@@ -9,13 +9,6 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 [![OpenGL](https://img.shields.io/badge/OpenGL-4.6-green.svg)](src/main.cpp)
 
-<p align="center">
-  <a href="https://github.com/VoltraLabs/VoltraEngine/wiki/Getting-Started">🚀 Getting Started</a> •
-  <a href="https://github.com/VoltraLabs/VoltraEngine/wiki">📘 Documentation</a> •
-  <a href="https://github.com/VoltraLabs/VoltraEngine/wiki/Architecture">🏗️ Architecture</a> •
-  <a href="https://github.com/VoltraLabs/VoltraEngine/wiki/Contributing">🤝 Contribute</a>
-</p>
-
 </div>
 
 ---
@@ -99,7 +92,7 @@ Please refer to the [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) for more information.
 
 ## 📚 Documentation
 
-See the [WIKI](https://github.com/VoltraLabs/VoltraEngine/wiki) for more information.
+See the [WIKI](https://github.com/Voltra-Labs/Voltra-Engine/wiki) for more information.
 
 ---
 

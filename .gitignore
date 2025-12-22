@@ -22,10 +22,6 @@ cmake_install.cmake
 install/
 vcpkg_installed/
 
-# External Libraries (Optional)
-# Uncomment the following line to exclude GLFW binaries:
-# external/glfw/lib-vc2022/
-
 # OS generated files
 .DS_Store
 Thumbs.db
