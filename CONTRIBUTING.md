@@ -58,10 +58,10 @@ We aim for modern, clean, and performant C++.
 1. **Standard**: Use C++20 features where appropriate (Concepts, Modules, etc.).
 2. **Memory**: Avoid raw pointers (`new`/`delete`). Use smart pointers (`std::unique_ptr`, `std::shared_ptr`) or stack allocation.
 3. **Style**:
-   * Variables: `snake_case` (e.g., `window_width`, `is_running`).
-   * Functions: `snake_case` (e.g., `init_window()`, `render_frame()`).
-   * Types/Classes: `PascalCase` (e.g., `RenderSystem`, `Texture2D`).
-   * Private Members: Prefix with `m_` (e.g., `m_width`).
+   * **Variables (Local)**: `snake_case` (e.g., `window_width`, `is_running`).
+   * **Functions/Methods**: `PascalCase` (e.g., `InitWindow()`, `RenderFrame()`).
+   * **Types/Classes**: `PascalCase` (e.g., `RenderSystem`, `Texture2D`).
+   * **Private Members**: Prefix with `m_` followed by PascalCase (e.g., `m_Width`, `m_Running`).
 4. **Headers**:
    * Use `#pragma once`.
    * Separate declarations (`.hpp`) from implementations (`.cpp`).
