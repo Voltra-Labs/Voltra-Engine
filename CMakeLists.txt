@@ -28,6 +28,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
+# --- Dependency: spdlog (Logging) ---
+message(STATUS "Fetching spdlog...")
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG        v1.12.0
+)
+FetchContent_MakeAvailable(spdlog)
+
 # --- The Engine ---
 file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
 
@@ -48,6 +57,7 @@ target_link_libraries(${PROJECT_NAME}
     glfw 
     glm 
     OpenGL::GL
+    spdlog::spdlog
 )
 
 # --- 4. Testing Framework (Google Test) ---
