@@ -1,5 +1,5 @@
 #include "Window.hpp"
-#include <iostream>
+#include "Log.hpp"
 
 namespace Voltra {
 
@@ -14,9 +14,10 @@ namespace Voltra {
     void Window::Init(const Properties& props) {
         m_Data = props;
 
+        VOLTRA_CORE_INFO("Creating window {0} ({1}, {2})", props.Title, props.Width, props.Height);
+
         if (!glfwInit()) {
-            // TODO: Use a proper logging system instead of stderr
-            std::cerr << "[Window] Failed to initialize GLFW!" << std::endl;
+            VOLTRA_CORE_FATAL("Failed to initialize GLFW!");
             return;
         }
 
@@ -28,7 +29,7 @@ namespace Voltra {
         m_Window = glfwCreateWindow((int)props.Width, (int)props.Height, m_Data.Title.c_str(), nullptr, nullptr);
         
         if (!m_Window) {
-            std::cerr << "[Window] Failed to create GLFW window!" << std::endl;
+            VOLTRA_CORE_FATAL("Failed to create GLFW window!");
             glfwTerminate();
             return;
         }
@@ -37,7 +38,7 @@ namespace Voltra {
         
         // TODO: Initialize GLAD/OpenGL loader here
         
-        std::cout << "[Window] Initialized: " << props.Width << "x" << props.Height << std::endl;
+        VOLTRA_CORE_INFO("Initialized: {0}x{1}", props.Width, props.Height);
     }
 
     void Window::Shutdown() {
