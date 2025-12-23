@@ -2,7 +2,7 @@
 #include <iostream>
 
 int main() {
-    // 1. Initialize Voltra Engine
+    // Initialize Voltra Engine
     if (!glfwInit()) {
         return -1;
     }
@@ -12,7 +12,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
-    // 2. Create the engine window
+    // Create the engine window
     GLFWwindow* window = glfwCreateWindow(1280, 720, "Voltra Engine v0.0.1", NULL, NULL);
     if (!window) {
         glfwTerminate();
@@ -23,7 +23,7 @@ int main() {
 
     std::cout << "Voltra Engine: Successfully initialized." << std::endl;
 
-    // 3. Game Loop
+    // Game Loop
     while (!glfwWindowShouldClose(window)) {
         // Rendering
         glClearColor(0.8f, 0.1f, 0.1f, 1.0f); // Clear screen with a reddish color

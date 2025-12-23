@@ -1,0 +1,43 @@
+name: Voltra Engine CI
+
+# When does this run?
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build & Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    
+    # This will run the job twice in parallel, once on Windows and once on Ubuntu.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+    # Download the code
+    - uses: actions/checkout@v4
+
+    # Install system dependencies
+    - name: Install Linux Dependencies
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+
+    # Configure CMake
+    - name: Configure CMake
+      run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
+
+    # Build everything (Engine + Tests)
+    - name: Build
+      run: cmake --build build --config Debug
+
+    # Run the tests
+    - name: Run Tests
+      working-directory: build
+      run: ctest -C Debug --output-on-failure
