@@ -77,11 +77,21 @@ FetchContent_MakeAvailable(googletest)
 
 # --- 5. Test Executable ---
 # We create a separate executable just for running tests
-add_executable(VoltraTests tests/main_test.cpp)
+add_executable(VoltraTests 
+    tests/main_test.cpp 
+    tests/EventTest.cpp
+)
+
 
 # Link against GTest and the main functionality required
 # Note: GTest::gtest_main provides a standard main() entry point for tests
 target_link_libraries(VoltraTests PRIVATE GTest::gtest_main)
+
+target_include_directories(VoltraTests PRIVATE 
+    src
+    ${glfw_SOURCE_DIR}/include
+    ${glm_SOURCE_DIR}
+)
 
 # Integrate with CTest (allows running "ctest" command)
 include(GoogleTest)
