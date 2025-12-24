@@ -25,6 +25,7 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 * **Modern C++ Base:** Written strictly in **C++20** to utilize the latest language features.
 * **Cross-Platform:** Window abstraction layer powered by **GLFW 3.3.8**.
 * **Graphics Context:** Initialized with **OpenGL 4.6 Core Profile**.
+* **Event System:** Blocking event system for windowing and input handling.
 * **Math Library:** Integrated **GLM 1.0.1** for SIMD-friendly vector mathematics.
 * **Logging System:** Professional logging with **spdlog v1.12.0** for both engine and client code.
 * **Testing Framework:** Integrated **Google Test v1.14.0** for unit testing.
@@ -34,7 +35,7 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 
 | Module | Status | Description |
 | :--- | :---: | :--- |
-| **Core System** | ✅ | Window creation, Input polling, Main Loop. |
+| **Core System** | ✅ | Window creation, Event handling, Main Loop. |
 | **Logging** | ✅ | Multi-level logging system with spdlog. |
 | **Maths** | ✅ | Integration of GLM (Vectors, Matrices, Quaternions). |
 | **Testing** | ✅ | Google Test framework configured. |
@@ -103,6 +104,11 @@ Voltra-Engine/
 │   │   ├── Application.hpp/cpp  # Main application class
 │   │   ├── Window.hpp/cpp       # Window abstraction (GLFW)
 │   │   └── Log.hpp/cpp          # Logging system (spdlog)
+│   ├── Events/
+│   │   ├── Event.hpp            # Base event class and dispatcher
+│   │   ├── ApplicationEvent.hpp # Window and App events
+│   │   ├── KeyEvent.hpp         # Keyboard events
+│   │   └── MouseEvent.hpp        # Mouse events
 │   └── main.cpp                 # Entry point
 ├── tests/
 │   └── main_test.cpp            # Google Test suite
@@ -150,6 +156,28 @@ uint32_t height = window->GetHeight();
 bool shouldClose = window->ShouldClose();
 ```
 
+### Event System
+
+The Event System handles engine-wide events using a blocking dispatcher mechanism:
+
+```cpp
+void OnEvent(Event& e) {
+    EventDispatcher dispatcher(e);
+    
+    // Dispatch window resize events
+    dispatcher.Dispatch<WindowResizeEvent>([](WindowResizeEvent& e) {
+        VOLTRA_CORE_INFO("Window resized to {0}x{1}", e.GetWidth(), e.GetHeight());
+        return true; // Event handled
+    });
+}
+```
+
+Categories include:
+* **Application:** Window close, resize, tick, update, render.
+* **Keyboard:** Key pressed, released, typed.
+* **Mouse:** Button pressed, released, moved, scrolled.
+```
+
 ## 🧪 Testing
 
 The project uses Google Test for unit testing. Tests are located in the `tests/` directory.
@@ -176,6 +204,7 @@ For detailed documentation on architecture, systems, and development guides, vis
 
 ### Quick Links:
 - [🏗️ Architecture & Core Systems](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Architecture)
+- [⚡ Event System](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Event-System)
 - [🚀 Getting Started](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Getting-Started)
 - [🤝 Contribution Guide](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Contribution-Guide)
 
