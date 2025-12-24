@@ -1,16 +1,12 @@
 #include "Application.hpp"
-#include <glad/glad.h> 
-#include <GLFW/glfw3.h>
-
-#include "Events/ApplicationEvent.hpp"
-#include "Renderer/VertexArray.hpp"
-#include "Renderer/Shader.hpp"
 #include "Core/Log.hpp"
+
+#include "Renderer/Renderer.hpp"
 
 namespace Voltra {
 
     Application::Application() {
-        m_Window = std::make_unique<Window>();
+        m_Window = std::make_unique<Window>(Window::Properties("Voltra Engine", 1280, 720));
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
 
         m_VertexArray = VertexArray::Create();
@@ -21,76 +17,68 @@ namespace Voltra {
              0.0f,  0.5f, 0.0f
         };
 
-        std::shared_ptr<VertexBuffer> vertexBuffer = VertexBuffer::Create(vertices, sizeof(vertices));
+        // Stack allocation for buffer creation is fine as ownership is passed to shared_ptr internally
+        std::shared_ptr<VertexBuffer> vertex_buffer = VertexBuffer::Create(vertices, sizeof(vertices));
         
         BufferLayout layout = {
             { ShaderDataType::Float3, "a_Position" }
         };
         
-        vertexBuffer->SetLayout(layout);
-        m_VertexArray->AddVertexBuffer(vertexBuffer);
+        vertex_buffer->SetLayout(layout);
+        m_VertexArray->AddVertexBuffer(vertex_buffer);
 
         uint32_t indices[3] = { 0, 1, 2 };
-        std::shared_ptr<IndexBuffer> indexBuffer = IndexBuffer::Create(indices, sizeof(indices) / sizeof(uint32_t));
-        m_VertexArray->SetIndexBuffer(indexBuffer);
+        std::shared_ptr<IndexBuffer> index_buffer = IndexBuffer::Create(indices, sizeof(indices) / sizeof(uint32_t));
+        m_VertexArray->SetIndexBuffer(index_buffer);
 
-        std::string vertexSrc = R"(
+        std::string vertex_src = R"(
             #version 330 core
-            
             layout(location = 0) in vec3 a_Position;
-            
             out vec3 v_Position;
-            
-            void main()
-            {
+            void main() {
                 v_Position = a_Position;
                 gl_Position = vec4(a_Position, 1.0);
             }
         )";
 
-        std::string fragmentSrc = R"(
+        std::string fragment_src = R"(
             #version 330 core
-            
             layout(location = 0) out vec4 color;
-            
             in vec3 v_Position;
-            
-            void main()
-            {
-                color = vec4(1.0, 0.5, 0.2, 1.0);
+            void main() {
+                color = vec4(0.2, 0.8, 0.3, 1.0);
             }
         )";
 
-        m_Shader = std::make_shared<Shader>(vertexSrc, fragmentSrc);
+        m_Shader = std::make_shared<Shader>(vertex_src, fragment_src);
     }
 
     Application::~Application() {
     }
 
-    void Application::OnEvent(Event& e)
-    {
-        if (e.GetEventType() == EventType::WindowClose)
-        {
-            WindowCloseEvent& event = (WindowCloseEvent&)e;
+    void Application::OnEvent(Event& e) {
+        if (e.GetEventType() == EventType::WindowClose) {
+            // Simplified handling
             m_Running = false;
         }
-        
         VOLTRA_CORE_TRACE("{0}", e.ToString());
     }
 
     void Application::Run() {
         while (m_Running) {
-            glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-            glClear(GL_COLOR_BUFFER_BIT);
+            // 1. Clear Command
+            RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1.0f });
+            RenderCommand::Clear();
 
-            if (m_Shader) m_Shader->Bind();
-            if (m_VertexArray) {
-                m_VertexArray->Bind();
-                glDrawElements(GL_TRIANGLES, m_VertexArray->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
-            }
+            // 2. Scene Submission
+            Renderer::BeginScene();
+            
+            // We pass the geometry and material (shader) to the renderer
+            Renderer::Submit(m_VertexArray, m_Shader);
+            
+            Renderer::EndScene();
 
             m_Window->OnUpdate();
         }
     }
-
 }
