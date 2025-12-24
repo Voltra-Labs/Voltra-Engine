@@ -24,8 +24,9 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 
 * **Modern C++ Base:** Written strictly in **C++20** to utilize the latest language features.
 * **Cross-Platform:** Window abstraction layer powered by **GLFW 3.3.8**.
-* **Graphics Context:** Initialized with **OpenGL 4.6 Core Profile**.
+* **Graphics Context:** Initialized with **OpenGL 4.6 Core Profile** via **GLAD** loader.
 * **Event System:** Blocking event system for windowing and input handling.
+* **Renderer Abstraction:** Platform-agnostic buffer system (VertexBuffer, IndexBuffer) with OpenGL implementation.
 * **Math Library:** Integrated **GLM 1.0.1** for SIMD-friendly vector mathematics.
 * **Logging System:** Professional logging with **spdlog v1.12.0** for both engine and client code.
 * **Testing Framework:** Integrated **Google Test v1.14.0** for unit testing.
@@ -39,7 +40,7 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 | **Logging** | ✅ | Multi-level logging system with spdlog. |
 | **Maths** | ✅ | Integration of GLM (Vectors, Matrices, Quaternions). |
 | **Testing** | ✅ | Google Test framework configured. |
-| **Renderer** | 🚧 | *In Progress* - Basic pipeline setup. |
+| **Renderer** | 🚧 | *In Progress* - Buffer abstractions (VertexBuffer, IndexBuffer) implemented. |
 | **ECS** | ⏳ | *Planned* - Entity Component System architecture. |
 | **Assets** | ⏳ | *Planned* - Asset manager and loaders. |
 
@@ -108,10 +109,17 @@ Voltra-Engine/
 │   │   ├── Event.hpp            # Base event class and dispatcher
 │   │   ├── ApplicationEvent.hpp # Window and App events
 │   │   ├── KeyEvent.hpp         # Keyboard events
-│   │   └── MouseEvent.hpp        # Mouse events
+│   │   └── MouseEvent.hpp       # Mouse events
+│   ├── Renderer/
+│   │   ├── Buffer.hpp/cpp       # VertexBuffer & IndexBuffer abstractions
+│   │   └── ...                  # Future renderer components
+│   ├── Vendor/
+│   │   └── Glad/                # OpenGL loader (GLAD)
 │   └── main.cpp                 # Entry point
 ├── tests/
-│   └── main_test.cpp            # Google Test suite
+│   ├── main_test.cpp            # Basic tests
+│   ├── EventTest.cpp            # Event system tests
+│   └── BufferTest.cpp           # Renderer buffer tests
 ├── build/                       # Generated build files (git-ignored)
 ├── CMakeLists.txt               # Build configuration
 ├── README.md                    # This file
@@ -120,7 +128,7 @@ Voltra-Engine/
 └── LICENSE                      # MIT License
 ```
 
-> **Note:** Dependencies are managed automatically by CMake FetchContent and are downloaded to `build/_deps/` during the first build.
+> **Note:** Dependencies are managed automatically by CMake FetchContent and are downloaded to `build/_deps/` during the first build. GLAD is included as a vendor library in `src/Vendor/Glad/`.
 
 ## 🔧 Core Systems
 
@@ -204,6 +212,7 @@ For detailed documentation on architecture, systems, and development guides, vis
 
 ### Quick Links:
 - [🏗️ Architecture & Core Systems](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Architecture)
+- [🎨 Renderer System](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Renderer-System)
 - [⚡ Event System](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Event-System)
 - [🚀 Getting Started](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Getting-Started)
 - [🤝 Contribution Guide](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Contribution-Guide)
