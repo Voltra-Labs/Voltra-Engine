@@ -38,9 +38,11 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(spdlog)
 
 # --- The Engine ---
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.c" "src/*.h" "src/*.hpp") 
+file(GLOB_RECURSE ENGINE_SOURCES "src/*.cpp" "src/*.c" "src/*.h" "src/*.hpp")
 
-add_executable(${PROJECT_NAME} ${SOURCES})
+list(REMOVE_ITEM ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+add_executable(${PROJECT_NAME} ${ENGINE_SOURCES} src/main.cpp)
 
 # Include Configuration
 target_include_directories(${PROJECT_NAME} PUBLIC 
@@ -84,15 +86,26 @@ add_executable(VoltraTests
     tests/main_test.cpp 
     tests/EventTest.cpp
     tests/BufferTest.cpp
+    ${ENGINE_SOURCES}
 )
 
 
 # Link against GTest and the main functionality required
 # Note: GTest::gtest_main provides a standard main() entry point for tests
-target_link_libraries(VoltraTests PRIVATE GTest::gtest_main)
+target_link_libraries(VoltraTests 
+    PRIVATE 
+    GTest::gtest_main
+    glfw 
+    glm 
+    OpenGL::GL
+    spdlog::spdlog
+    ${CMAKE_DL_LIBS}
+)
 
 target_include_directories(VoltraTests PRIVATE 
+    include
     src
+    src/Vendor/Glad/include
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
 )

@@ -1,6 +1,6 @@
 #include "Application.hpp"
+#include <glad/glad.h> 
 #include <GLFW/glfw3.h>
-#include <glad/glad.h>
 
 #include "Events/ApplicationEvent.hpp"
 #include "Renderer/VertexArray.hpp"

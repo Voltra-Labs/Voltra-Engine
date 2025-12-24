@@ -58,7 +58,7 @@ namespace Voltra {
                 ShaderDataTypeToOpenGLBaseType(element.Type),
                 element.Normalized ? GL_TRUE : GL_FALSE,
                 layout.GetStride(),
-                (const void*)element.Offset);
+                (const void*)(uintptr_t)element.Offset);
             m_VertexBufferIndex++;
         }
         
