@@ -184,7 +184,6 @@ Categories include:
 * **Application:** Window close, resize, tick, update, render.
 * **Keyboard:** Key pressed, released, typed.
 * **Mouse:** Button pressed, released, moved, scrolled.
-```
 
 ## 🧪 Testing
 
