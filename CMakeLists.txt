@@ -38,13 +38,15 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(spdlog)
 
 # --- The Engine ---
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.h")
+file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.c" "src/*.h") 
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Include Configuration
 target_include_directories(${PROJECT_NAME} PUBLIC 
     include 
+    src
+    src/Vendor/Glad/include
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
 )
@@ -58,6 +60,7 @@ target_link_libraries(${PROJECT_NAME}
     glm 
     OpenGL::GL
     spdlog::spdlog
+    ${CMAKE_DL_LIBS}
 )
 
 # --- 4. Testing Framework (Google Test) ---

@@ -1,7 +1,8 @@
 #pragma once
 
 #include <string>
-#include <GLFW/glfw3.h>
+
+struct GLFWwindow;
 
 namespace Voltra {
 
@@ -27,7 +28,7 @@ namespace Voltra {
         [[nodiscard]] uint32_t GetHeight() const { return m_Data.Height; }
         [[nodiscard]] GLFWwindow* GetNativeWindow() const { return m_Window; }
 
-        [[nodiscard]] bool ShouldClose() const { return glfwWindowShouldClose(m_Window); }
+        [[nodiscard]] bool ShouldClose() const;
 
     private:
         void Init(const Properties& props);
