@@ -3,6 +3,7 @@
 #include <glad/glad.h>
 #include <vector>
 #include "../Core/Log.hpp"
+#include <glm/gtc/type_ptr.hpp>
 
 namespace Voltra {
 
@@ -98,6 +99,50 @@ namespace Voltra {
     void Shader::Unbind() const
     {
         glUseProgram(0);
+    }
+
+    // Helper function to get uniform location (maybe cache this in a map for optimization)
+    GLint GetUniformLocation(uint32_t programID, const std::string& name) {
+        GLint location = glGetUniformLocation(programID, name.c_str());
+        if (location == -1) {
+            VOLTRA_CORE_WARN("Warning: Uniform '{0}' doesn't exist!", name);
+        }
+        return location;
+    }
+
+    void Shader::UploadUniformInt(const std::string& name, int value) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniform1i(location, value);
+    }
+
+    void Shader::UploadUniformFloat(const std::string& name, float value) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniform1f(location, value);
+    }
+
+    void Shader::UploadUniformFloat2(const std::string& name, const glm::vec2& value) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniform2f(location, value.x, value.y);
+    }
+
+    void Shader::UploadUniformFloat3(const std::string& name, const glm::vec3& value) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniform3f(location, value.x, value.y, value.z);
+    }
+
+    void Shader::UploadUniformFloat4(const std::string& name, const glm::vec4& value) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniform4f(location, value.x, value.y, value.z, value.w);
+    }
+
+    void Shader::UploadUniformMat3(const std::string& name, const glm::mat3& matrix) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniformMatrix3fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
+    }
+
+    void Shader::UploadUniformMat4(const std::string& name, const glm::mat4& matrix) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
     }
 
 }

@@ -1,11 +1,13 @@
 #include "Application.hpp"
 #include "Core/Log.hpp"
-
 #include "Renderer/Renderer.hpp"
+#include "Renderer/OrthographicCamera.hpp"
 
 namespace Voltra {
 
-    Application::Application() {
+    Application::Application()
+        : m_Camera(-1.6f, 1.6f, -0.9f, 0.9f) // Aspect Ratio 16:9 
+    {
         m_Window = std::make_unique<Window>(Window::Properties("Voltra Engine", 1280, 720));
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
 
@@ -33,11 +35,18 @@ namespace Voltra {
 
         std::string vertex_src = R"(
             #version 330 core
+            
             layout(location = 0) in vec3 a_Position;
+
+            uniform mat4 u_ViewProjection;
+            uniform mat4 u_Transform;
+
             out vec3 v_Position;
+
             void main() {
                 v_Position = a_Position;
-                gl_Position = vec4(a_Position, 1.0);
+                // Multiplicación: Proyección * Vista * Modelo * Vértice
+                gl_Position = u_ViewProjection * u_Transform * vec4(a_Position, 1.0);
             }
         )";
 
@@ -66,16 +75,13 @@ namespace Voltra {
 
     void Application::Run() {
         while (m_Running) {
-            // 1. Clear Command
             RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1.0f });
             RenderCommand::Clear();
 
-            // 2. Scene Submission
-            Renderer::BeginScene();
-            
-            // We pass the geometry and material (shader) to the renderer
+            Renderer::BeginScene(m_Camera);
+
             Renderer::Submit(m_VertexArray, m_Shader);
-            
+
             Renderer::EndScene();
 
             m_Window->OnUpdate();
