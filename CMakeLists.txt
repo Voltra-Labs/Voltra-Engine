@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(spdlog)
 
 # --- The Engine ---
-file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.c" "src/*.h") 
+file(GLOB_RECURSE SOURCES "src/*.cpp" "src/*.c" "src/*.h" "src/*.hpp") 
 
 add_executable(${PROJECT_NAME} ${SOURCES})
 
@@ -83,6 +83,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(VoltraTests 
     tests/main_test.cpp 
     tests/EventTest.cpp
+    tests/BufferTest.cpp
 )
 
 
