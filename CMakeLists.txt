@@ -86,6 +86,8 @@ add_executable(VoltraTests
     tests/main_test.cpp 
     tests/EventTest.cpp
     tests/BufferTest.cpp
+    tests/LayerStackTest.cpp
+    tests/TimestepTest.cpp
     ${ENGINE_SOURCES}
 )
 
