@@ -33,22 +33,7 @@ jobs:
     - name: Configure CMake
       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
-    # --- BUILD ---
-    - name: Build (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: xvfb-run --auto-servernum cmake --build build --config Debug
-
-    - name: Build (Windows)
-      if: matrix.os == 'windows-latest'
-      run: cmake --build build --config Debug
-
-    # --- TESTS ---
-    - name: Run Tests (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      working-directory: build
-      run: xvfb-run --auto-servernum ctest -C Debug --output-on-failure
-
-    # --- MESA3D ---
+    # --- SETUP MESA FOR WINDOWS ---
     - name: Setup Mesa3D (Windows)
       if: matrix.os == 'windows-latest'
       shell: powershell
@@ -64,12 +49,28 @@ jobs:
         7z x $output -omesa -y
         
         Write-Host "Installing drivers to build/Debug..."
+        New-Item -ItemType Directory -Force -Path "build/Debug"
+        
         Copy-Item "mesa/x64/opengl32.dll" -Destination "build/Debug/opengl32.dll"
         Copy-Item "mesa/x64/libglapi.dll" -Destination "build/Debug/libglapi.dll"
         
         Write-Host "Mesa3D Installed Successfully."
 
-    # --- RUN TESTS ---
+    # --- BUILD ---
+    - name: Build (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: xvfb-run --auto-servernum cmake --build build --config Debug
+
+    - name: Build (Windows)
+      if: matrix.os == 'windows-latest'
+      run: cmake --build build --config Debug
+
+    # --- TESTS ---
+    - name: Run Tests (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      working-directory: build
+      run: xvfb-run --auto-servernum ctest -C Debug --output-on-failure
+
     - name: Run Tests (Windows)
       if: matrix.os == 'windows-latest'
       working-directory: build
