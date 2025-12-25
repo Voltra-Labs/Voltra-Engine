@@ -7,6 +7,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Module to automatically download libraries
 include(FetchContent)
 
+# --- Dependency: stb (Image Loading) ---
+message(STATUS "Fetching stb...")
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(stb)
+
 # --- Dependency: GLFW ---
 message(STATUS "Fetching GLFW...")
 FetchContent_Declare(
@@ -60,7 +69,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     src/Vendor/Glad/include
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
+    ${stb_SOURCE_DIR}
 )
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 
 # Library Linking
 find_package(OpenGL REQUIRED)
@@ -114,7 +126,10 @@ target_link_libraries(VoltraTests
     spdlog::spdlog
     EnTT::EnTT
     ${CMAKE_DL_LIBS}
+    ${stb_SOURCE_DIR}
 )
+
+target_compile_definitions(VoltraTests PRIVATE GLFW_INCLUDE_NONE)
 
 target_include_directories(VoltraTests PRIVATE 
     include
