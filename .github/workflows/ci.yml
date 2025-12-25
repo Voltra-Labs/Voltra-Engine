@@ -27,17 +27,28 @@ jobs:
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+        sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev xvfb
 
     # Configure CMake
     - name: Configure CMake
       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
-    # Build everything (Engine + Tests)
-    - name: Build
+    # BUILD
+    - name: Build (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: xvfb-run --auto-servernum cmake --build build --config Debug
+
+    - name: Build (Windows)
+      if: matrix.os == 'windows-latest'
       run: cmake --build build --config Debug
 
-    # Run the tests
-    - name: Run Tests
+    # TESTS
+    - name: Run Tests (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      working-directory: build
+      run: xvfb-run --auto-servernum ctest -C Debug --output-on-failure
+
+    - name: Run Tests (Windows)
+      if: matrix.os == 'windows-latest'
       working-directory: build
       run: ctest -C Debug --output-on-failure
