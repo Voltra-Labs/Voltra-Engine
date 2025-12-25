@@ -37,6 +37,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
+# --- Dependency: EnTT (ECS) ---
+message(STATUS "Fetching EnTT...")
+FetchContent_Declare(
+    entt
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG        v3.13.0
+)
+FetchContent_MakeAvailable(entt)
+
 # --- The Engine ---
 file(GLOB_RECURSE ENGINE_SOURCES "src/*.cpp" "src/*.c" "src/*.h" "src/*.hpp")
 
@@ -62,6 +71,7 @@ target_link_libraries(${PROJECT_NAME}
     glm 
     OpenGL::GL
     spdlog::spdlog
+    EnTT::EnTT
     ${CMAKE_DL_LIBS}
 )
 
@@ -88,6 +98,7 @@ add_executable(VoltraTests
     tests/BufferTest.cpp
     tests/LayerStackTest.cpp
     tests/TimestepTest.cpp
+    tests/ECSTest.cpp
     ${ENGINE_SOURCES}
 )
 
@@ -101,6 +112,7 @@ target_link_libraries(VoltraTests
     glm 
     OpenGL::GL
     spdlog::spdlog
+    EnTT::EnTT
     ${CMAKE_DL_LIBS}
 )
 
