@@ -42,12 +42,25 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: cmake --build build --config Debug
 
-    # TESTS
+    # RUN LINUX TESTS
     - name: Run Tests (Linux)
       if: matrix.os == 'ubuntu-latest'
       working-directory: build
       run: xvfb-run --auto-servernum ctest -C Debug --output-on-failure
 
+    # SETUP MESA FOR WINDOWS
+    - name: Setup Mesa3D (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: powershell
+      run: |
+        curl -L -o mesa.7z https://github.com/pal1000/mesa-dist-win/releases/download/23.1.9/mesa3d-23.1.9-release-msvc.7z
+        
+        7z x mesa.7z -omesa -y
+        
+        Copy-Item mesa/x64/opengl32.dll build/Debug/opengl32.dll
+        Copy-Item mesa/x64/libglapi.dll build/Debug/libglapi.dll
+
+    # RUN TESTS WINDOWS
     - name: Run Tests (Windows)
       if: matrix.os == 'windows-latest'
       working-directory: build
