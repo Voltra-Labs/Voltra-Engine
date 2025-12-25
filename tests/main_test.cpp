@@ -6,6 +6,11 @@
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
 
+    // List tests
+    if (::testing::GTEST_FLAG(list_tests)) {
+        return RUN_ALL_TESTS();
+    }
+
     // Initialize GLFW
     if (!glfwInit()) {
         std::cerr << "[TESTS] CRITICAL: Failed to initialize GLFW" << std::endl;
