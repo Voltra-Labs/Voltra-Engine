@@ -1,6 +1,9 @@
 #include "Scene.hpp"
 #include "Entity.hpp"
 #include "Components.hpp"
+#include "Renderer/Renderer.hpp"
+#include <glm/glm.hpp>
+#include "Renderer/Renderer2D.hpp"
 
 namespace Voltra {
 
@@ -23,16 +26,47 @@ namespace Voltra {
     }
 
     void Scene::OnUpdate(Timestep ts) {
-        // Update scripts
+        // Scripts (Logic)
         m_Registry.view<NativeScriptComponent>().each([=](auto entity, auto& nsc) {
             if (!nsc.Instance) {
                 nsc.Instance = nsc.InstantiateScript();
                 nsc.Instance->m_Entity = Entity{ entity, this };
                 nsc.Instance->OnCreate();
             }
-
             nsc.Instance->OnUpdate(ts);
         });
+
+        // Rendering
+        CameraComponent* mainCamera = nullptr;
+        glm::mat4 cameraTransform;
+
+        auto view = m_Registry.view<TransformComponent, CameraComponent>();
+        for (auto entity : view) {
+            auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
+            if (camera.Primary) {
+                mainCamera = &camera;
+                cameraTransform = transform.Transform;
+                break;
+            }
+        }
+
+        if (mainCamera) {
+            // Synchronize camera position
+            glm::vec3 pos = glm::vec3(cameraTransform[3]);
+            mainCamera->Camera.SetPosition(pos);
+            
+            Renderer2D::BeginScene(mainCamera->Camera);
+
+            // Draw all entitie s with SpriteRenderer and Transform
+            auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
+            for (auto entity : group) {
+                auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
+                
+                Renderer2D::DrawQuad(transform.Transform, sprite.Color);
+            }
+
+            Renderer2D::EndScene();
+        }
     }
 
 }

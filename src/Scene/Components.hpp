@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Renderer/OrthographicCamera.hpp"
 #include <glm/glm.hpp>
 #include <string>
 #include "ScriptableEntity.hpp"
@@ -36,6 +37,29 @@ namespace Voltra {
             InstantiateScript = []() { return static_cast<ScriptableEntity*>(new T()); };
             DestroyScript = [](NativeScriptComponent* nsc) { delete nsc->Instance; nsc->Instance = nullptr; };
         }
+    };
+
+    // Define the color (and future support for textures)
+    struct SpriteRendererComponent {
+        glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+
+        SpriteRendererComponent() = default;
+        SpriteRendererComponent(const SpriteRendererComponent&) = default;
+        SpriteRendererComponent(const glm::vec4& color) : Color(color) {}
+    };
+
+    // Allows an entity to act as a camera
+    struct CameraComponent {
+        Voltra::OrthographicCamera Camera;
+        bool Primary = true; // If there are multiple cameras, is this the main one?
+        bool FixedAspectRatio = false;
+
+        // Constructor by default initializing a basic orthographic camera (-1 to 1)
+        CameraComponent() 
+            : Camera(-1.0f, 1.0f, -1.0f, 1.0f) {} // Default aspect ratio 1.0
+            
+        operator Voltra::OrthographicCamera& () { return Camera; }
+        operator const Voltra::OrthographicCamera& () const { return Camera; }
     };
 
 }

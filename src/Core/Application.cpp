@@ -3,6 +3,7 @@
 #include "Renderer/Renderer.hpp"
 #include <GLFW/glfw3.h>
 #include "../Sandbox/ExampleLayer.hpp"
+#include "Renderer/Renderer2D.hpp"
 
 namespace Voltra {
 
@@ -16,6 +17,7 @@ namespace Voltra {
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
 
         Renderer::Init();
+        Renderer2D::Init();
 
         // Example layer
         PushLayer(new ExampleLayer());
