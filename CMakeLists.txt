@@ -111,6 +111,7 @@ add_executable(VoltraTests
     tests/LayerStackTest.cpp
     tests/TimestepTest.cpp
     tests/ECSTest.cpp
+    tests/TextureTest.cpp
     ${ENGINE_SOURCES}
 )
 
@@ -119,7 +120,7 @@ add_executable(VoltraTests
 # Note: GTest::gtest_main provides a standard main() entry point for tests
 target_link_libraries(VoltraTests 
     PRIVATE 
-    GTest::gtest_main
+    GTest::gtest
     glfw 
     glm 
     OpenGL::GL
