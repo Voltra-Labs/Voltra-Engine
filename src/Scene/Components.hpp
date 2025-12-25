@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Renderer/Texture.hpp"
+#include <memory>
 #include "Renderer/OrthographicCamera.hpp"
 #include <glm/glm.hpp>
 #include <string>
@@ -42,10 +44,18 @@ namespace Voltra {
     // Define the color (and future support for textures)
     struct SpriteRendererComponent {
         glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
+        std::shared_ptr<Texture2D> Texture;
+        float TilingFactor = 1.0f;
 
         SpriteRendererComponent() = default;
         SpriteRendererComponent(const SpriteRendererComponent&) = default;
+        
+        // Color constructor
         SpriteRendererComponent(const glm::vec4& color) : Color(color) {}
+        
+        // Texture constructor
+        SpriteRendererComponent(const std::shared_ptr<Texture2D>& texture) 
+            : Texture(texture), Color(1.0f) {}
     };
 
     // Allows an entity to act as a camera

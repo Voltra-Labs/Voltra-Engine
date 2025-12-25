@@ -57,12 +57,19 @@ namespace Voltra {
             
             Renderer2D::BeginScene(mainCamera->Camera);
 
-            // Draw all entitie s with SpriteRenderer and Transform
+            // Draw all entities with SpriteRenderer and Transform
             auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
             for (auto entity : group) {
                 auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
                 
-                Renderer2D::DrawQuad(transform.Transform, sprite.Color);
+                // If it has a texture, we use the texture overload
+                if (sprite.Texture) {
+                    // TODO: DrawQuad(transform, texture, tint)
+                    Renderer2D::DrawQuad(transform.Transform, sprite.Texture);
+                } 
+                else {
+                    Renderer2D::DrawQuad(transform.Transform, sprite.Color);
+                }
             }
 
             Renderer2D::EndScene();

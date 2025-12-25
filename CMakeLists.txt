@@ -126,7 +126,6 @@ target_link_libraries(VoltraTests
     spdlog::spdlog
     EnTT::EnTT
     ${CMAKE_DL_LIBS}
-    ${stb_SOURCE_DIR}
 )
 
 target_compile_definitions(VoltraTests PRIVATE GLFW_INCLUDE_NONE)
@@ -137,6 +136,7 @@ target_include_directories(VoltraTests PRIVATE
     src/Vendor/Glad/include
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
+    ${stb_SOURCE_DIR}
 )
 
 # Integrate with CTest (allows running "ctest" command)
