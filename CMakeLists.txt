@@ -55,10 +55,42 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(entt)
 
+# --- Dependency: ImGui ---
+message(STATUS "Fetching ImGui...")
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        docking
+)
+FetchContent_MakeAvailable(imgui)
+
+# Create an ImGui library to handle includes/sources cleanly
+set(IMGUI_DIR ${imgui_SOURCE_DIR})
+add_library(ImGuiLib STATIC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+)
+target_include_directories(ImGuiLib PUBLIC 
+    ${IMGUI_DIR} 
+    ${IMGUI_DIR}/backends
+    ${glfw_SOURCE_DIR}/include 
+    include # to find Voltra headers if backends need them? No, usually not.
+)
+target_link_libraries(ImGuiLib PRIVATE glfw OpenGL::GL) # Backends need these
+
 # --- The Engine ---
 file(GLOB_RECURSE ENGINE_SOURCES "src/*.cpp" "src/*.c" "src/*.h" "src/*.hpp")
 
 list(REMOVE_ITEM ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+list(APPEND ENGINE_SOURCES
+    # ImGui sources are now in ImGuiLib
+)
 
 add_executable(${PROJECT_NAME} ${ENGINE_SOURCES} src/main.cpp)
 
@@ -70,6 +102,8 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
     ${stb_SOURCE_DIR}
+    ${stb_SOURCE_DIR}
+    # ImGui includes handled by linking ImGuiLib
 )
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
@@ -79,6 +113,7 @@ find_package(OpenGL REQUIRED)
 
 target_link_libraries(${PROJECT_NAME} 
     PRIVATE 
+    ImGuiLib 
     glfw 
     glm 
     OpenGL::GL
@@ -121,6 +156,7 @@ add_executable(VoltraTests
 # Note: GTest::gtest_main provides a standard main() entry point for tests
 target_link_libraries(VoltraTests 
     PRIVATE 
+    ImGuiLib
     GTest::gtest
     glfw 
     glm 
