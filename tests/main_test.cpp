@@ -3,13 +3,18 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 
+//For LOGS
+#include "Core/Log.hpp"
+
 // Callback to print GLFW internal errors
 void GLFWErrorCallback(int error, const char* description) {
-    std::cerr << "[GLFW ERROR] (" << error << "): " << description << std::endl;
+    VOLTRA_CORE_ERROR("GLFW Error ({0}): {1}", error, description);
 }
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
+
+    Voltra::Log::Init();
 
     // List tests
     if (::testing::GTEST_FLAG(list_tests)) {
@@ -20,7 +25,7 @@ int main(int argc, char** argv) {
 
     // Initialize GLFW
     if (!glfwInit()) {
-        std::cerr << "[TESTS] CRITICAL: Failed to initialize GLFW" << std::endl;
+        VOLTRA_CORE_FATAL("Failed to initialize GLFW");
         return -1;
     }
 
@@ -34,12 +39,12 @@ int main(int argc, char** argv) {
     // Use software rendering if hardware not available (useful for CI)
     glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API);
 
-    std::cout << "[TESTS] Attempting to create window with OpenGL 4.5..." << std::endl;
+    VOLTRA_CORE_INFO("Attempting to create headless window (OpenGL 4.5)...");
 
     GLFWwindow* window = glfwCreateWindow(640, 480, "Voltra Test Context", nullptr, nullptr);
     if (!window) {
-        std::cerr << "[TESTS] CRITICAL: Failed to create GLFW window/context." << std::endl;
-        std::cerr << "        Possible causes: GPU driver too old or Mesa3D DLLs not found in .exe folder." << std::endl;
+        VOLTRA_CORE_FATAL("Failed to create GLFW window/context.");
+        VOLTRA_CORE_ERROR("Possible causes: GPU driver too old or Mesa3D DLLs not found.");
         glfwTerminate();
         return -1;
     }
@@ -49,16 +54,16 @@ int main(int argc, char** argv) {
 
     // Load OpenGL pointers with GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        std::cerr << "[TESTS] CRITICAL: Failed to initialize GLAD" << std::endl;
+        VOLTRA_CORE_FATAL("Failed to initialize GLAD");
         glfwDestroyWindow(window);
         glfwTerminate();
         return -1;
     }
 
-    std::cout << "[TESTS] OpenGL Info:" << std::endl;
-    std::cout << "  Vendor:   " << glGetString(GL_VENDOR) << std::endl;
-    std::cout << "  Renderer: " << glGetString(GL_RENDERER) << std::endl;
-    std::cout << "  Version:  " << glGetString(GL_VERSION) << std::endl;
+    VOLTRA_CORE_INFO("OpenGL Info:");
+    VOLTRA_CORE_TRACE("  Vendor:   {0}", (const char*)glGetString(GL_VENDOR));
+    VOLTRA_CORE_TRACE("  Renderer: {0}", (const char*)glGetString(GL_RENDERER));
+    VOLTRA_CORE_TRACE("  Version:  {0}", (const char*)glGetString(GL_VERSION));
 
     int result = RUN_ALL_TESTS();
 

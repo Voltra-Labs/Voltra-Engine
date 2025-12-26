@@ -1,10 +1,12 @@
 #include "Renderer.hpp"
+#include "TextureManager.hpp"
 
 namespace Voltra {
 
     std::unique_ptr<Renderer::SceneData> Renderer::s_SceneData = std::make_unique<Renderer::SceneData>();
 
     void Renderer::Init() {
+        TextureManager::Init();
     }
 
     void Renderer::BeginScene(OrthographicCamera& camera) {
@@ -24,4 +26,7 @@ namespace Voltra {
         RenderCommand::DrawIndexed(vertexArray);
     }
 
+    void Renderer::Shutdown() {
+        TextureManager::Clean();
+    }
 }
