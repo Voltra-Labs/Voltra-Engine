@@ -13,7 +13,7 @@ namespace Voltra {
         if (s_Instance) VOLTRA_CORE_ERROR("Application already exists!");
         s_Instance = this;
 
-        m_Window = std::make_unique<Window>(Window::Properties("Voltra Engine", 1280, 720));
+        m_Window = std::make_unique<Window>(Window::Properties("Voltra Engine", 1920, 1080));
         m_Window->SetEventCallback(std::bind(&Application::OnEvent, this, std::placeholders::_1));
 
         Renderer::Init();

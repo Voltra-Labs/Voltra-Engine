@@ -3,6 +3,8 @@
 #include "Core/Timestep.hpp"
 #include <entt/entt.hpp>
 
+class b2World;
+
 namespace Voltra {
 
     class Entity;
@@ -15,10 +17,14 @@ namespace Voltra {
         Entity CreateEntity(const std::string& name = std::string());
         void DestroyEntity(Entity entity);
 
+        void OnRuntimeStart();
+        void OnRuntimeStop();
+
         void OnUpdate(Timestep ts);
 
     private:
         entt::registry m_Registry;
+        b2World* m_PhysicsWorld = nullptr;
 
         friend class Entity;
     };
