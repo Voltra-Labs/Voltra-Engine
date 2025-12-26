@@ -33,7 +33,18 @@ jobs:
     - name: Configure CMake
       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
-    # --- SETUP MESA FOR WINDOWS ---
+    # --- BUILD ---
+    - name: Build (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: xvfb-run --auto-servernum cmake --build build --config Debug
+
+    - name: Build (Windows)
+      if: matrix.os == 'windows-latest'
+      run: cmake --build build --config Debug
+
+    # --- TESTS SETUP ---
+    
+    # SETUP MESA (WINDOWS):
     - name: Setup Mesa3D (Windows)
       if: matrix.os == 'windows-latest'
       shell: powershell
@@ -49,23 +60,14 @@ jobs:
         7z x $output -omesa -y
         
         Write-Host "Installing drivers to build/Debug..."
-        New-Item -ItemType Directory -Force -Path "build/Debug"
-        
+        # Copiamos las DLLs junto al ejecutable recién compilado
         Copy-Item "mesa/x64/*.dll" -Destination "build/Debug"
         
         Write-Host "Mesa3D DLLs installed:"
         Get-ChildItem "build/Debug/*.dll" | Select-Object Name
 
-    # --- BUILD ---
-    - name: Build (Linux)
-      if: matrix.os == 'ubuntu-latest'
-      run: xvfb-run --auto-servernum cmake --build build --config Debug
+    # --- RUN TESTS ---
 
-    - name: Build (Windows)
-      if: matrix.os == 'windows-latest'
-      run: cmake --build build --config Debug
-
-    # --- TESTS ---
     - name: Run Tests (Linux)
       if: matrix.os == 'ubuntu-latest'
       working-directory: build
@@ -74,6 +76,9 @@ jobs:
     - name: Run Tests (Windows)
       if: matrix.os == 'windows-latest'
       working-directory: build
+      env:
+        GALLIUM_DRIVER: llvmpipe
+        LIBGL_ALWAYS_SOFTWARE: "true"
       run: |
         $env:Path = "$PWD\Debug;$env:Path"
         ctest -C Debug --output-on-failure
