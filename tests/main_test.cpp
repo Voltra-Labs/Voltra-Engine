@@ -3,6 +3,11 @@
 #include <GLFW/glfw3.h>
 #include <iostream>
 
+// Callback to print GLFW internal errors
+void GLFWErrorCallback(int error, const char* description) {
+    std::cerr << "[GLFW ERROR] (" << error << "): " << description << std::endl;
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
 
@@ -10,6 +15,8 @@ int main(int argc, char** argv) {
     if (::testing::GTEST_FLAG(list_tests)) {
         return RUN_ALL_TESTS();
     }
+
+    glfwSetErrorCallback(GLFWErrorCallback);
 
     // Initialize GLFW
     if (!glfwInit()) {
@@ -27,9 +34,12 @@ int main(int argc, char** argv) {
     // Use software rendering if hardware not available (useful for CI)
     glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_NATIVE_CONTEXT_API);
 
+    std::cout << "[TESTS] Attempting to create window with OpenGL 4.5..." << std::endl;
+
     GLFWwindow* window = glfwCreateWindow(640, 480, "Voltra Test Context", nullptr, nullptr);
     if (!window) {
-        std::cerr << "[TESTS] CRITICAL: Failed to create GLFW window/context. GPU may not support OpenGL 4.5." << std::endl;
+        std::cerr << "[TESTS] CRITICAL: Failed to create GLFW window/context." << std::endl;
+        std::cerr << "        Possible causes: GPU driver too old or Mesa3D DLLs not found in .exe folder." << std::endl;
         glfwTerminate();
         return -1;
     }
@@ -49,11 +59,6 @@ int main(int argc, char** argv) {
     std::cout << "  Vendor:   " << glGetString(GL_VENDOR) << std::endl;
     std::cout << "  Renderer: " << glGetString(GL_RENDERER) << std::endl;
     std::cout << "  Version:  " << glGetString(GL_VERSION) << std::endl;
-
-    // Verify real DSA support
-    if (GLAD_GL_VERSION_4_5 == 0) {
-        std::cerr << "[TESTS] WARNING: OpenGL 4.5 not supported by driver. Tests relying on DSA (Texture/Buffers) will crash." << std::endl;
-    }
 
     int result = RUN_ALL_TESTS();
 

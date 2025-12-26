@@ -51,10 +51,10 @@ jobs:
         Write-Host "Installing drivers to build/Debug..."
         New-Item -ItemType Directory -Force -Path "build/Debug"
         
-        Copy-Item "mesa/x64/opengl32.dll" -Destination "build/Debug/opengl32.dll"
-        Copy-Item "mesa/x64/libglapi.dll" -Destination "build/Debug/libglapi.dll"
+        Copy-Item "mesa/x64/*.dll" -Destination "build/Debug"
         
-        Write-Host "Mesa3D Installed Successfully."
+        Write-Host "Mesa3D DLLs installed:"
+        Get-ChildItem "build/Debug/*.dll" | Select-Object Name
 
     # --- BUILD ---
     - name: Build (Linux)
@@ -74,4 +74,6 @@ jobs:
     - name: Run Tests (Windows)
       if: matrix.os == 'windows-latest'
       working-directory: build
-      run: ctest -C Debug --output-on-failure
+      run: |
+        $env:Path = "$PWD\Debug;$env:Path"
+        ctest -C Debug --output-on-failure
