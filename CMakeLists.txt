@@ -112,6 +112,7 @@ add_executable(VoltraTests
     tests/TimestepTest.cpp
     tests/ECSTest.cpp
     tests/TextureTest.cpp
+    tests/TextureManagerTest.cpp
     ${ENGINE_SOURCES}
 )
 

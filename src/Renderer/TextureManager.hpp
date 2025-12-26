@@ -1,30 +1,32 @@
 #pragma once
 
-#include "Texture2D.h"
+#include "Texture.hpp"
 #include <string>
 #include <unordered_map>
 #include <memory>
 #include <filesystem>
 
-class TextureManager {
-public:
-    TextureManager() = delete;
+namespace Voltra {
 
-    // Initializes the system and creates the default fallback texture
-    static void Init();
+    class TextureManager {
+    public:
+        TextureManager() = delete;
 
-    // Requests a texture. NEVER returns nullptr.
-    static std::shared_ptr<Texture2D> GetTexture(const std::string& path);
+        // Initializes the system and creates the default fallback texture
+        static void Init();
 
-    // Cleans up memory
-    static void Clean();
+        // Requests a texture. NEVER returns nullptr.
+        static std::shared_ptr<Texture2D> GetTexture(const std::string& path);
 
-private:
-    // Loads the texture from disk
-    static std::shared_ptr<Texture2D> LoadTexture(const std::string& path);
+        // Cleans up memory
+        static void Clean();
 
-    static std::unordered_map<std::string, std::shared_ptr<Texture2D>> s_Textures;
-    
-    // Texture we return if something fails
-    static std::shared_ptr<Texture2D> s_DefaultTexture; 
-};
+    private:
+        // Loads the texture from disk
+        static std::shared_ptr<Texture2D> LoadTexture(const std::string& path);
+
+        static std::unordered_map<std::string, std::shared_ptr<Texture2D>> s_Textures;
+        static std::shared_ptr<Texture2D> s_DefaultTexture; 
+    };
+
+}
