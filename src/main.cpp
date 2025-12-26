@@ -1,4 +1,5 @@
 #include "Core/Application.hpp"
+#include "Sandbox/EditorLayer.hpp"
 #include "Core/Log.hpp"
 #include <memory>
 
@@ -11,6 +12,8 @@ int main() {
 
     // Heap allocation ensures stack safety for large engine objects
     auto app = std::make_unique<Voltra::Application>();
+    
+    app->PushLayer(new Voltra::EditorLayer());
     
     app->Run();
 
