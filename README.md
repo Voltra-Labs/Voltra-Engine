@@ -42,9 +42,9 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 | **Logging** | ✅ | Multi-level logging system with spdlog. |
 | **Maths** | ✅ | Integration of GLM (Vectors, Matrices, Quaternions). |
 | **Testing** | ✅ | Google Test framework configured. |
-| **Renderer** | 🚧 | *In Progress* - Core abstractions (VAO, Shader, Camera) and high-level Renderer implemented. |
+| **Renderer** | 🚧 | *Advanced* - Core abstractions (VAO, Shader, Camera), Textures and high-level Renderer implemented. |
+| **Assets** | 🚧 | *In Progress* - Texture Manager implemented. |
 | **ECS** | ⏳ | *Planned* - Entity Component System architecture. |
-| **Assets** | ⏳ | *Planned* - Asset manager and loaders. |
 
 ## 🛠️ Requirements
 
