@@ -119,10 +119,11 @@ target_link_libraries(${PROJECT_NAME}
     OpenGL::GL
     spdlog::spdlog
     EnTT::EnTT
+    box2d
     ${CMAKE_DL_LIBS}
 )
 
-# --- 4. Testing Framework (Google Test) ---
+# --- Testing Framework (Google Test) ---
 # Enable CMake's testing functionality
 enable_testing()
 
@@ -137,7 +138,18 @@ set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(googletest)
 
-# --- 5. Test Executable ---
+# --- Dependency: Box2D (Physics) ---
+message(STATUS "Fetching Box2D...")
+FetchContent_Declare(
+    box2d
+    GIT_REPOSITORY https://github.com/erincatto/box2d.git
+    GIT_TAG        v2.4.1
+)
+set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
+set(BOX2D_BUILD_TESTBED OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(box2d)
+
+# --- Test Executable ---
 # We create a separate executable just for running tests
 add_executable(VoltraTests 
     tests/main_test.cpp 
@@ -163,6 +175,7 @@ target_link_libraries(VoltraTests
     OpenGL::GL
     spdlog::spdlog
     EnTT::EnTT
+    box2d
     ${CMAKE_DL_LIBS}
 )
 
