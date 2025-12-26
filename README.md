@@ -22,15 +22,17 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 
 ## ✨ Key Features
 
-* **Modern C++ Base:** Written strictly in **C++20** to utilize the latest language features.
-* **Cross-Platform:** Window abstraction layer powered by **GLFW 3.3.8**.
-* **Graphics Context:** Initialized with **OpenGL 4.6 Core Profile** via **GLAD** loader.
-* **Event System:** Blocking event system for windowing and input handling.
-* **Renderer Abstraction:** Platform-agnostic buffer system (VertexBuffer, IndexBuffer) with OpenGL implementation.
-* **Math Library:** Integrated **GLM 1.0.1** for SIMD-friendly vector mathematics.
-* **Logging System:** Professional logging with **spdlog v1.12.0** for both engine and client code.
-* **Testing Framework:** Integrated **Google Test v1.14.0** for unit testing.
-* **Build System:** Modular **CMake** configuration with automatic dependency management via FetchContent.
+*   **Modern C++ Base:** Written strictly in **C++20** to utilize the latest language features.
+*   **Cross-Platform:** Window abstraction layer powered by **GLFW 3.3.8**.
+*   **Graphics Context:** Initialized with **OpenGL 4.6 Core Profile** via **GLAD** loader.
+*   **Event System:** Blocking event system for windowing and input handling.
+*   **Layer System:** Stack-based layer system for organizing rendering and logic updates.
+*   **Input Polling:** Static input polling for real-time keyboard and mouse state checks.
+*   **Renderer Abstraction:** Platform-agnostic rendering architecture (VertexArray, Shader, RenderCommand) with OpenGL implementation.
+*   **Math Library:** Integrated **GLM 1.0.1** for SIMD-friendly vector mathematics.
+*   **Logging System:** Professional logging with **spdlog v1.12.0** for both engine and client code.
+*   **Testing Framework:** Integrated **Google Test v1.14.0** for unit testing.
+*   **Build System:** Modular **CMake** configuration with automatic dependency management via FetchContent.
 
 ## 🗺️ Roadmap & Status
 
@@ -48,10 +50,10 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 
 To build Voltra Engine, you need:
 
-* **C++ Compiler:** MSVC (Visual Studio 2022 recommended), GCC 10+, or Clang 10+.
-* **CMake:** Version 3.15 or higher.
-* **Video Driver:** Support for OpenGL 4.6.
-* **Internet Connection:** Required for first build to fetch dependencies automatically.
+*   **C++ Compiler:** MSVC (Visual Studio 2022 recommended), GCC 10+, or Clang 10+.
+*   **CMake:** Version 3.15 or higher.
+*   **Video Driver:** Support for OpenGL 4.6.
+*   **Internet Connection:** Required for first build to fetch dependencies automatically.
 
 > **Note:** All dependencies (GLFW, GLM, spdlog, Google Test) are automatically downloaded and configured by CMake using FetchContent. No manual installation required!
 
@@ -112,14 +114,18 @@ Voltra-Engine/
 │   │   └── MouseEvent.hpp       # Mouse events
 │   ├── Renderer/
 │   │   ├── Buffer.hpp/cpp       # VertexBuffer & IndexBuffer abstractions
-│   │   └── ...                  # Future renderer components
+│   │   ├── VertexArray.hpp/cpp  # Vertex Array Objects
+│   │   ├── Shader.hpp/cpp       # Shader management
+│   │   └── ...                  # Renderer commands and context
 │   ├── Vendor/
 │   │   └── Glad/                # OpenGL loader (GLAD)
 │   └── main.cpp                 # Entry point
 ├── tests/
 │   ├── main_test.cpp            # Basic tests
 │   ├── EventTest.cpp            # Event system tests
-│   └── BufferTest.cpp           # Renderer buffer tests
+│   ├── BufferTest.cpp           # Renderer buffer tests
+│   ├── LayerStackTest.cpp       # Layer system tests
+│   └── TimestepTest.cpp         # Timestep utility tests
 ├── build/                       # Generated build files (git-ignored)
 ├── CMakeLists.txt               # Build configuration
 ├── README.md                    # This file
@@ -184,7 +190,6 @@ Categories include:
 * **Application:** Window close, resize, tick, update, render.
 * **Keyboard:** Key pressed, released, typed.
 * **Mouse:** Button pressed, released, moved, scrolled.
-```
 
 ## 🧪 Testing
 

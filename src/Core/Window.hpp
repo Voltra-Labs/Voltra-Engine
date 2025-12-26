@@ -1,9 +1,14 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
-#include <GLFW/glfw3.h>
+#include <functional>
+
+struct GLFWwindow;
 
 namespace Voltra {
+
+    class Event;
 
     class Window {
     public:
@@ -18,23 +23,34 @@ namespace Voltra {
                 : Title(title), Width(width), Height(height) {}
         };
 
+        using EventCallbackFn = std::function<void(Event&)>;
+
         Window(const Properties& props = Properties());
         ~Window();
 
         void OnUpdate();
 
+        void SetEventCallback(const EventCallbackFn& callback) { m_Data.EventCallback = callback; }
+
         [[nodiscard]] uint32_t GetWidth() const { return m_Data.Width; }
         [[nodiscard]] uint32_t GetHeight() const { return m_Data.Height; }
         [[nodiscard]] GLFWwindow* GetNativeWindow() const { return m_Window; }
 
-        [[nodiscard]] bool ShouldClose() const { return glfwWindowShouldClose(m_Window); }
+        [[nodiscard]] bool ShouldClose() const;
 
     private:
         void Init(const Properties& props);
         void Shutdown();
 
         GLFWwindow* m_Window{ nullptr };
-        Properties m_Data;
+        
+        struct WindowData {
+            std::string Title;
+            uint32_t Width, Height;
+            EventCallbackFn EventCallback;
+        };
+
+        WindowData m_Data;
     };
 
 }
