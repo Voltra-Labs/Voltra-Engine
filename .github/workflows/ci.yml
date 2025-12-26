@@ -22,22 +22,63 @@ jobs:
     # Download the code
     - uses: actions/checkout@v4
 
-    # Install system dependencies
+    # --- LINUX SETUP ---
     - name: Install Linux Dependencies
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev
+        sudo apt-get install -y libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libgl1-mesa-dev xvfb
 
-    # Configure CMake
+    # --- CONFIGURATION ---
     - name: Configure CMake
       run: cmake -B build -DCMAKE_BUILD_TYPE=Debug
 
-    # Build everything (Engine + Tests)
-    - name: Build
+    # --- BUILD ---
+    - name: Build (Linux)
+      if: matrix.os == 'ubuntu-latest'
+      run: xvfb-run --auto-servernum cmake --build build --config Debug
+
+    - name: Build (Windows)
+      if: matrix.os == 'windows-latest'
       run: cmake --build build --config Debug
 
-    # Run the tests
-    - name: Run Tests
+    # --- TESTS SETUP ---
+    
+    # SETUP MESA (WINDOWS):
+    - name: Setup Mesa3D (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: powershell
+      run: |
+        Write-Host "Downloading Mesa3D..."
+        $ProgressPreference = 'SilentlyContinue'
+        $url = "https://github.com/pal1000/mesa-dist-win/releases/download/23.1.9/mesa3d-23.1.9-release-msvc.7z"
+        $output = "mesa.7z"
+        
+        Invoke-WebRequest -Uri $url -OutFile $output
+        
+        Write-Host "Extracting..."
+        7z x $output -omesa -y
+        
+        Write-Host "Installing drivers to build/Debug..."
+        # Copiamos las DLLs junto al ejecutable recién compilado
+        Copy-Item "mesa/x64/*.dll" -Destination "build/Debug"
+        
+        Write-Host "Mesa3D DLLs installed:"
+        Get-ChildItem "build/Debug/*.dll" | Select-Object Name
+
+    # --- RUN TESTS ---
+
+    - name: Run Tests (Linux)
+      if: matrix.os == 'ubuntu-latest'
       working-directory: build
-      run: ctest -C Debug --output-on-failure
+      run: xvfb-run --auto-servernum ctest -C Debug --output-on-failure
+
+    - name: Run Tests (Windows)
+      if: matrix.os == 'windows-latest'
+      working-directory: build
+      env:
+        GALLIUM_DRIVER: llvmpipe
+        LIBGL_ALWAYS_SOFTWARE: "true"
+      run: |
+        $env:Path = "$PWD\Debug;$env:Path"
+        ctest -C Debug --output-on-failure

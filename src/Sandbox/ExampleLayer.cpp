@@ -12,21 +12,29 @@ void ExampleLayer::OnAttach() {
     // Initialize scene
     m_ActiveScene = std::make_shared<Voltra::Scene>();
 
-    // Create entity "Green Square"
-    m_SquareEntity = m_ActiveScene->CreateEntity("Green Square");
+    // Create a procedural texture (Checkerboard 2x2)
+    auto checkerTexture = std::make_shared<Voltra::Texture2D>(2, 2);
     
-    // Add Sprite component (Green color)
-    m_SquareEntity.AddComponent<Voltra::SpriteRendererComponent>(glm::vec4{0.2f, 0.8f, 0.3f, 1.0f});
+    uint32_t white = 0xFFFFFFFF;
+    uint32_t black = 0xFF000000;
+    uint32_t data[] = { white, black, black, white };
     
-    // Optional: Modify its Transform (position/scale)
-    auto& transform = m_SquareEntity.GetComponent<Voltra::TransformComponent>();
-    transform.Transform = glm::scale(glm::mat4(1.0f), glm::vec3(0.5f)); // Make the square a bit smaller
+    checkerTexture->SetData(data, sizeof(data));
 
-    // Create entity "Main Camera"
+    // Create entity with texture
+    m_SquareEntity = m_ActiveScene->CreateEntity("Checker Square");
+    
+    // Add component with texture
+    m_SquareEntity.AddComponent<Voltra::SpriteRendererComponent>(checkerTexture);
+    
+    // Optional: Scale to see the pixels better
+    m_SquareEntity.GetComponent<Voltra::TransformComponent>().Transform = 
+        glm::scale(glm::mat4(1.0f), glm::vec3(1.5f));
+
+
+    // Create camera
     m_CameraEntity = m_ActiveScene->CreateEntity("Main Camera");
     m_CameraEntity.AddComponent<Voltra::CameraComponent>();
-
-    // Note: CameraComponent by default has 'Primary = true', so the scene will use it automatically.
 }
 
 void ExampleLayer::OnDetach() {

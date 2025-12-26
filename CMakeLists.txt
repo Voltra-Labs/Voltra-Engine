@@ -7,6 +7,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Module to automatically download libraries
 include(FetchContent)
 
+# --- Dependency: stb (Image Loading) ---
+message(STATUS "Fetching stb...")
+FetchContent_Declare(
+    stb
+    GIT_REPOSITORY https://github.com/nothings/stb.git
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(stb)
+
 # --- Dependency: GLFW ---
 message(STATUS "Fetching GLFW...")
 FetchContent_Declare(
@@ -60,7 +69,10 @@ target_include_directories(${PROJECT_NAME} PUBLIC
     src/Vendor/Glad/include
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
+    ${stb_SOURCE_DIR}
 )
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
 
 # Library Linking
 find_package(OpenGL REQUIRED)
@@ -99,6 +111,7 @@ add_executable(VoltraTests
     tests/LayerStackTest.cpp
     tests/TimestepTest.cpp
     tests/ECSTest.cpp
+    tests/TextureTest.cpp
     ${ENGINE_SOURCES}
 )
 
@@ -107,7 +120,7 @@ add_executable(VoltraTests
 # Note: GTest::gtest_main provides a standard main() entry point for tests
 target_link_libraries(VoltraTests 
     PRIVATE 
-    GTest::gtest_main
+    GTest::gtest
     glfw 
     glm 
     OpenGL::GL
@@ -116,12 +129,15 @@ target_link_libraries(VoltraTests
     ${CMAKE_DL_LIBS}
 )
 
+target_compile_definitions(VoltraTests PRIVATE GLFW_INCLUDE_NONE)
+
 target_include_directories(VoltraTests PRIVATE 
     include
     src
     src/Vendor/Glad/include
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
+    ${stb_SOURCE_DIR}
 )
 
 # Integrate with CTest (allows running "ctest" command)

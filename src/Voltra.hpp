@@ -21,5 +21,6 @@
 #include "Renderer/Shader.hpp"
 #include "Renderer/VertexArray.hpp"
 #include "Renderer/OrthographicCamera.hpp"
+#include "Renderer/Texture.hpp"
 
 // --- Utilities ---
