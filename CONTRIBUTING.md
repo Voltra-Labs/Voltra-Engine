@@ -66,7 +66,35 @@ We aim for modern, clean, and performant C++.
    * Use `#pragma once`.
    * Separate declarations (`.hpp`) from implementations (`.cpp`).
 
+
 ---
+
+## 📝 Logging Guidelines
+
+**CRITICAL:** Do NOT use `std::cout`, `std::cerr`, or `printf` for logging.
+
+Voltra Engine uses a professional logging system (**spdlog**) that provides:
+- Color-coded output
+- Timestamps and Layouts
+- Separation between Engine (Core) and Client (App) logs
+- Different log levels (Trace, Info, Warn, Error, Fatal)
+
+### Usage Rules:
+
+1. **Engine Code** (`src/Core`, `src/Renderer`, etc.):
+   - ALways use `VOLTRA_CORE_*` macros.
+   - Example: `VOLTRA_CORE_INFO("System initialized");`
+
+2. **Client/App Code** (Game logic, Sandbox):
+   - Always use `VOLTRA_*` macros.
+   - Example: `VOLTRA_ERROR("Falied to load level: {}", levelName);`
+
+3. **Forbidden**:
+   - ❌ `std::cout << "Debug" << std::endl;`
+   - ❌ `printf("Debug\n");`
+
+Any Process Request containing raw `std::cout` usage will be **rejected**.
+
 
 ## 🚀 Pull Request Process
 
