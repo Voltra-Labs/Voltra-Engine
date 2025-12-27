@@ -131,6 +131,7 @@ target_link_libraries(${PROJECT_NAME}
     spdlog::spdlog
     EnTT::EnTT
     box2d
+    yaml-cpp
     ${CMAKE_DL_LIBS}
 )
 
@@ -160,6 +161,16 @@ set(BOX2D_BUILD_UNIT_TESTS OFF CACHE BOOL "" FORCE)
 set(BOX2D_BUILD_TESTBED OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(box2d)
 
+# --- Dependency: yaml-cpp (Serialization) ---
+message(STATUS "Fetching yaml-cpp...")
+FetchContent_Declare(
+    yaml-cpp
+    GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
+    GIT_TAG        master
+)
+set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(yaml-cpp)
+
 # --- Test Executable ---
 # We create a separate executable just for running tests
 add_executable(VoltraTests 
@@ -171,6 +182,7 @@ add_executable(VoltraTests
     tests/ECSTest.cpp
     tests/TextureTest.cpp
     tests/TextureManagerTest.cpp
+    tests/SceneSerializerTest.cpp
     ${ENGINE_SOURCES}
 )
 
@@ -187,6 +199,7 @@ target_link_libraries(VoltraTests
     spdlog::spdlog
     EnTT::EnTT
     box2d
+    yaml-cpp
     ${CMAKE_DL_LIBS}
 )
 

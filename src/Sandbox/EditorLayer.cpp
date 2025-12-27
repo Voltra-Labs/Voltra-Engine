@@ -10,7 +10,10 @@
 #include "Core/Application.hpp"
 
 #include "Scene/Components.hpp"
+#include "Scene/SceneSerializer.hpp"
 #include "Renderer/RenderCommand.hpp"
+#include "Core/Input.hpp"
+#include "Events/KeyEvent.hpp"
 
 namespace Voltra {
 
@@ -216,6 +219,27 @@ namespace Voltra {
              if (ImGui::IsKeyPressed(ImGuiKey_R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
         }
 
+        // Scene Serialization
+        bool control = Input::IsKeyPressed(GLFW_KEY_LEFT_CONTROL) || Input::IsKeyPressed(GLFW_KEY_RIGHT_CONTROL);
+        if (control && Input::IsKeyPressed(GLFW_KEY_S)) {
+            SceneSerializer serializer(m_ActiveScene);
+            serializer.Serialize("../assets/scenes/Example.voltra");
+            VOLTRA_INFO("Scene Saved to ../assets/scenes/Example.voltra");
+        }
+        if (control && Input::IsKeyPressed(GLFW_KEY_O)) {
+             std::shared_ptr<Scene> newScene = std::make_shared<Scene>();
+             SceneSerializer serializer(newScene);
+             if (serializer.Deserialize("../assets/scenes/Example.voltra"))
+             {
+                 m_ActiveScene->OnRuntimeStop(); // Stop physics on old scene
+                 m_ActiveScene = newScene;
+                 m_ActiveScene->OnRuntimeStart(); // Start physics on new scene (or remove if editor shouldn't autorun)
+                 
+                 m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+                 VOLTRA_INFO("Scene Loaded from ../assets/scenes/Example.voltra");
+             }
+        }
+
         ImGui::End(); // Viewport
 
         m_SceneHierarchyPanel.OnImGuiRender();
@@ -225,5 +249,29 @@ namespace Voltra {
 
     void EditorLayer::OnEvent(Event& e) {
         EventDispatcher dispatcher(e);
+        dispatcher.Dispatch<KeyPressedEvent>([&](KeyPressedEvent& e) {
+             // Shortcuts that don't depend on ImGui frame
+             bool control = Input::IsKeyPressed(GLFW_KEY_LEFT_CONTROL) || Input::IsKeyPressed(GLFW_KEY_RIGHT_CONTROL);
+             bool shift = Input::IsKeyPressed(GLFW_KEY_LEFT_SHIFT) || Input::IsKeyPressed(GLFW_KEY_RIGHT_SHIFT);
+
+             switch (e.GetKeyCode())
+             {
+                 case GLFW_KEY_S:
+                 {
+                     if (control && shift) {
+                         // Save As logic could go here
+                     }
+                     break;
+                 }
+                 case GLFW_KEY_D:
+                 {
+                     if (control) {
+                         // Duplicate Entity Logic could go here
+                     }
+                     break;
+                 }
+             }
+             return false;
+        });
     }
 }
