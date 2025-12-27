@@ -44,7 +44,7 @@ namespace Voltra {
         ImGuiTreeNodeFlags flags = (((entt::entity)m_SelectionContext == (entt::entity)entity) ? ImGuiTreeNodeFlags_Selected : 0) | ImGuiTreeNodeFlags_OpenOnArrow;
         flags |= ImGuiTreeNodeFlags_SpanAvailWidth;
 
-        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)(entt::entity)entity, flags, tag.c_str());
+        bool opened = ImGui::TreeNodeEx((void*)(uint64_t)(uint32_t)(entt::entity)entity, flags, "%s", tag.c_str());
         if (ImGui::IsItemClicked()) {
             m_SelectionContext = entity;
         }
@@ -59,7 +59,7 @@ namespace Voltra {
 
         ImGui::Columns(2);
         ImGui::SetColumnWidth(0, columnWidth);
-        ImGui::Text(label.c_str());
+        ImGui::Text("%s", label.c_str());
         ImGui::NextColumn();
 
         ImGui::PushMultiItemsWidths(3, ImGui::CalcItemWidth());
@@ -121,7 +121,7 @@ namespace Voltra {
             ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2{ 4, 4 });
             float lineHeight = ImGui::GetFontSize() + GImGui->Style.FramePadding.y * 2.0f;
             ImGui::Separator();
-            bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, name.c_str());
+            bool open = ImGui::TreeNodeEx((void*)typeid(T).hash_code(), treeNodeFlags, "%s", name.c_str());
             ImGui::PopStyleVar();
 
             if (open) {
@@ -137,7 +137,8 @@ namespace Voltra {
             
             char buffer[256];
             memset(buffer, 0, sizeof(buffer));
-            strcpy_s(buffer, sizeof(buffer), tag.c_str());
+            strncpy(buffer, tag.c_str(), sizeof(buffer));
+            buffer[sizeof(buffer) - 1] = '\0';
             if (ImGui::InputText("Tag", buffer, sizeof(buffer))) {
                 tag = std::string(buffer);
             }
