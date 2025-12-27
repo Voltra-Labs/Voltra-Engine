@@ -17,6 +17,8 @@ namespace Voltra {
         Entity CreateEntity(const std::string& name = std::string());
         void DestroyEntity(Entity entity);
 
+        Entity GetPrimaryCameraEntity();
+
         void OnRuntimeStart();
         void OnRuntimeStop();
 
@@ -27,6 +29,7 @@ namespace Voltra {
         b2World* m_PhysicsWorld = nullptr;
 
         friend class Entity;
+        friend class SceneHierarchyPanel;
     };
 
 }

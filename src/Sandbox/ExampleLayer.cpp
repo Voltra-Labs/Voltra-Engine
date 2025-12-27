@@ -28,8 +28,7 @@ void ExampleLayer::OnAttach() {
     m_SquareEntity.AddComponent<Voltra::SpriteRendererComponent>(checkerTexture);
     
     // Optional: Scale to see the pixels better
-    m_SquareEntity.GetComponent<Voltra::TransformComponent>().Transform = 
-        glm::scale(glm::mat4(1.0f), glm::vec3(1.5f));
+    m_SquareEntity.GetComponent<Voltra::TransformComponent>().Scale = glm::vec3(1.5f);
 
 
     // Create camera
