@@ -1,9 +1,11 @@
 #include "EditorLayer.hpp"
-#include "EditorLayer.hpp"
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <ImGuizmo.h>
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 
 #include "Core/Application.hpp"
 
@@ -91,6 +93,8 @@ namespace Voltra {
     }
 
     void EditorLayer::OnImGuiRender() {
+        ImGuizmo::BeginFrame();
+
         static bool dockspaceOpen = true;
         static bool opt_fullscreen = true;
         static bool opt_padding = false;
@@ -159,6 +163,59 @@ namespace Voltra {
         uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
         ImGui::Image((void*)(uintptr_t)textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
         
+        // Gizmos
+        Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
+        if (selectedEntity && m_GizmoType != -1)
+        {
+            ImGuizmo::SetOrthographic(true);
+            ImGuizmo::SetDrawlist();
+            
+            float windowWidth = (float)ImGui::GetWindowWidth();
+            float windowHeight = (float)ImGui::GetWindowHeight();
+            ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, windowWidth, windowHeight);
+
+            // Camera
+            auto cameraEntity = m_ActiveScene->GetPrimaryCameraEntity();
+            const auto& camera = cameraEntity.GetComponent<CameraComponent>().Camera;
+            const glm::mat4& cameraProjection = camera.GetProjectionMatrix();
+            glm::mat4 cameraView = glm::inverse(cameraEntity.GetComponent<TransformComponent>().GetTransform());
+
+            // Entity Transform
+            auto& tc = selectedEntity.GetComponent<TransformComponent>();
+            glm::mat4 transform = tc.GetTransform();
+
+            // Snapping
+            bool snap = Input::IsKeyPressed(GLFW_KEY_LEFT_CONTROL);
+            float snapValue = 0.5f; // Snap to 0.5m for translation/scale
+            if (m_GizmoType == ImGuizmo::OPERATION::ROTATE)
+                snapValue = 45.0f;
+
+            float snapValues[3] = { snapValue, snapValue, snapValue };
+
+            ImGuizmo::Manipulate(glm::value_ptr(cameraView), glm::value_ptr(cameraProjection),
+                (ImGuizmo::OPERATION)m_GizmoType, ImGuizmo::LOCAL, glm::value_ptr(transform),
+                nullptr, snap ? snapValues : nullptr);
+
+            if (ImGuizmo::IsUsing())
+            {
+                glm::vec3 translation, rotation, scale;
+                ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), glm::value_ptr(translation), glm::value_ptr(rotation), glm::value_ptr(scale));
+                
+                glm::vec3 deltaRotation = rotation - glm::degrees(tc.Rotation);
+                tc.Translation = translation;
+                tc.Rotation += glm::radians(deltaRotation);
+                tc.Scale = scale;
+            }
+        }
+        
+        // Input Handling for shortcuts (inside ImGui context)
+        if (!ImGui::GetIO().WantTextInput) {
+             if (ImGui::IsKeyPressed(ImGuiKey_Q)) m_GizmoType = -1;
+             if (ImGui::IsKeyPressed(ImGuiKey_W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
+             if (ImGui::IsKeyPressed(ImGuiKey_E)) m_GizmoType = ImGuizmo::OPERATION::ROTATE;
+             if (ImGui::IsKeyPressed(ImGuiKey_R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
+        }
+
         ImGui::End(); // Viewport
 
         m_SceneHierarchyPanel.OnImGuiRender();
@@ -167,5 +224,6 @@ namespace Voltra {
     }
 
     void EditorLayer::OnEvent(Event& e) {
+        EventDispatcher dispatcher(e);
     }
 }

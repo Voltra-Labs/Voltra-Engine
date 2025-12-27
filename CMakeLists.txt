@@ -64,6 +64,15 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(imgui)
 
+# --- Dependency: ImGuizmo ---
+message(STATUS "Fetching ImGuizmo...")
+FetchContent_Declare(
+    imguizmo
+    GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
+    GIT_TAG        master
+)
+FetchContent_MakeAvailable(imguizmo)
+
 # Create an ImGui library to handle includes/sources cleanly
 set(IMGUI_DIR ${imgui_SOURCE_DIR})
 add_library(ImGuiLib STATIC
@@ -74,12 +83,14 @@ add_library(ImGuiLib STATIC
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/backends/imgui_impl_glfw.cpp
     ${IMGUI_DIR}/backends/imgui_impl_opengl3.cpp
+    ${imguizmo_SOURCE_DIR}/ImGuizmo.cpp
 )
 target_include_directories(ImGuiLib PUBLIC 
     ${IMGUI_DIR} 
     ${IMGUI_DIR}/backends
     ${glfw_SOURCE_DIR}/include 
     include # to find Voltra headers if backends need them? No, usually not.
+    ${imguizmo_SOURCE_DIR}
 )
 target_link_libraries(ImGuiLib PRIVATE glfw OpenGL::GL) # Backends need these
 
