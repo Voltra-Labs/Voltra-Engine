@@ -9,6 +9,7 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 [![OpenGL](https://img.shields.io/badge/OpenGL-4.6-green.svg)](src/main.cpp)
 [![Testing](https://img.shields.io/badge/Testing-Google%20Test-yellow.svg)](tests/)
+<a href="https://deepwiki.com/Voltra-Labs/Voltra-Engine"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
 
 </div>
 
