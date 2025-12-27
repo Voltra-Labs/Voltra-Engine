@@ -192,4 +192,4 @@ target_include_directories(VoltraTests PRIVATE
 
 # Integrate with CTest (allows running "ctest" command)
 include(GoogleTest)
-gtest_discover_tests(VoltraTests)
+gtest_discover_tests(VoltraTests DISCOVERY_TIMEOUT 60)

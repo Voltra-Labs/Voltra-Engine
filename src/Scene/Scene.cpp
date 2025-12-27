@@ -28,6 +28,16 @@ namespace Voltra {
         m_Registry.destroy(entity);
     }
 
+    Entity Scene::GetPrimaryCameraEntity() {
+        auto view = m_Registry.view<CameraComponent>();
+        for (auto entity : view) {
+            const auto& camera = view.get<CameraComponent>(entity);
+            if (camera.Primary)
+                return Entity{ entity, this };
+        }
+        return {};
+    }
+
     static b2BodyType VoltraBodyTypeToBox2D(Rigidbody2DComponent::BodyType bodyType) {
         switch (bodyType) {
             case Rigidbody2DComponent::BodyType::Static:    return b2_staticBody;
@@ -46,18 +56,10 @@ namespace Voltra {
             auto& transform = entity.GetComponent<TransformComponent>();
             auto& rb = entity.GetComponent<Rigidbody2DComponent>();
 
-            // Extract Transform
-            glm::vec3 scale;
-            scale.x = glm::length(glm::vec3(transform.Transform[0]));
-            scale.y = glm::length(glm::vec3(transform.Transform[1]));
-
-            // Extract Rotation (Z-axis for 2D)
-            float angle = glm::atan(transform.Transform[0][1], transform.Transform[0][0]);
-
             b2BodyDef bodyDef;
             bodyDef.type = VoltraBodyTypeToBox2D(rb.Type);
-            bodyDef.position.Set(transform.Transform[3][0], transform.Transform[3][1]);
-            bodyDef.angle = angle;
+            bodyDef.position.Set(transform.Translation.x, transform.Translation.y);
+            bodyDef.angle = transform.Rotation.z;
 
             b2Body* body = m_PhysicsWorld->CreateBody(&bodyDef);
             body->SetFixedRotation(rb.FixedRotation);
@@ -67,7 +69,7 @@ namespace Voltra {
                 auto& bc = entity.GetComponent<BoxCollider2DComponent>();
 
                 b2PolygonShape boxShape;
-                boxShape.SetAsBox(bc.Size.x * scale.x, bc.Size.y * scale.y, b2Vec2(bc.Offset.x, bc.Offset.y), 0.0f); 
+                boxShape.SetAsBox(bc.Size.x * transform.Scale.x, bc.Size.y * transform.Scale.y, b2Vec2(bc.Offset.x, bc.Offset.y), 0.0f); 
                 
                 b2FixtureDef fixtureDef;
                 fixtureDef.shape = &boxShape;
@@ -103,20 +105,9 @@ namespace Voltra {
                     b2Body* body = (b2Body*)rb.RuntimeBody;
                     const auto& position = body->GetPosition();
                     auto& transform = entity.GetComponent<TransformComponent>();
-                    transform.Transform[3][0] = position.x;
-                    transform.Transform[3][1] = position.y;
-                    
-                    float angle = body->GetAngle();
-
-                    // Retrieve existing scale
-                    glm::vec3 scale;
-                    scale.x = glm::length(glm::vec3(transform.Transform[0]));
-                    scale.y = glm::length(glm::vec3(transform.Transform[1]));
-                    scale.z = glm::length(glm::vec3(transform.Transform[2]));
-
-                    transform.Transform = glm::translate(glm::mat4(1.0f), glm::vec3(position.x, position.y, transform.Transform[3][2]))
-                        * glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 0.0f, 1.0f))
-                        * glm::scale(glm::mat4(1.0f), scale);
+                    transform.Translation.x = position.x;
+                    transform.Translation.y = position.y;
+                    transform.Rotation.z = body->GetAngle();
                 }
             }
         }
@@ -140,7 +131,7 @@ namespace Voltra {
             auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
             if (camera.Primary) {
                 mainCamera = &camera;
-                cameraTransform = transform.Transform;
+                cameraTransform = transform.GetTransform();
                 break;
             }
         }
@@ -160,10 +151,10 @@ namespace Voltra {
                 // If it has a texture, we use the texture overload
                 if (sprite.Texture) {
                     // TODO: DrawQuad(transform, texture, tint)
-                    Renderer2D::DrawQuad(transform.Transform, sprite.Texture);
+                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
                 } 
                 else {
-                    Renderer2D::DrawQuad(transform.Transform, sprite.Color);
+                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Color);
                 }
             }
 
