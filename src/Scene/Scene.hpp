@@ -22,7 +22,9 @@ namespace Voltra {
         void OnRuntimeStart();
         void OnRuntimeStop();
 
-        void OnUpdate(Timestep ts);
+        void OnUpdate(Timestep ts); // Existing
+
+        entt::registry& GetRegistry() { return m_Registry; }
 
     private:
         entt::registry m_Registry;
@@ -30,6 +32,7 @@ namespace Voltra {
 
         friend class Entity;
         friend class SceneHierarchyPanel;
+        friend class SceneSerializer;
     };
 
 }

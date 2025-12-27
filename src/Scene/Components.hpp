@@ -74,6 +74,10 @@ namespace Voltra {
         bool Primary = true; // If there are multiple cameras, is this the main one?
         bool FixedAspectRatio = false;
 
+        float OrthographicSize = 10.0f;
+        float OrthographicNear = -1.0f;
+        float OrthographicFar = 1.0f;
+
         // Constructor by default initializing a basic orthographic camera (-1 to 1)
         CameraComponent() 
             : Camera(-1.0f, 1.0f, -1.0f, 1.0f) {} // Default aspect ratio 1.0
