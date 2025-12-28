@@ -27,6 +27,9 @@ namespace Voltra {
         fbSpec.Width = 1280;
         fbSpec.Height = 720;
         m_Framebuffer = Framebuffer::Create(fbSpec);
+        m_GameFramebuffer = Framebuffer::Create(fbSpec);
+        
+        // Camera
 
         // Camera
         auto cameraEntity = m_ActiveScene->CreateEntity("Camera");
@@ -69,46 +72,68 @@ namespace Voltra {
     }
 
     void EditorLayer::OnUpdate(Timestep ts) {
-        // Resize logic if framebuffer size != viewport size
+        // Resize logic for Scene Window framebuffer
         if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && // zero sized framebuffer is invalid
             (m_Framebuffer->GetSpecification().Width != m_ViewportSize.x || m_Framebuffer->GetSpecification().Height != m_ViewportSize.y))
         {
             m_Framebuffer->Resize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
             m_EditorCamera.SetViewportSize(m_ViewportSize.x, m_ViewportSize.y);
-            
-            // Update camera projection
-            auto cameraEntity = m_ActiveScene->GetPrimaryCameraEntity();
-            if (cameraEntity)
-            {
-                auto& cc = cameraEntity.GetComponent<CameraComponent>();
-                float aspectRatio = m_ViewportSize.x / m_ViewportSize.y;
-                float orthoSize = 9.0f; // Hardcoded default size for now
-                cc.Camera.SetProjection(-orthoSize * aspectRatio * 0.5f, orthoSize * aspectRatio * 0.5f, -orthoSize * 0.5f, orthoSize * 0.5f);
-            }
         }
 
+        // Resize logic for Game Window framebuffer
+        if (m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f &&
+            (m_GameFramebuffer->GetSpecification().Width != m_GameViewportSize.x || m_GameFramebuffer->GetSpecification().Height != m_GameViewportSize.y))
+        {
+            m_GameFramebuffer->Resize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+            m_ActiveScene->OnViewportResize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
+        }
+
+        // ============================
+        // RENDER PASS 1: Scene View (Editor Camera)
+        // ============================
         m_Framebuffer->Bind();
         RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1 });
+        RenderCommand::Clear();
+
+        // Always Update Editor Scene logic if focused? 
+        if (m_ViewportFocused)
+             m_EditorCamera.OnUpdate(ts);
+
+        // ImGui Zoom Handling
+        if (m_ViewportHovered)
+        {
+             float wheel = ImGui::GetIO().MouseWheel;
+             if (wheel != 0.0f)
+                 m_EditorCamera.Zoom(wheel);
+        }
+
+        m_ActiveScene->OnUpdateEditor(ts, m_EditorCamera);
+        m_Framebuffer->Unbind();
+
+        // ============================
+        // RENDER PASS 2: Game View (Runtime Camera)
+        // ============================
+        m_GameFramebuffer->Bind();
+        RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1 }); 
         RenderCommand::Clear();
 
         switch (m_SceneState)
         {
             case SceneState::Edit:
             {
-                if (m_ViewportFocused)
-                    m_EditorCamera.OnUpdate(ts);
-                
-                m_ActiveScene->OnUpdateEditor(ts, m_EditorCamera);
+                // In Edit mode, we just want to SEE what the game camera sees, but not run physics/scripts
+                m_ActiveScene->OnRenderRuntime(ts);
                 break;
             }
             case SceneState::Play:
             {
+                // In Play Mode, we update the scene (physics + scripts) AND render it
                 m_ActiveScene->OnUpdate(ts);
                 break;
             }
         }
         
-        m_Framebuffer->Unbind();
+        m_GameFramebuffer->Unbind();
     }
 
 
@@ -241,10 +266,17 @@ namespace Voltra {
         // SCENE WINDOW (Edit Mode + Gizmos)
         // ==========================================
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0, 0 });
-        ImGui::Begin("Scene");
+        ImGui::Begin("Scene", nullptr, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
         
         m_ViewportFocused = ImGui::IsWindowFocused(); // We consider Scene window specifically for input
         m_ViewportHovered = ImGui::IsWindowHovered();
+
+        if (m_ViewportHovered)
+        {
+             float wheel = ImGui::GetIO().MouseWheel;
+             if (wheel != 0.0f)
+                 m_EditorCamera.Zoom(wheel);
+        }
         
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         
@@ -254,9 +286,9 @@ namespace Voltra {
         uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
         ImGui::Image((void*)(uintptr_t)textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
-        // Gizmos (Only in active Scene window)
+        // Gizmos (Only in active Scene window, but available in Play Mode too)
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-        if (selectedEntity && m_GizmoType != -1 && m_SceneState == SceneState::Edit) 
+        if (selectedEntity && m_GizmoType != -1) 
         {
             ImGuizmo::SetOrthographic(true);
             ImGuizmo::SetDrawlist();
@@ -306,13 +338,11 @@ namespace Voltra {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0, 0 });
         ImGui::Begin("Game");
         
-        // Just render the framebuffer image. No Gizmos.
         ImVec2 gamePanelSize = ImGui::GetContentRegionAvail();
+        m_GameViewportSize = { gamePanelSize.x, gamePanelSize.y };
         
-        // Note: For now we share the framebuffer and it's resized by the Scene window logic above.
-        // We just draw it here. If the aspect ratios differ significantly, it might look stretched.
-        // The user agreed to this compromise for now.
-        ImGui::Image((void*)(uintptr_t)textureID, ImVec2{ gamePanelSize.x, gamePanelSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
+        uint32_t gameTextureID = m_GameFramebuffer->GetColorAttachmentRendererID();
+        ImGui::Image((void*)(uintptr_t)gameTextureID, ImVec2{ gamePanelSize.x, gamePanelSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
         
         ImGui::End(); // Game
         ImGui::PopStyleVar();
@@ -393,7 +423,7 @@ namespace Voltra {
         // Use Serializer
         try {
             SceneSerializer serializer(m_EditorScene);
-            std::filesystem::path tempPath = "scenes/temp_physics.voltra";
+            std::filesystem::path tempPath = "../assets/scenes/temp_physics.voltra";
             serializer.Serialize(tempPath.string());
             
             SceneSerializer newSerializer(m_ActiveScene);
@@ -407,6 +437,7 @@ namespace Voltra {
 
          m_ActiveScene->OnRuntimeStart();
          m_SceneHierarchyPanel.SetContext(m_ActiveScene);
+         ImGui::SetWindowFocus("Game");
     }
 
     void EditorLayer::OnSceneStop() {
@@ -418,7 +449,7 @@ namespace Voltra {
         
         // Cleanup temp file
         try {
-            std::filesystem::path tempPath = "scenes/temp_physics.voltra";
+            std::filesystem::path tempPath = "../assets/scenes/temp_physics.voltra";
             if (std::filesystem::exists(tempPath))
                 std::filesystem::remove(tempPath);
         } catch (...) {
