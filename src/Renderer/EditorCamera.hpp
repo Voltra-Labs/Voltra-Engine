@@ -20,6 +20,7 @@ namespace Voltra {
 
         float GetZoomLevel() const { return m_ZoomLevel; }
         void SetZoomLevel(float level) { m_ZoomLevel = level; CalculateView(); }
+        void Zoom(float delta);
 
     private:
         bool OnMouseScrolled(MouseScrolledEvent& e);
@@ -32,6 +33,7 @@ namespace Voltra {
         float m_ZoomLevel = 1.0f;
         float m_ViewportWidth = 1280.0f;
         float m_ViewportHeight = 720.0f;
+        glm::vec2 m_LastMousePosition = { 0.0f, 0.0f };
     };
 
 }

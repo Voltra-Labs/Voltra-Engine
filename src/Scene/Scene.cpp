@@ -186,4 +186,60 @@ namespace Voltra {
         Renderer2D::EndScene();
     }
 
+    void Scene::OnRenderRuntime(Timestep ts) {
+        // Rendering logic recycled from OnUpdate
+        CameraComponent* mainCamera = nullptr;
+        glm::mat4 cameraTransform;
+
+        auto view = m_Registry.view<TransformComponent, CameraComponent>();
+        for (auto entity : view) {
+            auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
+            if (camera.Primary) {
+                mainCamera = &camera;
+                cameraTransform = transform.GetTransform();
+                break;
+            }
+        }
+
+        if (mainCamera) {
+            glm::vec3 pos = glm::vec3(cameraTransform[3]);
+            mainCamera->Camera.SetPosition(pos);
+            
+            Renderer2D::BeginScene(mainCamera->Camera);
+
+            auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
+            for (auto entity : group) {
+                auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
+                
+                if (sprite.Texture) {
+                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
+                } 
+                else {
+                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Color);
+                }
+            }
+
+            Renderer2D::EndScene();
+        }
+    }
+
+    void Scene::OnViewportResize(uint32_t width, uint32_t height)
+    {
+        m_ViewportWidth = width;
+        m_ViewportHeight = height;
+
+        // Resize our non-FixedAspectRatio cameras
+        auto view = m_Registry.view<CameraComponent>();
+        for (auto entity : view)
+        {
+            auto& cameraComponent = view.get<CameraComponent>(entity);
+            if (!cameraComponent.FixedAspectRatio)
+            {
+                float aspectRatio = (float)width / (float)height;
+                float orthoSize = cameraComponent.OrthographicSize;
+                cameraComponent.Camera.SetProjection(-orthoSize * aspectRatio * 0.5f, orthoSize * aspectRatio * 0.5f, -orthoSize * 0.5f, orthoSize * 0.5f);
+            }
+        }
+    }
+
 }
