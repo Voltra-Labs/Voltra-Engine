@@ -6,7 +6,7 @@
 
 <p align="center">
   <img src=".github/assets/editor_screenshot.png" alt="Voltra Engine Editor" width="800"/>
-  <video src=".github/assets/editor_video.mp4" alt="Voltra Engine Editor" width="800"/>
+  ![Voltra Engine Editor](.github/assets/editor_demo.gif)
 </p>
 
 [![Voltra Engine CI](https://github.com/Voltra-Labs/Voltra-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Voltra-Labs/Voltra-Engine/actions/workflows/ci.yml)
