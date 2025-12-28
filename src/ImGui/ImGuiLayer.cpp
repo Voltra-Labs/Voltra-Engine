@@ -24,6 +24,11 @@ namespace Voltra {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;          // Enable Keyboard Controls
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
         // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
+        
+        // Load font relative to build directory (or project root depending on run config)
+        // Since we run from build/, use ../assets
+        io.Fonts->AddFontFromFileTTF("../assets/fonts/Roboto-Regular.ttf", 18.0f);
+        io.FontDefault = io.Fonts->Fonts.back();
 
         // Setup Dear ImGui style
         ImGui::StyleColorsDark();

@@ -8,6 +8,9 @@
 
 #include <box2d/box2d.h>
 
+#include "Renderer/EditorCamera.hpp"
+
+
 namespace Voltra {
 
     Scene::Scene() {
@@ -160,6 +163,27 @@ namespace Voltra {
 
             Renderer2D::EndScene();
         }
+    }
+
+    void Scene::OnUpdateEditor(Timestep ts, EditorCamera& camera) {
+        // Rendering
+        Renderer2D::BeginScene(camera);
+
+        // Draw all entities with SpriteRenderer and Transform
+        auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
+        for (auto entity : group) {
+            auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
+            
+            // If it has a texture, we use the texture overload
+            if (sprite.Texture) {
+                Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
+            } 
+            else {
+                Renderer2D::DrawQuad(transform.GetTransform(), sprite.Color);
+            }
+        }
+
+        Renderer2D::EndScene();
     }
 
 }
