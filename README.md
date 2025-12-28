@@ -19,21 +19,22 @@
 
 **Voltra Engine** is an educational and experimental game engine designed with **Data-Oriented Design (DOD)** principles at its core. The goal is to create a modern architecture that maximizes CPU cache locality and leverages current hardware capabilities, moving away from traditional object-oriented overheads in critical loops.
 
-Currently in the **Initial Core** phase, Voltra provides a robust foundation for windowing, context management, and logging, ready for the implementation of a modern rendering pipeline.
+Currently, Voltra provides a robust foundation with a custom Editor, ECS architecture, and 2D physics, making it a capable tool for 2D game development.
 
 ## ✨ Key Features
 
 *   **Modern C++ Base:** Written strictly in **C++20** to utilize the latest language features.
 *   **Cross-Platform:** Window abstraction layer powered by **GLFW 3.3.8**.
 *   **Graphics Context:** Initialized with **OpenGL 4.6 Core Profile** via **GLAD** loader.
+*   **Entity Component System (ECS):** Flexible architecture for game objects using Components (Tag, Transform, Sprite, Physics, etc.).
+*   **2D Physics:** Integrated **Box2D** physics engine for realistic collisions and dynamics.
+*   **Editor Interface:** Professional **ImGui**-based editor with Docking, Scene Hierarchy, and Properties Panel.
+*   **Renderer:** Batching 2D Renderer (Quads, Textures, Rotated Quads) and Framebuffer support.
+*   **Scene Serialization:** Save and Load scenes using **YAML**.
 *   **Event System:** Blocking event system for windowing and input handling.
-*   **Layer System:** Stack-based layer system for organizing rendering and logic updates.
-*   **Input Polling:** Static input polling for real-time keyboard and mouse state checks.
-*   **Renderer Abstraction:** Platform-agnostic rendering architecture (VertexArray, Shader, RenderCommand) with OpenGL implementation.
-*   **Math Library:** Integrated **GLM 1.0.1** for SIMD-friendly vector mathematics.
-*   **Logging System:** Professional logging with **spdlog v1.12.0** for both engine and client code.
-*   **Testing Framework:** Integrated **Google Test v1.14.0** for unit testing.
-*   **Build System:** Modular **CMake** configuration with automatic dependency management via FetchContent.
+*   **Logging System:** Professional logging with **spdlog v1.12.0**.
+*   **Testing Framework:** Integrated **Google Test v1.14.0**.
+*   **Build System:** Modular **CMake** configuration with automatic dependency management.
 
 ## 🗺️ Roadmap & Status
 
@@ -41,11 +42,13 @@ Currently in the **Initial Core** phase, Voltra provides a robust foundation for
 | :--- | :---: | :--- |
 | **Core System** | ✅ | Window creation, Event handling, Main Loop. |
 | **Logging** | ✅ | Multi-level logging system with spdlog. |
-| **Maths** | ✅ | Integration of GLM (Vectors, Matrices, Quaternions). |
-| **Testing** | ✅ | Google Test framework configured. |
-| **Renderer** | 🚧 | *Advanced* - Core abstractions (VAO, Shader, Camera), Textures and high-level Renderer implemented. |
-| **Assets** | 🚧 | *In Progress* - Texture Manager implemented. |
-| **ECS** | ⏳ | *Planned* - Entity Component System architecture. |
+| **Maths** | ✅ | Integration of GLM. |
+| **Testing** | ✅ | Google Test framework implemented. |
+| **Renderer** | ✅ | Batch Renderer 2D, Framebuffers, Editor Camera. |
+| **ECS** | ✅ | Entity-Component structure fully implemented. |
+| **Physics** | ✅ | Box2D integration (Rigidbodies, Colliders). |
+| **Editor** | ✅ | ImGui Docking, Scene Hierarchy, Inspector. |
+| **Scripting** | 🚧 | *In Progress* - Native C++ Scripting. |
 
 ## 🛠️ Requirements
 
@@ -56,7 +59,7 @@ To build Voltra Engine, you need:
 *   **Video Driver:** Support for OpenGL 4.6.
 *   **Internet Connection:** Required for first build to fetch dependencies automatically.
 
-> **Note:** All dependencies (GLFW, GLM, spdlog, Google Test) are automatically downloaded and configured by CMake using FetchContent. No manual installation required!
+> **Note:** All dependencies (GLFW, GLM, spdlog, Google Test, yaml-cpp, Box2D, ImGui) are automatically downloaded and configured by CMake using FetchContent.
 
 ## 🚀 Quick Start
 
@@ -93,10 +96,6 @@ The executable will be located in the `build/` directory (or `build/Release/` on
 # Run all tests
 cd build
 ctest --output-on-failure
-
-# Or run the test executable directly
-.\Release\VoltraTests.exe  # Windows
-./VoltraTests              # Linux/macOS
 ```
 
 ## 📂 Project Structure
@@ -106,97 +105,61 @@ Voltra-Engine/
 ├── src/
 │   ├── Core/
 │   │   ├── Application.hpp/cpp  # Main application class
-│   │   ├── Window.hpp/cpp       # Window abstraction (GLFW)
 │   │   └── Log.hpp/cpp          # Logging system (spdlog)
 │   ├── Events/
-│   │   ├── Event.hpp            # Base event class and dispatcher
-│   │   ├── ApplicationEvent.hpp # Window and App events
-│   │   ├── KeyEvent.hpp         # Keyboard events
-│   │   └── MouseEvent.hpp       # Mouse events
+│   │   └── Event.hpp            # Event system (Key, Mouse, App)
 │   ├── Renderer/
-│   │   ├── Buffer.hpp/cpp       # VertexBuffer & IndexBuffer abstractions
-│   │   ├── VertexArray.hpp/cpp  # Vertex Array Objects
-│   │   ├── Shader.hpp/cpp       # Shader management
-│   │   └── ...                  # Renderer commands and context
-│   ├── Vendor/
-│   │   └── Glad/                # OpenGL loader (GLAD)
+│   │   ├── Renderer2D.hpp/cpp   # Batch Renderer
+│   │   ├── Framebuffer.hpp/cpp  # FBO handling
+│   │   └── EditorCamera.hpp/cpp # Camera for Editor view
+│   ├── Scene/
+│   │   ├── Scene.hpp/cpp        # Scene management & ECS registry
+│   │   ├── Entity.hpp/cpp       # Entity wrapper
+│   │   └── Components.hpp       # ECS Components
+│   ├── ImGui/
+│   │   ├── ImGuiLayer.hpp/cpp       # ImGui integration
+│   │   └── SceneHierarchyPanel.cpp  # Editor UI panels
+│   ├── Sandbox/
+│   │   └── EditorLayer.hpp/cpp  # Main Editor application layer
 │   └── main.cpp                 # Entry point
-├── tests/
-│   ├── main_test.cpp            # Basic tests
-│   ├── EventTest.cpp            # Event system tests
-│   ├── BufferTest.cpp           # Renderer buffer tests
-│   ├── LayerStackTest.cpp       # Layer system tests
-│   └── TimestepTest.cpp         # Timestep utility tests
+├── tests/                       # Google Test unit tests
 ├── build/                       # Generated build files (git-ignored)
 ├── CMakeLists.txt               # Build configuration
 ├── README.md                    # This file
 ├── CONTRIBUTING.md              # Contribution guidelines
-├── CODE_OF_CONDUCT.md           # Code of conduct
 └── LICENSE                      # MIT License
 ```
 
-> **Note:** Dependencies are managed automatically by CMake FetchContent and are downloaded to `build/_deps/` during the first build. GLAD is included as a vendor library in `src/Vendor/Glad/`.
+> **Note:** Dependencies (Glad, ImGui, Box2D, etc.) are managed in `src/Vendor` or via CMake FetchContent.
 
 ## 🔧 Core Systems
 
-### Logging System
-
-Voltra Engine includes a professional logging system powered by spdlog with color-coded output:
-
+### Entity Component System (ECS)
+Voltra uses `entt` inspired registry system (internally implemented or wrapped) to manage game objects.
 ```cpp
-// Engine-side logging (use in engine code)
-VOLTRA_CORE_TRACE("Detailed trace information");
-VOLTRA_CORE_INFO("Informational message");
-VOLTRA_CORE_WARN("Warning message");
-VOLTRA_CORE_ERROR("Error message");
-VOLTRA_CORE_FATAL("Critical error");
-
-// Client-side logging (use in game/app code)
-VOLTRA_TRACE("Game trace");
-VOLTRA_INFO("Game info");
-VOLTRA_WARN("Game warning");
-VOLTRA_ERROR("Game error");
-VOLTRA_FATAL("Game critical");
+auto entity = scene->CreateEntity("Player");
+entity.AddComponent<TransformComponent>();
+entity.AddComponent<SpriteRendererComponent>(glm::vec4(1.0f, 0.5f, 0.2f, 1.0f));
 ```
 
-### Window Management
-
-The `Window` class provides a clean abstraction over GLFW:
-
+### Logging System
 ```cpp
-// Window is automatically created by Application
-// Access window properties:
-uint32_t width = window->GetWidth();
-uint32_t height = window->GetHeight();
-bool shouldClose = window->ShouldClose();
+VOLTRA_CORE_INFO("Engine Initialized");
+VOLTRA_WARN("Player health low: {}", health);
 ```
 
 ### Event System
-
-The Event System handles engine-wide events using a blocking dispatcher mechanism:
-
+Blocking event system for handling inputs and window events.
 ```cpp
 void OnEvent(Event& e) {
     EventDispatcher dispatcher(e);
-    
-    // Dispatch window resize events
-    dispatcher.Dispatch<WindowResizeEvent>([](WindowResizeEvent& e) {
-        VOLTRA_CORE_INFO("Window resized to {0}x{1}", e.GetWidth(), e.GetHeight());
-        return true; // Event handled
-    });
+    dispatcher.Dispatch<WindowResizeEvent>(OnWindowResize);
 }
 ```
-
-Categories include:
-* **Application:** Window close, resize, tick, update, render.
-* **Keyboard:** Key pressed, released, typed.
-* **Mouse:** Button pressed, released, moved, scrolled.
 
 ## 🧪 Testing
 
 The project uses Google Test for unit testing. Tests are located in the `tests/` directory.
-
-To add new tests, edit `tests/main_test.cpp` or create new test files and link them in `CMakeLists.txt`.
 
 ## 🤝 Contributing
 
@@ -211,17 +174,6 @@ Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
 ## 🛡️ Code of Conduct
 
 Please refer to the [CODE_OF_CONDUCT](CODE_OF_CONDUCT.md) for more information.
-
-## 📚 Documentation
-
-For detailed documentation on architecture, systems, and development guides, visit the [Wiki](https://github.com/Voltra-Labs/Voltra-Engine/wiki).
-
-### Quick Links:
-- [🏗️ Architecture & Core Systems](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Architecture)
-- [🎨 Renderer System](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Renderer-System)
-- [⚡ Event System](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Event-System)
-- [🚀 Getting Started](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Getting-Started)
-- [🤝 Contribution Guide](https://github.com/Voltra-Labs/Voltra-Engine/wiki/Contribution-Guide)
 
 ---
 
