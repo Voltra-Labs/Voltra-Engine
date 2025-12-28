@@ -5,8 +5,6 @@
 **A high-performance 3D graphics engine built from scratch in C++20.**
 
 <p align="center">
-  <img src=".github/assets/editor_screenshot.png" alt="Voltra Engine Editor" width="800"/>
-  <br/>
   <a href=".github/assets/editor_video.gif"><img src=".github/assets/editor_video.gif" alt="Voltra Engine Editor" width="800"/></a>
 </p>
 
