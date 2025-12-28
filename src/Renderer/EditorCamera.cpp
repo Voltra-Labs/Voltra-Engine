@@ -1,5 +1,6 @@
 #include "EditorCamera.hpp"
 #include "Core/Input.hpp"
+#include "Core/Log.hpp"
 
 
 #define GLFW_INCLUDE_NONE
@@ -15,47 +16,28 @@ namespace Voltra {
 
     void EditorCamera::OnUpdate(Timestep ts)
     {
-        // Pan logic
-        if (Input::IsMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT))
-        {
-            glm::vec2 mousePos = { Input::GetMouseX(), Input::GetMouseY() };
+        glm::vec2 mouse = { Input::GetMouseX(), Input::GetMouseY() };
+        glm::vec2 delta = (mouse - m_LastMousePosition);
+        m_LastMousePosition = mouse;
 
-            // Simple panning logic could be implemented here relative to delta mouse
-            // For now, let's implement WASD movement for the editor camera as requested in some contexts,
-            // or stick to 2D standard Right-Click Drag.
+        // Panning (RMB or MMB)
+        if (Input::IsMouseButtonPressed(GLFW_MOUSE_BUTTON_RIGHT) || Input::IsMouseButtonPressed(GLFW_MOUSE_BUTTON_MIDDLE))
+        {
+            glm::vec3 pos = GetPosition();
             
-            // NOTE: Delta time based movement matches 2D Engine usage usually
-        }
+            // Calculate scale based on viewport size to map pixels to world units
+            // Ortho Size (Vertical) = 2 * ZoomLevel
+            float heightScale = (m_ZoomLevel * 2.0f) / m_ViewportHeight;
+            float widthScale = heightScale; // Because pixels are square, and AspectRatio handles the width of viewport
 
-        // Keyboard movement for Editor
-        if (Input::IsKeyPressed(GLFW_KEY_A))
-        {
-            glm::vec3 pos = GetPosition();
-            pos.x -= m_ZoomLevel * ts; // Speed scales with zoom
-            SetPosition(pos);
-        }
-        if (Input::IsKeyPressed(GLFW_KEY_D))
-        {
-            glm::vec3 pos = GetPosition();
-            pos.x += m_ZoomLevel * ts;
-            SetPosition(pos);
-        }
-        if (Input::IsKeyPressed(GLFW_KEY_W))
-        {
-            glm::vec3 pos = GetPosition();
-            pos.y += m_ZoomLevel * ts;
-            SetPosition(pos);
-        }
-        if (Input::IsKeyPressed(GLFW_KEY_S))
-        {
-            glm::vec3 pos = GetPosition();
-            pos.y -= m_ZoomLevel * ts;
-            SetPosition(pos);
-        }
+            // X Axis: Moving mouse Right (+X) -> Camera Left (-X) -> World Right
+            pos.x -= delta.x * widthScale;
+            // Y Axis: Moving mouse Down (+Y) -> Camera Up (+Y) -> World Down
+            // (GLFW Y is inverted relative to World Y)
+            pos.y += delta.y * heightScale; 
 
-
-        // Update Projection based on Aspect Ratio and Zoom
-        CalculateView();
+            SetPosition(pos);
+        }
     }
 
     void EditorCamera::OnEvent(Event& e)
@@ -81,11 +63,16 @@ namespace Voltra {
         SetProjection(left, right, bottom, top);
     }
 
-    bool EditorCamera::OnMouseScrolled(MouseScrolledEvent& e)
+    void EditorCamera::Zoom(float delta)
     {
-        m_ZoomLevel -= e.GetYOffset() * 0.25f;
+        m_ZoomLevel -= delta * 0.25f * m_ZoomLevel;
         m_ZoomLevel = std::max(m_ZoomLevel, 0.25f);
         CalculateView();
+    }
+
+    bool EditorCamera::OnMouseScrolled(MouseScrolledEvent& e)
+    {
+        // Handled in EditorLayer via ImGui
         return false;
     }
 
