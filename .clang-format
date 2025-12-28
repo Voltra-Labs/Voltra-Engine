@@ -1,0 +1,13 @@
+---
+Language:        Cpp
+BasedOnStyle:    WebKit
+Standard:        c++20
+IndentWidth:     4
+TabWidth:        4
+UseTab:          Never
+ColumnLimit:     120
+AccessModifierOffset: -4
+SortIncludes:    true
+AllowShortBlocksOnASingleLine: Empty
+BreakBeforeBraces: Allman 
+---

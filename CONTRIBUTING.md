@@ -107,11 +107,28 @@ Any Process Request containing raw `std::cout` usage will be **rejected**.
 
 ---
 
-## 🧪 Testing
+## 🛠️ Development Setup
 
-* Ensure the engine builds on your platform.
-* If you add a new feature, provide a small example or test case demonstrating it works.
+Since Voltra uses **CMake FetchContent**, you don't need to manually install libraries like GLFW or GLM.
 
+1. **Clone**: `git clone https://github.com/Voltra-Labs/Voltra-Engine.git`
+2. **Configure**:
+   ```bash
+   cmake -S . -B build
+   ```
+3. **Build**:
+   ```bash
+   cmake --build build
+   ```
+4. **Run**:
+   ```bash
+   ./build/src/Voltra
+   ```
+5. **Run Tests**:
+   ```bash
+   cd build
+   ctest --output-on-failure
+   ```
 ---
 
 **Thank you for your help!**
