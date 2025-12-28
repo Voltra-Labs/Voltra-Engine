@@ -23,6 +23,8 @@ namespace Voltra {
         void OnRuntimeStop();
 
         void OnUpdate(Timestep ts); // Existing
+        void OnUpdateEditor(Timestep ts, class EditorCamera& camera);
+
 
         entt::registry& GetRegistry() { return m_Registry; }
 

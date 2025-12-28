@@ -17,7 +17,7 @@ namespace Voltra {
     }
 
     void SceneHierarchyPanel::OnImGuiRender() {
-        ImGui::Begin("Scene Hierarchy");
+        ImGui::Begin("Hierarchy");
 
         if (m_Context) {
             m_Context->m_Registry.view<TagComponent>().each([&](auto entityID, auto& tag) {
@@ -31,7 +31,7 @@ namespace Voltra {
 
         ImGui::End();
 
-        ImGui::Begin("Properties");
+        ImGui::Begin("Inspector");
         if (m_SelectionContext) {
             DrawComponents(m_SelectionContext);
         }
