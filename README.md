@@ -4,6 +4,11 @@
 
 **A high-performance 3D graphics engine built from scratch in C++20.**
 
+<p align="center">
+  <a href=".github/assets/editor_video.gif"><img src=".github/assets/editor_video.gif" alt="Voltra Engine Editor" width="800"/></a>
+</p>
+
+[![Voltra Engine CI](https://github.com/Voltra-Labs/Voltra-Engine/actions/workflows/ci.yml/badge.svg)](https://github.com/Voltra-Labs/Voltra-Engine/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Standard](https://img.shields.io/badge/C%2B%2B-20-blue.svg?logo=c%2B%2B)](CMakeLists.txt)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
@@ -15,11 +20,14 @@
 
 ---
 
-## 📖 About The Project
+## 🎯 Why Voltra?
 
-**Voltra Engine** is an educational and experimental game engine designed with **Data-Oriented Design (DOD)** principles at its core. The goal is to create a modern architecture that maximizes CPU cache locality and leverages current hardware capabilities, moving away from traditional object-oriented overheads in critical loops.
+There are thousands of game engines, why another one? **Voltra Engine** is not intended to compete commercially with Unreal or Godot. Its mission is to demystify the architecture of modern game engines.
 
-Currently, Voltra provides a robust foundation with a custom Editor, ECS architecture, and 2D physics, making it a capable tool for 2D game development.
+It's designed specifically for **engineering students, C++ developers, and graphics enthusiasts** who want to understand what's "under the hood": 
+* **Realistic Architecture:** No "black boxes". All code (ECS, Renderer, Physics) is accessible and follows **C++20** standards.
+* **Data-Oriented Design (DOD):** Structured to maximize performance and cache usage, moving away from traditional OOP on critical loops.
+* **Test Zone:** The perfect place to experiment with OpenGL 4.6, write your own shaders or implement new physics without the bloatware of giant engines.
 
 ## ✨ Key Features
 
@@ -48,7 +56,10 @@ Currently, Voltra provides a robust foundation with a custom Editor, ECS archite
 | **ECS** | ✅ | Entity-Component structure fully implemented. |
 | **Physics** | ✅ | Box2D integration (Rigidbodies, Colliders). |
 | **Editor** | ✅ | ImGui Docking, Scene Hierarchy, Inspector. |
-| **Scripting** | 🚧 | *In Progress* - Native C++ Scripting. |
+| **Scene Serialization** | ✅ | Save and Load scenes using YAML. |
+| **Gizmos** | ✅ | Draw gizmos for debugging and visualization. |
+| **Scripting** | 🚧 | *In Progress* - Native C++ Scripting without to recompile the engine. |
+| **Asset Management** | 🚧 | *In Progress* - Load and manage assets (Textures, Shaders, Fonts). |
 
 ## 🛠️ Requirements
 
