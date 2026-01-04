@@ -13,12 +13,24 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Scene Constructor.
+     */
     Scene::Scene() {
     }
 
+    /**
+     * @brief Scene Destructor.
+     */
     Scene::~Scene() {
     }
 
+    /**
+     * @brief Creates an entity with default Transform and Tag components.
+     * 
+     * @param name The tag name.
+     * @return The created Entity handle.
+     */
     Entity Scene::CreateEntity(const std::string& name) {
         Entity entity = { m_Registry.create(), this };
         entity.AddComponent<TransformComponent>();
@@ -27,10 +39,20 @@ namespace Voltra {
         return entity;
     }
 
+    /**
+     * @brief Removes the entity from the registry.
+     * 
+     * @param entity The entity to destroy.
+     */
     void Scene::DestroyEntity(Entity entity) {
         m_Registry.destroy(entity);
     }
 
+    /**
+     * @brief Iterates components to find the primary camera.
+     * 
+     * @return The primary camera entity, or null entity if none found.
+     */
     Entity Scene::GetPrimaryCameraEntity() {
         auto view = m_Registry.view<CameraComponent>();
         for (auto entity : view) {
@@ -41,6 +63,12 @@ namespace Voltra {
         return {};
     }
 
+    /**
+     * @brief Helper to convert Voltra BodyType to Box2D BodyType.
+     * 
+     * @param bodyType Internal enum.
+     * @return Box2D enum.
+     */
     static b2BodyType VoltraBodyTypeToBox2D(Rigidbody2DComponent::BodyType bodyType) {
         switch (bodyType) {
             case Rigidbody2DComponent::BodyType::Static:    return b2_staticBody;
@@ -50,6 +78,9 @@ namespace Voltra {
         return b2_staticBody;
     }
 
+    /**
+     * @brief Instantiates the Physics World and creates bodies for all rigidbodies.
+     */
     void Scene::OnRuntimeStart() {
         m_PhysicsWorld = new b2World({ 0.0f, -9.8f });
 
@@ -86,19 +117,25 @@ namespace Voltra {
         }
     }
 
+    /**
+     * @brief Destroys the Physics World.
+     */
     void Scene::OnRuntimeStop() {
         delete m_PhysicsWorld;
         m_PhysicsWorld = nullptr;
     }
 
+    /**
+     * @brief Steps physics world, updates scripts, and renders the scene.
+     * 
+     * @param ts Time step.
+     */
     void Scene::OnUpdate(Timestep ts) {
-        // Update Physics
         const int32_t velocityIterations = 6;
         const int32_t positionIterations = 2;
         if (m_PhysicsWorld) {
             m_PhysicsWorld->Step(ts, velocityIterations, positionIterations);
 
-            // Sync back to Transform
             auto view = m_Registry.view<Rigidbody2DComponent>();
             for (auto e : view) {
                 Entity entity = { e, this };
@@ -115,7 +152,6 @@ namespace Voltra {
             }
         }
 
-        // Scripts (Logic)
         m_Registry.view<NativeScriptComponent>().each([=](auto entity, auto& nsc) {
             if (!nsc.Instance) {
                 nsc.Instance = nsc.InstantiateScript();
@@ -125,7 +161,6 @@ namespace Voltra {
             nsc.Instance->OnUpdate(ts);
         });
 
-        // Rendering
         CameraComponent* mainCamera = nullptr;
         glm::mat4 cameraTransform;
 
@@ -140,18 +175,15 @@ namespace Voltra {
         }
 
         if (mainCamera) {
-            // Synchronize camera position
             glm::vec3 pos = glm::vec3(cameraTransform[3]);
             mainCamera->Camera.SetPosition(pos);
             
             Renderer2D::BeginScene(mainCamera->Camera);
 
-            // Draw all entities with SpriteRenderer and Transform
             auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
             for (auto entity : group) {
                 auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
                 
-                // If it has a texture, we use the texture overload
                 if (sprite.Texture) {
                     // TODO: DrawQuad(transform, texture, tint)
                     Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
@@ -165,16 +197,19 @@ namespace Voltra {
         }
     }
 
+    /**
+     * @brief Renders the scene from the perspective of an editor camera.
+     * 
+     * @param ts Time step.
+     * @param camera The editor camera.
+     */
     void Scene::OnUpdateEditor(Timestep ts, EditorCamera& camera) {
-        // Rendering
         Renderer2D::BeginScene(camera);
 
-        // Draw all entities with SpriteRenderer and Transform
         auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
         for (auto entity : group) {
             auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
             
-            // If it has a texture, we use the texture overload
             if (sprite.Texture) {
                 Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
             } 
@@ -186,8 +221,12 @@ namespace Voltra {
         Renderer2D::EndScene();
     }
 
+    /**
+     * @brief Renders the scene from the perspective of the primary runtime camera (without logic updates).
+     * 
+     * @param ts Time step.
+     */
     void Scene::OnRenderRuntime(Timestep ts) {
-        // Rendering logic recycled from OnUpdate
         CameraComponent* mainCamera = nullptr;
         glm::mat4 cameraTransform;
 
@@ -223,12 +262,17 @@ namespace Voltra {
         }
     }
 
+    /**
+     * @brief Recalculates camera projection matrices when the viewport resizes.
+     * 
+     * @param width New width.
+     * @param height New height.
+     */
     void Scene::OnViewportResize(uint32_t width, uint32_t height)
     {
         m_ViewportWidth = width;
         m_ViewportHeight = height;
 
-        // Resize our non-FixedAspectRatio cameras
         auto view = m_Registry.view<CameraComponent>();
         for (auto entity : view)
         {

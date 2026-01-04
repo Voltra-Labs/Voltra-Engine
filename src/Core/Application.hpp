@@ -10,18 +10,62 @@
 #include "ImGui/ImGuiLayer.hpp"
 
 namespace Voltra {
+    /**
+     * @brief The main Application class.
+     * 
+     * Manages the application lifecycle, window, events, and layer stack.
+     * This class is a singleton.
+     */
     class Application {
     public:
+        /**
+         * @brief Constructs the Application object.
+         */
         Application();
+
+        /**
+         * @brief Destroys the Application object.
+         */
         virtual ~Application();
 
+        /**
+         * @brief Runs the application loop.
+         */
         void Run();
+
+        /**
+         * @brief Handles application events.
+         * 
+         * @param e The event to handle.
+         */
         void OnEvent(Event& e);
         
+        /**
+         * @brief Pushes a layer to the layer stack.
+         * 
+         * @param layer Pointer to the layer to push.
+         */
         void PushLayer(Layer* layer);
+
+        /**
+         * @brief Pushes an overlay to the layer stack.
+         * 
+         * @param overlay Pointer to the overlay to push.
+         */
         void PushOverlay(Layer* overlay);
 
+        /**
+         * @brief Gets the singleton instance of the Application.
+         * 
+         * @return Reference to the Application instance.
+         */
         static Application& Get() { return *s_Instance; }
+
+        /**
+         * @brief Gets the application window.
+         * 
+         * @return Reference to the Window object.
+         */
         Window& GetWindow() { return *m_Window; }
 
     private:
@@ -33,7 +77,13 @@ namespace Voltra {
         float m_LastFrameTime = 0.0f;
     };
 
-    // Defined in client (main.cpp)
+    /**
+     * @brief Creates the Application instance.
+     * 
+     * This function must be implemented by the client.
+     * 
+     * @return Pointer to the created Application instance.
+     */
     Application* CreateApplication();
 
 }

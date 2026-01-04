@@ -8,21 +8,42 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Manages texture resources and caching.
+     * 
+     * Ensures textures are loaded only once and reused.
+     */
     class TextureManager {
     public:
         TextureManager() = delete;
 
-        // Initializes the system and creates the default fallback texture
+        /**
+         * @brief Initializes the texture manager.
+         * 
+         * Creates a default fallback texture.
+         */
         static void Init();
 
-        // Requests a texture. NEVER returns nullptr.
+        /**
+         * @brief Retrieves a texture from the cache or loads it.
+         * 
+         * @param path Filepath to the texture.
+         * @return Shared pointer to the texture (or fallback if failed).
+         */
         static std::shared_ptr<Texture2D> GetTexture(const std::string& path);
 
-        // Cleans up memory
+        /**
+         * @brief Clears the texture cache.
+         */
         static void Clean();
 
     private:
-        // Loads the texture from disk
+        /**
+         * @brief Internally loads a texture from disk.
+         * 
+         * @param path Filepath.
+         * @return Shared pointer to the loaded texture or nullptr.
+         */
         static std::shared_ptr<Texture2D> LoadTexture(const std::string& path);
 
         static std::unordered_map<std::string, std::shared_ptr<Texture2D>> s_Textures;

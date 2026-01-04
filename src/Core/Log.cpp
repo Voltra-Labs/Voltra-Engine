@@ -6,8 +6,13 @@ namespace Voltra {
     std::shared_ptr<spdlog::logger> Log::s_CoreLogger;
     std::shared_ptr<spdlog::logger> Log::s_ClientLogger;
 
+    /**
+     * @brief Initializes the logging subsystem.
+     * 
+     * Sets the log pattern to "[Time] Name: Message" with colors.
+     * Creates "VOLTRA" and "APP" loggers.
+     */
     void Log::Init() {
-        // Pattern: [Time] Name: Message
         spdlog::set_pattern("%^[%T] %n: %v%$");
 
         s_CoreLogger = spdlog::stdout_color_mt("VOLTRA");

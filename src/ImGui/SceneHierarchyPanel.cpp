@@ -7,15 +7,28 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Constructs the panel and sets the context.
+     * 
+     * @param context The scene context.
+     */
     SceneHierarchyPanel::SceneHierarchyPanel(const std::shared_ptr<Scene>& context) {
         SetContext(context);
     }
 
+    /**
+     * @brief Updates the context and clears selection.
+     * 
+     * @param context The new scene context.
+     */
     void SceneHierarchyPanel::SetContext(const std::shared_ptr<Scene>& context) {
         m_Context = context;
         m_SelectionContext = {};
     }
 
+    /**
+     * @brief Renders the Hierarchy and Inspector windows.
+     */
     void SceneHierarchyPanel::OnImGuiRender() {
         ImGui::Begin("Hierarchy");
 
@@ -38,6 +51,13 @@ namespace Voltra {
         ImGui::End();
     }
 
+    /**
+     * @brief Recursively draws the entity tree node.
+     * 
+     * Handles selection and tree expansion.
+     * 
+     * @param entity The entity to draw.
+     */
     void SceneHierarchyPanel::DrawEntityNode(Entity entity) {
         auto& tag = entity.GetComponent<TagComponent>().Tag;
 
@@ -54,6 +74,14 @@ namespace Voltra {
         }
     }
 
+    /**
+     * @brief Draws a custom vec3 control with reset buttons.
+     * 
+     * @param label The label for the control.
+     * @param values The vector values reference.
+     * @param resetValue The value to reset to when the button is clicked.
+     * @param columnWidth The width of the label column.
+     */
     static void DrawVec3Control(const std::string& label, glm::vec3& values, float resetValue = 0.0f, float columnWidth = 100.0f) {
         ImGui::PushID(label.c_str());
 
@@ -110,6 +138,15 @@ namespace Voltra {
         ImGui::PopID();
     }
 
+    /**
+     * @brief Draws a collapsible header for a component.
+     * 
+     * @tparam T The component type.
+     * @tparam UIFunction The function to draw the component body.
+     * @param name The header name.
+     * @param entity The entity.
+     * @param uiFunction The UI drawing lambda.
+     */
     template<typename T, typename UIFunction>
     void SceneHierarchyPanel::DrawComponent(const std::string& name, Entity entity, UIFunction uiFunction) {
         const ImGuiTreeNodeFlags treeNodeFlags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_FramePadding;
@@ -131,6 +168,11 @@ namespace Voltra {
         }
     }
 
+    /**
+     * @brief Orchestrates drawing of all supported components.
+     * 
+     * @param entity The entity to draw components for.
+     */
     void SceneHierarchyPanel::DrawComponents(Entity entity) {
         if (entity.HasComponent<TagComponent>()) {
             auto& tag = entity.GetComponent<TagComponent>().Tag;
@@ -157,16 +199,13 @@ namespace Voltra {
         DrawComponent<SpriteRendererComponent>("Sprite Renderer", entity, [](auto& component) {
             ImGui::ColorEdit4("Color", glm::value_ptr(component.Color));
 
-            if (component.Texture)
-            {
+            if (component.Texture) {
                 ImGui::Image((void*)(uintptr_t)component.Texture->GetRendererID(), ImVec2(64, 64));
             }
 
             static char buffer[256] = "";
             ImGui::InputText("Texture Path", buffer, sizeof(buffer));
-            if (ImGui::Button("Load Texture"))
-            {
-                // Simple texture loading
+            if (ImGui::Button("Load Texture")) {
                 std::string path(buffer);
                 if (!path.empty())
                     component.Texture = std::make_shared<Texture2D>(path);

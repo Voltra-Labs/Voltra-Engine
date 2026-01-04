@@ -5,12 +5,31 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Logging system wrapper.
+     * 
+     * Initialized spdlog loggers for the Engine (Core) and the Client (App).
+     */
     class Log {
     public:
+        /**
+         * @brief Initializes the logging subsystem.
+         * 
+         * Sets up the patterns and creates the loggers.
+         */
         static void Init();
 
-        // Getters for the loggers
+        /**
+         * @brief Retrieves the engine's core logger.
+         * 
+         * @return Reference to the core logger shared pointer.
+         */
         static std::shared_ptr<spdlog::logger>& GetCoreLogger() { return s_CoreLogger; }
+        /**
+         * @brief Retrieves the client's logger.
+         * 
+         * @return Reference to the client logger shared pointer.
+         */
         static std::shared_ptr<spdlog::logger>& GetClientLogger() { return s_ClientLogger; }
 
     private:

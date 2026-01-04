@@ -65,6 +65,65 @@ We aim for modern, clean, and performant C++.
 4. **Headers**:
    * Use `#pragma once`.
    * Separate declarations (`.hpp`) from implementations (`.cpp`).
+5. **Documentation**:
+   * **Avoid unnecessary inline comments**: Do not use small `//` comments for obvious code. Code should be self-explanatory through clear naming.
+     * ❌ Bad: `int count = 0; // Initialize counter`
+     * ✅ Good: `int entityCount = 0;`
+   * **Mandatory extended comments for functions**: All public functions and methods **must** have extended documentation using multi-line comments (`/** */` or `/* */`).
+     * Include: Purpose, parameters, return value, and any important notes.
+     * Example:
+       ```cpp
+       /**
+        * @brief Initializes the rendering system with the specified configuration.
+        * 
+        * @param config The renderer configuration settings
+        * @return true if initialization succeeded, false otherwise
+        * 
+        * @note This function must be called before any rendering operations.
+        */
+       bool InitRenderer(const RendererConfig& config);
+       ```
+   * **Private/Internal functions**: Should have at least a brief comment explaining their purpose if not immediately obvious.
+6. **Brace Style (K&R / Egyptian Brackets)**:
+   * **Opening brace `{` on the same line** as the statement (function, if, for, while, class, etc.).
+   * **Closing brace `}` on a new line**, aligned with the statement.
+   * This applies to: functions, classes, conditionals, loops, and any other block statements.
+   * Examples:
+     * ✅ **Correct**:
+       ```cpp
+       void MyFunction() {
+           // code here
+       }
+
+       if (condition) {
+           // code here
+       } else {
+           // code here
+       }
+
+       for (int i = 0; i < 10; ++i) {
+           // code here
+       }
+
+       class MyClass {
+       public:
+           void Method() {
+               // code here
+           }
+       };
+       ```
+     * ❌ **Incorrect** (Allman style - NOT allowed):
+       ```cpp
+       void MyFunction()
+       {
+           // code here
+       }
+
+       if (condition)
+       {
+           // code here
+       }
+       ```
 
 
 ---

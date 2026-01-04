@@ -4,7 +4,13 @@
 
 namespace Voltra {
 
-    // Create a texture manually (Data/Pixel Art)
+    /**
+     * @brief Manually creates a texture buffer.
+     * 
+     * @param width Width in pixels.
+     * @param height Height in pixels.
+     * @param filter Initial filter settings.
+     */
     Texture2D::Texture2D(uint32_t width, uint32_t height, TextureFilter filter)
         : m_Width(width), m_Height(height) {
         
@@ -14,7 +20,6 @@ namespace Voltra {
         glCreateTextures(GL_TEXTURE_2D, 1, &m_RendererID);
         glTextureStorage2D(m_RendererID, 1, m_InternalFormat, m_Width, m_Height);
 
-        // Apply the filter requested (By default Nearest)
         glTextureParameteri(m_RendererID, GL_TEXTURE_MIN_FILTER, (GLenum)filter);
         glTextureParameteri(m_RendererID, GL_TEXTURE_MAG_FILTER, (GLenum)filter);
         
@@ -24,7 +29,13 @@ namespace Voltra {
         m_IsLoaded = true;
     }
 
-    // Create a texture from an image file
+    /**
+     * @brief Loads and creates a texture from an image file.
+     * 
+     * Uses stbi_load for image loading.
+     * 
+     * @param path Filepath to the image.
+     */
     Texture2D::Texture2D(const std::string& path)
         : m_Path(path) {
         
@@ -62,12 +73,20 @@ namespace Voltra {
         }
     }
 
+    /**
+     * @brief Destructor. Deletes the OpenGL texture.
+     */
     Texture2D::~Texture2D() {
         glDeleteTextures(1, &m_RendererID);
     }
 
+    /**
+     * @brief Replaces the texture data with new pixel data.
+     * 
+     * @param data Pointer to the new data.
+     * @param size Size of the data in bytes.
+     */
     void Texture2D::SetData(void* data, uint32_t size) {
-        // Basic security check (4 bytes per pixel for RGBA)
         uint32_t bpp = m_DataFormat == GL_RGBA ? 4 : 3;
         if (size != m_Width * m_Height * bpp) {
             VOLTRA_CORE_ERROR("Data size must be entire texture!");
@@ -77,11 +96,22 @@ namespace Voltra {
         glTextureSubImage2D(m_RendererID, 0, 0, 0, m_Width, m_Height, m_DataFormat, GL_UNSIGNED_BYTE, data);
     }
 
+    /**
+     * @brief Updates the texture filtering parameters.
+     * 
+     * @param minFilter Minification filter.
+     * @param magFilter Magnification filter.
+     */
     void Texture2D::SetFilter(TextureFilter minFilter, TextureFilter magFilter) {
         glTextureParameteri(m_RendererID, GL_TEXTURE_MIN_FILTER, (GLenum)minFilter);
         glTextureParameteri(m_RendererID, GL_TEXTURE_MAG_FILTER, (GLenum)magFilter);
     }
 
+    /**
+     * @brief Binds the texture to a specific slot.
+     * 
+     * @param slot Texture unit index.
+     */
     void Texture2D::Bind(uint32_t slot) const {
         glBindTextureUnit(slot, m_RendererID);
     }

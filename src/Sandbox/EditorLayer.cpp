@@ -17,9 +17,15 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Initializes the EditorLayer and sets up the Editor Camera.
+     */
     EditorLayer::EditorLayer() : Layer("EditorLayer"), m_EditorCamera(1.778f) {}
 
 
+    /**
+     * @brief Sets up framebuffers, initial scene entities, and components.
+     */
     void EditorLayer::OnAttach() {
         m_ActiveScene = std::make_shared<Scene>();
 
@@ -29,14 +35,10 @@ namespace Voltra {
         m_Framebuffer = Framebuffer::Create(fbSpec);
         m_GameFramebuffer = Framebuffer::Create(fbSpec);
         
-        // Camera
-
-        // Camera
         auto cameraEntity = m_ActiveScene->CreateEntity("Camera");
         auto& cc = cameraEntity.AddComponent<CameraComponent>();
         cc.Camera.SetProjection(-8.0f, 8.0f, -4.5f, 4.5f);
 
-        // Ground (Green)
         auto ground = m_ActiveScene->CreateEntity("Ground");
         auto& groundTransform = ground.GetComponent<TransformComponent>();
         groundTransform.Translation = { 0.0f, -3.0f, 0.0f };
@@ -47,7 +49,6 @@ namespace Voltra {
         groundRb.Type = Rigidbody2DComponent::BodyType::Static;
         ground.AddComponent<BoxCollider2DComponent>();
 
-        // Box (Red)
         m_SquareEntity = m_ActiveScene->CreateEntity("Box");
         auto& boxTransform = m_SquareEntity.GetComponent<TransformComponent>();
         boxTransform.Translation = { 0.0f, 3.0f, 0.0f };
@@ -66,42 +67,40 @@ namespace Voltra {
         m_ActiveScene->OnRuntimeStart();
     }
 
+    /**
+     * @brief Stops runtime if active when detaching.
+     */
     void EditorLayer::OnDetach() {
         if (m_ActiveScene)
             m_ActiveScene->OnRuntimeStop();
     }
 
+    /**
+     * @brief Resizes framebuffers and renders the scene (Edit or Play mode).
+     * 
+     * @param ts Time step.
+     */
     void EditorLayer::OnUpdate(Timestep ts) {
-        // Resize logic for Scene Window framebuffer
-        if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f && // zero sized framebuffer is invalid
-            (m_Framebuffer->GetSpecification().Width != m_ViewportSize.x || m_Framebuffer->GetSpecification().Height != m_ViewportSize.y))
-        {
+        if (m_ViewportSize.x > 0.0f && m_ViewportSize.y > 0.0f &&
+            (m_Framebuffer->GetSpecification().Width != m_ViewportSize.x || m_Framebuffer->GetSpecification().Height != m_ViewportSize.y)) {
             m_Framebuffer->Resize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
             m_EditorCamera.SetViewportSize(m_ViewportSize.x, m_ViewportSize.y);
         }
 
-        // Resize logic for Game Window framebuffer
         if (m_GameViewportSize.x > 0.0f && m_GameViewportSize.y > 0.0f &&
-            (m_GameFramebuffer->GetSpecification().Width != m_GameViewportSize.x || m_GameFramebuffer->GetSpecification().Height != m_GameViewportSize.y))
-        {
+            (m_GameFramebuffer->GetSpecification().Width != m_GameViewportSize.x || m_GameFramebuffer->GetSpecification().Height != m_GameViewportSize.y)) {
             m_GameFramebuffer->Resize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
             m_ActiveScene->OnViewportResize((uint32_t)m_GameViewportSize.x, (uint32_t)m_GameViewportSize.y);
         }
 
-        // ============================
-        // RENDER PASS 1: Scene View (Editor Camera)
-        // ============================
         m_Framebuffer->Bind();
         RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1 });
         RenderCommand::Clear();
 
-        // Always Update Editor Scene logic if focused? 
         if (m_ViewportFocused)
              m_EditorCamera.OnUpdate(ts);
 
-        // ImGui Zoom Handling
-        if (m_ViewportHovered)
-        {
+        if (m_ViewportHovered) {
              float wheel = ImGui::GetIO().MouseWheel;
              if (wheel != 0.0f)
                  m_EditorCamera.Zoom(wheel);
@@ -110,24 +109,16 @@ namespace Voltra {
         m_ActiveScene->OnUpdateEditor(ts, m_EditorCamera);
         m_Framebuffer->Unbind();
 
-        // ============================
-        // RENDER PASS 2: Game View (Runtime Camera)
-        // ============================
         m_GameFramebuffer->Bind();
         RenderCommand::SetClearColor({ 0.1f, 0.1f, 0.1f, 1 }); 
         RenderCommand::Clear();
 
-        switch (m_SceneState)
-        {
-            case SceneState::Edit:
-            {
-                // In Edit mode, we just want to SEE what the game camera sees, but not run physics/scripts
+        switch (m_SceneState) {
+            case SceneState::Edit: {
                 m_ActiveScene->OnRenderRuntime(ts);
                 break;
             }
-            case SceneState::Play:
-            {
-                // In Play Mode, we update the scene (physics + scripts) AND render it
+            case SceneState::Play: {
                 m_ActiveScene->OnUpdate(ts);
                 break;
             }
@@ -137,10 +128,11 @@ namespace Voltra {
     }
 
 
+    /**
+     * @brief Draws the entire Editor UI (DockSpace, Viewports, Toolbar, Panels).
+     */
     void EditorLayer::OnImGuiRender() {
-        // Main Menu Bar
-        if (ImGui::BeginMainMenuBar())
-        {
+        if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("File")) { ImGui::EndMenu(); }
             if (ImGui::BeginMenu("Edit")) { ImGui::EndMenu(); }
             if (ImGui::BeginMenu("Assets")) { ImGui::EndMenu(); }
@@ -154,44 +146,36 @@ namespace Voltra {
             ImGui::EndMainMenuBar();
         }
 
-        // UI Toolbar
         ImGuiWindowFlags toolbarFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
         
         ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + 24.0f)); // Assuming 24 height for main menu bar
-        ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, 32.0f)); // Fixed height for toolbar
+        ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + 24.0f));
+        ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, 32.0f));
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 2));
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::Begin("##toolbar", nullptr, toolbarFlags);
         
         bool toolbarEnabled = (m_SceneState == SceneState::Edit);
-        ImVec4 buttonColor = ImVec4(0.4f, 0.4f, 0.4f, 1.0f); // Standard Grey
-        ImVec4 activeColor = ImVec4(0.3f, 0.3f, 0.3f, 1.0f); // Slightly darker for active/interaction
+        ImVec4 buttonColor = ImVec4(0.4f, 0.4f, 0.4f, 1.0f);
+        ImVec4 activeColor = ImVec4(0.3f, 0.3f, 0.3f, 1.0f);
 
         float size = ImGui::GetWindowHeight() - 4.0f;
         ImGui::SetCursorPosX((ImGui::GetWindowContentRegionMax().x * 0.5f) - (size * 0.5f));
 
-
-
-        if (m_SceneState == SceneState::Edit)
-        {
-            if (ImGui::Button("Play", ImVec2(80, size))) 
-            {
+        if (m_SceneState == SceneState::Edit) {
+            if (ImGui::Button("Play", ImVec2(80, size))) {
                 OnScenePlay();
             }
         }
-        else
-        {
-            if (ImGui::Button("Stop", ImVec2(80, size))) 
-            {
+        else {
+            if (ImGui::Button("Stop", ImVec2(80, size))) {
                 OnSceneStop();
             }
         }
         
         ImGui::SameLine();
-        if (ImGui::Button("Pause", ImVec2(80, size)))
-        {
+        if (ImGui::Button("Pause", ImVec2(80, size))) {
             // TODO: Toggle pause
         }
 
@@ -206,10 +190,8 @@ namespace Voltra {
         static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
 
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
-        if (opt_fullscreen)
-        {
+        if (opt_fullscreen) {
             const ImGuiViewport* viewport = ImGui::GetMainViewport();
-            // Start below toolbar
             ImGui::SetNextWindowPos(ImVec2(viewport->Pos.x, viewport->Pos.y + 24.0f + 32.0f)); 
             ImGui::SetNextWindowSize(ImVec2(viewport->Size.x, viewport->Size.y - 24.0f - 32.0f));
             ImGui::SetNextWindowViewport(viewport->ID);
@@ -219,33 +201,34 @@ namespace Voltra {
             window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
         }
 
-        if (dockspace_flags & ImGuiDockNodeFlags_PassthruCentralNode)
+        if (dockspace_flags & ImGuiDockNodeFlags_PassthruCentralNode) {
             window_flags |= ImGuiWindowFlags_NoBackground;
+        }
 
-        if (!opt_padding)
+        if (!opt_padding) {
             ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        }
         
         ImGui::Begin("DockSpace Demo", &dockspaceOpen, window_flags);
 
-        if (!opt_padding)
+        if (!opt_padding) {
             ImGui::PopStyleVar();
+        }
 
-        if (opt_fullscreen)
+        if (opt_fullscreen) {
             ImGui::PopStyleVar(2);
+        }
 
-        // DockSpace
         ImGuiIO& io = ImGui::GetIO();
-        if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
-        {
+        if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable) {
             ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
             ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
 
             static bool first_time = true;
-            if (first_time)
-            {
+            if (first_time) {
                 first_time = false;
 
-                ImGui::DockBuilderRemoveNode(dockspace_id); // clear any previous layout
+                ImGui::DockBuilderRemoveNode(dockspace_id);
                 ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
                 ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
 
@@ -253,7 +236,6 @@ namespace Voltra {
                 ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
                 ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.20f, nullptr, &dock_main_id);
                 
-                // Dock windows
                 ImGui::DockBuilderDockWindow("Scene", dock_main_id);
                 ImGui::DockBuilderDockWindow("Game", dock_main_id);
                 ImGui::DockBuilderDockWindow("Inspector", dock_id_right);
@@ -262,17 +244,13 @@ namespace Voltra {
             }
         }
 
-        // ==========================================
-        // SCENE WINDOW (Edit Mode + Gizmos)
-        // ==========================================
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0, 0 });
         ImGui::Begin("Scene", nullptr, ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoScrollbar);
         
-        m_ViewportFocused = ImGui::IsWindowFocused(); // We consider Scene window specifically for input
+        m_ViewportFocused = ImGui::IsWindowFocused();
         m_ViewportHovered = ImGui::IsWindowHovered();
 
-        if (m_ViewportHovered)
-        {
+        if (m_ViewportHovered) {
              float wheel = ImGui::GetIO().MouseWheel;
              if (wheel != 0.0f)
                  m_EditorCamera.Zoom(wheel);
@@ -280,16 +258,13 @@ namespace Voltra {
         
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         
-        // Resize Framebuffer based on Scene window size
         m_ViewportSize = { viewportPanelSize.x, viewportPanelSize.y };
 
         uint32_t textureID = m_Framebuffer->GetColorAttachmentRendererID();
         ImGui::Image((void*)(uintptr_t)textureID, ImVec2{ m_ViewportSize.x, m_ViewportSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
 
-        // Gizmos (Only in active Scene window, but available in Play Mode too)
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
-        if (selectedEntity && m_GizmoType != -1) 
-        {
+        if (selectedEntity && m_GizmoType != -1) {
             ImGuizmo::SetOrthographic(true);
             ImGuizmo::SetDrawlist();
             
@@ -297,16 +272,12 @@ namespace Voltra {
             float windowHeight = (float)ImGui::GetWindowHeight();
             ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, windowWidth, windowHeight);
 
-            // Camera
             const auto& camera = m_EditorCamera;
             const glm::mat4& cameraProjection = camera.GetProjectionMatrix();
             glm::mat4 cameraView = camera.GetViewMatrix();
-
-            // Entity Transform
             auto& tc = selectedEntity.GetComponent<TransformComponent>();
             glm::mat4 transform = tc.GetTransform();
 
-            // Snapping
             bool snap = Input::IsKeyPressed(GLFW_KEY_LEFT_CONTROL);
             float snapValue = 0.5f; 
             if (m_GizmoType == ImGuizmo::OPERATION::ROTATE)
@@ -318,8 +289,7 @@ namespace Voltra {
                 (ImGuizmo::OPERATION)m_GizmoType, ImGuizmo::LOCAL, glm::value_ptr(transform),
                 nullptr, snap ? snapValues : nullptr);
 
-            if (ImGuizmo::IsUsing())
-            {
+            if (ImGuizmo::IsUsing()) {
                 glm::vec3 translation, rotation, scale;
                 ImGuizmo::DecomposeMatrixToComponents(glm::value_ptr(transform), glm::value_ptr(translation), glm::value_ptr(rotation), glm::value_ptr(scale));
                 
@@ -329,12 +299,9 @@ namespace Voltra {
                 tc.Scale = scale;
             }
         }
-        ImGui::End(); // Scene
+        ImGui::End();
         ImGui::PopStyleVar();
 
-        // ==========================================
-        // GAME WINDOW (Play/Mockup View Only)
-        // ==========================================
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{ 0, 0 });
         ImGui::Begin("Game");
         
@@ -344,10 +311,9 @@ namespace Voltra {
         uint32_t gameTextureID = m_GameFramebuffer->GetColorAttachmentRendererID();
         ImGui::Image((void*)(uintptr_t)gameTextureID, ImVec2{ gamePanelSize.x, gamePanelSize.y }, ImVec2{ 0, 1 }, ImVec2{ 1, 0 });
         
-        ImGui::End(); // Game
+        ImGui::End();
         ImGui::PopStyleVar();
         
-        // Input Handling for shortcuts (inside ImGui context)
         if (!ImGui::GetIO().WantTextInput) {
              if (ImGui::IsKeyPressed(ImGuiKey_Q)) m_GizmoType = -1;
              if (ImGui::IsKeyPressed(ImGuiKey_W)) m_GizmoType = ImGuizmo::OPERATION::TRANSLATE;
@@ -355,7 +321,6 @@ namespace Voltra {
              if (ImGui::IsKeyPressed(ImGuiKey_R)) m_GizmoType = ImGuizmo::OPERATION::SCALE;
         }
 
-        // Scene Serialization
         bool control = Input::IsKeyPressed(GLFW_KEY_LEFT_CONTROL) || Input::IsKeyPressed(GLFW_KEY_RIGHT_CONTROL);
         if (control && Input::IsKeyPressed(GLFW_KEY_S)) {
             SceneSerializer serializer(m_ActiveScene);
@@ -381,6 +346,11 @@ namespace Voltra {
         ImGui::End(); // DockSpace
     }
 
+    /**
+     * @brief Processes input events for the Editor Camera and Shortcuts.
+     * 
+     * @param e The event.
+     */
     void EditorLayer::OnEvent(Event& e) {
         if (m_ViewportHovered)
              m_EditorCamera.OnEvent(e);
@@ -389,7 +359,6 @@ namespace Voltra {
 
 
         dispatcher.Dispatch<KeyPressedEvent>([&](KeyPressedEvent& e) {
-             // Shortcuts that don't depend on ImGui frame
              bool control = Input::IsKeyPressed(GLFW_KEY_LEFT_CONTROL) || Input::IsKeyPressed(GLFW_KEY_RIGHT_CONTROL);
              bool shift = Input::IsKeyPressed(GLFW_KEY_LEFT_SHIFT) || Input::IsKeyPressed(GLFW_KEY_RIGHT_SHIFT);
 
@@ -414,13 +383,17 @@ namespace Voltra {
         });
     }
 
+    /**
+     * @brief Transitions the editor to Play Mode.
+     * 
+     * Backs up the current scene and starts the runtime physics/scripting.
+     */
     void EditorLayer::OnScenePlay() {
         m_SceneState = SceneState::Play;
         
         m_EditorScene = m_ActiveScene;
         m_ActiveScene = std::make_shared<Scene>();
         
-        // Use Serializer
         try {
             SceneSerializer serializer(m_EditorScene);
             std::filesystem::path tempPath = "../assets/scenes/temp_physics.voltra";
@@ -440,6 +413,11 @@ namespace Voltra {
          ImGui::SetWindowFocus("Game");
     }
 
+    /**
+     * @brief Transitions the editor back to Edit Mode.
+     * 
+     * Restores the backup scene state.
+     */
     void EditorLayer::OnSceneStop() {
         m_SceneState = SceneState::Edit;
         m_ActiveScene->OnRuntimeStop();
@@ -447,7 +425,6 @@ namespace Voltra {
         m_ActiveScene = m_EditorScene;
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
         
-        // Cleanup temp file
         try {
             std::filesystem::path tempPath = "../assets/scenes/temp_physics.voltra";
             if (std::filesystem::exists(tempPath))

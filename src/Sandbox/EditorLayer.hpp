@@ -12,22 +12,61 @@
 
 namespace Voltra {
 
+    /**
+     * @brief The main editor layer containing the docking system and panels.
+     */
     class EditorLayer : public Layer {
     public:
+        /**
+         * @brief Constructs the Editor Layer.
+         */
         EditorLayer();
         virtual ~EditorLayer() = default;
 
+        /**
+         * @brief Called when the layer is attached to the application.
+         */
         virtual void OnAttach() override;
+
+        /**
+         * @brief Called when the layer is detached.
+         */
         virtual void OnDetach() override;
+
+        /**
+         * @brief Updates the editor state.
+         * 
+         * @param ts Time step.
+         */
         virtual void OnUpdate(Timestep ts) override;
+
+        /**
+         * @brief Renders the ImGui interface.
+         */
         virtual void OnImGuiRender() override;
+
+        /**
+         * @brief Handles events.
+         * 
+         * @param e The event.
+         */
         virtual void OnEvent(Event& e) override;
 
     private:
+        /**
+         * @brief Starts the scene runtime.
+         */
         void OnScenePlay();
+
+        /**
+         * @brief Stops the scene runtime.
+         */
         void OnSceneStop();
 
     private:
+        /**
+         * @brief State of the scene (Edit or Play).
+         */
         enum class SceneState { Edit = 0, Play = 1 };
         SceneState m_SceneState = SceneState::Edit;
 
@@ -46,7 +85,7 @@ namespace Voltra {
         bool m_ViewportHovered = false;
 
 
-        int m_GizmoType = 7; // ImGuizmo::OPERATION::TRANSLATE
+        int m_GizmoType = 7;
 
         SceneHierarchyPanel m_SceneHierarchyPanel;
     };
