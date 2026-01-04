@@ -7,16 +7,35 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Enum representing the type of an event.
+     */
     enum class EventType {
         None = 0,
-        WindowClose, WindowResize, WindowFocus, WindowLostFocus, WindowMoved,
-        AppTick, AppUpdate, AppRender,
-        KeyPressed, KeyReleased, KeyTyped,
-        MouseButtonPressed, MouseButtonReleased, MouseMoved, MouseScrolled
+        WindowClose,
+        WindowResize,
+        WindowFocus,
+        WindowLostFocus,
+        WindowMoved,
+        AppTick,
+        AppUpdate,
+        AppRender,
+        KeyPressed,
+        KeyReleased,
+        KeyTyped,
+        MouseButtonPressed,
+        MouseButtonReleased,
+        MouseMoved,
+        MouseScrolled
     };
 
 #define BIT(x) (1 << x)
 
+    /**
+     * @brief Bitfield enum for event categories.
+     * 
+     * Allows events to belong to multiple categories (e.g., Input + Keyboard).
+     */
     enum EventCategory {
         None = 0,
         EventCategoryApplication    = BIT(0),
@@ -34,6 +53,11 @@ namespace Voltra {
 
 #define EVENT_CLASS_CATEGORY(category) virtual int GetCategoryFlags() const override { return category; }
 
+    /**
+     * @brief Base class for all events in the engine.
+     * 
+     * Events are currently blocking (dispatched immediately).
+     */
     class Event {
     public:
         virtual ~Event() = default;
@@ -45,19 +69,39 @@ namespace Voltra {
         virtual int GetCategoryFlags() const = 0;
         virtual std::string ToString() const { return GetName(); }
 
+        /**
+         * @brief Checks if the event belongs to a specific category.
+         * 
+         * @param category The category to check against.
+         * @return true if the event is in the category, false otherwise.
+         */
         inline bool IsInCategory(EventCategory category) {
             return GetCategoryFlags() & category;
         }
     protected:
-        // Event state can be handled here if needed
     };
 
+    /**
+     * @brief Utility class to dispatch events based on their type.
+     */
     class EventDispatcher {
     public:
+        /**
+         * @brief Constructs an EventDispatcher.
+         * 
+         * @param event The event to be dispatched.
+         */
         EventDispatcher(Event& event)
             : m_Event(event) {}
 
-        // F will be deduced by the compiler
+        /**
+         * @brief Dispatches the event if it matches the template type T.
+         * 
+         * @tparam T The event type to check against.
+         * @tparam F The function type (deduced).
+         * @param func The callback function to handle the event.
+         * @return true if the event was dispatched, false otherwise.
+         */
         template<typename T, typename F>
         bool Dispatch(const F& func) {
             if (m_Event.GetEventType() == T::GetStaticType()) {

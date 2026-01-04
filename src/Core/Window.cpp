@@ -8,14 +8,28 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Constructs a new Window object.
+     * 
+     * @param props The window configuration properties.
+     */
     Window::Window(const Properties& props) {
         Init(props);
     }
 
+    /**
+     * @brief Destroys the Window object.
+     */
     Window::~Window() {
         Shutdown();
     }
 
+    /**
+     * @brief Initializes the GLFW window and OpenGL context.
+     * 
+     * @param props The window properties.
+     * @note Creates the context, loads GLAD, and sets up GLFW callbacks.
+     */
     void Window::Init(const Properties& props) {
         m_Data.Title = props.Title;
         m_Data.Width = props.Width;
@@ -28,7 +42,6 @@ namespace Voltra {
             return;
         }
 
-        // Configure for OpenGL 4.6 Core Profile
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
@@ -48,7 +61,6 @@ namespace Voltra {
         glfwMakeContextCurrent(m_Window);
         glfwSetWindowUserPointer(m_Window, &m_Data);
         
-        // --- Glad initialization ---
         int status = gladLoadGLLoader((GLADloadproc)glfwGetProcAddress);
         if (!status) {
             VOLTRA_CORE_FATAL("Failed to initialize Glad!");
@@ -60,10 +72,8 @@ namespace Voltra {
         VOLTRA_CORE_INFO("  Renderer: {0}", (const char*)glGetString(GL_RENDERER));
         VOLTRA_CORE_INFO("  Version:  {0}", (const char*)glGetString(GL_VERSION));
 
-        // --- Basic OpenGL configuration ---
         glViewport(0, 0, props.Width, props.Height);
 
-        // GLFW Callbacks
         glfwSetWindowSizeCallback(m_Window, [](GLFWwindow* window, int width, int height) {
             WindowData& data = *(WindowData*)glfwGetWindowUserPointer(window);
             data.Width = width;
@@ -132,6 +142,9 @@ namespace Voltra {
         });
     }
 
+    /**
+     * @brief Shuts down the window and terminates GLFW.
+     */
     void Window::Shutdown() {
         if (m_Window) {
             glfwDestroyWindow(m_Window);
@@ -139,11 +152,21 @@ namespace Voltra {
         glfwTerminate();
     }
 
+    /**
+     * @brief Updates the window frame.
+     * 
+     * Polls events and swaps buffers.
+     */
     void Window::OnUpdate() {
         glfwPollEvents();
         glfwSwapBuffers(m_Window);
     }
 
+    /**
+     * @brief Checks if the window close flag is set.
+     * 
+     * @return true if the window should close, false otherwise.
+     */
     bool Window::ShouldClose() const {
         return glfwWindowShouldClose(m_Window);
     }

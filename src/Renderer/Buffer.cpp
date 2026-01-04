@@ -3,32 +3,42 @@
 
 namespace Voltra {
 
-    // ==============================================================================
-    // OpenGLVertexBuffer
-    // ==============================================================================
-
+    /**
+     * @brief OpenGL implementation of a VertexBuffer.
+     */
     class OpenGLVertexBuffer : public VertexBuffer
     {
     public:
-        OpenGLVertexBuffer(float* vertices, uint32_t size)
-        {
+        /**
+         * @brief Constructs an OpenGLVertexBuffer.
+         * 
+         * @param vertices Data pointer.
+         * @param size Size in bytes.
+         */
+        OpenGLVertexBuffer(float* vertices, uint32_t size) {
             glCreateBuffers(1, &m_RendererID);
             glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
             glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
         }
 
-        virtual ~OpenGLVertexBuffer()
-        {
+        /**
+         * @brief Destructor. Deletes the buffer.
+         */
+        virtual ~OpenGLVertexBuffer() {
             glDeleteBuffers(1, &m_RendererID);
         }
 
-        virtual void Bind() const override
-        {
+        /**
+         * @brief Binds the OpenGL buffer.
+         */
+        virtual void Bind() const override {
             glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
         }
 
-        virtual void Unbind() const override
-        {
+        /**
+         * @brief Unbinds the OpenGL buffer.
+         */
+        virtual void Unbind() const override {
             glBindBuffer(GL_ARRAY_BUFFER, 0);
         }
 
@@ -40,39 +50,43 @@ namespace Voltra {
         BufferLayout m_Layout;
     };
 
-    // ==============================================================================
-    // OpenGLIndexBuffer
-    // ==============================================================================
-
+    /**
+     * @brief OpenGL implementation of an IndexBuffer.
+     */
     class OpenGLIndexBuffer : public IndexBuffer
     {
     public:
-        OpenGLIndexBuffer(uint32_t* indices, uint32_t count)
-            : m_Count(count)
-        {
+        /**
+         * @brief Constructs an OpenGLIndexBuffer.
+         * 
+         * @param indices Index data pointer.
+         * @param count Number of indices.
+         */
+        OpenGLIndexBuffer(uint32_t* indices, uint32_t count) : m_Count(count) {
             glCreateBuffers(1, &m_RendererID);
-            
-            // GL_ELEMENT_ARRAY_BUFFER is not valid without an actively bound VAO used in many DSA cases
-            // But since we are binding it immediately to upload data, standard binding is fine.
-            // For Index Buffers, binding to GL_ELEMENT_ARRAY_BUFFER effectively binds it to the current VAO if one is bound.
-            // We should just use GlBufferData with the specific target.
             
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_RendererID);
             glBufferData(GL_ELEMENT_ARRAY_BUFFER, count * sizeof(uint32_t), indices, GL_STATIC_DRAW);
         }
 
-        virtual ~OpenGLIndexBuffer()
-        {
+        /**
+         * @brief Destructor. Deletes the buffer.
+         */
+        virtual ~OpenGLIndexBuffer() {
             glDeleteBuffers(1, &m_RendererID);
         }
 
-        virtual void Bind() const override
-        {
+        /**
+         * @brief Binds the OpenGL buffer.
+         */
+        virtual void Bind() const override {
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_RendererID);
         }
 
-        virtual void Unbind() const override
-        {
+        /**
+         * @brief Unbinds the OpenGL buffer.
+         */
+        virtual void Unbind() const override {
             glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
         }
 
@@ -83,17 +97,25 @@ namespace Voltra {
         uint32_t m_Count;
     };
 
-    // ==============================================================================
-    // Factory Methods
-    // ==============================================================================
-
-    std::unique_ptr<VertexBuffer> VertexBuffer::Create(float* vertices, uint32_t size)
-    {
+    /**
+     * @brief Factory method to create a vertex buffer.
+     * 
+     * @param vertices Data pointer.
+     * @param size Size in bytes.
+     * @return Unique ptr to the created VertexBuffer.
+     */
+    std::unique_ptr<VertexBuffer> VertexBuffer::Create(float* vertices, uint32_t size) {
         return std::make_unique<OpenGLVertexBuffer>(vertices, size);
     }
 
-    std::unique_ptr<IndexBuffer> IndexBuffer::Create(uint32_t* indices, uint32_t count)
-    {
+    /**
+     * @brief Factory method to create an index buffer.
+     * 
+     * @param indices Index data pointer.
+     * @param count Number of indices.
+     * @return Unique ptr to the created IndexBuffer.
+     */
+    std::unique_ptr<IndexBuffer> IndexBuffer::Create(uint32_t* indices, uint32_t count) {
         return std::make_unique<OpenGLIndexBuffer>(indices, count);
     }
 }

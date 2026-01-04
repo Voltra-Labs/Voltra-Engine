@@ -7,8 +7,15 @@
 
 namespace Voltra {
 
-    Shader::Shader(const std::string& vertexSrc, const std::string& fragmentSrc)
-    {
+    /**
+     * @brief Compiles and links vertex and fragment shaders.
+     * 
+     * Checks for compilation and linking errors, logging them if present.
+     * 
+     * @param vertexSrc The source code for the vertex shader.
+     * @param fragmentSrc The source code for the fragment shader.
+     */
+    Shader::Shader(const std::string& vertexSrc, const std::string& fragmentSrc) {
         GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
 
         const GLchar* source = vertexSrc.c_str();
@@ -18,8 +25,7 @@ namespace Voltra {
 
         GLint isCompiled = 0;
         glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &isCompiled);
-        if(isCompiled == GL_FALSE)
-        {
+        if(isCompiled == GL_FALSE) {
             GLint maxLength = 0;
             glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &maxLength);
 
@@ -41,8 +47,7 @@ namespace Voltra {
         glCompileShader(fragmentShader);
 
         glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &isCompiled);
-        if (isCompiled == GL_FALSE)
-        {
+        if (isCompiled == GL_FALSE) {
             GLint maxLength = 0;
             glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &maxLength);
 
@@ -65,8 +70,7 @@ namespace Voltra {
 
         GLint isLinked = 0;
         glGetProgramiv(m_RendererID, GL_LINK_STATUS, (int*)&isLinked);
-        if (isLinked == GL_FALSE)
-        {
+        if (isLinked == GL_FALSE) {
             GLint maxLength = 0;
             glGetProgramiv(m_RendererID, GL_INFO_LOG_LENGTH, &maxLength);
 
@@ -86,22 +90,34 @@ namespace Voltra {
         glDetachShader(m_RendererID, fragmentShader);
     }
 
-    Shader::~Shader()
-    {
+    /**
+     * @brief Destructor. Deletes the OpenGL program.
+     */
+    Shader::~Shader() {
         glDeleteProgram(m_RendererID);
     }
 
-    void Shader::Bind() const
-    {
+    /**
+     * @brief Activates the shader program.
+     */
+    void Shader::Bind() const {
         glUseProgram(m_RendererID);
     }
 
-    void Shader::Unbind() const
-    {
+    /**
+     * @brief Deactivates the shader program.
+     */
+    void Shader::Unbind() const {
         glUseProgram(0);
     }
 
-    // Helper function to get uniform location (maybe cache this in a map for optimization)
+    /**
+     * @brief Helper to find uniform location.
+     * 
+     * @param programID Shader program ID.
+     * @param name Uniform name.
+     * @return Location index or -1 if not found.
+     */
     GLint GetUniformLocation(uint32_t programID, const std::string& name) {
         GLint location = glGetUniformLocation(programID, name.c_str());
         if (location == -1) {
@@ -110,36 +126,71 @@ namespace Voltra {
         return location;
     }
 
+    /**
+     * @brief Uploads an int uniform.
+     * @param name Uniform name.
+     * @param value value.
+     */
     void Shader::UploadUniformInt(const std::string& name, int value) {
         GLint location = GetUniformLocation(m_RendererID, name);
         glUniform1i(location, value);
     }
 
+    /**
+     * @brief Uploads a float uniform.
+     * @param name Uniform name.
+     * @param value value.
+     */
     void Shader::UploadUniformFloat(const std::string& name, float value) {
         GLint location = GetUniformLocation(m_RendererID, name);
         glUniform1f(location, value);
     }
 
+    /**
+     * @brief Uploads a vec2 uniform.
+     * @param name Uniform name.
+     * @param value value.
+     */
     void Shader::UploadUniformFloat2(const std::string& name, const glm::vec2& value) {
         GLint location = GetUniformLocation(m_RendererID, name);
         glUniform2f(location, value.x, value.y);
     }
 
+    /**
+     * @brief Uploads a vec3 uniform.
+     * @param name Uniform name.
+     * @param value value.
+     */
     void Shader::UploadUniformFloat3(const std::string& name, const glm::vec3& value) {
         GLint location = GetUniformLocation(m_RendererID, name);
         glUniform3f(location, value.x, value.y, value.z);
     }
 
+    /**
+     * @brief Uploads a vec4 uniform.
+     * @param name Uniform name.
+     * @param value value.
+     */
     void Shader::UploadUniformFloat4(const std::string& name, const glm::vec4& value) {
         GLint location = GetUniformLocation(m_RendererID, name);
         glUniform4f(location, value.x, value.y, value.z, value.w);
     }
 
+    /**
+     * @brief Uploads a mat3 uniform.
+     * @param name Uniform name.
+     * @param matrix value.
+     */
     void Shader::UploadUniformMat3(const std::string& name, const glm::mat3& matrix) {
         GLint location = GetUniformLocation(m_RendererID, name);
         glUniformMatrix3fv(location, 1, GL_FALSE, glm::value_ptr(matrix));
     }
 
+    /**
+     * @brief Uploads a mat4 uniform.
+     * @param name Uniform name.
+     * @param matrix value.
+     */
     void Shader::UploadUniformMat4(const std::string& name, const glm::mat4& matrix) {
         GLint location = GetUniformLocation(m_RendererID, name);
         glUniformMatrix4fv(location, 1, GL_FALSE, glm::value_ptr(matrix));

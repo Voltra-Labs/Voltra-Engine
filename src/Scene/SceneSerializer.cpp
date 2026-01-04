@@ -95,81 +95,92 @@ namespace Voltra {
         return out;
     }
 
+    /**
+     * @brief Serializer Constructor.
+     * 
+     * @param scene The scene context to operate on.
+     */
     SceneSerializer::SceneSerializer(const std::shared_ptr<Scene>& scene)
         : m_Scene(scene) {
     }
 
+    /**
+     * @brief Helper to serialize a single entity and its components.
+     * 
+     * @param out The YAML emitter.
+     * @param entity The entity handle.
+     */
     static void SerializeEntity(YAML::Emitter& out, Entity entity) {
         out << YAML::BeginMap; // Entity
         out << YAML::Key << "Entity" << YAML::Value << "12837192831273"; // TODO: Entity ID goes here
 
         if (entity.HasComponent<TagComponent>()) {
             out << YAML::Key << "TagComponent";
-            out << YAML::BeginMap; // TagComponent
+            out << YAML::BeginMap;
 
             auto& tag = entity.GetComponent<TagComponent>().Tag;
             out << YAML::Key << "Tag" << YAML::Value << tag;
 
-            out << YAML::EndMap; // TagComponent
+            out << YAML::EndMap;
         }
 
         if (entity.HasComponent<TransformComponent>()) {
             out << YAML::Key << "TransformComponent";
-            out << YAML::BeginMap; // TransformComponent
+            out << YAML::BeginMap;
 
             auto& tc = entity.GetComponent<TransformComponent>();
             out << YAML::Key << "Translation" << YAML::Value << tc.Translation;
             out << YAML::Key << "Rotation" << YAML::Value << tc.Rotation;
             out << YAML::Key << "Scale" << YAML::Value << tc.Scale;
 
-            out << YAML::EndMap; // TransformComponent
+            out << YAML::EndMap;
         }
 
         if (entity.HasComponent<CameraComponent>()) {
             out << YAML::Key << "CameraComponent";
-            out << YAML::BeginMap; // CameraComponent
+            out << YAML::BeginMap;
 
             auto& cameraComponent = entity.GetComponent<CameraComponent>();
             auto& camera = cameraComponent.Camera;
 
             out << YAML::Key << "Camera" << YAML::Value;
-            out << YAML::BeginMap; // Camera
-            out << YAML::Key << "ProjectionType" << YAML::Value << 1; // Assuming Orthographic for now
+            out << YAML::BeginMap;
+            out << YAML::Key << "ProjectionType" << YAML::Value << 1;
             out << YAML::Key << "OrthographicSize" << YAML::Value << cameraComponent.OrthographicSize;
             out << YAML::Key << "OrthographicNear" << YAML::Value << cameraComponent.OrthographicNear;
             out << YAML::Key << "OrthographicFar" << YAML::Value << cameraComponent.OrthographicFar;
-            out << YAML::EndMap; // Camera
+            out << YAML::EndMap;
 
             out << YAML::Key << "Primary" << YAML::Value << cameraComponent.Primary;
             out << YAML::Key << "FixedAspectRatio" << YAML::Value << cameraComponent.FixedAspectRatio;
 
-            out << YAML::EndMap; // CameraComponent
+            out << YAML::EndMap;
         }
 
         if (entity.HasComponent<SpriteRendererComponent>()) {
             out << YAML::Key << "SpriteRendererComponent";
-            out << YAML::BeginMap; // SpriteRendererComponent
+            out << YAML::BeginMap;
 
             auto& spriteRendererComponent = entity.GetComponent<SpriteRendererComponent>();
             out << YAML::Key << "Color" << YAML::Value << spriteRendererComponent.Color;
 
-            out << YAML::EndMap; // SpriteRendererComponent
+            out << YAML::EndMap;
         }
 
         if (entity.HasComponent<Rigidbody2DComponent>()) {
             out << YAML::Key << "Rigidbody2DComponent";
-            out << YAML::BeginMap; // Rigidbody2DComponent
+            out << YAML::BeginMap;
 
             auto& rb2dComponent = entity.GetComponent<Rigidbody2DComponent>();
             out << YAML::Key << "BodyType" << YAML::Value << (int)rb2dComponent.Type;
             out << YAML::Key << "FixedRotation" << YAML::Value << rb2dComponent.FixedRotation;
 
-            out << YAML::EndMap; // Rigidbody2DComponent
+            out << YAML::EndMap;
         }
 
         if (entity.HasComponent<BoxCollider2DComponent>()) {
             out << YAML::Key << "BoxCollider2DComponent";
-            out << YAML::BeginMap; // BoxCollider2DComponent
+            out << YAML::BeginMap;
 
             auto& bc2dComponent = entity.GetComponent<BoxCollider2DComponent>();
             out << YAML::Key << "Offset" << YAML::Value << bc2dComponent.Offset;
@@ -179,12 +190,17 @@ namespace Voltra {
             out << YAML::Key << "Restitution" << YAML::Value << bc2dComponent.Restitution;
             out << YAML::Key << "RestitutionThreshold" << YAML::Value << bc2dComponent.RestitutionThreshold;
 
-            out << YAML::EndMap; // BoxCollider2DComponent
+            out << YAML::EndMap;
         }
 
-        out << YAML::EndMap; // Entity
+        out << YAML::EndMap;
     }
 
+    /**
+     * @brief Serializes the entire scene to a .voltra file.
+     * 
+     * @param filepath Path to write.
+     */
     void SceneSerializer::Serialize(const std::string& filepath) {
         YAML::Emitter out;
         out << YAML::BeginMap;
@@ -207,10 +223,22 @@ namespace Voltra {
         fout << out.c_str();
     }
 
+    /**
+     * @brief Defines runtime serialization (Binary format - Future implementation).
+     * 
+     * @param filepath Path.
+     */
     void SceneSerializer::SerializeRuntime(const std::string& filepath) {
-        // Not implemented yet
     }
 
+    /**
+     * @brief Deserializes a scene from a .voltra file.
+     * 
+     * Reconstructs entities and components from YAML.
+     * 
+     * @param filepath Path to read.
+     * @return true if successful, false if file is invalid.
+     */
     bool SceneSerializer::Deserialize(const std::string& filepath) {
         std::ifstream stream(filepath);
         std::stringstream strStream;
@@ -237,7 +265,6 @@ namespace Voltra {
 
                 auto transformComponent = entity["TransformComponent"];
                 if (transformComponent) {
-                    // Entities always have transforms
                     auto& tc = deserializedEntity.GetComponent<TransformComponent>();
                     tc.Translation = transformComponent["Translation"].as<glm::vec3>();
                     tc.Rotation = transformComponent["Rotation"].as<glm::vec3>();
@@ -288,8 +315,13 @@ namespace Voltra {
         return true;
     }
 
+    /**
+     * @brief Deserializes runtime binary data.
+     * 
+     * @param filepath Path.
+     * @return Always false (Not Implemented).
+     */
     bool SceneSerializer::DeserializeRuntime(const std::string& filepath) {
-        // Not implemented yet
         return false;
     }
 

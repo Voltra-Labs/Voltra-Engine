@@ -5,10 +5,14 @@
 
 namespace Voltra {
 
-    static GLenum ShaderDataTypeToOpenGLBaseType(ShaderDataType type)
-    {
-        switch (type)
-        {
+    /**
+     * @brief Converts internal ShaderDataType to OpenGL types.
+     * 
+     * @param type The internal type.
+     * @return The GLenum type.
+     */
+    static GLenum ShaderDataTypeToOpenGLBaseType(ShaderDataType type) {
+        switch (type) {
             case ShaderDataType::Float:    return GL_FLOAT;
             case ShaderDataType::Float2:   return GL_FLOAT;
             case ShaderDataType::Float3:   return GL_FLOAT;
@@ -24,34 +28,46 @@ namespace Voltra {
         return 0;
     }
 
-    VertexArray::VertexArray()
-    {
+    /**
+     * @brief Generates the OpenGL VAO.
+     */
+    VertexArray::VertexArray() {
         glGenVertexArrays(1, &m_RendererID);
     }
 
-    VertexArray::~VertexArray()
-    {
+    /**
+     * @brief Deletes the OpenGL VAO.
+     */
+    VertexArray::~VertexArray() {
         glDeleteVertexArrays(1, &m_RendererID);
     }
 
-    void VertexArray::Bind() const
-    {
+    /**
+     * @brief Binds the VAO.
+     */
+    void VertexArray::Bind() const {
         glBindVertexArray(m_RendererID);
     }
 
-    void VertexArray::Unbind() const
-    {
+    /**
+     * @brief Unbinds the VAO.
+     */
+    void VertexArray::Unbind() const {
         glBindVertexArray(0);
     }
 
-    void VertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer)
-    {
+    /**
+     * @brief Links a VertexBuffer to this VAO using the buffer's layout.
+     * 
+     * @param vertexBuffer The buffer to attach.
+     */
+    void VertexArray::AddVertexBuffer(const std::shared_ptr<VertexBuffer>& vertexBuffer) {
         glBindVertexArray(m_RendererID);
         vertexBuffer->Bind();
 
         const auto& layout = vertexBuffer->GetLayout();
-        for (const auto& element : layout)
-        {
+
+        for (const auto& element : layout) {
             glEnableVertexAttribArray(m_VertexBufferIndex);
             glVertexAttribPointer(m_VertexBufferIndex,
                 element.GetComponentCount(),
@@ -65,16 +81,23 @@ namespace Voltra {
         m_VertexBuffers.push_back(vertexBuffer);
     }
 
-    void VertexArray::SetIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer)
-    {
+    /**
+     * @brief Sets the global IndexBuffer for this VAO.
+     * 
+     * @param indexBuffer The index buffer.
+     */
+    void VertexArray::SetIndexBuffer(const std::shared_ptr<IndexBuffer>& indexBuffer) {
         glBindVertexArray(m_RendererID);
         indexBuffer->Bind();
 
         m_IndexBuffer = indexBuffer;
     }
     
-    std::shared_ptr<VertexArray> VertexArray::Create()
-    {
+    /**
+     * @brief Factory creator.
+     * @return New VertexArray instance.
+     */
+    std::shared_ptr<VertexArray> VertexArray::Create() {
         return std::make_shared<VertexArray>();
     }
 

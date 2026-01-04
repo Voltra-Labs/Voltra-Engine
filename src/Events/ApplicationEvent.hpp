@@ -6,14 +6,39 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Event triggered when the window is resized.
+     */
     class WindowResizeEvent : public Event {
     public:
+        /**
+         * @brief Constructs a WindowResizeEvent.
+         * 
+         * @param width The new width of the window.
+         * @param height The new height of the window.
+         */
         WindowResizeEvent(uint32_t width, uint32_t height)
             : m_Width(width), m_Height(height) {}
 
+        /**
+         * @brief Gets the new width.
+         * 
+         * @return The width in pixels.
+         */
         uint32_t GetWidth() const { return m_Width; }
+
+        /**
+         * @brief Gets the new height.
+         * 
+         * @return The height in pixels.
+         */
         uint32_t GetHeight() const { return m_Height; }
 
+        /**
+         * @brief Returns a string representation of the event.
+         * 
+         * @return Debug string.
+         */
         std::string ToString() const override {
             std::stringstream ss;
             ss << "WindowResizeEvent: " << m_Width << ", " << m_Height;
@@ -26,6 +51,9 @@ namespace Voltra {
         uint32_t m_Width, m_Height;
     };
 
+    /**
+     * @brief Event triggered when the window is closed.
+     */
     class WindowCloseEvent : public Event {
     public:
         WindowCloseEvent() = default;
@@ -34,6 +62,9 @@ namespace Voltra {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
+    /**
+     * @brief Event triggered on application tick.
+     */
     class AppTickEvent : public Event {
     public:
         AppTickEvent() = default;
@@ -42,6 +73,9 @@ namespace Voltra {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
+    /**
+     * @brief Event triggered on application update.
+     */
     class AppUpdateEvent : public Event {
     public:
         AppUpdateEvent() = default;
@@ -50,6 +84,9 @@ namespace Voltra {
         EVENT_CLASS_CATEGORY(EventCategoryApplication)
     };
 
+    /**
+     * @brief Event triggered on application render.
+     */
     class AppRenderEvent : public Event {
     public:
         AppRenderEvent() = default;

@@ -5,17 +5,30 @@
 
 namespace Voltra {
 
+    /**
+     * @brief Constructs the Framebuffer and initializes it.
+     * 
+     * @param spec Configuration specification.
+     */
     Framebuffer::Framebuffer(const FramebufferSpecification& spec)
         : m_Specification(spec) {
         Invalidate();
     }
 
+    /**
+     * @brief Destructor. Clean up OpenGL resources.
+     */
     Framebuffer::~Framebuffer() {
         glDeleteFramebuffers(1, &m_RendererID);
         glDeleteTextures(1, &m_ColorAttachment);
         glDeleteTextures(1, &m_DepthAttachment);
     }
 
+    /**
+     * @brief Recreates the framebuffer and its attachments.
+     * 
+     * Handles deletion of old resources if they exist.
+     */
     void Framebuffer::Invalidate() {
         if (m_RendererID) {
             glDeleteFramebuffers(1, &m_RendererID);
@@ -37,7 +50,6 @@ namespace Voltra {
 
         glGenTextures(1, &m_DepthAttachment);
         glBindTexture(GL_TEXTURE_2D, m_DepthAttachment);
-        // NOTE: creating a depth/stencil buffer
         glTexStorage2D(GL_TEXTURE_2D, 1, GL_DEPTH24_STENCIL8, m_Specification.Width, m_Specification.Height);
         
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_TEXTURE_2D, m_DepthAttachment, 0);
@@ -48,15 +60,27 @@ namespace Voltra {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    /**
+     * @brief Binds the framebuffer and sets the viewport.
+     */
     void Framebuffer::Bind() {
         glBindFramebuffer(GL_FRAMEBUFFER, m_RendererID);
         glViewport(0, 0, m_Specification.Width, m_Specification.Height);
     }
 
+    /**
+     * @brief Unbinds the framebuffer (binds default 0).
+     */
     void Framebuffer::Unbind() {
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
     }
 
+    /**
+     * @brief Resizes the framebuffer.
+     * 
+     * @param width New width.
+     * @param height New height.
+     */
     void Framebuffer::Resize(uint32_t width, uint32_t height) {
         if (width == 0 || height == 0 || width > 8192 || height > 8192) {
             VOLTRA_CORE_WARN("Attempted to resize framebuffer to {0}, {1}", width, height);
@@ -69,6 +93,12 @@ namespace Voltra {
         Invalidate();
     }
 
+    /**
+     * @brief Factory method to create a Framebuffer.
+     * 
+     * @param spec Configuration.
+     * @return Shared pointer to the new Framebuffer.
+     */
     std::shared_ptr<Framebuffer> Framebuffer::Create(const FramebufferSpecification& spec) {
         return std::make_shared<Framebuffer>(spec);
     }
