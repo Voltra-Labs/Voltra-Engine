@@ -59,7 +59,8 @@ It's designed specifically for **engineering students, C++ developers, and graph
 | **Scene Serialization** | ✅ | Save and Load scenes using YAML. |
 | **Gizmos** | ✅ | Draw gizmos for debugging and visualization. |
 | **Scripting** | 🚧 | *In Progress* - Native C++ Scripting without to recompile the engine. |
-| **Asset Management** | 🚧 | *In Progress* - Load and manage assets (Textures, Shaders, Fonts). |
+| **Asset Management** | ✅ | Centralized system to load and cache assets (Textures, Shaders). |
+| **UUID System** | ✅ | 64-bit Unique Identifiers for Entities and Resources. |
 
 ## 🛠️ Requirements
 
@@ -166,6 +167,20 @@ void OnEvent(Event& e) {
     EventDispatcher dispatcher(e);
     dispatcher.Dispatch<WindowResizeEvent>(OnWindowResize);
 }
+```
+
+### UUID System
+Voltra implements a robust 64-bit UUID system (based on `std::random_device`) to uniquely identify entities and resources. This facilitates serialization and referencing objects independent of memory addresses.
+```cpp
+Voltra::UUID id; // Generates a random 64-bit UUID
+Voltra::UUID idFromInt = 123456789; // Constructs from existing integer
+```
+
+### Asset Manager
+A static `AssetManager` class handles the loading and caching of resources (Textures and Shaders) to ensure that the same asset is not loaded twice into memory. It uses smart pointers (`std::shared_ptr`) for automatic memory management.
+```cpp
+// Loads the texture from disk or returns the cached instance
+auto texture = AssetManager::LoadTexture("assets/textures/player.png");
 ```
 
 ## 🧪 Testing
