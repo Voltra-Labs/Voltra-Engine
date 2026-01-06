@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <memory>
 #include <glad/glad.h>
 
 namespace Voltra {
@@ -42,6 +43,15 @@ namespace Voltra {
         ~Texture2D();
 
         /**
+         * @brief Creates a texture from a file.
+         * 
+         * @param path The filepath to the image.
+         * @return A shared pointer to the created texture.
+         */
+        static std::shared_ptr<Texture2D> Create(const std::string& path);
+
+
+        /**
          * @brief Gets the texture width.
          * @return Width in pixels.
          */
@@ -52,6 +62,13 @@ namespace Voltra {
          * @return Height in pixels.
          */
         uint32_t GetHeight() const { return m_Height; }
+
+        /**
+         * @brief Gets the texture file path.
+         * @return The file path string.
+         */
+        const std::string& GetPath() const { return m_Path; }
+
 
         /**
          * @brief Gets the OpenGL renderer ID.

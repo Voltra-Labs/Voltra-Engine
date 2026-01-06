@@ -4,8 +4,58 @@
 #include <vector>
 #include "../Core/Log.hpp"
 #include <glm/gtc/type_ptr.hpp>
+#include <fstream>
+#include <sstream>
+#include <memory> 
 
 namespace Voltra {
+
+    /**
+     * @brief Helper function to read file content.
+     */
+    static std::string ReadFile(const std::string& filepath) {
+        std::string result;
+        std::ifstream in(filepath, std::ios::in | std::ios::binary);
+        if (in) {
+            in.seekg(0, std::ios::end);
+            size_t size = in.tellg();
+            if (size != -1) {
+                result.resize(size);
+                in.seekg(0, std::ios::beg);
+                in.read(&result[0], size);
+            } else {
+                VOLTRA_CORE_ERROR("Could not read from file '{0}'", filepath);
+            }
+        } else {
+            VOLTRA_CORE_ERROR("Could not open file '{0}'", filepath);
+        }
+        return result;
+    }
+
+    /**
+     * @brief Helper to preprocess shader source.
+     * Splits source into vertex and fragment shaders based on #type delimiter.
+     */
+    static std::unordered_map<GLenum, std::string> PreProcess(const std::string& source) {
+        std::unordered_map<GLenum, std::string> shaderSources;
+
+        const char* typeToken = "#type";
+        size_t typeTokenLength = strlen(typeToken);
+        size_t pos = source.find(typeToken, 0); 
+        while (pos != std::string::npos) {
+            size_t eol = source.find_first_of("\r\n", pos);
+            size_t begin = pos + typeTokenLength + 1;
+            std::string type = source.substr(begin, eol - begin);
+
+            size_t nextLinePos = source.find_first_not_of("\r\n", eol);
+            pos = source.find(typeToken, nextLinePos);
+            
+            shaderSources[type == "vertex" ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER] = 
+                (pos == std::string::npos) ? source.substr(nextLinePos) : source.substr(nextLinePos, pos - nextLinePos);
+        }
+
+        return shaderSources;
+    }
 
     /**
      * @brief Compiles and links vertex and fragment shaders.
@@ -95,6 +145,18 @@ namespace Voltra {
      */
     Shader::~Shader() {
         glDeleteProgram(m_RendererID);
+    }
+
+    /**
+     * @brief Creates a shader from a filepath.
+     * 
+     * @param filepath Path to the shader file.
+     * @return Shared pointer to the shader.
+     */
+    std::shared_ptr<Shader> Shader::Create(const std::string& filepath) {
+        std::string source = ReadFile(filepath);
+        auto shaderSources = PreProcess(source);
+        return std::make_shared<Shader>(shaderSources[GL_VERTEX_SHADER], shaderSources[GL_FRAGMENT_SHADER]);
     }
 
     /**

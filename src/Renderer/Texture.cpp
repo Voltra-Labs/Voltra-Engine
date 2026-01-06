@@ -1,6 +1,7 @@
 #include "Texture.hpp"
 #include "Core/Log.hpp"
 #include <stb_image.h>
+#include <memory>
 
 namespace Voltra {
 
@@ -78,6 +79,16 @@ namespace Voltra {
      */
     Texture2D::~Texture2D() {
         glDeleteTextures(1, &m_RendererID);
+    }
+
+    /**
+     * @brief Creates a texture from a file.
+     * 
+     * @param path The filepath to the image.
+     * @return A shared pointer to the created texture.
+     */
+    std::shared_ptr<Texture2D> Texture2D::Create(const std::string& path) {
+        return std::make_shared<Texture2D>(path);
     }
 
     /**

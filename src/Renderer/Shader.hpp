@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <memory>
 #include <glm/glm.hpp>
 
 namespace Voltra {
@@ -24,6 +25,15 @@ namespace Voltra {
          * @brief Destructor. Deletes the shader program.
          */
         ~Shader();
+
+        /**
+         * @brief Creates a shader from a descriptor file.
+         * 
+         * @param filepath Path to the shader file (usually contains both vertex/fragment sources).
+         * @return A shared pointer to the created shader.
+         */
+        static std::shared_ptr<Shader> Create(const std::string& filepath);
+
 
         /**
          * @brief Binds this shader program.
