@@ -39,6 +39,14 @@ namespace Voltra {
          */
         static std::shared_ptr<Shader> LoadShader(const std::string& path);
 
+        /**
+         * @brief Clears the internal cache of textures and shaders.
+         * 
+         * This should be called before the OpenGL context is destroyed to prevent
+         * double-free or segfaults during static destruction.
+         */
+        static void Clear();
+
     private:
         static std::unordered_map<std::string, std::shared_ptr<Texture2D>> s_TextureCache;
         static std::unordered_map<std::string, std::shared_ptr<Shader>> s_ShaderCache;

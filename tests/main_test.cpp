@@ -5,6 +5,7 @@
 
 //For LOGS
 #include "Core/Log.hpp"
+#include "Renderer/AssetManager.hpp"
 
 // Callback to print GLFW internal errors
 void GLFWErrorCallback(int error, const char* description) {
@@ -68,6 +69,7 @@ int main(int argc, char** argv) {
     int result = RUN_ALL_TESTS();
 
     // Cleanup
+    Voltra::AssetManager::Clear();
     glfwDestroyWindow(window);
     glfwTerminate();
 

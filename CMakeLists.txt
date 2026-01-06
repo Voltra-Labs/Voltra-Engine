@@ -216,6 +216,13 @@ target_include_directories(VoltraTests PRIVATE
     ${stb_SOURCE_DIR}
 )
 
+# Copy assets to build directory for tests
+add_custom_command(TARGET VoltraTests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/assets
+    ${CMAKE_BINARY_DIR}/assets
+)
+
 # Integrate with CTest (allows running "ctest" command)
 include(GoogleTest)
 gtest_discover_tests(VoltraTests DISCOVERY_TIMEOUT 60)

@@ -51,4 +51,12 @@ namespace Voltra {
         return shader;
     }
 
+    /**
+     * @brief Clears the internal cache.
+     */
+    void AssetManager::Clear() {
+        s_TextureCache.clear();
+        s_ShaderCache.clear();
+    }
+
 }
