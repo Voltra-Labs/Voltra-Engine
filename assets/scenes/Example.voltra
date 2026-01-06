@@ -1,14 +1,14 @@
 Scene: Untitled
 Entities:
-  - Entity: 12837192831273
+  - Entity: 2967840729631572321
     TagComponent:
       Tag: Box
     TransformComponent:
-      Translation: [0.5184995, -1.9834853, 0]
-      Rotation: [0, 0, -0.0028340502]
-      Scale: [1, 1, 1]
+      Translation: [1.8438623, 3.325122, 0]
+      Rotation: [0, 0, 0.17453286]
+      Scale: [0.9999997, 0.9999997, 1]
     SpriteRendererComponent:
-      Color: [0, 0, 0, 1]
+      Color: [1, 0, 0, 1]
     Rigidbody2DComponent:
       BodyType: 2
       FixedRotation: false
@@ -19,7 +19,7 @@ Entities:
       Friction: 0.5
       Restitution: 0
       RestitutionThreshold: 0.5
-  - Entity: 12837192831273
+  - Entity: 11871160404443561580
     TagComponent:
       Tag: Ground
     TransformComponent:
@@ -27,7 +27,7 @@ Entities:
       Rotation: [0, 0, 0]
       Scale: [3, 1, 1]
     SpriteRendererComponent:
-      Color: [1, 1, 1, 1]
+      Color: [0, 1, 0, 1]
     Rigidbody2DComponent:
       BodyType: 0
       FixedRotation: false
@@ -38,7 +38,7 @@ Entities:
       Friction: 0.5
       Restitution: 0
       RestitutionThreshold: 0.5
-  - Entity: 12837192831273
+  - Entity: 12119811887464866286
     TagComponent:
       Tag: Camera
     TransformComponent:

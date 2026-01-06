@@ -31,8 +31,9 @@ namespace Voltra {
      * @param name The tag name.
      * @return The created Entity handle.
      */
-    Entity Scene::CreateEntity(const std::string& name) {
+    Entity Scene::CreateEntity(const std::string& name, UUID uuid) {
         Entity entity = { m_Registry.create(), this };
+        entity.AddComponent<IDComponent>(uuid);
         entity.AddComponent<TransformComponent>();
         auto& tag = entity.AddComponent<TagComponent>();
         tag.Tag = name.empty() ? "Entity" : name;

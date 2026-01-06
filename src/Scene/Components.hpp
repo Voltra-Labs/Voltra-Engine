@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Renderer/Texture.hpp"
+#include "Core/UUID.hpp"
 #include <memory>
 #include "Renderer/OrthographicCamera.hpp"
 #include <glm/glm.hpp>
@@ -9,6 +10,19 @@
 #include "ScriptableEntity.hpp"
 
 namespace Voltra {
+
+
+
+    /**
+     * @brief Component for identifying entities with a unique ID.
+     */
+    struct IDComponent {
+        UUID ID;
+
+        IDComponent() = default;
+        IDComponent(const IDComponent&) = default;
+        IDComponent(const UUID& uuid) : ID(uuid) {}
+    };
 
     /**
      * @brief Component for identifying entities with a name.
