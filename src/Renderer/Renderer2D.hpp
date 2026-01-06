@@ -90,7 +90,7 @@ namespace Voltra {
          * @param transform Transformation matrix.
          * @param texture Texture to apply.
          */
-        static void DrawQuad(const glm::mat4& transform, const std::shared_ptr<Texture2D>& texture);
+        static void DrawQuad(const glm::mat4& transform, const std::shared_ptr<Texture2D>& texture, float tilingFactor = 1.0f, const glm::vec4& tintColor = glm::vec4(1.0f));
     };
 
 }

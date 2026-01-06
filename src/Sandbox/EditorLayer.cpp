@@ -11,6 +11,7 @@
 
 #include "Scene/Components.hpp"
 #include "Scene/SceneSerializer.hpp"
+#include "Renderer/AssetManager.hpp"
 #include "Renderer/RenderCommand.hpp"
 #include "Core/Input.hpp"
 #include "Events/KeyEvent.hpp"
@@ -54,6 +55,11 @@ namespace Voltra {
         boxTransform.Translation = { 0.0f, 3.0f, 0.0f };
         boxTransform.Rotation = { 0.0f, 0.0f, glm::radians(10.0f) };
         m_SquareEntity.AddComponent<SpriteRendererComponent>(glm::vec4{ 1.0f, 0.0f, 0.0f, 1.0f });
+        
+        auto texture = AssetManager::LoadTexture("../assets/textures/container.png");
+
+        auto& src = m_SquareEntity.GetComponent<SpriteRendererComponent>();
+        src.Texture = texture;
         
         auto& boxRb = m_SquareEntity.AddComponent<Rigidbody2DComponent>();
         boxRb.Type = Rigidbody2DComponent::BodyType::Dynamic;

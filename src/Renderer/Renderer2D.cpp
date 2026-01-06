@@ -77,9 +77,10 @@ namespace Voltra {
             
             uniform vec4 u_Color;
             uniform sampler2D u_Texture;
+            uniform float u_TilingFactor;
             
             void main() {
-                color = texture(u_Texture, v_TexCoord) * u_Color;
+                color = texture(u_Texture, v_TexCoord * u_TilingFactor) * u_Color;
             }
         )";
 
@@ -182,12 +183,16 @@ namespace Voltra {
      * @param transform Model matrix.
      * @param texture Texture to bind.
      */
-    void Renderer2D::DrawQuad(const glm::mat4& transform, const std::shared_ptr<Texture2D>& texture) {
+    void Renderer2D::DrawQuad(const glm::mat4& transform, const std::shared_ptr<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor) {
         s_Data->TextureShader->Bind();
-        s_Data->TextureShader->UploadUniformFloat4("u_Color", glm::vec4(1.0f));
+        s_Data->TextureShader->UploadUniformFloat4("u_Color", tintColor);
+        s_Data->TextureShader->UploadUniformFloat("u_TilingFactor", tilingFactor);
         s_Data->TextureShader->UploadUniformMat4("u_Transform", transform);
 
-        texture->Bind(0);
+        if (texture)
+            texture->Bind(0);
+        else
+            s_Data->WhiteTexture->Bind(0);
 
         s_Data->QuadVertexArray->Bind();
         RenderCommand::DrawIndexed(s_Data->QuadVertexArray);

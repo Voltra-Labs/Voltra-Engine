@@ -185,13 +185,7 @@ namespace Voltra {
             for (auto entity : group) {
                 auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
                 
-                if (sprite.Texture) {
-                    // TODO: DrawQuad(transform, texture, tint)
-                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
-                } 
-                else {
-                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Color);
-                }
+                Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture, sprite.TilingFactor, sprite.Color);
             }
 
             Renderer2D::EndScene();
@@ -211,12 +205,7 @@ namespace Voltra {
         for (auto entity : group) {
             auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
             
-            if (sprite.Texture) {
-                Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
-            } 
-            else {
-                Renderer2D::DrawQuad(transform.GetTransform(), sprite.Color);
-            }
+            Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture, sprite.TilingFactor, sprite.Color);
         }
 
         Renderer2D::EndScene();
@@ -251,12 +240,7 @@ namespace Voltra {
             for (auto entity : group) {
                 auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
                 
-                if (sprite.Texture) {
-                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture);
-                } 
-                else {
-                    Renderer2D::DrawQuad(transform.GetTransform(), sprite.Color);
-                }
+                Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture, sprite.TilingFactor, sprite.Color);
             }
 
             Renderer2D::EndScene();

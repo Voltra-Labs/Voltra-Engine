@@ -2,6 +2,8 @@
 
 #include "Scene/Entity.hpp"
 #include "Scene/Components.hpp"
+#include "Renderer/AssetManager.hpp"
+
 
 #include <yaml-cpp/yaml.h>
 #include <fstream>
@@ -163,6 +165,11 @@ namespace Voltra {
 
             auto& spriteRendererComponent = entity.GetComponent<SpriteRendererComponent>();
             out << YAML::Key << "Color" << YAML::Value << spriteRendererComponent.Color;
+            
+            if (spriteRendererComponent.Texture)
+                out << YAML::Key << "TexturePath" << YAML::Value << spriteRendererComponent.Texture->GetPath();
+            
+            out << YAML::Key << "TilingFactor" << YAML::Value << spriteRendererComponent.TilingFactor;
 
             out << YAML::EndMap;
         }
@@ -288,8 +295,16 @@ namespace Voltra {
 
                 auto spriteRendererComponent = entity["SpriteRendererComponent"];
                 if (spriteRendererComponent) {
-                    auto& src = deserializedEntity.AddComponent<SpriteRendererComponent>();
+                auto& src = deserializedEntity.AddComponent<SpriteRendererComponent>();
                     src.Color = spriteRendererComponent["Color"].as<glm::vec4>();
+                    
+                    if (spriteRendererComponent["TexturePath"]) {
+                        std::string texturePath = spriteRendererComponent["TexturePath"].as<std::string>();
+                        src.Texture = AssetManager::LoadTexture(texturePath);
+                    }
+
+                    if (spriteRendererComponent["TilingFactor"])
+                        src.TilingFactor = spriteRendererComponent["TilingFactor"].as<float>();
                 }
 
                 auto rigidbody2DComponent = entity["Rigidbody2DComponent"];

@@ -184,6 +184,7 @@ add_executable(VoltraTests
     tests/TextureManagerTest.cpp
     tests/SceneSerializerTest.cpp
     tests/UUIDTest.cpp
+    tests/AssetManagerTest.cpp
     ${ENGINE_SOURCES}
 )
 
