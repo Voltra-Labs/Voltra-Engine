@@ -112,7 +112,7 @@ namespace Voltra {
      */
     static void SerializeEntity(YAML::Emitter& out, Entity entity) {
         out << YAML::BeginMap; // Entity
-        out << YAML::Key << "Entity" << YAML::Value << "12837192831273"; // TODO: Entity ID goes here
+        out << YAML::Key << "Entity" << YAML::Value << entity.GetComponent<IDComponent>().ID;
 
         if (entity.HasComponent<TagComponent>()) {
             out << YAML::Key << "TagComponent";
@@ -254,14 +254,14 @@ namespace Voltra {
         auto entities = data["Entities"];
         if (entities) {
             for (auto entity : entities) {
-                uint64_t uuid = entity["Entity"].as<uint64_t>(); // TODO
+                uint64_t uuid = entity["Entity"].as<uint64_t>();
 
                 std::string name;
                 auto tagComponent = entity["TagComponent"];
                 if (tagComponent)
                     name = tagComponent["Tag"].as<std::string>();
 
-                Entity deserializedEntity = m_Scene->CreateEntity(name);
+                Entity deserializedEntity = m_Scene->CreateEntity(name, uuid);
 
                 auto transformComponent = entity["TransformComponent"];
                 if (transformComponent) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Core/Timestep.hpp"
+#include "Core/UUID.hpp"
 #include <entt/entt.hpp>
 
 class b2World;
@@ -31,7 +32,7 @@ namespace Voltra {
          * @param name Optional debug name (tag).
          * @return The created entity.
          */
-        Entity CreateEntity(const std::string& name = std::string());
+        Entity CreateEntity(const std::string& name = std::string(), UUID uuid = UUID());
 
         /**
          * @brief Destroys an entity.
