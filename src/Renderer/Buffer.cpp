@@ -22,6 +22,17 @@ namespace Voltra {
         }
 
         /**
+         * @brief Constructs a dynamic OpenGLVertexBuffer.
+         * 
+         * @param size Size in bytes.
+         */
+        OpenGLVertexBuffer(uint32_t size) {
+            glCreateBuffers(1, &m_RendererID);
+            glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
+            glBufferData(GL_ARRAY_BUFFER, size, nullptr, GL_DYNAMIC_DRAW);
+        }
+
+        /**
          * @brief Destructor. Deletes the buffer.
          */
         virtual ~OpenGLVertexBuffer() {
@@ -40,6 +51,11 @@ namespace Voltra {
          */
         virtual void Unbind() const override {
             glBindBuffer(GL_ARRAY_BUFFER, 0);
+        }
+
+        virtual void SetData(const void* data, uint32_t size) override {
+            glBindBuffer(GL_ARRAY_BUFFER, m_RendererID);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, size, data);
         }
 
         virtual const BufferLayout& GetLayout() const override { return m_Layout; }
@@ -106,6 +122,16 @@ namespace Voltra {
      */
     std::unique_ptr<VertexBuffer> VertexBuffer::Create(float* vertices, uint32_t size) {
         return std::make_unique<OpenGLVertexBuffer>(vertices, size);
+    }
+
+    /**
+     * @brief Factory method to create a dynamic vertex buffer.
+     * 
+     * @param size Size in bytes.
+     * @return Unique ptr to the created VertexBuffer.
+     */
+    std::unique_ptr<VertexBuffer> VertexBuffer::Create(uint32_t size) {
+        return std::make_unique<OpenGLVertexBuffer>(size);
     }
 
     /**

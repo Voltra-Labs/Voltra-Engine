@@ -31,9 +31,10 @@ namespace Voltra {
          * @brief Issues an indexed draw call.
          * 
          * @param vertexArray The vertex array containing geometry.
+         * @param indexCount Optional index count to draw.
          */
-        static void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray) {
-            s_RendererAPI->DrawIndexed(vertexArray);
+        static void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray, uint32_t indexCount = 0) {
+            s_RendererAPI->DrawIndexed(vertexArray, indexCount);
         }
 
     private:

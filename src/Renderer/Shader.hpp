@@ -54,6 +54,15 @@ namespace Voltra {
         void UploadUniformInt(const std::string& name, int value);
 
         /**
+         * @brief Uploads an array of integer uniforms.
+         * 
+         * @param name Uniform name.
+         * @param values Pointer to array of integers.
+         * @param count Number of elements.
+         */
+        void UploadUniformIntArray(const std::string& name, int* values, uint32_t count);
+
+        /**
          * @brief Uploads a float uniform.
          * 
          * @param name Uniform name.

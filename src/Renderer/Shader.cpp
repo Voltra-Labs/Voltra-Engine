@@ -199,6 +199,17 @@ namespace Voltra {
     }
 
     /**
+     * @brief Uploads an int array uniform.
+     * @param name Uniform name.
+     * @param values values pointer.
+     * @param count element count.
+     */
+    void Shader::UploadUniformIntArray(const std::string& name, int* values, uint32_t count) {
+        GLint location = GetUniformLocation(m_RendererID, name);
+        glUniform1iv(location, count, values);
+    }
+
+    /**
      * @brief Uploads a float uniform.
      * @param name Uniform name.
      * @param value value.
