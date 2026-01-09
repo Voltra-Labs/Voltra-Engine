@@ -16,6 +16,7 @@
 
 // --- Renderer System ---
 #include "Renderer/Renderer.hpp"
+#include "Renderer/Renderer2D.hpp"
 #include "Renderer/RenderCommand.hpp"
 #include "Renderer/Buffer.hpp"
 #include "Renderer/Shader.hpp"

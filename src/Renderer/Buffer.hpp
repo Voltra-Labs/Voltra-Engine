@@ -183,6 +183,14 @@ namespace Voltra {
         virtual void SetLayout(const BufferLayout& layout) = 0;
 
         /**
+         * @brief Updates the buffer data.
+         * 
+         * @param data Pointer to the new data.
+         * @param size Size of the data in bytes.
+         */
+        virtual void SetData(const void* data, uint32_t size) = 0;
+
+        /**
          * @brief Creates a VertexBuffer.
          * 
          * @param vertices Pointer to vertex data.
@@ -190,6 +198,14 @@ namespace Voltra {
          * @return Unique pointer to the created buffer.
          */
         static std::unique_ptr<VertexBuffer> Create(float* vertices, uint32_t size);
+
+        /**
+         * @brief Creates a dynamic VertexBuffer.
+         * 
+         * @param size Size of the buffer in bytes.
+         * @return Unique pointer to the created buffer.
+         */
+        static std::unique_ptr<VertexBuffer> Create(uint32_t size);
     };
 
     /**

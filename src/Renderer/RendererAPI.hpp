@@ -42,8 +42,9 @@ namespace Voltra {
          * @brief Performs an indexed draw call.
          * 
          * @param vertexArray The vertex array to render.
+         * @param indexCount Optional index count (0 to use entire IB).
          */
-        virtual void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray) = 0;
+        virtual void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray, uint32_t indexCount = 0) = 0;
 
         /**
          * @brief Gets the current API.

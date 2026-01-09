@@ -30,9 +30,11 @@ namespace Voltra {
          * @brief Draws indexed geometry.
          * 
          * @param vertexArray VAO to use.
+         * @param indexCount Number of indices.
          */
-        void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray) override {
-            glDrawElements(GL_TRIANGLES, vertexArray->GetIndexBuffer()->GetCount(), GL_UNSIGNED_INT, nullptr);
+        void DrawIndexed(const std::shared_ptr<VertexArray>& vertexArray, uint32_t indexCount = 0) override {
+            uint32_t count = indexCount ? indexCount : vertexArray->GetIndexBuffer()->GetCount();
+            glDrawElements(GL_TRIANGLES, count, GL_UNSIGNED_INT, nullptr);
         }
     };
 }
