@@ -19,10 +19,10 @@ namespace Voltra {
     };
 
     struct Renderer2DData {
-        static const uint32_t MaxQuads = 10000;
-        static const uint32_t MaxVertices = MaxQuads * 4;
-        static const uint32_t MaxIndices = MaxQuads * 6;
-        static const uint32_t MaxTextureSlots = 32; // TODO: RenderCaps
+        static constexpr uint32_t MaxQuads = 10000;
+        static constexpr uint32_t MaxVertices = MaxQuads * 4;
+        static constexpr uint32_t MaxIndices = MaxQuads * 6;
+        static constexpr uint32_t MaxTextureSlots = 32; // TODO: RenderCaps
 
         std::shared_ptr<VertexArray> QuadVertexArray;
         std::shared_ptr<VertexBuffer> QuadVertexBuffer;
