@@ -1,5 +1,6 @@
 #include "Renderer.hpp"
 #include "TextureManager.hpp"
+#include "Core/Log.hpp"
 
 namespace Voltra {
 
@@ -10,6 +11,21 @@ namespace Voltra {
      */
     void Renderer::Init() {
         TextureManager::Init();
+    }
+
+    /**
+     * @brief Initializes the renderer's GLAD instance from an external loader.
+     * 
+     * @param loader The OpenGL loader function.
+     */
+    void Renderer::InitExternal(void* loader) {
+        if (!gladLoadGLLoader((GLADloadproc)loader)) {
+            VOLTRA_CORE_ERROR("Failed to initialize GLAD in Core DLL!");
+        } else {
+            VOLTRA_CORE_INFO("GLAD initialized in Core DLL.");
+        }
+        // Also initialize internal subsystems if needed
+        Init(); 
     }
 
     /**

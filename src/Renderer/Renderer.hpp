@@ -23,6 +23,13 @@ namespace Voltra {
          * @brief Shuts down the renderer.
          */
         static void Shutdown();
+
+        /**
+         * @brief Initializes the renderer's GLAD instance from an external loader.
+         * 
+         * @param loader The OpenGL loader function (e.g. glfwGetProcAddress).
+         */
+        static void InitExternal(void* loader);
         
         /**
          * @brief Begins a new scene context.

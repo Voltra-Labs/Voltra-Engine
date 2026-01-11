@@ -6,6 +6,7 @@
 //For LOGS
 #include "Core/Log.hpp"
 #include "Renderer/AssetManager.hpp"
+#include "Renderer/Renderer.hpp"
 
 // Callback to print GLFW internal errors
 void GLFWErrorCallback(int error, const char* description) {
@@ -60,6 +61,9 @@ int main(int argc, char** argv) {
         glfwTerminate();
         return -1;
     }
+
+    // Initialize Core DLL's GLAD instance
+    Voltra::Renderer::InitExternal((void*)glfwGetProcAddress);
 
     VOLTRA_CORE_INFO("OpenGL Info:");
     VOLTRA_CORE_TRACE("  Vendor:   {0}", (const char*)glGetString(GL_VENDOR));
