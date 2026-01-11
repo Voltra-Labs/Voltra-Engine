@@ -20,7 +20,6 @@
         #error "IOS is not supported!"
     #elif TARGET_OS_MAC == 1
         #define VOLTRA_PLATFORM_MACOS
-        #error "MacOS is not supported!"
     #else
         #error "Unknown Apple Platform!"
     #endif
@@ -29,7 +28,6 @@
     #error "Android is not supported!"
 #elif defined(__linux__)
     #define VOLTRA_PLATFORM_LINUX
-    #error "Linux is not supported!"
 #else
     /* Unknown compiler/platform */
     #error "Unknown platform!"
@@ -42,6 +40,12 @@
     #else
         #define VOLTRA_API __declspec(dllimport)
     #endif
+#elif defined(VOLTRA_PLATFORM_LINUX) || defined(VOLTRA_PLATFORM_MACOS)
+    #if defined(VOLTRA_BUILD_DLL)
+        #define VOLTRA_API __attribute__((visibility("default")))
+    #else
+        #define VOLTRA_API
+    #endif
 #else
-    #error "Voltra only supports Windows!"
+    #error "Voltra currently only supports Windows, Linux and MacOS!"
 #endif
