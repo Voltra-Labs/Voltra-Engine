@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core.hpp"
 #include <cstdint>
 #include <functional>
 
@@ -10,7 +11,7 @@ namespace Voltra {
      * 
      * Represents a 64-bit universally unique identifier using random number generation.
      */
-    class UUID {
+    class VOLTRA_API UUID {
     public:
         /**
          * @brief Default constructor. Generates a new random UUID.

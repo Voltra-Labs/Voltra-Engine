@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core.hpp"
 #include "Core/Timestep.hpp"
 #include "Events/Event.hpp"
 #include <string>
@@ -12,7 +13,7 @@ namespace Voltra {
      * Layers are pushed to the LayerStack and updated sequentially.
      * They can handle events and render ImGui elements.
      */
-    class Layer {
+    class VOLTRA_API Layer {
     public:
         /**
          * @brief Constructs a new Layer object.

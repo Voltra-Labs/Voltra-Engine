@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <memory>
 #include <cstdint>
 
@@ -8,7 +9,7 @@ namespace Voltra {
     /**
      * @brief Configuration for a Framebuffer.
      */
-    struct FramebufferSpecification {
+    struct VOLTRA_API FramebufferSpecification {
         uint32_t Width, Height;
     };
 
@@ -17,7 +18,7 @@ namespace Voltra {
      * 
      * Manages color and depth attachments.
      */
-    class Framebuffer {
+    class VOLTRA_API Framebuffer {
     public:
         /**
          * @brief Constructs a Framebuffer.

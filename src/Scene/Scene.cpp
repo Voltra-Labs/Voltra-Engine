@@ -199,15 +199,18 @@ namespace Voltra {
      * @param camera The editor camera.
      */
     void Scene::OnUpdateEditor(Timestep ts, EditorCamera& camera) {
+        // VOLTRA_CORE_INFO("Scene::OnUpdateEditor Start");
         Renderer2D::BeginScene(camera);
 
         auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
         for (auto entity : group) {
             auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
             
+            // VOLTRA_CORE_INFO("Scene::OnUpdateEditor Drawing Entity");
             Renderer2D::DrawQuad(transform.GetTransform(), sprite.Texture, sprite.TilingFactor, sprite.Color);
         }
 
+        // VOLTRA_CORE_INFO("Scene::OnUpdateEditor EndScene");
         Renderer2D::EndScene();
     }
 

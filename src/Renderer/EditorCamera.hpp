@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "OrthographicCamera.hpp"
 #include "Core/Timestep.hpp"
 #include "Events/Event.hpp"
@@ -14,7 +15,7 @@ namespace Voltra {
      * 
      * Provides orthographic projection and mouse interaction.
      */
-    class EditorCamera : public OrthographicCamera {
+    class VOLTRA_API EditorCamera : public OrthographicCamera {
     public:
         /**
          * @brief Constructs an EditorCamera.

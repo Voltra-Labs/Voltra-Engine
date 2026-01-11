@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <string>
 #include <memory>
 #include <glm/glm.hpp>
@@ -11,7 +12,7 @@ namespace Voltra {
      * 
      * Handles compilation, linking, and uniform management.
      */
-    class Shader {
+    class VOLTRA_API Shader {
     public:
         /**
          * @brief Constructs a shader from source code strings.

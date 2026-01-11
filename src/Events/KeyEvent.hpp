@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Event.hpp"
 
 namespace Voltra {
@@ -7,7 +8,7 @@ namespace Voltra {
     /**
      * @brief Base class for keyboard events.
      */
-    class KeyEvent : public Event {
+    class VOLTRA_API KeyEvent : public Event {
     public:
         /**
          * @brief Gets the key code associated with this event.
@@ -32,7 +33,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when a key is pressed.
      */
-    class KeyPressedEvent : public KeyEvent {
+    class VOLTRA_API KeyPressedEvent : public KeyEvent {
     public:
         /**
          * @brief Constructs a KeyPressedEvent.
@@ -64,7 +65,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when a key is released.
      */
-    class KeyReleasedEvent : public KeyEvent {
+    class VOLTRA_API KeyReleasedEvent : public KeyEvent {
     public:
         /**
          * @brief Constructs a KeyReleasedEvent.
@@ -86,7 +87,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when a key is typed (text input).
      */
-    class KeyTypedEvent : public KeyEvent {
+    class VOLTRA_API KeyTypedEvent : public KeyEvent {
     public:
         /**
          * @brief Constructs a KeyTypedEvent.

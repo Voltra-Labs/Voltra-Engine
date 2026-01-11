@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core.hpp"
+
 #include <memory>
 #include <spdlog/spdlog.h>
 
@@ -10,7 +12,7 @@ namespace Voltra {
      * 
      * Initialized spdlog loggers for the Engine (Core) and the Client (App).
      */
-    class Log {
+    class VOLTRA_API Log {
     public:
         /**
          * @brief Initializes the logging subsystem.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Event.hpp"
 #include <cstdint>
 #include <sstream>
@@ -9,7 +10,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when the window is resized.
      */
-    class WindowResizeEvent : public Event {
+    class VOLTRA_API WindowResizeEvent : public Event {
     public:
         /**
          * @brief Constructs a WindowResizeEvent.
@@ -54,7 +55,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when the window is closed.
      */
-    class WindowCloseEvent : public Event {
+    class VOLTRA_API WindowCloseEvent : public Event {
     public:
         WindowCloseEvent() = default;
 
@@ -65,7 +66,7 @@ namespace Voltra {
     /**
      * @brief Event triggered on application tick.
      */
-    class AppTickEvent : public Event {
+    class VOLTRA_API AppTickEvent : public Event {
     public:
         AppTickEvent() = default;
 
@@ -76,7 +77,7 @@ namespace Voltra {
     /**
      * @brief Event triggered on application update.
      */
-    class AppUpdateEvent : public Event {
+    class VOLTRA_API AppUpdateEvent : public Event {
     public:
         AppUpdateEvent() = default;
 
@@ -87,7 +88,7 @@ namespace Voltra {
     /**
      * @brief Event triggered on application render.
      */
-    class AppRenderEvent : public Event {
+    class VOLTRA_API AppRenderEvent : public Event {
     public:
         AppRenderEvent() = default;
 

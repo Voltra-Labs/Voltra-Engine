@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "OrthographicCamera.hpp"
 #include "Texture.hpp"
 
@@ -15,7 +16,7 @@ namespace Voltra {
      * All geometry is aggregated into a single dynamic vertex buffer and flushed
      * in minimal draw calls.
      */
-    class Renderer2D {
+    class VOLTRA_API Renderer2D {
     public:
         /**
          * @brief Statistics structure for profiling rendering performance.

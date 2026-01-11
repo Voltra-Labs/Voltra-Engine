@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Scene.hpp"
 #include "Core/Log.hpp"
 #include <entt/entt.hpp>
@@ -9,7 +10,7 @@ namespace Voltra {
     /**
      * @brief Represents an entity in the scene (ECS wrapper around entt::entity).
      */
-    class Entity {
+    class VOLTRA_API Entity {
     public:
         Entity() = default;
         

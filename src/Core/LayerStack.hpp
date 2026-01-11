@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Layer.hpp"
 #include <vector>
 
@@ -11,7 +12,7 @@ namespace Voltra {
      * Layers are organized into normal layers and overlays.
      * Normal layers are pushed to the first half of the list, while overlays are always on top.
      */
-    class LayerStack {
+    class VOLTRA_API LayerStack {
     public:
         /**
          * @brief Default constructor for LayerStack.

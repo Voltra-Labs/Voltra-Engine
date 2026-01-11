@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <string>
 #include <memory>
 #include <glad/glad.h>
@@ -19,7 +20,7 @@ namespace Voltra {
      * 
      * Handles loading from files or manual creation.
      */
-    class Texture2D {
+    class VOLTRA_API Texture2D {
     public:
         /**
          * @brief Loads a texture from a file.

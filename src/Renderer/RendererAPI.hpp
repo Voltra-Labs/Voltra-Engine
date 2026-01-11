@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include "VertexArray.hpp"
@@ -11,7 +12,7 @@ namespace Voltra {
      * 
      * Defines platform-agnostic rendering commands.
      */
-    class RendererAPI {
+    class VOLTRA_API RendererAPI {
     public:
         /**
          * @brief Supported graphics APIs.

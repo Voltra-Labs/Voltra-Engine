@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Scene/Scene.hpp"
 #include "Scene/Entity.hpp"
 #include <memory>
@@ -11,7 +12,7 @@ namespace Voltra {
      * 
      * Allows selection of entities and modification of their components.
      */
-    class SceneHierarchyPanel {
+    class VOLTRA_API SceneHierarchyPanel {
     public:
         SceneHierarchyPanel() = default;
         /**

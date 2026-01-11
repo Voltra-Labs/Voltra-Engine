@@ -108,4 +108,8 @@ namespace Voltra {
         event.Handled |= event.IsInCategory(EventCategoryMouse) & io.WantCaptureMouse;
         event.Handled |= event.IsInCategory(EventCategoryKeyboard) & io.WantCaptureKeyboard;
     }
+
+    ImGuiContext* ImGuiLayer::GetContext() {
+        return ImGui::GetCurrentContext();
+    }
 }

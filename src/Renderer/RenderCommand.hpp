@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "RendererAPI.hpp"
 
 namespace Voltra {
@@ -9,7 +10,7 @@ namespace Voltra {
      * 
      * Hides the underlying RendererAPI usage.
      */
-    class RenderCommand {
+    class VOLTRA_API RenderCommand {
     public:
         /**
          * @brief Sets the clear color for the screen.

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Texture.hpp"
 #include <string>
 #include <unordered_map>
@@ -13,7 +14,7 @@ namespace Voltra {
      * 
      * Ensures textures are loaded only once and reused.
      */
-    class TextureManager {
+    class VOLTRA_API TextureManager {
     public:
         TextureManager() = delete;
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "RenderCommand.hpp"
 #include "OrthographicCamera.hpp"
 #include "Shader.hpp"
@@ -11,7 +12,7 @@ namespace Voltra {
      * 
      * Manages scene execution and primitive submission.
      */
-    class Renderer {
+    class VOLTRA_API Renderer {
     public:
         /**
          * @brief Initializes the renderer.
