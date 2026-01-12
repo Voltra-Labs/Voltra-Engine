@@ -22,6 +22,13 @@ namespace Voltra {
         static void Init();
 
         /**
+         * @brief Shuts down the logging subsystem.
+         * 
+         * Cleans up loggers and frees resources.
+         */
+        static void Shutdown();
+
+        /**
          * @brief Retrieves the engine's core logger.
          * 
          * @return Reference to the core logger shared pointer.

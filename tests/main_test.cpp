@@ -74,6 +74,7 @@ int main(int argc, char** argv) {
 
     // Cleanup
     Voltra::AssetManager::Clear();
+    Voltra::Log::Shutdown();
     glfwDestroyWindow(window);
     glfwTerminate();
 

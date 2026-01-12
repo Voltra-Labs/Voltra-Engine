@@ -22,4 +22,10 @@ namespace Voltra {
         s_ClientLogger->set_level(spdlog::level::trace);
     }
 
+    void Log::Shutdown() {
+        s_ClientLogger.reset();
+        s_CoreLogger.reset();
+        spdlog::shutdown();
+    }
+
 }
