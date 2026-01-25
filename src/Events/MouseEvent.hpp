@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Event.hpp"
 
 namespace Voltra {
@@ -7,7 +8,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when the mouse moves.
      */
-    class MouseMovedEvent : public Event {
+    class VOLTRA_API MouseMovedEvent : public Event {
     public:
         /**
          * @brief Constructs a MouseMovedEvent.
@@ -47,7 +48,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when the mouse scroll wheel is used.
      */
-    class MouseScrolledEvent : public Event {
+    class VOLTRA_API MouseScrolledEvent : public Event {
     public:
         /**
          * @brief Constructs a MouseScrolledEvent.
@@ -87,7 +88,7 @@ namespace Voltra {
     /**
      * @brief Base class for mouse button events.
      */
-    class MouseButtonEvent : public Event {
+    class VOLTRA_API MouseButtonEvent : public Event {
     public:
         /**
          * @brief Gets the mouse button code.
@@ -112,7 +113,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when a mouse button is pressed.
      */
-    class MouseButtonPressedEvent : public MouseButtonEvent {
+    class VOLTRA_API MouseButtonPressedEvent : public MouseButtonEvent {
     public:
         /**
          * @brief Constructs a MouseButtonPressedEvent.
@@ -134,7 +135,7 @@ namespace Voltra {
     /**
      * @brief Event triggered when a mouse button is released.
      */
-    class MouseButtonReleasedEvent : public MouseButtonEvent {
+    class VOLTRA_API MouseButtonReleasedEvent : public MouseButtonEvent {
     public:
         /**
          * @brief Constructs a MouseButtonReleasedEvent.

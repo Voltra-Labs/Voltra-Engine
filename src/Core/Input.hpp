@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core.hpp"
+
 #include <glm/glm.hpp>
 
 namespace Voltra {
@@ -7,7 +9,7 @@ namespace Voltra {
     /**
      * @brief Static class for handling input polling (keyboard and mouse).
      */
-    class Input {
+    class VOLTRA_API Input {
     public:
         /**
          * @brief Checks if a specific keyboard key is pressed.

@@ -4,6 +4,9 @@ project(VoltraEngine VERSION 0.0.1 LANGUAGES CXX C)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Enable -fPIC globally for all targets (required for linking static libs into shared libs)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 # Module to automatically download libraries
 include(FetchContent)
 
@@ -89,54 +92,79 @@ target_include_directories(ImGuiLib PUBLIC
     ${IMGUI_DIR} 
     ${IMGUI_DIR}/backends
     ${glfw_SOURCE_DIR}/include 
-    include # to find Voltra headers if backends need them? No, usually not.
+    include
     ${imguizmo_SOURCE_DIR}
 )
-target_link_libraries(ImGuiLib PRIVATE glfw OpenGL::GL) # Backends need these
+target_link_libraries(ImGuiLib PRIVATE glfw OpenGL::GL)
 
-# --- The Engine ---
-file(GLOB_RECURSE ENGINE_SOURCES "src/*.cpp" "src/*.c" "src/*.h" "src/*.hpp")
 
-list(REMOVE_ITEM ENGINE_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+# VoltraCore (Engine Library - DLL)
 
-list(APPEND ENGINE_SOURCES
-    # ImGui sources are now in ImGuiLib
-)
+file(GLOB_RECURSE CORE_SOURCES "src/*.cpp" "src/*.c" "src/*.h" "src/*.hpp")
 
-add_executable(${PROJECT_NAME} ${ENGINE_SOURCES} src/main.cpp)
+# Exclude main.cpp and Sandbox sources from Core
+list(FILTER CORE_SOURCES EXCLUDE REGEX "src/main.cpp")
+list(FILTER CORE_SOURCES EXCLUDE REGEX "src/Sandbox/.*")
 
-# Include Configuration
-target_include_directories(${PROJECT_NAME} PUBLIC 
+add_library(VoltraCore SHARED ${CORE_SOURCES})
+
+target_include_directories(VoltraCore PUBLIC 
     include 
     src
     src/Vendor/Glad/include
     ${glfw_SOURCE_DIR}/include
     ${glm_SOURCE_DIR}
     ${stb_SOURCE_DIR}
-    ${stb_SOURCE_DIR}
-    # ImGui includes handled by linking ImGuiLib
 )
 
-target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
+# Private definitions for building the DLL
+target_compile_definitions(VoltraCore PRIVATE VOLTRA_BUILD_DLL)
+target_compile_definitions(VoltraCore PRIVATE GLFW_INCLUDE_NONE)
 
-# Library Linking
 find_package(OpenGL REQUIRED)
 
-target_link_libraries(${PROJECT_NAME} 
+target_link_libraries(VoltraCore 
+    PUBLIC
+        spdlog::spdlog # Public so client apps can use logging macros
+        glm
+        EnTT::EnTT
+        box2d
+        yaml-cpp
     PRIVATE 
-    ImGuiLib 
-    glfw 
-    glm 
-    OpenGL::GL
-    spdlog::spdlog
-    EnTT::EnTT
-    box2d
-    yaml-cpp
-    ${CMAKE_DL_LIBS}
+        ImGuiLib 
+        glfw 
+        OpenGL::GL
+        ${CMAKE_DL_LIBS}
 )
 
-# --- Testing Framework (Google Test) ---
-# Enable CMake's testing functionality
+
+# Sandbox (Game Library - DLL)
+
+file(GLOB_RECURSE SANDBOX_SOURCES "src/Sandbox/*.cpp" "src/Sandbox/*.h" "src/Sandbox/*.hpp")
+
+add_library(Sandbox SHARED ${SANDBOX_SOURCES})
+
+target_include_directories(Sandbox PRIVATE src)
+
+target_link_libraries(Sandbox 
+    PRIVATE 
+        VoltraCore
+        ImGuiLib
+)
+
+
+# VoltraRunner (Executable)
+
+add_executable(VoltraRunner src/main.cpp)
+
+target_link_libraries(VoltraRunner 
+    PRIVATE 
+        VoltraCore 
+        Sandbox
+)
+
+# Testing Framework
+
 enable_testing()
 
 message(STATUS "Fetching Google Test...")
@@ -145,9 +173,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG        v1.14.0
 )
-# Prevent GTest from overriding parent project compiler settings on Windows
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-
 FetchContent_MakeAvailable(googletest)
 
 # --- Dependency: Box2D (Physics) ---
@@ -171,8 +197,6 @@ FetchContent_Declare(
 set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(yaml-cpp)
 
-# --- Test Executable ---
-# We create a separate executable just for running tests
 add_executable(VoltraTests 
     tests/main_test.cpp 
     tests/EventTest.cpp
@@ -185,24 +209,15 @@ add_executable(VoltraTests
     tests/SceneSerializerTest.cpp
     tests/UUIDTest.cpp
     tests/AssetManagerTest.cpp
-    ${ENGINE_SOURCES}
+    src/Vendor/Glad/src/glad.c
 )
 
-
-# Link against GTest and the main functionality required
-# Note: GTest::gtest_main provides a standard main() entry point for tests
 target_link_libraries(VoltraTests 
     PRIVATE 
-    ImGuiLib
-    GTest::gtest
-    glfw 
-    glm 
-    OpenGL::GL
-    spdlog::spdlog
-    EnTT::EnTT
-    box2d
-    yaml-cpp
-    ${CMAKE_DL_LIBS}
+        VoltraCore # Link against the Core DLL
+        GTest::gtest
+        glfw
+        OpenGL::GL
 )
 
 target_compile_definitions(VoltraTests PRIVATE GLFW_INCLUDE_NONE)
@@ -210,19 +225,13 @@ target_compile_definitions(VoltraTests PRIVATE GLFW_INCLUDE_NONE)
 target_include_directories(VoltraTests PRIVATE 
     include
     src
-    src/Vendor/Glad/include
-    ${glfw_SOURCE_DIR}/include
-    ${glm_SOURCE_DIR}
-    ${stb_SOURCE_DIR}
 )
 
-# Copy assets to build directory for tests
 add_custom_command(TARGET VoltraTests POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/assets
     ${CMAKE_BINARY_DIR}/assets
 )
 
-# Integrate with CTest (allows running "ctest" command)
 include(GoogleTest)
 gtest_discover_tests(VoltraTests DISCOVERY_TIMEOUT 60)

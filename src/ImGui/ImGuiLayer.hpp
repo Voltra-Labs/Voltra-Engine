@@ -1,9 +1,12 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Core/Layer.hpp"
 #include "Events/ApplicationEvent.hpp"
 #include "Events/KeyEvent.hpp"
 #include "Events/MouseEvent.hpp"
+
+struct ImGuiContext;
 
 namespace Voltra {
 
@@ -12,7 +15,7 @@ namespace Voltra {
      * 
      * Sets up the ImGui context, style, and platform backends.
      */
-    class ImGuiLayer : public Layer {
+    class VOLTRA_API ImGuiLayer : public Layer {
     public:
         /**
          * @brief Constructs the ImGuiLayer.
@@ -57,6 +60,12 @@ namespace Voltra {
          * @brief Ends the ImGui frame and renders it.
          */
         void End();
+
+        /**
+         * @brief Gets the internal ImGui context.
+         * @return Pointer to the context.
+         */
+        struct ::ImGuiContext* GetContext();
 
     private:
         float m_Time = 0.0f;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <vector>
 #include <string>
 #include <memory>
@@ -96,7 +97,7 @@ namespace Voltra {
      * 
      * Manages a list of BufferElements and calculates strides and offsets.
      */
-    class BufferLayout {
+    class VOLTRA_API BufferLayout {
     public:
         /**
          * @brief Default constructor.
@@ -151,7 +152,7 @@ namespace Voltra {
     /**
      * @brief Interface for a Vertex Buffer.
      */
-    class VertexBuffer {
+    class VOLTRA_API VertexBuffer {
     public:
         /**
          * @brief Virtual destructor.
@@ -211,7 +212,7 @@ namespace Voltra {
     /**
      * @brief Interface for an Index Buffer.
      */
-    class IndexBuffer {
+    class VOLTRA_API IndexBuffer {
     public:
         /**
          * @brief Virtual destructor.

@@ -11,17 +11,18 @@
  * 
  * @return Execution status code (0 for success).
  */
-int main() {
 
-    Voltra::Log::Init();
+int main() {
     
+    Voltra::Log::Init();
+
     VOLTRA_CORE_INFO("Voltra Engine Initialized!");
 
-    auto app = std::make_unique<Voltra::Application>();
-    
-    app->PushLayer(new Voltra::EditorLayer());
+    auto app = CreateApplication();
     
     app->Run();
+
+    delete app;
 
     return 0;
 }

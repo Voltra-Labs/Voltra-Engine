@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Core/Timestep.hpp"
 #include "Core/UUID.hpp"
 #include <entt/entt.hpp>
@@ -15,7 +16,7 @@ namespace Voltra {
      * 
      * Manages the Entity Component System (ECS) registry and the physics world.
      */
-    class Scene {
+    class VOLTRA_API Scene {
     public:
         /**
          * @brief Constructs a new Scene.

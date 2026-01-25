@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Scene/Scene.hpp"
 #include <memory>
 #include <string>
@@ -9,7 +10,7 @@ namespace Voltra {
     /**
      * @brief Serializes and deserializes Scenes to/from YAML files.
      */
-    class SceneSerializer {
+    class VOLTRA_API SceneSerializer {
     public:
         /**
          * @brief Constructs a serializer for a specific scene.

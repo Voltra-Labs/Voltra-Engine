@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <string>
 #include <memory>
 #include <unordered_map>
@@ -15,7 +16,7 @@ namespace Voltra {
      * Manages the loading and caching of textures and shaders to ensure
      * resources are unique in memory.
      */
-    class AssetManager {
+    class VOLTRA_API AssetManager {
     public:
         /**
          * @brief Loads a Texture2D from the specified path.

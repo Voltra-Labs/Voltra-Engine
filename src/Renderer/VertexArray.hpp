@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <memory>
 #include "Buffer.hpp"
 #include <vector>
@@ -11,7 +12,7 @@ namespace Voltra {
      * 
      * Manages VertexBuffers and IndexBuffers relationships.
      */
-    class VertexArray {
+    class VOLTRA_API VertexArray {
     public:
         /**
          * @brief Constructs a new VertexArray.

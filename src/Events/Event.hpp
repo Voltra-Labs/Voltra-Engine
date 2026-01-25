@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <string>
 #include <functional>
 #include <iostream>
@@ -58,7 +59,7 @@ namespace Voltra {
      * 
      * Events are currently blocking (dispatched immediately).
      */
-    class Event {
+    class VOLTRA_API Event {
     public:
         virtual ~Event() = default;
 
@@ -84,7 +85,7 @@ namespace Voltra {
     /**
      * @brief Utility class to dispatch events based on their type.
      */
-    class EventDispatcher {
+    class VOLTRA_API EventDispatcher {
     public:
         /**
          * @brief Constructs an EventDispatcher.

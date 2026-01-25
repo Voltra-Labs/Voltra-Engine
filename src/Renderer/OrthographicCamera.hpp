@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include <glm/glm.hpp>
 
 namespace Voltra {
@@ -7,7 +8,7 @@ namespace Voltra {
     /**
      * @brief A 2D Orthographic Camera.
      */
-    class OrthographicCamera {
+    class VOLTRA_API OrthographicCamera {
     public:
         /**
          * @brief Constructs the camera with a specific projection.

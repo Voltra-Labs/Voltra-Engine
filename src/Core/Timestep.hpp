@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core.hpp"
+
 namespace Voltra {
 
     /**
@@ -7,7 +9,7 @@ namespace Voltra {
      * 
      * Allows easy conversion between seconds and milliseconds.
      */
-    class Timestep {
+    class VOLTRA_API Timestep {
     public:
         /**
          * @brief Constructs a Timestep.

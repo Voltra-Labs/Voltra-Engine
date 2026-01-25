@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core.hpp"
+
 #include "Window.hpp"
 #include "Events/Event.hpp"
 #include "Events/ApplicationEvent.hpp"
@@ -16,7 +18,7 @@ namespace Voltra {
      * Manages the application lifecycle, window, events, and layer stack.
      * This class is a singleton.
      */
-    class Application {
+    class VOLTRA_API Application {
     public:
         /**
          * @brief Constructs the Application object.
@@ -75,6 +77,9 @@ namespace Voltra {
         bool m_Running = true;
         LayerStack m_LayerStack;
         float m_LastFrameTime = 0.0f;
+
+    public:
+        ImGuiLayer* GetImGuiLayer() { return m_ImGuiLayer; }
     };
 
     /**
@@ -84,6 +89,24 @@ namespace Voltra {
      * 
      * @return Pointer to the created Application instance.
      */
-    Application* CreateApplication();
-
 }
+
+// Client App Define
+// Client App Define
+#if defined(VOLTRA_PLATFORM_WINDOWS)
+    #if defined(VOLTRA_CLIENT_EXPORT) || defined(Sandbox_EXPORTS)
+        #define VOLTRA_CLIENT_API __declspec(dllexport)
+    #else
+        #define VOLTRA_CLIENT_API __declspec(dllimport)
+    #endif
+#elif defined(VOLTRA_PLATFORM_LINUX) || defined(VOLTRA_PLATFORM_MACOS)
+    #if defined(VOLTRA_CLIENT_EXPORT) || defined(Sandbox_EXPORTS)
+        #define VOLTRA_CLIENT_API __attribute__((visibility("default")))
+    #else
+        #define VOLTRA_CLIENT_API
+    #endif
+#else
+    #define VOLTRA_CLIENT_API
+#endif
+
+extern "C" VOLTRA_CLIENT_API Voltra::Application* CreateApplication();

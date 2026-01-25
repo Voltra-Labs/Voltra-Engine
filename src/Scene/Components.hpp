@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Renderer/Texture.hpp"
 #include "Core/UUID.hpp"
 #include <memory>
@@ -16,7 +17,7 @@ namespace Voltra {
     /**
      * @brief Component for identifying entities with a unique ID.
      */
-    struct IDComponent {
+    struct VOLTRA_API IDComponent {
         UUID ID;
 
         IDComponent() = default;
@@ -27,7 +28,7 @@ namespace Voltra {
     /**
      * @brief Component for identifying entities with a name.
      */
-    struct TagComponent {
+    struct VOLTRA_API TagComponent {
         std::string Tag;
 
         TagComponent() = default;
@@ -38,7 +39,7 @@ namespace Voltra {
     /**
      * @brief Component describing the position, rotation, and scale.
      */
-    struct TransformComponent {
+    struct VOLTRA_API TransformComponent {
         glm::vec3 Translation = { 0.0f, 0.0f, 0.0f };
         glm::vec3 Rotation = { 0.0f, 0.0f, 0.0f };
         glm::vec3 Scale = { 1.0f, 1.0f, 1.0f };
@@ -66,7 +67,7 @@ namespace Voltra {
     /**
      * @brief Component for attaching C++ script logic to an entity.
      */
-    struct NativeScriptComponent {
+    struct VOLTRA_API NativeScriptComponent {
         ScriptableEntity* Instance = nullptr;
 
         ScriptableEntity* (*InstantiateScript)();
@@ -89,7 +90,7 @@ namespace Voltra {
     /**
      * @brief Component for rendering a sprite (color or texture).
      */
-    struct SpriteRendererComponent {
+    struct VOLTRA_API SpriteRendererComponent {
         glm::vec4 Color{ 1.0f, 1.0f, 1.0f, 1.0f };
         std::shared_ptr<Texture2D> Texture; 
         float TilingFactor = 1.0f;          
@@ -106,7 +107,7 @@ namespace Voltra {
     /**
      * @brief Component for camera properties.
      */
-    struct CameraComponent {
+    struct VOLTRA_API CameraComponent {
         Voltra::OrthographicCamera Camera;
         bool Primary = true; 
         bool FixedAspectRatio = false;
@@ -125,7 +126,7 @@ namespace Voltra {
     /**
      * @brief Component for 2D rigid body physics (Box2D wrapper).
      */
-    struct Rigidbody2DComponent {
+    struct VOLTRA_API Rigidbody2DComponent {
         enum class BodyType { Static = 0, Kinematic, Dynamic };
         BodyType Type = BodyType::Static;
         bool FixedRotation = false;
@@ -139,7 +140,7 @@ namespace Voltra {
     /**
      * @brief Component for 2D box collider (Box2D fixture).
      */
-    struct BoxCollider2DComponent {
+    struct VOLTRA_API BoxCollider2DComponent {
         glm::vec2 Offset = { 0.0f, 0.0f };
         glm::vec2 Size = { 0.5f, 0.5f };
 

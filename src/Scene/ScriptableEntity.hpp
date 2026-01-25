@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "Entity.hpp"
 
 namespace Voltra {
@@ -9,7 +10,7 @@ namespace Voltra {
      * 
      * Allows writing logic in C++ that interacts with the ECS.
      */
-    class ScriptableEntity {
+    class VOLTRA_API ScriptableEntity {
     public:
         virtual ~ScriptableEntity() {}
 

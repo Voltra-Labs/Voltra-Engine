@@ -1,9 +1,8 @@
 #include "Application.hpp"
 #include "Core/Log.hpp"
 #include "Renderer/Renderer.hpp"
-#include <GLFW/glfw3.h>
-#include "../Sandbox/ExampleLayer.hpp"
 #include "Renderer/Renderer2D.hpp"
+#include <GLFW/glfw3.h>
 
 namespace Voltra {
 
@@ -26,14 +25,15 @@ namespace Voltra {
 
         m_ImGuiLayer = new ImGuiLayer();
         PushOverlay(m_ImGuiLayer);
-
-        PushLayer(new ExampleLayer());
     }
 
     /**
      * @brief Destroys the Application object.
      */
-    Application::~Application() {}
+    Application::~Application() {
+        Renderer2D::Shutdown();
+        Renderer::Shutdown();
+    }
 
     /**
      * @brief Pushes a new Layer to the LayerStack.

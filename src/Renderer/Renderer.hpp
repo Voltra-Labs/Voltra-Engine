@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/Core.hpp"
 #include "RenderCommand.hpp"
 #include "OrthographicCamera.hpp"
 #include "Shader.hpp"
@@ -11,7 +12,7 @@ namespace Voltra {
      * 
      * Manages scene execution and primitive submission.
      */
-    class Renderer {
+    class VOLTRA_API Renderer {
     public:
         /**
          * @brief Initializes the renderer.
@@ -22,6 +23,13 @@ namespace Voltra {
          * @brief Shuts down the renderer.
          */
         static void Shutdown();
+
+        /**
+         * @brief Initializes the renderer's GLAD instance from an external loader.
+         * 
+         * @param loader The OpenGL loader function (e.g. glfwGetProcAddress).
+         */
+        static void InitExternal(void* loader);
         
         /**
          * @brief Begins a new scene context.

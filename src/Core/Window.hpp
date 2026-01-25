@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Core.hpp"
+
 #include <cstdint>
 #include <string>
 #include <functional>
@@ -15,7 +17,7 @@ namespace Voltra {
      * 
      * Wraps GLFW window creation, event polling, and buffer swapping.
      */
-    class Window {
+    class VOLTRA_API Window {
     public:
         /**
          * @brief Configuration properties for creating a window.
