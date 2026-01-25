@@ -30,7 +30,10 @@ namespace Voltra {
     /**
      * @brief Destroys the Application object.
      */
-    Application::~Application() {}
+    Application::~Application() {
+        Renderer2D::Shutdown();
+        Renderer::Shutdown();
+    }
 
     /**
      * @brief Pushes a new Layer to the LayerStack.
