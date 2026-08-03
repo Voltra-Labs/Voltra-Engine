@@ -1,0 +1,125 @@
+# CLAUDE.md
+
+Voltra Engine — a Rust game engine on `wgpu` + `winit`. Rewrite of a C++/OpenGL
+engine; the C++ tree survives in git history under the tag `v0-cpp-final`.
+
+Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing crate
+boundaries, and [docs/CONVENTIONS.md](docs/CONVENTIONS.md) before naming
+anything. Both are short.
+
+## Commands
+
+```sh
+cargo run -p voltra-editor                                  # launch the editor
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace --all-targets -- -D warnings       # must be clean
+cargo fmt --all
+```
+
+Run all three of `fmt`, `clippy`, `test` before reporting work as done.
+
+The editor is a GUI app with an infinite event loop — never run it in the
+foreground. Launch it detached, give it a few seconds, check the log, kill it.
+
+## Layout
+
+```
+Cargo.toml           virtual manifest — workspace members + shared dep versions
+assets/              runtime assets (shaders, textures, scenes)
+crates/
+  voltra-render/     GPU layer: device, surface, passes     — owns wgpu
+  voltra-core/       platform layer: event loop, window     — owns winit
+  voltra-editor/     the editor binary
+docs/                ARCHITECTURE.md, CONVENTIONS.md
+```
+
+## Hard rules
+
+- **No `src/` at the workspace root.** The root manifest is virtual.
+- **Only `voltra-core` depends on `winit`. Only `voltra-render` depends on
+  `wgpu`.** Other crates use the re-exports. If a change would make
+  `voltra-render` import `winit`, the design is wrong — pass a
+  `wgpu::SurfaceTarget` instead.
+- **No ECS, scene-graph or engine-framework crates.** Writing those in-house is
+  the point of this project. Leaf libraries (math, serde, physics) are fine.
+- **All versions live in root `[workspace.dependencies]`**; member crates write
+  `dep.workspace = true`. Never pin a version inside a member crate.
+- **New crates only when there is code for them.** Do not scaffold empty crates
+  from the planned list in ARCHITECTURE.md.
+- No `unwrap()` outside tests. `expect("why this cannot fail")` when the
+  invariant is real. Log via `log`, never `println!`.
+
+## Verify graphics APIs, do not recall them
+
+`wgpu` 30 and `winit` 0.30 are newer than the model's training data, and wgpu 30
+broke nearly every tutorial online (they target v25 and older). Writing wgpu code
+from memory produces plausible code that does not compile.
+
+Before writing GPU code, do one of:
+
+1. Query **Context7** (MCP) for the current `wgpu` / `winit` docs.
+2. Read the vendored source directly — it is on disk and authoritative:
+   `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/`.
+
+The v30 differences already found are tabulated at the end of
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Add to that table whenever you hit
+a new one.
+
+## Models and delegation
+
+**Think on Opus 5. Execute wide on Sonnet 5.**
+
+Use Opus for the work where being wrong is expensive: architecture and crate
+boundaries, ECS storage design, render graph shape, unsafe reasoning, lifetime
+and borrow puzzles, debugging something whose cause is not yet known.
+
+Delegate to subagents with `model: "sonnet"` once the shape of the work is
+already decided and the task is well specified:
+
+- searching the codebase or the registry sources for an API or usage
+- mechanical refactors across many files
+- writing tests against a signature that already exists
+- porting a known C++ subsystem to an already-agreed Rust design
+- independent tasks that can run in parallel
+
+Guidance for delegating well:
+
+- Fan out only when the subtasks are genuinely independent. Sequential work with
+  shared context is faster in the main thread.
+- A subagent starts cold. Give it the file paths, the target API, the acceptance
+  check (`cargo clippy --workspace -- -D warnings`), and the conventions link —
+  it cannot see this conversation.
+- Review what comes back. Subagents miss the layering rules above; a returned
+  diff that makes `voltra-render` import `winit` gets rejected, not merged.
+- Keep the final architectural call on Opus, even when Sonnet wrote the code.
+
+## Plugins and skills
+
+Installed and expected to be used (all user-scope; skip any that is absent):
+
+| Tool | Use it for |
+| --- | --- |
+| **context7** (MCP) | Current docs for `wgpu`, `winit`, any crate. Mandatory before writing graphics code — see above. |
+| **superpowers** | Workflow skills: `brainstorming` and `writing-plans` before a subsystem, `test-driven-development` for pure logic (ECS, math), `systematic-debugging` when a bug's cause is unknown, `subagent-driven-development` and `dispatching-parallel-agents` when fanning out, `verification-before-completion` before saying done. |
+| **security-guidance** | Runs on edits and commits. Take its findings seriously in asset loading and deserialization paths. |
+| **claude-md-management** | `/revise-claude-md` when this file drifts from reality. |
+| **caveman** | Response-compression style. On request only; never change register unprompted. |
+
+Prefer a skill over improvising a workflow. `systematic-debugging` in particular
+beats guessing at a graphics bug — GPU issues punish speculation.
+
+## Git
+
+Branch off `main`: `feature/<topic>`, `fix/<topic>`, `refactor/<topic>`,
+`docs/<topic>`. Never commit straight to `main`; open a PR.
+
+[Conventional Commits](https://www.conventionalcommits.org/), scope = crate
+without the `voltra-` prefix, subject imperative and ≤50 chars:
+
+```
+feat(render): add render pipeline and WGSL shader loading
+fix(core): skip redraw while the window is minimised
+```
+
+Do not commit, push, or open a PR unless asked.

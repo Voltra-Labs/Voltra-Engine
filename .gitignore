@@ -1,28 +1,3 @@
-# Compilation and Binaries
-build/
-bin/
-obj/
-out/
-.vs/
-.vscode/
-*.exe
+/target
+**/*.rs.bk
 *.pdb
-*.ilk
-*.lib
-*.dll
-*.user
-*.suo
-*.sln
-
-# CMake
-CMakeCache.txt
-CMakeFiles/
-CMakeSettings.json
-cmake_install.cmake
-install/
-vcpkg_installed/
-
-# OS generated files
-.DS_Store
-Thumbs.db
-desktop.ini

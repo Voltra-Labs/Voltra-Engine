@@ -1,0 +1,11 @@
+[package]
+name = "voltra-editor"
+description = "Voltra editor application."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-core.workspace = true
+env_logger.workspace = true
