@@ -3,7 +3,7 @@
 use wgpu::SurfaceTarget;
 
 use crate::context::GpuContext;
-use crate::pipeline;
+use crate::{pass, pipeline};
 
 /// Drives one frame at a time on top of a [`GpuContext`].
 pub struct Renderer {
@@ -53,28 +53,7 @@ impl Renderer {
                     label: Some("frame-encoder"),
                 });
 
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("main-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-
-            pass.set_pipeline(&self.flat_color);
-            // Three vertices, one instance. The shader builds the positions.
-            pass.draw(0..3, 0..1);
-        }
+        pass::draw_flat_color(&mut encoder, &view, &self.flat_color, self.clear_color);
 
         self.ctx.queue().submit(Some(encoder.finish()));
         self.ctx.present(frame);

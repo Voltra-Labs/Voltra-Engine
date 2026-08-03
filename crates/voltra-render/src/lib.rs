@@ -5,6 +5,7 @@
 //! [`wgpu::SurfaceTarget`], which keeps `winit` out of the render layer.
 
 pub mod context;
+pub mod pass;
 pub mod pipeline;
 pub mod renderer;
 pub mod shader;
