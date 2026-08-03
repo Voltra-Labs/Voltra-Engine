@@ -3,20 +3,23 @@
 use wgpu::SurfaceTarget;
 
 use crate::context::GpuContext;
+use crate::pipeline;
 
 /// Drives one frame at a time on top of a [`GpuContext`].
-///
-/// Today it only issues a clear pass. Draw submission lands here as the
-/// pipeline layer grows.
 pub struct Renderer {
     ctx: GpuContext,
+    flat_color: wgpu::RenderPipeline,
     pub clear_color: wgpu::Color,
 }
 
 impl Renderer {
     pub fn new(target: impl Into<SurfaceTarget<'static>>, width: u32, height: u32) -> Self {
+        let ctx = GpuContext::new(target, width, height);
+        let flat_color = pipeline::create_flat_color(ctx.device(), ctx.config().format);
+
         Self {
-            ctx: GpuContext::new(target, width, height),
+            ctx,
+            flat_color,
             clear_color: wgpu::Color {
                 r: 0.1,
                 g: 0.1,
@@ -51,8 +54,8 @@ impl Renderer {
                 });
 
         {
-            let _pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("clear-pass"),
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("main-pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     depth_slice: None,
@@ -67,6 +70,10 @@ impl Renderer {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
+
+            pass.set_pipeline(&self.flat_color);
+            // Three vertices, one instance. The shader builds the positions.
+            pass.draw(0..3, 0..1);
         }
 
         self.ctx.queue().submit(Some(encoder.finish()));
