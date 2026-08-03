@@ -4,7 +4,9 @@
 //! allowed to depend on `winit`.
 
 pub mod app;
+pub mod time;
 pub mod window;
 
 pub use app::App;
+pub use time::{Clock, Timestep};
 pub use window::WindowConfig;
