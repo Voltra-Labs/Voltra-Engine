@@ -1,0 +1,12 @@
+[package]
+name = "voltra-render"
+description = "GPU abstraction layer for the Voltra engine, built on wgpu."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+wgpu.workspace = true
+pollster.workspace = true
+log.workspace = true

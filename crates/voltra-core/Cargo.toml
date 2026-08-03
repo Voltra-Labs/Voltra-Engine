@@ -1,0 +1,12 @@
+[package]
+name = "voltra-core"
+description = "Application loop, windowing and platform layer for the Voltra engine."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-render.workspace = true
+winit.workspace = true
+log.workspace = true

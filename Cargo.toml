@@ -1,0 +1,29 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/Voltra-Labs/Voltra-Engine"
+
+# Single source of truth for third-party versions. Member crates opt in with
+# `dep.workspace = true` so the whole workspace can never split a version.
+[workspace.dependencies]
+voltra-core = { path = "crates/voltra-core" }
+voltra-render = { path = "crates/voltra-render" }
+
+wgpu = "30.0.0"
+winit = "0.30.13"
+pollster = "1.0.1"
+log = "0.4.33"
+env_logger = "0.11.11"
+
+# Our crates stay debuggable; dependencies are compiled optimized because we
+# never step into them and wgpu/naga are painfully slow at opt-level 0.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
