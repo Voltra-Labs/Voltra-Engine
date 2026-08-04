@@ -116,7 +116,7 @@ fn render_textured(
         &render_pipeline,
         camera_binding.bind_group(),
         &texture_bind_group,
-        mesh,
+        Some(mesh),
         CLEAR,
     );
     encoder.copy_texture_to_buffer(

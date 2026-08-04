@@ -2092,7 +2092,9 @@ name = "voltra-core"
 version = "0.1.0"
 dependencies = [
  "log",
+ "voltra-ecs",
  "voltra-render",
+ "voltra-scene",
  "winit",
 ]
 
@@ -2106,6 +2108,8 @@ version = "0.1.0"
 dependencies = [
  "env_logger",
  "voltra-core",
+ "voltra-render",
+ "voltra-scene",
 ]
 
 [[package]]
@@ -2118,6 +2122,14 @@ dependencies = [
  "log",
  "pollster",
  "wgpu",
+]
+
+[[package]]
+name = "voltra-scene"
+version = "0.1.0"
+dependencies = [
+ "voltra-ecs",
+ "voltra-render",
 ]
 
 [[package]]

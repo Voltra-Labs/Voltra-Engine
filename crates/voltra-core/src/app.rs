@@ -2,8 +2,10 @@
 
 use std::sync::Arc;
 
+use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::Renderer;
+use voltra_scene::SpriteBatch;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -27,6 +29,8 @@ pub struct App {
     renderer: Option<Renderer>,
     clock: Clock,
     input: Input,
+    /// The scene. Populate it before calling [`App::run`].
+    pub world: World,
 }
 
 impl App {
@@ -115,7 +119,12 @@ impl ApplicationHandler for App {
                 self.update();
 
                 if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.render();
+                    // Rebuilt every frame. Caching it means tracking every
+                    // Transform and Sprite write, which is not worth it until
+                    // the batch actually shows up in a profile.
+                    let batch = SpriteBatch::from_world(&self.world);
+                    let mesh = batch.upload(renderer.context().device());
+                    renderer.render_mesh(mesh.as_ref());
                 }
 
                 // Must come after everything that reads input this frame.

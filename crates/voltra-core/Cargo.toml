@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+voltra-ecs.workspace = true
 voltra-render.workspace = true
+voltra-scene.workspace = true
 winit.workspace = true
 log.workspace = true
