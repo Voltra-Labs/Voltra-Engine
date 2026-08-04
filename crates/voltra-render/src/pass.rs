@@ -8,13 +8,14 @@ use crate::mesh::Mesh;
 
 /// Records a clear followed by one mesh drawn with `pipeline`.
 ///
-/// `camera` is bound to group 0; the pipeline layout and the shader both
-/// expect it there.
+/// `camera` is bound to group 0 and `texture` to group 1; the pipeline layout
+/// and the shader both expect them there.
 pub fn draw_mesh(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
     camera: &wgpu::BindGroup,
+    texture: &wgpu::BindGroup,
     mesh: &Mesh,
     clear: wgpu::Color,
 ) {
@@ -37,5 +38,6 @@ pub fn draw_mesh(
 
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, camera, &[]);
+    pass.set_bind_group(1, texture, &[]);
     mesh.draw(&mut pass);
 }

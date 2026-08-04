@@ -7,11 +7,12 @@ use crate::shader;
 ///
 /// `format` must match the surface configuration the pipeline will render
 /// into; a mismatch is a validation error at draw time, not at creation.
-/// `camera_layout` becomes bind group 0.
+/// `camera_layout` becomes bind group 0, `texture_layout` group 1.
 pub fn create_flat_color(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
     camera_layout: &wgpu::BindGroupLayout,
+    texture_layout: &wgpu::BindGroupLayout,
 ) -> wgpu::RenderPipeline {
     let module = shader::create_module(device, "flat-color", shader::FLAT_COLOR);
 
@@ -20,7 +21,7 @@ pub fn create_flat_color(
     // makes a mismatch fail here rather than at the first draw.
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("flat-color-layout"),
-        bind_group_layouts: &[Some(camera_layout)],
+        bind_group_layouts: &[Some(camera_layout), Some(texture_layout)],
         immediate_size: 0,
     });
 

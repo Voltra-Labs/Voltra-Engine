@@ -116,6 +116,7 @@ Verified against the crate source, not from memory:
 | Present | `queue.present(frame)` — `SurfaceTexture::present` was removed |
 | Render pass | `RenderPassDescriptor` requires `multiview_mask`; `RenderPassColorAttachment` requires `depth_slice` |
 | Pipeline layout | `bind_group_layouts` is `&[Option<&BindGroupLayout>]`, and `push_constant_ranges` is replaced by `immediate_size: u32` |
+| Sampler | `mipmap_filter` takes `MipmapFilterMode`, a separate type from `FilterMode` |
 | Pipeline | `VertexState::buffers` is `&[Option<VertexBufferLayout>]` — the entries are wrapped in `Option` |
 | Device poll | `PollType::Wait` is a struct variant; use `PollType::wait_indefinitely()` |
 | Buffer readback | `Buffer::get_mapped_range` returns `Result` |
