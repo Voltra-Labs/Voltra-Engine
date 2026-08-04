@@ -11,6 +11,8 @@
 //! The test skips itself when no GPU adapter is available so CI machines
 //! without one still pass.
 
+use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::glam::Vec2;
 use voltra_render::mesh::{self, Mesh};
 use voltra_render::{pass, pipeline, wgpu};
 
@@ -48,8 +50,14 @@ fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
     .ok()
 }
 
-/// Draws `mesh` into a `SIZE`x`SIZE` texture and reads the pixels back.
-fn render_to_pixels(device: &wgpu::Device, queue: &wgpu::Queue, mesh: &Mesh) -> Vec<Rgba> {
+/// Draws `mesh` through `camera` into a `SIZE`x`SIZE` texture and reads the
+/// pixels back.
+fn render_to_pixels(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    mesh: &Mesh,
+    camera: &Camera2D,
+) -> Vec<Rgba> {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("headless-target"),
         size: wgpu::Extent3d {
@@ -80,12 +88,21 @@ fn render_to_pixels(device: &wgpu::Device, queue: &wgpu::Queue, mesh: &Mesh) -> 
         mapped_at_creation: false,
     });
 
-    let render_pipeline = pipeline::create_flat_color(device, FORMAT);
+    let camera_binding = CameraBinding::new(device);
+    camera_binding.upload(queue, camera);
+    let render_pipeline = pipeline::create_flat_color(device, FORMAT, camera_binding.layout());
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("headless-encoder"),
     });
-    pass::draw_mesh(&mut encoder, &view, &render_pipeline, mesh, CLEAR);
+    pass::draw_mesh(
+        &mut encoder,
+        &view,
+        &render_pipeline,
+        camera_binding.bind_group(),
+        mesh,
+        CLEAR,
+    );
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             texture: &texture,
@@ -152,7 +169,7 @@ fn triangle_rasterises_and_interpolates() {
     };
 
     let triangle = Mesh::new(&device, "test-triangle", &mesh::TRIANGLE);
-    let pixels = render_to_pixels(&device, &queue, &triangle);
+    let pixels = render_to_pixels(&device, &queue, &triangle, &Camera2D::default());
 
     // The top-left corner is outside the triangle, so it must still hold the
     // clear colour. 0.1 linear encodes to roughly 89 in an sRGB texture.
@@ -194,7 +211,7 @@ fn indexed_quad_covers_every_pixel() {
     assert!(quad.is_indexed());
     assert_eq!(quad.count(), mesh::QUAD_INDICES.len() as u32);
 
-    let pixels = render_to_pixels(&device, &queue, &quad);
+    let pixels = render_to_pixels(&device, &queue, &quad, &Camera2D::default());
 
     // The quad spans the whole of clip space, so the clear colour must be
     // completely painted over. If the index buffer were ignored or mis-typed,
@@ -215,4 +232,63 @@ fn indexed_quad_covers_every_pixel() {
         top_left.r > top_left.g && top_left.r > top_left.b,
         "top-left should follow the red vertex, got {top_left:?}"
     );
+}
+
+#[test]
+fn moving_the_camera_moves_the_geometry() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    let triangle = Mesh::new(&device, "test-triangle", &mesh::TRIANGLE);
+
+    let centred = render_to_pixels(&device, &queue, &triangle, &Camera2D::default());
+    // Pushing the camera two units right puts the triangle entirely off the
+    // left edge of a viewport that only spans [-1, 1].
+    let panned = render_to_pixels(
+        &device,
+        &queue,
+        &triangle,
+        &Camera2D::new(Vec2::new(2.0, 0.0), 1.0, 1.0),
+    );
+
+    let centre_before = at(&centred, SIZE / 2, SIZE / 2);
+    let centre_after = at(&panned, SIZE / 2, SIZE / 2);
+
+    assert!(
+        centre_before.r > centre_before.g,
+        "sanity: the unpanned triangle should still be there, got {centre_before:?}"
+    );
+    // If the uniform never reached the shader, both frames would be identical.
+    assert_ne!(
+        centre_before, centre_after,
+        "camera had no effect: the uniform is not reaching the shader"
+    );
+    assert!(
+        centre_after.r < 120 && centre_after.g < 120 && centre_after.b < 130,
+        "panned frame should be pure clear colour, got {centre_after:?}"
+    );
+}
+
+#[test]
+fn zooming_out_shrinks_the_geometry() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    let quad = Mesh::indexed(&device, "test-quad", &mesh::QUAD, &mesh::QUAD_INDICES);
+
+    // At zoom 0.5 the viewport covers four units, so the two-unit quad only
+    // fills the middle and the clear colour survives around it.
+    let pixels = render_to_pixels(&device, &queue, &quad, &Camera2D::new(Vec2::ZERO, 0.5, 1.0));
+
+    let corner = at(&pixels, 1, 1);
+    let centre = at(&pixels, SIZE / 2, SIZE / 2);
+    assert!(
+        corner.r < 120 && corner.g < 120 && corner.b < 130,
+        "zoomed out, the corner should be clear colour, got {corner:?}"
+    );
+    assert_ne!(centre, corner, "the quad should still cover the centre");
 }
