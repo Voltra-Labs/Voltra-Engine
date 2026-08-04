@@ -4,11 +4,14 @@
 //! the swapchain, an offscreen texture for a headless test, and — later — the
 //! editor viewport.
 
-/// Records a clear followed by the built-in triangle.
-pub fn draw_flat_color(
+use crate::mesh::Mesh;
+
+/// Records a clear followed by one mesh drawn with `pipeline`.
+pub fn draw_mesh(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
     pipeline: &wgpu::RenderPipeline,
+    mesh: &Mesh,
     clear: wgpu::Color,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -29,6 +32,5 @@ pub fn draw_flat_color(
     });
 
     pass.set_pipeline(pipeline);
-    // Three vertices, one instance. The shader builds the positions.
-    pass.draw(0..3, 0..1);
+    mesh.draw(&mut pass);
 }

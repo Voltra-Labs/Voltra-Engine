@@ -1,5 +1,6 @@
 //! Render pipeline construction.
 
+use crate::mesh::Vertex;
 use crate::shader;
 
 /// Builds the built-in flat-colour pipeline.
@@ -21,9 +22,7 @@ pub fn create_flat_color(
             module: &module,
             entry_point: Some("vs_main"),
             compilation_options: Default::default(),
-            // No vertex buffers: the shader generates positions from
-            // @builtin(vertex_index).
-            buffers: &[],
+            buffers: &[Some(Vertex::LAYOUT)],
         },
         primitive: wgpu::PrimitiveState {
             topology: wgpu::PrimitiveTopology::TriangleList,

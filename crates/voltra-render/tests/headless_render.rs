@@ -1,4 +1,4 @@
-//! Renders the built-in triangle into an offscreen texture and inspects the
+//! Renders the built-in meshes into an offscreen texture and inspects the
 //! resulting pixels.
 //!
 //! This is the only honest way to prove the pipeline actually rasterises
@@ -11,6 +11,7 @@
 //! The test skips itself when no GPU adapter is available so CI machines
 //! without one still pass.
 
+use voltra_render::mesh::{self, Mesh};
 use voltra_render::{pass, pipeline, wgpu};
 
 const SIZE: u32 = 64;
@@ -47,8 +48,8 @@ fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
     .ok()
 }
 
-/// Draws the triangle into a `SIZE`x`SIZE` texture and reads it back.
-fn render_to_pixels(device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<Rgba> {
+/// Draws `mesh` into a `SIZE`x`SIZE` texture and reads the pixels back.
+fn render_to_pixels(device: &wgpu::Device, queue: &wgpu::Queue, mesh: &Mesh) -> Vec<Rgba> {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("headless-target"),
         size: wgpu::Extent3d {
@@ -84,7 +85,7 @@ fn render_to_pixels(device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<Rgba> {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("headless-encoder"),
     });
-    pass::draw_flat_color(&mut encoder, &view, &render_pipeline, CLEAR);
+    pass::draw_mesh(&mut encoder, &view, &render_pipeline, mesh, CLEAR);
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             texture: &texture,
@@ -150,7 +151,8 @@ fn triangle_rasterises_and_interpolates() {
         return;
     };
 
-    let pixels = render_to_pixels(&device, &queue);
+    let triangle = Mesh::new(&device, "test-triangle", &mesh::TRIANGLE);
+    let pixels = render_to_pixels(&device, &queue, &triangle);
 
     // The top-left corner is outside the triangle, so it must still hold the
     // clear colour. 0.1 linear encodes to roughly 89 in an sRGB texture.
@@ -179,4 +181,38 @@ fn triangle_rasterises_and_interpolates() {
     // Everything is opaque.
     assert_eq!(centre.a, 255);
     assert_eq!(corner.a, 255);
+}
+
+#[test]
+fn indexed_quad_covers_every_pixel() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    let quad = Mesh::indexed(&device, "test-quad", &mesh::QUAD, &mesh::QUAD_INDICES);
+    assert!(quad.is_indexed());
+    assert_eq!(quad.count(), mesh::QUAD_INDICES.len() as u32);
+
+    let pixels = render_to_pixels(&device, &queue, &quad);
+
+    // The quad spans the whole of clip space, so the clear colour must be
+    // completely painted over. If the index buffer were ignored or mis-typed,
+    // part of the surface would survive.
+    let clear_ish = |p: &Rgba| p.r < 120 && p.g < 120 && p.b < 130;
+    let survivors = pixels.iter().filter(|p| clear_ish(p)).count();
+    assert_eq!(
+        survivors, 0,
+        "{survivors} pixels still hold the clear colour"
+    );
+
+    // Corners carry the vertex colours, so opposite corners must differ —
+    // that only holds if the indices mapped to the vertices we expect.
+    let top_left = at(&pixels, 0, 0);
+    let bottom_right = at(&pixels, SIZE - 1, SIZE - 1);
+    assert_ne!(top_left, bottom_right);
+    assert!(
+        top_left.r > top_left.g && top_left.r > top_left.b,
+        "top-left should follow the red vertex, got {top_left:?}"
+    );
 }

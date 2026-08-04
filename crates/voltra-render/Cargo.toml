@@ -10,3 +10,4 @@ repository.workspace = true
 wgpu.workspace = true
 pollster.workspace = true
 log.workspace = true
+bytemuck = { version = "1.25.2", features = ["derive"] }

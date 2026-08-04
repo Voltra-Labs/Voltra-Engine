@@ -5,12 +5,14 @@
 //! [`wgpu::SurfaceTarget`], which keeps `winit` out of the render layer.
 
 pub mod context;
+pub mod mesh;
 pub mod pass;
 pub mod pipeline;
 pub mod renderer;
 pub mod shader;
 
 pub use context::GpuContext;
+pub use mesh::{Mesh, Vertex};
 pub use renderer::Renderer;
 
 // Re-exported so downstream crates never declare their own `wgpu` dependency
