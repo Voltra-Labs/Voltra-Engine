@@ -6,7 +6,10 @@
 
 use crate::mesh::Mesh;
 
-/// Records a clear followed by one mesh drawn with `pipeline`.
+/// Records a clear followed by `mesh`, if there is one.
+///
+/// `None` still records the pass: the clear is what stops the previous frame
+/// showing through when the scene is empty.
 ///
 /// `camera` is bound to group 0 and `texture` to group 1; the pipeline layout
 /// and the shader both expect them there.
@@ -16,7 +19,7 @@ pub fn draw_mesh(
     pipeline: &wgpu::RenderPipeline,
     camera: &wgpu::BindGroup,
     texture: &wgpu::BindGroup,
-    mesh: &Mesh,
+    mesh: Option<&Mesh>,
     clear: wgpu::Color,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -35,6 +38,10 @@ pub fn draw_mesh(
         occlusion_query_set: None,
         multiview_mask: None,
     });
+
+    let Some(mesh) = mesh else {
+        return;
+    };
 
     pass.set_pipeline(pipeline);
     pass.set_bind_group(0, camera, &[]);

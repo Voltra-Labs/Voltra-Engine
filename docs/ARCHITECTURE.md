@@ -25,10 +25,18 @@
         └────────┬─────────┘
                  │
         ┌────────▼─────────┐
-        │  voltra-render   │  GPU: device, surface, pipelines, passes
-        │  (owns wgpu)     │
-        └──────────────────┘
+        │  voltra-scene    │  components and the geometry they become
+        └───┬──────────┬───┘
+            │          │
+┌───────────▼──┐  ┌────▼─────────────┐
+│  voltra-ecs  │  │  voltra-render   │  GPU: device, surface, passes
+│  (no deps)   │  │  (owns wgpu)     │
+└──────────────┘  └──────────────────┘
 ```
+
+`voltra-scene` is the only crate that knows about both entities and vertices.
+Keeping that knowledge in one place is what lets `voltra-ecs` stay free of
+rendering and `voltra-render` stay free of entities.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`) and exactly one
 may depend on `wgpu` (`voltra-render`). Everything else consumes them through
@@ -40,6 +48,7 @@ re-exports, so a version bump is a one-line change.
 | --- | --- | --- |
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-render` | GPU device, swapchain, frame recording | `GpuContext`, `Renderer` |
+| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch` |
 | `voltra-core` | Event loop, OS window, input, frame timing | `App`, `WindowConfig`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary | `main` |
 
@@ -49,7 +58,7 @@ Added only when there is code to put in them:
 
 | Crate | Purpose | Blocked on |
 | --- | --- | --- |
-| `voltra-scene` | Scene graph, hierarchy, serialization | stage 6 |
+| `voltra-assets` | Loading, caching, hot reload | stage 9 |
 | `voltra-assets` | Loading, caching, hot reload | stage 8 |
 | `xtask` | Repo automation written in Rust instead of shell | when scripts appear |
 

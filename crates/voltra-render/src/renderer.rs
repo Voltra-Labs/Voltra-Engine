@@ -4,7 +4,7 @@ use wgpu::SurfaceTarget;
 
 use crate::camera::{Camera2D, CameraBinding};
 use crate::context::GpuContext;
-use crate::mesh::{self, Mesh};
+use crate::mesh::Mesh;
 use crate::texture::Texture;
 use crate::{pass, pipeline, texture};
 
@@ -16,7 +16,6 @@ pub struct Renderer {
     /// Bound whenever geometry has no texture of its own. White multiplies to
     /// a no-op, so this is what lets one pipeline serve both cases.
     white_bind_group: wgpu::BindGroup,
-    triangle: Mesh,
     pub camera: Camera2D,
     pub clear_color: wgpu::Color,
 }
@@ -34,14 +33,12 @@ impl Renderer {
         );
         let white = Texture::white(ctx.device(), ctx.queue());
         let white_bind_group = white.create_bind_group(ctx.device(), &texture_layout);
-        let triangle = Mesh::new(ctx.device(), "triangle", &mesh::TRIANGLE);
 
         Self {
             ctx,
             flat_color,
             camera_binding,
             white_bind_group,
-            triangle,
             camera: Camera2D {
                 aspect: aspect_of(width, height),
                 ..Default::default()
@@ -65,7 +62,8 @@ impl Renderer {
         self.camera.aspect = aspect_of(width, height);
     }
 
-    pub fn render(&mut self) {
+    /// Draws `mesh`, or just clears the frame when there is nothing to draw.
+    pub fn render_mesh(&mut self, mesh: Option<&Mesh>) {
         let Some(frame) = self.ctx.acquire() else {
             return;
         };
@@ -91,7 +89,7 @@ impl Renderer {
             &self.flat_color,
             self.camera_binding.bind_group(),
             &self.white_bind_group,
-            &self.triangle,
+            mesh,
             self.clear_color,
         );
 

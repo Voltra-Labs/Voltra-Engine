@@ -1,13 +1,11 @@
 [package]
-name = "voltra-editor"
-description = "Voltra editor application."
+name = "voltra-scene"
+description = "Scene components and the geometry they turn into."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-voltra-core.workspace = true
+voltra-ecs.workspace = true
 voltra-render.workspace = true
-voltra-scene.workspace = true
-env_logger.workspace = true

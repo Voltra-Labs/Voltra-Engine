@@ -14,6 +14,7 @@ repository = "https://github.com/Voltra-Labs/Voltra-Engine"
 voltra-core = { path = "crates/voltra-core" }
 voltra-ecs = { path = "crates/voltra-ecs" }
 voltra-render = { path = "crates/voltra-render" }
+voltra-scene = { path = "crates/voltra-scene" }
 
 wgpu = "30.0.0"
 winit = "0.30.13"
