@@ -105,6 +105,9 @@ Verified against the crate source, not from memory:
 | Frame acquire | `get_current_texture()` returns the `CurrentSurfaceTexture` enum, not a `Result` |
 | Present | `queue.present(frame)` — `SurfaceTexture::present` was removed |
 | Render pass | `RenderPassDescriptor` requires `multiview_mask`; `RenderPassColorAttachment` requires `depth_slice` |
+| Pipeline | `VertexState::buffers` is `&[Option<VertexBufferLayout>]` — the entries are wrapped in `Option` |
+| Device poll | `PollType::Wait` is a struct variant; use `PollType::wait_indefinitely()` |
+| Buffer readback | `Buffer::get_mapped_range` returns `Result` |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7

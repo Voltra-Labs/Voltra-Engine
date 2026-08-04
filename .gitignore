@@ -1,3 +1,6 @@
 /target
 **/*.rs.bk
 *.pdb
+
+# agent worktrees
+.claude/worktrees/

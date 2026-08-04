@@ -68,11 +68,13 @@ privileged and plain `cargo build` covers everything.
 | Stage | Scope | State |
 | --- | --- | --- |
 | 1 | Window + wgpu surface + clear pass | done |
-| 2 | Shaders, render pipeline, first triangle | next |
-| 3 | Vertex/index buffers, textures, 2D quad renderer | planned |
-| 4 | In-house ECS, scene graph, transforms | planned |
-| 5 | Editor UI, viewport, gizmos | planned |
-| 6 | Scene serialization, asset pipeline, physics | planned |
+| 2 | Shaders, render pipeline, first triangle | done |
+| 3 | Vertex/index buffers | done |
+| 4 | Uniforms, bind groups, camera | next |
+| 5 | Textures and samplers | planned |
+| 6 | In-house ECS, scene graph, transforms | planned |
+| 7 | Editor UI, viewport, gizmos | planned |
+| 8 | Scene serialization, asset pipeline, physics | planned |
 
 ## Contributing
 

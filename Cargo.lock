@@ -2001,6 +2001,7 @@ dependencies = [
 name = "voltra-render"
 version = "0.1.0"
 dependencies = [
+ "bytemuck",
  "log",
  "pollster",
  "wgpu",
