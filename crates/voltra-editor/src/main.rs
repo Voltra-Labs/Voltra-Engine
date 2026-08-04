@@ -1,3 +1,6 @@
+mod panels;
+
+use panels::Editor;
 use voltra_core::{App, WindowConfig};
 use voltra_render::glam::Vec2;
 use voltra_scene::{Sprite, Transform};
@@ -10,10 +13,12 @@ fn main() {
         ..Default::default()
     });
 
-    // A placeholder scene until there is an editor UI to build one with.
+    // Something to look at on the first run, before anything has been spawned
+    // from the menu.
     spawn_demo_scene(&mut app);
 
-    app.run();
+    let mut editor = Editor::default();
+    app.with_ui(move |ui, frame| editor.ui(ui, frame)).run();
 }
 
 fn spawn_demo_scene(app: &mut App) {

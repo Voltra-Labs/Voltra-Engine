@@ -11,6 +11,9 @@
 //! The test skips itself when no GPU adapter is available so CI machines
 //! without one still pass.
 
+mod common;
+
+use common::{headless_device, read_texture, Rgba, CLEAR};
 use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::glam::Vec2;
 use voltra_render::mesh::{self, Mesh};
@@ -19,37 +22,6 @@ use voltra_render::{pass, pipeline, wgpu};
 
 const SIZE: u32 = 64;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-
-const CLEAR: wgpu::Color = wgpu::Color {
-    r: 0.1,
-    g: 0.1,
-    b: 0.12,
-    a: 1.0,
-};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Rgba {
-    r: u8,
-    g: u8,
-    b: u8,
-    a: u8,
-}
-
-/// Returns `None` when the machine has no usable adapter.
-fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
-    let instance =
-        wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-
-    let adapter =
-        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))
-            .ok()?;
-
-    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-        label: Some("headless-test-device"),
-        ..Default::default()
-    }))
-    .ok()
-}
 
 /// Draws `mesh` through `camera` into a `SIZE`x`SIZE` texture and reads the
 /// pixels back.
@@ -86,20 +58,6 @@ fn render_textured(
     });
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    // `copy_texture_to_buffer` requires bytes_per_row to be a multiple of 256.
-    // At 64px * 4 bytes that is exactly 256, but compute it rather than rely on
-    // the coincidence surviving a change to SIZE.
-    let unpadded = SIZE * 4;
-    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-    let padded = unpadded.div_ceil(align) * align;
-
-    let readback = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("headless-readback"),
-        size: (padded * SIZE) as wgpu::BufferAddress,
-        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-        mapped_at_creation: false,
-    });
-
     let camera_binding = CameraBinding::new(device);
     camera_binding.upload(queue, camera);
     let texture_layout = texture::bind_group_layout(device);
@@ -119,58 +77,9 @@ fn render_textured(
         Some(mesh),
         CLEAR,
     );
-    encoder.copy_texture_to_buffer(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyBufferInfo {
-            buffer: &readback,
-            layout: wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(padded),
-                rows_per_image: Some(SIZE),
-            },
-        },
-        wgpu::Extent3d {
-            width: SIZE,
-            height: SIZE,
-            depth_or_array_layers: 1,
-        },
-    );
     queue.submit(Some(encoder.finish()));
 
-    readback.map_async(wgpu::MapMode::Read, .., |result| {
-        result.expect("readback buffer failed to map");
-    });
-    device
-        .poll(wgpu::PollType::wait_indefinitely())
-        .expect("device poll failed");
-
-    let pixels = {
-        let mapped = readback
-            .get_mapped_range(..)
-            .expect("readback buffer range not mapped");
-        let mut out = Vec::with_capacity((SIZE * SIZE) as usize);
-        for y in 0..SIZE {
-            let row = (y * padded) as usize;
-            for x in 0..SIZE {
-                let i = row + (x * 4) as usize;
-                out.push(Rgba {
-                    r: mapped[i],
-                    g: mapped[i + 1],
-                    b: mapped[i + 2],
-                    a: mapped[i + 3],
-                });
-            }
-        }
-        out
-    };
-    readback.unmap();
-
-    pixels
+    read_texture(device, queue, &texture, SIZE, SIZE)
 }
 
 fn at(pixels: &[Rgba], x: u32, y: u32) -> Rgba {
@@ -232,8 +141,7 @@ fn indexed_quad_covers_every_pixel() {
     // The quad spans the whole of clip space, so the clear colour must be
     // completely painted over. If the index buffer were ignored or mis-typed,
     // part of the surface would survive.
-    let clear_ish = |p: &Rgba| p.r < 120 && p.g < 120 && p.b < 130;
-    let survivors = pixels.iter().filter(|p| clear_ish(p)).count();
+    let survivors = pixels.iter().filter(|p| p.is_clear_ish()).count();
     assert_eq!(
         survivors, 0,
         "{survivors} pixels still hold the clear colour"

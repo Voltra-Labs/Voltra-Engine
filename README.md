@@ -6,14 +6,17 @@ A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs
 
 > **Status: early rewrite.** Voltra was originally a C++/OpenGL engine. The Rust
 > rewrite starts from an empty slate; the C++ tree is preserved on the `main`
-> branch history and tagged `v0-cpp-final`. Today the engine opens a window and
-> clears the swapchain — nothing more.
+> branch history and tagged `v0-cpp-final`. Today it runs an editor: an
+> in-house ECS, textured sprite batching, a 2D camera, and an egui interface
+> with a hierarchy, an inspector and a live viewport.
 
 ## Design stance
 
 - **No engine framework dependencies.** No ECS crate, no scene-graph crate. Core
   systems are written in-house so the architecture stays ours. Well-understood
-  leaf libraries (math, serialization, physics) are fair game.
+  leaf libraries (math, serialization, physics, UI widgets) are fair game — but
+  the wgpu backend that draws egui is ours, because the official one is pinned
+  to an older wgpu.
 - **wgpu, not raw Vulkan.** One backend-agnostic API, five platforms, no
   hand-rolled swapchain code.
 - **Workspace-first.** Every subsystem is its own crate with an explicit
@@ -39,7 +42,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 ```
 
-Controls in the editor:
+The editor opens with a hierarchy on the left, an inspector on the right and the
+scene in the middle. `Scene ▸ Spawn sprite` adds an entity; selecting one in the
+hierarchy lets the inspector edit its transform and colour.
+
+Camera controls, active whenever egui is not using the input itself:
 
 | Input | Action |
 | --- | --- |
@@ -63,10 +70,10 @@ Voltra-Engine/
 ├── assets/               # runtime assets (shaders, textures, scenes)
 ├── crates/
 │   ├── voltra-ecs/       # entities and components — zero dependencies
-│   ├── voltra-render/    # GPU layer: device, surface, passes  (no winit)
+│   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
-│   └── voltra-editor/    # binary: the editor application
+│   └── voltra-editor/    # binary: the editor and its panels
 └── docs/
     ├── ARCHITECTURE.md   # layering, crate graph, planned crates
     └── CONVENTIONS.md    # naming, file/folder rules, code style
@@ -86,8 +93,9 @@ privileged and plain `cargo build` covers everything.
 | 5 | Textures and samplers | done |
 | 6 | In-house ECS | done |
 | 7 | Transforms, sprites, batched rendering from the world | done |
-| 8 | Editor UI, viewport, gizmos | next |
-| 9 | Scene serialization, asset pipeline, physics | planned |
+| 8 | Editor UI: hierarchy, inspector, viewport | done |
+| 9 | Scene serialization and the asset pipeline | next |
+| 10 | Gizmos, picking, physics | planned |
 
 ## Contributing
 
