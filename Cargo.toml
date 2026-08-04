@@ -22,6 +22,12 @@ bytemuck = { version = "1.25.2", features = ["derive"] }
 glam = { version = "0.33.3", features = ["bytemuck"] }
 # PNG only: the default feature set drags in jpeg, gif, tiff, webp and more.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
+# Immediate-mode UI for the editor. `egui-wgpu` is pinned to wgpu 29 and cannot
+# be used against wgpu 30, so the backend is ours; `epaint` is the tessellated
+# output it consumes, and is all the render layer needs to know about.
+egui = "0.35.0"
+egui-winit = "0.35.0"
+epaint = { version = "0.35.0", default-features = false, features = ["bytemuck"] }
 pollster = "1.0.1"
 log = "0.4.33"
 env_logger = "0.11.11"

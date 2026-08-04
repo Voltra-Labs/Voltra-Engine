@@ -5,6 +5,7 @@ use wgpu::SurfaceTarget;
 use crate::camera::{Camera2D, CameraBinding};
 use crate::context::GpuContext;
 use crate::mesh::Mesh;
+use crate::target::RenderTarget;
 use crate::texture::Texture;
 use crate::{pass, pipeline, texture};
 
@@ -62,15 +63,13 @@ impl Renderer {
         self.camera.aspect = aspect_of(width, height);
     }
 
-    /// Draws `mesh`, or just clears the frame when there is nothing to draw.
+    /// Draws `mesh` straight to the window, or just clears it.
+    ///
+    /// The path a shipped game takes: no editor, no intermediate texture.
     pub fn render_mesh(&mut self, mesh: Option<&Mesh>) {
         let Some(frame) = self.ctx.acquire() else {
             return;
         };
-
-        // Uploaded every frame rather than on change: one 64-byte write is
-        // cheaper than tracking whether the camera moved.
-        self.camera_binding.upload(self.ctx.queue(), &self.camera);
 
         let view = frame
             .texture
@@ -83,18 +82,92 @@ impl Renderer {
                     label: Some("frame-encoder"),
                 });
 
+        self.record_scene(&mut encoder, &view, mesh);
+
+        self.ctx.queue().submit(Some(encoder.finish()));
+        self.ctx.present(frame);
+    }
+
+    /// Draws `mesh` into an offscreen target instead of the window.
+    ///
+    /// The editor's path: the result becomes an image inside a viewport panel,
+    /// which is why the scene needs its own size and aspect rather than the
+    /// window's.
+    pub fn render_scene(&mut self, target: &RenderTarget, mesh: Option<&Mesh>) {
+        let mut encoder =
+            self.ctx
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("scene-encoder"),
+                });
+
+        self.record_scene(&mut encoder, target.view(), mesh);
+        self.ctx.queue().submit(Some(encoder.finish()));
+    }
+
+    /// Acquires the window's frame, clears it, and hands the pass to `record`.
+    ///
+    /// Everything drawn over the top of the scene — the editor UI today —
+    /// arrives through here rather than through a method per overlay.
+    pub fn present_with(&mut self, record: impl FnOnce(&mut wgpu::RenderPass<'_>)) {
+        let Some(frame) = self.ctx.acquire() else {
+            return;
+        };
+
+        let view = frame
+            .texture
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let mut encoder =
+            self.ctx
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("present-encoder"),
+                });
+
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("present-pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(self.clear_color),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            record(&mut pass);
+        }
+
+        self.ctx.queue().submit(Some(encoder.finish()));
+        self.ctx.present(frame);
+    }
+
+    fn record_scene(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        mesh: Option<&Mesh>,
+    ) {
+        // Uploaded every frame rather than on change: one 64-byte write is
+        // cheaper than tracking whether the camera moved.
+        self.camera_binding.upload(self.ctx.queue(), &self.camera);
+
         pass::draw_mesh(
-            &mut encoder,
-            &view,
+            encoder,
+            view,
             &self.flat_color,
             self.camera_binding.bind_group(),
             &self.white_bind_group,
             mesh,
             self.clear_color,
         );
-
-        self.ctx.queue().submit(Some(encoder.finish()));
-        self.ctx.present(frame);
     }
 }
 

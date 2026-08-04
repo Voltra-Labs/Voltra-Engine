@@ -11,4 +11,6 @@ voltra-ecs.workspace = true
 voltra-render.workspace = true
 voltra-scene.workspace = true
 winit.workspace = true
+egui.workspace = true
+egui-winit.workspace = true
 log.workspace = true

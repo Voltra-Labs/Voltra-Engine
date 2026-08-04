@@ -42,7 +42,10 @@ docs/                ARCHITECTURE.md, CONVENTIONS.md
   `voltra-render` import `winit`, the design is wrong — pass a
   `wgpu::SurfaceTarget` instead.
 - **No ECS, scene-graph or engine-framework crates.** Writing those in-house is
-  the point of this project. Leaf libraries (math, serde, physics) are fine.
+  the point of this project. Leaf libraries (math, serde, physics, `egui`) are
+  fine. `egui-wgpu` is not usable — it is pinned to wgpu 29 and would give the
+  build two incompatible copies of wgpu; the backend in
+  `voltra-render::egui_backend` is ours.
 - **All versions live in root `[workspace.dependencies]`**; member crates write
   `dep.workspace = true`. Never pin a version inside a member crate.
 - **New crates only when there is code for them.** Do not scaffold empty crates
@@ -52,19 +55,28 @@ docs/                ARCHITECTURE.md, CONVENTIONS.md
 
 ## Verify graphics APIs, do not recall them
 
-`wgpu` 30 and `winit` 0.30 are newer than the model's training data, and wgpu 30
-broke nearly every tutorial online (they target v25 and older). Writing wgpu code
+`wgpu` 30, `winit` 0.30 and `egui` 0.35 are newer than the model's training data.
+wgpu 30 broke nearly every tutorial online (they target v25 and older), and egui
+0.35 merged the panel types and changed how a frame is run. Writing this code
 from memory produces plausible code that does not compile.
 
-Before writing GPU code, do one of:
+Before writing GPU or UI code, do one of:
 
-1. Query **Context7** (MCP) for the current `wgpu` / `winit` docs.
+1. Query **Context7** (MCP) for the current `wgpu` / `winit` / `egui` docs.
 2. Read the vendored source directly — it is on disk and authoritative:
-   `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/`.
+   `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/`,
+   `.../egui-0.35.0/src/`.
 
-The v30 differences already found are tabulated at the end of
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Add to that table whenever you hit
-a new one.
+The differences already found are tabulated at the end of
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), one table per crate. Add to them
+whenever you hit a new one.
+
+Colour space is the other thing not to guess at. sRGB conversions happen in
+three places — the texture format, the sampler and the shader — and applying one
+twice is a visible darkening that no validation layer reports. The rules that
+hold here are written up under "egui for the editor UI" in ARCHITECTURE.md, and
+`crates/voltra-render/tests/headless_egui.rs` pins them with mid-tone pixels,
+which are the only values that can tell a double conversion from a correct one.
 
 ## Models and delegation
 

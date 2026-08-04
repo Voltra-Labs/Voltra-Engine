@@ -3,8 +3,9 @@
 use std::sync::Arc;
 
 use voltra_ecs::World;
+use voltra_render::egui_backend::ScreenDescriptor;
 use voltra_render::glam::Vec2;
-use voltra_render::Renderer;
+use voltra_render::{Camera2D, Filter, RenderTarget, Renderer};
 use voltra_scene::SpriteBatch;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -14,6 +15,7 @@ use winit::window::{Window, WindowId};
 
 use crate::input::Input;
 use crate::time::Clock;
+use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 
 /// World units the camera pans per second.
@@ -21,12 +23,59 @@ const PAN_SPEED: f32 = 1.5;
 /// Multiplier applied per line of scroll wheel.
 const ZOOM_STEP: f32 = 1.1;
 
+type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
+
+/// What the UI may reach while it is being laid out.
+///
+/// Passing this rather than the whole `App` is what stops a panel reaching the
+/// event loop or the swapchain — a UI callback that could acquire a frame would
+/// deadlock the one already in flight.
+pub struct UiFrame<'a> {
+    /// The scene. Panels add, remove and edit entities through it.
+    pub world: &'a mut World,
+    /// The camera the scene was drawn with, so a viewport panel can pan it.
+    pub camera: &'a mut Camera2D,
+    /// The rendered scene, ready for `egui::Image::new`.
+    viewport: TextureId,
+    viewport_size: (u32, u32),
+    requested_size: &'a mut (u32, u32),
+}
+
+impl UiFrame<'_> {
+    /// Handle for the scene image.
+    pub fn viewport(&self) -> TextureId {
+        self.viewport
+    }
+
+    /// Physical size the scene was rendered at this frame.
+    pub fn viewport_size(&self) -> (u32, u32) {
+        self.viewport_size
+    }
+
+    /// Asks for a different scene resolution, honoured on the *next* frame.
+    ///
+    /// It cannot be this frame's: the scene has to be drawn before egui can
+    /// sample it, and a panel only learns how much room it has once egui is
+    /// already laying out. One frame of lag while dragging a splitter is the
+    /// price, and it is not visible.
+    pub fn request_viewport_size(&mut self, width: u32, height: u32) {
+        *self.requested_size = (width.max(1), height.max(1));
+    }
+}
+
 #[derive(Default)]
 pub struct App {
     config: WindowConfig,
-    // Both stay `None` until the event loop resumes and hands us a window.
+    // All of these stay `None` until the event loop resumes and hands us a
+    // window; none of them can be built without a surface.
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
+    egui: Option<EguiLayer>,
+    scene_target: Option<RenderTarget>,
+    viewport: Option<TextureId>,
+    /// Size the UI last asked the scene to be rendered at.
+    requested_size: (u32, u32),
+    ui: Option<UiFn>,
     clock: Clock,
     input: Input,
     /// The scene. Populate it before calling [`App::run`].
@@ -39,6 +88,15 @@ impl App {
             config,
             ..Default::default()
         }
+    }
+
+    /// Installs the UI callback, run once per frame to lay the editor out.
+    ///
+    /// Without one the scene is drawn straight to the window and no UI exists,
+    /// which is what a shipped game wants.
+    pub fn with_ui(mut self, ui: impl FnMut(&mut egui::Ui, &mut UiFrame<'_>) + 'static) -> Self {
+        self.ui = Some(Box::new(ui));
+        self
     }
 
     pub fn run(mut self) {
@@ -78,6 +136,69 @@ impl App {
             }
         }
     }
+
+    /// Draws the world straight to the window. No UI, no intermediate texture.
+    fn redraw_without_ui(&mut self) {
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
+        // Rebuilt every frame. Caching it means tracking every Transform and
+        // Sprite write, which is not worth it until the batch actually shows up
+        // in a profile.
+        let batch = SpriteBatch::from_world(&self.world);
+        let mesh = batch.upload(renderer.context().device());
+        renderer.render_mesh(mesh.as_ref());
+    }
+
+    /// Scene to an offscreen target, then the UI over the top of the window.
+    fn redraw_with_ui(&mut self) {
+        let (Some(renderer), Some(window), Some(egui), Some(target), Some(viewport), Some(ui)) = (
+            self.renderer.as_mut(),
+            self.window.as_ref(),
+            self.egui.as_mut(),
+            self.scene_target.as_mut(),
+            self.viewport,
+            self.ui.as_mut(),
+        ) else {
+            return;
+        };
+
+        // Cloned handles rather than borrows: `renderer.camera` goes into the
+        // UI callback mutably, which rules out holding a borrow of the renderer
+        // across it. Both are reference-counted, so this costs a bump.
+        let device = renderer.context().device().clone();
+        let queue = renderer.context().queue().clone();
+
+        let (width, height) = self.requested_size;
+        if target.resize(&device, width, height) {
+            // The old view points at a texture that no longer exists, and the
+            // scene has to be projected for the panel's shape, not the window's.
+            egui.update_view(&device, viewport, target.raw_view(), Filter::Linear);
+            renderer.camera.aspect = target.aspect();
+        }
+
+        let batch = SpriteBatch::from_world(&self.world);
+        let mesh = batch.upload(&device);
+        renderer.render_scene(target, mesh.as_ref());
+
+        let size = window.inner_size();
+        let screen = ScreenDescriptor {
+            width: size.width.max(1),
+            height: size.height.max(1),
+            pixels_per_point: window.scale_factor() as f32,
+        };
+
+        let mut frame = UiFrame {
+            world: &mut self.world,
+            camera: &mut renderer.camera,
+            viewport,
+            viewport_size: (target.width(), target.height()),
+            requested_size: &mut self.requested_size,
+        };
+        egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
+
+        renderer.present_with(|pass| egui.render(pass));
+    }
 }
 
 impl ApplicationHandler for App {
@@ -94,7 +215,30 @@ impl ApplicationHandler for App {
         );
 
         let size = window.inner_size();
-        self.renderer = Some(Renderer::new(window.clone(), size.width, size.height));
+        let renderer = Renderer::new(window.clone(), size.width, size.height);
+
+        if self.ui.is_some() {
+            let device = renderer.context().device().clone();
+            let format = renderer.context().config().format;
+
+            // Same format as the window so the UI compositing step has nothing
+            // to convert, and full window size until a panel says otherwise.
+            let target = RenderTarget::new(
+                &device,
+                "scene-viewport",
+                format,
+                size.width,
+                size.height,
+                Filter::Linear,
+            );
+            let mut egui = EguiLayer::new(&window, &device, format);
+            self.viewport = Some(egui.register_view(&device, target.raw_view(), Filter::Linear));
+            self.requested_size = (target.width(), target.height());
+            self.scene_target = Some(target);
+            self.egui = Some(egui);
+        }
+
+        self.renderer = Some(renderer);
         self.window = Some(window);
 
         // Device creation takes long enough to produce a huge first delta;
@@ -103,28 +247,38 @@ impl ApplicationHandler for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        self.input.process_window_event(&event);
-
-        let Some(renderer) = self.renderer.as_mut() else {
-            return;
+        // egui gets first refusal. A keystroke aimed at a text field must not
+        // also fly the camera, and a click on a panel must not select in the
+        // scene behind it.
+        let consumed = match (self.egui.as_mut(), self.window.as_ref()) {
+            (Some(egui), Some(window)) => egui.on_window_event(window, &event),
+            _ => false,
         };
+        if !consumed {
+            self.input.process_window_event(&event);
+        }
+
+        if self.renderer.is_none() {
+            return;
+        }
 
         match event {
             WindowEvent::CloseRequested => {
                 log::info!("close requested, shutting down");
                 event_loop.exit();
             }
-            WindowEvent::Resized(size) => renderer.resize(size.width, size.height),
+            WindowEvent::Resized(size) => {
+                if let Some(renderer) = self.renderer.as_mut() {
+                    renderer.resize(size.width, size.height);
+                }
+            }
             WindowEvent::RedrawRequested => {
                 self.update();
 
-                if let Some(renderer) = self.renderer.as_mut() {
-                    // Rebuilt every frame. Caching it means tracking every
-                    // Transform and Sprite write, which is not worth it until
-                    // the batch actually shows up in a profile.
-                    let batch = SpriteBatch::from_world(&self.world);
-                    let mesh = batch.upload(renderer.context().device());
-                    renderer.render_mesh(mesh.as_ref());
+                if self.ui.is_some() {
+                    self.redraw_with_ui();
+                } else {
+                    self.redraw_without_ui();
                 }
 
                 // Must come after everything that reads input this frame.

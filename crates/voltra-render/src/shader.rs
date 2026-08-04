@@ -11,6 +11,9 @@
 /// Source of the built-in flat-colour triangle shader.
 pub const FLAT_COLOR: &str = include_str!("shaders/flat_color.wgsl");
 
+/// Source of the shader that draws egui's tessellated triangles.
+pub const EGUI: &str = include_str!("shaders/egui.wgsl");
+
 /// Compiles WGSL into a shader module.
 ///
 /// `wgpu` validates and reports compilation errors through the device error
