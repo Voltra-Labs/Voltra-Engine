@@ -63,7 +63,12 @@ impl Editor {
 
                 // Collected before the loop: selecting inside it would hold a
                 // borrow of the world while the buttons want to mutate it.
-                let entities: Vec<Entity> = frame.world.query::<Sprite>().map(|(e, _)| e).collect();
+                let mut entities: Vec<Entity> =
+                    frame.world.query::<Sprite>().map(|(e, _)| e).collect();
+                // Storage order is not list order. A sparse set fills the hole
+                // left by a removal with its last element, so deleting one row
+                // would otherwise make another jump across the list.
+                entities.sort_by_key(Entity::index);
 
                 if entities.is_empty() {
                     ui.label(RichText::new("nothing in the scene").italics().weak());
