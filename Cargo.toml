@@ -17,6 +17,7 @@ voltra-render = { path = "crates/voltra-render" }
 wgpu = "30.0.0"
 winit = "0.30.13"
 bytemuck = { version = "1.25.2", features = ["derive"] }
+glam = { version = "0.33.3", features = ["bytemuck"] }
 pollster = "1.0.1"
 log = "0.4.33"
 env_logger = "0.11.11"

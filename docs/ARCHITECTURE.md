@@ -48,10 +48,9 @@ Added only when there is code to put in them:
 
 | Crate | Purpose | Blocked on |
 | --- | --- | --- |
-| `voltra-math` | Vectors, matrices, transforms (likely a `glam` facade) | stage 3 |
-| `voltra-ecs` | In-house entity/component storage | stage 4 |
-| `voltra-scene` | Scene graph, hierarchy, serialization | stage 4 |
-| `voltra-assets` | Loading, caching, hot reload | stage 6 |
+| `voltra-ecs` | In-house entity/component storage | stage 6 |
+| `voltra-scene` | Scene graph, hierarchy, serialization | stage 6 |
+| `voltra-assets` | Loading, caching, hot reload | stage 8 |
 | `xtask` | Repo automation written in Rust instead of shell | when scripts appear |
 
 ## Frame flow
@@ -86,6 +85,17 @@ aliasing proofs in every query — a subproject, not a module.
 generation)` handles plus one dense storage per component type, zero `unsafe`.
 Archetypes come later, driven by profiler output, not by aesthetics.
 
+### `glam` instead of a `voltra-math` crate
+
+The no-frameworks rule targets engine architecture — ECS, scene graph, render
+graph — not leaf libraries. `glam` is a leaf: SIMD vectors and matrices with no
+opinion about how a game is structured, so depending on it costs no design
+freedom. Hand-written matrix maths would teach nothing and is prime territory
+for silent sign and transpose errors.
+
+It is used directly in `voltra-render` and re-exported from there. A
+`voltra-math` facade wrapping it would be a crate with no code in it.
+
 ### wgpu over raw Vulkan or OpenGL
 
 The C++ engine was OpenGL-only. wgpu gives Vulkan/DX12/Metal/GL/WebGPU from one
@@ -105,6 +115,7 @@ Verified against the crate source, not from memory:
 | Frame acquire | `get_current_texture()` returns the `CurrentSurfaceTexture` enum, not a `Result` |
 | Present | `queue.present(frame)` — `SurfaceTexture::present` was removed |
 | Render pass | `RenderPassDescriptor` requires `multiview_mask`; `RenderPassColorAttachment` requires `depth_slice` |
+| Pipeline layout | `bind_group_layouts` is `&[Option<&BindGroupLayout>]`, and `push_constant_ranges` is replaced by `immediate_size: u32` |
 | Pipeline | `VertexState::buffers` is `&[Option<VertexBufferLayout>]` — the entries are wrapped in `Option` |
 | Device poll | `PollType::Wait` is a struct variant; use `PollType::wait_indefinitely()` |
 | Buffer readback | `Buffer::get_mapped_range` returns `Result` |
