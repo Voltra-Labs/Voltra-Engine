@@ -14,6 +14,7 @@
 use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::glam::Vec2;
 use voltra_render::mesh::{self, Mesh};
+use voltra_render::texture::{self, Filter, Texture};
 use voltra_render::{pass, pipeline, wgpu};
 
 const SIZE: u32 = 64;
@@ -58,6 +59,17 @@ fn render_to_pixels(
     mesh: &Mesh,
     camera: &Camera2D,
 ) -> Vec<Rgba> {
+    render_textured(device, queue, mesh, camera, &Texture::white(device, queue))
+}
+
+/// As [`render_to_pixels`], but with an explicit texture bound to group 1.
+fn render_textured(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    mesh: &Mesh,
+    camera: &Camera2D,
+    albedo: &Texture,
+) -> Vec<Rgba> {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("headless-target"),
         size: wgpu::Extent3d {
@@ -90,7 +102,10 @@ fn render_to_pixels(
 
     let camera_binding = CameraBinding::new(device);
     camera_binding.upload(queue, camera);
-    let render_pipeline = pipeline::create_flat_color(device, FORMAT, camera_binding.layout());
+    let texture_layout = texture::bind_group_layout(device);
+    let texture_bind_group = albedo.create_bind_group(device, &texture_layout);
+    let render_pipeline =
+        pipeline::create_flat_color(device, FORMAT, camera_binding.layout(), &texture_layout);
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("headless-encoder"),
@@ -100,6 +115,7 @@ fn render_to_pixels(
         &view,
         &render_pipeline,
         camera_binding.bind_group(),
+        &texture_bind_group,
         mesh,
         CLEAR,
     );
@@ -269,6 +285,106 @@ fn moving_the_camera_moves_the_geometry() {
         centre_after.r < 120 && centre_after.g < 120 && centre_after.b < 130,
         "panned frame should be pure clear colour, got {centre_after:?}"
     );
+}
+
+/// A full-screen quad with white vertex colours, so the texture is the only
+/// thing deciding the output.
+const WHITE_QUAD: [voltra_render::Vertex; 4] = [
+    voltra_render::Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0], [0.0, 0.0]),
+    voltra_render::Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0], [0.0, 1.0]),
+    voltra_render::Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0], [1.0, 1.0]),
+    voltra_render::Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 0.0]),
+];
+
+#[test]
+fn texture_is_sampled_the_right_way_up() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    // 2x2, one solid colour per texel, laid out row-major from the top left.
+    #[rustfmt::skip]
+    let texels: [u8; 16] = [
+        255, 0, 0, 255,     0, 255, 0, 255,
+        0, 0, 255, 255,     255, 255, 0, 255,
+    ];
+    let checker = Texture::from_rgba8(&device, &queue, "checker", &texels, 2, 2, Filter::Nearest)
+        .expect("2x2 RGBA is 16 bytes");
+
+    let quad = Mesh::indexed(&device, "white-quad", &WHITE_QUAD, &mesh::QUAD_INDICES);
+    let pixels = render_textured(&device, &queue, &quad, &Camera2D::default(), &checker);
+
+    // Sample well inside each quadrant to stay clear of the texel boundary.
+    let q = SIZE / 4;
+    let top_left = at(&pixels, q, q);
+    let top_right = at(&pixels, SIZE - q, q);
+    let bottom_left = at(&pixels, q, SIZE - q);
+    let bottom_right = at(&pixels, SIZE - q, SIZE - q);
+
+    // If V were flipped, top and bottom would swap and every one of these
+    // would fail — which is the point of checking all four.
+    assert!(
+        top_left.r > 200 && top_left.g < 60 && top_left.b < 60,
+        "top-left should be red, got {top_left:?}"
+    );
+    assert!(
+        top_right.g > 200 && top_right.r < 60 && top_right.b < 60,
+        "top-right should be green, got {top_right:?}"
+    );
+    assert!(
+        bottom_left.b > 200 && bottom_left.r < 60 && bottom_left.g < 60,
+        "bottom-left should be blue, got {bottom_left:?}"
+    );
+    assert!(
+        bottom_right.r > 200 && bottom_right.g > 200 && bottom_right.b < 60,
+        "bottom-right should be yellow, got {bottom_right:?}"
+    );
+}
+
+#[test]
+fn white_texture_leaves_vertex_colour_alone() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    let white = Texture::white(&device, &queue);
+    assert_eq!((white.width(), white.height()), (1, 1));
+
+    let triangle = Mesh::new(&device, "test-triangle", &mesh::TRIANGLE);
+    let textured = render_textured(
+        &device,
+        &queue,
+        &triangle,
+        &Camera2D::default(),
+        &Texture::white(&device, &queue),
+    );
+
+    // Multiplying by white is a no-op, so this must match what the untextured
+    // path produced. That equivalence is what allows a single pipeline.
+    let centre = at(&textured, SIZE / 2, SIZE / 2);
+    assert!(
+        centre.r > centre.g && centre.r > centre.b && centre.r > 150,
+        "white texture should not tint the vertex colours, got {centre:?}"
+    );
+}
+
+#[test]
+fn wrong_sized_pixel_data_is_rejected() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    // 2x2 RGBA needs 16 bytes; hand it 12.
+    let err = Texture::from_rgba8(&device, &queue, "short", &[0; 12], 2, 2, Filter::Nearest)
+        .expect_err("short pixel data must not be accepted");
+
+    // Left unchecked this reaches wgpu as a validation panic rather than a
+    // Result the caller can act on.
+    let text = err.to_string();
+    assert!(text.contains("12") && text.contains("16"), "{text}");
 }
 
 #[test]

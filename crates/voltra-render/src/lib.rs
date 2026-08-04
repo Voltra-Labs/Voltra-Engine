@@ -11,11 +11,13 @@ pub mod pass;
 pub mod pipeline;
 pub mod renderer;
 pub mod shader;
+pub mod texture;
 
 pub use camera::{Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use mesh::{Mesh, Vertex};
 pub use renderer::Renderer;
+pub use texture::{Filter, Texture, TextureError};
 
 // Re-exported so downstream crates never declare their own `wgpu` dependency
 // and can't drift onto a different version.
