@@ -38,6 +38,7 @@ re-exports, so a version bump is a one-line change.
 
 | Crate | Owns | Key types |
 | --- | --- | --- |
+| `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-render` | GPU device, swapchain, frame recording | `GpuContext`, `Renderer` |
 | `voltra-core` | Event loop, OS window, input, frame timing | `App`, `WindowConfig`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary | `main` |
@@ -48,7 +49,6 @@ Added only when there is code to put in them:
 
 | Crate | Purpose | Blocked on |
 | --- | --- | --- |
-| `voltra-ecs` | In-house entity/component storage | stage 6 |
 | `voltra-scene` | Scene graph, hierarchy, serialization | stage 6 |
 | `voltra-assets` | Loading, caching, hot reload | stage 8 |
 | `xtask` | Repo automation written in Rust instead of shell | when scripts appear |
@@ -81,9 +81,22 @@ Deliberate. Writing our own is the point of the project. The trap is that a
 Bevy-style archetype ECS in Rust needs `UnsafeCell`, `TypeId` erasure and manual
 aliasing proofs in every query — a subproject, not a module.
 
-**Therefore the first ECS is the simple one:** generational `Entity(index,
-generation)` handles plus one dense storage per component type, zero `unsafe`.
+**Therefore the first ECS is the simple one**, and it is what `voltra-ecs` now
+contains: generational `Entity` handles plus one sparse set per component type,
+zero `unsafe`. Insert, remove and lookup are O(1) and each component type
+iterates contiguously. The weak spot is multi-component queries, which walk one
+set and look the rest up per entity.
+
 Archetypes come later, driven by profiler output, not by aesthetics.
+
+Two invariants the tests pin down, both of which fail silently if broken:
+
+- **Generations must be checked on every access.** An index is recycled after a
+  despawn, so a stale handle would otherwise read and write whichever entity
+  took the slot.
+- **`World::despawn` must clear the storages before bumping the generation.**
+  Bump first and every storage sees a stale handle, refuses to remove anything,
+  and leaks one component per dead entity forever.
 
 ### `glam` instead of a `voltra-math` crate
 
