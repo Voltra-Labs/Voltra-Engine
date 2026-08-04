@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Fail on warnings everywhere, not just where clippy is invoked explicitly.
+  RUSTFLAGS: -D warnings
+
+jobs:
+  # Formatting is platform-independent and finishes in seconds, so it runs on
+  # its own rather than blocking behind a full compile.
+  fmt:
+    name: rustfmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: cargo fmt --all --check
+
+  check:
+    name: clippy + tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Let both platforms report; a Windows-only break should not hide a
+      # Linux-only one.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        # The headless render tests skip themselves when no GPU adapter is
+        # present, which is the normal case on hosted runners. They still guard
+        # local runs and any self-hosted machine that has one.
+        run: cargo test --workspace
