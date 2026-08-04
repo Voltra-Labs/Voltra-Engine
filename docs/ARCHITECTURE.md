@@ -39,7 +39,7 @@ re-exports, so a version bump is a one-line change.
 | Crate | Owns | Key types |
 | --- | --- | --- |
 | `voltra-render` | GPU device, swapchain, frame recording | `GpuContext`, `Renderer` |
-| `voltra-core` | Event loop, OS window, application lifecycle | `App`, `WindowConfig` |
+| `voltra-core` | Event loop, OS window, input, frame timing | `App`, `WindowConfig`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary | `main` |
 
 ### Planned crates

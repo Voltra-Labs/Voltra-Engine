@@ -39,6 +39,14 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 ```
 
+Controls in the editor:
+
+| Input | Action |
+| --- | --- |
+| `W` `A` `S` `D` | Pan the camera |
+| Scroll wheel | Zoom |
+| `R` | Reset the camera |
+
 Useful environment variables (read by `wgpu`):
 
 ```sh
