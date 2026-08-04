@@ -62,6 +62,7 @@ Voltra-Engine/
 ├── CLAUDE.md             # instructions for AI agents working in this repo
 ├── assets/               # runtime assets (shaders, textures, scenes)
 ├── crates/
+│   ├── voltra-ecs/       # entities and components — zero dependencies
 │   ├── voltra-render/    # GPU layer: device, surface, passes  (no winit)
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
 │   └── voltra-editor/    # binary: the editor application
@@ -82,9 +83,10 @@ privileged and plain `cargo build` covers everything.
 | 3 | Vertex/index buffers | done |
 | 4 | Uniforms, bind groups, 2D camera | done |
 | 5 | Textures and samplers | done |
-| 6 | In-house ECS, scene graph, transforms | next |
-| 7 | Editor UI, viewport, gizmos | planned |
-| 8 | Scene serialization, asset pipeline, physics | planned |
+| 6 | In-house ECS | done |
+| 7 | Scene graph, transforms, sprite rendering | next |
+| 8 | Editor UI, viewport, gizmos | planned |
+| 9 | Scene serialization, asset pipeline, physics | planned |
 
 ## Contributing
 

@@ -1,0 +1,11 @@
+[package]
+name = "voltra-ecs"
+description = "In-house entity-component storage for the Voltra engine."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Intentionally empty. The point of this crate is that it owes nothing to
+# anyone: no ECS framework, no allocator crate, no unsafe.
+[dependencies]

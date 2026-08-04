@@ -2097,6 +2097,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-ecs"
+version = "0.1.0"
+
+[[package]]
 name = "voltra-editor"
 version = "0.1.0"
 dependencies = [
