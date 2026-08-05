@@ -87,6 +87,27 @@ hold here are written up under "egui for the editor UI" in ARCHITECTURE.md, and
 `crates/voltra-render/tests/headless_egui.rs` pins them with mid-tone pixels,
 which are the only values that can tell a double conversion from a correct one.
 
+## Look it up before inventing it
+
+Two different triggers, same response — go and read, do not reason from memory:
+
+- **You are not certain.** An API signature, a colour-space rule, a wgpu type, a
+  crate's current behaviour. Query Context7 or read the vendored source. See
+  "Verify graphics APIs" above.
+- **The decision is important and someone has already solved it.** Camera
+  controls, asset hot reload, render graph shape, scene format, undo, gizmos,
+  input scoping, ECS storage. Search the web and find out how the established
+  engines do it — **Unity, Unreal, Godot, Bevy** — before choosing. They have had
+  the bug reports we have not.
+
+Say what you found and why the shape they use is or is not right here. Copying
+their answer without the reason is as bad as inventing one. Where their solution
+does not fit our layering, name the difference and adapt it deliberately — this
+is a wgpu engine with a hand-written ECS, not a clone of any of them.
+
+Findings worth keeping go in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) under
+"Decisions", with the alternatives that were rejected.
+
 ## Models and delegation
 
 **Think on Opus 5. Execute wide on Sonnet 5.**
