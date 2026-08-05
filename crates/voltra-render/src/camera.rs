@@ -13,7 +13,9 @@ use glam::{Mat4, Vec2, Vec3};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera2D {
     pub position: Vec2,
-    pub zoom: f32,
+    /// Private because `half_extents` divides by it. Write through
+    /// [`Self::set_zoom`], which clamps.
+    zoom: f32,
     /// Viewport width divided by height. Keeps squares square.
     pub aspect: f32,
 }
@@ -30,11 +32,18 @@ impl Default for Camera2D {
 
 impl Camera2D {
     pub fn new(position: Vec2, zoom: f32, aspect: f32) -> Self {
-        Self {
+        let mut camera = Self {
             position,
-            zoom,
+            zoom: 1.0,
             aspect,
-        }
+        };
+        camera.set_zoom(zoom);
+        camera
+    }
+
+    /// Current zoom. Always within [`Self::MIN_ZOOM`]..=[`Self::MAX_ZOOM`].
+    pub fn zoom(&self) -> f32 {
+        self.zoom
     }
 
     /// Half the world-space height covered by the viewport.
@@ -343,18 +352,22 @@ mod tests {
             (after - before).length() < 1e-4,
             "anchor drifted from {before} to {after}"
         );
-        assert!(camera.zoom > 1.5, "zoom did not increase: {}", camera.zoom);
+        assert!(
+            camera.zoom() > 1.5,
+            "zoom did not increase: {}",
+            camera.zoom()
+        );
     }
 
     #[test]
     fn set_zoom_clamps_both_ends() {
         let mut camera = Camera2D::default();
         camera.set_zoom(f32::INFINITY);
-        assert_eq!(camera.zoom, Camera2D::MAX_ZOOM);
+        assert_eq!(camera.zoom(), Camera2D::MAX_ZOOM);
         camera.set_zoom(0.0);
-        assert_eq!(camera.zoom, Camera2D::MIN_ZOOM);
+        assert_eq!(camera.zoom(), Camera2D::MIN_ZOOM);
         camera.set_zoom(-5.0);
-        assert_eq!(camera.zoom, Camera2D::MIN_ZOOM);
+        assert_eq!(camera.zoom(), Camera2D::MIN_ZOOM);
     }
 
     #[test]
@@ -362,7 +375,7 @@ mod tests {
         let mut camera = Camera2D::default();
         camera.set_zoom(2.0);
         camera.set_zoom(f32::NAN);
-        assert_eq!(camera.zoom, 2.0, "NaN must leave the previous zoom alone");
+        assert_eq!(camera.zoom(), 2.0, "NaN must leave the previous zoom alone");
     }
 
     #[test]
@@ -375,11 +388,26 @@ mod tests {
 
         // Zoom was already at the ceiling, so nothing may move. Without this
         // the camera slides sideways every notch once the user hits the limit.
-        assert_eq!(camera.zoom, Camera2D::MAX_ZOOM);
+        assert_eq!(camera.zoom(), Camera2D::MAX_ZOOM);
         assert!(
             camera.position.length() < 1e-6,
             "drifted to {}",
             camera.position
+        );
+    }
+
+    #[test]
+    fn new_clamps_its_zoom() {
+        // The constructor is a second door onto the same invariant. Leaving it
+        // unclamped means `Camera2D::new(pos, 0.0, 1.0)` produces infinities in
+        // half_extents with no warning anywhere.
+        assert_eq!(
+            Camera2D::new(Vec2::ZERO, 0.0, 1.0).zoom(),
+            Camera2D::MIN_ZOOM
+        );
+        assert_eq!(
+            Camera2D::new(Vec2::ZERO, 1e9, 1.0).zoom(),
+            Camera2D::MAX_ZOOM
         );
     }
 
