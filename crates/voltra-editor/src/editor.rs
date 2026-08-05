@@ -4,6 +4,7 @@ use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 
+use crate::camera::ViewportCamera;
 use crate::panels;
 
 /// Editor state that outlives a frame.
@@ -13,6 +14,7 @@ use crate::panels;
 #[derive(Default)]
 pub struct Editor {
     pub(crate) selected: Option<Entity>,
+    pub(crate) camera: ViewportCamera,
 }
 
 impl Editor {

@@ -1,3 +1,4 @@
+mod camera;
 mod editor;
 mod panels;
 
