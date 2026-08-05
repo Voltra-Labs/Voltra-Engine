@@ -2739,6 +2739,7 @@ name = "voltra-editor"
 version = "0.1.0"
 dependencies = [
  "env_logger",
+ "log",
  "voltra-core",
  "voltra-ecs",
  "voltra-render",
