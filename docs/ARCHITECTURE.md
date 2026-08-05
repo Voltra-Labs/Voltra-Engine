@@ -177,11 +177,16 @@ Navigation therefore lives in `voltra-editor::camera::ViewportCamera`, and
 
 Two consequences worth stating:
 
-- **Input scoping is egui's job, not ours.** `InputState::smooth_scroll_delta`
-  is zeroed by whichever `ScrollArea` consumed it, and keys do not arrive while
-  a widget holds focus. Reimplementing that in `Input` would duplicate a
-  resolution egui has already made — and get it wrong, as the old code did:
-  scrolling the hierarchy zoomed the scene.
+- **Scroll scoping is egui's job; keyboard scoping is ours.**
+  `InputState::smooth_scroll_delta` is zeroed by whichever `ScrollArea`
+  consumed it, so the wheel arrives at `ViewportCamera` already scoped — using
+  the raw delta instead is exactly what let the old code get this wrong:
+  scrolling the hierarchy zoomed the scene. Keys get no such help: `keys_down`
+  is populated from the raw `Event::Key` regardless of focus, and
+  `count_and_consume_key` only strips matched events out of `self.events`,
+  never out of `keys_down`, so `i.key_down(Key::W)` reads true with a text
+  field focused. `WASD` stays off the camera only because
+  `ViewportCamera::navigate` gates on `response.hovered()` itself.
 - **Zoom is clamped, in the layer that divides by it.** `Camera2D::zoom` is
   private behind `set_zoom`, which clamps to `MIN_ZOOM`..=`MAX_ZOOM` and refuses
   `NaN`. Godot does the same (`CLAMP` in `EditorZoomWidget::set_zoom`); so does
