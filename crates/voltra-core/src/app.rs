@@ -4,24 +4,17 @@ use std::sync::Arc;
 
 use voltra_ecs::World;
 use voltra_render::egui_backend::ScreenDescriptor;
-use voltra_render::glam::Vec2;
 use voltra_render::{Camera2D, Filter, RenderTarget, Renderer};
 use voltra_scene::SpriteBatch;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowId};
 
 use crate::input::Input;
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
-
-/// World units the camera pans per second.
-const PAN_SPEED: f32 = 1.5;
-/// Multiplier applied per line of scroll wheel.
-const ZOOM_STEP: f32 = 1.1;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
 
@@ -105,36 +98,15 @@ impl App {
         event_loop.run_app(&mut self).expect("event loop failed");
     }
 
-    /// One simulation step. Everything that reads input belongs here, between
-    /// the events arriving and `Input::end_frame` wiping the per-frame sets.
+    /// One simulation step, between the events arriving and `Input::end_frame`
+    /// wiping the per-frame sets.
+    ///
+    /// Deliberately empty of camera work. How a scene is navigated is the
+    /// editor's business, not the platform layer's; `voltra-editor` does it
+    /// from the viewport panel. A game reads [`Input`] and moves its own
+    /// camera.
     fn update(&mut self) {
-        let dt = self.clock.tick().as_secs_f32();
-
-        if let Some(renderer) = self.renderer.as_mut() {
-            let pan = Vec2::new(
-                self.input.axis(KeyCode::KeyA, KeyCode::KeyD),
-                self.input.axis(KeyCode::KeyS, KeyCode::KeyW),
-            );
-            if pan != Vec2::ZERO {
-                // Normalising stops diagonal movement being faster than
-                // axis-aligned movement. Scaling by the delta keeps the speed
-                // independent of frame rate.
-                renderer.camera.position += pan.normalize() * PAN_SPEED * dt;
-            }
-
-            let scroll = self.input.scroll_delta();
-            if scroll != 0.0 {
-                // Multiplicative so each notch feels the same at any zoom, and
-                // so zoom can never reach or cross zero.
-                renderer.camera.zoom *= ZOOM_STEP.powf(scroll);
-            }
-
-            if self.input.was_key_pressed(KeyCode::KeyR) {
-                renderer.camera.position = Vec2::ZERO;
-                renderer.camera.zoom = 1.0;
-                log::info!("camera reset");
-            }
-        }
+        let _dt = self.clock.tick().as_secs_f32();
     }
 
     /// Draws the world straight to the window. No UI, no intermediate texture.
