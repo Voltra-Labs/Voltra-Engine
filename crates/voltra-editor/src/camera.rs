@@ -116,3 +116,78 @@ impl ViewportCamera {
 fn axis(positive: bool, negative: bool) -> f32 {
     f32::from(positive) - f32::from(negative)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Not square and not a round number, so an axis mix-up cannot pass by
+    /// coincidence.
+    fn viewport() -> Vec2 {
+        Vec2::new(800.0, 600.0)
+    }
+
+    #[test]
+    fn pan_moves_the_camera_opposite_the_drag_x() {
+        let nav = ViewportCamera::default();
+        let vp = viewport();
+        let mut camera = Camera2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
+
+        // Dragging the pointer right must move the camera left.
+        nav.pan(&mut camera, Vec2::new(10.0, 0.0), vp);
+        assert!(
+            camera.position.x < 0.0,
+            "expected position.x negative after a rightward drag, got {}",
+            camera.position.x
+        );
+    }
+
+    #[test]
+    fn pan_moves_the_camera_opposite_the_drag_y() {
+        let nav = ViewportCamera::default();
+        let vp = viewport();
+        let mut camera = Camera2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
+
+        // The drag delta is Y-down (screen space); world space is Y-up, so
+        // dragging the pointer down must move the camera's position.y
+        // *positive*.
+        nav.pan(&mut camera, Vec2::new(0.0, 10.0), vp);
+        assert!(
+            camera.position.y > 0.0,
+            "expected position.y positive after a downward drag, got {}",
+            camera.position.y
+        );
+    }
+
+    #[test]
+    fn pan_covers_half_the_world_distance_at_twice_the_zoom() {
+        let nav = ViewportCamera::default();
+        let vp = viewport();
+        let drag = Vec2::new(20.0, 0.0);
+
+        let mut base = Camera2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
+        nav.pan(&mut base, drag, vp);
+
+        let mut doubled = Camera2D::new(Vec2::ZERO, 2.0, vp.x / vp.y);
+        nav.pan(&mut doubled, drag, vp);
+
+        assert!(
+            (doubled.position.length() - base.position.length() * 0.5).abs() < 1e-4,
+            "expected half the world distance at double zoom: {} vs {}",
+            base.position.length(),
+            doubled.position.length()
+        );
+    }
+
+    #[test]
+    fn axis_reads_a_key_pair_as_a_signed_direction() {
+        assert_eq!(axis(true, false), 1.0);
+        assert_eq!(axis(false, true), -1.0);
+        assert_eq!(axis(false, false), 0.0);
+    }
+
+    #[test]
+    fn axis_cancels_when_both_keys_are_held() {
+        assert_eq!(axis(true, true), 0.0);
+    }
+}
