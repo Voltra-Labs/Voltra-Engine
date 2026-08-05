@@ -21,6 +21,12 @@ A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs
   hand-rolled swapchain code.
 - **Workspace-first.** Every subsystem is its own crate with an explicit
   dependency direction. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Prior art beats invention.** Writing the core systems in-house does not mean
+  guessing at them. Where Unity, Unreal, Godot or Bevy have already settled a
+  question — where the editor camera lives, how input is scoped to a viewport,
+  what a scene file holds — that answer is researched first and adopted or
+  rejected for a stated reason. The reasons live in the "Decisions" section of
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Requirements
 
