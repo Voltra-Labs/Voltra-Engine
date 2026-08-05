@@ -106,7 +106,7 @@ impl App {
     /// from the viewport panel. A game reads [`Input`] and moves its own
     /// camera.
     fn update(&mut self) {
-        let _dt = self.clock.tick().as_secs_f32();
+        self.clock.tick();
     }
 
     /// Draws the world straight to the window. No UI, no intermediate texture.

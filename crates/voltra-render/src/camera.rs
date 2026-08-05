@@ -88,9 +88,11 @@ impl Camera2D {
 
     /// Sets `zoom`, clamped to [`Self::MIN_ZOOM`]..=[`Self::MAX_ZOOM`].
     ///
-    /// `NaN` leaves the previous value alone: it compares false against every
-    /// bound, so `clamp` would panic and a bare assignment would poison the
-    /// projection matrix for every later frame.
+    /// `NaN` leaves the previous value alone: `f32::clamp` only panics when a
+    /// bound is `NaN` or `min > max`, neither true here, so a `NaN` `self`
+    /// would pass straight through unclamped. The guard exists anyway because
+    /// without it `zoom` would silently become `NaN` and stay poisoned —
+    /// every later frame's projection matrix depends on it.
     pub fn set_zoom(&mut self, zoom: f32) {
         if zoom.is_nan() {
             return;
@@ -113,7 +115,9 @@ impl Camera2D {
 
     /// A viewport no smaller than one point per axis.
     ///
-    /// A panel dragged shut reports zero, and both conversions divide by this.
+    /// A panel dragged shut reports zero. `viewport_to_world` divides by this;
+    /// `world_to_viewport` multiplies by it, but calls this first so both
+    /// conversions agree on the same guarded value.
     fn guard(viewport: Vec2) -> Vec2 {
         viewport.max(Vec2::ONE)
     }

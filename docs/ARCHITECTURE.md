@@ -177,16 +177,24 @@ Navigation therefore lives in `voltra-editor::camera::ViewportCamera`, and
 
 Two consequences worth stating:
 
-- **Scroll scoping is egui's job; keyboard scoping is ours.**
-  `InputState::smooth_scroll_delta` is zeroed by whichever `ScrollArea`
-  consumed it, so the wheel arrives at `ViewportCamera` already scoped — using
-  the raw delta instead is exactly what let the old code get this wrong:
-  scrolling the hierarchy zoomed the scene. Keys get no such help: `keys_down`
+- **Scroll and keyboard scoping to the viewport are both ours, not egui's.**
+  `ViewportCamera` reads `InputState::smooth_scroll_delta` only when
+  `response.hover_pos()` is `Some`, so a scroll over the hierarchy never
+  reaches it regardless of what egui does with the delta elsewhere. A
+  `ScrollArea` does additionally zero `smooth_scroll_delta` once it has
+  actually scrolled — gated on `scrolling_up || scrolling_down`, so a list
+  that fits entirely, or one already at its end, leaves the delta untouched —
+  but that is a courtesy to *other* consumers of the delta, not the reason
+  `ViewportCamera` gets this right; using the raw delta instead of the
+  smoothed one is what let the old code get it wrong, by zooming the scene
+  on a scroll over the hierarchy. Keys get no such courtesy at all: `keys_down`
   is populated from the raw `Event::Key` regardless of focus, and
   `count_and_consume_key` only strips matched events out of `self.events`,
   never out of `keys_down`, so `i.key_down(Key::W)` reads true with a text
-  field focused. `WASD` stays off the camera only because
-  `ViewportCamera::navigate` gates on `response.hovered()` itself.
+  field focused. `ViewportCamera::navigate` therefore gates keys on two
+  things of its own: `response.hovered()` scopes them to the viewport, and
+  `Context::egui_wants_keyboard_input` backs off again while a widget holds
+  focus.
 - **Zoom is clamped, in the layer that divides by it.** `Camera2D::zoom` is
   private behind `set_zoom`, which clamps to `MIN_ZOOM`..=`MAX_ZOOM` and refuses
   `NaN`. Godot does the same (`CLAMP` in `EditorZoomWidget::set_zoom`); so does
