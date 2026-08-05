@@ -43,6 +43,72 @@ impl Camera2D {
         Vec2::new(half_height * self.aspect, half_height)
     }
 
+    /// Floor and ceiling for [`Self::set_zoom`].
+    ///
+    /// Unbounded zoom is not a theoretical problem: `half_extents` divides by
+    /// `zoom`, so zero produces infinities and a large enough value produces
+    /// denormals. Godot clamps its editor zoom for the same reason.
+    pub const MIN_ZOOM: f32 = 1.0 / 128.0;
+    pub const MAX_ZOOM: f32 = 128.0;
+
+    /// The world point under a viewport pixel.
+    ///
+    /// `point` is viewport-local and **Y-down**, which is what every UI toolkit
+    /// reports; world space is Y-up, hence the flip on that axis alone.
+    ///
+    /// Assumes `self.aspect` matches `viewport`'s. `App` keeps it so; if it
+    /// ever did not, the image on screen would already be stretched.
+    pub fn viewport_to_world(&self, point: Vec2, viewport: Vec2) -> Vec2 {
+        let viewport = Self::guard(viewport);
+        let half = self.half_extents();
+        // Normalised to 0..1 across the viewport, then to -1..1 about its
+        // centre, then scaled by what the camera covers.
+        let normalised = point / viewport;
+        let centred = Vec2::new(normalised.x * 2.0 - 1.0, 1.0 - normalised.y * 2.0);
+        self.position + centred * half
+    }
+
+    /// Inverse of [`Self::viewport_to_world`].
+    pub fn world_to_viewport(&self, world: Vec2, viewport: Vec2) -> Vec2 {
+        let viewport = Self::guard(viewport);
+        let half = self.half_extents();
+        let centred = (world - self.position) / half;
+        let normalised = Vec2::new(centred.x * 0.5 + 0.5, 0.5 - centred.y * 0.5);
+        normalised * viewport
+    }
+
+    /// Sets `zoom`, clamped to [`Self::MIN_ZOOM`]..=[`Self::MAX_ZOOM`].
+    ///
+    /// `NaN` leaves the previous value alone: it compares false against every
+    /// bound, so `clamp` would panic and a bare assignment would poison the
+    /// projection matrix for every later frame.
+    pub fn set_zoom(&mut self, zoom: f32) {
+        if zoom.is_nan() {
+            return;
+        }
+        self.zoom = zoom.clamp(Self::MIN_ZOOM, Self::MAX_ZOOM);
+    }
+
+    /// Scales the zoom by `factor`, keeping the world point under `anchor`
+    /// under `anchor` afterwards.
+    ///
+    /// Measuring the same anchor before and after is what makes this correct at
+    /// the clamp too: if `set_zoom` refused the change, the two samples are
+    /// equal and the camera does not move.
+    pub fn zoom_around(&mut self, anchor: Vec2, viewport: Vec2, factor: f32) {
+        let before = self.viewport_to_world(anchor, viewport);
+        self.set_zoom(self.zoom * factor);
+        let after = self.viewport_to_world(anchor, viewport);
+        self.position += before - after;
+    }
+
+    /// A viewport no smaller than one point per axis.
+    ///
+    /// A panel dragged shut reports zero, and both conversions divide by this.
+    fn guard(viewport: Vec2) -> Vec2 {
+        viewport.max(Vec2::ONE)
+    }
+
     /// The matrix handed to the shader.
     ///
     /// The `directx` projection and not the `opengl` or `vulkan` one: glam
@@ -194,5 +260,133 @@ mod tests {
             camera.view_projection().to_cols_array_2d()
         );
         assert_eq!(size_of::<CameraUniform>(), 16 * size_of::<f32>());
+    }
+
+    /// A viewport that is not square and not a round number, so an axis mix-up
+    /// cannot pass by coincidence.
+    fn viewport() -> Vec2 {
+        Vec2::new(800.0, 600.0)
+    }
+
+    fn camera_for(viewport: Vec2) -> Camera2D {
+        Camera2D::new(Vec2::new(3.0, -2.0), 1.5, viewport.x / viewport.y)
+    }
+
+    #[test]
+    fn viewport_centre_is_the_camera_position() {
+        let viewport = viewport();
+        let camera = camera_for(viewport);
+        let world = camera.viewport_to_world(viewport * 0.5, viewport);
+        assert!(
+            (world - camera.position).length() < 1e-5,
+            "centre mapped to {world}, expected {}",
+            camera.position
+        );
+    }
+
+    #[test]
+    fn viewport_top_left_is_up_and_to_the_left() {
+        let viewport = viewport();
+        let camera = camera_for(viewport);
+        let half = camera.half_extents();
+        // Top-left in a Y-down viewport is minimum x and *maximum* y in world
+        // space. Getting this flip wrong is the classic silent bug.
+        let expected = camera.position + Vec2::new(-half.x, half.y);
+        let world = camera.viewport_to_world(Vec2::ZERO, viewport);
+        assert!(
+            (world - expected).length() < 1e-5,
+            "got {world}, want {expected}"
+        );
+    }
+
+    #[test]
+    fn viewport_and_world_round_trip() {
+        let viewport = viewport();
+        for zoom in [Camera2D::MIN_ZOOM, 0.25, 1.0, 7.5, Camera2D::MAX_ZOOM] {
+            let camera = Camera2D::new(Vec2::new(-4.0, 9.0), zoom, viewport.x / viewport.y);
+            for point in [
+                Vec2::ZERO,
+                viewport,
+                viewport * 0.5,
+                Vec2::new(123.0, 456.0),
+            ] {
+                let back =
+                    camera.world_to_viewport(camera.viewport_to_world(point, viewport), viewport);
+                // A twentieth of a point, not a thousandth. `world_to_viewport`
+                // subtracts two world coordinates of magnitude ~9 to get a
+                // difference of ~0.008 at MAX_ZOOM, then divides by an equally
+                // small half-extent. f32 carries about seven digits, so that
+                // cancellation costs real precision — the observed error at the
+                // ceiling is ~0.006 points. This is inherent to f32 world
+                // coordinates, not to the algorithm, and a twentieth of a pixel
+                // is far below anything visible.
+                assert!(
+                    (back - point).length() < 0.05,
+                    "zoom {zoom}: {point} round-tripped to {back}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn zoom_around_keeps_the_anchor_world_point_still() {
+        let viewport = viewport();
+        let mut camera = camera_for(viewport);
+        // Off-centre on both axes: a centred zoom would pass a centred anchor.
+        let anchor = Vec2::new(150.0, 500.0);
+        let before = camera.viewport_to_world(anchor, viewport);
+
+        camera.zoom_around(anchor, viewport, 1.7);
+
+        let after = camera.viewport_to_world(anchor, viewport);
+        assert!(
+            (after - before).length() < 1e-4,
+            "anchor drifted from {before} to {after}"
+        );
+        assert!(camera.zoom > 1.5, "zoom did not increase: {}", camera.zoom);
+    }
+
+    #[test]
+    fn set_zoom_clamps_both_ends() {
+        let mut camera = Camera2D::default();
+        camera.set_zoom(f32::INFINITY);
+        assert_eq!(camera.zoom, Camera2D::MAX_ZOOM);
+        camera.set_zoom(0.0);
+        assert_eq!(camera.zoom, Camera2D::MIN_ZOOM);
+        camera.set_zoom(-5.0);
+        assert_eq!(camera.zoom, Camera2D::MIN_ZOOM);
+    }
+
+    #[test]
+    fn set_zoom_ignores_nan() {
+        let mut camera = Camera2D::default();
+        camera.set_zoom(2.0);
+        camera.set_zoom(f32::NAN);
+        assert_eq!(camera.zoom, 2.0, "NaN must leave the previous zoom alone");
+    }
+
+    #[test]
+    fn zoom_around_at_the_clamp_does_not_drift() {
+        let viewport = viewport();
+        let mut camera = Camera2D::new(Vec2::ZERO, Camera2D::MAX_ZOOM, viewport.x / viewport.y);
+        let anchor = Vec2::new(10.0, 20.0);
+
+        camera.zoom_around(anchor, viewport, 2.0);
+
+        // Zoom was already at the ceiling, so nothing may move. Without this
+        // the camera slides sideways every notch once the user hits the limit.
+        assert_eq!(camera.zoom, Camera2D::MAX_ZOOM);
+        assert!(
+            camera.position.length() < 1e-6,
+            "drifted to {}",
+            camera.position
+        );
+    }
+
+    #[test]
+    fn a_degenerate_viewport_stays_finite() {
+        let camera = Camera2D::default();
+        let world = camera.viewport_to_world(Vec2::ZERO, Vec2::ZERO);
+        assert!(world.is_finite(), "got {world}");
     }
 }
