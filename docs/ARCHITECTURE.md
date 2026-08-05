@@ -156,6 +156,42 @@ tests in `tests/headless_egui.rs`:
   second view in the non-sRGB format. `view()` there costs a visible darkening
   that no validation layer reports.
 
+### The editor owns the editor camera
+
+`voltra-core` used to read `WASD`, the wheel and `R` in `App::update` and fly
+`Renderer::camera` with them. That made the platform layer decide what a pan
+gesture is, and handed editor bindings to any game taking the no-UI path.
+
+Checked against the engines that have already answered this:
+
+- Unity's scene camera is `Editor/Mono/SceneView/SceneView.cs`, in the
+  `UnityEditor` assembly; `SceneView` extends `EditorWindow`.
+- Unreal navigates through `FEditorViewportClient`, an editor-module type.
+- Godot handles 2D navigation in `CanvasItemEditor`, an editor plugin, not in
+  `Camera2D`.
+- Bevy ships no controller in `bevy_render`.
+
+Unanimous: **the render layer exposes a camera, the tool decides how it moves.**
+Navigation therefore lives in `voltra-editor::camera::ViewportCamera`, and
+`App::update` touches no camera at all.
+
+Two consequences worth stating:
+
+- **Input scoping is egui's job, not ours.** `InputState::smooth_scroll_delta`
+  is zeroed by whichever `ScrollArea` consumed it, and keys do not arrive while
+  a widget holds focus. Reimplementing that in `Input` would duplicate a
+  resolution egui has already made — and get it wrong, as the old code did:
+  scrolling the hierarchy zoomed the scene.
+- **Zoom is clamped, in the layer that divides by it.** `Camera2D::zoom` is
+  private behind `set_zoom`, which clamps to `MIN_ZOOM`..=`MAX_ZOOM` and refuses
+  `NaN`. Godot does the same (`CLAMP` in `EditorZoomWidget::set_zoom`); so does
+  every editor that has shipped a zoom control. Steps are multiplicative for the
+  same reason theirs are — a notch should feel the same at any magnification.
+
+`viewport_to_world` / `world_to_viewport` sit on `Camera2D` rather than in the
+editor because the projection lives there. Picking, gizmos and a grid overlay
+will all want them.
+
 ### wgpu over raw Vulkan or OpenGL
 
 The C++ engine was OpenGL-only. wgpu gives Vulkan/DX12/Metal/GL/WebGPU from one
@@ -197,3 +233,6 @@ Same problem, same rule: read the source, not a tutorial.
 | Panel size | `default_size`, not `default_width` / `default_height` |
 | Menus | `MenuBar::new().ui(ui, …)`; close an open menu with `ui.close()` |
 | Images | `ImageData` has only the `Color` variant; the `Font` one is gone |
+| Widget input | `egui::Image` is inert unless given `.sense(Sense::drag())`; without it the `Response` reports no drag and no hover |
+| Scroll | Read `InputState::smooth_scroll_delta`, not the raw one — a `ScrollArea` zeroes it once it has consumed it, which is what scopes the wheel to a panel |
+| Pointer position | `Response::hover_pos` is in global screen points; subtract `response.rect.min` for widget-local ones |
