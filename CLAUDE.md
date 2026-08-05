@@ -52,6 +52,15 @@ docs/                ARCHITECTURE.md, CONVENTIONS.md
   from the planned list in ARCHITECTURE.md.
 - No `unwrap()` outside tests. `expect("why this cannot fail")` when the
   invariant is real. Log via `log`, never `println!`.
+- **Build it robust and scalable, never "good enough to move on".** This is a
+  long-lived engine, not a demo. A shortcut taken to close a task becomes the
+  thing the next subsystem is built on. Concretely: no hardcoded values where
+  the engine will need a parameter, no special case where the general case is
+  the same amount of work, no silent failure where an error should propagate,
+  no data structure chosen for one caller when the second caller is already
+  planned. Handle the empty, the resized and the despawned case at the time the
+  code is written. If the robust version is genuinely much larger, say so and
+  ask — do not quietly ship the shortcut.
 
 ## Verify graphics APIs, do not recall them
 
@@ -116,10 +125,31 @@ Installed and expected to be used (all user-scope; skip any that is absent):
 | **superpowers** | Workflow skills: `brainstorming` and `writing-plans` before a subsystem, `test-driven-development` for pure logic (ECS, math), `systematic-debugging` when a bug's cause is unknown, `subagent-driven-development` and `dispatching-parallel-agents` when fanning out, `verification-before-completion` before saying done. |
 | **security-guidance** | Runs on edits and commits. Take its findings seriously in asset loading and deserialization paths. |
 | **claude-md-management** | `/revise-claude-md` when this file drifts from reality. |
-| **caveman** | Response-compression style. On request only; never change register unprompted. |
+| **caveman** | Response style. **Always on** — see below. |
 
-Prefer a skill over improvising a workflow. `systematic-debugging` in particular
+**caveman is the default register in this repo.** Answer terse, no filler, no
+pleasantries, fragments fine. It applies from the first reply of a session
+without being asked, and it does not decay over a long conversation. Full
+technical substance stays: code blocks, API names, error strings and commit
+messages are written normally and never compressed. Drop out of it only for
+security warnings, destructive-action confirmations, and multi-step sequences
+where terseness would make the order ambiguous — then resume. Off only if the
+user says "stop caveman" / "normal mode".
+
+**Invoke superpowers before starting work, not after.** Gather the context and
+decide the shape first: `brainstorming` before any new feature or subsystem —
+including ones that look small — then `writing-plans` if it spans more than a
+couple of files, `test-driven-development` for pure logic, and
+`systematic-debugging` the moment a cause is unknown. Finish with
+`verification-before-completion`. Improvising the workflow is what produces the
+shortcuts the hard rule above forbids; `systematic-debugging` in particular
 beats guessing at a graphics bug — GPU issues punish speculation.
+
+**Context7 is a lookup, not a store.** Query it to *read* current `wgpu` /
+`winit` / `egui` docs before writing graphics or UI code — that part is
+mandatory. It cannot save anything. Findings that must survive the session go in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (API differences, design decisions)
+or in a doc comment next to the code they explain.
 
 ## Git
 
