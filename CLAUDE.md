@@ -52,6 +52,15 @@ docs/                ARCHITECTURE.md, CONVENTIONS.md
   from the planned list in ARCHITECTURE.md.
 - No `unwrap()` outside tests. `expect("why this cannot fail")` when the
   invariant is real. Log via `log`, never `println!`.
+- **One concept per file, one responsibility per folder.** CONVENTIONS.md sets
+  the bar and it is not optional: split a module into a directory once it passes
+  roughly 300 lines or grows a second concept, preferring `foo.rs` + `foo/` over
+  `foo/mod.rs`. If describing a file needs the word "and", it is two files.
+  Do not pile new code into `voltra-core` or `voltra-editor` because they happen
+  to be where the wiring lives — a subsystem gets its own module directory, and
+  its own crate once it stops being describable without naming another one.
+  Split *before* adding to an oversized file, in its own move-only commit, so
+  the split and the new behaviour never share a diff.
 - **Build it robust and scalable, never "good enough to move on".** This is a
   long-lived engine, not a demo. A shortcut taken to close a task becomes the
   thing the next subsystem is built on. Concretely: no hardcoded values where
