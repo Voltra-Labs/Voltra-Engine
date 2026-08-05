@@ -6,10 +6,13 @@
 //! `CanvasItemEditor`, all for the same reason: a shipped game moves its own
 //! camera and must not inherit an editor's bindings.
 //!
-//! Input scoping is delegated to egui rather than reimplemented.
-//! `smooth_scroll_delta` is already zeroed by whichever `ScrollArea` consumed
-//! it, and keys never arrive while a widget holds focus, so neither a scroll
-//! over the hierarchy nor typing into a field can reach the camera.
+//! Input scoping is partly egui's job and partly ours. `smooth_scroll_delta`
+//! arrives already scoped: whichever `ScrollArea` consumed it zeroes it out,
+//! so a scroll over the hierarchy cannot also zoom the scene. Keys get no such
+//! help — `keys_down` is populated from the raw key events regardless of which
+//! widget holds focus — so `ViewportCamera::navigate` scopes them itself, by
+//! gating on `response.hovered()` and on `Context::egui_wants_keyboard_input`,
+//! so typing into a focused field cannot also pan the camera.
 
 use voltra_core::egui::{Key, PointerButton, Response, Ui};
 use voltra_render::glam::Vec2;
@@ -66,7 +69,7 @@ impl ViewportCamera {
             }
         }
 
-        if !response.hovered() {
+        if !response.hovered() || ui.ctx().egui_wants_keyboard_input() {
             return;
         }
 
