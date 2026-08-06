@@ -261,6 +261,83 @@ texture for the whole batch, so there is no per-sprite alpha to test. A quad tes
 is not an approximation here; it is the exact answer until sprites get their own
 textures.
 
+### When 3D arrives: one world, two render paths
+
+**Nothing in this entry is built.** The engine is 2D today and CLAUDE.md forbids
+building 3D scaffolding early. This records the *shape* 3D will take, so that
+decisions made now — a scene file format above all — are not made accidentally
+against it. It is a direction, not a design; 3D gets its own spec when there is
+code for it.
+
+#### What the established engines actually do
+
+| Engine | Scene model | Render path | Transform | Physics |
+| --- | --- | --- | --- | --- |
+| **Godot** | Two trees: `CanvasItem` and `Node3D` | Two paths, separate by design | `Transform2D` and `Transform3D` | Two engines |
+| **Unity** | One `GameObject` graph | 2D is an orthographic camera over the 3D path | One, always 3D | Box2D and PhysX |
+| **Bevy** | One `World` | Two render subgraphs, `Core2d` and `Core3d`, one per camera | One, always 3D | Third-party, per-dimension |
+| **Unreal** | 3D only | 3D only — Paper2D sprites are quads in the world | One, 3D | One |
+
+Two things are unanimous and one is not.
+
+**Unanimous: the render path splits, and so does physics.** Not one path with a
+flag — separate paths. Bevy's `Core3d` runs a depth prepass and `Core2d` does
+not; Godot's canvas renderer and its 3D renderer share only low-level GPU
+resources. Nobody parameterises one into the other, because the differences are
+not parameters: depth testing versus painter's order, frustum versus rectangle,
+per-pixel sorting versus a sort key.
+
+**Not unanimous: whether the scene model splits.** Godot duplicates it. Unity and
+Bevy share it and pay for 2D objects carrying a 3D transform they never use.
+
+#### What Voltra will do
+
+**One `World`, following Unity and Bevy.** Godot splits its *scene tree*; we do
+not have one, we have an ECS. Copying that split would mean two `World`s, and
+with it the duplication Godot lives with — two cameras, two physics, two of
+everything above the renderer. `voltra-ecs` will never learn that 3D exists.
+
+**Separate render paths, following Godot.** The camera component selects the
+path: a 2D camera gets no depth buffer and draws in `sort_order`; a 3D camera
+gets a depth buffer and a frustum. `voltra-render` grows a second path, not a
+branch inside the first.
+
+**`Transform` and `Transform3D` as separate components in that one world.** This
+is the one place we deviate from both favourites, and the deviation is earned by
+the storage we chose. Unity and Bevy cannot do this: their transform is a single
+type on a single component slot, so a 2D sprite pays for a `Vec3` and a rotation
+quaternion it never reads. Our ECS is one sparse set per component type, so an
+entity holds whichever transform it needs and a query costs nothing for the other.
+Godot reaches the same outcome through separate node types; we reach it through
+separate components, which is the ECS-native form of the same idea.
+
+**Consequences for code written today**, all of which CLAUDE.md already requires:
+
+- `Vertex::position` stays `[f32; 2]`. 3D gets its own vertex type rather than a
+  widened one, so a sprite never carries a dead Z.
+- The 2D path never gains a depth buffer, before or after 3D exists.
+- `Sprite::sort_order` stays 2D. 3D sorts by depth; these are different
+  mechanisms, not one mechanism with a parameter.
+- **A scene file records which of the two an entity is**, and records a 2D
+  transform as two floats rather than three. This is the decision this entry
+  exists to protect: a file format is the one thing that cannot be refactored
+  freely later, because files written in the old shape already exist.
+
+#### Rejected
+
+- **Two worlds, Godot-style.** Buys clean separation at the cost of duplicating
+  every subsystem above the renderer. Godot accepts that trade because its scene
+  tree is the engine's central abstraction; ours is the ECS, and an ECS already
+  separates by component.
+- **One 3D transform for everything, Unity- and Bevy-style.** Simpler, and it is
+  what both of our reference engines do — but it taxes every 2D sprite forever
+  for a dimension the engine may not use for years, and our component storage
+  makes the tax avoidable. Revisit if sharing systems between 2D and 3D turns out
+  to matter more than the per-entity cost.
+- **3D only, Unreal-style, with 2D as quads in a 3D world.** Coherent, and it is
+  why Unreal has no 2D/3D split to maintain. Rejected because 2D is what this
+  engine is for right now, and paying 3D's costs to get it would be backwards.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
