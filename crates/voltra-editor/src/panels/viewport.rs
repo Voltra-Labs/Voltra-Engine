@@ -24,9 +24,15 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             let scene = ui.add(
                 egui::Image::new(egui::load::SizedTexture::new(frame.viewport(), available))
                     // Without this the image is inert decoration and the
-                    // pointer never reaches the camera.
-                    .sense(egui::Sense::drag()),
+                    // pointer never reaches the camera or the selection.
+                    .sense(egui::Sense::click_and_drag()),
             );
+
+            // Before navigation: a click and a drag are mutually exclusive in
+            // egui, so this cannot swallow a pan.
+            if scene.clicked() {
+                editor.selected = crate::picking::clicked_entity(&scene, frame);
+            }
 
             editor.camera.navigate(ui, &scene, frame.camera);
         });

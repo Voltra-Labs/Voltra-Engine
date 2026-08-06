@@ -1,6 +1,7 @@
 mod camera;
 mod editor;
 mod panels;
+mod picking;
 
 use editor::Editor;
 use voltra_core::{App, WindowConfig};
