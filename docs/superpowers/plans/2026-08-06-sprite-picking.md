@@ -590,28 +590,34 @@ mod tests {
 
     #[test]
     fn picking_agrees_with_the_draw_order() {
-        // The two orderings are one definition used twice. If they diverge, a
-        // click selects something other than what is on top, so this test binds
-        // them together rather than trusting the comment that says they match.
+        // `sort_order` and spawn order deliberately disagree: the sprite that
+        // must win is spawned FIRST, so it carries the *lower* entity index.
+        //
+        // That is what makes this test about composition rather than about
+        // either key alone. Order by index only and the loser wins. Swap the
+        // tuple to `(index, sort_order)` and the loser wins. Only
+        // `(sort_order, index)`, in that order, in both places, gives `top` —
+        // which is the property the whole design rests on, since a divergence
+        // would mean clicking selects something other than the visible pixels.
         let mut world = World::new();
-        spawn(
-            &mut world,
-            Transform::default(),
-            Sprite::new([1.0, 0.0, 0.0, 1.0]).with_sort_order(1),
-        );
         let top = spawn(
             &mut world,
             Transform::default(),
             Sprite::new([0.0, 1.0, 0.0, 1.0]).with_sort_order(2),
         );
+        spawn(
+            &mut world,
+            Transform::default(),
+            Sprite::new([1.0, 0.0, 0.0, 1.0]).with_sort_order(1),
+        );
 
         let batch = crate::batch::SpriteBatch::from_world(&world);
-        let last_drawn_red = batch.vertices[batch.vertices.len() - 1].color[0];
+        let last_drawn_green = batch.vertices[batch.vertices.len() - 1].color[1];
 
         assert_eq!(sprite_at(&world, Vec2::ZERO), Some(top));
         assert!(
-            last_drawn_red < 0.5,
-            "the green sprite must be drawn last, got red {last_drawn_red}"
+            last_drawn_green > 0.5,
+            "the sort_order 2 sprite must be drawn last, got green {last_drawn_green}"
         );
     }
 }
@@ -643,6 +649,21 @@ use voltra_render::glam::Vec2;
 use crate::sprite::Sprite;
 use crate::transform::Transform;
 
+/// Determinant at or below which a transform counts as collapsed.
+///
+/// Deliberately **not** `f32::EPSILON`. That constant is a *relative* precision
+/// figure — the gap between `1.0` and the next representable float — and using
+/// it as an absolute cutoff rejects any sprite with a uniform scale below about
+/// `3.5e-4`, which is small but perfectly invertible and perfectly legitimate.
+///
+/// `1e-12` is the determinant of a uniform scale of `1e-6`, a millionth of a
+/// world unit. The tightest view the camera allows is two world units divided
+/// by `Camera2D::MAX_ZOOM`, so a sprite that size is orders of magnitude below
+/// one pixel and cannot be meant to be clicked. Inverting a matrix with that
+/// determinant still produces finite numbers, well inside `f32`'s range — so
+/// this threshold is about intent, not about the arithmetic breaking down.
+const MIN_DETERMINANT: f32 = 1e-12;
+
 /// The topmost sprite whose quad contains `point`, in world space.
 ///
 /// "Topmost" is the same `(sort_order, entity index)` ordering
@@ -673,10 +694,15 @@ fn contains(transform: &Transform, point: Vec2) -> bool {
     // comparison against NaN is false. `inverse_or_zero` is worse rather than
     // better here — a zero matrix sends every point to the origin, which is
     // inside the quad, so a collapsed sprite would be pickable everywhere.
-    if matrix.determinant().abs() < f32::EPSILON {
+    if matrix.determinant().abs() < MIN_DETERMINANT {
         return false;
     }
 
+    // Inclusive on both edges, so a point exactly on a boundary is a hit. The
+    // GPU's fill convention for that same edge is its own, so a pixel on the
+    // shared border of two sprites can be picked as one and shaded as the
+    // other. A sub-pixel disagreement on a measure-zero set, and not worth a
+    // second rule to reconcile.
     let local = matrix.inverse().transform_point2(point);
     local.x.abs() <= Sprite::HALF_EXTENT && local.y.abs() <= Sprite::HALF_EXTENT
 }
