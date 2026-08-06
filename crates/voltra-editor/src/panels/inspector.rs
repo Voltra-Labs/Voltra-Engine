@@ -72,8 +72,14 @@ fn transform_ui(ui: &mut Ui, transform: &mut Transform) {
 
 fn sprite_ui(ui: &mut Ui, sprite: &mut Sprite) {
     ui.label(RichText::new("Sprite").strong());
-    ui.horizontal(|ui| {
+
+    egui::Grid::new("sprite").num_columns(2).show(ui, |ui| {
         ui.label("colour");
         ui.color_edit_button_rgba_unmultiplied(&mut sprite.color);
+        ui.end_row();
+
+        ui.label("sort order");
+        ui.add(DragValue::new(&mut sprite.sort_order));
+        ui.end_row();
     });
 }
