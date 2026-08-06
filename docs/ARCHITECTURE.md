@@ -48,7 +48,7 @@ re-exports, so a version bump is a one-line change.
 | --- | --- | --- |
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
-| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch` |
+| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 
@@ -211,6 +211,55 @@ The C++ engine was OpenGL-only. wgpu gives Vulkan/DX12/Metal/GL/WebGPU from one
 codebase, enforces resource lifetimes through `Drop`, and validates at API level
 — which removes the whole class of "forgot to delete the GPU object" bugs that
 the C++ tree kept hitting.
+
+### Draw order is a sort key on the sprite, not a Z
+
+This is a 2D engine with no depth buffer — `depth_stencil: None` in every
+pipeline — so what covers what is decided entirely by the order geometry reaches
+the GPU. That order used to be `World::query2`'s, which is sparse-set storage
+order, and a sparse set fills the hole left by a removal with its last element.
+Despawning one entity could therefore reorder two unrelated overlapping sprites.
+Alpha blending is order-dependent, so that was a rendering bug before it was a
+picking bug.
+
+`Sprite::sort_order` is an `i32`, and `SpriteBatch::from_world` sorts on
+`(sort_order, entity.index())` before emitting vertices.
+
+- **An integer, not a float.** Unity's `sortingOrder` and Godot's `z_index` are
+  both integers. Ties are then exact rather than dependent on a float's
+  representation.
+- **`entity.index()` breaks ties, and that half matters most.** Without it,
+  everything sharing the default `sort_order` of 0 — which is the common case —
+  falls straight back to storage order, and the fix would fix nothing.
+- **Named `sort_order`, not `z_index`.** Godot's name describes an axis it has
+  no relation to. `Sprite::sort_order`'s own doc comment already reserves the
+  point: when a real Z eventually exists, the name has to still be free.
+
+Picking uses the same ordering, in `voltra_scene::pick::sprite_at`. One
+definition used twice: if they diverged, a click would select something other
+than the sprite whose pixels are visible.
+
+The hit test carries the point into the sprite's local space and compares
+against the unit quad, rather than building an oriented bounding box. Rotation
+and non-uniform scale then need no separate code path. A transform whose
+determinant falls below a named `MIN_DETERMINANT` (`1e-12`) is rejected before
+the inversion — deliberately not `f32::EPSILON`, which is a *relative*
+precision figure, the gap between `1.0` and the next representable float, and
+would as an absolute floor reject a sprite that is small but perfectly
+invertible and legitimate. `1e-12` is instead the determinant of a uniform
+scale of one millionth of a world unit, far below one pixel even at the
+camera's closest zoom, so the guard is about intent rather than about
+`Mat3::inverse` breaking down: a singular matrix returns NaN rather than
+panicking, and every comparison against NaN is false, but `inverse_or_zero`
+would be worse — a zero matrix sends every point to the origin, which is inside
+the quad, so a collapsed sprite would be pickable everywhere.
+
+Rejected: **pixel-accurate hit-testing**, which is what `bevy_sprite`'s picking
+backend does. It can, because each of its sprites carries its own texture and
+therefore its own alpha. Here `Sprite` holds a colour and the renderer binds one
+texture for the whole batch, so there is no per-sprite alpha to test. A quad test
+is not an approximation here; it is the exact answer until sprites get their own
+textures.
 
 ### wgpu 30 API notes
 

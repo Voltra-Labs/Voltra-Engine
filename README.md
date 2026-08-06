@@ -50,7 +50,9 @@ cargo fmt --all
 
 The editor opens with a hierarchy on the left, an inspector on the right and the
 scene in the middle. `Scene ▸ Spawn sprite` adds an entity; selecting one in the
-hierarchy lets the inspector edit its transform and colour.
+hierarchy lets the inspector edit its transform and colour. An entity can also
+be selected by clicking it in the viewport; clicking empty space clears the
+selection.
 
 Camera controls. These belong to the editor, not the engine, and a game built
 on `voltra-core` moves its own camera. Scroll, `WASD` and `R` act only while
@@ -105,7 +107,8 @@ privileged and plain `cargo build` covers everything.
 | 7 | Transforms, sprites, batched rendering from the world | done |
 | 8 | Editor UI: hierarchy, inspector, viewport | done |
 | 9 | Scene serialization and the asset pipeline | next |
-| 10 | Gizmos, picking, physics | planned |
+| 10 | Picking: click to select, stable draw order | done |
+| 11 | Gizmos and physics | planned |
 
 ## Contributing
 
