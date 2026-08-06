@@ -52,12 +52,16 @@ The editor opens with a hierarchy on the left, an inspector on the right and the
 scene in the middle. `Scene ▸ Spawn sprite` adds an entity; selecting one in the
 hierarchy lets the inspector edit its transform and colour.
 
-Camera controls, active whenever egui is not using the input itself:
+Camera controls. These belong to the editor, not the engine, and a game built
+on `voltra-core` moves its own camera. Scroll, `WASD` and `R` act only while
+the pointer is over the scene; a middle-drag pan, once started, keeps going
+even after the pointer leaves it.
 
 | Input | Action |
 | --- | --- |
-| `W` `A` `S` `D` | Pan the camera |
-| Scroll wheel | Zoom |
+| Middle-drag | Pan |
+| Scroll wheel | Zoom about the cursor |
+| `W` `A` `S` `D` | Pan |
 | `R` | Reset the camera |
 
 Useful environment variables (read by `wgpu`):

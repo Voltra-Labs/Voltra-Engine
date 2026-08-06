@@ -1,6 +1,8 @@
+mod camera;
+mod editor;
 mod panels;
 
-use panels::Editor;
+use editor::Editor;
 use voltra_core::{App, WindowConfig};
 use voltra_render::glam::Vec2;
 use voltra_scene::{Sprite, Transform};

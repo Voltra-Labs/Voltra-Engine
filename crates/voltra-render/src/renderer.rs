@@ -35,15 +35,18 @@ impl Renderer {
         let white = Texture::white(ctx.device(), ctx.queue());
         let white_bind_group = white.create_bind_group(ctx.device(), &texture_layout);
 
+        let camera = {
+            let mut camera = Camera2D::default();
+            camera.aspect = aspect_of(width, height);
+            camera
+        };
+
         Self {
             ctx,
             flat_color,
             camera_binding,
             white_bind_group,
-            camera: Camera2D {
-                aspect: aspect_of(width, height),
-                ..Default::default()
-            },
+            camera,
             clear_color: wgpu::Color {
                 r: 0.1,
                 g: 0.1,
