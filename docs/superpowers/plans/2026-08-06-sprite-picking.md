@@ -561,11 +561,31 @@ mod tests {
             Sprite::default(),
         );
 
-        // A singular matrix inverts to infinities and NaN. Depending on how the
-        // comparison is written that makes a collapsed sprite either unpickable
-        // or pickable everywhere; both are wrong, and neither reports itself.
+        // Honest about its own weakness: this passes with the determinant check
+        // removed too. `glam` inverts an exactly-singular matrix to NaN, and
+        // every comparison against NaN is false, so the sprite is skipped by
+        // accident rather than by decision. Kept because it pins the behaviour
+        // we want, but the test that makes the guard load-bearing is the next
+        // one.
         assert_eq!(sprite_at(&world, Vec2::ZERO), None);
         assert_eq!(sprite_at(&world, Vec2::new(100.0, 100.0)), None);
+    }
+
+    #[test]
+    fn a_near_zero_scale_sprite_is_never_picked() {
+        let mut world = World::new();
+        // Nearly singular rather than singular, which is the case the
+        // determinant check actually decides. This matrix still inverts to
+        // finite numbers, so NaN does not rescue us: without the check, the
+        // inverse scales x by 1e30, the origin maps to the origin, and a sprite
+        // far thinner than a pixel is pickable along its entire centre line.
+        spawn(
+            &mut world,
+            Transform::default().with_scale(Vec2::new(1e-30, 1.0)),
+            Sprite::default(),
+        );
+
+        assert_eq!(sprite_at(&world, Vec2::ZERO), None);
     }
 
     #[test]
@@ -668,7 +688,7 @@ fn contains(transform: &Transform, point: Vec2) -> bool {
 cargo test -p voltra-scene --lib pick
 ```
 
-Expected: PASS, all nine.
+Expected: PASS, all ten.
 
 - [ ] **Step 5: Check the workspace**
 
