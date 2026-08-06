@@ -1,5 +1,7 @@
 //! The sprite component: a coloured quad, sized by its entity's transform.
 
+use voltra_ecs::Entity;
+
 /// A coloured quad. Its size comes from the entity's [`Transform`].
 ///
 /// [`Transform`]: crate::transform::Transform
@@ -49,4 +51,14 @@ impl Sprite {
         self.sort_order = order;
         self
     }
+}
+
+/// The ordering both drawing and picking use: `sort_order` first, then the
+/// entity's index to break ties.
+///
+/// One function rather than two matching tuples. If batching and picking ever
+/// disagreed, a click would select something other than the sprite whose pixels
+/// are visible, and nothing would report it.
+pub fn draw_key(entity: Entity, sprite: &Sprite) -> (i32, u32) {
+    (sprite.sort_order, entity.index())
 }

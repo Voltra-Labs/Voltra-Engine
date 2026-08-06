@@ -10,5 +10,5 @@ pub mod sprite;
 pub mod transform;
 
 pub use batch::SpriteBatch;
-pub use sprite::Sprite;
+pub use sprite::{draw_key, Sprite};
 pub use transform::Transform;

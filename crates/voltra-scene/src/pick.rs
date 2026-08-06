@@ -6,7 +6,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
-use crate::sprite::Sprite;
+use crate::sprite::{draw_key, Sprite};
 use crate::transform::Transform;
 
 /// Determinant at or below which a transform counts as collapsed.
@@ -35,7 +35,7 @@ pub fn sprite_at(world: &World, point: Vec2) -> Option<Entity> {
     world
         .query2::<Transform, Sprite>()
         .filter(|(_entity, transform, _sprite)| contains(transform, point))
-        .max_by_key(|(entity, _transform, sprite)| (sprite.sort_order, entity.index()))
+        .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite))
         .map(|(entity, _transform, _sprite)| entity)
 }
 

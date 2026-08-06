@@ -4,7 +4,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::Vertex;
 
-use crate::sprite::Sprite;
+use crate::sprite::{draw_key, Sprite};
 use crate::transform::Transform;
 
 /// The unit quad every sprite is built from, as `(corner, uv)` pairs.
@@ -53,9 +53,13 @@ impl SpriteBatch {
     /// entity is despawned. `Entity::index` breaks ties so sprites sharing a
     /// `sort_order` keep a stable order too; without it the common case, where
     /// everything sits on 0, would be exactly as unstable as before.
+    ///
+    /// Sorted with the unstable variant: `draw_key` is unique per entity, so
+    /// there are never any equal keys for stability to preserve, and a
+    /// dropped tiebreaker fails louder without it.
     pub fn from_world(world: &World) -> Self {
         let mut sprites: Vec<_> = world.query2::<Transform, Sprite>().collect();
-        sprites.sort_by_key(|(entity, _, sprite)| (sprite.sort_order, entity.index()));
+        sprites.sort_unstable_by_key(|(entity, _, sprite)| draw_key(*entity, sprite));
 
         let mut batch = Self::default();
         for (_entity, transform, sprite) in sprites {
