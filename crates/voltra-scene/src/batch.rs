@@ -1,6 +1,7 @@
 //! Turning a world full of sprites into vertex and index data.
 
 use voltra_ecs::World;
+use voltra_render::glam::Vec2;
 use voltra_render::Vertex;
 
 use crate::sprite::Sprite;
@@ -11,11 +12,23 @@ use crate::transform::Transform;
 /// Centred on the origin so scale and rotation act about the sprite's middle
 /// rather than dragging it away from its own position. V runs opposite to Y
 /// because image rows go down while clip space goes up.
-const CORNERS: [(voltra_render::glam::Vec2, [f32; 2]); 4] = [
-    (voltra_render::glam::Vec2::new(-0.5, 0.5), [0.0, 0.0]),
-    (voltra_render::glam::Vec2::new(-0.5, -0.5), [0.0, 1.0]),
-    (voltra_render::glam::Vec2::new(0.5, -0.5), [1.0, 1.0]),
-    (voltra_render::glam::Vec2::new(0.5, 0.5), [1.0, 0.0]),
+const CORNERS: [(Vec2, [f32; 2]); 4] = [
+    (
+        Vec2::new(-Sprite::HALF_EXTENT, Sprite::HALF_EXTENT),
+        [0.0, 0.0],
+    ),
+    (
+        Vec2::new(-Sprite::HALF_EXTENT, -Sprite::HALF_EXTENT),
+        [0.0, 1.0],
+    ),
+    (
+        Vec2::new(Sprite::HALF_EXTENT, -Sprite::HALF_EXTENT),
+        [1.0, 1.0],
+    ),
+    (
+        Vec2::new(Sprite::HALF_EXTENT, Sprite::HALF_EXTENT),
+        [1.0, 0.0],
+    ),
 ];
 
 /// Two triangles over those four corners.
@@ -33,13 +46,21 @@ pub struct SpriteBatch {
 
 impl SpriteBatch {
     /// Walks every entity holding both a [`Transform`] and a [`Sprite`].
+    ///
+    /// Collected and sorted rather than pushed as we go. With no depth buffer,
+    /// the order geometry is written in is the order it is drawn in — and
+    /// `query2` yields sparse-set storage order, which shifts when an unrelated
+    /// entity is despawned. `Entity::index` breaks ties so sprites sharing a
+    /// `sort_order` keep a stable order too; without it the common case, where
+    /// everything sits on 0, would be exactly as unstable as before.
     pub fn from_world(world: &World) -> Self {
-        let mut batch = Self::default();
+        let mut sprites: Vec<_> = world.query2::<Transform, Sprite>().collect();
+        sprites.sort_by_key(|(entity, _, sprite)| (sprite.sort_order, entity.index()));
 
-        for (_entity, transform, sprite) in world.query2::<Transform, Sprite>() {
+        let mut batch = Self::default();
+        for (_entity, transform, sprite) in sprites {
             batch.push(transform, sprite);
         }
-
         batch
     }
 
@@ -92,7 +113,6 @@ impl SpriteBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_render::glam::Vec2;
 
     fn world_with(sprites: &[(Transform, Sprite)]) -> World {
         let mut world = World::new();
@@ -227,5 +247,131 @@ mod tests {
 
         let count = batch.vertices.len() as u16;
         assert!(batch.indices.iter().all(|&i| i < count));
+    }
+
+    /// Spawns each sprite and hands back the handles, so a test can despawn a
+    /// specific one.
+    fn world_returning_entities(
+        sprites: &[(Transform, Sprite)],
+    ) -> (World, Vec<voltra_ecs::Entity>) {
+        let mut world = World::new();
+        let mut entities = Vec::new();
+        for (transform, sprite) in sprites {
+            let e = world.spawn();
+            world.insert(e, *transform);
+            world.insert(e, *sprite);
+            entities.push(e);
+        }
+        (world, entities)
+    }
+
+    /// The x coordinate of each sprite's centre, in the order the GPU will
+    /// receive them.
+    ///
+    /// Asserting on the vertex buffer rather than on an internal list checks
+    /// the thing that actually reaches the driver. The mean of the four
+    /// corners rather than the first one: a corner sits half a unit off the
+    /// sprite's position, so reading one directly would make these tests
+    /// depend on which corner `CORNERS` happens to list first, which is
+    /// incidental to draw order.
+    fn draw_order(batch: &SpriteBatch) -> Vec<f32> {
+        batch
+            .vertices
+            .chunks(4)
+            .map(|quad| quad.iter().map(|v| v.position[0]).sum::<f32>() / 4.0)
+            .collect()
+    }
+
+    #[test]
+    fn a_higher_sort_order_is_drawn_later() {
+        // Spawned back-to-front on purpose: if the sort is missing, the
+        // insertion order survives and this fails.
+        let (world, _) = world_returning_entities(&[
+            (
+                Transform::from_translation(Vec2::new(10.0, 0.0)),
+                Sprite::default().with_sort_order(5),
+            ),
+            (
+                Transform::from_translation(Vec2::new(20.0, 0.0)),
+                Sprite::default().with_sort_order(-3),
+            ),
+        ]);
+
+        let batch = SpriteBatch::from_world(&world);
+        let xs = draw_order(&batch);
+
+        // The -3 sprite sits at x = 20 and must come first; painter's order
+        // means later is on top.
+        assert!(xs[0] > 19.0, "expected the -3 sprite first, got {xs:?}");
+        assert!(xs[1] < 11.0, "expected the 5 sprite last, got {xs:?}");
+    }
+
+    #[test]
+    fn sprites_are_drawn_in_spawn_order_by_default() {
+        let (world, _) = world_returning_entities(&[
+            (
+                Transform::from_translation(Vec2::new(1.0, 0.0)),
+                Sprite::default(),
+            ),
+            (
+                Transform::from_translation(Vec2::new(2.0, 0.0)),
+                Sprite::default(),
+            ),
+            (
+                Transform::from_translation(Vec2::new(3.0, 0.0)),
+                Sprite::default(),
+            ),
+        ]);
+
+        // A baseline, and deliberately named as one. With nothing despawned,
+        // storage order already equals spawn order, so this would pass with no
+        // sort at all — the test that actually exercises the ordering is below.
+        let xs = draw_order(&SpriteBatch::from_world(&world));
+        assert_eq!(xs, vec![1.0, 2.0, 3.0]);
+    }
+
+    #[test]
+    fn despawning_scrambles_storage_but_not_draw_order() {
+        let (mut world, entities) = world_returning_entities(&[
+            (
+                Transform::from_translation(Vec2::new(1.0, 0.0)),
+                Sprite::default(),
+            ),
+            (
+                Transform::from_translation(Vec2::new(2.0, 0.0)),
+                Sprite::default(),
+            ),
+            (
+                Transform::from_translation(Vec2::new(3.0, 0.0)),
+                Sprite::default(),
+            ),
+            (
+                Transform::from_translation(Vec2::new(4.0, 0.0)),
+                Sprite::default(),
+            ),
+        ]);
+
+        // Four sprites, and the second one goes. `SparseSet::remove` is a
+        // `swap_remove`, so the *last* element takes the freed slot: storage
+        // becomes [1, 4, 3] and an unsorted batch would draw it that way.
+        //
+        // Four rather than three on purpose. With three, removing index 1 puts
+        // the last element exactly where a stable removal would have left it,
+        // so [1, 3] comes out identical with and without the sort and the test
+        // proves nothing.
+        //
+        // Every sprite is on the default sort_order of 0, so `entity.index()`
+        // is the only thing producing this order. Drop that half of the key and
+        // `sort_by_key`'s stability preserves storage order and this fails.
+        world.despawn(entities[1]);
+
+        let xs = draw_order(&SpriteBatch::from_world(&world));
+        assert_eq!(xs, vec![1.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn a_sprite_defaults_to_sort_order_zero() {
+        assert_eq!(Sprite::default().sort_order, 0);
+        assert_eq!(Sprite::new([1.0, 0.0, 0.0, 1.0]).sort_order, 0);
     }
 }

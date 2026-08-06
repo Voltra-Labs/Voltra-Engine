@@ -226,32 +226,45 @@ Append to `#[cfg(test)] mod tests` in `crates/voltra-scene/src/batch.rs`. The ex
     }
 
     #[test]
-    fn equal_sort_orders_fall_back_to_entity_index() {
+    fn sprites_are_drawn_in_spawn_order_by_default() {
         let (world, _) = world_returning_entities(&[
             (Transform::from_translation(Vec2::new(1.0, 0.0)), Sprite::default()),
             (Transform::from_translation(Vec2::new(2.0, 0.0)), Sprite::default()),
             (Transform::from_translation(Vec2::new(3.0, 0.0)), Sprite::default()),
         ]);
 
+        // A baseline, and deliberately named as one. With nothing despawned,
+        // storage order already equals spawn order, so this would pass with no
+        // sort at all — the test that actually exercises the ordering is below.
         let xs = draw_order(&SpriteBatch::from_world(&world));
-        assert_eq!(xs, vec![1.0, 2.0, 3.0], "spawn order must be preserved");
+        assert_eq!(xs, vec![1.0, 2.0, 3.0]);
     }
 
     #[test]
-    fn despawning_one_sprite_does_not_reorder_the_others() {
+    fn despawning_scrambles_storage_but_not_draw_order() {
         let (mut world, entities) = world_returning_entities(&[
             (Transform::from_translation(Vec2::new(1.0, 0.0)), Sprite::default()),
             (Transform::from_translation(Vec2::new(2.0, 0.0)), Sprite::default()),
             (Transform::from_translation(Vec2::new(3.0, 0.0)), Sprite::default()),
+            (Transform::from_translation(Vec2::new(4.0, 0.0)), Sprite::default()),
         ]);
 
-        // This is the bug the sort exists to fix. A sparse set fills the hole
-        // left by a removal with its last element, so without the sort the
-        // third sprite jumps into the second's place in the draw order.
+        // Four sprites, and the second one goes. `SparseSet::remove` is a
+        // `swap_remove`, so the *last* element takes the freed slot: storage
+        // becomes [1, 4, 3] and an unsorted batch would draw it that way.
+        //
+        // Four rather than three on purpose. With three, removing index 1 puts
+        // the last element exactly where a stable removal would have left it,
+        // so [1, 3] comes out identical with and without the sort and the test
+        // proves nothing.
+        //
+        // Every sprite is on the default sort_order of 0, so `entity.index()`
+        // is the only thing producing this order. Drop that half of the key and
+        // `sort_by_key`'s stability preserves storage order and this fails.
         world.despawn(entities[1]);
 
         let xs = draw_order(&SpriteBatch::from_world(&world));
-        assert_eq!(xs, vec![1.0, 3.0], "the survivors must keep their order");
+        assert_eq!(xs, vec![1.0, 3.0, 4.0]);
     }
 
     #[test]
