@@ -4,8 +4,10 @@
 //! `voltra-render`, which knows nothing about entities. Dependencies point
 //! down into both and never back up.
 
+pub mod batch;
 pub mod sprite;
 pub mod transform;
 
-pub use sprite::{Sprite, SpriteBatch};
+pub use batch::SpriteBatch;
+pub use sprite::Sprite;
 pub use transform::Transform;
