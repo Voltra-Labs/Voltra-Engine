@@ -184,14 +184,20 @@ Append to `#[cfg(test)] mod tests` in `crates/voltra-scene/src/batch.rs`. The ex
         (world, entities)
     }
 
-    /// The x coordinate of each sprite's first vertex, in the order the GPU
-    /// will receive them. Asserting on the vertex buffer rather than on an
-    /// internal list checks the thing that actually reaches the driver.
+    /// The x coordinate of each sprite's centre, in the order the GPU will
+    /// receive them.
+    ///
+    /// Asserting on the vertex buffer rather than on an internal list checks
+    /// the thing that actually reaches the driver. The mean of the four
+    /// corners rather than the first one: a corner sits half a unit off the
+    /// sprite's position, so reading one directly would make these tests
+    /// depend on which corner `CORNERS` happens to list first, which is
+    /// incidental to draw order.
     fn draw_order(batch: &SpriteBatch) -> Vec<f32> {
         batch
             .vertices
             .chunks(4)
-            .map(|quad| quad[0].position[0])
+            .map(|quad| quad.iter().map(|v| v.position[0]).sum::<f32>() / 4.0)
             .collect()
     }
 
