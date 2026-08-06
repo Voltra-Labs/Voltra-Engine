@@ -5,6 +5,7 @@
 //! down into both and never back up.
 
 pub mod batch;
+pub mod pick;
 pub mod sprite;
 pub mod transform;
 
