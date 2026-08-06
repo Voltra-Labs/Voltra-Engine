@@ -20,29 +20,38 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 return;
             };
 
-            ui.label(format!(
-                "Entity {} (gen {})",
-                entity.index(),
-                entity.generation()
-            ));
-            ui.separator();
-
-            if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
-                transform_ui(ui, transform);
-            }
-            if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
+            // Every `DragValue` below gets its id from layout position, not from
+            // `entity`. Without this, selecting a different sprite that lands the
+            // same row on screen reuses the previous widget's id, and egui — which
+            // still thinks that id is mid-edit — applies the leftover text to the
+            // new entity instead of the one the user clicked. Salting the whole
+            // body by `entity` makes every id here a function of the entity too, so
+            // a selection change is a real id change and egui starts clean.
+            ui.push_id(entity, |ui| {
+                ui.label(format!(
+                    "Entity {} (gen {})",
+                    entity.index(),
+                    entity.generation()
+                ));
                 ui.separator();
-                sprite_ui(ui, sprite);
-            }
 
-            ui.separator();
-            if ui
-                .button(RichText::new("Delete").color(Color32::LIGHT_RED))
-                .clicked()
-            {
-                frame.world.despawn(entity);
-                editor.selected = None;
-            }
+                if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
+                    transform_ui(ui, transform);
+                }
+                if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
+                    ui.separator();
+                    sprite_ui(ui, sprite);
+                }
+
+                ui.separator();
+                if ui
+                    .button(RichText::new("Delete").color(Color32::LIGHT_RED))
+                    .clicked()
+                {
+                    frame.world.despawn(entity);
+                    editor.selected = None;
+                }
+            });
         });
 }
 
