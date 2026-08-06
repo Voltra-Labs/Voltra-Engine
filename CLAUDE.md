@@ -7,6 +7,38 @@ Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before changing crate
 boundaries, and [docs/CONVENTIONS.md](docs/CONVENTIONS.md) before naming
 anything. Both are short.
 
+## The engine is 2D. 3D comes later
+
+The README calls this a 2D/3D engine and 3D is genuinely on the roadmap, but
+**nothing is built for it yet and nothing should be.** Every subsystem written
+now targets 2D and only 2D.
+
+That is not aspiration, it is the current state of the tree:
+
+- `Vertex::position` is `[f32; 2]`.
+- There is no depth buffer anywhere — `depth_stencil: None` in every pipeline
+  and `depth_stencil_attachment: None` in every pass. What covers what is decided
+  by draw order, the painter's algorithm, and nothing else.
+- `Transform` is `Vec2` plus `Mat3`. `Camera2D` is orthographic.
+- `Mat4` and `Vec3` appear only in `camera.rs`, because WGSL wants a 4×4 in the
+  uniform. They are not a third dimension arriving early.
+
+What this means when writing code:
+
+- **Do not build 3D scaffolding speculatively.** No `Transform3D` beside
+  `Transform`, no depth attachment "ready for later", no z-axis on a component
+  that has no use for one. Same rule as the empty-crates one below: it rots.
+- **Do not bend a 2D design to accommodate an unbuilt 3D one.** That produces
+  two half-designs. Solve 2D properly; 3D gets its own design when there is code
+  for it.
+- **Do not name a 2D concept after an axis it is not.** Godot's `z_index` is a
+  sorting key with no relation to any Z coordinate, and the collision confuses
+  people permanently. Unity's `sortingOrder` is the better model. When a real Z
+  exists, the name must still be free.
+- 3D is not a variant of 2D here. Picking becomes a ray cast rather than a
+  point-in-quad test, sorting becomes a depth test rather than an ordered draw,
+  and the camera gains a frustum. Each is a new subsystem, not a parameter.
+
 ## Commands
 
 ```sh
