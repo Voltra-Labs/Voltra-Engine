@@ -16,12 +16,19 @@ use crate::transform::Transform;
 /// it as an absolute cutoff rejects any sprite with a uniform scale below about
 /// `3.5e-4`, which is small but perfectly invertible and perfectly legitimate.
 ///
-/// `1e-12` is the determinant of a uniform scale of `1e-6`, a millionth of a
-/// world unit. The tightest view the camera allows is two world units divided
-/// by `Camera2D::MAX_ZOOM`, so a sprite that size is orders of magnitude below
-/// one pixel and cannot be meant to be clicked. Inverting a matrix with that
-/// determinant still produces finite numbers, well inside `f32`'s range — so
-/// this threshold is about intent, not about the arithmetic breaking down.
+/// The determinant of a 2D linear transform is an *area* scale factor — the
+/// product of both axes, not either one alone — so this threshold is a
+/// statement about the sprite's on-screen area, not about its width or height
+/// individually. A uniform scale of `1e-6` gives a determinant of `1e-12`: a
+/// sprite a millionth of a world unit on a side, far below a pixel under any
+/// zoom worth supporting (this crate has no `Camera2D` — that type lives in
+/// `voltra-editor` and has no business being named here). An anisotropic
+/// transform can reach the same determinant a different way, say `1e-4` on one
+/// axis against `1e-8` on the other, and is rejected for the same reason:
+/// whatever the shape, the quad it maps to has negligible area. Inverting a
+/// matrix with that determinant still produces finite numbers, well inside
+/// `f32`'s range — so this threshold is about intent, not about the arithmetic
+/// breaking down.
 const MIN_DETERMINANT: f32 = 1e-12;
 
 /// The topmost sprite whose quad contains `point`, in world space.
@@ -221,6 +228,53 @@ mod tests {
         );
 
         assert_eq!(sprite_at(&world, Vec2::ZERO), None);
+    }
+
+    #[test]
+    fn a_small_but_usable_sprite_is_still_picked() {
+        let mut world = World::new();
+        // Uniform scale 1e-4 gives a determinant of 1e-8, which is below
+        // `f32::EPSILON` (about 1.19e-7) and above `MIN_DETERMINANT`. That gap
+        // is the whole reason the named constant exists: under `f32::EPSILON`
+        // this sprite inverted perfectly well and was silently unpickable
+        // anyway. This is the assertion that makes the *value* load-bearing
+        // rather than merely present.
+        let sprite = spawn(
+            &mut world,
+            Transform::default().with_scale(Vec2::splat(1e-4)),
+            Sprite::default(),
+        );
+
+        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(sprite));
+    }
+
+    #[test]
+    fn despawning_an_unrelated_entity_does_not_change_who_is_picked() {
+        // Spawned in this order on purpose: `third` sits before both
+        // overlapping sprites in storage, and `SparseSet::remove` is a
+        // `swap_remove` — removing `third` pulls the dense array's *last*
+        // element (`second`) into `third`'s freed slot, which swaps the
+        // storage-order positions of `first` and `second`. A pick that read
+        // iteration order instead of `entity.index()` would answer
+        // differently before and after the despawn; `max_by_key` over a
+        // unique key must not. Verified: swapping the implementation for
+        // `.filter(...).last()` makes this test fail (left: Some(index 1),
+        // right: Some(index 2)), so this pins a real regression, not just a
+        // structural property.
+        let mut world = World::new();
+        let third = spawn(
+            &mut world,
+            Transform::from_translation(Vec2::new(50.0, 50.0)),
+            Sprite::default(),
+        );
+        let _first = spawn(&mut world, Transform::default(), Sprite::default());
+        let second = spawn(&mut world, Transform::default(), Sprite::default());
+
+        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(second));
+
+        world.despawn(third);
+
+        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(second));
     }
 
     #[test]

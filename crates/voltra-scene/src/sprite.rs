@@ -19,6 +19,13 @@ pub struct Sprite {
     ///
     /// An `i32` rather than an `f32` so ties are exact and never depend on a
     /// float's representation.
+    ///
+    /// Sprites sharing a `sort_order` draw in [`Entity`] index order, and an
+    /// index is fixed for its entity's whole lifetime — but indices are
+    /// recycled LIFO, so a sprite spawned after a despawn can inherit a low
+    /// index and draw behind older sprites it was created after. `sort_order`
+    /// is the control for when that matters; index order is only the tiebreak
+    /// for when it does not.
     pub sort_order: i32,
 }
 
