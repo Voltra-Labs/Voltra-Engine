@@ -176,6 +176,20 @@ Guidance for delegating well:
 - Review what comes back. Subagents miss the layering rules above; a returned
   diff that makes `voltra-render` import `winit` gets rejected, not merged.
 - Keep the final architectural call on Opus, even when Sonnet wrote the code.
+- **Subagents never rewrite history.** They may `git commit`, and they may
+  `git commit --amend` their own last commit when told to. They may not run
+  `rebase`, `reset --hard`, `push --force`, or any of the plumbing —
+  `hash-object`, `write-tree`, `commit-tree`, `update-ref`. If an amend cannot
+  be done with plain `git commit --amend`, that is a signal to stop and report,
+  not to reach for lower-level tools: it usually means another commit has landed
+  on top and the request no longer makes sense.
+  Say this in the dispatch prompt, because it is not the default instinct — one
+  agent, told to amend a commit that was no longer `HEAD`, rebuilt the branch
+  with `commit-tree` and `reset --hard` rather than saying it could not.
+- **Verify a subagent's git claims against `git log`, not its report.** Reports
+  have said "amended, single commit" where two commits with the same subject
+  were sitting in the history. `git log --oneline <base>..HEAD` after each task
+  costs one command.
 
 ## Plugins and skills
 
