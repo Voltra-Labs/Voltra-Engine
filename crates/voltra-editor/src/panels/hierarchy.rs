@@ -3,7 +3,7 @@
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
-use voltra_scene::Sprite;
+use voltra_scene::SceneId;
 
 use crate::editor::Editor;
 
@@ -14,9 +14,18 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             ui.heading("Hierarchy");
             ui.separator();
 
+            // Predicate is identity, not appearance — the same rule `Clear`
+            // and `save` use for what counts as "in the scene". Querying
+            // `Sprite` would hide an identity-carrying entity that has no
+            // `Sprite` (loadable from a hand-edited file today, a future
+            // light or camera entity tomorrow) even though it is savable,
+            // loadable and clearable; this list, and only this list, would
+            // then disagree about what the scene contains.
+            //
             // Collected before the loop: selecting inside it would hold a
             // borrow of the world while the buttons want to mutate it.
-            let mut entities: Vec<Entity> = frame.world.query::<Sprite>().map(|(e, _)| e).collect();
+            let mut entities: Vec<Entity> =
+                frame.world.query::<SceneId>().map(|(e, _)| e).collect();
             // Storage order is not list order. A sparse set fills the hole
             // left by a removal with its last element, so deleting one row
             // would otherwise make another jump across the list.
