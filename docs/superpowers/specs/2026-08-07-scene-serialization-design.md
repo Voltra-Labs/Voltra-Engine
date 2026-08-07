@@ -88,10 +88,30 @@ Components live in a `BTreeMap<String, ron::Value>` so the key order is
 alphabetical and stable. A `HashMap` would reorder between runs and fill diffs
 with noise that is not a change.
 
-`ron::Value` is what both known and unknown components are held as while in
-memory: a known one is turned into a `Value` on the way out and back into its
-type on the way in, and an unknown one simply stays a `Value` throughout. That
-single representation is what lets the two be written by the same code path.
+`Box<ron::value::RawValue>` is what both known and unknown components are held as
+while in memory: a known one becomes a `RawValue` on the way out and its own type
+on the way in, and an unknown one stays a `RawValue` throughout. One
+representation, so a single code path writes both.
+
+**`RawValue`, not `ron::Value`.** This spec originally said `Value`, and that was
+wrong in three ways that only surfaced when the vendored 0.12.2 source was read:
+
+- `Value` has no struct variant, only `Map`. A component would come out as
+  `{"rotation": 0.0, "translation": (0.0, 0.0)}` rather than the
+  `(translation: (0.0, 0.0), rotation: 0.0)` shown above — braces and quoted
+  keys instead of RON struct syntax, which undermines the readable-format
+  decision this file opens with.
+- `Map` is backed by a `BTreeMap`, so a component's fields would be re-sorted
+  alphabetically rather than kept in declaration order.
+- `Value`'s deserializer does not support enums at all. Neither component has one
+  today, so nothing would break yet — it would break on the first one that did,
+  silently until then.
+
+`RawValue` holds the RON text itself. It preserves struct syntax and field order,
+carries enums because it never interprets them, and makes preservation of an
+unknown component exact rather than approximate. `RawValue::from_rust::<T>` and
+`RawValue::into_rust::<T>` are the two conversions, and it derives `Eq`, `Ord`
+and `Hash`, which is everything the maps here need.
 
 **One `PrettyConfig`, defined once and used by every save.** Formatting is the
 serializer's choice, so the only way two saves of the same world can be identical

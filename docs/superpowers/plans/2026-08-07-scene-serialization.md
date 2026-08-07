@@ -4,7 +4,7 @@
 
 **Goal:** Save a world to a readable, diffable `.ron` file and load it back, without ever destroying data the running build does not understand.
 
-**Architecture:** A `ComponentRegistry` maps a component's name to save and load functions specialised for its type, so serialization walks the registry rather than the ECS's type-erased storages — `voltra-ecs` keeps its zero dependencies and gains no new API. Entities persist through a `SceneId(Uuid)` component; unknown components survive as raw `ron::Value`s and are written back untouched.
+**Architecture:** A `ComponentRegistry` maps a component's name to save and load functions specialised for its type, so serialization walks the registry rather than the ECS's type-erased storages — `voltra-ecs` keeps its zero dependencies and gains no new API. Entities persist through a `SceneId(Uuid)` component; unknown components survive as `ron::value::RawValue`s — the RON text itself — and are written back untouched.
 
 **Tech Stack:** Rust, `serde` 1.0.229, `ron` 0.12.2, `uuid` 1.24.0 (v7 + serde).
 
@@ -70,7 +70,7 @@ exact branch of hand-writing code into plans that did not match reality.
 - Produces:
   - `Transform` and `Sprite` both `#[derive(Serialize, Deserialize)]`
   - `pub struct SceneId(pub Uuid)`, with `SceneId::new() -> Self` using UUID **v7**
-  - `pub struct UnknownComponents(pub BTreeMap<String, ron::Value>)`, `Default`
+  - `pub struct UnknownComponents(pub BTreeMap<String, Box<ron::value::RawValue>>)`, `Default`
   - All three re-exported from `voltra_scene`
 
 - [ ] **Step 1: Add the dependencies to the root manifest**
@@ -217,7 +217,7 @@ impl Default for SceneId {
 /// deleting it — which is the failure mode this exists to prevent, and the one
 /// Unity is criticised for.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct UnknownComponents(pub BTreeMap<String, ron::Value>);
+pub struct UnknownComponents(pub BTreeMap<String, Box<ron::value::RawValue>>);
 ```
 
 Verify `Uuid::now_v7()` exists with that name in the vendored `uuid` source before relying on it, and report if it differs.
@@ -272,8 +272,8 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Produces:
   - `pub enum SceneError` with variants `Io(std::io::Error)`, `Parse(ron::error::SpannedError)`, `Serialize(ron::Error)`, `UnsupportedVersion { found: u32, supported: u32 }`, `Component { name: String, source: ron::Error }`
   - `pub struct ComponentRegistry` with `new()`, `with_defaults()`, `register::<T: Serialize + DeserializeOwned + 'static>(&mut self, name: &'static str)`, `names(&self) -> impl Iterator<Item = &'static str>`
-  - `pub(crate) fn save_one(&self, world: &World, entity: Entity, name: &str) -> Option<Result<ron::Value, SceneError>>`
-  - `pub(crate) fn load_one(&self, world: &mut World, entity: Entity, name: &str, value: &ron::Value) -> Option<Result<(), SceneError>>`
+  - `pub(crate) fn save_one(&self, world: &World, entity: Entity, name: &str) -> Option<Result<Box<ron::value::RawValue>, SceneError>>`
+  - `pub(crate) fn load_one(&self, world: &mut World, entity: Entity, name: &str, value: &ron::value::RawValue) -> Option<Result<(), SceneError>>`
 
 Both `*_one` return `None` when the name is not registered — that is how the caller distinguishes "unknown, preserve it" from "known, and it failed".
 
@@ -463,8 +463,8 @@ use crate::{Sprite, Transform};
 /// One component type's name and the two conversions that go with it.
 struct Entry {
     name: &'static str,
-    save: fn(&World, Entity) -> Option<Result<ron::Value, SceneError>>,
-    load: fn(&mut World, Entity, &ron::Value) -> Result<(), SceneError>,
+    save: fn(&World, Entity) -> Option<Result<Box<ron::value::RawValue>, SceneError>>,
+    load: fn(&mut World, Entity, &ron::value::RawValue) -> Result<(), SceneError>,
 }
 
 /// The component types a scene file may contain.
@@ -529,7 +529,7 @@ impl ComponentRegistry {
         world: &World,
         entity: Entity,
         name: &str,
-    ) -> Option<Result<ron::Value, SceneError>> {
+    ) -> Option<Result<Box<ron::value::RawValue>, SceneError>> {
         let entry = self.entries.iter().find(|e| e.name == name)?;
         (entry.save)(world, entity)
     }
@@ -543,7 +543,7 @@ impl ComponentRegistry {
         world: &mut World,
         entity: Entity,
         name: &str,
-        value: &ron::Value,
+        value: &ron::value::RawValue,
     ) -> Option<Result<(), SceneError>> {
         let entry = self.entries.iter().find(|e| e.name == name)?;
         Some((entry.load)(world, entity, value))
@@ -635,7 +635,7 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Produces:
   - `pub const VERSION: u32 = 1;`
   - `pub struct SceneFile { pub version: u32, pub entities: Vec<EntityRecord> }`, `Serialize + Deserialize`
-  - `pub struct EntityRecord { pub id: SceneId, pub components: BTreeMap<String, ron::Value> }`, `Serialize + Deserialize`
+  - `pub struct EntityRecord { pub id: SceneId, pub components: BTreeMap<String, Box<ron::value::RawValue>> }`, `Serialize + Deserialize`
   - `pub fn to_scene_file(world: &World, registry: &ComponentRegistry) -> Result<SceneFile, SceneError>`
   - `pub fn save(world: &World, registry: &ComponentRegistry, path: &Path) -> Result<(), SceneError>`
 
@@ -795,7 +795,7 @@ pub struct SceneFile {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EntityRecord {
     pub id: SceneId,
-    pub components: BTreeMap<String, ron::Value>,
+    pub components: BTreeMap<String, Box<ron::value::RawValue>>,
 }
 
 /// The formatting every save uses.
