@@ -2,10 +2,12 @@
 
 use std::path::Path;
 
-use voltra_ecs::World;
+use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
 use super::registry::ComponentRegistry;
+#[cfg(test)]
+use super::save::EntityRecord;
 use super::save::{SceneFile, VERSION};
 #[cfg(test)]
 use crate::scene_id::SceneId;
@@ -15,6 +17,18 @@ use crate::scene_id::UnknownComponents;
 ///
 /// Adds rather than replaces. Whether to clear first is the caller's decision,
 /// and the editor's menu is where that belongs.
+///
+/// All-or-nothing: if any entity fails to load, every entity this call spawned
+/// is despawned before the error is returned, so a failed load leaves `world`
+/// exactly as it found it. An editor that reports "could not open the scene"
+/// and then shows half of it is worse than one that shows nothing.
+///
+/// The rollback is why the per-entity work lives in [`spawn_entities`] rather
+/// than inline behind a `?`: `?` returns the instant something fails, which is
+/// exactly the moment the list of entities to clean up would otherwise be
+/// lost. `spawn_entities` instead returns the entities it spawned *alongside*
+/// its `Result`, unconditionally, so there is a value to inspect and act on
+/// before this function decides what to return.
 pub fn from_scene_file(
     file: &SceneFile,
     registry: &ComponentRegistry,
@@ -27,18 +41,48 @@ pub fn from_scene_file(
         });
     }
 
+    let (spawned, result) = spawn_entities(file, registry, world);
+    if let Err(error) = result {
+        for entity in spawned {
+            world.despawn(entity);
+        }
+        return Err(error);
+    }
+
+    log::info!("loaded {} entities", spawned.len());
+    Ok(())
+}
+
+/// Spawns every entity in `file` into `world`, stopping at the first error.
+///
+/// Always returns every entity spawned before it stopped, paired with the
+/// outcome, rather than folding the two into a `Result<Vec<Entity>, (Vec<
+/// Entity>, SceneError)>`: `clippy::result_large_err` correctly rejects that
+/// shape (the tuple makes `SceneError`'s size infectious), and the caller
+/// needs the spawned list in both the success and the failure case anyway, so
+/// a plain pair is both the smaller type and the fit.
+fn spawn_entities(
+    file: &SceneFile,
+    registry: &ComponentRegistry,
+    world: &mut World,
+) -> (Vec<Entity>, Result<(), SceneError>) {
+    let mut spawned = Vec::with_capacity(file.entities.len());
+
     for record in &file.entities {
         let entity = world.spawn();
+        spawned.push(entity);
         world.insert(entity, record.id);
 
         let mut unknown = UnknownComponents::default();
 
         for (name, value) in &record.components {
             match registry.load_one(world, entity, name, value) {
-                // Registered: a failure here is ours, and it propagates. The
-                // name says this build understands the component, so data it
-                // cannot read is broken rather than foreign.
-                Some(result) => result?,
+                // Registered: a failure here is ours. The name says this build
+                // understands the component, so data it cannot read is broken
+                // rather than foreign — and it takes the whole load down with
+                // it, rather than leaving this entity half-built.
+                Some(Ok(())) => {}
+                Some(Err(error)) => return (spawned, Err(error)),
                 // Not registered: keep it verbatim so saving writes it back.
                 // Dropping it is how a build silently deletes work done by a
                 // build that knew more.
@@ -54,8 +98,7 @@ pub fn from_scene_file(
         }
     }
 
-    log::info!("loaded {} entities", file.entities.len());
-    Ok(())
+    (spawned, Ok(()))
 }
 
 /// Reads `path` and spawns its entities into `world`.
@@ -160,10 +203,23 @@ mod tests {
 
     #[test]
     fn a_wrong_version_is_refused() {
+        // Non-empty on purpose: with `entities: Vec::new()` a version check
+        // placed *after* the spawn loop would pass just as happily, because
+        // there is nothing to spawn either way. This proves the ordering.
         let registry = ComponentRegistry::with_defaults();
+        let mut components = std::collections::BTreeMap::new();
+        components.insert(
+            "Sprite".to_owned(),
+            ron::value::RawValue::from_ron("(color: (1.0, 1.0, 1.0, 1.0), sort_order: 0)")
+                .expect("valid RON")
+                .to_owned(),
+        );
         let file = SceneFile {
             version: VERSION + 1,
-            entities: Vec::new(),
+            entities: vec![EntityRecord {
+                id: SceneId::new(),
+                components,
+            }],
         };
 
         let mut world = World::new();
@@ -171,6 +227,64 @@ mod tests {
         assert!(
             matches!(result, Err(SceneError::UnsupportedVersion { .. })),
             "got {result:?}"
+        );
+        assert_eq!(
+            world.entity_count(),
+            0,
+            "a version check that runs after the spawn loop would leave an entity behind"
+        );
+    }
+
+    #[test]
+    fn a_failed_load_rolls_back_every_entity_it_spawned() {
+        // A load is all-or-nothing: reporting an error and leaving half the
+        // file's entities in the world is worse than reporting nothing, since
+        // nothing then signals how far the load got.
+        let registry = ComponentRegistry::with_defaults();
+        let text = r#"(
+            version: 1,
+            entities: [
+                (
+                    id: "018f3a2b-7c41-7000-8000-2b1d4e5f6a70",
+                    components: { "Sprite": (color: (1.0, 1.0, 1.0, 1.0), sort_order: 0) },
+                ),
+                (
+                    id: "018f3a2b-7c41-7000-8000-2b1d4e5f6a71",
+                    components: { "Sprite": "not a sprite" },
+                ),
+            ],
+        )"#;
+        let file: SceneFile = ron::from_str(text).expect("the fixture is valid RON");
+
+        let mut world = World::new();
+        let pre_existing = world.spawn();
+        world.insert(pre_existing, SceneId::new());
+        world.insert(pre_existing, Sprite::default());
+
+        let result = from_scene_file(&file, &registry, &mut world);
+        assert!(
+            matches!(result, Err(SceneError::Component { .. })),
+            "got {result:?}"
+        );
+
+        assert!(
+            world.is_alive(pre_existing),
+            "a failed load must not touch an entity that was already in the world"
+        );
+        assert_eq!(
+            world.get::<Sprite>(pre_existing),
+            Some(&Sprite::default()),
+            "a failed load must not touch components on a pre-existing entity"
+        );
+        assert_eq!(
+            world.query::<SceneId>().count(),
+            1,
+            "no entity from the failing file may remain after a failed load"
+        );
+        assert_eq!(
+            world.entity_count(),
+            1,
+            "every entity the failed load spawned must be rolled back"
         );
     }
 
