@@ -19,8 +19,7 @@ pub struct Handle<T> {
 }
 
 impl<T> Handle<T> {
-    /// Only used by tests; crate-visible to allow future other modules to construct handles.
-    #[allow(dead_code)]
+    /// Crate-visible to allow other modules to construct handles.
     pub(crate) fn new(index: u32, generation: u32) -> Self {
         Self {
             index,

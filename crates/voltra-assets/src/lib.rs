@@ -6,5 +6,7 @@
 //! only through `voltra_render::wgpu`.
 
 pub mod handle;
+pub mod store;
 
 pub use handle::Handle;
+pub use store::Assets;
