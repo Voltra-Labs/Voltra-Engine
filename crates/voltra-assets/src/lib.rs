@@ -8,6 +8,7 @@
 pub mod error;
 pub mod handle;
 pub mod path;
+pub mod placeholder;
 pub mod store;
 
 pub use error::AssetError;
