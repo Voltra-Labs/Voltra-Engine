@@ -429,6 +429,76 @@ opinion. What is guaranteed, and is what `saving_is_idempotent_through_a_load`
 pins down, is narrower and exact: **save, load, save produces identical
 bytes.** A file this build already wrote is a fixed point.
 
+### A scene save replaces the file or leaves it alone
+
+**`voltra_scene::format::save` used to end in `std::fs::write`, which
+truncates the destination and then writes into it.** Between those two steps
+the file on disk is shorter than both the old scene and the new one, so a
+crash, a process kill, a full disk or an I/O error inside that window leaves
+a truncated scene file with the previous version gone. This is the only
+place in the workspace that writes user data, so it was the only place that
+could lose any of it.
+
+**A save now has exactly two outcomes.** `Ok(())` means the file holds the
+complete new scene; `Err(_)` means the file is byte-for-byte what it was
+before the call, or still absent if it was absent before. There is no third
+state — a reader opening the file concurrently sees one whole version or the
+other, never a partial one.
+
+The mechanism is the standard one: write the new bytes to a temporary file,
+flush them to the physical disk, then rename the temporary over the
+destination. Three details are what make that guarantee actually hold:
+
+**The temporary is a sibling of the destination, not in the system temp
+directory.** `rename` is atomic only within a single volume; across volumes
+it degrades to a copy, which reopens the exact window this change exists to
+close.
+
+**`sync_all` runs before the rename, not after.** Skip it and the rename can
+reach the disk before the bytes do, and a power loss then leaves the file
+renamed and empty — the original destroyed, the replacement never written.
+
+**The temporary name is unique per write**, `<file_name>.<uuid-v7>.tmp`,
+reusing the `uuid` dependency the crate already has. Two editor instances
+open on the same project then never share a temporary and so cannot
+truncate each other's half-written file.
+
+Godot already solves this the same way: it writes a `.tmp` file beside the
+destination and renames it over. We take that pattern and depart on one
+point — Godot's temporary name is fixed, ours is not. A fixed name
+self-cleans, but it means two concurrent writers share one temporary and can
+corrupt each other, which is this same bug one level down; Godot lives with
+it and has the matching report
+([godotengine/godot#956](https://github.com/godotengine/godot/issues/956)).
+
+**`std::fs::rename` does replace an existing destination on Windows.**
+Windows 10 1607 and later use `FileRenameInfoEx` with
+`FILE_RENAME_FLAG_POSIX_SEMANTICS`, falling back to `MoveFileEx` with
+`MOVEFILE_REPLACE_EXISTING`
+([rust-lang/rust#131072](https://github.com/rust-lang/rust/pull/131072)).
+
+#### Rejected
+
+- **An in-place write plus a `.bak` copy of the previous version.** Turns one
+  truncation window into two — the destination still has a moment where it
+  is truncated, and now so does the backup. Scene files already live in git,
+  which is a better backup than a sibling file ever would be.
+- **The `tempfile` crate.** `NamedTempFile::persist` does the same thing and
+  is well tested, but it is about sixty lines against `std`, pulls in
+  `fastrand` plus `rustix`/`windows-sys` transitively, and picks the
+  temporary's own name. That last point stops being cosmetic in stage 12,
+  when a hot-reload watcher starts watching `assets/`: the name of the file
+  that appears and vanishes on every save needs to be ours to choose.
+- **A fixed temporary name.** The Godot point above, rejected for the same
+  reason it costs Godot: it self-cleans, but it lets two concurrent writers
+  corrupt each other.
+
+**Known gap, not papered over:** the directory entry itself is not fsynced,
+because Windows has no portable equivalent of an `fsync` on a directory
+handle. After a power loss the rename may not have reached the disk even
+though the bytes did. The consequence is losing that one save, never the
+previous file.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
