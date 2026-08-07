@@ -398,6 +398,29 @@ silently keep broken data alive across every future save instead of surfacing
 it once. `from_scene_file` therefore rolls back every entity a failing load
 spawned rather than committing a partial world.
 
+**`Scene ▸ Open` loads before it despawns.** The obvious implementation clears
+the world and then loads, but a typo'd path, a corrupt file or an unsupported
+version then leaves the user with an empty scene and nothing to show for it —
+and `from_scene_file`'s own rollback cannot help, because the despawning
+happened outside the call it protects. The menu instead captures the entities
+already in the world, loads — which only ever adds — and despawns the captured
+set once loading has reported success. A failed open is a no-op: the scene is
+exactly what it was. This is the all-or-nothing guarantee above, extended past
+the function boundary it would otherwise stop at.
+
+**What is "in the scene" is decided by identity, not appearance.** `Save`,
+`Open`, `Clear` and the hierarchy list all query `SceneId`. They used to
+disagree — two of them queried `Sprite` instead — and only agreed in practice
+because every spawner happens to insert both components together. The first
+entity to break that pairing, such as one loaded from a file with no
+`"Sprite"` component, would have been visible to some of the four and
+invisible to the rest: listed but not cleared, say, or cleared but not saved.
+One question asked four times needs one answer. The useful corollary is the
+other direction: an entity with a `Sprite` and no `SceneId` is deliberately
+transient — not listed, not cleared, not saved — so opting out of persistence
+is the absence of a component, not an exclusion list someone has to keep in
+sync.
+
 **Not a guarantee this design makes: byte-identical output against an
 arbitrary input file.** Formatting is the serializer's choice, so a
 hand-written file with different indentation, spacing or key order never
