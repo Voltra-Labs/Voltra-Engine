@@ -48,7 +48,7 @@ re-exports, so a version bump is a one-line change.
 | --- | --- | --- |
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
-| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at` |
+| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 
@@ -337,6 +337,97 @@ separate components, which is the ECS-native form of the same idea.
 - **3D only, Unreal-style, with 2D as quads in a 3D world.** Coherent, and it is
   why Unreal has no 2D/3D split to maintain. Rejected because 2D is what this
   engine is for right now, and paying 3D's costs to get it would be backwards.
+
+### Scenes are RON, and unknown components survive
+
+**Serialization cannot live in `voltra-ecs`.** That crate stores components as
+`HashMap<TypeId, Box<dyn ErasedStorage>>`, and `ErasedStorage` exposes only
+`remove_entity` and a downcast — there is no way to enumerate which types a
+`World` holds, or to serialize a storage without already knowing `T` at compile
+time. `voltra-ecs` also has zero dependencies on purpose; adding `serde` there
+would end that. The list of persistable types has to live somewhere that both
+knows concrete types and is allowed to depend on `serde`, which is
+`voltra-scene::format::ComponentRegistry`. `register::<T>("Name")` closes over
+`T`, and saving walks the registry rather than the storages.
+
+**The registry is keyed by a chosen name, not a Rust path.** `register::<Sprite>
+("Sprite")` writes `"Sprite"` to the file, not `voltra_scene::sprite::Sprite`.
+Renaming or moving the type in code then does not silently orphan every scene
+that already references it — the name on disk and the name in code are two
+things, deliberately, and only one of them is allowed to be free to change.
+
+**`SceneId` is UUID v7.** A v7 carries a timestamp in its high bits, so sorting
+by id sorts by creation order. `to_scene_file` writes entities in `SceneId`
+order, which is what makes a save both deterministic — the same world always
+serializes to the same bytes — and append-friendly in a diff, since a newly
+created entity's id sorts after every existing one instead of landing in the
+middle of the file. A v4 id would force a choice between those two properties;
+v7 buys both from the same field.
+
+**Unknown components are preserved and written back**, not dropped. On load, a
+component name the registry does not recognise is kept unparsed in
+`UnknownComponents`, a `BTreeMap<String, Box<ron::value::RawValue>>` on that
+entity, and `log::warn!` names it once; on save, those raw values are merged
+back into the entity's map alongside whatever this build did understand.
+Checked, not guessed at:
+
+- **Unity** drops a component's data the moment it saves a scene containing one
+  whose script cannot be resolved — the well-known "Missing (Mono Script)"
+  failure mode. Rejected: it is the one behaviour here that destroys work,
+  silently, the instant an editor with an older or incomplete plugin set
+  touches a file someone else built.
+- **Godot** keeps a node's serialized properties even when its script is
+  missing. Adopted: a build that does not know `Physics` can still open a
+  scene, move a sprite, and save without deleting the `Physics` line it cannot
+  read.
+
+`RawValue` rather than `ron::Value` is what makes the preserved side exact
+rather than approximate: `Value` has no struct variant, so a component would
+round-trip through it as a brace-and-quoted-key map with its fields resorted
+alphabetically, and its deserializer rejects enums outright. `RawValue` is
+`#[repr(transparent)]` over the original RON text, so an unknown component's
+field order, syntax and any enum it contains survive untouched, not merely its
+data.
+
+**A known component that fails to deserialize is an error, not a preserved
+unknown.** The two look similar — both are "a component in the file this call
+cannot turn into a live value" — but they mean opposite things. Unknown means
+"not mine, do not touch"; a registered name whose data does not fit the type
+means "mine, and broken", and preserving that as if it were foreign would
+silently keep broken data alive across every future save instead of surfacing
+it once. `from_scene_file` therefore rolls back every entity a failing load
+spawned rather than committing a partial world.
+
+**`Scene ▸ Open` loads before it despawns.** The obvious implementation clears
+the world and then loads, but a typo'd path, a corrupt file or an unsupported
+version then leaves the user with an empty scene and nothing to show for it —
+and `from_scene_file`'s own rollback cannot help, because the despawning
+happened outside the call it protects. The menu instead captures the entities
+already in the world, loads — which only ever adds — and despawns the captured
+set once loading has reported success. A failed open is a no-op: the scene is
+exactly what it was. This is the all-or-nothing guarantee above, extended past
+the function boundary it would otherwise stop at.
+
+**What is "in the scene" is decided by identity, not appearance.** `Save`,
+`Open`, `Clear` and the hierarchy list all query `SceneId`. They used to
+disagree — two of them queried `Sprite` instead — and only agreed in practice
+because every spawner happens to insert both components together. The first
+entity to break that pairing, such as one loaded from a file with no
+`"Sprite"` component, would have been visible to some of the four and
+invisible to the rest: listed but not cleared, say, or cleared but not saved.
+One question asked four times needs one answer. The useful corollary is the
+other direction: an entity with a `Sprite` and no `SceneId` is deliberately
+transient — not listed, not cleared, not saved — so opting out of persistence
+is the absence of a component, not an exclusion list someone has to keep in
+sync.
+
+**Not a guarantee this design makes: byte-identical output against an
+arbitrary input file.** Formatting is the serializer's choice, so a
+hand-written file with different indentation, spacing or key order never
+round-trips to itself — there is nothing to compare it against but its own
+opinion. What is guaranteed, and is what `saving_is_idempotent_through_a_load`
+pins down, is narrower and exact: **save, load, save produces identical
+bytes.** A file this build already wrote is a fixed point.
 
 ### wgpu 30 API notes
 

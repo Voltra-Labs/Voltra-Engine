@@ -6,7 +6,7 @@ mod picking;
 use editor::Editor;
 use voltra_core::{App, WindowConfig};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Sprite, Transform};
+use voltra_scene::{SceneId, Sprite, Transform};
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -33,6 +33,7 @@ fn spawn_demo_scene(app: &mut App) {
 
     for (color, position, rotation) in palette {
         let entity = app.world.spawn();
+        app.world.insert(entity, SceneId::new());
         app.world.insert(
             entity,
             Transform::from_translation(position)

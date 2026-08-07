@@ -5,10 +5,14 @@
 //! down into both and never back up.
 
 pub mod batch;
+pub mod format;
 pub mod pick;
+pub mod scene_id;
 pub mod sprite;
 pub mod transform;
 
 pub use batch::SpriteBatch;
+pub use format::{ComponentRegistry, SceneError};
+pub use scene_id::{SceneId, UnknownComponents};
 pub use sprite::{draw_key, Sprite};
 pub use transform::Transform;

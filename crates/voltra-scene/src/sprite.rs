@@ -5,7 +5,7 @@ use voltra_ecs::Entity;
 /// A coloured quad. Its size comes from the entity's [`Transform`].
 ///
 /// [`Transform`]: crate::transform::Transform
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Sprite {
     /// Multiplied with the bound texture. White leaves the texture as-is.
     pub color: [f32; 4],
