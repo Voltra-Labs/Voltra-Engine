@@ -2793,6 +2793,7 @@ dependencies = [
 name = "voltra-scene"
 version = "0.1.0"
 dependencies = [
+ "log",
  "ron",
  "serde",
  "uuid",

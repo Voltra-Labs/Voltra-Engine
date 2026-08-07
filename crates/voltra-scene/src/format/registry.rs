@@ -30,15 +30,10 @@ type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::error::Spanne
 
 /// One component type's name and the two conversions that go with it.
 ///
-/// `save`/`load` are read by `save_one`/`load_one` below. `save` now has a
-/// live caller outside tests (`to_scene_file`); `load` does not yet — scene
-/// *load*, which wires up `load_one`, is the next task — so `dead_code` still
-/// flags it on its own. Allowed on the one field rather than the whole struct,
-/// since `name` and `save` are genuinely read now.
+/// `save`/`load` are read by `save_one`/`load_one` below.
 struct Entry {
     name: &'static str,
     save: SaveFn,
-    #[allow(dead_code)]
     load: LoadFn,
 }
 
@@ -107,9 +102,6 @@ impl ComponentRegistry {
     ///
     /// The outer `Option` is the caller's signal to preserve the value untouched
     /// instead of failing.
-    ///
-    /// Only tests call this so far; scene load wires it up in the next task.
-    #[allow(dead_code)]
     pub(crate) fn load_one(
         &self,
         world: &mut World,

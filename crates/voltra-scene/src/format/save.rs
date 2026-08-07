@@ -95,15 +95,15 @@ pub fn to_scene_file(world: &World, registry: &ComponentRegistry) -> Result<Scen
 }
 
 /// Writes the world to `path`.
-///
-/// No `log::info!` here: `voltra-scene` does not depend on `log`, and adding
-/// it for one call site is a dependency change this task does not call for.
-/// The caller that wires this into a save command is better placed to log the
-/// path and count anyway, since it also knows *why* the save happened.
 pub fn save(world: &World, registry: &ComponentRegistry, path: &Path) -> Result<(), SceneError> {
     let file = to_scene_file(world, registry)?;
     let text = ron::ser::to_string_pretty(&file, pretty()).map_err(SceneError::Serialize)?;
     std::fs::write(path, text)?;
+    log::info!(
+        "saved {} entities to {}",
+        file.entities.len(),
+        path.display()
+    );
     Ok(())
 }
 

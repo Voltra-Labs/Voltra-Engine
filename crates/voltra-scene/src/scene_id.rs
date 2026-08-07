@@ -13,6 +13,7 @@ use uuid::Uuid;
 /// file. Only entities carrying a `SceneId` are saved, so a transient runtime
 /// spawn opts out simply by not having one, and no exclusion list has to exist.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SceneId(pub Uuid);
 
 impl SceneId {
