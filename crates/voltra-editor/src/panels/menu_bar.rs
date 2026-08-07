@@ -27,7 +27,17 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.close();
                 }
                 if ui.button("Clear").clicked() {
-                    let all: Vec<Entity> = frame.world.query::<Sprite>().map(|(e, _)| e).collect();
+                    // Predicate is identity, not appearance: `SceneId` is what
+                    // makes an entity part of the scene — the same rule `save`
+                    // uses to decide what gets written. Querying `Sprite`
+                    // instead would miss an identity-carrying entity with no
+                    // `Sprite` (loadable from a file, just not this build's
+                    // demo/menu spawners) and leave it behind after a Clear
+                    // that looked complete, only for it to resurface on the
+                    // next Save. A `Sprite` with no `SceneId` is deliberately
+                    // transient and Clear should leave it alone, which this
+                    // predicate does for free.
+                    let all: Vec<Entity> = frame.world.query::<SceneId>().map(|(e, _)| e).collect();
                     for entity in all {
                         frame.world.despawn(entity);
                     }
