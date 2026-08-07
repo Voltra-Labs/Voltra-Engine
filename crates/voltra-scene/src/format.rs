@@ -1,5 +1,6 @@
 //! Reading and writing a scene as a file.
 
+pub mod atomic;
 pub mod error;
 pub mod load;
 pub mod registry;
