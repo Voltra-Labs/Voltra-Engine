@@ -27,10 +27,11 @@ macro_rules! device_or_skip {
 #[test]
 fn the_same_path_twice_returns_the_same_handle() {
     let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
     write_png(&root, "sprites/hero.png", 4, 4);
 
-    let mut textures = Textures::new(&device, &queue, &root);
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
     let path = AssetPath::new("sprites/hero.png").expect("valid");
 
     let first = textures.load(&device, &queue, &path);
@@ -44,10 +45,11 @@ fn the_same_path_twice_returns_the_same_handle() {
 #[test]
 fn two_spellings_of_one_path_share_a_texture() {
     let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
     write_png(&root, "sprites/hero.png", 4, 4);
 
-    let mut textures = Textures::new(&device, &queue, &root);
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
     let plain = textures.load(
         &device,
         &queue,
@@ -66,11 +68,12 @@ fn two_spellings_of_one_path_share_a_texture() {
 #[test]
 fn different_paths_return_different_handles() {
     let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
     write_png(&root, "hero.png", 4, 4);
     write_png(&root, "villain.png", 8, 8);
 
-    let mut textures = Textures::new(&device, &queue, &root);
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
     let hero = textures.load(&device, &queue, &AssetPath::new("hero.png").expect("valid"));
     let villain = textures.load(
         &device,
@@ -86,9 +89,10 @@ fn different_paths_return_different_handles() {
 #[test]
 fn a_missing_file_yields_the_placeholder() {
     let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
 
-    let mut textures = Textures::new(&device, &queue, &root);
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
     let handle = textures.load(
         &device,
         &queue,
@@ -102,10 +106,11 @@ fn a_missing_file_yields_the_placeholder() {
 #[test]
 fn a_corrupt_png_yields_the_placeholder() {
     let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
     std::fs::write(root.join("broken.png"), b"this is not a PNG").expect("seed file");
 
-    let mut textures = Textures::new(&device, &queue, &root);
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
     let handle = textures.load(
         &device,
         &queue,
@@ -120,9 +125,10 @@ fn a_failed_path_is_cached_rather_than_retried() {
     // Without this, a sprite with a broken path re-reads the disk and logs a
     // warning every frame it is drawn.
     let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
 
-    let mut textures = Textures::new(&device, &queue, &root);
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
     let path = AssetPath::new("absent.png").expect("valid");
     let first = textures.load(&device, &queue, &path);
 
@@ -139,13 +145,32 @@ fn a_failed_path_is_cached_rather_than_retried() {
 #[test]
 fn the_placeholder_is_an_eight_by_eight_texture() {
     let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
 
-    let textures = Textures::new(&device, &queue, &root);
+    let textures = Textures::new(&device, &queue, &layout, &root);
     let placeholder = textures.get(textures.placeholder());
 
     assert_eq!(placeholder.width(), 8);
     assert_eq!(placeholder.height(), 8);
     assert_eq!(textures.len(), 1);
     assert!(!textures.is_empty());
+}
+
+#[test]
+fn every_texture_has_a_bind_group() {
+    // A bind group must exist for the placeholder and for every successfully
+    // loaded texture — a sprite that resolves a handle but finds no group to
+    // draw with is a bug that only shows up as a validation panic at render
+    // time, not at load time.
+    let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
+    let root = scratch_root();
+    write_png(&root, "hero.png", 4, 4);
+
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
+    textures.bind_group(textures.placeholder());
+
+    let hero = textures.load(&device, &queue, &AssetPath::new("hero.png").expect("valid"));
+    textures.bind_group(hero);
 }
