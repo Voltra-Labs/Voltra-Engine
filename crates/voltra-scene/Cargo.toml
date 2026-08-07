@@ -9,3 +9,6 @@ repository.workspace = true
 [dependencies]
 voltra-ecs.workspace = true
 voltra-render.workspace = true
+serde.workspace = true
+ron.workspace = true
+uuid.workspace = true

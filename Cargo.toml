@@ -19,7 +19,13 @@ voltra-scene = { path = "crates/voltra-scene" }
 wgpu = "30.0.0"
 winit = "0.30.13"
 bytemuck = { version = "1.25.2", features = ["derive"] }
-glam = { version = "0.33.3", features = ["bytemuck"] }
+glam = { version = "0.33.3", features = ["bytemuck", "serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+# Scene files are authoring artefacts: read in a pull request, merged in git.
+ron = "0.12.2"
+# v7 rather than v4: the timestamp in the high bits means sorting by id sorts by
+# creation, so a scene file is deterministic *and* appends new entities at the end.
+uuid = { version = "1.24.0", features = ["v7", "serde"] }
 # PNG only: the default feature set drags in jpeg, gif, tiff, webp and more.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 # Immediate-mode UI for the editor. `egui-wgpu` is pinned to wgpu 29 and cannot

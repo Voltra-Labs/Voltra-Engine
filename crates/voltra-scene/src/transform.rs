@@ -6,7 +6,7 @@ use voltra_render::glam::{Mat3, Vec2};
 ///
 /// `Mat3` rather than `Mat4`: a 2D affine transform needs nine floats, not
 /// sixteen, and the camera promotes it on the way to the shader.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Transform {
     pub translation: Vec2,
     /// Counter-clockwise, in radians.
