@@ -30,14 +30,15 @@ type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::error::Spanne
 
 /// One component type's name and the two conversions that go with it.
 ///
-/// `save`/`load` are read by `save_one`/`load_one` below. Nothing outside
-/// tests calls those yet — scene save/load, which wires them up, is a later
-/// task — so `dead_code` sees no live root and flags the fields transitively.
-/// Allowed rather than worked around, since the fix is a task away, not a bug.
-#[allow(dead_code)]
+/// `save`/`load` are read by `save_one`/`load_one` below. `save` now has a
+/// live caller outside tests (`to_scene_file`); `load` does not yet — scene
+/// *load*, which wires up `load_one`, is the next task — so `dead_code` still
+/// flags it on its own. Allowed on the one field rather than the whole struct,
+/// since `name` and `save` are genuinely read now.
 struct Entry {
     name: &'static str,
     save: SaveFn,
+    #[allow(dead_code)]
     load: LoadFn,
 }
 
@@ -92,9 +93,6 @@ impl ComponentRegistry {
 
     /// The entity's value for `name`, or `None` when the name is unregistered
     /// **or** the entity simply has no such component.
-    ///
-    /// Only tests call this so far; scene save wires it up in a later task.
-    #[allow(dead_code)]
     pub(crate) fn save_one(
         &self,
         world: &World,
@@ -110,7 +108,7 @@ impl ComponentRegistry {
     /// The outer `Option` is the caller's signal to preserve the value untouched
     /// instead of failing.
     ///
-    /// Only tests call this so far; scene load wires it up in a later task.
+    /// Only tests call this so far; scene load wires it up in the next task.
     #[allow(dead_code)]
     pub(crate) fn load_one(
         &self,
