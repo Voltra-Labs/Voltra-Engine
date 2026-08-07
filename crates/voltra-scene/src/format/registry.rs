@@ -7,12 +7,26 @@
 //! captures functions that already know `T`, and saving then walks the registry
 //! rather than the storages.
 
+use ron::value::RawValue;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
 use crate::{Sprite, Transform};
+
+/// A registered type's save conversion: entity to stored value, or `None` when
+/// the entity has no such component.
+type SaveFn = fn(&World, Entity) -> Option<Result<Box<RawValue>, SceneError>>;
+
+/// A registered type's load conversion: stored value to entity.
+///
+/// Returns the bare `ron` error rather than a [`SceneError`]: this function
+/// only knows `T`, not the registered name the [`Entry`] was stored under, and
+/// `SceneError::Component` needs that name to point at anything a user can act
+/// on. `load_one` has the `Entry` in hand, so it wraps this into a `SceneError`
+/// with the real name instead of `T`'s Rust path.
+type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::error::SpannedError>;
 
 /// One component type's name and the two conversions that go with it.
 ///
@@ -23,8 +37,8 @@ use crate::{Sprite, Transform};
 #[allow(dead_code)]
 struct Entry {
     name: &'static str,
-    save: fn(&World, Entity) -> Option<Result<ron::Value, SceneError>>,
-    load: fn(&mut World, Entity, &ron::Value) -> Result<(), SceneError>,
+    save: SaveFn,
+    load: LoadFn,
 }
 
 /// The component types a scene file may contain.
@@ -62,17 +76,10 @@ impl ComponentRegistry {
             name,
             save: |world, entity| {
                 let component = world.get::<T>(entity)?;
-                Some(to_value(component))
+                Some(RawValue::from_rust(component).map_err(SceneError::Serialize))
             },
             load: |world, entity, value| {
-                let component: T =
-                    value
-                        .clone()
-                        .into_rust()
-                        .map_err(|source| SceneError::Component {
-                            name: std::any::type_name::<T>().to_owned(),
-                            source,
-                        })?;
+                let component: T = value.into_rust()?;
                 world.insert(entity, component);
                 Ok(())
             },
@@ -93,7 +100,7 @@ impl ComponentRegistry {
         world: &World,
         entity: Entity,
         name: &str,
-    ) -> Option<Result<ron::Value, SceneError>> {
+    ) -> Option<Result<Box<RawValue>, SceneError>> {
         let entry = self.entries.iter().find(|e| e.name == name)?;
         (entry.save)(world, entity)
     }
@@ -110,10 +117,15 @@ impl ComponentRegistry {
         world: &mut World,
         entity: Entity,
         name: &str,
-        value: &ron::Value,
+        value: &RawValue,
     ) -> Option<Result<(), SceneError>> {
         let entry = self.entries.iter().find(|e| e.name == name)?;
-        Some((entry.load)(world, entity, value))
+        Some(
+            (entry.load)(world, entity, value).map_err(|source| SceneError::Component {
+                name: entry.name.to_owned(),
+                source: source.into(),
+            }),
+        )
     }
 }
 
@@ -121,15 +133,6 @@ impl Default for ComponentRegistry {
     fn default() -> Self {
         Self::with_defaults()
     }
-}
-
-/// A component as a `ron::Value`, via RON text.
-///
-/// `Value` is the one representation both known and unknown components share,
-/// which is what lets a single code path write both.
-fn to_value<T: Serialize>(component: &T) -> Result<ron::Value, SceneError> {
-    let text = ron::to_string(component).map_err(SceneError::Serialize)?;
-    ron::from_str(&text).map_err(SceneError::Parse)
 }
 
 #[cfg(test)]
@@ -195,9 +198,9 @@ mod tests {
         let mut world = World::new();
         let entity = world.spawn();
         let registry = ComponentRegistry::with_defaults();
-        let value = ron::Value::Unit;
+        let value = RawValue::from_ron("()").expect("valid RON");
         assert!(registry
-            .load_one(&mut world, entity, "Physics", &value)
+            .load_one(&mut world, entity, "Physics", value)
             .is_none());
     }
 
@@ -218,14 +221,35 @@ mod tests {
         let registry = ComponentRegistry::with_defaults();
 
         // A string where a Sprite struct belongs.
-        let nonsense: ron::Value = ron::from_str("\"not a sprite\"").expect("valid RON");
+        let nonsense = RawValue::from_ron("\"not a sprite\"").expect("valid RON");
 
         let result = registry
-            .load_one(&mut world, entity, "Sprite", &nonsense)
+            .load_one(&mut world, entity, "Sprite", nonsense)
             .expect("Sprite is registered");
         assert!(
             matches!(result, Err(SceneError::Component { .. })),
             "expected a Component error, got {result:?}"
         );
+    }
+
+    #[test]
+    fn the_component_error_names_the_registered_name_not_the_rust_path() {
+        // Regression test: this field used to hold `std::any::type_name::<T>()`
+        // (e.g. `voltra_scene::sprite::Sprite`), which is not the name that
+        // appears in a scene file, and does not let a user find the thing the
+        // error is about. It must be the name `register` was called with.
+        let mut world = World::new();
+        let entity = world.spawn();
+        let registry = ComponentRegistry::with_defaults();
+
+        let nonsense = RawValue::from_ron("\"not a sprite\"").expect("valid RON");
+
+        let result = registry
+            .load_one(&mut world, entity, "Sprite", nonsense)
+            .expect("Sprite is registered");
+        match result {
+            Err(SceneError::Component { name, .. }) => assert_eq!(name, "Sprite"),
+            other => panic!("expected a Component error, got {other:?}"),
+        }
     }
 }

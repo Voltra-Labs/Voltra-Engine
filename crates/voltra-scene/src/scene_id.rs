@@ -40,7 +40,7 @@ impl Default for SceneId {
 /// deleting it — which is the failure mode this exists to prevent, and the one
 /// Unity is criticised for.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct UnknownComponents(pub BTreeMap<String, ron::Value>);
+pub struct UnknownComponents(pub BTreeMap<String, Box<ron::value::RawValue>>);
 
 #[cfg(test)]
 mod tests {
