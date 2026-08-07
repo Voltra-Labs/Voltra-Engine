@@ -7,6 +7,7 @@ use ron::value::RawValue;
 use serde::{Deserialize, Serialize};
 use voltra_ecs::World;
 
+use super::atomic;
 use super::error::SceneError;
 use super::registry::ComponentRegistry;
 use crate::scene_id::{SceneId, UnknownComponents};
@@ -94,11 +95,16 @@ pub fn to_scene_file(world: &World, registry: &ComponentRegistry) -> Result<Scen
     })
 }
 
-/// Writes the world to `path`.
+/// Writes the world to `path`, or leaves the file exactly as it was.
+///
+/// There is no third outcome. The bytes go to a sibling temporary and are
+/// renamed over `path`, so a crash, a full disk or a serialization failure
+/// cannot leave a half-written scene where a whole one used to be. See
+/// [`atomic::replace`].
 pub fn save(world: &World, registry: &ComponentRegistry, path: &Path) -> Result<(), SceneError> {
     let file = to_scene_file(world, registry)?;
     let text = ron::ser::to_string_pretty(&file, pretty()).map_err(SceneError::Serialize)?;
-    std::fs::write(path, text)?;
+    atomic::replace(path, text.as_bytes())?;
     log::info!(
         "saved {} entities to {}",
         file.entities.len(),
