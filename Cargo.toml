@@ -11,6 +11,7 @@ repository = "https://github.com/Voltra-Labs/Voltra-Engine"
 # Single source of truth for third-party versions. Member crates opt in with
 # `dep.workspace = true` so the whole workspace can never split a version.
 [workspace.dependencies]
+voltra-assets = { path = "crates/voltra-assets" }
 voltra-core = { path = "crates/voltra-core" }
 voltra-ecs = { path = "crates/voltra-ecs" }
 voltra-render = { path = "crates/voltra-render" }

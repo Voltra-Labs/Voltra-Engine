@@ -1,0 +1,19 @@
+[package]
+name = "voltra-assets"
+description = "Loading and caching the files a scene refers to."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-render.workspace = true
+log.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+# Only the tests encode a PNG; the crate itself never does — `Texture::from_png`
+# does the decoding, inside `voltra-render`.
+image.workspace = true
+pollster.workspace = true
+ron.workspace = true
