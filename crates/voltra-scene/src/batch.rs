@@ -1,8 +1,9 @@
 //! Turning a world full of sprites into vertex and index data.
 
+use voltra_assets::Handle;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_render::Vertex;
+use voltra_render::{Texture, Vertex};
 
 use crate::sprite::{draw_key, Sprite};
 use crate::transform::Transform;
@@ -34,6 +35,19 @@ const CORNERS: [(Vec2, [f32; 2]); 4] = [
 /// Two triangles over those four corners.
 const QUAD_INDICES: [u16; 6] = [0, 1, 2, 0, 2, 3];
 
+/// A contiguous run of one texture's sprites within [`SpriteBatch::indices`].
+///
+/// Painter's order wins over batching: sprites are never reordered to grow a
+/// run, so a run only ever covers sprites that were already adjacent in draw
+/// order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SpriteRange {
+    /// `None` draws against the renderer's white bind group.
+    pub texture: Option<Handle<Texture>>,
+    /// Index range into [`SpriteBatch::indices`] (and thus the uploaded mesh).
+    pub indices: std::ops::Range<u32>,
+}
+
 /// Vertex and index data for every sprite in a world.
 ///
 /// Built on the CPU each frame. Kept as plain `Vec`s rather than GPU buffers
@@ -42,6 +56,11 @@ const QUAD_INDICES: [u16; 6] = [0, 1, 2, 0, 2, 3];
 pub struct SpriteBatch {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u16>,
+    /// Draw-order runs of same-texture sprites, covering all of `indices`.
+    ///
+    /// Split only where the texture actually changes — a run never merges two
+    /// sprites that draw order keeps apart, even if they share a texture.
+    pub ranges: Vec<SpriteRange>,
 }
 
 impl SpriteBatch {
@@ -62,9 +81,12 @@ impl SpriteBatch {
         sprites.sort_unstable_by_key(|(entity, _, sprite)| draw_key(*entity, sprite));
 
         let mut batch = Self::default();
+        let mut handles = Vec::with_capacity(sprites.len());
         for (_entity, transform, sprite) in sprites {
+            handles.push(sprite.texture_handle);
             batch.push(transform, sprite);
         }
+        batch.ranges = runs_from_handles(&handles, QUAD_INDICES.len() as u32);
         batch
     }
 
@@ -112,6 +134,35 @@ impl SpriteBatch {
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty()
     }
+}
+
+/// Splits a sequence of per-sprite texture handles, already in draw order,
+/// into [`SpriteRange`]s covering `indices_per_sprite` indices each.
+///
+/// A pure function so texture-run splitting has a unit test that needs
+/// neither a [`World`] nor a GPU-issued [`Handle`] — only draw order and
+/// equality, which is all the algorithm actually looks at. Never reorders:
+/// a run only grows by walking forward while the next handle matches, so
+/// two sprites sharing a texture but separated by a third never merge.
+fn runs_from_handles(
+    handles: &[Option<Handle<Texture>>],
+    indices_per_sprite: u32,
+) -> Vec<SpriteRange> {
+    let mut ranges = Vec::new();
+    let mut i = 0usize;
+    while i < handles.len() {
+        let texture = handles[i];
+        let start = i as u32 * indices_per_sprite;
+        i += 1;
+        while i < handles.len() && handles[i] == texture {
+            i += 1;
+        }
+        ranges.push(SpriteRange {
+            texture,
+            indices: start..(i as u32 * indices_per_sprite),
+        });
+    }
+    ranges
 }
 
 #[cfg(test)]
@@ -377,5 +428,151 @@ mod tests {
     fn a_sprite_defaults_to_sort_order_zero() {
         assert_eq!(Sprite::default().sort_order, 0);
         assert_eq!(Sprite::new([1.0, 0.0, 0.0, 1.0]).sort_order, 0);
+    }
+
+    /// Six indices per sprite everywhere below: [`QUAD_INDICES`]'s length,
+    /// spelled out so a range's bounds are checkable by eye against the test
+    /// data rather than through another layer of indirection.
+    const INDICES_PER_SPRITE: u32 = 6;
+
+    fn sprite_with_texture(handle: Option<Handle<Texture>>) -> Sprite {
+        Sprite {
+            texture_handle: handle,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn contiguous_same_handles_merge_into_one_range() {
+        let a = Handle::forge(0, 0);
+        let ranges = runs_from_handles(&[Some(a), Some(a)], INDICES_PER_SPRITE);
+
+        assert_eq!(
+            ranges,
+            vec![SpriteRange {
+                texture: Some(a),
+                indices: 0..12,
+            }]
+        );
+    }
+
+    #[test]
+    fn interleaved_handles_split_ranges() {
+        let a = Handle::forge(0, 0);
+        let b = Handle::forge(1, 0);
+        let ranges = runs_from_handles(&[Some(a), Some(b), Some(a)], INDICES_PER_SPRITE);
+
+        assert_eq!(
+            ranges,
+            vec![
+                SpriteRange {
+                    texture: Some(a),
+                    indices: 0..6,
+                },
+                SpriteRange {
+                    texture: Some(b),
+                    indices: 6..12,
+                },
+                SpriteRange {
+                    texture: Some(a),
+                    indices: 12..18,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn none_and_some_do_not_merge() {
+        let a = Handle::forge(0, 0);
+        let ranges = runs_from_handles(&[None, Some(a)], INDICES_PER_SPRITE);
+
+        assert_eq!(
+            ranges,
+            vec![
+                SpriteRange {
+                    texture: None,
+                    indices: 0..6,
+                },
+                SpriteRange {
+                    texture: Some(a),
+                    indices: 6..12,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn an_empty_handle_list_produces_no_ranges() {
+        assert_eq!(runs_from_handles(&[], INDICES_PER_SPRITE), Vec::new());
+    }
+
+    #[test]
+    fn draw_order_still_follows_sort_order() {
+        // Same setup as `a_higher_sort_order_is_drawn_later`, but each sprite
+        // also carries a distinct forged handle so the ranges can be checked
+        // against the same reordering: draw order, not spawn order, decides
+        // both the vertex layout and which run each sprite lands in.
+        let low = Handle::forge(0, 0);
+        let high = Handle::forge(1, 0);
+        let (world, _) = world_returning_entities(&[
+            (
+                Transform::from_translation(Vec2::new(10.0, 0.0)),
+                Sprite {
+                    texture_handle: Some(high),
+                    ..Sprite::default().with_sort_order(5)
+                },
+            ),
+            (
+                Transform::from_translation(Vec2::new(20.0, 0.0)),
+                Sprite {
+                    texture_handle: Some(low),
+                    ..Sprite::default().with_sort_order(-3)
+                },
+            ),
+        ]);
+
+        let batch = SpriteBatch::from_world(&world);
+        let xs = draw_order(&batch);
+
+        assert!(xs[0] > 19.0, "expected the -3 sprite first, got {xs:?}");
+        assert!(xs[1] < 11.0, "expected the 5 sprite last, got {xs:?}");
+        assert_eq!(
+            batch.ranges,
+            vec![
+                SpriteRange {
+                    texture: Some(low),
+                    indices: 0..6,
+                },
+                SpriteRange {
+                    texture: Some(high),
+                    indices: 6..12,
+                },
+            ],
+            "ranges must follow draw order, not spawn order"
+        );
+    }
+
+    #[test]
+    fn from_world_builds_one_range_for_untextured_sprites() {
+        let batch = SpriteBatch::from_world(&world_with(&[
+            (Transform::default(), sprite_with_texture(None)),
+            (
+                Transform::from_translation(Vec2::new(5.0, 0.0)),
+                sprite_with_texture(None),
+            ),
+        ]));
+
+        assert_eq!(
+            batch.ranges,
+            vec![SpriteRange {
+                texture: None,
+                indices: 0..12,
+            }]
+        );
+    }
+
+    #[test]
+    fn an_empty_world_produces_no_ranges() {
+        assert!(SpriteBatch::from_world(&World::new()).ranges.is_empty());
     }
 }
