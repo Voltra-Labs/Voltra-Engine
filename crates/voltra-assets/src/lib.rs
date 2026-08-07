@@ -10,8 +10,10 @@ pub mod handle;
 pub mod path;
 pub mod placeholder;
 pub mod store;
+pub mod textures;
 
 pub use error::AssetError;
 pub use handle::Handle;
 pub use path::AssetPath;
 pub use store::Assets;
+pub use textures::Textures;
