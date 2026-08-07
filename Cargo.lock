@@ -2809,6 +2809,7 @@ dependencies = [
  "ron",
  "serde",
  "uuid",
+ "voltra-assets",
  "voltra-ecs",
  "voltra-render",
 ]

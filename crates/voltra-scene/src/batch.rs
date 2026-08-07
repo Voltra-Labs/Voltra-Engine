@@ -123,7 +123,7 @@ mod tests {
         for (transform, sprite) in sprites {
             let e = world.spawn();
             world.insert(e, *transform);
-            world.insert(e, *sprite);
+            world.insert(e, sprite.clone());
         }
         world
     }
@@ -263,7 +263,7 @@ mod tests {
         for (transform, sprite) in sprites {
             let e = world.spawn();
             world.insert(e, *transform);
-            world.insert(e, *sprite);
+            world.insert(e, sprite.clone());
             entities.push(e);
         }
         (world, entities)

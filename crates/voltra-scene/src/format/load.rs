@@ -148,7 +148,7 @@ mod tests {
                 (
                     *id,
                     original.get::<Transform>(e).copied(),
-                    original.get::<Sprite>(e).copied(),
+                    original.get::<Sprite>(e).cloned(),
                 )
             })
             .collect();
@@ -158,7 +158,7 @@ mod tests {
                 (
                     *id,
                     loaded.get::<Transform>(e).copied(),
-                    loaded.get::<Sprite>(e).copied(),
+                    loaded.get::<Sprite>(e).cloned(),
                 )
             })
             .collect();
