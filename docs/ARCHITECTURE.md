@@ -25,18 +25,23 @@
         └────────┬─────────┘
                  │
         ┌────────▼─────────┐
-        │  voltra-scene    │  components and the geometry they become
-        └───┬──────────┬───┘
-            │          │
-┌───────────▼──┐  ┌────▼─────────────┐
-│  voltra-ecs  │  │  voltra-render   │  GPU: device, surface, passes
-│  (no deps)   │  │  (owns wgpu)     │
-└──────────────┘  └──────────────────┘
+        │   voltra-scene   │  components and the geometry they become
+        └─┬──────────┬───┬─┘
+          │          │   │
+┌─────────▼────┐  ┌──▼───▼───────────┐  ┌──────────────────┐
+│  voltra-ecs  │  │  voltra-render   │◄─┤  voltra-assets   │
+│  (no deps)   │  │  (owns wgpu)     │  │  cache, loading  │
+└──────────────┘  └──────────────────┘  └──────────────────┘
 ```
 
 `voltra-scene` is the only crate that knows about both entities and vertices.
 Keeping that knowledge in one place is what lets `voltra-ecs` stay free of
 rendering and `voltra-render` stay free of entities.
+
+`voltra-assets` points into `voltra-render` because the thing it caches *is* a
+GPU texture — caching decoded bytes and re-uploading per sprite would cache the
+cheap half. It reaches `Device` and `Queue` through `voltra_render::wgpu` and
+declares no `wgpu` of its own, so the one-crate-per-backend rule holds.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`) and exactly one
 may depend on `wgpu` (`voltra-render`). Everything else consumes them through
@@ -47,6 +52,7 @@ re-exports, so a version bump is a one-line change.
 | Crate | Owns | Key types |
 | --- | --- | --- |
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
+| `voltra-assets` | Asset identity, the texture cache, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
 | `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
@@ -58,7 +64,6 @@ Added only when there is code to put in them:
 
 | Crate | Purpose | Blocked on |
 | --- | --- | --- |
-| `voltra-assets` | Loading, caching, hot reload | stage 9 |
 | `xtask` | Repo automation written in Rust instead of shell | when scripts appear |
 
 ## Frame flow
@@ -498,6 +503,56 @@ because Windows has no portable equivalent of an `fsync` on a directory
 handle. After a power loss the rename may not have reached the disk even
 though the bytes did. The consequence is losing that one save, never the
 previous file.
+
+### An asset is named by its path, and a bad name draws magenta
+
+**A path is the identity, in an enum.** Bevy chose `AssetPath` as canonical
+deliberately and deferred UUIDs — *"everyone uses filesystems... to manage
+their asset source files"*
+([bevyengine/bevy#8624](https://github.com/bevyengine/bevy/pull/8624)). The
+enum shape is what keeps a `Uuid` variant addable later without changing the
+scene format's `VERSION`, which matters because a file format is the one
+thing that cannot be refactored freely — files in the old shape already
+exist.
+
+**`AssetPath` is a security boundary, not a newtype for tidiness.** A scene
+file is external input; a raw string in one could name a file anywhere on
+the machine, and merely opening the scene would read it. The check lives in
+the constructor and `Deserialize` routes through it by hand, because a
+derived impl would skip it on the only path that matters.
+
+**The handle is an index and a generation, not a refcount.** Same shape as
+`voltra_ecs::Entity`, so the engine has one idea of a handle. Bevy and Godot
+refcount and get eviction for it; here an `Arc` in `Sprite` would cost its
+`Copy`, which `batch.rs` and `pick.rs` rely on in per-frame loops, and no
+measured memory problem is asking for eviction. `Assets::remove` exists so
+the generation is real and testable; when to call it is the part still
+deferred.
+
+**A failure draws a magenta checker and the scene still opens.** Same value
+the format already states twice — an unknown component is preserved, a
+failed Open changes nothing. A path is user data, not a build invariant, so
+a moved PNG must not make a scene unopenable. The 1×1 white texture already
+in the tree was rejected as the placeholder: it is indistinguishable from a
+sprite with no texture, which hides the failure everywhere but the log.
+
+**Loading is synchronous, and that is not a shortcut to undo.** There is no
+task system, and building one for this would be the subproject rather than
+the module. The placeholder is exactly what an async load must return while
+bytes are in flight, so the call site does not change shape when async
+arrives.
+
+#### Rejected
+
+- **Refcounted strong/weak handles.** Solves eviction properly in Bevy and
+  Godot. Rejected while `Sprite` stays `Copy` and nothing measured asks for
+  eviction — see above.
+- **A UUID sidecar per asset** (Unity's `.meta`, Godot 4.4's `uid://`).
+  Survives a rename, but costs a sidecar and an import step this engine has
+  no editor to manage. Failure mode when the sidecar is lost: a silently
+  dead reference.
+- **Failing the scene load on a missing texture.** Would contradict Open's
+  rollback — a moved PNG must not make a scene unopenable.
 
 ### wgpu 30 API notes
 
