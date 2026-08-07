@@ -88,6 +88,18 @@ Components live in a `BTreeMap<String, ron::Value>` so the key order is
 alphabetical and stable. A `HashMap` would reorder between runs and fill diffs
 with noise that is not a change.
 
+`ron::Value` is what both known and unknown components are held as while in
+memory: a known one is turned into a `Value` on the way out and back into its
+type on the way in, and an unknown one simply stays a `Value` throughout. That
+single representation is what lets the two be written by the same code path.
+
+**One `PrettyConfig`, defined once and used by every save.** Formatting is the
+serializer's choice, so the only way two saves of the same world can be identical
+is for there to be exactly one configuration, in one place, that nobody passes a
+variant of. `struct_names` is off — the example above has no `SceneFile(` prefix
+and that is deliberate, since the type name adds nothing a reader of a `.ron`
+scene needs.
+
 ### 2. Identity: a `SceneId(Uuid)` component
 
 `Entity` is an index and a generation, both recycled by the allocator at runtime.
@@ -209,10 +221,17 @@ All headless. No GPU, no window, no editor.
 
 - **Round trip through the world.** Build a world, save, load into a fresh world,
   and compare every component of every entity. `SceneId`s must survive unchanged.
-- **The byte-identical round trip.** Load a file containing an unknown component,
-  save it back without touching anything, and assert the output is **identical to
-  the input, byte for byte**. This is the test that decides whether preservation
-  works; without it, preservation is a claim.
+- **Preservation, stated as something achievable.** Byte-identical output against
+  an arbitrary input file is *not* a guarantee this design can make: formatting is
+  the serializer's choice, so a hand-written file with different indentation will
+  never round-trip to itself. Two tests replace it, and together they say what
+  actually matters:
+  - **The unknown component's data survives.** Load a file containing a component
+    the registry does not know, save, load again, and assert the unknown value is
+    equal to what went in — compared as a parsed `ron::Value`, not as text.
+  - **Saving is idempotent.** Save a world, load it, save again, and assert the
+    two outputs are **identical byte for byte**. Any instability — map ordering,
+    float formatting, entity order — shows up here as a diff.
 - **Unknown components are logged**, once per name.
 - **A known component with invalid data is an error**, not a preserved unknown.
 - **Entity order is by `SceneId`**, and a newly created entity lands at the end
