@@ -120,6 +120,14 @@ fn mesh_draws<'a>(
 #[derive(Default)]
 pub struct App {
     config: WindowConfig,
+    /// Where [`AssetPath`]s resolve from, when the caller has an opinion.
+    ///
+    /// `None` means [`voltra_assets::default_root`] decides at `resumed` time.
+    /// A game that ships its assets somewhere unusual sets this; the editor
+    /// does not need to.
+    ///
+    /// [`AssetPath`]: voltra_assets::AssetPath
+    asset_root: Option<PathBuf>,
     // All of these stay `None` until the event loop resumes and hands us a
     // window; none of them can be built without a surface.
     window: Option<Arc<Window>>,
@@ -151,6 +159,14 @@ impl App {
     /// which is what a shipped game wants.
     pub fn with_ui(mut self, ui: impl FnMut(&mut egui::Ui, &mut UiFrame<'_>) + 'static) -> Self {
         self.ui = Some(Box::new(ui));
+        self
+    }
+
+    /// Sets the directory every texture path resolves against.
+    ///
+    /// Without this, [`voltra_assets::default_root`] resolves one at startup.
+    pub fn with_asset_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.asset_root = Some(root.into());
         self
     }
 
@@ -275,13 +291,19 @@ impl ApplicationHandler for App {
         let size = window.inner_size();
         let renderer = Renderer::new(window.clone(), size.width, size.height);
 
+        let asset_root = self
+            .asset_root
+            .clone()
+            .unwrap_or_else(voltra_assets::default_root);
+        log::info!("asset root: {}", asset_root.display());
+
         // The same layout object the sprite pipeline was built with —
         // `Renderer` owns both, so `texture_layout()` is guaranteed to be it.
         let textures = Textures::new(
             renderer.context().device(),
             renderer.context().queue(),
             renderer.texture_layout(),
-            PathBuf::from("assets"),
+            asset_root,
         );
 
         if self.ui.is_some() {
