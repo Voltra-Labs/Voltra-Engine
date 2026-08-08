@@ -111,7 +111,7 @@ Note: cloning `Option<AssetPath>` then calling `set_texture` re-loads even when 
 - Consumes: `voltra_assets::{AssetPath, Handle, Textures}`, `voltra_render::Texture`
 - Produces: `Sprite { color, sort_order, texture, texture_handle }`, `Sprite::set_texture(...)`, `Default`/`new` leave both texture fields `None`. **No longer `Copy`.** Keep `Clone`.
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 In `crates/voltra-scene/Cargo.toml`:
 
@@ -121,7 +121,7 @@ voltra-assets.workspace = true
 
 Keep alphabetical order among `voltra-*` lines (`voltra-assets` above `voltra-ecs`).
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Add to `sprite.rs` (or extend an existing test module) — tests only first, fields not yet present:
 
@@ -181,9 +181,9 @@ mod texture_tests {
 
 Prefer: change the round-trip test to not forge a handle — set only `texture`, serialise, assert no `texture_handle` key and deserialized handle is `None`. Simpler, no API hole.
 
-- [ ] **Step 3: Run tests — expect compile failure** (`texture` field missing)
+- [x] **Step 3: Run tests — expect compile failure** (`texture` field missing)
 
-- [ ] **Step 4: Implement**
+- [x] **Step 4: Implement**
 
 Update `Sprite`:
 
@@ -206,9 +206,9 @@ Remove `Copy` from the derive. Update `Default` / `new` / `with_sort_order` to l
 
 Fix compile breaks: anywhere that moved a `Sprite` by `Copy` must clone or use references. Grep for `Sprite` in the workspace and fix.
 
-- [ ] **Step 5: Tests pass; fmt / clippy / workspace test**
+- [x] **Step 5: Tests pass; fmt / clippy / workspace test**
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/voltra-scene/ crates/voltra-assets/src/handle.rs
@@ -233,11 +233,11 @@ git commit -m "feat(scene): give Sprite a texture path and handle"
 
 **Why the layout is an argument:** wgpu bind groups are tied to the layout object the pipeline was created with. A second `bind_group_layout(device)` call produces a distinct layout; groups from it will not bind to the flat-color pipeline.
 
-- [ ] **Step 1: Write a failing unit/integration expectation**
+- [x] **Step 1: Write a failing unit/integration expectation**
 
 In `headless_textures.rs`, after constructing `Textures`, assert `textures.bind_group(textures.placeholder())` can be obtained (method missing → fail compile).
 
-- [ ] **Step 2: Implement**
+- [x] **Step 2: Implement**
 
 Store:
 
@@ -275,11 +275,11 @@ pub fn bind_group(&self, handle: Handle<Texture>) -> &BindGroup {
 
 Failed loads map to the placeholder handle — that bind group already exists; do not insert a duplicate map entry for the path beyond what `by_path` already does.
 
-- [ ] **Step 3: Update every `Textures::new` call** (headless tests) to pass a layout from `voltra_render::texture::bind_group_layout(&device)`.
+- [x] **Step 3: Update every `Textures::new` call** (headless tests) to pass a layout from `voltra_render::texture::bind_group_layout(&device)`.
 
-- [ ] **Step 4: fmt / clippy / test**
+- [x] **Step 4: fmt / clippy / test**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(assets): cache texture bind groups"
@@ -315,7 +315,7 @@ pub struct SpriteBatch {
 
 `from_world` sorts by `draw_key`, pushes quads, and builds `ranges` as contiguous runs of equal `texture_handle`.
 
-- [ ] **Step 1: Failing tests**
+- [x] **Step 1: Failing tests**
 
 ```rust
 #[test]
@@ -379,7 +379,7 @@ Use sparingly in batch tests. Document that `Textures::get` / `bind_group` will 
 
 Alternatively export `Handle::new` as `pub` with docs "prefer store-issued handles". The ECS already has a similar visibility for Entity. Check `Entity` — if Entity construction is public for tests, match that.
 
-- [ ] **Step 2: Implement range building inside `from_world` / `push`**
+- [x] **Step 2: Implement range building inside `from_world` / `push`**
 
 Algorithm after sorted push loop (or during):
 
@@ -406,9 +406,9 @@ fn push_ranges(handles_in_order: &[Option<Handle<Texture>>]) -> Vec<SpriteRange>
 
 Empty world → empty ranges.
 
-- [ ] **Step 3: fmt / clippy / test**
+- [x] **Step 3: fmt / clippy / test**
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(scene): split sprite batches by texture run"
@@ -471,11 +471,11 @@ impl Renderer {
 
 Store `texture_layout` on `Renderer` (already created in `new` — keep it in a field instead of dropping).
 
-- [ ] **Step 1: Unit test for `draw_range` bounds** — if hard without GPU, rely on headless: one existing test still uses `draw_mesh`; add a headless test that draws two ranges with different bind groups (white vs a coloured texture) into one target and checks a pixel from each half. Skip without adapter.
+- [x] **Step 1: Unit test for `draw_range` bounds** — if hard without GPU, rely on headless: one existing test still uses `draw_mesh`; add a headless test that draws two ranges with different bind groups (white vs a coloured texture) into one target and checks a pixel from each half. Skip without adapter.
 
-- [ ] **Step 2: Implement mesh / pass / renderer**
+- [x] **Step 2: Implement mesh / pass / renderer**
 
-- [ ] **Step 3: Update `app.rs` temporarily?** Prefer Task 5 for App. Until then, workspace must compile — update `app.rs` in this task to pass a single full-range draw with `white_bind_group` so the tree stays green:
+- [x] **Step 3: Update `app.rs` temporarily?** Prefer Task 5 for App. Until then, workspace must compile — update `app.rs` in this task to pass a single full-range draw with `white_bind_group` so the tree stays green:
 
 ```rust
 let batch = SpriteBatch::from_world(&self.world);
@@ -494,9 +494,9 @@ renderer.render_scene(target, mesh.as_ref(), &draws);
 
 Actually after Task 3, ranges exist; using white for all keeps visuals identical to today until Task 5. Good incremental step — do that App stub in Task 4 so compile works, Task 5 replaces white lookup with real bind groups.
 
-- [ ] **Step 4: fmt / clippy / test**
+- [x] **Step 4: fmt / clippy / test**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git commit -m "feat(render): draw mesh ranges with per-run binds"
@@ -558,11 +558,11 @@ impl UiFrame<'_> {
 }
 ```
 
-- [ ] **Step 1: Implement ownership + draw wiring + `UiFrame` fields**
+- [x] **Step 1: Implement ownership + draw wiring + `UiFrame` fields**
 
-- [ ] **Step 2: Manual/editor smoke later; for now `cargo test --workspace`**
+- [x] **Step 2: Manual/editor smoke later; for now `cargo test --workspace`**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "feat(core): wire Textures into the frame loop"
@@ -586,13 +586,13 @@ Simplest robust UX for 12b: each frame show `TextEdit` on a `String` cloned from
 
 **Open:** after successful `load` and despawn of `previous`, call `frame.resolve_sprite_textures()`.
 
-- [ ] **Step 1: Implement inspector + Open**
+- [x] **Step 1: Implement inspector + Open**
 
-- [ ] **Step 2: fmt / clippy / test**
+- [x] **Step 2: fmt / clippy / test**
 
-- [ ] **Step 3: Optional detached editor smoke** — launch `cargo run -p voltra-editor` detached, confirm log clean, kill. Do not block on GUI interaction in CI.
+- [x] **Step 3: Optional detached editor smoke** — launch `cargo run -p voltra-editor` detached, confirm log clean, kill. Do not block on GUI interaction in CI.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git commit -m "feat(editor): edit and resolve sprite textures"
@@ -611,11 +611,11 @@ git commit -m "feat(editor): edit and resolve sprite textures"
 - Update the picking decision paragraph that says "the renderer binds one texture for the whole batch" — that sentence is now false. Replace with: sprites may carry textures; picking is still AABB until pixel-perfect lands.
 - Wrap at 80 columns. Match surrounding voice. `#### Rejected` for texture-first sorting and for loading inside `from_world`.
 
-- [ ] **Step 1: Edit the doc**
+- [x] **Step 1: Edit the doc**
 
-- [ ] **Step 2: `cargo test --workspace`** (sanity)
+- [x] **Step 2: `cargo test --workspace`** (sanity)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git commit -m "docs: record sprite texture decisions"

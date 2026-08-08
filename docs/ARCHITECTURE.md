@@ -56,7 +56,10 @@ out on purpose — both depend on `voltra-assets` directly, not only through
 `voltra-scene`, because both own a `Textures` cache: `App` builds one and holds
 it for the frame loop, and the inspector panel takes a `&mut Textures` to
 resolve a path the moment someone edits it. Drawing every real edge would bury
-the one this section exists to explain.
+the one this section exists to explain. `voltra-testkit` does not appear at
+all: it is a dev-only crate, `publish = false` and never anything but a
+`[dev-dependencies]` entry, so it carries no edge a shipped binary's dependency
+graph — which this diagram is — would ever need to show.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`) and exactly one
 may depend on `wgpu` (`voltra-render`). Everything else consumes them through
@@ -639,6 +642,57 @@ rather than the edge it actually is.
   geometry layer has no other reason to reach. Matches neither `AssetServer`
   nor `ResourceLoader`, both of which resolve before the frame that draws
   the result.
+
+### The asset root is resolved, never assumed
+
+**The directory `AssetPath`s are joined onto comes from
+`voltra_assets::default_root()`, or from `App::with_asset_root`.** The
+resolution order is `VOLTRA_ASSET_ROOT`, then the nearest `assets` directory at
+or above `CARGO_MANIFEST_DIR`, then the nearest one at or above the
+executable's directory, then `<cwd>/assets`.
+
+No engine resolves assets against the process working directory, and this one
+should not either: the working directory is set by whatever shell or launcher
+started the process, and it silently changes what every path in every scene
+file means. Bevy resolves `BEVY_ASSET_ROOT`, then `CARGO_MANIFEST_DIR`, then
+the executable's parent. Unreal hangs every path off the executable's base
+directory. Unity's `Application.dataPath` is `<project>/Assets` in the editor
+and `<exe>_Data` in a player build. Godot's `res://` is the project directory
+in the editor and the PCK beside the executable once exported.
+
+The walk *upwards* is the one place this differs from Bevy: `cargo run -p
+voltra-editor` sets `CARGO_MANIFEST_DIR` to `crates/voltra-editor`, not the
+workspace root, so joining `assets` onto it directly would resolve to a
+directory that does not exist. The walk is bounded at six levels, because an
+unbounded one started in a temp directory would adopt any `assets` sitting near
+the drive root.
+
+#### Rejected
+
+- **`<cwd>/assets`, which is what stage 12b shipped.** Works only when the
+  process is started from the workspace root, which no shipped binary is.
+- **The executable's directory alone.** Correct for a shipped game, wrong
+  during development, where the binary is under `target/debug` and the assets
+  are not.
+
+### Sprite indices are `u32`
+
+**`Mesh::indexed` takes `&[u32]` and binds `IndexFormat::Uint32`.** A sprite
+batch is not one object's geometry: it holds every sprite in the world in one
+buffer, split into per-texture ranges, so it cannot be "split before it gets
+large" the way a mesh with its own draw call can. At 16 384 sprites a `u16`
+base index wraps and the next sprite silently draws over the first, with no
+validation error anywhere. Bevy binds its sprite index buffer as `Uint32` for
+the same reason. The cost is two extra bytes per index.
+
+### Headless test scaffolding lives in `voltra-testkit`
+
+**Adapter acquisition, texture readback, scratch directories and PNG writing
+are one dev-only crate, not one copy per crate's `tests/` tree.** Each
+integration test is its own binary and each crate its own tree, so the
+alternative is the same 120 lines copied per crate — it was already at two
+copies with a third due. `voltra-testkit` is `publish = false` and appears only
+under `[dev-dependencies]`, so it is not part of the shipped dependency graph.
 
 ### wgpu 30 API notes
 
