@@ -92,6 +92,13 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             for entity in previous {
                                 frame.world.despawn(entity);
                             }
+                            // The world just changed under every handle in
+                            // it: entities from the old scene are gone and
+                            // the new ones carry paths nothing has resolved
+                            // yet. Runs after the despawns above so it never
+                            // wastes a lookup loading a texture for an
+                            // entity about to disappear.
+                            frame.resolve_sprite_textures();
                             // Not load-bearing: a stale `selected` cannot come
                             // back to address a different entity, since
                             // `Entities::is_alive` checks the generation and a

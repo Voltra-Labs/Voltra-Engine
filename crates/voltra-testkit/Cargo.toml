@@ -1,0 +1,13 @@
+[package]
+name = "voltra-testkit"
+description = "Headless GPU scaffolding shared by the workspace's integration tests."
+publish = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-render.workspace = true
+image.workspace = true
+pollster.workspace = true

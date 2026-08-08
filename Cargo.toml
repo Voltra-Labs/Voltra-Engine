@@ -16,6 +16,7 @@ voltra-core = { path = "crates/voltra-core" }
 voltra-ecs = { path = "crates/voltra-ecs" }
 voltra-render = { path = "crates/voltra-render" }
 voltra-scene = { path = "crates/voltra-scene" }
+voltra-testkit = { path = "crates/voltra-testkit" }
 
 wgpu = "30.0.0"
 winit = "0.30.13"

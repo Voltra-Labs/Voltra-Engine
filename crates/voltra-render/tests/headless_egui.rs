@@ -9,9 +9,6 @@
 //! The primitives are built directly from `epaint`, so these tests exercise the
 //! backend without dragging widgets and layout into the render crate.
 
-mod common;
-
-use common::{headless_device, read_texture, Rgba};
 use epaint::textures::{TextureOptions, TexturesDelta};
 use epaint::{
     pos2, ClippedPrimitive, Color32, ColorImage, ImageDelta, Mesh, Primitive, Rect, TextureId,
@@ -20,6 +17,7 @@ use epaint::{
 use voltra_render::egui_backend::{EguiBackend, ScreenDescriptor};
 use voltra_render::target::RenderTarget;
 use voltra_render::{wgpu, Filter};
+use voltra_testkit::{headless_device, read_texture, Rgba};
 
 const SIZE: u32 = 64;
 /// sRGB, matching a real swapchain, so the gamma-converting entry point of the

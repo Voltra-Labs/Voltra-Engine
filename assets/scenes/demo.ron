@@ -1,0 +1,26 @@
+(
+    version: 1,
+    entities: [
+        (
+            id: "019fe220-e7f7-7211-ac55-33f4ae75d6f9",
+            components: {
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:Some(Path("sprites/checker.png"))),
+                "Transform": (translation:(-1.2,0.0),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe220-e7f7-7211-ac55-3405a8519129",
+            components: {
+                "Sprite": (color:(1.0,0.4,0.2,1.0),sort_order:1,texture:None),
+                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.5,1.5)),
+            },
+        ),
+        (
+            id: "019fe220-e7f7-7211-ac55-3414dbc3e447",
+            components: {
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:2,texture:Some(Path("sprites/checker.png"))),
+                "Transform": (translation:(1.2,0.0),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+    ],
+)

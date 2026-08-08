@@ -11,14 +11,13 @@
 //! The test skips itself when no GPU adapter is available so CI machines
 //! without one still pass.
 
-mod common;
-
-use common::{headless_device, read_texture, Rgba, CLEAR};
 use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::glam::Vec2;
-use voltra_render::mesh::{self, Mesh};
+use voltra_render::mesh::{self, Mesh, Vertex};
+use voltra_render::pass::MeshDraw;
 use voltra_render::texture::{self, Filter, Texture};
 use voltra_render::{pass, pipeline, wgpu};
+use voltra_testkit::{headless_device, read_texture, Rgba, CLEAR};
 
 const SIZE: u32 = 64;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
@@ -315,4 +314,156 @@ fn zooming_out_shrinks_the_geometry() {
         "zoomed out, the corner should be clear colour, got {corner:?}"
     );
     assert_ne!(centre, corner, "the quad should still cover the centre");
+}
+
+/// Two side-by-side quads sharing one vertex/index buffer: x in `[-1, 0]` for
+/// the first, `[0, 1]` for the second. Each is its own indexed range so
+/// [`pass::draw_mesh_batches`] can bind a different texture per half.
+const TWO_HALVES: [Vertex; 8] = [
+    Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0], [0.0, 0.0]),
+    Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0], [1.0, 0.0]),
+    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 0.0]),
+    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 0.0]),
+];
+const TWO_HALVES_INDICES: [u32; 12] = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+
+#[test]
+fn draw_mesh_batches_binds_a_different_texture_per_range() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("headless-target"),
+        size: wgpu::Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    let camera_binding = CameraBinding::new(&device);
+    camera_binding.upload(&queue, &Camera2D::default());
+    let texture_layout = texture::bind_group_layout(&device);
+    let render_pipeline =
+        pipeline::create_flat_color(&device, FORMAT, camera_binding.layout(), &texture_layout);
+
+    let white = Texture::white(&device, &queue).create_bind_group(&device, &texture_layout);
+    let red = Texture::from_rgba8(
+        &device,
+        &queue,
+        "red",
+        &[255, 0, 0, 255],
+        1,
+        1,
+        Filter::Nearest,
+    )
+    .expect("1x1 RGBA is 4 bytes")
+    .create_bind_group(&device, &texture_layout);
+
+    let mesh = Mesh::indexed(&device, "two-halves", &TWO_HALVES, &TWO_HALVES_INDICES);
+    let draws = [
+        MeshDraw {
+            texture: &white,
+            indices: 0..6,
+        },
+        MeshDraw {
+            texture: &red,
+            indices: 6..12,
+        },
+    ];
+
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("headless-encoder"),
+    });
+    pass::draw_mesh_batches(
+        &mut encoder,
+        &view,
+        &render_pipeline,
+        camera_binding.bind_group(),
+        Some(&mesh),
+        &draws,
+        CLEAR,
+    );
+    queue.submit(Some(encoder.finish()));
+
+    let pixels = read_texture(&device, &queue, &texture, SIZE, SIZE);
+
+    // Left half went through the white bind group, a no-op on the white
+    // vertex colour; right half went through the red one.
+    let left = at(&pixels, SIZE / 4, SIZE / 2);
+    let right = at(&pixels, 3 * SIZE / 4, SIZE / 2);
+    assert!(
+        left.r > 200 && left.g > 200 && left.b > 200,
+        "left half should stay white, got {left:?}"
+    );
+    assert!(
+        right.r > 200 && right.g < 60 && right.b < 60,
+        "right half should be tinted red, got {right:?}"
+    );
+}
+
+#[test]
+fn draw_mesh_batches_with_no_draws_only_clears() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter available; skipping headless render test");
+        return;
+    };
+
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("headless-target"),
+        size: wgpu::Extent3d {
+            width: SIZE,
+            height: SIZE,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    let camera_binding = CameraBinding::new(&device);
+    camera_binding.upload(&queue, &Camera2D::default());
+    let texture_layout = texture::bind_group_layout(&device);
+    let render_pipeline =
+        pipeline::create_flat_color(&device, FORMAT, camera_binding.layout(), &texture_layout);
+    let mesh = Mesh::indexed(&device, "two-halves", &TWO_HALVES, &TWO_HALVES_INDICES);
+
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("headless-encoder"),
+    });
+    pass::draw_mesh_batches(
+        &mut encoder,
+        &view,
+        &render_pipeline,
+        camera_binding.bind_group(),
+        Some(&mesh),
+        &[],
+        CLEAR,
+    );
+    queue.submit(Some(encoder.finish()));
+
+    let pixels = read_texture(&device, &queue, &texture, SIZE, SIZE);
+    let survivors = pixels.iter().filter(|p| p.is_clear_ish()).count();
+    assert_eq!(
+        survivors,
+        pixels.len(),
+        "empty draws must leave nothing but the clear colour"
+    );
 }

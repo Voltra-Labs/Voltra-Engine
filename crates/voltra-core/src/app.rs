@@ -1,11 +1,14 @@
 //! Event loop driver.
 
+mod draw;
+mod ui_frame;
+
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use voltra_assets::Textures;
 use voltra_ecs::World;
-use voltra_render::egui_backend::ScreenDescriptor;
-use voltra_render::{Camera2D, Filter, RenderTarget, Renderer};
-use voltra_scene::SpriteBatch;
+use voltra_render::{Filter, RenderTarget, Renderer};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -15,54 +18,26 @@ use crate::input::Input;
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
+pub use ui_frame::UiFrame;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
-
-/// What the UI may reach while it is being laid out.
-///
-/// Passing this rather than the whole `App` is what stops a panel reaching the
-/// event loop or the swapchain — a UI callback that could acquire a frame would
-/// deadlock the one already in flight.
-pub struct UiFrame<'a> {
-    /// The scene. Panels add, remove and edit entities through it.
-    pub world: &'a mut World,
-    /// The camera the scene was drawn with, so a viewport panel can pan it.
-    pub camera: &'a mut Camera2D,
-    /// The rendered scene, ready for `egui::Image::new`.
-    viewport: TextureId,
-    viewport_size: (u32, u32),
-    requested_size: &'a mut (u32, u32),
-}
-
-impl UiFrame<'_> {
-    /// Handle for the scene image.
-    pub fn viewport(&self) -> TextureId {
-        self.viewport
-    }
-
-    /// Physical size the scene was rendered at this frame.
-    pub fn viewport_size(&self) -> (u32, u32) {
-        self.viewport_size
-    }
-
-    /// Asks for a different scene resolution, honoured on the *next* frame.
-    ///
-    /// It cannot be this frame's: the scene has to be drawn before egui can
-    /// sample it, and a panel only learns how much room it has once egui is
-    /// already laying out. One frame of lag while dragging a splitter is the
-    /// price, and it is not visible.
-    pub fn request_viewport_size(&mut self, width: u32, height: u32) {
-        *self.requested_size = (width.max(1), height.max(1));
-    }
-}
 
 #[derive(Default)]
 pub struct App {
     config: WindowConfig,
+    /// Where [`AssetPath`]s resolve from, when the caller has an opinion.
+    ///
+    /// `None` means [`voltra_assets::default_root`] decides at `resumed` time.
+    /// A game that ships its assets somewhere unusual sets this; the editor
+    /// does not need to.
+    ///
+    /// [`AssetPath`]: voltra_assets::AssetPath
+    asset_root: Option<PathBuf>,
     // All of these stay `None` until the event loop resumes and hands us a
     // window; none of them can be built without a surface.
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
+    textures: Option<Textures>,
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
     viewport: Option<TextureId>,
@@ -92,6 +67,14 @@ impl App {
         self
     }
 
+    /// Sets the directory every texture path resolves against.
+    ///
+    /// Without this, [`voltra_assets::default_root`] resolves one at startup.
+    pub fn with_asset_root(mut self, root: impl Into<PathBuf>) -> Self {
+        self.asset_root = Some(root.into());
+        self
+    }
+
     pub fn run(mut self) {
         let event_loop = EventLoop::new().expect("failed to create event loop");
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -107,69 +90,6 @@ impl App {
     /// camera.
     fn update(&mut self) {
         self.clock.tick();
-    }
-
-    /// Draws the world straight to the window. No UI, no intermediate texture.
-    fn redraw_without_ui(&mut self) {
-        let Some(renderer) = self.renderer.as_mut() else {
-            return;
-        };
-        // Rebuilt every frame. Caching it means tracking every Transform and
-        // Sprite write, which is not worth it until the batch actually shows up
-        // in a profile.
-        let batch = SpriteBatch::from_world(&self.world);
-        let mesh = batch.upload(renderer.context().device());
-        renderer.render_mesh(mesh.as_ref());
-    }
-
-    /// Scene to an offscreen target, then the UI over the top of the window.
-    fn redraw_with_ui(&mut self) {
-        let (Some(renderer), Some(window), Some(egui), Some(target), Some(viewport), Some(ui)) = (
-            self.renderer.as_mut(),
-            self.window.as_ref(),
-            self.egui.as_mut(),
-            self.scene_target.as_mut(),
-            self.viewport,
-            self.ui.as_mut(),
-        ) else {
-            return;
-        };
-
-        // Cloned handles rather than borrows: `renderer.camera` goes into the
-        // UI callback mutably, which rules out holding a borrow of the renderer
-        // across it. Both are reference-counted, so this costs a bump.
-        let device = renderer.context().device().clone();
-        let queue = renderer.context().queue().clone();
-
-        let (width, height) = self.requested_size;
-        if target.resize(&device, width, height) {
-            // The old view points at a texture that no longer exists, and the
-            // scene has to be projected for the panel's shape, not the window's.
-            egui.update_view(&device, viewport, target.raw_view(), Filter::Linear);
-            renderer.camera.aspect = target.aspect();
-        }
-
-        let batch = SpriteBatch::from_world(&self.world);
-        let mesh = batch.upload(&device);
-        renderer.render_scene(target, mesh.as_ref());
-
-        let size = window.inner_size();
-        let screen = ScreenDescriptor {
-            width: size.width.max(1),
-            height: size.height.max(1),
-            pixels_per_point: window.scale_factor() as f32,
-        };
-
-        let mut frame = UiFrame {
-            world: &mut self.world,
-            camera: &mut renderer.camera,
-            viewport,
-            viewport_size: (target.width(), target.height()),
-            requested_size: &mut self.requested_size,
-        };
-        egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
-
-        renderer.present_with(|pass| egui.render(pass));
     }
 }
 
@@ -188,6 +108,21 @@ impl ApplicationHandler for App {
 
         let size = window.inner_size();
         let renderer = Renderer::new(window.clone(), size.width, size.height);
+
+        let asset_root = self
+            .asset_root
+            .clone()
+            .unwrap_or_else(voltra_assets::default_root);
+        log::info!("asset root: {}", asset_root.display());
+
+        // The same layout object the sprite pipeline was built with —
+        // `Renderer` owns both, so `texture_layout()` is guaranteed to be it.
+        let textures = Textures::new(
+            renderer.context().device(),
+            renderer.context().queue(),
+            renderer.texture_layout(),
+            asset_root,
+        );
 
         if self.ui.is_some() {
             let device = renderer.context().device().clone();
@@ -211,6 +146,7 @@ impl ApplicationHandler for App {
         }
 
         self.renderer = Some(renderer);
+        self.textures = Some(textures);
         self.window = Some(window);
 
         // Device creation takes long enough to produce a huge first delta;

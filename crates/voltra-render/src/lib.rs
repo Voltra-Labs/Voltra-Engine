@@ -19,6 +19,7 @@ pub use camera::{Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
 pub use mesh::{Mesh, Vertex};
+pub use pass::MeshDraw;
 pub use renderer::Renderer;
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};

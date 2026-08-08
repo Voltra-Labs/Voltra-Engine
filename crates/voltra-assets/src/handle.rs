@@ -37,6 +37,21 @@ impl<T> Handle<T> {
     pub fn generation(&self) -> u32 {
         self.generation
     }
+
+    /// Builds a handle without a store behind it, for tests that need one to
+    /// compare or sort but never resolve.
+    ///
+    /// `pub(crate)` on [`new`](Handle::new) cannot reach a downstream crate's
+    /// tests — `#[cfg(test)]` only compiles for this crate's own test build.
+    /// `forge` is the crate-boundary escape hatch: public, but `doc(hidden)`
+    /// and named to say what it is. A forged handle names a slot nothing
+    /// allocated, so `Textures::get` and anything that calls `bind_group` on
+    /// it will panic; callers that need a handle to actually resolve must get
+    /// one from a real store instead.
+    #[doc(hidden)]
+    pub fn forge(index: u32, generation: u32) -> Self {
+        Self::new(index, generation)
+    }
 }
 
 // Every trait below is implemented by hand rather than derived. A derive on a

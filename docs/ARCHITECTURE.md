@@ -15,23 +15,28 @@
 ## Layers
 
 ```
-        ┌──────────────────┐
-        │  voltra-editor   │  binary — wires everything together
-        └────────┬─────────┘
-                 │
-        ┌────────▼─────────┐
-        │   voltra-core    │  platform: event loop, window, input, time
-        │  (owns winit)    │
-        └────────┬─────────┘
-                 │
-        ┌────────▼─────────┐
-        │   voltra-scene   │  components and the geometry they become
-        └─┬──────────┬───┬─┘
-          │          │   │
-┌─────────▼────┐  ┌──▼───▼───────────┐  ┌──────────────────┐
-│  voltra-ecs  │  │  voltra-render   │◄─┤  voltra-assets   │
-│  (no deps)   │  │  (owns wgpu)     │  │  cache, loading  │
-└──────────────┘  └──────────────────┘  └──────────────────┘
+        ┌──────────────────┐  binary — wires everything together
+        │  voltra-editor   │
+        └──────────────────┘
+                  │
+        ┌─────────▼────────┐  platform: event loop, window, input, time
+        │   voltra-core    │
+        │   (owns winit)   │
+        └──────────────────┘
+                  │
+        ┌─────────▼────────┐  components and the geometry they become
+        │   voltra-scene   │
+        └──────────────────┘
+                  │
+         ┌────────┴────────┐
+         │                 │
+  ┌──────▼─────┐   ┌───────▼───────┐  identity, texture cache, loading
+  │ voltra-ecs │   │ voltra-assets │
+  │ (no deps)  │   └───────────────┘
+  └────────────┘           │
+                   ┌───────▼───────┐  owns wgpu
+                   │ voltra-render │
+                   └───────────────┘
 ```
 
 `voltra-scene` is the only crate that knows about both entities and vertices.
@@ -42,6 +47,19 @@ rendering and `voltra-render` stay free of entities.
 GPU texture — caching decoded bytes and re-uploading per sprite would cache the
 cheap half. It reaches `Device` and `Queue` through `voltra_render::wgpu` and
 declares no `wgpu` of its own, so the one-crate-per-backend rule holds.
+
+The diagram draws one path per crate, not the full dependency lattice: it omits
+`voltra-scene`'s own direct reach into `voltra-render` for `Vertex` and `Mesh`,
+the same way it already omitted `voltra-editor`'s direct reach into
+`voltra-scene`. `voltra-core` and `voltra-editor` are two more edges it leaves
+out on purpose — both depend on `voltra-assets` directly, not only through
+`voltra-scene`, because both own a `Textures` cache: `App` builds one and holds
+it for the frame loop, and the inspector panel takes a `&mut Textures` to
+resolve a path the moment someone edits it. Drawing every real edge would bury
+the one this section exists to explain. `voltra-testkit` does not appear at
+all: it is a dev-only crate, `publish = false` and never anything but a
+`[dev-dependencies]` entry, so it carries no edge a shipped binary's dependency
+graph — which this diagram is — would ever need to show.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`) and exactly one
 may depend on `wgpu` (`voltra-render`). Everything else consumes them through
@@ -57,6 +75,7 @@ re-exports, so a version bump is a one-line change.
 | `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
+| `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `scratch_root`, `write_png` |
 
 ### Planned crates
 
@@ -261,10 +280,10 @@ the quad, so a collapsed sprite would be pickable everywhere.
 
 Rejected: **pixel-accurate hit-testing**, which is what `bevy_sprite`'s picking
 backend does. It can, because each of its sprites carries its own texture and
-therefore its own alpha. Here `Sprite` holds a colour and the renderer binds one
-texture for the whole batch, so there is no per-sprite alpha to test. A quad test
-is not an approximation here; it is the exact answer until sprites get their own
-textures.
+therefore its own alpha. Sprites here carry an optional texture too as of
+stage 12b, but `pick::sprite_at` does not read it — picking is still the same
+quad test against every sprite's local space, textured or not, until
+pixel-perfect hit-testing is built on top of that per-sprite alpha.
 
 ### When 3D arrives: one world, two render paths
 
@@ -553,6 +572,128 @@ arrives.
   dead reference.
 - **Failing the scene load on a missing texture.** Would contradict Open's
   rollback — a moved PNG must not make a scene unopenable.
+
+### Sprites carry a path and a handle, and batch by contiguous runs
+
+**`Sprite` stores both `texture: Option<AssetPath>` and a `#[serde(skip)]`
+`texture_handle: Option<Handle<Texture>>`.** The path is the identity a `.ron`
+file understands; the handle is a session-local index `Textures::load` fills
+in, and nothing on disk ever sees it. `Sprite` loses `Copy` this way —
+`AssetPath` holds a `String` — but `batch.rs` and `pick.rs` already take
+references, and Bevy and Godot do not treat their sprite component as cheap
+`Copy` either.
+
+**Resolving a path into a handle happens outside `from_world`, in the
+app/editor wiring that owns `Textures`** — on scene Open, on an inspector path
+commit, and whenever code calls `Sprite::set_texture`. `from_world` never
+touches the disk, matching Bevy's `AssetServer` and Godot's `ResourceLoader`:
+both resolve off the draw loop. Loading inside `from_world` would stall every
+frame on a broken path until the miss got cached, and would couple scene
+geometry to GPU device lifetime, which nothing else in `voltra-scene` does.
+
+**`from_world` still sorts by `(sort_order, entity.index())` first, unchanged,
+and only then splits the sorted mesh into contiguous same-handle runs.** Unity
+and Godot both batch this way — adjacent sprites merge only if they already
+share a texture after sort order is decided, never before. Sorting by texture
+first would break painter's order, which alpha blending depends on.
+Interleaved textures (`A, A, B, A`) become three draws; two sprites naming the
+same PNG still share one handle and one GPU texture no matter what sits
+between them in sort order — 12a's promise, unaffected by how many draws that
+costs.
+
+**No texture and a failed load stay visually distinct**, same values 12a
+already chose for the failure case: `None` draws the existing 1×1 white times
+the sprite's colour; a path that fails to load draws the magenta-and-black
+checker. White-times-colour is what a coloured sprite with no PNG has always
+drawn, so keeping it is not a new behaviour — a second, indistinguishable
+"missing texture" look would only hide the failure from the render, not the
+log.
+
+**The scene format grows a field, not a version.** `texture: Option<AssetPath>`
+is `#[serde(default)]`, so a scene written before this stage deserializes with
+`texture: None` and opens as untextured white quads. A missing optional field
+with a default is not a breaking format change, so `VERSION` does not move.
+
+**Bind groups for loaded textures are cached on `Textures` at load time,
+built against the render pipeline's bind group layout, not rebuilt per frame
+or per draw call.** `Textures` already owns the `Device` a bind group needs;
+recreating one every frame would be GPU work with no matching change on
+screen. `Renderer` keeps its own white bind group as the sentinel for a
+`None` range — the one bind group not cached on `Textures`, because it
+belongs to no texture.
+
+**`voltra-render` still does not depend on `voltra-assets`.** It receives
+index ranges and bind groups from the caller and draws each range with the
+matching group; it has no idea a range came from resolving a path. The
+dependency direction is `voltra-scene → voltra-assets → voltra-render`; the
+layers diagram in `## Layers` was corrected in the same stage that added this
+paragraph, which had drawn that chain as a stray arrow into `voltra-render`
+rather than the edge it actually is.
+
+#### Rejected
+
+- **Sorting by texture first, `sort_order` only within a texture group.**
+  Maximizes batching, but breaks painter's order the moment two
+  differently-textured, overlapping, alpha-blended sprites need a specific
+  draw order. Unity and Godot both reject this for the same reason; Godot's
+  overlap-aware reordering is an opt-in optimisation on top of sorted order,
+  not a replacement for it, and is out of scope here.
+- **Loading textures inside `SpriteBatch::from_world`.** Keeps the call site
+  simple at the cost of disk I/O on the draw loop and a GPU device the
+  geometry layer has no other reason to reach. Matches neither `AssetServer`
+  nor `ResourceLoader`, both of which resolve before the frame that draws
+  the result.
+
+### The asset root is resolved, never assumed
+
+**The directory `AssetPath`s are joined onto comes from
+`voltra_assets::default_root()`, or from `App::with_asset_root`.** The
+resolution order is `VOLTRA_ASSET_ROOT`, then the nearest `assets` directory at
+or above `CARGO_MANIFEST_DIR`, then the nearest one at or above the
+executable's directory, then `<cwd>/assets`.
+
+No engine resolves assets against the process working directory, and this one
+should not either: the working directory is set by whatever shell or launcher
+started the process, and it silently changes what every path in every scene
+file means. Bevy resolves `BEVY_ASSET_ROOT`, then `CARGO_MANIFEST_DIR`, then
+the executable's parent. Unreal hangs every path off the executable's base
+directory. Unity's `Application.dataPath` is `<project>/Assets` in the editor
+and `<exe>_Data` in a player build. Godot's `res://` is the project directory
+in the editor and the PCK beside the executable once exported.
+
+The walk *upwards* is the one place this differs from Bevy: `cargo run -p
+voltra-editor` sets `CARGO_MANIFEST_DIR` to `crates/voltra-editor`, not the
+workspace root, so joining `assets` onto it directly would resolve to a
+directory that does not exist. The walk is bounded at six levels, because an
+unbounded one started in a temp directory would adopt any `assets` sitting near
+the drive root.
+
+#### Rejected
+
+- **`<cwd>/assets`, which is what stage 12b shipped.** Works only when the
+  process is started from the workspace root, which no shipped binary is.
+- **The executable's directory alone.** Correct for a shipped game, wrong
+  during development, where the binary is under `target/debug` and the assets
+  are not.
+
+### Sprite indices are `u32`
+
+**`Mesh::indexed` takes `&[u32]` and binds `IndexFormat::Uint32`.** A sprite
+batch is not one object's geometry: it holds every sprite in the world in one
+buffer, split into per-texture ranges, so it cannot be "split before it gets
+large" the way a mesh with its own draw call can. At 16 384 sprites a `u16`
+base index wraps and the next sprite silently draws over the first, with no
+validation error anywhere. Bevy binds its sprite index buffer as `Uint32` for
+the same reason. The cost is two extra bytes per index.
+
+### Headless test scaffolding lives in `voltra-testkit`
+
+**Adapter acquisition, texture readback, scratch directories and PNG writing
+are one dev-only crate, not one copy per crate's `tests/` tree.** Each
+integration test is its own binary and each crate its own tree, so the
+alternative is the same 120 lines copied per crate — it was already at two
+copies with a third due. `voltra-testkit` is `publish = false` and appears only
+under `[dev-dependencies]`, so it is not part of the shipped dependency graph.
 
 ### wgpu 30 API notes
 
