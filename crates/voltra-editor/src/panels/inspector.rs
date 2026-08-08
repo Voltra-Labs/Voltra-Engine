@@ -141,11 +141,21 @@ fn texture_ui(
 
     ui.horizontal(|ui| {
         let response = ui.add(TextEdit::singleline(&mut buffer).hint_text("path/to/texture.png"));
+        let clear_clicked = ui.button("Clear").clicked();
+
+        // Clicking `Clear` also moves focus off the `TextEdit`, so both
+        // conditions can be true on the same frame; `else if` makes Clear win
+        // rather than letting the stale buffer commit and then immediately
+        // get overwritten, which loaded a texture just to discard it.
+        //
         // `lost_focus` alone also covers Enter: a singleline `TextEdit`
         // surrenders focus on it. Guarded on a real change so clicking in
         // and out without editing does not re-run `set_texture` for no
         // reason.
-        if response.lost_focus() && buffer != committed {
+        if clear_clicked {
+            sprite.set_texture(None, textures, device, queue);
+            buffer.clear();
+        } else if response.lost_focus() && buffer != committed {
             match AssetPath::new(&buffer) {
                 Ok(path) => sprite.set_texture(Some(path), textures, device, queue),
                 Err(e) => log::error!("invalid texture path {buffer:?}: {e}"),
@@ -159,10 +169,6 @@ fn texture_ui(
                 .map(AssetPath::as_str)
                 .unwrap_or("")
                 .to_owned();
-        }
-        if ui.button("Clear").clicked() {
-            sprite.set_texture(None, textures, device, queue);
-            buffer.clear();
         }
     });
 
