@@ -1,5 +1,7 @@
 //! Vertex and index buffers.
 
+use std::ops::Range;
+
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
@@ -96,6 +98,24 @@ impl Mesh {
             }
             None => pass.draw(0..self.count, 0..1),
         }
+    }
+
+    /// Binds this mesh and issues an indexed draw over `indices` only.
+    ///
+    /// Lets one uploaded buffer serve several draw calls: a batch that groups
+    /// its geometry into contiguous per-texture runs draws each run through
+    /// its own call here without re-uploading anything. Panics if this mesh
+    /// has no index buffer — callers pick ranges from data they built
+    /// themselves, so a mismatch here is a caller bug, not a runtime case to
+    /// recover from.
+    pub fn draw_range(&self, pass: &mut wgpu::RenderPass<'_>, indices: Range<u32>) {
+        let index_buffer = self
+            .indices
+            .as_ref()
+            .expect("draw_range requires an indexed mesh");
+        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        pass.draw_indexed(indices, 0, 0..1);
     }
 
     /// Vertex count for a direct draw, index count for an indexed one.

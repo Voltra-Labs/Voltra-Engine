@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use voltra_ecs::World;
 use voltra_render::egui_backend::ScreenDescriptor;
-use voltra_render::{Camera2D, Filter, RenderTarget, Renderer};
+use voltra_render::{Camera2D, Filter, MeshDraw, RenderTarget, Renderer};
 use voltra_scene::SpriteBatch;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -119,7 +119,21 @@ impl App {
         // in a profile.
         let batch = SpriteBatch::from_world(&self.world);
         let mesh = batch.upload(renderer.context().device());
-        renderer.render_mesh(mesh.as_ref());
+        // Every range draws against white until Task 5 wires up `Textures`
+        // and gives sprites their own handles. Cloned (a cheap ref-count
+        // bump — `wgpu::BindGroup` is `Clone`) rather than borrowed, so the
+        // borrow on `renderer` ends here instead of surviving into the
+        // `&mut self` call below.
+        let white = renderer.white_bind_group().clone();
+        let draws: Vec<_> = batch
+            .ranges
+            .iter()
+            .map(|range| MeshDraw {
+                texture: &white,
+                indices: range.indices.clone(),
+            })
+            .collect();
+        renderer.render_mesh(mesh.as_ref(), &draws);
     }
 
     /// Scene to an offscreen target, then the UI over the top of the window.
@@ -151,7 +165,21 @@ impl App {
 
         let batch = SpriteBatch::from_world(&self.world);
         let mesh = batch.upload(&device);
-        renderer.render_scene(target, mesh.as_ref());
+        // Every range draws against white until Task 5 wires up `Textures`
+        // and gives sprites their own handles. Cloned (a cheap ref-count
+        // bump — `wgpu::BindGroup` is `Clone`) rather than borrowed, so the
+        // borrow on `renderer` ends here instead of surviving into the
+        // `&mut self` call below.
+        let white = renderer.white_bind_group().clone();
+        let draws: Vec<_> = batch
+            .ranges
+            .iter()
+            .map(|range| MeshDraw {
+                texture: &white,
+                indices: range.indices.clone(),
+            })
+            .collect();
+        renderer.render_scene(target, mesh.as_ref(), &draws);
 
         let size = window.inner_size();
         let screen = ScreenDescriptor {
