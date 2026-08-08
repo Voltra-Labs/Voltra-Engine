@@ -81,16 +81,20 @@ impl SpriteBatch {
         sprites.sort_unstable_by_key(|(entity, _, sprite)| draw_key(*entity, sprite));
 
         let mut batch = Self::default();
-        let mut handles = Vec::with_capacity(sprites.len());
         for (_entity, transform, sprite) in sprites {
-            handles.push(sprite.texture_handle);
             batch.push(transform, sprite);
         }
-        batch.ranges = runs_from_handles(&handles, QUAD_INDICES.len() as u32);
         batch
     }
 
-    /// Appends one quad.
+    /// Appends one quad, extending or starting a [`SpriteRange`] to match.
+    ///
+    /// Grows the last range when this sprite's handle matches it, so two
+    /// pushes in a row for the same texture draw in one call; starts a new
+    /// range otherwise. Never looks further back than the last range, so a
+    /// texture that reappears later still gets its own run — the same
+    /// painter's-order-over-batching rule `from_world`'s sort already commits
+    /// to.
     pub fn push(&mut self, transform: &Transform, sprite: &Sprite) {
         let matrix = transform.matrix();
         // Every quad's indices are relative to its own first vertex; without
@@ -106,8 +110,18 @@ impl SpriteBatch {
             ));
         }
 
+        let start = self.indices.len() as u32;
         self.indices
             .extend(QUAD_INDICES.iter().map(|offset| base + offset));
+        let end = self.indices.len() as u32;
+
+        match self.ranges.last_mut() {
+            Some(range) if range.texture == sprite.texture_handle => range.indices.end = end,
+            _ => self.ranges.push(SpriteRange {
+                texture: sprite.texture_handle,
+                indices: start..end,
+            }),
+        }
     }
 
     pub fn sprite_count(&self) -> usize {
@@ -134,35 +148,6 @@ impl SpriteBatch {
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty()
     }
-}
-
-/// Splits a sequence of per-sprite texture handles, already in draw order,
-/// into [`SpriteRange`]s covering `indices_per_sprite` indices each.
-///
-/// A pure function so texture-run splitting has a unit test that needs
-/// neither a [`World`] nor a GPU-issued [`Handle`] — only draw order and
-/// equality, which is all the algorithm actually looks at. Never reorders:
-/// a run only grows by walking forward while the next handle matches, so
-/// two sprites sharing a texture but separated by a third never merge.
-fn runs_from_handles(
-    handles: &[Option<Handle<Texture>>],
-    indices_per_sprite: u32,
-) -> Vec<SpriteRange> {
-    let mut ranges = Vec::new();
-    let mut i = 0usize;
-    while i < handles.len() {
-        let texture = handles[i];
-        let start = i as u32 * indices_per_sprite;
-        i += 1;
-        while i < handles.len() && handles[i] == texture {
-            i += 1;
-        }
-        ranges.push(SpriteRange {
-            texture,
-            indices: start..(i as u32 * indices_per_sprite),
-        });
-    }
-    ranges
 }
 
 #[cfg(test)]
@@ -430,11 +415,6 @@ mod tests {
         assert_eq!(Sprite::new([1.0, 0.0, 0.0, 1.0]).sort_order, 0);
     }
 
-    /// Six indices per sprite everywhere below: [`QUAD_INDICES`]'s length,
-    /// spelled out so a range's bounds are checkable by eye against the test
-    /// data rather than through another layer of indirection.
-    const INDICES_PER_SPRITE: u32 = 6;
-
     fn sprite_with_texture(handle: Option<Handle<Texture>>) -> Sprite {
         Sprite {
             texture_handle: handle,
@@ -442,13 +422,19 @@ mod tests {
         }
     }
 
+    /// These four exercise [`SpriteBatch::push`] directly, with no [`World`]
+    /// and no `from_world` in the call stack: `push` maintains `ranges`
+    /// itself now, so the invariant has to hold from an empty batch onward,
+    /// not just after `from_world` has walked one.
     #[test]
-    fn contiguous_same_handles_merge_into_one_range() {
+    fn push_alone_merges_contiguous_same_handles_into_one_range() {
         let a = Handle::forge(0, 0);
-        let ranges = runs_from_handles(&[Some(a), Some(a)], INDICES_PER_SPRITE);
+        let mut batch = SpriteBatch::default();
+        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
+        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
 
         assert_eq!(
-            ranges,
+            batch.ranges,
             vec![SpriteRange {
                 texture: Some(a),
                 indices: 0..12,
@@ -457,13 +443,16 @@ mod tests {
     }
 
     #[test]
-    fn interleaved_handles_split_ranges() {
+    fn push_alone_splits_a_range_when_the_handle_changes() {
         let a = Handle::forge(0, 0);
         let b = Handle::forge(1, 0);
-        let ranges = runs_from_handles(&[Some(a), Some(b), Some(a)], INDICES_PER_SPRITE);
+        let mut batch = SpriteBatch::default();
+        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
+        batch.push(&Transform::default(), &sprite_with_texture(Some(b)));
+        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
 
         assert_eq!(
-            ranges,
+            batch.ranges,
             vec![
                 SpriteRange {
                     texture: Some(a),
@@ -482,12 +471,14 @@ mod tests {
     }
 
     #[test]
-    fn none_and_some_do_not_merge() {
+    fn push_alone_keeps_none_and_some_in_separate_ranges() {
         let a = Handle::forge(0, 0);
-        let ranges = runs_from_handles(&[None, Some(a)], INDICES_PER_SPRITE);
+        let mut batch = SpriteBatch::default();
+        batch.push(&Transform::default(), &sprite_with_texture(None));
+        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
 
         assert_eq!(
-            ranges,
+            batch.ranges,
             vec![
                 SpriteRange {
                     texture: None,
@@ -502,8 +493,8 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_handle_list_produces_no_ranges() {
-        assert_eq!(runs_from_handles(&[], INDICES_PER_SPRITE), Vec::new());
+    fn a_fresh_batch_has_no_ranges_until_something_is_pushed() {
+        assert!(SpriteBatch::default().ranges.is_empty());
     }
 
     #[test]
