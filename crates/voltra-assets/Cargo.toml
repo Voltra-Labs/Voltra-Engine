@@ -12,6 +12,7 @@ log.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
+voltra-testkit.workspace = true
 # Only the tests encode a PNG; the crate itself never does — `Texture::from_png`
 # does the decoding, inside `voltra-render`.
 image.workspace = true

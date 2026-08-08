@@ -11,15 +11,13 @@
 //! The test skips itself when no GPU adapter is available so CI machines
 //! without one still pass.
 
-mod common;
-
-use common::{headless_device, read_texture, Rgba, CLEAR};
 use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::glam::Vec2;
 use voltra_render::mesh::{self, Mesh, Vertex};
 use voltra_render::pass::MeshDraw;
 use voltra_render::texture::{self, Filter, Texture};
 use voltra_render::{pass, pipeline, wgpu};
+use voltra_testkit::{headless_device, read_texture, Rgba, CLEAR};
 
 const SIZE: u32 = 64;
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;

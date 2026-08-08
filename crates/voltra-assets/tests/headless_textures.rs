@@ -7,10 +7,8 @@
 //! Each test skips itself when no adapter is available so CI machines without
 //! one still pass.
 
-mod common;
-
-use common::{headless_device, scratch_root, write_png};
 use voltra_assets::{AssetPath, Textures};
+use voltra_testkit::{headless_device, scratch_root, write_png};
 
 macro_rules! device_or_skip {
     () => {

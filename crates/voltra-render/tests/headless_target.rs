@@ -6,14 +6,12 @@
 //! invisible from the API side — a target can be created, bound and drawn to
 //! with no validation error and still hand back an empty texture.
 
-mod common;
-
-use common::{headless_device, read_texture, CLEAR};
 use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::mesh::{self, Mesh};
 use voltra_render::target::RenderTarget;
 use voltra_render::texture::{self, Filter, Texture};
 use voltra_render::{pass, pipeline, wgpu};
+use voltra_testkit::{headless_device, read_texture, CLEAR};
 
 const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 

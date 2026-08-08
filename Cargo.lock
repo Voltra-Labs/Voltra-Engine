@@ -2757,6 +2757,7 @@ dependencies = [
  "ron",
  "serde",
  "voltra-render",
+ "voltra-testkit",
 ]
 
 [[package]]
@@ -2800,6 +2801,7 @@ dependencies = [
  "image",
  "log",
  "pollster",
+ "voltra-testkit",
  "wgpu",
 ]
 
@@ -2813,6 +2815,15 @@ dependencies = [
  "uuid",
  "voltra-assets",
  "voltra-ecs",
+ "voltra-render",
+]
+
+[[package]]
+name = "voltra-testkit"
+version = "0.1.0"
+dependencies = [
+ "image",
+ "pollster",
  "voltra-render",
 ]
 
