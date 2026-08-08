@@ -15,23 +15,28 @@
 ## Layers
 
 ```
-        ┌──────────────────┐
-        │  voltra-editor   │  binary — wires everything together
-        └────────┬─────────┘
-                 │
-        ┌────────▼─────────┐
-        │   voltra-core    │  platform: event loop, window, input, time
-        │  (owns winit)    │
-        └────────┬─────────┘
-                 │
-        ┌────────▼─────────┐
-        │   voltra-scene   │  components and the geometry they become
-        └─┬──────────┬───┬─┘
-          │          │   │
-┌─────────▼────┐  ┌──▼───▼───────────┐  ┌──────────────────┐
-│  voltra-ecs  │  │  voltra-render   │◄─┤  voltra-assets   │
-│  (no deps)   │  │  (owns wgpu)     │  │  cache, loading  │
-└──────────────┘  └──────────────────┘  └──────────────────┘
+        ┌──────────────────┐  binary — wires everything together
+        │  voltra-editor   │
+        └──────────────────┘
+                  │
+        ┌─────────▼────────┐  platform: event loop, window, input, time
+        │   voltra-core    │
+        │   (owns winit)   │
+        └──────────────────┘
+                  │
+        ┌─────────▼────────┐  components and the geometry they become
+        │   voltra-scene   │
+        └──────────────────┘
+                  │
+         ┌────────┴────────┐
+         │                 │
+  ┌──────▼─────┐   ┌───────▼───────┐  identity, texture cache, loading
+  │ voltra-ecs │   │ voltra-assets │
+  │ (no deps)  │   └───────────────┘
+  └────────────┘           │
+                   ┌───────▼───────┐  owns wgpu
+                   │ voltra-render │
+                   └───────────────┘
 ```
 
 `voltra-scene` is the only crate that knows about both entities and vertices.
@@ -42,6 +47,16 @@ rendering and `voltra-render` stay free of entities.
 GPU texture — caching decoded bytes and re-uploading per sprite would cache the
 cheap half. It reaches `Device` and `Queue` through `voltra_render::wgpu` and
 declares no `wgpu` of its own, so the one-crate-per-backend rule holds.
+
+The diagram draws one path per crate, not the full dependency lattice: it omits
+`voltra-scene`'s own direct reach into `voltra-render` for `Vertex` and `Mesh`,
+the same way it already omitted `voltra-editor`'s direct reach into
+`voltra-scene`. `voltra-core` and `voltra-editor` are two more edges it leaves
+out on purpose — both depend on `voltra-assets` directly, not only through
+`voltra-scene`, because both own a `Textures` cache: `App` builds one and holds
+it for the frame loop, and the inspector panel takes a `&mut Textures` to
+resolve a path the moment someone edits it. Drawing every real edge would bury
+the one this section exists to explain.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`) and exactly one
 may depend on `wgpu` (`voltra-render`). Everything else consumes them through
@@ -606,8 +621,10 @@ belongs to no texture.
 **`voltra-render` still does not depend on `voltra-assets`.** It receives
 index ranges and bind groups from the caller and draws each range with the
 matching group; it has no idea a range came from resolving a path. The
-dependency direction the layers diagram already draws — `voltra-scene` and
-`voltra-assets` both sit above `voltra-render` — holds exactly as before.
+dependency direction is `voltra-scene → voltra-assets → voltra-render`; the
+layers diagram in `## Layers` was corrected in the same stage that added this
+paragraph, which had drawn that chain as a stray arrow into `voltra-render`
+rather than the edge it actually is.
 
 #### Rejected
 
