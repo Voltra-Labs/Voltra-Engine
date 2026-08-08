@@ -2809,6 +2809,7 @@ dependencies = [
 name = "voltra-scene"
 version = "0.1.0"
 dependencies = [
+ "image",
  "log",
  "ron",
  "serde",
@@ -2816,6 +2817,7 @@ dependencies = [
  "voltra-assets",
  "voltra-ecs",
  "voltra-render",
+ "voltra-testkit",
 ]
 
 [[package]]
