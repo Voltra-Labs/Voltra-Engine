@@ -1,11 +1,13 @@
 //! Event loop driver.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
+use voltra_assets::Textures;
 use voltra_ecs::World;
 use voltra_render::egui_backend::ScreenDescriptor;
-use voltra_render::{Camera2D, Filter, MeshDraw, RenderTarget, Renderer};
-use voltra_scene::SpriteBatch;
+use voltra_render::{wgpu, Camera2D, Filter, MeshDraw, RenderTarget, Renderer};
+use voltra_scene::{Sprite, SpriteBatch};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -28,6 +30,16 @@ pub struct UiFrame<'a> {
     pub world: &'a mut World,
     /// The camera the scene was drawn with, so a viewport panel can pan it.
     pub camera: &'a mut Camera2D,
+    /// Loaded textures, shared with the renderer's draws for this frame.
+    ///
+    /// A panel that edits a sprite's texture path resolves through this —
+    /// never a `Textures` of its own — so the handle it produces is valid
+    /// against the bind groups the very same frame is about to draw with.
+    pub textures: &'a mut Textures,
+    /// Needed to load a texture a panel just named.
+    pub device: &'a wgpu::Device,
+    /// Needed to upload a texture a panel just named.
+    pub queue: &'a wgpu::Queue,
     /// The rendered scene, ready for `egui::Image::new`.
     viewport: TextureId,
     viewport_size: (u32, u32),
@@ -54,6 +66,65 @@ impl UiFrame<'_> {
     pub fn request_viewport_size(&mut self, width: u32, height: u32) {
         *self.requested_size = (width.max(1), height.max(1));
     }
+
+    /// Re-resolves every sprite's texture handle from its path.
+    ///
+    /// For after a world-replacing edit — Open is the only caller today.
+    /// Handles from whatever was in the world before mean nothing once the
+    /// entities they pointed at are gone, so this reloads every `Sprite`
+    /// unconditionally rather than trying to detect which ones changed. Not
+    /// for per-frame use: a path whose handle is already correct still pays
+    /// for a `Textures::load` cache lookup.
+    pub fn resolve_sprite_textures(&mut self) {
+        resolve_world_textures(self.world, self.textures, self.device, self.queue);
+    }
+}
+
+/// Re-resolves every [`Sprite`]'s texture handle from its path.
+///
+/// Collected before mutating: `World` has no query that yields `&mut Sprite`
+/// while also handing out unrelated mutable access to itself, and
+/// `set_texture` cannot run inside the iterator borrowing the world it would
+/// need to call `get_mut` on.
+fn resolve_world_textures(
+    world: &mut World,
+    textures: &mut Textures,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) {
+    let entities: Vec<_> = world
+        .query::<Sprite>()
+        .map(|(e, sprite)| (e, sprite.texture.clone()))
+        .collect();
+    for (entity, path) in entities {
+        if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+            sprite.set_texture(path, textures, device, queue);
+        }
+    }
+}
+
+/// Turns a batch's texture-run ranges into the renderer's draw list.
+///
+/// `white` stands in for `None`: an untextured range still needs a bind
+/// group, and the renderer's own white one is what every flat-coloured
+/// sprite drew against before textures existed. Both `textures` and `white`
+/// share `'a` so the returned draws can borrow either.
+fn mesh_draws<'a>(
+    batch: &SpriteBatch,
+    textures: &'a Textures,
+    white: &'a wgpu::BindGroup,
+) -> Vec<MeshDraw<'a>> {
+    batch
+        .ranges
+        .iter()
+        .map(|range| MeshDraw {
+            texture: match range.texture {
+                Some(handle) => textures.bind_group(handle),
+                None => white,
+            },
+            indices: range.indices.clone(),
+        })
+        .collect()
 }
 
 #[derive(Default)]
@@ -63,6 +134,7 @@ pub struct App {
     // window; none of them can be built without a surface.
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
+    textures: Option<Textures>,
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
     viewport: Option<TextureId>,
@@ -111,7 +183,8 @@ impl App {
 
     /// Draws the world straight to the window. No UI, no intermediate texture.
     fn redraw_without_ui(&mut self) {
-        let Some(renderer) = self.renderer.as_mut() else {
+        let (Some(renderer), Some(textures)) = (self.renderer.as_mut(), self.textures.as_ref())
+        else {
             return;
         };
         // Rebuilt every frame. Caching it means tracking every Transform and
@@ -119,33 +192,34 @@ impl App {
         // in a profile.
         let batch = SpriteBatch::from_world(&self.world);
         let mesh = batch.upload(renderer.context().device());
-        // Every range draws against white until Task 5 wires up `Textures`
-        // and gives sprites their own handles. Cloned (a cheap ref-count
-        // bump — `wgpu::BindGroup` is `Clone`) rather than borrowed, so the
-        // borrow on `renderer` ends here instead of surviving into the
-        // `&mut self` call below.
+        // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
+        // rather than borrowed, so the borrow on `renderer` ends here instead
+        // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
-        let draws: Vec<_> = batch
-            .ranges
-            .iter()
-            .map(|range| MeshDraw {
-                texture: &white,
-                indices: range.indices.clone(),
-            })
-            .collect();
+        let draws = mesh_draws(&batch, textures, &white);
         renderer.render_mesh(mesh.as_ref(), &draws);
     }
 
     /// Scene to an offscreen target, then the UI over the top of the window.
     fn redraw_with_ui(&mut self) {
-        let (Some(renderer), Some(window), Some(egui), Some(target), Some(viewport), Some(ui)) = (
+        let (
+            Some(renderer),
+            Some(window),
+            Some(egui),
+            Some(target),
+            Some(viewport),
+            Some(ui),
+            Some(textures),
+        ) = (
             self.renderer.as_mut(),
             self.window.as_ref(),
             self.egui.as_mut(),
             self.scene_target.as_mut(),
             self.viewport,
             self.ui.as_mut(),
-        ) else {
+            self.textures.as_mut(),
+        )
+        else {
             return;
         };
 
@@ -165,20 +239,11 @@ impl App {
 
         let batch = SpriteBatch::from_world(&self.world);
         let mesh = batch.upload(&device);
-        // Every range draws against white until Task 5 wires up `Textures`
-        // and gives sprites their own handles. Cloned (a cheap ref-count
-        // bump — `wgpu::BindGroup` is `Clone`) rather than borrowed, so the
-        // borrow on `renderer` ends here instead of surviving into the
-        // `&mut self` call below.
+        // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
+        // rather than borrowed, so the borrow on `renderer` ends here instead
+        // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
-        let draws: Vec<_> = batch
-            .ranges
-            .iter()
-            .map(|range| MeshDraw {
-                texture: &white,
-                indices: range.indices.clone(),
-            })
-            .collect();
+        let draws = mesh_draws(&batch, textures, &white);
         renderer.render_scene(target, mesh.as_ref(), &draws);
 
         let size = window.inner_size();
@@ -191,6 +256,9 @@ impl App {
         let mut frame = UiFrame {
             world: &mut self.world,
             camera: &mut renderer.camera,
+            textures,
+            device: &device,
+            queue: &queue,
             viewport,
             viewport_size: (target.width(), target.height()),
             requested_size: &mut self.requested_size,
@@ -217,6 +285,15 @@ impl ApplicationHandler for App {
         let size = window.inner_size();
         let renderer = Renderer::new(window.clone(), size.width, size.height);
 
+        // The same layout object the sprite pipeline was built with —
+        // `Renderer` owns both, so `texture_layout()` is guaranteed to be it.
+        let textures = Textures::new(
+            renderer.context().device(),
+            renderer.context().queue(),
+            renderer.texture_layout(),
+            PathBuf::from("assets"),
+        );
+
         if self.ui.is_some() {
             let device = renderer.context().device().clone();
             let format = renderer.context().config().format;
@@ -239,6 +316,7 @@ impl ApplicationHandler for App {
         }
 
         self.renderer = Some(renderer);
+        self.textures = Some(textures);
         self.window = Some(window);
 
         // Device creation takes long enough to produce a huge first delta;

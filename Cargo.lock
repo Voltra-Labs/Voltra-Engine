@@ -2766,6 +2766,7 @@ dependencies = [
  "egui",
  "egui-winit",
  "log",
+ "voltra-assets",
  "voltra-ecs",
  "voltra-render",
  "voltra-scene",
