@@ -261,10 +261,10 @@ the quad, so a collapsed sprite would be pickable everywhere.
 
 Rejected: **pixel-accurate hit-testing**, which is what `bevy_sprite`'s picking
 backend does. It can, because each of its sprites carries its own texture and
-therefore its own alpha. Here `Sprite` holds a colour and the renderer binds one
-texture for the whole batch, so there is no per-sprite alpha to test. A quad test
-is not an approximation here; it is the exact answer until sprites get their own
-textures.
+therefore its own alpha. Sprites here carry an optional texture too as of
+stage 12b, but `pick::sprite_at` does not read it — picking is still the same
+quad test against every sprite's local space, textured or not, until
+pixel-perfect hit-testing is built on top of that per-sprite alpha.
 
 ### When 3D arrives: one world, two render paths
 
@@ -553,6 +553,75 @@ arrives.
   dead reference.
 - **Failing the scene load on a missing texture.** Would contradict Open's
   rollback — a moved PNG must not make a scene unopenable.
+
+### Sprites carry a path and a handle, and batch by contiguous runs
+
+**`Sprite` stores both `texture: Option<AssetPath>` and a `#[serde(skip)]`
+`texture_handle: Option<Handle<Texture>>`.** The path is the identity a `.ron`
+file understands; the handle is a session-local index `Textures::load` fills
+in, and nothing on disk ever sees it. `Sprite` loses `Copy` this way —
+`AssetPath` holds a `String` — but `batch.rs` and `pick.rs` already take
+references, and Bevy and Godot do not treat their sprite component as cheap
+`Copy` either.
+
+**Resolving a path into a handle happens outside `from_world`, in the
+app/editor wiring that owns `Textures`** — on scene Open, on an inspector path
+commit, and whenever code calls `Sprite::set_texture`. `from_world` never
+touches the disk, matching Bevy's `AssetServer` and Godot's `ResourceLoader`:
+both resolve off the draw loop. Loading inside `from_world` would stall every
+frame on a broken path until the miss got cached, and would couple scene
+geometry to GPU device lifetime, which nothing else in `voltra-scene` does.
+
+**`from_world` still sorts by `(sort_order, entity.index())` first, unchanged,
+and only then splits the sorted mesh into contiguous same-handle runs.** Unity
+and Godot both batch this way — adjacent sprites merge only if they already
+share a texture after sort order is decided, never before. Sorting by texture
+first would break painter's order, which alpha blending depends on.
+Interleaved textures (`A, A, B, A`) become three draws; two sprites naming the
+same PNG still share one handle and one GPU texture no matter what sits
+between them in sort order — 12a's promise, unaffected by how many draws that
+costs.
+
+**No texture and a failed load stay visually distinct**, same values 12a
+already chose for the failure case: `None` draws the existing 1×1 white times
+the sprite's colour; a path that fails to load draws the magenta-and-black
+checker. White-times-colour is what a coloured sprite with no PNG has always
+drawn, so keeping it is not a new behaviour — a second, indistinguishable
+"missing texture" look would only hide the failure from the render, not the
+log.
+
+**The scene format grows a field, not a version.** `texture: Option<AssetPath>`
+is `#[serde(default)]`, so a scene written before this stage deserializes with
+`texture: None` and opens as untextured white quads. A missing optional field
+with a default is not a breaking format change, so `VERSION` does not move.
+
+**Bind groups for loaded textures are cached on `Textures` at load time,
+built against the render pipeline's bind group layout, not rebuilt per frame
+or per draw call.** `Textures` already owns the `Device` a bind group needs;
+recreating one every frame would be GPU work with no matching change on
+screen. `Renderer` keeps its own white bind group as the sentinel for a
+`None` range — the one bind group not cached on `Textures`, because it
+belongs to no texture.
+
+**`voltra-render` still does not depend on `voltra-assets`.** It receives
+index ranges and bind groups from the caller and draws each range with the
+matching group; it has no idea a range came from resolving a path. The
+dependency direction the layers diagram already draws — `voltra-scene` and
+`voltra-assets` both sit above `voltra-render` — holds exactly as before.
+
+#### Rejected
+
+- **Sorting by texture first, `sort_order` only within a texture group.**
+  Maximizes batching, but breaks painter's order the moment two
+  differently-textured, overlapping, alpha-blended sprites need a specific
+  draw order. Unity and Godot both reject this for the same reason; Godot's
+  overlap-aware reordering is an opt-in optimisation on top of sorted order,
+  not a replacement for it, and is out of scope here.
+- **Loading textures inside `SpriteBatch::from_world`.** Keeps the call site
+  simple at the cost of disk I/O on the draw loop and a GPU device the
+  geometry layer has no other reason to reach. Matches neither `AssetServer`
+  nor `ResourceLoader`, both of which resolve before the frame that draws
+  the result.
 
 ### wgpu 30 API notes
 
