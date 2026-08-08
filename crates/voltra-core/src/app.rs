@@ -81,25 +81,15 @@ impl UiFrame<'_> {
 }
 
 /// Re-resolves every [`Sprite`]'s texture handle from its path.
-///
-/// Collected before mutating: `World` has no query that yields `&mut Sprite`
-/// while also handing out unrelated mutable access to itself, and
-/// `set_texture` cannot run inside the iterator borrowing the world it would
-/// need to call `get_mut` on.
 fn resolve_world_textures(
     world: &mut World,
     textures: &mut Textures,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) {
-    let entities: Vec<_> = world
-        .query::<Sprite>()
-        .map(|(e, sprite)| (e, sprite.texture.clone()))
-        .collect();
-    for (entity, path) in entities {
-        if let Some(sprite) = world.get_mut::<Sprite>(entity) {
-            sprite.set_texture(path, textures, device, queue);
-        }
+    for (_, sprite) in world.query_mut::<Sprite>() {
+        let path = sprite.texture.clone();
+        sprite.set_texture(path, textures, device, queue);
     }
 }
 
