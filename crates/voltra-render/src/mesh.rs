@@ -60,16 +60,19 @@ impl Mesh {
         }
     }
 
-    /// Uploads vertices plus a `u16` index buffer.
+    /// Uploads vertices plus a `u32` index buffer.
     ///
-    /// `u16` covers 65k vertices per mesh, which is far past the point where
-    /// the mesh should have been split anyway. It halves index bandwidth
-    /// against `u32`.
+    /// `u32` rather than `u16`: sprite batches are split by texture into
+    /// ranges over one mesh, so a batch is not free to stop at 65 536 vertices
+    /// the way a single-object mesh would be, and a wrapped index draws the
+    /// wrong geometry without any validation error. Bevy binds its sprite
+    /// indices as `Uint32` for the same reason. The cost is four bytes per
+    /// index instead of two.
     pub fn indexed(
         device: &wgpu::Device,
         label: &str,
         vertices: &[Vertex],
-        indices: &[u16],
+        indices: &[u32],
     ) -> Self {
         Self {
             vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -93,7 +96,7 @@ impl Mesh {
         pass.set_vertex_buffer(0, self.vertices.slice(..));
         match &self.indices {
             Some(indices) => {
-                pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint16);
+                pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..self.count, 0, 0..1);
             }
             None => pass.draw(0..self.count, 0..1),
@@ -114,7 +117,7 @@ impl Mesh {
             .as_ref()
             .expect("draw_range requires an indexed mesh");
         pass.set_vertex_buffer(0, self.vertices.slice(..));
-        pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+        pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         pass.draw_indexed(indices, 0, 0..1);
     }
 
@@ -146,7 +149,7 @@ pub const QUAD: [Vertex; 4] = [
 ];
 
 /// Two triangles sharing the diagonal, so four vertices cover a quad.
-pub const QUAD_INDICES: [u16; 6] = [0, 1, 2, 0, 2, 3];
+pub const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
 
 #[cfg(test)]
 mod tests {

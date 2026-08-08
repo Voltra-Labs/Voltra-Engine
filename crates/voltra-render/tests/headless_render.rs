@@ -331,7 +331,7 @@ const TWO_HALVES: [Vertex; 8] = [
     Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0], [1.0, 1.0]),
     Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 0.0]),
 ];
-const TWO_HALVES_INDICES: [u16; 12] = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
+const TWO_HALVES_INDICES: [u32; 12] = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
 
 #[test]
 fn draw_mesh_batches_binds_a_different_texture_per_range() {

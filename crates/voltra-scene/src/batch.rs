@@ -33,7 +33,7 @@ const CORNERS: [(Vec2, [f32; 2]); 4] = [
 ];
 
 /// Two triangles over those four corners.
-const QUAD_INDICES: [u16; 6] = [0, 1, 2, 0, 2, 3];
+const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
 
 /// A contiguous run of one texture's sprites within [`SpriteBatch::indices`].
 ///
@@ -55,7 +55,7 @@ pub struct SpriteRange {
 #[derive(Debug, Default, Clone)]
 pub struct SpriteBatch {
     pub vertices: Vec<Vertex>,
-    pub indices: Vec<u16>,
+    pub indices: Vec<u32>,
     /// Draw-order runs of same-texture sprites, covering all of `indices`.
     ///
     /// Split only where the texture actually changes — a run never merges two
@@ -98,8 +98,9 @@ impl SpriteBatch {
     pub fn push(&mut self, transform: &Transform, sprite: &Sprite) {
         let matrix = transform.matrix();
         // Every quad's indices are relative to its own first vertex; without
-        // this offset each sprite would redraw the first one.
-        let base = self.vertices.len() as u16;
+        // this offset each sprite would redraw the first one. `u32` because a
+        // batch holds every sprite in the world, not one object's geometry.
+        let base = self.vertices.len() as u32;
 
         for (corner, uv) in CORNERS {
             let world = matrix.transform_point2(corner);
@@ -285,7 +286,7 @@ mod tests {
             (Transform::default(), Sprite::default()),
         ]));
 
-        let count = batch.vertices.len() as u16;
+        let count = batch.vertices.len() as u32;
         assert!(batch.indices.iter().all(|&i| i < count));
     }
 
@@ -565,5 +566,35 @@ mod tests {
     #[test]
     fn an_empty_world_produces_no_ranges() {
         assert!(SpriteBatch::from_world(&World::new()).ranges.is_empty());
+    }
+
+    #[test]
+    fn a_batch_past_sixty_five_thousand_vertices_still_indexes_its_own_quads() {
+        // 16 384 sprites is 65 536 vertices, exactly where a `u16` base
+        // wraps. The 16 385th sprite's indices must point at its own four
+        // vertices; with a `u16` cast they point at the first sprite's, and
+        // nothing — not wgpu, not a validation layer — reports it.
+        const SPRITES: u32 = 16_385;
+
+        let mut batch = SpriteBatch::default();
+        for _ in 0..SPRITES {
+            batch.push(&Transform::default(), &Sprite::default());
+        }
+
+        let last = batch
+            .indices
+            .last()
+            .copied()
+            .expect("a pushed batch has indices");
+        assert!(
+            last > u16::MAX as u32,
+            "the last index wrapped: got {last}, expected past {}",
+            u16::MAX
+        );
+        assert_eq!(batch.vertices.len() as u32, SPRITES * 4);
+        assert!(batch
+            .indices
+            .iter()
+            .all(|&i| i < batch.vertices.len() as u32));
     }
 }
