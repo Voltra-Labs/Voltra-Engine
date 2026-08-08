@@ -8,7 +8,13 @@ use std::ops::Range;
 
 use crate::mesh::Mesh;
 
-/// Records a clear followed by `mesh`, if there is one.
+/// Records a clear followed by all of `mesh`, if there is one.
+///
+/// The whole-mesh path, and the only one that can draw geometry with no index
+/// buffer: [`draw_mesh_batches`] goes through [`Mesh::draw_range`], which is
+/// indexed by construction. Sprites take the batched path because they are
+/// split into per-texture ranges over one buffer; anything drawn in a single
+/// call against a single bind group belongs here.
 ///
 /// `None` still records the pass: the clear is what stops the previous frame
 /// showing through when the scene is empty.
