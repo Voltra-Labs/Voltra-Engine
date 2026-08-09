@@ -14,6 +14,9 @@ pub const FLAT_COLOR: &str = include_str!("shaders/flat_color.wgsl");
 /// Source of the shader that draws egui's tessellated triangles.
 pub const EGUI: &str = include_str!("shaders/egui.wgsl");
 
+/// Source of the shader that widens line segments in screen space.
+pub const LINES: &str = include_str!("shaders/lines.wgsl");
+
 /// Compiles WGSL into a shader module.
 ///
 /// `wgpu` validates and reports compilation errors through the device error

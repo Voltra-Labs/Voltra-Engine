@@ -7,6 +7,7 @@
 pub mod camera;
 pub mod context;
 pub mod egui_backend;
+pub mod lines;
 pub mod mesh;
 pub mod pass;
 pub mod pipeline;
@@ -18,6 +19,7 @@ pub mod texture;
 pub use camera::{Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
+pub use lines::{LineBatch, LineVertex};
 pub use mesh::{Mesh, Vertex};
 pub use pass::MeshDraw;
 pub use renderer::Renderer;
