@@ -119,3 +119,51 @@ pub fn draw_mesh_batches(
         mesh.draw_range(&mut pass, draw.indices.clone());
     }
 }
+
+/// Records `mesh` over whatever is already in `view`.
+///
+/// The only pass in the engine that **loads** rather than clears. Every other
+/// one is the single thing drawn into its target that frame; an overlay is by
+/// definition the second, and clearing here would erase the scene it annotates.
+///
+/// `camera` is bound to group 0 and `viewport` to group 1, matching
+/// [`pipeline::create_lines`](crate::pipeline::create_lines).
+///
+/// `None` records nothing at all — not even a pass. Unlike the passes above,
+/// there is no clear to be the point of recording one: there would be nothing
+/// to preserve and nothing to draw, and a load-store pass over an untouched
+/// target is bandwidth spent on a no-op.
+pub fn draw_lines(
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    camera: &wgpu::BindGroup,
+    viewport: &wgpu::BindGroup,
+    mesh: Option<&Mesh>,
+) {
+    let Some(mesh) = mesh else {
+        return;
+    };
+
+    let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("lines-pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    });
+
+    pass.set_pipeline(pipeline);
+    pass.set_bind_group(0, camera, &[]);
+    pass.set_bind_group(1, viewport, &[]);
+    mesh.draw(&mut pass);
+}
