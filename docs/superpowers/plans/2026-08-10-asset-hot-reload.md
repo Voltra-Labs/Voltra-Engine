@@ -139,7 +139,7 @@ one bind group per broken path, and `reload` can then swap it like any other.
   means "the checker the store was seeded with"; what changes is that a failed
   `load` no longer returns it.
 
-- [ ] **Step 1: Update the tests that pin the old invariant**
+- [x] **Step 1: Update the tests that pin the old invariant**
 
 In `crates/voltra-assets/tests/headless_textures.rs`, replace
 `a_missing_file_yields_the_placeholder` (lines 87–102) with:
@@ -207,7 +207,7 @@ In `crates/voltra-scene/tests/headless_sprite_textures.rs`, in
 The pixel assertions further down that test already prove the contents are the
 magenta-and-black checker; leave them alone.
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `cargo test -p voltra-assets --test headless_textures`
 Expected: FAIL on `a_missing_file_yields_a_checker_of_its_own` — `assert_ne!`
@@ -217,7 +217,7 @@ On a machine with no GPU adapter every one of these prints "no GPU adapter;
 skipping" and passes. That is not a pass: this task cannot be verified without
 an adapter, so say so in the report rather than reporting green.
 
-- [ ] **Step 3: Factor the placeholder texture out**
+- [x] **Step 3: Factor the placeholder texture out**
 
 In `crates/voltra-assets/src/textures.rs`, add this free function below the
 `impl Textures` block:
@@ -253,7 +253,7 @@ and `let mut bind_groups = HashMap::new();` with:
         let placeholder = store.insert(texture);
 ```
 
-- [ ] **Step 4: Give each failure its own slot**
+- [x] **Step 4: Give each failure its own slot**
 
 Add this method to `impl Textures`, directly after `load`:
 
@@ -286,7 +286,7 @@ Change `load`'s error arm (currently `textures.rs:96-100`) to:
             }
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `cargo test -p voltra-assets --test headless_textures`
 Expected: PASS, eight tests.
@@ -294,7 +294,7 @@ Expected: PASS, eight tests.
 Run: `cargo test -p voltra-scene --test headless_sprite_textures`
 Expected: PASS, four tests.
 
-- [ ] **Step 6: fmt, clippy, test**
+- [x] **Step 6: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -302,7 +302,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add crates/voltra-assets/src/textures.rs crates/voltra-assets/tests/headless_textures.rs crates/voltra-scene/tests/headless_sprite_textures.rs
@@ -339,7 +339,7 @@ proof goes in `crates/voltra-scene/tests/headless_sprite_textures.rs`, where the
 render-to-target harness already exists — that file already renders a `Sprite`
 through the real pipeline and reads the frame back.
 
-- [ ] **Step 1: Add the colour-carrying PNG writer to the testkit**
+- [x] **Step 1: Add the colour-carrying PNG writer to the testkit**
 
 In `crates/voltra-testkit/src/lib.rs`, replace the body of `write_png` and add
 the new function above it:
@@ -377,7 +377,7 @@ pub fn write_png(root: &Path, name: &str, width: u32, height: u32) {
 }
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `crates/voltra-assets/tests/hot_reload.rs`:
 
@@ -559,7 +559,7 @@ fn reloading_twice_does_not_grow_the_store() {
 }
 ```
 
-- [ ] **Step 3: Run them and watch them fail to compile**
+- [x] **Step 3: Run them and watch them fail to compile**
 
 Run: `cargo test -p voltra-assets --test hot_reload`
 Expected: FAIL — `no method named 'reload' found`, and
@@ -570,7 +570,7 @@ exposing the `wgpu::Texture`. Every texture in the engine would carry a usage
 flag it does not need so that one test could read it back, and the pixel
 question is answered in Step 6 where the render harness already is.
 
-- [ ] **Step 4: Implement `reload` and the lookup the tests need**
+- [x] **Step 4: Implement `reload` and the lookup the tests need**
 
 In `crates/voltra-assets/src/textures.rs`, add both to `impl Textures`, after
 `insert_broken`:
@@ -628,7 +628,7 @@ In `crates/voltra-assets/src/textures.rs`, add both to `impl Textures`, after
     }
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `cargo test -p voltra-assets --test hot_reload`
 Expected: PASS, six tests.
@@ -638,7 +638,7 @@ first assertion, Task 1 is not in the tree — that test needs the per-path
 checker slot, because a shared placeholder handle cannot be overwritten without
 changing every other broken path too.
 
-- [ ] **Step 6: Prove it in pixels, where the render harness lives**
+- [x] **Step 6: Prove it in pixels, where the render harness lives**
 
 Append to `crates/voltra-scene/tests/headless_sprite_textures.rs`. It already
 has `render_batch`, `at`, `close_camera`, `sprite_at` and `write_flat_png`; use
@@ -687,7 +687,7 @@ If the frame is unchanged after the reload while `voltra-assets`' tests pass,
 the bind group is not being replaced — that is the one line in `reload` after
 the `*slot = texture;`.
 
-- [ ] **Step 7: fmt, clippy, test**
+- [x] **Step 7: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -695,7 +695,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```sh
 git add crates/voltra-assets/src/textures.rs crates/voltra-assets/tests/hot_reload.rs crates/voltra-testkit/src/lib.rs crates/voltra-scene/tests/headless_sprite_textures.rs
@@ -724,7 +724,7 @@ about textures.
   - re-exported as `voltra_assets::AssetWatcher`
   - `AssetError::Watch { root: PathBuf, source: notify_debouncer_full::notify::Error }`
 
-- [ ] **Step 1: Add the dependency**
+- [x] **Step 1: Add the dependency**
 
 In the root `Cargo.toml`, in `[workspace.dependencies]`, alphabetically:
 
@@ -742,7 +742,7 @@ In `crates/voltra-assets/Cargo.toml`, under `[dependencies]`:
 notify-debouncer-full.workspace = true
 ```
 
-- [ ] **Step 2: Add the error variant**
+- [x] **Step 2: Add the error variant**
 
 In `crates/voltra-assets/src/error.rs`, add to the enum after `Decode`:
 
@@ -773,7 +773,7 @@ and leave `Absolute | EscapesRoot | Empty` returning `None`.
 Update the enum's doc comment, which currently says "The last two are runtime
 failures": it is now "`Read`, `Decode` and `Watch` are runtime failures".
 
-- [ ] **Step 3: Write the failing tests**
+- [x] **Step 3: Write the failing tests**
 
 Create `crates/voltra-assets/tests/watch.rs`:
 
@@ -893,12 +893,12 @@ fn a_root_that_does_not_exist_is_an_error_not_a_panic() {
 }
 ```
 
-- [ ] **Step 4: Run them and watch them fail to compile**
+- [x] **Step 4: Run them and watch them fail to compile**
 
 Run: `cargo test -p voltra-assets --test watch`
 Expected: FAIL — `unresolved import 'voltra_assets::AssetWatcher'`.
 
-- [ ] **Step 5: Implement the watcher**
+- [x] **Step 5: Implement the watcher**
 
 Create `crates/voltra-assets/src/watch.rs`:
 
@@ -1073,13 +1073,13 @@ impl AssetWatcher {
 }
 ```
 
-- [ ] **Step 6: Export it**
+- [x] **Step 6: Export it**
 
 In `crates/voltra-assets/src/lib.rs`, add `pub mod watch;` after `pub mod
 textures;`, and `pub use watch::AssetWatcher;` after `pub use
 textures::Textures;`.
 
-- [ ] **Step 7: Run the tests**
+- [x] **Step 7: Run the tests**
 
 Run: `cargo test -p voltra-assets --test watch`
 Expected: PASS, five tests. They take a few seconds — the negative cases wait
@@ -1092,7 +1092,7 @@ timeout means the path never relativized. Run with
 read the "ignoring … not under …" lines: that is the Windows prefix problem,
 and the fix is in `to_asset_path`, not in the deadline.
 
-- [ ] **Step 8: fmt, clippy, test**
+- [x] **Step 8: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1100,7 +1100,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```sh
 git add Cargo.toml Cargo.lock crates/voltra-assets
@@ -1119,7 +1119,7 @@ git commit -m "feat(assets): watch the asset root for changes"
 - Consumes: `Textures::reload` (Task 2), `AssetWatcher::{new, drain}` (Task 3).
 - Produces: `voltra_core::App::with_hot_reload(self) -> App`.
 
-- [ ] **Step 1: Add the field and the builder**
+- [x] **Step 1: Add the field and the builder**
 
 In `crates/voltra-core/src/app.rs`, add to `struct App`, directly under
 `asset_root`:
@@ -1158,7 +1158,7 @@ Add the builder beside `with_asset_root`:
     }
 ```
 
-- [ ] **Step 2: Build the watcher in `resumed`**
+- [x] **Step 2: Build the watcher in `resumed`**
 
 In `resumed`, directly after the `Textures::new(...)` call and before the
 `if self.ui.is_some()` block:
@@ -1178,7 +1178,7 @@ In `resumed`, directly after the `Textures::new(...)` call and before the
 `asset_root` is moved into `Textures::new` on the line above it, so change that
 call's last argument to `asset_root.clone()`.
 
-- [ ] **Step 3: Drain once per frame**
+- [x] **Step 3: Drain once per frame**
 
 Replace `App::update`'s body:
 
@@ -1212,7 +1212,7 @@ Replace `App::update`'s body:
     }
 ```
 
-- [ ] **Step 4: The editor opts in**
+- [x] **Step 4: The editor opts in**
 
 In `crates/voltra-editor/src/main.rs`, change the final statement of `main`:
 
@@ -1223,7 +1223,7 @@ In `crates/voltra-editor/src/main.rs`, change the final statement of `main`:
         .run();
 ```
 
-- [ ] **Step 5: fmt, clippy, test**
+- [x] **Step 5: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1231,7 +1231,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 6: Smoke it in the real editor**
+- [x] **Step 6: Smoke it in the real editor**
 
 The editor is a GUI app with an infinite event loop. Never run it in the
 foreground.
@@ -1253,7 +1253,7 @@ If the `reloaded` line never appears but `watching` did, the events are arriving
 and being filtered out — that is `to_asset_path`, and `RUST_LOG=debug` names the
 path it dropped.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add crates/voltra-core/src/app.rs crates/voltra-editor/src/main.rs
@@ -1271,7 +1271,7 @@ git commit -m "feat(core): reload changed assets each frame"
 
 **Interfaces:** none.
 
-- [ ] **Step 1: Add the decisions**
+- [x] **Step 1: Add the decisions**
 
 In `docs/ARCHITECTURE.md`, under "Decisions", after
 "Headless test scaffolding lives in `voltra-testkit`":
@@ -1349,7 +1349,7 @@ the shape of a second is not known.
   built against.
 ```
 
-- [ ] **Step 2: Fix the roadmap**
+- [x] **Step 2: Fix the roadmap**
 
 In `README.md`, replace the last two rows of the roadmap table:
 
@@ -1363,18 +1363,18 @@ In `README.md`, replace the last two rows of the roadmap table:
 Stage 12 was split three ways in the 12a design and shipped that way; one
 "planned" row hid two thirds of it being already merged.
 
-- [ ] **Step 3: Tick this plan**
+- [x] **Step 3: Tick this plan**
 
-Change every `- [ ]` in this file to `- [x]`. Verify against
+Change every `- [x]` in this file to `- [x]`. Verify against
 `git log --oneline main..HEAD` first — if a step describes something that is not
 in the tree, leave it unticked and say so in the report.
 
-- [ ] **Step 4: Sanity check**
+- [x] **Step 4: Sanity check**
 
 Run: `cargo test --workspace`
 Expected: green. Documentation only; this confirms nothing else drifted.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add docs/ARCHITECTURE.md README.md docs/superpowers/plans/2026-08-10-asset-hot-reload.md

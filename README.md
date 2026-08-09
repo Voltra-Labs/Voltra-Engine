@@ -110,7 +110,9 @@ privileged and plain `cargo build` covers everything.
 | 9 | Scene serialization | done |
 | 10 | Picking: click to select, stable draw order | done |
 | 11 | Gizmos and physics | planned |
-| 12 | Asset pipeline: loading, caching, hot reload | planned |
+| 12a | Asset store: handles, paths, cache | done |
+| 12b | Textures per sprite, batched by texture | done |
+| 12c | Hot reload: watch, debounce, swap under a stable handle | done |
 
 ## Contributing
 

@@ -695,6 +695,79 @@ alternative is the same 120 lines copied per crate — it was already at two
 copies with a third due. `voltra-testkit` is `publish = false` and appears only
 under `[dev-dependencies]`, so it is not part of the shipped dependency graph.
 
+### Hot reload swaps contents under a stable handle
+
+**`Textures::reload` replaces the texture in the slot its handle already names
+and replaces that handle's bind group with it.** The handle does not change, so
+`Sprite`, `SpriteBatch`, the scene format and the renderer never learn that
+anything happened — which is the only reason a reload can be a per-frame
+operation rather than a walk of the world.
+
+Replacing the bind group is not optional. It holds the *old* `TextureView`, so
+swapping the texture alone changes nothing the GPU can see.
+
+A reload that fails keeps the previous pixels and warns once. An image editor's
+save leaves the file truncated for a few milliseconds and the debounce window
+does not always cover it; degrading to the magenta checker on every save would
+teach the reader to ignore the one colour that means "this path is broken".
+Unreal and Unity both keep an imported asset when its source becomes unreadable.
+
+A path that failed at load therefore gets **its own** slot holding the
+placeholder's pixels rather than the shared placeholder handle. A `Sprite`
+stores the handle it was given and nothing re-resolves it, so a shared handle
+would make a broken path permanently broken: repairing one would mean
+overwriting the texture every other broken path draws. Its own slot costs 256
+bytes.
+
+#### Rejected
+
+- **Issuing a new handle and repointing the world.** Correct, and it makes the
+  scene dirty for a change nobody made to it, plus a full world walk per save.
+- **Degrading to the placeholder on a failed reload.** Flashes magenta on
+  routine saves, which spends the signal that means a real broken path.
+
+### The asset watcher is opt-in and filters by extension
+
+**`App::with_hot_reload()` starts one recursive `notify` watch on the asset
+root, debounced at 200 ms.** The editor opts in; a shipped game does not. All
+four of Unity, Unreal, Godot and Bevy ship this switchable and none leaves it on
+in a build.
+
+Events are filtered by **file extension**, not by event kind. Which `EventKind`
+an overwrite produces varies by platform and by the writing program, and
+matching on them is what makes a watcher miss changes
+([bevy#10576](https://github.com/bevyengine/bevy/issues/10576)). The extension
+filter also makes the scene format's atomic save invisible for free — neither
+`demo.ron.tmp` nor `demo.ron` is a texture — rather than as a rule about our own
+temporary files.
+
+Both the root and each event path are canonicalized before the prefix is
+stripped, and an event that still will not relativize is logged at `debug` and
+dropped. On Windows a canonical path carries the `\\?\` extended-length prefix
+that a root built from `CARGO_MANIFEST_DIR` does not, and an `expect` on that
+mismatch is exactly what crashed Bevy's watcher on Windows
+([bevy#18342](https://github.com/bevyengine/bevy/issues/18342)). The editor's
+own log shows the two forms meeting: `asset root: D:\...\assets`, then
+`watching \\?\D:\...\assets`.
+
+`AssetWatcher` produces `AssetPath`s and nothing else — no textures, no handles,
+no device. There is no subscriber registry: there is one consumer, `App`, and
+the shape of a second is not known.
+
+#### Rejected
+
+- **Godot's rescan on window focus.** No new dependency, and less machinery. It
+  works there because Godot keeps a `.import` database with timestamps; here the
+  equivalent means walking the tree and `stat`ing every file, which is a
+  filesystem index — a bigger thing than the watcher it avoids.
+- **A cargo feature, as Bevy does it.** Keeps the dependency out of a release
+  binary, at the price of `#[cfg]` through `Textures` and the frame loop. Code
+  behind a disabled `cfg` is not compiled, which is the shape that let Bevy's
+  Windows regression through.
+- **Depending on `notify` directly as well as on the debouncer.** Two entries
+  can drift to incompatible versions; the debouncer re-exports the one it was
+  built against.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
