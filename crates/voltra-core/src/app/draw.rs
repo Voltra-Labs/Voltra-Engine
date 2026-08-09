@@ -82,17 +82,29 @@ impl App {
             pixels_per_point: window.scale_factor() as f32,
         };
 
+        // Emptied before the layout that refills it, not after the draw: a
+        // frame that returns early above must not leave last frame's segments
+        // to be drawn again.
+        self.lines.clear();
+
         let mut frame = UiFrame {
             world: &mut self.world,
             camera: &mut renderer.camera,
             textures,
             device: &device,
             queue: &queue,
+            lines: &mut self.lines,
             viewport,
             viewport_size: (target.width(), target.height()),
             requested_size: &mut self.requested_size,
         };
         egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
+
+        // After the UI, because the UI is what produced the segments, and
+        // before `present_with`, because that is when egui samples the target.
+        // The overlay therefore lands in the same frame as the scene under it.
+        let lines = self.lines.upload(&device);
+        renderer.render_lines(target, lines.as_ref());
 
         renderer.present_with(|pass| egui.render(pass));
     }

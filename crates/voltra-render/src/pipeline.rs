@@ -1,5 +1,6 @@
 //! Render pipeline construction.
 
+use crate::lines::LineVertex;
 use crate::mesh::Vertex;
 use crate::shader;
 
@@ -40,6 +41,60 @@ pub fn create_flat_color(
             // 2D geometry is always viewed from one side, so culling would
             // only cost a winding rule to get wrong. The 3D pipeline turns it
             // back on alongside the depth buffer.
+            cull_mode: None,
+            ..Default::default()
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &module,
+            entry_point: Some("fs_main"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format,
+                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
+}
+
+/// Builds the line pipeline.
+///
+/// Same shape as [`create_flat_color`] — `TriangleList`, no culling, no depth,
+/// alpha blending — because a widened line *is* triangles. What differs is the
+/// vertex layout and the shader that reads it.
+pub fn create_lines(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    camera_layout: &wgpu::BindGroupLayout,
+    viewport_layout: &wgpu::BindGroupLayout,
+) -> wgpu::RenderPipeline {
+    let module = shader::create_module(device, "lines", shader::LINES);
+
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("lines-layout"),
+        bind_group_layouts: &[Some(camera_layout), Some(viewport_layout)],
+        immediate_size: 0,
+    });
+
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("lines-pipeline"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("vs_main"),
+            compilation_options: Default::default(),
+            buffers: &[Some(LineVertex::LAYOUT)],
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            front_face: wgpu::FrontFace::Ccw,
+            // A widened quad's winding flips with the direction its segment
+            // runs in, so culling would drop every line that happened to point
+            // the other way.
             cull_mode: None,
             ..Default::default()
         },

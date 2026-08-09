@@ -1,7 +1,9 @@
 mod camera;
 mod editor;
+mod gizmo;
 mod panels;
 mod picking;
+mod tool;
 
 use editor::Editor;
 use voltra_assets::AssetPath;

@@ -7,7 +7,7 @@
 
 use voltra_assets::Textures;
 use voltra_ecs::World;
-use voltra_render::{wgpu, Camera2D};
+use voltra_render::{wgpu, Camera2D, LineBatch};
 use voltra_scene::Sprite;
 
 use crate::ui::TextureId;
@@ -32,6 +32,13 @@ pub struct UiFrame<'a> {
     pub device: &'a wgpu::Device,
     /// Needed to upload a texture a panel just named.
     pub queue: &'a wgpu::Queue,
+    /// Segments to draw over the scene this frame.
+    ///
+    /// A panel pushes into this and never sees a device: `App` uploads it and
+    /// records the pass after the scene and before egui samples the target, so
+    /// the overlay lands in the same frame as the scene it annotates. Emptied
+    /// before every layout, so a panel that stops pushing stops drawing.
+    pub(super) lines: &'a mut LineBatch,
     /// The rendered scene, ready for `egui::Image::new`.
     pub(super) viewport: TextureId,
     pub(super) viewport_size: (u32, u32),
@@ -47,6 +54,14 @@ impl UiFrame<'_> {
     /// Physical size the scene was rendered at this frame.
     pub fn viewport_size(&self) -> (u32, u32) {
         self.viewport_size
+    }
+
+    /// The overlay a panel draws into: world-unit endpoints, pixel widths.
+    ///
+    /// Drawn over the scene image, under the same camera, so a segment lines up
+    /// with the sprite it points at without the panel converting anything.
+    pub fn lines(&mut self) -> &mut LineBatch {
+        self.lines
     }
 
     /// Asks for a different scene resolution, honoured on the *next* frame.

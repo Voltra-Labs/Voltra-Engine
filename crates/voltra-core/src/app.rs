@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use voltra_assets::{AssetWatcher, Textures};
 use voltra_ecs::World;
-use voltra_render::{Filter, RenderTarget, Renderer};
+use voltra_render::{Filter, LineBatch, RenderTarget, Renderer};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -52,6 +52,8 @@ pub struct App {
     ui: Option<UiFn>,
     clock: Clock,
     input: Input,
+    /// Overlay segments, emptied and rebuilt by the UI every frame.
+    lines: LineBatch,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
 }

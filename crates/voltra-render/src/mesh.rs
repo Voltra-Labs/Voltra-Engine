@@ -48,7 +48,7 @@ pub struct Mesh {
 
 impl Mesh {
     /// Uploads vertices for a direct (non-indexed) draw.
-    pub fn new(device: &wgpu::Device, label: &str, vertices: &[Vertex]) -> Self {
+    pub fn new<V: Pod>(device: &wgpu::Device, label: &str, vertices: &[V]) -> Self {
         Self {
             vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
@@ -68,10 +68,16 @@ impl Mesh {
     /// wrong geometry without any validation error. Bevy binds its sprite
     /// indices as `Uint32` for the same reason. The cost is four bytes per
     /// index instead of two.
-    pub fn indexed(
+    ///
+    /// Generic over the vertex type because a `Mesh` is buffers and a count:
+    /// what the bytes mean is the pipeline's business, declared by whichever
+    /// [`wgpu::VertexBufferLayout`] it was built with. [`Vertex`] and
+    /// `LineVertex` are two such meanings, and there is no third structure to
+    /// justify.
+    pub fn indexed<V: Pod>(
         device: &wgpu::Device,
         label: &str,
-        vertices: &[Vertex],
+        vertices: &[V],
         indices: &[u32],
     ) -> Self {
         Self {

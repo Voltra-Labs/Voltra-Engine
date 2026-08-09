@@ -109,7 +109,8 @@ privileged and plain `cargo build` covers everything.
 | 8 | Editor UI: hierarchy, inspector, viewport | done |
 | 9 | Scene serialization | done |
 | 10 | Picking: click to select, stable draw order | done |
-| 11 | Gizmos and physics | planned |
+| 11a | Translate gizmo, and a line pipeline to draw it | done |
+| 11b | Physics: bodies, integration, collision | planned |
 | 12a | Asset store: handles, paths, cache | done |
 | 12b | Textures per sprite, batched by texture | done |
 | 12c | Hot reload: watch, debounce, swap under a stable handle | done |

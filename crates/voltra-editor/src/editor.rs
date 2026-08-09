@@ -5,7 +5,9 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 
 use crate::camera::ViewportCamera;
+use crate::gizmo::Gizmo;
 use crate::panels;
+use crate::tool::Tool;
 
 /// Editor state that outlives a frame.
 ///
@@ -15,6 +17,9 @@ use crate::panels;
 pub struct Editor {
     pub(crate) selected: Option<Entity>,
     pub(crate) camera: ViewportCamera,
+    /// Which transform a viewport drag performs. Persistent, Unity-style.
+    pub(crate) tool: Tool,
+    pub(crate) gizmo: Gizmo,
 }
 
 impl Editor {
