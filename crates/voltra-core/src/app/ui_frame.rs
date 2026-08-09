@@ -73,7 +73,12 @@ impl UiFrame<'_> {
 }
 
 /// Re-resolves every [`Sprite`]'s texture handle from its path.
-fn resolve_world_textures(
+///
+/// Visible to `app` as well as to [`UiFrame`] because the world can arrive
+/// already populated: [`App::world`](crate::app::App::world) is public and
+/// documented to be filled before `run`, and those sprites have never met a
+/// [`Textures`].
+pub(super) fn resolve_world_textures(
     world: &mut World,
     textures: &mut Textures,
     device: &wgpu::Device,

@@ -4,9 +4,13 @@ mod panels;
 mod picking;
 
 use editor::Editor;
+use voltra_assets::AssetPath;
 use voltra_core::{App, WindowConfig};
 use voltra_render::glam::Vec2;
 use voltra_scene::{SceneId, Sprite, Transform};
+
+/// The sample texture this repository ships, under the asset root.
+const CHECKER: &str = "sprites/checker.png";
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -16,8 +20,9 @@ fn main() {
         ..Default::default()
     });
 
-    // Something to look at on the first run, before anything has been spawned
-    // from the menu.
+    // Something to look at on the first run, before anything has been opened
+    // from the menu. It names the checker this repository ships, so the texture
+    // path — and hot reload over it — is visible without opening a scene first.
     spawn_demo_scene(&mut app);
 
     let mut editor = Editor::default();
@@ -42,6 +47,10 @@ fn spawn_demo_scene(app: &mut App) {
                 .with_scale(Vec2::splat(0.4))
                 .with_rotation(rotation),
         );
-        app.world.insert(entity, Sprite::new(color));
+        let mut sprite = Sprite::new(color);
+        // Only the path. The handle is `None` until `resumed` resolves it,
+        // because there is no device to upload with until a window exists.
+        sprite.texture = Some(AssetPath::new(CHECKER).expect("a valid asset path"));
+        app.world.insert(entity, sprite);
     }
 }
