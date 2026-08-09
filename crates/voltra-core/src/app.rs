@@ -157,11 +157,23 @@ impl ApplicationHandler for App {
 
         // The same layout object the sprite pipeline was built with —
         // `Renderer` owns both, so `texture_layout()` is guaranteed to be it.
-        let textures = Textures::new(
+        let mut textures = Textures::new(
             renderer.context().device(),
             renderer.context().queue(),
             renderer.texture_layout(),
             asset_root.clone(),
+        );
+
+        // `App::world` is public and documented to be populated before `run`,
+        // so by the time there is a device to upload with, the world may
+        // already hold sprites naming a texture they have never resolved.
+        // Without this they draw untextured forever: the only other callers of
+        // `set_texture` are the inspector and Open, and a game has neither.
+        ui_frame::resolve_world_textures(
+            &mut self.world,
+            &mut textures,
+            renderer.context().device(),
+            renderer.context().queue(),
         );
 
         if self.hot_reload {
