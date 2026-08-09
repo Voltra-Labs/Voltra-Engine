@@ -85,7 +85,7 @@ fn different_paths_return_different_handles() {
 }
 
 #[test]
-fn a_missing_file_yields_the_placeholder() {
+fn a_missing_file_yields_a_checker_of_its_own() {
     let (device, queue) = device_or_skip!();
     let layout = voltra_render::texture::bind_group_layout(&device);
     let root = scratch_root();
@@ -97,8 +97,13 @@ fn a_missing_file_yields_the_placeholder() {
         &AssetPath::new("sprites/absent.png").expect("valid"),
     );
 
-    assert_eq!(handle, textures.placeholder());
-    assert_eq!(textures.len(), 1, "a failure must not store a texture");
+    // Its own slot, not the shared placeholder handle: a `Sprite` stores the
+    // handle it was given and nothing re-resolves it, so sharing one would
+    // make a broken path unfixable by hot reload.
+    assert_ne!(handle, textures.placeholder());
+    assert_eq!(textures.get(handle).width(), 8, "it is still the checker");
+    assert_eq!(textures.len(), 2, "the placeholder plus this path's copy");
+    textures.bind_group(handle);
 }
 
 #[test]
@@ -115,7 +120,8 @@ fn a_corrupt_png_yields_the_placeholder() {
         &AssetPath::new("broken.png").expect("valid"),
     );
 
-    assert_eq!(handle, textures.placeholder());
+    assert_ne!(handle, textures.placeholder());
+    assert_eq!(textures.get(handle).width(), 8, "it is still the checker");
 }
 
 #[test]
@@ -137,7 +143,12 @@ fn a_failed_path_is_cached_rather_than_retried() {
     let second = textures.load(&device, &queue, &path);
 
     assert_eq!(first, second);
-    assert_eq!(second, textures.placeholder());
+    assert_ne!(second, textures.placeholder());
+    assert_eq!(
+        textures.len(),
+        2,
+        "the retry must not have added a second copy"
+    );
 }
 
 #[test]
