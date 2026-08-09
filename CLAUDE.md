@@ -151,14 +151,15 @@ Findings worth keeping go in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) under
 
 ## Models and delegation
 
-**Think on Opus 5. Execute wide on Sonnet 5.**
+**Think on Opus 5. Execute wide on Grok 4.5, through the cursor-orchestrator
+MCP.**
 
 Use Opus for the work where being wrong is expensive: architecture and crate
 boundaries, ECS storage design, render graph shape, unsafe reasoning, lifetime
 and borrow puzzles, debugging something whose cause is not yet known.
 
-Delegate to subagents with `model: "sonnet"` once the shape of the work is
-already decided and the task is well specified:
+Delegate through `mcp__cursor-orchestrator__spawn_agent` once the shape of the
+work is already decided and the task is well specified:
 
 - searching the codebase or the registry sources for an API or usage
 - mechanical refactors across many files
@@ -166,16 +167,54 @@ already decided and the task is well specified:
 - porting a known C++ subsystem to an already-agreed Rust design
 - independent tasks that can run in parallel
 
+### Dispatching through the MCP
+
+The built-in `Agent` tool is not the delegation path here. `cursor-orchestrator`
+is: it runs `cursor-agent` in its own git worktree, so a subagent cannot touch
+the working tree this session is editing.
+
+```
+mcp__cursor-orchestrator__spawn_agent
+  repo:   "Voltra-Engine"              # relative to ORCH_REPOS_ROOT = D:\Proyectos
+  model:  "cursor-grok-4.5-high"       # also -low / -medium, each with a -fast variant
+  mode:   "full"                       # see below
+  prompt: <the whole briefing — the agent starts cold>
+```
+
+Returns a job id immediately. Then `get_job` for state and diff stat,
+`get_job_diff` to read the patch, `follow_up` to continue the same conversation
+in the same worktree, `apply_job` to land it, `discard_job` to throw it away.
+Call `doctor` first if anything looks wrong; it prints the live model list, and
+the names above are only correct until Cursor changes them.
+
+Model choice: `cursor-grok-4.5-high` for anything that has to reason about the
+code, `-medium` for a mechanical edit, `-low` only for a search. `-fast` buys
+latency, not quality. Opus keeps the architectural call regardless of who wrote
+the code.
+
+**Mode, on Windows.** Cursor's sandbox is macOS/Linux only, so `mode: "edit"`
+— the sandboxed writing mode — is unavailable here and `doctor` reports
+`modes_available: ["ask", "full"]`. That leaves `ask` for read-only research and
+`full` for anything that writes, and `full` is genuinely unsandboxed: the
+isolated worktree bounds the *git* damage, not what the process can run. So keep
+`full` for work whose shape is already decided, and prefer `ask` when the task
+is "go and find out".
+
 Guidance for delegating well:
 
 - Fan out only when the subtasks are genuinely independent. Sequential work with
   shared context is faster in the main thread.
-- A subagent starts cold. Give it the file paths, the target API, the acceptance
-  check (`cargo clippy --workspace -- -D warnings`), and the conventions link —
-  it cannot see this conversation.
-- Review what comes back. Subagents miss the layering rules above; a returned
-  diff that makes `voltra-render` import `winit` gets rejected, not merged.
-- Keep the final architectural call on Opus, even when Sonnet wrote the code.
+- A subagent starts cold — colder than a built-in one, since it is a different
+  model in a different worktree with no sight of this repository's conventions
+  unless the prompt carries them. Give it the file paths, the target API, the
+  acceptance check (`cargo clippy --workspace --all-targets -- -D warnings`),
+  and the hard rules it must not break: 2D only, only `voltra-core` imports
+  `winit`, only `voltra-render` imports `wgpu`, versions live in the root
+  manifest, no `unwrap()` outside tests, one concept per file.
+- Review what comes back — read `get_job_diff` before `apply_job`, never apply
+  on the strength of the agent's own summary. Subagents miss the layering rules
+  above; a returned diff that makes `voltra-render` import `winit` gets
+  discarded, not merged.
 - **Subagents never rewrite history.** They may `git commit`, and they may
   `git commit --amend` their own last commit when told to. They may not run
   `rebase`, `reset --hard`, `push --force`, or any of the plumbing —
@@ -198,6 +237,7 @@ Installed and expected to be used (all user-scope; skip any that is absent):
 | Tool | Use it for |
 | --- | --- |
 | **context7** (MCP) | Current docs for `wgpu`, `winit`, any crate. Mandatory before writing graphics code — see above. |
+| **cursor-orchestrator** (MCP) | Every delegated task. Grok 4.5 in an isolated worktree — see "Models and delegation". |
 | **superpowers** | Workflow skills: `brainstorming` and `writing-plans` before a subsystem, `test-driven-development` for pure logic (ECS, math), `systematic-debugging` when a bug's cause is unknown, `subagent-driven-development` and `dispatching-parallel-agents` when fanning out, `verification-before-completion` before saying done. |
 | **security-guidance** | Runs on edits and commits. Take its findings seriously in asset loading and deserialization paths. |
 | **claude-md-management** | `/revise-claude-md` when this file drifts from reality. |
@@ -220,6 +260,21 @@ couple of files, `test-driven-development` for pure logic, and
 `verification-before-completion`. Improvising the workflow is what produces the
 shortcuts the hard rule above forbids; `systematic-debugging` in particular
 beats guessing at a graphics bug — GPU issues punish speculation.
+
+**Run the workflow, skip its approval gates.** `brainstorming` asks for design
+sign-off and a spec review before continuing, and `writing-plans` and
+`executing-plans` want check-ins between phases. Do not stop at those. Ask the
+open questions up front — the ones where a different answer produces different
+work — then go spec → plan → implementation in one run and report at the end.
+The review happens on the finished result.
+
+The distinction is a question versus a checkpoint. "Watcher or rescan on focus?"
+is a question: only the user can settle it and the answer changes the code.
+"Does this design look right?" is a checkpoint: it costs a round trip and
+returns what reviewing the real thing would have said anyway. Judgement calls
+made mid-implementation get made, then stated in the report — and flagged when
+they are the kind that should not pass silently, such as changing an invariant
+another test already pins.
 
 **Context7 is a lookup, not a store.** Query it to *read* current `wgpu` /
 `winit` / `egui` docs before writing graphics or UI code — that part is
