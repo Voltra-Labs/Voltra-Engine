@@ -6,7 +6,7 @@ mod ui_frame;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use voltra_assets::Textures;
+use voltra_assets::{AssetWatcher, Textures};
 use voltra_ecs::World;
 use voltra_render::{Filter, RenderTarget, Renderer};
 use winit::application::ApplicationHandler;
@@ -33,11 +33,17 @@ pub struct App {
     ///
     /// [`AssetPath`]: voltra_assets::AssetPath
     asset_root: Option<PathBuf>,
+    /// Whether to watch the asset root and reload textures as files change.
+    ///
+    /// Off by default. A shipped game has no reason to watch its own assets,
+    /// and none of Unity, Unreal, Godot or Bevy leaves this on in a build.
+    hot_reload: bool,
     // All of these stay `None` until the event loop resumes and hands us a
     // window; none of them can be built without a surface.
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     textures: Option<Textures>,
+    watcher: Option<AssetWatcher>,
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
     viewport: Option<TextureId>,
@@ -75,6 +81,16 @@ impl App {
         self
     }
 
+    /// Watches the asset root and reloads textures as their files change.
+    ///
+    /// The editor wants this; a shipped game does not, which is why it is not
+    /// the default. A failure to start the watch is logged and otherwise
+    /// ignored — the app runs, it just does not notice file changes.
+    pub fn with_hot_reload(mut self) -> Self {
+        self.hot_reload = true;
+        self
+    }
+
     pub fn run(mut self) {
         let event_loop = EventLoop::new().expect("failed to create event loop");
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -90,6 +106,30 @@ impl App {
     /// camera.
     fn update(&mut self) {
         self.clock.tick();
+        self.reload_changed_assets();
+    }
+
+    /// Applies whatever the watcher saw since the last frame.
+    ///
+    /// Between the clock and the render, so a texture that changed this frame
+    /// is on screen this frame rather than next. Costs one non-blocking
+    /// `try_recv` when nothing changed, which is almost every frame.
+    fn reload_changed_assets(&mut self) {
+        let (Some(watcher), Some(textures), Some(renderer)) = (
+            self.watcher.as_mut(),
+            self.textures.as_mut(),
+            self.renderer.as_ref(),
+        ) else {
+            return;
+        };
+
+        for path in watcher.drain() {
+            textures.reload(
+                renderer.context().device(),
+                renderer.context().queue(),
+                &path,
+            );
+        }
     }
 }
 
@@ -121,8 +161,18 @@ impl ApplicationHandler for App {
             renderer.context().device(),
             renderer.context().queue(),
             renderer.texture_layout(),
-            asset_root,
+            asset_root.clone(),
         );
+
+        if self.hot_reload {
+            match AssetWatcher::new(&asset_root) {
+                Ok(watcher) => self.watcher = Some(watcher),
+                // Not fatal. Refusing to open the editor because a watch handle
+                // could not be had would trade a working session for a feature
+                // nobody has used yet this run.
+                Err(e) => log::error!("hot reload disabled: {e}"),
+            }
+        }
 
         if self.ui.is_some() {
             let device = renderer.context().device().clone();
