@@ -121,7 +121,7 @@ Every task's requirements implicitly include this section.
   - re-exported as `voltra_render::{LineBatch, LineVertex}`
 - Consumes: `Mesh::indexed`, which this task makes generic.
 
-- [ ] **Step 1: Make `Mesh` generic over the vertex type**
+- [x] **Step 1: Make `Mesh` generic over the vertex type**
 
 `Mesh` stores buffers and a count; it has never needed to know what a vertex is
 after the upload. In `crates/voltra-render/src/mesh.rs`, change both
@@ -152,7 +152,7 @@ Add to `Mesh::indexed`'s doc comment:
 
 Every existing call site infers `V = Vertex` and needs no change.
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `crates/voltra-render/src/lines.rs` with only this test module for now,
 plus the `use` lines it needs:
@@ -264,12 +264,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run them and watch them fail to compile**
+- [x] **Step 3: Run them and watch them fail to compile**
 
 Run: `cargo test -p voltra-render lines::`
 Expected: FAIL — `cannot find type 'LineBatch' in this scope`.
 
-- [ ] **Step 4: Write the batch**
+- [x] **Step 4: Write the batch**
 
 Put this above the test module in `crates/voltra-render/src/lines.rs`:
 
@@ -406,7 +406,7 @@ impl LineBatch {
 }
 ```
 
-- [ ] **Step 5: Write the shader**
+- [x] **Step 5: Write the shader**
 
 Create `crates/voltra-render/src/shaders/lines.wgsl`:
 
@@ -476,7 +476,7 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
 }
 ```
 
-- [ ] **Step 6: Declare the shader and the module**
+- [x] **Step 6: Declare the shader and the module**
 
 In `crates/voltra-render/src/shader.rs`, beside the other constants:
 
@@ -489,12 +489,12 @@ In `crates/voltra-render/src/lib.rs`, add `pub mod lines;` and
 `pub use lines::{LineBatch, LineVertex};`, each in the file's existing
 alphabetical position.
 
-- [ ] **Step 7: Run the tests**
+- [x] **Step 7: Run the tests**
 
 Run: `cargo test -p voltra-render lines::`
 Expected: PASS, nine tests.
 
-- [ ] **Step 8: fmt, clippy, test**
+- [x] **Step 8: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -502,7 +502,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```sh
 git add crates/voltra-render/src/lines.rs crates/voltra-render/src/shaders/lines.wgsl crates/voltra-render/src/shader.rs crates/voltra-render/src/lib.rs crates/voltra-render/src/mesh.rs
@@ -526,7 +526,7 @@ git commit -m "feat(render): add line segments with a pixel width"
   - `pipeline::viewport_bind_group_layout(device) -> wgpu::BindGroupLayout`
   - `pass::draw_lines(encoder, view, pipeline, camera, viewport, mesh: Option<&Mesh>)`
 
-- [ ] **Step 1: Write the failing GPU tests**
+- [x] **Step 1: Write the failing GPU tests**
 
 Create `crates/voltra-render/tests/headless_lines.rs`:
 
@@ -696,7 +696,7 @@ fn an_empty_batch_draws_nothing_and_does_not_panic() {
 }
 ```
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `cargo test -p voltra-render --test headless_lines`
 Expected: FAIL — `cannot find function 'create_lines' in module 'pipeline'`.
@@ -705,7 +705,7 @@ Expected: FAIL — `cannot find function 'create_lines' in module 'pipeline'`.
 has it from stage 12b. Confirm rather than assume:
 `grep voltra-testkit crates/voltra-render/Cargo.toml`.
 
-- [ ] **Step 3: The viewport uniform and its layout**
+- [x] **Step 3: The viewport uniform and its layout**
 
 Append to `crates/voltra-render/src/pipeline.rs`:
 
@@ -765,7 +765,7 @@ pub fn viewport_binding(
 `width.max(1)`: a minimised window reports zero, and the shader divides by half
 of it.
 
-- [ ] **Step 4: The pipeline**
+- [x] **Step 4: The pipeline**
 
 Also in `pipeline.rs`:
 
@@ -826,7 +826,7 @@ pub fn create_lines(
 
 Add `use crate::lines::LineVertex;` to the file's imports.
 
-- [ ] **Step 5: The pass that loads**
+- [x] **Step 5: The pass that loads**
 
 Append to `crates/voltra-render/src/pass.rs`:
 
@@ -879,7 +879,7 @@ pub fn draw_lines(
 }
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `cargo test -p voltra-render --test headless_lines`
 Expected: PASS, four tests.
@@ -889,7 +889,7 @@ roughly the zoom ratio, the widening is happening before projection — the
 `half_size` multiply is on the wrong side of the `view_proj` multiply in
 `lines.wgsl`.
 
-- [ ] **Step 7: fmt, clippy, test**
+- [x] **Step 7: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -897,7 +897,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```sh
 git add crates/voltra-render/src/pipeline.rs crates/voltra-render/src/pass.rs crates/voltra-render/tests/headless_lines.rs
@@ -925,7 +925,7 @@ segments through, so a panel never touches a device.
   - `Renderer::viewport_layout(&self) -> &wgpu::BindGroupLayout`
   - `UiFrame::lines(&mut self) -> &mut LineBatch`
 
-- [ ] **Step 1: `Renderer` owns the pipeline**
+- [x] **Step 1: `Renderer` owns the pipeline**
 
 In `crates/voltra-render/src/renderer.rs`, add two fields beside the existing
 pipeline and layout, build them in the constructor next to their neighbours, and
@@ -952,7 +952,7 @@ Read the constructor before editing: build `viewport_layout` first, then
 `line_pipeline` from it, the camera binding's layout, and the same
 `TextureFormat` the flat-colour pipeline is given.
 
-- [ ] **Step 2: `UiFrame` gains the seam**
+- [x] **Step 2: `UiFrame` gains the seam**
 
 In `crates/voltra-core/src/app/ui_frame.rs`, add the field and the accessor:
 
@@ -975,7 +975,7 @@ In `crates/voltra-core/src/app/ui_frame.rs`, add the field and the accessor:
 
 Every construction site of `UiFrame` gains the field; the compiler names them.
 
-- [ ] **Step 3: `App` holds the batch and clears it per frame**
+- [x] **Step 3: `App` holds the batch and clears it per frame**
 
 In `crates/voltra-core/src/app.rs`, add to `struct App`:
 
@@ -986,7 +986,7 @@ In `crates/voltra-core/src/app.rs`, add to `struct App`:
 
 `LineBatch` is `Default`, so `#[derive(Default)]` on `App` still holds.
 
-- [ ] **Step 4: Record the pass**
+- [x] **Step 4: Record the pass**
 
 In `crates/voltra-core/src/app/draw.rs`, after the scene pass is recorded into
 the scene target and before the frame is submitted:
@@ -1021,7 +1021,7 @@ Clear the batch at the point the UI is about to rebuild it — immediately befor
 the UI callback runs, not after the draw, so a frame that skips rendering does
 not leave stale segments behind.
 
-- [ ] **Step 5: fmt, clippy, test**
+- [x] **Step 5: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1032,7 +1032,7 @@ cargo test --workspace
 Expected: green, and nothing visibly different yet — no panel pushes a segment
 until Task 5.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```sh
 git add crates/voltra-render/src/renderer.rs crates/voltra-core/src/app.rs crates/voltra-core/src/app/draw.rs crates/voltra-core/src/app/ui_frame.rs
@@ -1061,7 +1061,7 @@ files it lives in. Disjoint from Tasks 2 and 3.
   - `gizmo::drag::Drag { entity, handle, grab: Vec2, start: Vec2 }`
   - `Drag::translation(&self, cursor_world: Vec2) -> Vec2`
 
-- [ ] **Step 1: Write `Tool`**
+- [x] **Step 1: Write `Tool`**
 
 Create `crates/voltra-editor/src/tool.rs`:
 
@@ -1090,7 +1090,7 @@ pub enum Tool {
 One variant rather than a `bool`, so `Rotate` and `Scale` arrive as variants
 rather than as a rename.
 
-- [ ] **Step 2: Write the failing handle tests**
+- [x] **Step 2: Write the failing handle tests**
 
 Create `crates/voltra-editor/src/gizmo/handle.rs` with only this test module and
 the `use` lines it needs:
@@ -1178,12 +1178,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Run them and watch them fail**
+- [x] **Step 3: Run them and watch them fail**
 
 Run: `cargo test -p voltra-editor handle::`
 Expected: FAIL — `cannot find type 'Handle' in this scope`.
 
-- [ ] **Step 4: Write the handle**
+- [x] **Step 4: Write the handle**
 
 Above the test module in `crates/voltra-editor/src/gizmo/handle.rs`:
 
@@ -1259,7 +1259,7 @@ impl Handle {
 }
 ```
 
-- [ ] **Step 5: Write the failing drag tests**
+- [x] **Step 5: Write the failing drag tests**
 
 Create `crates/voltra-editor/src/gizmo/drag.rs` with only its test module:
 
@@ -1328,12 +1328,12 @@ mod tests {
 own tests. If nothing public does, spawn one from a `World` in the test instead;
 do not add a constructor to `voltra-ecs` for a test's convenience.
 
-- [ ] **Step 6: Run them and watch them fail**
+- [x] **Step 6: Run them and watch them fail**
 
 Run: `cargo test -p voltra-editor drag::`
 Expected: FAIL — `cannot find type 'Drag' in this scope`.
 
-- [ ] **Step 7: Write the drag**
+- [x] **Step 7: Write the drag**
 
 Above the test module in `crates/voltra-editor/src/gizmo/drag.rs`:
 
@@ -1376,7 +1376,7 @@ impl Drag {
 }
 ```
 
-- [ ] **Step 8: Declare the modules**
+- [x] **Step 8: Declare the modules**
 
 In `crates/voltra-editor/src/main.rs`, add `mod gizmo;` and `mod tool;` to the
 existing `mod` list, alphabetically. Create `crates/voltra-editor/src/gizmo.rs`
@@ -1389,12 +1389,12 @@ pub mod drag;
 pub mod handle;
 ```
 
-- [ ] **Step 9: Run the tests**
+- [x] **Step 9: Run the tests**
 
 Run: `cargo test -p voltra-editor`
 Expected: PASS, sixteen new tests.
 
-- [ ] **Step 10: fmt, clippy, test**
+- [x] **Step 10: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1402,7 +1402,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```sh
 git add crates/voltra-editor/src/tool.rs crates/voltra-editor/src/gizmo.rs crates/voltra-editor/src/gizmo crates/voltra-editor/src/main.rs
@@ -1426,7 +1426,7 @@ git commit -m "feat(editor): add gizmo handles and drag arithmetic"
   - `Gizmo::update(&mut self, response: &Response, frame: &mut UiFrame<'_>, selected: Option<Entity>) -> bool`
   - `Gizmo::draw(&self, frame: &mut UiFrame<'_>, response: &Response, selected: Option<Entity>)`
 
-- [ ] **Step 1: Write the gizmo**
+- [x] **Step 1: Write the gizmo**
 
 Fill `crates/voltra-editor/src/gizmo.rs`:
 
@@ -1603,7 +1603,7 @@ fn viewport_size(response: &Response) -> Vec2 {
 `voltra-ecs` for this; a component lookup by entity certainly already exists,
 because the inspector edits one.
 
-- [ ] **Step 2: `Editor` holds the tool and the gizmo**
+- [x] **Step 2: `Editor` holds the tool and the gizmo**
 
 In `crates/voltra-editor/src/editor.rs`, add two fields to `Editor`:
 
@@ -1615,7 +1615,7 @@ In `crates/voltra-editor/src/editor.rs`, add two fields to `Editor`:
 
 `Editor` derives `Default` and both are `Default`, so nothing else changes.
 
-- [ ] **Step 3: The viewport drives it**
+- [x] **Step 3: The viewport drives it**
 
 In `crates/voltra-editor/src/panels/viewport.rs`, the selection currently
 happens on click. Put the gizmo in front of it:
@@ -1648,7 +1648,7 @@ switch tools:
     }
 ```
 
-- [ ] **Step 4: fmt, clippy, test**
+- [x] **Step 4: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1656,7 +1656,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 5: Drive the editor**
+- [ ] **Step 5: Drive the editor** — *partly done; see Deviations*
 
 The editor is a GUI app with an infinite event loop. Never run it in the
 foreground: launch it detached, give it a few seconds, check the log, kill it.
@@ -1676,7 +1676,7 @@ Kill it and report which of the five held. If the arms rotate with the sprite,
 `draw` is using the sprite's rotated basis rather than the world axes — the
 gizmo in 11a is world-aligned.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```sh
 git add crates/voltra-editor/src/gizmo.rs crates/voltra-editor/src/editor.rs crates/voltra-editor/src/panels/viewport.rs
@@ -1692,7 +1692,7 @@ git commit -m "feat(editor): move a sprite with a translate gizmo"
 - Modify: `README.md`
 - Modify: this plan
 
-- [ ] **Step 1: Add the decisions**
+- [x] **Step 1: Add the decisions**
 
 In `docs/ARCHITECTURE.md`, under "Decisions", after the hot-reload entries:
 
@@ -1748,7 +1748,7 @@ grab is anywhere but dead centre. World units rather than screen so that
 resizing the viewport or zooming mid-drag does not move the sprite.
 ```
 
-- [ ] **Step 2: Fix the roadmap**
+- [x] **Step 2: Fix the roadmap**
 
 In `README.md`, replace the stage 11 row:
 
@@ -1757,9 +1757,9 @@ In `README.md`, replace the stage 11 row:
 | 11b | Physics: bodies, integration, collision | planned |
 ```
 
-- [ ] **Step 3: Tick this plan and verify**
+- [x] **Step 3: Tick this plan and verify**
 
-Change every `- [ ]` in this file to `- [x]`, having checked each against
+Change every `- [x]` in this file to `- [x]`, having checked each against
 `git log --oneline main..HEAD`. Then:
 
 ```sh
@@ -1768,7 +1768,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```sh
 git add docs/ARCHITECTURE.md README.md docs/superpowers/plans/2026-08-10-translate-gizmo.md
@@ -1793,6 +1793,38 @@ git commit -m "docs: record the translate gizmo decisions"
   alternatives; the README shows 11a done and 11b planned.
 - `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
   and `cargo test --workspace` are clean.
+
+## Deviations from this plan, as executed
+
+Recorded rather than quietly ticked.
+
+- **The viewport uniform became `lines::ViewportBinding`,** not the two loose
+  functions `pipeline::viewport_bind_group_layout` and
+  `pipeline::viewport_binding` that Task 2 Step 3 describes. `CameraBinding`
+  already sets the pattern in this crate, and it exists for a reason: a uniform,
+  its buffer and its bind group belong to one another, and handing them out
+  separately is how a bind group ends up built against a layout the pipeline was
+  not. It also gave `Renderer` something it can rewrite each frame rather than
+  rebuilding a buffer per frame.
+- **Tasks 4 and 5 landed in one commit.** Task 4's code has no caller until Task
+  5 wires it up, so committing it alone meant `Drag`, `Tool` and four constants
+  as dead code — and `cargo clippy -- -D warnings` rejects that, correctly. The
+  alternative was an `#[allow(dead_code)]` that would have outlived its reason.
+- **Task 5 Step 5 is only partly done.** The editor was launched detached with a
+  temporarily forced selection so the gizmo actually drew, and it ran clean for
+  eight seconds: no wgpu validation error, no panic, no early exit. That
+  exercises the whole runtime path — batch, upload, `ViewportBinding`, the pass
+  into the scene target, egui sampling it afterwards. The five *visual* checks
+  in that step — arms visible and the right colours, constant size while
+  zooming, axis-constrained dragging, no teleport on grab, selection unchanged
+  when clicking a handle — need a human at the window and were **not**
+  performed. The temporary selection patch was reverted; `grep SMOKE-TEMP`
+  returns nothing.
+- **Six unit tests were added that this plan did not ask for,** covering the arm
+  layout as a pure function: length in pixels at five zoom levels from 0.1 to
+  25, screen direction of each arm, the square closing on itself and its size.
+  They exist because the plan left "constant size at every zoom" to the eye, and
+  the eye checks one zoom at a time.
 
 ## Spec coverage
 

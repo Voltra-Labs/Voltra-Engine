@@ -768,6 +768,81 @@ the shape of a second is not known.
   can drift to incompatible versions; the debouncer re-exports the one it was
   built against.
 
+### A line is a quad the shader widens
+
+**WebGPU has no line width, so `voltra_render::lines` uploads each segment as a
+quad carrying both endpoints, and `shaders/lines.wgsl` gives it its thickness
+after projection.** Verified against the vendored source rather than recalled:
+`PrimitiveState` in `wgpu-types-30.0.0/src/render.rs:385` has `topology`,
+`strip_index_format`, `front_face`, `cull_mode`, `unclipped_depth`,
+`polygon_mode` and `conservative`, and nothing else. `PolygonMode::Line` is
+wireframe fill behind an optional feature, not a width.
+
+Widening *after* projection is what makes the width a number of **pixels**. A
+gizmo has to be the same size on screen at every zoom, and doing the conversion
+at each call site means every caller recomputes pixels-per-world-unit and one of
+them gets it wrong. Bevy reached the same shape by adopting `bevy_polyline` into
+`bevy_gizmos`.
+
+`ViewportBinding` carries the pixel size the shader converts with, at group 1 —
+the slot the sprite pipeline gives its texture — so group 0 is the camera in
+every pipeline this engine has.
+
+`pass::draw_lines` is the engine's only pass that **loads** rather than clears.
+Every other pass is the single thing drawn into its target that frame; an
+overlay is by definition the second. With no mesh it records nothing at all, not
+even a pass: unlike the others there is no clear to be the point of recording
+one.
+
+`Mesh::new` and `Mesh::indexed` became generic over the vertex type at the same
+time. A `Mesh` is buffers and a count; what the bytes mean belongs to whichever
+`VertexBufferLayout` the pipeline was built with, and `Vertex` and `LineVertex`
+are two such meanings.
+
+#### Rejected
+
+- **`PrimitiveTopology::LineList`.** One pixel, always — invisible on a
+  high-DPI display and impossible to hit-test generously.
+- **Expanding on the CPU.** Fine for a gizmo's six segments, and it spreads
+  screen-space arithmetic across every caller. The grid would repeat it and the
+  collision overlay would repeat it again.
+- **`egui::Painter`.** No GPU code at all, and the overlay would live in the UI
+  layer: unreachable for a game, in a different coordinate system from the scene
+  it annotates, and useless to anything that has to be drawn under the same
+  camera.
+
+### The gizmo is a persistent tool, and it hit-tests in screen space
+
+**`Tool` is editor state, and the gizmo on screen says what a drag will do.**
+Unity's model; Godot 2D's too. Blender binds the transform to a gesture instead
+— `G`/`R`/`S` start a modal transform the mouse drives until a click confirms —
+which is faster once learned, invisible until someone tells you the letter, and
+needs modal input capture `Input` does not have: swallowing every key while
+active, surviving a lost window focus, unwinding on `Esc`. It layers onto a
+working gizmo later; the reverse does not.
+
+**Handles are tested against the pixels they were drawn at**, with a grab margin
+wider than the line, because a two-pixel line is a two-pixel picture and not a
+two-pixel target. Testing in world space gives a target that scales with the
+zoom while the picture does not, which is a standing Unreal bug report. The
+centre square is tested before the arms: both arms begin inside it, so testing
+it last would make the smallest target in the gizmo the unreachable one.
+
+**A drag stores the grab point and the original translation, both in world
+units,** and each frame sets `start + (cursor − grab)`. Setting the translation
+to the cursor teleports the sprite's origin under the pointer the moment the
+grab is anywhere but dead centre — which is every grab, since the handles are
+drawn away from the origin. World units rather than screen so that resizing the
+viewport or zooming mid-drag does not move the sprite. The drag holds its
+`Entity`, so a release outside the viewport still ends it and a despawn mid-drag
+ends it rather than panicking.
+
+The arm layout is a pure function taking a camera, a viewport and an origin,
+separated from the drawing for one reason: the property that matters is that an
+arm is 60 px long at zoom 0.1 and at zoom 25, and that is a statement about
+numbers. Verified through egui and a GPU it would have been verified at one
+zoom, by eye.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
