@@ -19,7 +19,7 @@ pub mod texture;
 pub use camera::{Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
-pub use lines::{LineBatch, LineVertex};
+pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
 pub use pass::MeshDraw;
 pub use renderer::Renderer;

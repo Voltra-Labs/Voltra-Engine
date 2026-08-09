@@ -63,6 +63,82 @@ impl LineVertex {
     };
 }
 
+/// The viewport's pixel size, on the GPU, with the bind group that reaches it.
+///
+/// Group 1 — the slot the sprite pipeline gives its texture — so that group 0
+/// is the camera in every pipeline this engine has. Shaped like
+/// [`CameraBinding`](crate::camera::CameraBinding), for the same reason: a
+/// uniform, its buffer and its bind group belong to one another, and handing
+/// them out separately is how a bind group ends up built against a layout the
+/// pipeline was not.
+pub struct ViewportBinding {
+    buffer: wgpu::Buffer,
+    layout: wgpu::BindGroupLayout,
+    bind_group: wgpu::BindGroup,
+}
+
+impl ViewportBinding {
+    pub fn new(device: &wgpu::Device) -> Self {
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("viewport-layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        // A `vec4` rather than a `vec2`: a uniform buffer binding is aligned to
+        // 16 bytes, and two unused floats are cheaper than a padding field
+        // nobody remembers the reason for.
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("viewport-uniform"),
+            size: size_of::<[f32; 4]>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("viewport-bind-group"),
+            layout: &layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
+
+        Self {
+            buffer,
+            layout,
+            bind_group,
+        }
+    }
+
+    /// Writes the size the next line pass widens against.
+    ///
+    /// Both dimensions are clamped to at least one. A minimised window reports
+    /// zero, and the shader divides by half of this — a NaN there goes through
+    /// every vertex of every line.
+    pub fn upload(&self, queue: &wgpu::Queue, width: u32, height: u32) {
+        let size = [width.max(1) as f32, height.max(1) as f32, 0.0, 0.0];
+        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&size));
+    }
+
+    /// The layout the line pipeline must be built against.
+    pub fn layout(&self) -> &wgpu::BindGroupLayout {
+        &self.layout
+    }
+
+    pub fn bind_group(&self) -> &wgpu::BindGroup {
+        &self.bind_group
+    }
+}
+
 /// Segments accumulated on the CPU, then uploaded as one mesh.
 ///
 /// Rebuilt every frame by whoever draws an overlay, so [`Self::clear`] keeps

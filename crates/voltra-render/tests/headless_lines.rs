@@ -8,7 +8,7 @@
 
 use voltra_render::glam::Vec2;
 use voltra_render::wgpu;
-use voltra_render::{lines::LineBatch, pass, pipeline, Camera2D, CameraBinding};
+use voltra_render::{lines::LineBatch, pass, pipeline, Camera2D, CameraBinding, ViewportBinding};
 use voltra_testkit::{headless_device, read_texture, Rgba, CLEAR};
 
 const SIZE: u32 = 64;
@@ -48,10 +48,10 @@ fn render(device: &wgpu::Device, queue: &wgpu::Queue, batch: &LineBatch, zoom: f
     let camera_binding = CameraBinding::new(device);
     camera_binding.upload(queue, &Camera2D::new(Vec2::ZERO, zoom, 1.0));
 
-    let viewport_layout = pipeline::viewport_bind_group_layout(device);
-    let viewport = pipeline::viewport_binding(device, queue, &viewport_layout, SIZE, SIZE);
+    let viewport = ViewportBinding::new(device);
+    viewport.upload(queue, SIZE, SIZE);
     let line_pipeline =
-        pipeline::create_lines(device, FORMAT, camera_binding.layout(), &viewport_layout);
+        pipeline::create_lines(device, FORMAT, camera_binding.layout(), viewport.layout());
 
     let mesh = batch.upload(device);
 
@@ -76,7 +76,7 @@ fn render(device: &wgpu::Device, queue: &wgpu::Queue, batch: &LineBatch, zoom: f
         &view,
         &line_pipeline,
         camera_binding.bind_group(),
-        &viewport,
+        viewport.bind_group(),
         mesh.as_ref(),
     );
     queue.submit(Some(encoder.finish()));

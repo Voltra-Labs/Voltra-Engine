@@ -61,61 +61,6 @@ pub fn create_flat_color(
     })
 }
 
-/// Layout of the viewport-size uniform the line shader widens with.
-///
-/// Group 1 — the slot the sprite pipeline gives its texture — so that group 0
-/// is the camera in every pipeline this engine has.
-pub fn viewport_bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("viewport-layout"),
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
-            },
-            count: None,
-        }],
-    })
-}
-
-/// The viewport size, uploaded, with its bind group.
-///
-/// A `vec4` rather than a `vec2`: a uniform buffer binding is aligned to 16
-/// bytes, and two unused floats are cheaper than a padding field nobody
-/// remembers the reason for.
-///
-/// Both dimensions are clamped to at least one. A minimised window reports zero
-/// and the shader divides by half of this, which would put a NaN through every
-/// vertex of every line.
-pub fn viewport_binding(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    layout: &wgpu::BindGroupLayout,
-    width: u32,
-    height: u32,
-) -> wgpu::BindGroup {
-    let size = [width.max(1) as f32, height.max(1) as f32, 0.0, 0.0];
-    let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-        label: Some("viewport-uniform"),
-        size: size_of::<[f32; 4]>() as wgpu::BufferAddress,
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-    queue.write_buffer(&buffer, 0, bytemuck::cast_slice(&size));
-
-    device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("viewport-bind-group"),
-        layout,
-        entries: &[wgpu::BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }],
-    })
-}
-
 /// Builds the line pipeline.
 ///
 /// Same shape as [`create_flat_color`] — `TriangleList`, no culling, no depth,
