@@ -261,6 +261,21 @@ couple of files, `test-driven-development` for pure logic, and
 shortcuts the hard rule above forbids; `systematic-debugging` in particular
 beats guessing at a graphics bug — GPU issues punish speculation.
 
+**Run the workflow, skip its approval gates.** `brainstorming` asks for design
+sign-off and a spec review before continuing, and `writing-plans` and
+`executing-plans` want check-ins between phases. Do not stop at those. Ask the
+open questions up front — the ones where a different answer produces different
+work — then go spec → plan → implementation in one run and report at the end.
+The review happens on the finished result.
+
+The distinction is a question versus a checkpoint. "Watcher or rescan on focus?"
+is a question: only the user can settle it and the answer changes the code.
+"Does this design look right?" is a checkpoint: it costs a round trip and
+returns what reviewing the real thing would have said anyway. Judgement calls
+made mid-implementation get made, then stated in the report — and flagged when
+they are the kind that should not pass silently, such as changing an invariant
+another test already pins.
+
 **Context7 is a lookup, not a store.** Query it to *read* current `wgpu` /
 `winit` / `egui` docs before writing graphics or UI code — that part is
 mandatory. It cannot save anything. Findings that must survive the session go in
