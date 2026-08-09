@@ -38,6 +38,7 @@ egui-winit = "0.35.0"
 epaint = { version = "0.35.0", default-features = false, features = ["bytemuck"] }
 pollster = "1.0.1"
 log = "0.4.33"
+notify-debouncer-full = "0.7"
 env_logger = "0.11.11"
 
 # Our crates stay debuggable; dependencies are compiled optimized because we

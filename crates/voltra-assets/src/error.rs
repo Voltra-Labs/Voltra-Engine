@@ -8,8 +8,9 @@ use voltra_render::TextureError;
 /// A failure to name or load an asset.
 ///
 /// The first three are rejections at construction and never reach a filesystem
-/// call. The last two are runtime failures, which `Textures::load` turns into
-/// a warning and a placeholder rather than propagating.
+/// call. `Read`, `Decode` and `Watch` are runtime failures: the first two
+/// `Textures::load` turns into a warning and a placeholder rather than
+/// propagating, and the third disables hot reload without stopping the app.
 #[derive(Debug)]
 pub enum AssetError {
     /// An absolute path, a volume prefix, or a UNC path.
@@ -25,6 +26,11 @@ pub enum AssetError {
     Decode {
         path: PathBuf,
         source: TextureError,
+    },
+    /// The filesystem watch could not be established.
+    Watch {
+        root: PathBuf,
+        source: notify_debouncer_full::notify::Error,
     },
 }
 
@@ -47,6 +53,9 @@ impl fmt::Display for AssetError {
             Self::Decode { path, source } => {
                 write!(f, "could not decode {}: {source}", path.display())
             }
+            Self::Watch { root, source } => {
+                write!(f, "could not watch {}: {source}", root.display())
+            }
         }
     }
 }
@@ -56,6 +65,7 @@ impl std::error::Error for AssetError {
         match self {
             Self::Read { source, .. } => Some(source),
             Self::Decode { source, .. } => Some(source),
+            Self::Watch { source, .. } => Some(source),
             Self::Absolute(_) | Self::EscapesRoot(_) | Self::Empty => None,
         }
     }

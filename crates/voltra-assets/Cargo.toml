@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 voltra-render.workspace = true
 log.workspace = true
+notify-debouncer-full.workspace = true
 serde.workspace = true
 
 [dev-dependencies]

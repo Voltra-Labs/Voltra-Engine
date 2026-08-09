@@ -21,7 +21,9 @@ fn main() {
     spawn_demo_scene(&mut app);
 
     let mut editor = Editor::default();
-    app.with_ui(move |ui, frame| editor.ui(ui, frame)).run();
+    app.with_ui(move |ui, frame| editor.ui(ui, frame))
+        .with_hot_reload()
+        .run();
 }
 
 fn spawn_demo_scene(app: &mut App) {

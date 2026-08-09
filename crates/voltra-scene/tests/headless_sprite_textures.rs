@@ -250,10 +250,14 @@ fn a_path_that_does_not_load_draws_the_placeholder_checker() {
 
     let mut textures = Textures::new(&device, &queue, &layout, &root);
     let missing = sprite_at(0.0, Some("absent.png"), &mut textures, &device, &queue);
-    assert_eq!(
+    assert!(
+        missing.1.texture_handle.is_some(),
+        "a failed load must still resolve to something drawable"
+    );
+    assert_ne!(
         missing.1.texture_handle,
         Some(textures.placeholder()),
-        "a failed load must resolve to the placeholder handle"
+        "a failed path gets its own slot so hot reload can fix it in place"
     );
 
     let mut batch = SpriteBatch::default();
@@ -315,4 +319,38 @@ fn an_untextured_sprite_still_tints_through_white() {
         "the sprite colour must survive the white texture, got {centre:?}"
     );
     assert!(!centre.is_clear_ish(), "nothing was drawn");
+}
+
+#[test]
+fn a_reloaded_texture_changes_what_is_drawn() {
+    // The dimension assertions in voltra-assets prove the slot was replaced.
+    // This proves the replacement reaches the screen — which it only does if
+    // the bind group was replaced too, because the old one names the old view.
+    let (device, queue) = device_or_skip!();
+    let layout = texture::bind_group_layout(&device);
+    let root = scratch_root();
+    write_flat_png(&root, "swap.png", [40, 200, 90, 255]);
+
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
+    let sprite = sprite_at(0.0, Some("swap.png"), &mut textures, &device, &queue);
+
+    let mut batch = SpriteBatch::default();
+    batch.push(&sprite.0, &sprite.1);
+
+    let before = render_batch(&device, &queue, &batch, &textures, &close_camera());
+    let centre = at(&before, SIZE / 2, SIZE / 2);
+    assert!(centre.g > centre.b, "the green PNG first: {centre:?}");
+
+    write_flat_png(&root, "swap.png", [50, 90, 220, 255]);
+    let path = AssetPath::new("swap.png").expect("a valid asset path");
+    assert!(textures.reload(&device, &queue, &path));
+
+    // The same batch, the same sprite, the same handle. Nothing in the world
+    // was touched — only the texture behind the handle.
+    let after = render_batch(&device, &queue, &batch, &textures, &close_camera());
+    let centre = at(&after, SIZE / 2, SIZE / 2);
+    assert!(
+        centre.b > centre.g,
+        "the reload must reach the screen: {centre:?}"
+    );
 }

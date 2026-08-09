@@ -46,19 +46,7 @@ impl Textures {
         root: impl Into<PathBuf>,
     ) -> Self {
         let mut store = Assets::new();
-        let texture = Texture::from_rgba8(
-            device,
-            queue,
-            "missing-texture",
-            &placeholder::rgba(),
-            placeholder::SIZE,
-            placeholder::SIZE,
-            // Nearest so the checks stay hard-edged. Filtering them into a
-            // magenta smear makes the failure look like a design choice.
-            Filter::Nearest,
-        )
-        .expect("the placeholder's pixel count matches its declared size");
-
+        let texture = placeholder_texture(device, queue);
         let bind_group = texture.create_bind_group(device, layout);
         let placeholder = store.insert(texture);
 
@@ -95,12 +83,79 @@ impl Textures {
             }
             Err(e) => {
                 log::warn!("{e}; drawing the missing-texture checker instead");
-                self.placeholder
+                self.insert_broken(device, queue)
             }
         };
 
         self.by_path.insert(path.clone(), handle);
         handle
+    }
+
+    /// A private texture holding the placeholder's pixels, under its own
+    /// handle.
+    ///
+    /// Not the shared [`Self::placeholder`] handle. A sprite stores the handle
+    /// it was given and nothing re-resolves it, so if every broken path shared
+    /// one handle, repairing one of them would mean overwriting the texture all
+    /// the others are also drawing — and hot reload could never fix a typo. Its
+    /// own slot costs 256 bytes of pixels.
+    fn insert_broken(&mut self, device: &Device, queue: &Queue) -> Handle<Texture> {
+        let texture = placeholder_texture(device, queue);
+        let bind_group = texture.create_bind_group(device, &self.layout);
+        let handle = self.store.insert(texture);
+        self.bind_groups.insert(handle, bind_group);
+        handle
+    }
+
+    /// Re-reads `path` and swaps the new pixels in under the handle it already
+    /// has. Returns whether anything changed.
+    ///
+    /// The handle is deliberately stable: every sprite in the world stores the
+    /// one it was given, and the scene file stores the path. Issuing a new
+    /// handle would mean walking the world to repoint them, and would make the
+    /// scene dirty for a change nobody made to it.
+    ///
+    /// A path that was never loaded is ignored. The watch is on the whole asset
+    /// root, so most events name files no scene has asked for; loading them
+    /// here would upload every PNG in the project the first time one of them
+    /// was touched.
+    pub fn reload(&mut self, device: &Device, queue: &Queue, path: &AssetPath) -> bool {
+        let Some(&handle) = self.by_path.get(path) else {
+            return false;
+        };
+
+        let texture = match self.read(device, queue, path) {
+            Ok(texture) => texture,
+            Err(e) => {
+                // The previous pixels stay on screen. An image editor's save
+                // leaves the file truncated for a few milliseconds and the
+                // debounce window does not always cover it, so degrading to the
+                // checker here would flash magenta on every save.
+                log::warn!("{e}; keeping the previously loaded texture");
+                return false;
+            }
+        };
+
+        let bind_group = texture.create_bind_group(device, &self.layout);
+        let slot = self
+            .store
+            .get_mut(handle)
+            .expect("Textures never removes, so every handle it issued resolves");
+        *slot = texture;
+        // The old bind group still names the old texture view, so replacing the
+        // texture without replacing this swaps nothing the GPU can see.
+        self.bind_groups.insert(handle, bind_group);
+
+        log::info!("reloaded {}", path.as_str());
+        true
+    }
+
+    /// The handle `path` is cached to, if it has ever been loaded.
+    ///
+    /// Distinct from [`Self::load`], which loads on a miss. This asks whether
+    /// the cache already knows the path, which is the question hot reload has.
+    pub fn by_path_handle(&self, path: &AssetPath) -> Option<Handle<Texture>> {
+        self.by_path.get(path).copied()
     }
 
     /// The bind group `handle`'s texture and sampler were bound into.
@@ -165,4 +220,23 @@ impl Textures {
         Texture::from_png(device, queue, path.as_str(), &bytes, Filter::Linear)
             .map_err(|source| AssetError::Decode { path: full, source })
     }
+}
+
+/// The magenta-and-black checker, uploaded.
+///
+/// A free function because both the store's seed and every failed path need
+/// one, and the second of those runs on a `&mut self` that already exists.
+fn placeholder_texture(device: &Device, queue: &Queue) -> Texture {
+    Texture::from_rgba8(
+        device,
+        queue,
+        "missing-texture",
+        &placeholder::rgba(),
+        placeholder::SIZE,
+        placeholder::SIZE,
+        // Nearest so the checks stay hard-edged. Filtering them into a magenta
+        // smear makes the failure look like a design choice.
+        Filter::Nearest,
+    )
+    .expect("the placeholder's pixel count matches its declared size")
 }

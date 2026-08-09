@@ -12,6 +12,7 @@ pub mod placeholder;
 pub mod root;
 pub mod store;
 pub mod textures;
+pub mod watch;
 
 pub use error::AssetError;
 pub use handle::Handle;
@@ -19,3 +20,4 @@ pub use path::AssetPath;
 pub use root::{default_root, ROOT_ENV};
 pub use store::Assets;
 pub use textures::Textures;
+pub use watch::AssetWatcher;

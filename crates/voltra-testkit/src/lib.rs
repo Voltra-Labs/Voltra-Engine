@@ -151,14 +151,17 @@ pub fn scratch_root() -> PathBuf {
     dir
 }
 
-/// Writes a real PNG of `width` x `height` opaque red at `root/name`.
+/// Writes a real PNG of `width` x `height` in one flat colour at `root/name`.
+///
+/// Tests that tell two textures apart by what comes back need their own
+/// colours; [`write_png`] is the red-by-default case.
 ///
 /// Encodes through `PngEncoder` rather than `DynamicImage::save_with_format`.
 /// The workspace pins `image` with `default-features = false, features =
 /// ["png"]`, and the convenience `save*` helpers sit behind feature gates that
 /// set does not necessarily turn on; the encoder is exactly what the `png`
 /// feature provides.
-pub fn write_png(root: &Path, name: &str, width: u32, height: u32) {
+pub fn write_png_rgba(root: &Path, name: &str, width: u32, height: u32, rgba: [u8; 4]) {
     use image::ImageEncoder;
 
     let path = root.join(name);
@@ -166,12 +169,15 @@ pub fn write_png(root: &Path, name: &str, width: u32, height: u32) {
         std::fs::create_dir_all(parent).expect("asset subdirectory");
     }
 
-    let pixels: Vec<u8> = (0..width * height)
-        .flat_map(|_| [255u8, 0, 0, 255])
-        .collect();
+    let pixels: Vec<u8> = (0..width * height).flat_map(|_| rgba).collect();
 
     let file = std::fs::File::create(&path).expect("creating the test PNG");
     image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
         .write_image(&pixels, width, height, image::ExtendedColorType::Rgba8)
         .expect("encoding the test PNG");
+}
+
+/// Writes a real PNG of `width` x `height` opaque red at `root/name`.
+pub fn write_png(root: &Path, name: &str, width: u32, height: u32) {
+    write_png_rgba(root, name, width, height, [255, 0, 0, 255]);
 }
