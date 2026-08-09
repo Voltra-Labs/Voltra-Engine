@@ -13,7 +13,7 @@ use serde::Serialize;
 use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
-use crate::{Sprite, Transform};
+use crate::{Collider, RigidBody, Sprite, Transform};
 
 /// A registered type's save conversion: entity to stored value, or `None` when
 /// the entity has no such component.
@@ -53,10 +53,17 @@ impl ComponentRegistry {
     }
 
     /// Every component type this crate defines.
+    ///
+    /// Registering here rather than making callers opt in is deliberate: there
+    /// are several call sites, and forgetting one would not fail — it would
+    /// silently drop that component from that save. A format that loses data
+    /// when a caller forgets a line is not a format.
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register::<Transform>("Transform");
         registry.register::<Sprite>("Sprite");
+        registry.register::<RigidBody>("RigidBody");
+        registry.register::<Collider>("Collider");
         registry
     }
 
