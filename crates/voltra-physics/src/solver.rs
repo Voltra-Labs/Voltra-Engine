@@ -21,10 +21,14 @@
 
 pub mod body;
 pub mod cache;
+pub mod constraint;
+pub mod contact;
 pub mod params;
 pub mod softness;
 
 pub use body::{SolverBodies, SolverBody};
 pub use cache::{CachedImpulse, ContactKey, ImpulseCache};
+pub use constraint::{prepare, ContactConstraint};
+pub use contact::{apply_restitution, solve, warm_start};
 pub use params::SolverParams;
 pub use softness::Softness;
