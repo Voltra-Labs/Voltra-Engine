@@ -2903,6 +2903,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-physics"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "voltra-ecs",
+ "voltra-render",
+ "voltra-scene",
+]
+
+[[package]]
 name = "voltra-render"
 version = "0.1.0"
 dependencies = [
