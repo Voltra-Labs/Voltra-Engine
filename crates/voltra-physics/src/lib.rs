@@ -12,6 +12,7 @@
 
 pub mod broad;
 pub mod clock;
+pub mod debug;
 pub mod integrate;
 pub mod narrow;
 pub mod step;

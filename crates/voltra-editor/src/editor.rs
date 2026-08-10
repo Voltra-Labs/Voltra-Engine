@@ -20,6 +20,13 @@ pub struct Editor {
     /// Which transform a viewport drag performs. Persistent, Unity-style.
     pub(crate) tool: Tool,
     pub(crate) gizmo: Gizmo,
+    /// Whether to outline every collider and draw every contact.
+    ///
+    /// Off by default: a scene full of green outlines is noise while sprites
+    /// are being placed, and the overlay is a debugging aid rather than part
+    /// of the picture being authored. Unity, Unreal and Godot all hide their
+    /// collision shapes behind a toggle for the same reason.
+    pub(crate) show_colliders: bool,
 }
 
 impl Editor {

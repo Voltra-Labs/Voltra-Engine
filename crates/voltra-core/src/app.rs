@@ -8,6 +8,8 @@ use std::sync::Arc;
 
 use voltra_assets::{AssetWatcher, Textures};
 use voltra_ecs::World;
+use voltra_physics::{Contact, PhysicsClock};
+use voltra_render::glam::Vec2;
 use voltra_render::{Filter, LineBatch, RenderTarget, Renderer};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -52,16 +54,37 @@ pub struct App {
     ui: Option<UiFn>,
     clock: Clock,
     input: Input,
+    /// Whether to simulate physics. Off by default, like every other opt-in.
+    physics: bool,
+    physics_clock: PhysicsClock,
+    /// World gravity, in world units per second squared.
+    ///
+    /// Negative y is down, matching the scene's axes. A game that wants
+    /// top-down movement sets this to zero rather than reaching for a flag.
+    pub gravity: Vec2,
+    /// The last physics step's contacts, for whoever wants to draw them.
+    contacts: Vec<Contact>,
     /// Overlay segments, emptied and rebuilt by the UI every frame.
     lines: LineBatch,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
 }
 
+/// Earth-ish gravity, in world units per second squared.
+///
+/// Negative y is down, matching the scene's axes. Not zero, because a physics
+/// world that does nothing until a magic number is typed teaches nothing about
+/// whether physics is working.
+const DEFAULT_GRAVITY: Vec2 = Vec2::new(0.0, -9.81);
+
 impl App {
     pub fn new(config: WindowConfig) -> Self {
         Self {
             config,
+            // Set here rather than in `Default`, which cannot express a
+            // non-zero field without hand-writing the whole impl for a struct
+            // that is otherwise all `None`.
+            gravity: DEFAULT_GRAVITY,
             ..Default::default()
         }
     }
@@ -93,6 +116,24 @@ impl App {
         self
     }
 
+    /// Simulates rigid bodies on a fixed step.
+    ///
+    /// Off by default: a scene with no `RigidBody` pays nothing either way, but
+    /// an editor that starts simulating the moment a body is added would move
+    /// the thing being placed out from under the cursor.
+    ///
+    /// Nothing resolves contacts yet — bodies fall through each other. Set
+    /// [`App::gravity`] to change or disable the acceleration.
+    pub fn with_physics(mut self) -> Self {
+        self.physics = true;
+        self
+    }
+
+    /// The last physics step's contacts.
+    pub fn contacts(&self) -> &[Contact] {
+        &self.contacts
+    }
+
     pub fn run(mut self) {
         let event_loop = EventLoop::new().expect("failed to create event loop");
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -107,8 +148,25 @@ impl App {
     /// from the viewport panel. A game reads [`Input`] and moves its own
     /// camera.
     fn update(&mut self) {
-        self.clock.tick();
+        let delta = self.clock.tick();
+        self.step_physics(delta.as_secs_f32());
         self.reload_changed_assets();
+    }
+
+    /// Runs however many fixed physics steps this frame owes.
+    ///
+    /// The contacts kept are the last step's — the state the frame ends in,
+    /// which is what the debug overlay should show. Earlier steps' contacts
+    /// describe positions nothing was ever drawn at.
+    fn step_physics(&mut self, delta: f32) {
+        if !self.physics {
+            return;
+        }
+
+        let dt = self.physics_clock.step();
+        for _ in 0..self.physics_clock.steps(delta) {
+            self.contacts = voltra_physics::step(&mut self.world, self.gravity, dt);
+        }
     }
 
     /// Applies whatever the watcher saw since the last frame.

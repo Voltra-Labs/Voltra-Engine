@@ -2880,6 +2880,7 @@ dependencies = [
  "log",
  "voltra-assets",
  "voltra-ecs",
+ "voltra-physics",
  "voltra-render",
  "voltra-scene",
  "winit",
@@ -2898,6 +2899,7 @@ dependencies = [
  "voltra-assets",
  "voltra-core",
  "voltra-ecs",
+ "voltra-physics",
  "voltra-render",
  "voltra-scene",
 ]

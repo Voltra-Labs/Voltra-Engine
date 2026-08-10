@@ -7,6 +7,7 @@
 
 use voltra_assets::Textures;
 use voltra_ecs::World;
+use voltra_physics::Contact;
 use voltra_render::{wgpu, Camera2D, LineBatch};
 use voltra_scene::Sprite;
 
@@ -39,13 +40,20 @@ pub struct UiFrame<'a> {
     /// the overlay lands in the same frame as the scene it annotates. Emptied
     /// before every layout, so a panel that stops pushing stops drawing.
     pub(super) lines: &'a mut LineBatch,
+    /// What the last physics step found overlapping.
+    ///
+    /// Read-only: a panel draws these, it does not author them. Empty when
+    /// physics is off, which is the default — see [`App::with_physics`].
+    ///
+    /// [`App::with_physics`]: crate::app::App::with_physics
+    pub(super) contacts: &'a [Contact],
     /// The rendered scene, ready for `egui::Image::new`.
     pub(super) viewport: TextureId,
     pub(super) viewport_size: (u32, u32),
     pub(super) requested_size: &'a mut (u32, u32),
 }
 
-impl UiFrame<'_> {
+impl<'a> UiFrame<'a> {
     /// Handle for the scene image.
     pub fn viewport(&self) -> TextureId {
         self.viewport
@@ -62,6 +70,27 @@ impl UiFrame<'_> {
     /// with the sprite it points at without the panel converting anything.
     pub fn lines(&mut self) -> &mut LineBatch {
         self.lines
+    }
+
+    /// What the last physics step found overlapping.
+    ///
+    /// Tied to the frame's own lifetime rather than the borrow of `self`, so
+    /// reading it does not keep the frame borrowed — an overlay that draws
+    /// contacts needs [`UiFrame::world_and_lines`] straight afterwards.
+    pub fn contacts(&self) -> &'a [Contact] {
+        self.contacts
+    }
+
+    /// The scene and the overlay at once, for a draw that walks one into the
+    /// other.
+    ///
+    /// Both are separate references inside the frame, but a caller holding a
+    /// `&mut UiFrame` cannot reach them together: [`UiFrame::lines`] borrows
+    /// the whole frame mutably and `world` is a field of it. Splitting them
+    /// here is what makes an overlay built *from* the scene — collider
+    /// outlines, and later any other debug draw — expressible at all.
+    pub fn world_and_lines(&mut self) -> (&World, &mut LineBatch) {
+        (self.world, self.lines)
     }
 
     /// Asks for a different scene resolution, honoured on the *next* frame.
