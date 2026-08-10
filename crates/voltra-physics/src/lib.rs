@@ -20,7 +20,7 @@ pub mod step;
 
 pub use broad::candidate_pairs;
 pub use clock::PhysicsClock;
-pub use integrate::integrate;
+pub use integrate::{integrate_positions, integrate_velocities};
 pub use narrow::Contact;
-pub use solver::{Softness, SolverParams};
+pub use solver::{Softness, SolverBodies, SolverParams};
 pub use step::step;

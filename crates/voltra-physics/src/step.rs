@@ -5,8 +5,9 @@ use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, Transform};
 
 use crate::broad::candidate_pairs;
-use crate::integrate::integrate;
+use crate::integrate::{integrate_positions, integrate_velocities};
 use crate::narrow::{contact, Contact};
+use crate::solver::SolverBodies;
 
 /// Advances the world by `dt` and returns what is overlapping afterwards.
 ///
@@ -16,7 +17,10 @@ use crate::narrow::{contact, Contact};
 /// which is why detection is worth shipping without it: a wrong normal is a
 /// line pointing the wrong way on screen, not a number nobody ever sees.
 pub fn step(world: &mut World, gravity: Vec2, dt: f32) -> Vec<Contact> {
-    integrate(world, gravity, dt);
+    let mut bodies = SolverBodies::gather(world);
+    integrate_velocities(&mut bodies, gravity, dt);
+    integrate_positions(&mut bodies, dt);
+    bodies.scatter(world);
 
     candidate_pairs(world)
         .into_iter()
