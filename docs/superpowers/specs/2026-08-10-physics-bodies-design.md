@@ -73,10 +73,35 @@ them, and there is nothing to synchronise because there is no second world.
   behaviour with the frame rate, and a stall makes it explode. Every engine runs
   it on a fixed step with an accumulator.
 
+## Where the components live, and why not in `voltra-physics`
+
+**`RigidBody` and `Collider` live in `voltra-scene`. `voltra-physics` holds the
+simulation and no components of its own.**
+
+This is forced, not preferred. `ComponentRegistry::with_defaults` is in
+`voltra-scene` (`format/registry.rs:56`) and is what makes a scene file
+round-trip. Putting the components in `voltra-physics` means either
+
+- `voltra-scene` registers them, so `voltra-scene → voltra-physics`, while
+  integration needs `Transform`, so `voltra-physics → voltra-scene`. A cycle.
+- Or the registry stops being complete on its own and every caller has to
+  remember a second `register` call. There are already four call sites of
+  `with_defaults`, and forgetting one does not fail: it silently drops the
+  component from that save. A scene format that loses data when a caller forgets
+  a line is not a format.
+
+So the split follows the one the repo already has: `voltra-scene` is components
+and the geometry they turn into — `Transform`, `Sprite`, `SpriteBatch`, `pick` —
+and the crate that *acts* on them is separate. `RigidBody` and `Collider` are
+authored in the editor, serialised in the scene and shown in the inspector,
+exactly like `Sprite`. `voltra-physics` owns `Contact`, `PhysicsClock` and the
+four steps, and nothing that a scene file contains.
+
 ## Components
 
-Both are plain components in the ECS, `Serialize`/`Deserialize`, registered with
-`ComponentRegistry` so a scene round-trips them.
+Both are plain components in the ECS, `Serialize`/`Deserialize`, added to
+`ComponentRegistry::with_defaults` so a scene round-trips them without any
+caller opting in.
 
 ```rust
 pub enum BodyType {
@@ -220,13 +245,18 @@ normal is invisible in a number and obvious as a line pointing the wrong way.
 
 ## Files
 
-**Created** — new crate `voltra-physics`, because this cannot be described
-without also being a second responsibility in an existing crate:
+**Created in `voltra-scene`** — the components, beside the ones already there:
 
 | File | Concept |
 | --- | --- |
 | `body.rs` | `BodyType`, `RigidBody` |
-| `collider.rs` | `Collider`, and its world-space AABB |
+| `collider.rs` | `Collider`, and its world-space AABB given a `Transform` |
+
+**Created as the new crate `voltra-physics`** — the simulation, which cannot be
+described without becoming a second responsibility inside an existing crate:
+
+| File | Concept |
+| --- | --- |
 | `clock.rs` | `PhysicsClock` — the accumulator and its cap |
 | `integrate.rs` | The integration step |
 | `broad.rs` | `candidate_pairs` |
@@ -234,13 +264,14 @@ without also being a second responsibility in an existing crate:
 | `step.rs` | `step`, which is the three above in order |
 | `debug.rs` | Shapes and contacts as line segments |
 
-It depends on `voltra-ecs` and `voltra-scene` (for `Transform`), and reaches
-`glam` through `voltra_render::glam` like every other crate. It does **not**
-depend on `voltra-assets`.
+It depends on `voltra-ecs` and `voltra-scene`, and reaches `glam` through
+`voltra_render::glam` like every other crate. It does **not** depend on
+`voltra-assets`, and nothing depends on it except `voltra-core` and
+`voltra-editor` — so the cycle above cannot reappear.
 
-**Modified**: `voltra-scene`'s `ComponentRegistry` gains both components;
-`voltra-core` drives the clock and the step; `voltra-editor` gets the toggle;
-the root manifest gains the member.
+**Modified**: `voltra-scene`'s `ComponentRegistry::with_defaults` registers both
+components; `voltra-core` drives the clock and the step; `voltra-editor` gets
+the toggle; the root manifest gains the member.
 
 ## Errors and edge cases, decided now
 

@@ -72,7 +72,8 @@ re-exports, so a version bump is a one-line change.
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-assets` | Asset identity, the texture cache, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
-| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId` |
+| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider` |
+| `voltra-physics` | Simulation over those components: integration and contact detection | `PhysicsClock`, `integrate`, `candidate_pairs`, `Contact`, `step` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `scratch_root`, `write_png` |
@@ -842,6 +843,135 @@ separated from the drawing for one reason: the property that matters is that an
 arm is 60 px long at zoom 0.1 and at zoom 25, and that is a statement about
 numbers. Verified through egui and a GPU it would have been verified at one
 zoom, by eye.
+
+### Physics is in-house, and its components live in `voltra-scene`
+
+**Written here rather than adopted from Rapier2D.** The reason is the ECS, not
+the maths. `bevy_rapier` *"has to maintain a separate physics world and
+synchronize a ton of data with Bevy each frame"* — that sentence is `avian`'s
+stated reason for existing. With a hand-written ECS the same wrapper has to be
+written first and then maintained, so adopting Rapier reproduces exactly the
+problem `avian` was written to remove. A body is a `RigidBody` component in the
+one `World`, integration reads and writes it in place, and there is no second
+world to synchronise.
+
+**`RigidBody` and `Collider` are `voltra-scene` components; `voltra-physics`
+owns no component at all.** This is forced rather than preferred.
+`ComponentRegistry::with_defaults` lives in `voltra-scene`, and it is what makes
+a scene file round-trip. Putting the components in `voltra-physics` gives two
+options and both are worse:
+
+- `voltra-scene` registers them, so `voltra-scene → voltra-physics`. Integration
+  needs `Transform`, so `voltra-physics → voltra-scene`. A cycle.
+- Or the registry stops being complete on its own and every caller has to
+  remember a second `register` call. Forgetting one does not fail — it silently
+  drops the component from that save, and a format that loses data when a caller
+  forgets a line is not a format.
+
+So the split is the one the repo already has: `voltra-scene` is components and
+the geometry they turn into, and the crate that *acts* on them is separate.
+`voltra-physics` owns `PhysicsClock`, `Contact` and the four steps, and nothing
+a scene file contains. Nothing depends on it but `voltra-core` and
+`voltra-editor`, so the cycle cannot reappear.
+
+`step` **returns** its contacts rather than storing them in a resource. Nothing
+consumes them yet except the debug draw, and a `Contacts` resource with no
+reader would be a structure designed for an imagined caller. 11b-2's solver
+takes this list as its input.
+
+#### Rejected
+
+- **Rapier2D or `avian`.** Above. `avian` additionally is `bevy_ecs`, which is
+  the crate this project exists to not depend on.
+- **Components in `voltra-physics`.** The cycle, or a registry that silently
+  loses data.
+- **A `Contacts` resource.** No reader; `voltra-ecs` has no resource concept and
+  inventing one for a single unbuilt caller is the shortcut the hard rules
+  forbid.
+
+### A fixed step, semi-implicit integration and inverse mass
+
+**Physics runs on a fixed step with an accumulator, never on the render delta.**
+Integrating with a variable delta makes behaviour depend on the frame rate — the
+same scene settles differently at 60 and 144 Hz, and one long stall makes it
+explode. Unity's `FixedUpdate`, Unreal's substepping, Godot's `_physics_process`
+and Box2D's own advice are all the same accumulator.
+
+**The accumulator is capped at 8 steps and the excess is dropped, not carried.**
+The spiral of death is the whole reason a cap exists: a frame slow enough to owe
+many steps gets slower by running them and then owes more. Carrying the debt
+only defers the spiral by one frame, so past the cap simulated time runs slow —
+which every engine chooses, because the alternative is a hang.
+
+**Semi-implicit (symplectic) Euler: velocity first, then position from the *new*
+velocity.** Explicit Euler injects energy, and a stack of boxes climbs on its
+own. The difference is the order of two lines and it is pinned by a test, since
+after one step from rest the two differ by exactly `g·dt²` and nothing else
+distinguishes them.
+
+**`RigidBody` stores `inverse_mass`, not mass**, as Box2D does. Every formula
+divides by mass, and "cannot be pushed" is then `0.0` rather than a branch
+repeated at each of them. A mass of zero or less therefore reads as *infinitely
+massive*, not infinitely light: `1.0 / 0.0` is `inf`, and an infinite inverse
+mass sends a body out of the world on its first contact.
+
+**`BodyType::Static` is the default, not `Dynamic`.** A `RigidBody` added by a
+click in the inspector must not make the sprite fall off the screen before
+anyone has typed a mass. Unity, Godot and Box2D all default to the inert body.
+
+Everything a scene file can say is clamped where it is read, because a scene
+file is external input: negative mass, a non-positive fixed step, a damping of
+10 000 (which would turn `v *= 1 − damping·dt` from a brake into a catapult), a
+negative scale on a collider (which would give an AABB whose min exceeds its max
+and silently collide with nothing), and a zero-length vector about to be
+normalised — `glam`'s `normalize` of a zero vector is `NaN`, not an error, and a
+`NaN` normal spreads into every velocity a solver touches.
+
+#### Rejected
+
+- **Integrating on the render delta.** Frame-rate-dependent behaviour, and a
+  stall that explodes the scene.
+- **Carrying the capped debt.** Defers the spiral rather than breaking it.
+- **Explicit Euler.** Two lines cheaper, and it adds energy for free.
+- **Storing mass.** A divide and a zero-check at every use site.
+
+### The broad phase is O(n²), and 11b-2's solver is already chosen
+
+**`candidate_pairs` compares every pair, rejecting on world-space AABBs.** For
+the tens of bodies a scene holds today this beats a spatial hash, which pays for
+bucketing before it saves anything. **Replace it past roughly 200 bodies** — n²
+is then 20 000 pair tests per step at 60 Hz. Sweep-and-prune on the x axis is the
+replacement, because a 2D world is wide. The signature does not change when that
+happens, which is what it is for.
+
+Pairs are emitted once and never mirrored, by starting the inner loop at `i + 1`:
+`(a, b)` and `(b, a)` are the same contact, and emitting both would double every
+impulse the solver applies. The same bound is what stops a body pairing with
+itself.
+
+**The solver for 11b-2 is TGS Soft ("Soft Step"), and this is recorded so it is
+not re-argued.** Erin Catto compared eight solvers in
+[Solver2D](https://box2d.org/posts/2024/02/solver2d/) and took TGS Soft for
+Box2D v3; XPBD, the obvious alternative, lost on friction and on precision far
+from the origin. Nothing in 11b-1 resolves a contact — a body sinks through a
+floor — and that is the stated limit of the stage rather than a bug.
+
+Detection ships without resolution because it is *visible*: `voltra-physics`'s
+debug draw puts collider outlines and contact normals through stage 11a's line
+pipeline, so a wrong normal is a line pointing the wrong way rather than a
+number nobody reads. The solver is then built against contacts someone has
+already looked at.
+
+#### Rejected
+
+- **A spatial hash or a BVH now.** Bucketing costs more than it saves at tens of
+  bodies, and the replacement threshold is written down instead.
+- **Oriented boxes and polygons.** 11b-3. An `Aabb` is axis-aligned in *world*
+  space, so a rotated sprite keeps an upright box — a real limitation, and
+  better stated than half-implemented.
+- **Ellipses.** A circle under a non-uniform scale takes its larger axis. A true
+  ellipse is a different shape, not a parameter of this one, and the larger axis
+  keeps the collider covering the sprite rather than cutting into it.
 
 ### wgpu 30 API notes
 

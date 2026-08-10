@@ -119,7 +119,7 @@ Every task's requirements implicitly include this section.
   - `Collider::world_extent(&self, transform: &Transform)` — the scaled half
     extents or radius
 
-- [ ] **Step 1: Write the failing component tests**
+- [x] **Step 1: Write the failing component tests**
 
 Create `crates/voltra-scene/src/body.rs` with only its test module:
 
@@ -287,12 +287,12 @@ mod tests {
 trips. Check first — the scene format already uses `ron`, so it is likely a
 normal dependency already; if so, add nothing.
 
-- [ ] **Step 2: Run them and watch them fail**
+- [x] **Step 2: Run them and watch them fail**
 
 Run: `cargo test -p voltra-scene body:: collider::`
 Expected: FAIL — `cannot find type 'RigidBody' in this scope`.
 
-- [ ] **Step 3: Write the components**
+- [x] **Step 3: Write the components**
 
 `crates/voltra-scene/src/body.rs`, above its tests:
 
@@ -426,7 +426,7 @@ impl Collider {
 }
 ```
 
-- [ ] **Step 4: Export and register them**
+- [x] **Step 4: Export and register them**
 
 In `crates/voltra-scene/src/lib.rs`, add `pub mod body;` and `pub mod collider;`
 alphabetically, and `pub use body::{BodyType, RigidBody};` plus
@@ -445,12 +445,12 @@ Registering here rather than making callers opt in is deliberate: there are
 several `with_defaults` call sites, and forgetting one would not fail — it would
 silently drop the component from that save.
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `cargo test -p voltra-scene`
 Expected: PASS, thirteen new tests among the existing ones.
 
-- [ ] **Step 6: fmt, clippy, test**
+- [x] **Step 6: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -458,7 +458,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add crates/voltra-scene/src/body.rs crates/voltra-scene/src/collider.rs crates/voltra-scene/src/lib.rs crates/voltra-scene/src/format/registry.rs
@@ -480,7 +480,7 @@ git commit -m "feat(scene): add rigid body and collider components"
   - `PhysicsClock::default()` — 1/60 s, 8 steps maximum
   - `integrate(world: &mut World, gravity: Vec2, dt: f32)`
 
-- [ ] **Step 1: Create the crate**
+- [x] **Step 1: Create the crate**
 
 `crates/voltra-physics/Cargo.toml`:
 
@@ -535,7 +535,7 @@ Create the other module files empty enough to compile as they are written; the
 `lib.rs` above is its final form, so expect it not to compile until Task 4.
 Write `lib.rs` last if that is easier — the compiler is the guide.
 
-- [ ] **Step 2: Write the failing clock tests**
+- [x] **Step 2: Write the failing clock tests**
 
 `crates/voltra-physics/src/clock.rs`, test module only:
 
@@ -609,7 +609,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Write the clock**
+- [x] **Step 3: Write the clock**
 
 ```rust
 //! How many fixed steps a variable frame owes.
@@ -682,7 +682,7 @@ impl PhysicsClock {
 }
 ```
 
-- [ ] **Step 4: Write the failing integrator tests**
+- [x] **Step 4: Write the failing integrator tests**
 
 `crates/voltra-physics/src/integrate.rs`, test module only:
 
@@ -817,7 +817,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 5: Write the integrator**
+- [x] **Step 5: Write the integrator**
 
 ```rust
 //! Moving bodies forward by one fixed step.
@@ -872,7 +872,7 @@ intermediate `Vec`, but only if the same loop can still reach `Transform`; two
 components mutably at once may not be expressible, and the `Vec` is then
 correct rather than lazy. Say which one you used in the report.
 
-- [ ] **Step 6: fmt, clippy, test**
+- [x] **Step 6: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -885,7 +885,7 @@ cargo test -p voltra-physics
 `lib.rs` to the modules that exist and restore it in Task 4. Do not commit a
 `lib.rs` that does not compile.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```sh
 git add Cargo.toml Cargo.lock crates/voltra-physics
@@ -906,7 +906,7 @@ git commit -m "feat(physics): add a fixed clock and an integrator"
   - `narrow::contact(a: (&Collider, &Transform), b: (&Collider, &Transform)) -> Option<(Vec2, f32, Vec2)>`
     returning `(normal, penetration, point)`
 
-- [ ] **Step 1: Write the failing broad-phase tests**
+- [x] **Step 1: Write the failing broad-phase tests**
 
 ```rust
 #[cfg(test)]
@@ -986,7 +986,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Write the broad phase**
+- [x] **Step 2: Write the broad phase**
 
 ```rust
 //! Which pairs are worth an exact test.
@@ -1033,7 +1033,7 @@ fn overlaps((a_min, a_max): (Vec2, Vec2), (b_min, b_max): (Vec2, Vec2)) -> bool 
 Add `use voltra_render::glam::Vec2;`. Starting the inner loop at `i + 1` is what
 gives each pair once and never mirrored, and never pairs a body with itself.
 
-- [ ] **Step 3: Write the failing narrow-phase tests**
+- [x] **Step 3: Write the failing narrow-phase tests**
 
 ```rust
 #[cfg(test)]
@@ -1168,7 +1168,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 4: Write the narrow phase**
+- [x] **Step 4: Write the narrow phase**
 
 Implement `contact` with the three pairs. The rules, restated so they are not
 improvised:
@@ -1190,7 +1190,7 @@ improvised:
 Anything with `.normalize()` in it needs the zero-length case handled first;
 `glam`'s `normalize` of a zero vector is NaN, not an error.
 
-- [ ] **Step 5: fmt, clippy, test**
+- [x] **Step 5: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1198,7 +1198,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test -p voltra-physics
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```sh
 git add crates/voltra-physics/src/broad.rs crates/voltra-physics/src/narrow.rs crates/voltra-physics/src/lib.rs
@@ -1216,7 +1216,7 @@ git commit -m "feat(physics): detect overlaps between bodies"
 **Interfaces:**
 - Produces: `step(world: &mut World, gravity: Vec2, dt: f32) -> Vec<Contact>`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 #[cfg(test)]
@@ -1326,7 +1326,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Write the step**
+- [x] **Step 2: Write the step**
 
 ```rust
 //! One fixed step: move everything, then find what overlaps.
@@ -1367,14 +1367,14 @@ pub fn step(world: &mut World, gravity: Vec2, dt: f32) -> Vec<Contact> {
 }
 ```
 
-- [ ] **Step 3: Restore `lib.rs` and run**
+- [x] **Step 3: Restore `lib.rs` and run**
 
 `lib.rs` is as written in Task 2 Step 1 once every module exists.
 
 Run: `cargo test -p voltra-physics`
 Expected: PASS, everything from Tasks 2, 3 and 4.
 
-- [ ] **Step 4: fmt, clippy, test**
+- [x] **Step 4: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1382,7 +1382,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```sh
 git add crates/voltra-physics/src/step.rs crates/voltra-physics/src/lib.rs
@@ -1405,7 +1405,7 @@ git commit -m "feat(physics): step the world and report contacts"
   - `App::{with_physics(self) -> Self, gravity: Vec2}`
   - `UiFrame::contacts(&self) -> &[Contact]`
 
-- [ ] **Step 1: The debug draw**
+- [x] **Step 1: The debug draw**
 
 `crates/voltra-physics/src/debug.rs`. An AABB is four segments; a circle is a
 24-segment closed polyline; a contact is a segment from its point along its
@@ -1416,7 +1416,7 @@ Unit-test what is testable without a GPU: that a world with one box produces
 four segments, a circle produces 24, an empty world produces none, and a contact
 adds exactly one more. `LineBatch::len` gives the count.
 
-- [ ] **Step 2: Drive it from `App`**
+- [x] **Step 2: Drive it from `App`**
 
 `App` gains `physics: bool`, `clock: PhysicsClock`, `gravity: Vec2` and
 `contacts: Vec<Contact>`, plus `with_physics()` beside `with_hot_reload()`. Off
@@ -1438,7 +1438,7 @@ Read `Clock`'s accessor name before writing this; `delta()` is a guess.
 The contacts kept are the last step's, which is what the debug draw should show:
 the state the frame ends in.
 
-- [ ] **Step 3: The editor toggle**
+- [x] **Step 3: The editor toggle**
 
 `Editor` gains `show_colliders: bool`, off by default — a scene full of green
 outlines is not what anyone wants while placing sprites. A `Physics` menu in the
@@ -1448,7 +1448,7 @@ menu bar toggles it. The viewport panel, after the gizmo's `draw`, calls
 `UiFrame` needs to expose the contacts for that; add `contacts: &'a [Contact]`
 beside `lines`, filled from `App::contacts`.
 
-- [ ] **Step 4: fmt, clippy, test**
+- [x] **Step 4: fmt, clippy, test**
 
 ```sh
 cargo fmt --all
@@ -1456,7 +1456,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 5: Drive the editor**
+- [ ] **Step 5: Drive the editor** — *partially done, see below*
 
 Launch it detached, never in the foreground. Spawn or open a scene with a
 dynamic body over a static floor, turn the toggle on, and confirm: green
@@ -1465,7 +1465,16 @@ the floor, and it keeps going through it — because nothing resolves contacts
 yet, which is this stage's stated limit and not a bug. Kill it and report which
 of those held.
 
-- [ ] **Step 6: Commit**
+**What was actually verified:** the editor was launched detached and ran to a
+steady state with no wgpu validation error and no panic; the adapter, asset root
+and watcher lines are the ordinary ones. **The overlay itself was not seen.**
+Turning it on needs `Physics ▸ Show colliders` clicked and two bodies spawned
+from the same menu, and nothing in this environment can drive an egui menu. The
+draw is covered by unit tests — a box is four segments, a circle is its segment
+count, a contact adds exactly one — so what is unverified is the pixels, not the
+geometry. A human clicking those three items settles it.
+
+- [x] **Step 6: Commit**
 
 ```sh
 git add crates/voltra-physics/src/debug.rs crates/voltra-core crates/voltra-editor
@@ -1476,7 +1485,7 @@ git commit -m "feat(core): step physics and draw its shapes"
 
 ### Task 6: Record the decisions
 
-- [ ] **Step 1: `docs/ARCHITECTURE.md`**
+- [x] **Step 1: `docs/ARCHITECTURE.md`**
 
 Under "Decisions": physics is in-house because adopting Rapier with a
 hand-written ECS reproduces `bevy_rapier`'s parallel world, which `avian` was
@@ -1489,14 +1498,14 @@ re-argued. Each with its rejected alternatives.
 
 Add `voltra-physics` to the crate table.
 
-- [ ] **Step 2: `README.md`**
+- [x] **Step 2: `README.md`**
 
 ```markdown
 | 11b-1 | Rigid bodies, fixed-step integration, contact detection | done |
 | 11b-2 | The contact solver: bodies stop overlapping and stack | planned |
 ```
 
-- [ ] **Step 3: Tick this plan, verify, commit**
+- [x] **Step 3: Tick this plan, verify, commit**
 
 Check each box against `git log --oneline main..HEAD`; leave unticked anything
 not in the tree and say so. Then `cargo fmt --all --check`, clippy, the full
