@@ -14,6 +14,7 @@ repository = "https://github.com/Voltra-Labs/Voltra-Engine"
 voltra-assets = { path = "crates/voltra-assets" }
 voltra-core = { path = "crates/voltra-core" }
 voltra-ecs = { path = "crates/voltra-ecs" }
+voltra-physics = { path = "crates/voltra-physics" }
 voltra-render = { path = "crates/voltra-render" }
 voltra-scene = { path = "crates/voltra-scene" }
 voltra-testkit = { path = "crates/voltra-testkit" }

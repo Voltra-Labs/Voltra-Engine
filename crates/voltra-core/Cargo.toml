@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 voltra-assets.workspace = true
 voltra-ecs.workspace = true
+voltra-physics.workspace = true
 voltra-render.workspace = true
 voltra-scene.workspace = true
 winit.workspace = true

@@ -1,0 +1,13 @@
+[package]
+name = "voltra-physics"
+description = "2D rigid bodies, integration and contact detection."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-ecs.workspace = true
+voltra-scene.workspace = true
+voltra-render.workspace = true
+log.workspace = true

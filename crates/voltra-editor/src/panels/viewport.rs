@@ -60,5 +60,14 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             match editor.tool {
                 Tool::Translate => editor.gizmo.draw(&scene, frame, editor.selected),
             }
+
+            // Last of all: the overlay is drawn in the order it is pushed, and
+            // a collider outline must not cover the handle being dragged over
+            // it.
+            if editor.show_colliders {
+                let contacts = frame.contacts();
+                let (world, lines) = frame.world_and_lines();
+                voltra_physics::debug::draw(world, contacts, lines);
+            }
         });
 }

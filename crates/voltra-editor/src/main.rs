@@ -30,6 +30,10 @@ fn main() {
     let mut editor = Editor::default();
     app.with_ui(move |ui, frame| editor.ui(ui, frame))
         .with_hot_reload()
+        // On, so a body spawned from the Physics menu actually falls. Nothing
+        // in a scene without a `RigidBody` moves either way, and there is no
+        // play mode yet to put this behind.
+        .with_physics()
         .run();
 }
 

@@ -94,6 +94,7 @@ impl App {
             device: &device,
             queue: &queue,
             lines: &mut self.lines,
+            contacts: &self.contacts,
             viewport,
             viewport_size: (target.width(), target.height()),
             requested_size: &mut self.requested_size,

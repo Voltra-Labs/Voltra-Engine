@@ -6,7 +6,7 @@ use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{ComponentRegistry, SceneId, Sprite, Transform};
+use voltra_scene::{Collider, ComponentRegistry, RigidBody, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 
@@ -113,6 +113,38 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
             });
 
+            ui.menu_button("Physics", |ui| {
+                ui.checkbox(&mut editor.show_colliders, "Show colliders");
+
+                ui.separator();
+
+                // The only way to author a body today: the inspector edits a
+                // `Transform` and a `Sprite` and nothing else yet. Two
+                // spawners rather than one because a falling body on its own
+                // demonstrates gravity but nothing about detection — the
+                // contact needs something to be against.
+                if ui.button("Spawn falling body").clicked() {
+                    editor.selected = Some(spawn_body(
+                        frame,
+                        Vec2::new(0.0, 1.5),
+                        Vec2::splat(0.4),
+                        RigidBody::new_dynamic(1.0),
+                        [1.0, 0.8, 0.3, 1.0],
+                    ));
+                    ui.close();
+                }
+                if ui.button("Spawn floor").clicked() {
+                    editor.selected = Some(spawn_body(
+                        frame,
+                        Vec2::new(0.0, -1.2),
+                        Vec2::new(3.0, 0.3),
+                        RigidBody::new_static(),
+                        [0.5, 0.5, 0.55, 1.0],
+                    ));
+                    ui.close();
+                }
+            });
+
             ui.separator();
             let (width, height) = frame.viewport_size();
             ui.label(format!("viewport {width}x{height}"));
@@ -120,6 +152,34 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             ui.label(format!("{} entities", frame.world.entity_count()));
         });
     });
+}
+
+/// Drops a sprite with a body and a collider that match its outline.
+///
+/// The collider is [`Sprite::HALF_EXTENT`] rather than a literal, so the green
+/// outline lands exactly on the sprite's edge. A collider that disagrees with
+/// the picture by a hair is a bug that reads as a physics bug.
+fn spawn_body(
+    frame: &mut UiFrame<'_>,
+    at: Vec2,
+    scale: Vec2,
+    body: RigidBody,
+    color: [f32; 4],
+) -> Entity {
+    let entity = frame.world.spawn();
+    frame.world.insert(entity, SceneId::new());
+    frame
+        .world
+        .insert(entity, Transform::from_translation(at).with_scale(scale));
+    frame.world.insert(entity, Sprite::new(color));
+    frame.world.insert(entity, body);
+    frame.world.insert(
+        entity,
+        Collider::Aabb {
+            half_extents: Vec2::splat(Sprite::HALF_EXTENT),
+        },
+    );
+    entity
 }
 
 /// Drops a white unit sprite at the origin, ready to be moved.

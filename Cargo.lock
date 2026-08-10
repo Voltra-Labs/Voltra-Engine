@@ -2880,6 +2880,7 @@ dependencies = [
  "log",
  "voltra-assets",
  "voltra-ecs",
+ "voltra-physics",
  "voltra-render",
  "voltra-scene",
  "winit",
@@ -2897,6 +2898,17 @@ dependencies = [
  "log",
  "voltra-assets",
  "voltra-core",
+ "voltra-ecs",
+ "voltra-physics",
+ "voltra-render",
+ "voltra-scene",
+]
+
+[[package]]
+name = "voltra-physics"
+version = "0.1.0"
+dependencies = [
+ "log",
  "voltra-ecs",
  "voltra-render",
  "voltra-scene",

@@ -85,6 +85,7 @@ Voltra-Engine/
 │   ├── voltra-ecs/       # entities and components — zero dependencies
 │   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
+│   ├── voltra-physics/   # rigid bodies, integration, contact detection
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
 │   └── voltra-editor/    # binary: the editor and its panels
 └── docs/
@@ -110,7 +111,8 @@ privileged and plain `cargo build` covers everything.
 | 9 | Scene serialization | done |
 | 10 | Picking: click to select, stable draw order | done |
 | 11a | Translate gizmo, and a line pipeline to draw it | done |
-| 11b | Physics: bodies, integration, collision | planned |
+| 11b-1 | Rigid bodies, fixed-step integration, contact detection | done |
+| 11b-2 | The contact solver: bodies stop overlapping and stack | planned |
 | 12a | Asset store: handles, paths, cache | done |
 | 12b | Textures per sprite, batched by texture | done |
 | 12c | Hot reload: watch, debounce, swap under a stable handle | done |
