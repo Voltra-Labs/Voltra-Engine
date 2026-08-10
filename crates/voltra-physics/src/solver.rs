@@ -20,9 +20,11 @@
 //! [Solver2D]: https://box2d.org/posts/2024/02/solver2d/
 
 pub mod body;
+pub mod cache;
 pub mod params;
 pub mod softness;
 
 pub use body::{SolverBodies, SolverBody};
+pub use cache::{CachedImpulse, ContactKey, ImpulseCache};
 pub use params::SolverParams;
 pub use softness::Softness;
