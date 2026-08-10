@@ -15,10 +15,12 @@ pub mod clock;
 pub mod debug;
 pub mod integrate;
 pub mod narrow;
+pub mod solver;
 pub mod step;
 
 pub use broad::candidate_pairs;
 pub use clock::PhysicsClock;
 pub use integrate::integrate;
 pub use narrow::Contact;
+pub use solver::{Softness, SolverParams};
 pub use step::step;
