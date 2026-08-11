@@ -146,7 +146,7 @@ mod tests {
         world.insert(floor, Transform::from_translation(Vec2::new(0.0, -1.0)));
         world.insert(
             floor,
-            Collider::Aabb {
+            Collider::Box {
                 half_extents: Vec2::new(10.0, 1.0),
             },
         );

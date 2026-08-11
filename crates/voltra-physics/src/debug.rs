@@ -44,7 +44,7 @@ pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
             continue;
         };
         match collider {
-            Collider::Aabb { .. } => {
+            Collider::Box { .. } => {
                 let (min, max) = collider.world_aabb(transform);
                 rect(lines, min, max, SHAPE_COLOR);
             }
@@ -107,7 +107,7 @@ mod tests {
         world.insert(entity, Transform::from_translation(at));
         world.insert(
             entity,
-            Collider::Aabb {
+            Collider::Box {
                 half_extents: Vec2::splat(1.0),
             },
         );

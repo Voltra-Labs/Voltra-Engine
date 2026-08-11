@@ -58,9 +58,9 @@ pub fn contact(a: Shape<'_>, b: Shape<'_>) -> Option<(Vec2, f32, Vec2)> {
 
     match (a.0, b.0) {
         (Collider::Circle { .. }, Collider::Circle { .. }) => circle_circle(a, b),
-        (Collider::Aabb { .. }, Collider::Aabb { .. }) => aabb_aabb(a, b),
-        (Collider::Aabb { .. }, Collider::Circle { .. }) => aabb_circle(a, b),
-        (Collider::Circle { .. }, Collider::Aabb { .. }) => {
+        (Collider::Box { .. }, Collider::Box { .. }) => aabb_aabb(a, b),
+        (Collider::Box { .. }, Collider::Circle { .. }) => aabb_circle(a, b),
+        (Collider::Circle { .. }, Collider::Box { .. }) => {
             // Solved the other way round and mirrored, so there is one
             // implementation of the hard case rather than two that can drift.
             let (normal, penetration, point) = aabb_circle(b, a)?;
@@ -118,7 +118,7 @@ pub(crate) mod tests {
     }
 
     pub(crate) fn boxed(half: f32) -> Collider {
-        Collider::Aabb {
+        Collider::Box {
             half_extents: Vec2::splat(half),
         }
     }
@@ -165,7 +165,7 @@ pub(crate) mod tests {
         assert!(contact((&circle(0.0), &at(0.0, 0.0)), (&circle(1.0), &at(0.0, 0.0))).is_none());
         assert!(contact(
             (
-                &Collider::Aabb {
+                &Collider::Box {
                     half_extents: Vec2::ZERO
                 },
                 &at(0.0, 0.0)

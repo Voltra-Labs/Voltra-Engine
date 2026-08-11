@@ -175,7 +175,7 @@ fn spawn_body(
     frame.world.insert(entity, body);
     frame.world.insert(
         entity,
-        Collider::Aabb {
+        Collider::Box {
             half_extents: Vec2::splat(Sprite::HALF_EXTENT),
         },
     );

@@ -131,7 +131,7 @@ mod tests {
     fn spawn_box(world: &mut World, at: Vec2, half_extents: Vec2, mass: Option<f32>) -> Entity {
         let entity = world.spawn();
         world.insert(entity, Transform::from_translation(at));
-        world.insert(entity, Collider::Aabb { half_extents });
+        world.insert(entity, Collider::Box { half_extents });
         if let Some(mass) = mass {
             world.insert(entity, RigidBody::new_dynamic(mass));
         }
@@ -147,7 +147,7 @@ mod tests {
         world.insert(floor, Transform::from_translation(Vec2::new(0.0, -2.0)));
         world.insert(
             floor,
-            Collider::Aabb {
+            Collider::Box {
                 half_extents: Vec2::new(10.0, 0.5),
             },
         );
@@ -263,7 +263,7 @@ mod tests {
         world.insert(platform, Transform::from_translation(Vec2::new(0.0, -2.0)));
         world.insert(
             platform,
-            Collider::Aabb {
+            Collider::Box {
                 half_extents: Vec2::new(10.0, 0.5),
             },
         );
@@ -548,7 +548,7 @@ mod tests {
         world.insert(wall, Transform::default());
         world.insert(
             wall,
-            Collider::Aabb {
+            Collider::Box {
                 half_extents: Vec2::splat(1.0),
             },
         );
