@@ -34,10 +34,12 @@ pub fn warm_start(constraints: &[ContactConstraint], bodies: &mut SolverBodies) 
 /// the relax pass, which takes the energy that push added back out of the
 /// velocities and the accumulated impulses without moving anything.
 ///
-/// **Friction is solved in the relax pass only.** That is what the Box2D source
-/// does, and the reason is that a friction impulse computed while the normal
-/// solve is injecting separation velocity is scaled by that separation rather
-/// than by contact force.
+/// **Friction is solved on every pass**, after the normals and against the
+/// normal impulse they have just accumulated. 11b-2 confined it to the relax
+/// pass, which is not what `b2SolveContact` does and cost a visible bug: warm
+/// starting applies last step's friction impulse up the slope at the start of
+/// the step, gravity cancels it over the sub-steps, and with nothing resisting
+/// in between a box on a rough ramp crept *uphill* at a steady 2 cm/s.
 pub fn solve(
     constraints: &mut [ContactConstraint],
     bodies: &mut SolverBodies,
@@ -97,10 +99,6 @@ pub fn solve(
             point.max_normal_impulse = point.max_normal_impulse.max(total);
 
             apply(a, b, point, normal * applied);
-        }
-
-        if use_bias {
-            continue;
         }
 
         for point in constraint.points_mut() {
