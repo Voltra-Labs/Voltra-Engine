@@ -39,12 +39,19 @@ pub struct CachedImpulse {
     pub tangent: f32,
 }
 
-/// The pair a cached impulse belongs to.
+/// The pair and the manifold point a cached impulse belongs to.
 ///
-/// Ordered as the broad phase emits it — `(a, b)` with `a` the lower entity,
-/// never mirrored — so a pair has one key rather than two. `Entity` carries a
-/// generation, so a recycled index cannot inherit a dead entity's impulses.
-pub type ContactKey = (Entity, Entity);
+/// The pair is ordered as the broad phase emits it — `(a, b)` with `a` the
+/// lower entity, never mirrored — so it has one key rather than two. `Entity`
+/// carries a generation, so a recycled index cannot inherit a dead entity's
+/// impulses.
+///
+/// The third field is the point's feature id, added in 11b-3 when a manifold
+/// gained its second point. Both ends of a resting box's face accumulate their
+/// own impulse, and a box that tips onto another corner must not inherit the
+/// force that was holding the old one: the id changes, so the lookup misses and
+/// the new contact starts cold, which is correct.
+pub type ContactKey = (Entity, Entity, u16);
 
 /// Contact impulses, kept for exactly as long as their pair keeps touching.
 ///
@@ -111,7 +118,7 @@ mod tests {
         let (a, b) = two_entities();
 
         assert_eq!(
-            ImpulseCache::default().warm_start((a, b)),
+            ImpulseCache::default().warm_start((a, b, 0)),
             CachedImpulse::default()
         );
     }
@@ -125,15 +132,15 @@ mod tests {
             tangent: -1.0,
         };
 
-        cache.record((a, b), impulse);
+        cache.record((a, b, 0), impulse);
         assert_eq!(
-            cache.warm_start((a, b)),
+            cache.warm_start((a, b, 0)),
             CachedImpulse::default(),
             "a step must not read what it is still writing"
         );
 
         cache.commit();
-        assert_eq!(cache.warm_start((a, b)), impulse);
+        assert_eq!(cache.warm_start((a, b, 0)), impulse);
     }
 
     #[test]
@@ -142,7 +149,7 @@ mod tests {
         let mut cache = ImpulseCache::default();
 
         cache.record(
-            (a, b),
+            (a, b, 0),
             CachedImpulse {
                 normal: 3.0,
                 tangent: 0.0,
@@ -152,7 +159,7 @@ mod tests {
         cache.commit(); // a step in which nothing was recorded
 
         assert!(cache.is_empty());
-        assert_eq!(cache.warm_start((a, b)), CachedImpulse::default());
+        assert_eq!(cache.warm_start((a, b, 0)), CachedImpulse::default());
     }
 
     #[test]
@@ -162,7 +169,7 @@ mod tests {
 
         for step in 1..=10 {
             cache.record(
-                (a, b),
+                (a, b, 0),
                 CachedImpulse {
                     normal: step as f32,
                     tangent: 0.0,
@@ -172,7 +179,7 @@ mod tests {
         }
 
         assert_eq!(cache.len(), 1);
-        assert_eq!(cache.warm_start((a, b)).normal, 10.0);
+        assert_eq!(cache.warm_start((a, b, 0)).normal, 10.0);
     }
 
     #[test]
@@ -180,7 +187,7 @@ mod tests {
         let (a, b) = two_entities();
         let mut cache = ImpulseCache::default();
         cache.record(
-            (a, b),
+            (a, b, 0),
             CachedImpulse {
                 normal: 1.0,
                 tangent: 0.0,
@@ -188,7 +195,7 @@ mod tests {
         );
         cache.commit();
         cache.record(
-            (a, b),
+            (a, b, 0),
             CachedImpulse {
                 normal: 2.0,
                 tangent: 0.0,
