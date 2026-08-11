@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use voltra_assets::{AssetWatcher, Textures};
 use voltra_ecs::World;
-use voltra_physics::{Contact, PhysicsClock};
+use voltra_physics::{Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
 use voltra_render::{Filter, LineBatch, RenderTarget, Renderer};
 use winit::application::ApplicationHandler;
@@ -56,14 +56,14 @@ pub struct App {
     input: Input,
     /// Whether to simulate physics. Off by default, like every other opt-in.
     physics: bool,
-    physics_clock: PhysicsClock,
+    /// The simulation: its fixed clock, its tuning, and the contact impulses
+    /// that have to survive from one step to the next.
+    physics_world: PhysicsWorld,
     /// World gravity, in world units per second squared.
     ///
     /// Negative y is down, matching the scene's axes. A game that wants
     /// top-down movement sets this to zero rather than reaching for a flag.
     pub gravity: Vec2,
-    /// The last physics step's contacts, for whoever wants to draw them.
-    contacts: Vec<Contact>,
     /// Overlay segments, emptied and rebuilt by the UI every frame.
     lines: LineBatch,
     /// The scene. Populate it before calling [`App::run`].
@@ -122,8 +122,9 @@ impl App {
     /// an editor that starts simulating the moment a body is added would move
     /// the thing being placed out from under the cursor.
     ///
-    /// Nothing resolves contacts yet — bodies fall through each other. Set
-    /// [`App::gravity`] to change or disable the acceleration.
+    /// Contacts are resolved: bodies rest on each other and stacks settle. Set
+    /// [`App::gravity`] to change or disable the acceleration, and reach the
+    /// solver's tuning through [`App::physics_mut`].
     pub fn with_physics(mut self) -> Self {
         self.physics = true;
         self
@@ -131,7 +132,12 @@ impl App {
 
     /// The last physics step's contacts.
     pub fn contacts(&self) -> &[Contact] {
-        &self.contacts
+        self.physics_world.contacts()
+    }
+
+    /// The simulation, to tune or to reset after loading a scene.
+    pub fn physics_mut(&mut self) -> &mut PhysicsWorld {
+        &mut self.physics_world
     }
 
     pub fn run(mut self) {
@@ -163,10 +169,8 @@ impl App {
             return;
         }
 
-        let dt = self.physics_clock.step();
-        for _ in 0..self.physics_clock.steps(delta) {
-            self.contacts = voltra_physics::step(&mut self.world, self.gravity, dt);
-        }
+        self.physics_world
+            .advance(&mut self.world, self.gravity, delta);
     }
 
     /// Applies whatever the watcher saw since the last frame.
