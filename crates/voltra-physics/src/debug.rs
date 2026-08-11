@@ -45,8 +45,11 @@ pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
         };
         match collider {
             Collider::Box { .. } => {
-                let (min, max) = collider.world_aabb(transform);
-                rect(lines, min, max, SHAPE_COLOR);
+                // The four turned corners, not the world AABB: the AABB is what
+                // the broad phase compares, and drawing it would show a box
+                // that grows as it rotates — the outline has to be the shape
+                // the narrow phase actually collides.
+                outline(lines, &collider.corners(transform), SHAPE_COLOR);
             }
             Collider::Circle { .. } => {
                 circle(
@@ -74,14 +77,8 @@ pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
     }
 }
 
-/// Four segments closing on themselves.
-fn rect(lines: &mut LineBatch, min: Vec2, max: Vec2, color: [f32; 4]) {
-    let corners = [
-        Vec2::new(min.x, min.y),
-        Vec2::new(max.x, min.y),
-        Vec2::new(max.x, max.y),
-        Vec2::new(min.x, max.y),
-    ];
+/// A closed polyline through `corners`.
+fn outline(lines: &mut LineBatch, corners: &[Vec2; 4], color: [f32; 4]) {
     for i in 0..corners.len() {
         lines.push(corners[i], corners[(i + 1) % corners.len()], WIDTH, color);
     }
@@ -176,6 +173,63 @@ mod tests {
         draw(&world, &[contact], &mut lines);
 
         assert_eq!(lines.len(), 4 + 4 + 1);
+    }
+
+    #[test]
+    fn a_rotated_box_is_drawn_turned_rather_than_bounded() {
+        // The AABB of a box turned 45° is √2 wide; the box itself is not. An
+        // overlay that draws the bound makes every rotated collider look wrong.
+        let mut world = World::new();
+        let entity = box_at(&mut world, Vec2::ZERO);
+        world.insert(
+            entity,
+            Transform::default().with_rotation(std::f32::consts::FRAC_PI_4),
+        );
+        let mut lines = LineBatch::default();
+
+        draw(&world, &[], &mut lines);
+
+        assert_eq!(lines.len(), 4);
+        let corners = Collider::Box {
+            half_extents: Vec2::splat(1.0),
+        }
+        .corners(world.get::<Transform>(entity).expect("the transform"));
+        let (min, max) = (corners[2], corners[0]);
+        assert!(
+            (max.y - min.y - 2.0 * std::f32::consts::SQRT_2).abs() < 1e-4,
+            "the diagonal is what the AABB would have drawn"
+        );
+    }
+
+    #[test]
+    fn a_two_point_contact_draws_two_normals() {
+        let mut world = World::new();
+        let a = box_at(&mut world, Vec2::ZERO);
+        let b = box_at(&mut world, Vec2::new(1.5, 0.0));
+        let contact = Contact::new(
+            a,
+            b,
+            Manifold::new(
+                Vec2::X,
+                &[
+                    ManifoldPoint {
+                        point: Vec2::new(0.75, 0.5),
+                        separation: -0.5,
+                        id: 1,
+                    },
+                    ManifoldPoint {
+                        point: Vec2::new(0.75, -0.5),
+                        separation: -0.5,
+                        id: 2,
+                    },
+                ],
+            ),
+        );
+        let mut lines = LineBatch::default();
+
+        draw(&world, &[contact], &mut lines);
+
+        assert_eq!(lines.len(), 4 + 4 + 2);
     }
 
     #[test]

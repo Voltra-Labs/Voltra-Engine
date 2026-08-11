@@ -123,11 +123,16 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 // spawners rather than one because a falling body on its own
                 // demonstrates gravity but nothing about detection — the
                 // contact needs something to be against.
+                // Tilted, so the drop shows what 11b-3 added: the box lands on
+                // a corner, tips onto a face and stops. Level, it would look
+                // exactly like the stage before it. The inspector edits the
+                // rotation afterwards like any other field.
                 if ui.button("Spawn falling body").clicked() {
                     editor.selected = Some(spawn_body(
                         frame,
                         Vec2::new(0.0, 1.5),
                         Vec2::splat(0.4),
+                        0.3,
                         RigidBody::new_dynamic(1.0),
                         [1.0, 0.8, 0.3, 1.0],
                     ));
@@ -138,6 +143,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         frame,
                         Vec2::new(0.0, -1.2),
                         Vec2::new(3.0, 0.3),
+                        0.0,
                         RigidBody::new_static(),
                         [0.5, 0.5, 0.55, 1.0],
                     ));
@@ -163,14 +169,18 @@ fn spawn_body(
     frame: &mut UiFrame<'_>,
     at: Vec2,
     scale: Vec2,
+    rotation: f32,
     body: RigidBody,
     color: [f32; 4],
 ) -> Entity {
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
-    frame
-        .world
-        .insert(entity, Transform::from_translation(at).with_scale(scale));
+    frame.world.insert(
+        entity,
+        Transform::from_translation(at)
+            .with_scale(scale)
+            .with_rotation(rotation),
+    );
     frame.world.insert(entity, Sprite::new(color));
     frame.world.insert(entity, body);
     frame.world.insert(
