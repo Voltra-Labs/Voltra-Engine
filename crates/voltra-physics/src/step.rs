@@ -6,7 +6,7 @@ use voltra_scene::{Collider, Transform};
 
 use crate::broad::candidate_pairs;
 use crate::integrate::{integrate_positions, integrate_velocities};
-use crate::narrow::{contact, Contact};
+use crate::narrow::{manifold, Contact};
 use crate::solver::{
     apply_restitution, prepare, solve, warm_start, CachedImpulse, ImpulseCache, SolverBodies,
     SolverParams,
@@ -106,14 +106,7 @@ pub(crate) fn collide(world: &World) -> Vec<Contact> {
         .filter_map(|(a, b)| {
             let a_shape = (world.get::<Collider>(a)?, world.get::<Transform>(a)?);
             let b_shape = (world.get::<Collider>(b)?, world.get::<Transform>(b)?);
-            let (normal, penetration, point) = contact(a_shape, b_shape)?;
-            Some(Contact {
-                a,
-                b,
-                normal,
-                penetration,
-                point,
-            })
+            Some(Contact::new(a, b, manifold(a_shape, b_shape)?))
         })
         .collect()
 }
@@ -501,9 +494,9 @@ mod tests {
 
         assert_eq!(contacts.len(), 1, "one contact, between ball and floor");
         assert!(
-            contacts[0].normal.y.abs() > 0.5,
+            contacts[0].normal().y.abs() > 0.5,
             "the contact must separate them vertically, got {:?}",
-            contacts[0].normal
+            contacts[0].normal()
         );
     }
 

@@ -17,7 +17,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, Transform};
 
-use box_circle::aabb_circle;
+use box_circle::box_circle;
 use circle::circle_circle;
 
 /// Below this a difference of positions has no meaningful direction.
@@ -28,48 +28,138 @@ const EPSILON: f32 = 1e-6;
 /// Arbitrary, and it has to be *something*: the alternative is a NaN.
 const FALLBACK_NORMAL: Vec2 = Vec2::X;
 
+/// Where two shapes touch, and how far into each other they are.
+///
+/// `separation` is negative while they overlap, which is the solver's sign
+/// rather than the narrow phase's: the sub-steps track a separation upwards
+/// towards zero, and flipping the sign once here beats flipping it at every
+/// use.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ManifoldPoint {
+    /// World space, on the overlap.
+    pub point: Vec2,
+    /// Negative while the shapes overlap.
+    pub separation: f32,
+    /// Which pair of features produced this point.
+    ///
+    /// The warm-start key: the same physical corner must carry the same id
+    /// from one step to the next or its impulse is thrown away and the contact
+    /// starts cold. Shapes with a single feature — every circle — use `0`.
+    pub id: u16,
+}
+
+/// One overlap, as one normal and up to two points.
+///
+/// Two is the bound because two convex faces can only cross at two points, and
+/// nothing here produces a third. It is Box2D's bound for the same reason, and
+/// an array of two costs no allocation where a `Vec` would cost one per
+/// contact per step.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Manifold {
+    /// Unit vector pushing `a` away from `b`. One normal for both points.
+    pub normal: Vec2,
+    points: [ManifoldPoint; 2],
+    count: u8,
+}
+
+impl Manifold {
+    /// A manifold of the first two of `points`.
+    ///
+    /// The only constructor, so `count` cannot disagree with the array. More
+    /// than two points is a bug in a pair function rather than a case to
+    /// handle, and taking the first two keeps a wrong manifold solvable
+    /// instead of turning it into a panic in the middle of a step.
+    pub(crate) fn new(normal: Vec2, points: &[ManifoldPoint]) -> Self {
+        debug_assert!(points.len() <= 2, "a manifold holds at most two points");
+        let mut stored = [points[0]; 2];
+        let count = points.len().min(2);
+        stored[..count].copy_from_slice(&points[..count]);
+        Self {
+            normal,
+            points: stored,
+            count: count as u8,
+        }
+    }
+
+    /// The points this manifold actually has.
+    pub fn points(&self) -> &[ManifoldPoint] {
+        &self.points[..self.count as usize]
+    }
+
+    /// The most negative separation of its points.
+    pub fn deepest_separation(&self) -> f32 {
+        self.points()
+            .iter()
+            .map(|point| point.separation)
+            .fold(f32::INFINITY, f32::min)
+    }
+
+    /// The same manifold with the normal reversed, for the mirrored argument
+    /// order. The points do not move: they are already where the shapes meet.
+    pub(crate) fn flipped(self) -> Self {
+        Self {
+            normal: -self.normal,
+            ..self
+        }
+    }
+}
+
 /// One overlap between two entities.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Contact {
     pub a: Entity,
     pub b: Entity,
+    pub manifold: Manifold,
+}
+
+impl Contact {
+    pub fn new(a: Entity, b: Entity, manifold: Manifold) -> Self {
+        Self { a, b, manifold }
+    }
+
     /// Unit vector pushing `a` away from `b`.
-    pub normal: Vec2,
-    /// How deep the overlap is along the normal. Always positive.
-    pub penetration: f32,
-    /// A point on the overlap, in world space. For drawing now, and for the
-    /// torque arm once there is angular velocity.
-    pub point: Vec2,
+    pub fn normal(&self) -> Vec2 {
+        self.manifold.normal
+    }
+
+    pub fn points(&self) -> &[ManifoldPoint] {
+        self.manifold.points()
+    }
+
+    /// The most negative separation of its points — how deep the overlap is at
+    /// its worst.
+    pub fn deepest(&self) -> f32 {
+        self.manifold.deepest_separation()
+    }
 }
 
 /// A shape and where it sits.
 type Shape<'a> = (&'a Collider, &'a Transform);
 
-/// The overlap between two shapes, as `(normal, penetration, point)`.
+/// The overlap between two shapes.
 ///
 /// `None` when they do not overlap, when they merely touch — zero penetration
 /// is not a collision, and reporting it would hand the solver a contact with
 /// nothing to resolve on every frame two bodies rest against each other — or
 /// when either shape has no area.
-pub fn contact(a: Shape<'_>, b: Shape<'_>) -> Option<(Vec2, f32, Vec2)> {
+pub fn manifold(a: Shape<'_>, b: Shape<'_>) -> Option<Manifold> {
     if a.0.is_degenerate(a.1) || b.0.is_degenerate(b.1) {
         return None;
     }
 
     match (a.0, b.0) {
         (Collider::Circle { .. }, Collider::Circle { .. }) => circle_circle(a, b),
-        (Collider::Box { .. }, Collider::Box { .. }) => aabb_aabb(a, b),
-        (Collider::Box { .. }, Collider::Circle { .. }) => aabb_circle(a, b),
+        (Collider::Box { .. }, Collider::Box { .. }) => box_box(a, b),
+        (Collider::Box { .. }, Collider::Circle { .. }) => box_circle(a, b),
         (Collider::Circle { .. }, Collider::Box { .. }) => {
             // Solved the other way round and mirrored, so there is one
             // implementation of the hard case rather than two that can drift.
-            let (normal, penetration, point) = aabb_circle(b, a)?;
-            Some((-normal, penetration, point))
+            Some(box_circle(b, a)?.flipped())
         }
     }
 }
 
-fn aabb_aabb(a: Shape<'_>, b: Shape<'_>) -> Option<(Vec2, f32, Vec2)> {
+fn box_box(a: Shape<'_>, b: Shape<'_>) -> Option<Manifold> {
     let (ha, hb) = (a.0.world_half_extents(a.1), b.0.world_half_extents(b.1));
     let delta = a.1.translation - b.1.translation;
     let overlap = (ha + hb) - delta.abs();
@@ -89,7 +179,14 @@ fn aabb_aabb(a: Shape<'_>, b: Shape<'_>) -> Option<(Vec2, f32, Vec2)> {
 
     // On the face of `b` that `a` is pushed away from.
     let point = b.1.translation + normal * (hb * normal.abs()).length();
-    Some((normal, penetration, point))
+    Some(Manifold::new(
+        normal,
+        &[ManifoldPoint {
+            point,
+            separation: -penetration,
+            id: 0,
+        }],
+    ))
 }
 
 /// `+1` or `-1` matching `value`'s sign, and `+1` for exactly zero.
@@ -127,43 +224,55 @@ pub(crate) mod tests {
     fn boxes_report_the_axis_of_least_penetration() {
         // Overlapping 0.2 in x and 1.5 in y: the way out is x, because it is
         // nearer. Choosing the deeper axis pushes a box through its neighbour.
-        let (normal, penetration, _) =
-            contact((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(1.8, 0.5)))
-                .expect("they overlap");
+        let m = manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(1.8, 0.5)))
+            .expect("they overlap");
 
         assert!(
-            normal.y.abs() < 1e-6,
-            "expected an x normal, got {normal:?}"
+            m.normal.y.abs() < 1e-6,
+            "expected an x normal, got {:?}",
+            m.normal
         );
-        assert!((penetration - 0.2).abs() < 1e-6, "{penetration}");
+        assert!((m.deepest_separation() + 0.2).abs() < 1e-6, "{m:?}");
     }
 
     #[test]
     fn separated_boxes_do_not_touch() {
-        assert!(contact((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(3.0, 0.0))).is_none());
+        assert!(manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(3.0, 0.0))).is_none());
     }
 
     #[test]
     fn swapping_two_boxes_negates_the_normal() {
         let one =
-            contact((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(1.8, 0.5))).expect("overlap");
+            manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(1.8, 0.5))).expect("overlap");
         let other =
-            contact((&boxed(1.0), &at(1.8, 0.5)), (&boxed(1.0), &at(0.0, 0.0))).expect("overlap");
+            manifold((&boxed(1.0), &at(1.8, 0.5)), (&boxed(1.0), &at(0.0, 0.0))).expect("overlap");
 
         assert!(
-            (one.0 + other.0).length() < 1e-6,
+            (one.normal + other.normal).length() < 1e-6,
             "{:?} {:?}",
-            one.0,
-            other.0
+            one.normal,
+            other.normal
         );
+    }
+
+    #[test]
+    fn coincident_boxes_give_a_finite_normal() {
+        let m = manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(0.0, 0.0)))
+            .expect("fully overlapping");
+
+        assert!(
+            m.normal.is_finite() && (m.normal.length() - 1.0).abs() < 1e-6,
+            "{m:?}"
+        );
+        assert!(m.deepest_separation() < 0.0, "{m:?}");
     }
 
     #[test]
     fn a_zero_sized_collider_never_collides() {
         // A scene file can contain a zero or negative radius, and an inverted
         // shape would report a contact with a backwards normal.
-        assert!(contact((&circle(0.0), &at(0.0, 0.0)), (&circle(1.0), &at(0.0, 0.0))).is_none());
-        assert!(contact(
+        assert!(manifold((&circle(0.0), &at(0.0, 0.0)), (&circle(1.0), &at(0.0, 0.0))).is_none());
+        assert!(manifold(
             (
                 &Collider::Box {
                     half_extents: Vec2::ZERO
@@ -176,24 +285,11 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn coincident_boxes_give_a_finite_normal() {
-        let (normal, penetration, _) =
-            contact((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(0.0, 0.0)))
-                .expect("fully overlapping");
-
-        assert!(
-            normal.is_finite() && (normal.length() - 1.0).abs() < 1e-6,
-            "{normal:?}"
-        );
-        assert!(penetration > 0.0);
-    }
-
-    #[test]
     fn scale_changes_whether_two_bodies_touch() {
         let big = Transform::default().with_scale(Vec2::splat(4.0));
 
-        assert!(contact((&circle(1.0), &big), (&circle(1.0), &at(3.0, 0.0))).is_some());
-        assert!(contact(
+        assert!(manifold((&circle(1.0), &big), (&circle(1.0), &at(3.0, 0.0))).is_some());
+        assert!(manifold(
             (&circle(1.0), &Transform::default()),
             (&circle(1.0), &at(3.0, 0.0))
         )
@@ -212,12 +308,50 @@ pub(crate) mod tests {
         ];
 
         for (a, at_a, b, at_b) in cases {
-            let (normal, _, _) = contact((&a, &at_a), (&b, &at_b)).expect("overlap");
+            let m = manifold((&a, &at_a), (&b, &at_b)).expect("overlap");
             assert!(
-                (normal.length() - 1.0).abs() < 1e-5,
-                "{normal:?} has length {}",
-                normal.length()
+                (m.normal.length() - 1.0).abs() < 1e-5,
+                "{:?} has length {}",
+                m.normal,
+                m.normal.length()
             );
         }
+    }
+
+    #[test]
+    fn a_manifold_holds_at_most_two_points() {
+        let m = manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(1.8, 0.5)))
+            .expect("they overlap");
+
+        assert!(m.points().len() <= 2, "{m:?}");
+        assert!(
+            !m.points().is_empty(),
+            "a manifold with no points is not one"
+        );
+    }
+
+    #[test]
+    fn a_contact_reports_its_deepest_point() {
+        let m = Manifold::new(
+            Vec2::Y,
+            &[
+                ManifoldPoint {
+                    point: Vec2::ZERO,
+                    separation: -0.1,
+                    id: 1,
+                },
+                ManifoldPoint {
+                    point: Vec2::X,
+                    separation: -0.4,
+                    id: 2,
+                },
+            ],
+        );
+        let mut world = voltra_ecs::World::new();
+        let contact = Contact::new(world.spawn(), world.spawn(), m);
+
+        assert_eq!(contact.points().len(), 2);
+        assert!((contact.deepest() + 0.4).abs() < 1e-6);
+        assert_eq!(contact.normal(), Vec2::Y);
     }
 }

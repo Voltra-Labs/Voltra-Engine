@@ -106,14 +106,14 @@ pub fn prepare(
                 a,
                 b,
                 key,
-                normal: contact.normal,
+                normal: contact.normal(),
                 // The narrow phase reports how deep the overlap is; the solver
                 // thinks in separation, which is the same number negated.
-                base_separation: -contact.penetration,
+                base_separation: contact.deepest(),
                 effective_mass: 1.0 / inverse_mass_sum,
                 friction,
                 restitution,
-                relative_velocity: (body_a.velocity - body_b.velocity).dot(contact.normal),
+                relative_velocity: (body_a.velocity - body_b.velocity).dot(contact.normal()),
                 normal_impulse: warm.normal,
                 tangent_impulse: warm.tangent,
                 max_normal_impulse: 0.0,

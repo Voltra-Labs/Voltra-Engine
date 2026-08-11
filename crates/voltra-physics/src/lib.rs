@@ -29,7 +29,7 @@ pub mod world;
 pub use broad::candidate_pairs;
 pub use clock::PhysicsClock;
 pub use integrate::{integrate_positions, integrate_velocities};
-pub use narrow::Contact;
+pub use narrow::{Contact, Manifold, ManifoldPoint};
 pub use solver::{ImpulseCache, Softness, SolverBodies, SolverParams};
 pub use step::step;
 pub use world::PhysicsWorld;

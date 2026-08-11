@@ -1,10 +1,8 @@
 //! Circle against circle: the one pair that is a subtraction.
 
-use voltra_render::glam::Vec2;
+use super::{Manifold, ManifoldPoint, Shape, EPSILON, FALLBACK_NORMAL};
 
-use super::{Shape, EPSILON, FALLBACK_NORMAL};
-
-pub(super) fn circle_circle(a: Shape<'_>, b: Shape<'_>) -> Option<(Vec2, f32, Vec2)> {
+pub(super) fn circle_circle(a: Shape<'_>, b: Shape<'_>) -> Option<Manifold> {
     let (ra, rb) = (a.0.world_radius(a.1), b.0.world_radius(b.1));
     let delta = a.1.translation - b.1.translation;
     let distance = delta.length();
@@ -21,32 +19,50 @@ pub(super) fn circle_circle(a: Shape<'_>, b: Shape<'_>) -> Option<(Vec2, f32, Ve
         FALLBACK_NORMAL
     };
 
-    Some((normal, penetration, b.1.translation + normal * rb))
+    // One point, and one feature: a circle has nowhere else to touch, so the
+    // id is the constant every single-point manifold uses.
+    Some(Manifold::new(
+        normal,
+        &[ManifoldPoint {
+            point: b.1.translation + normal * rb,
+            separation: -penetration,
+            id: 0,
+        }],
+    ))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::narrow::contact;
+    use crate::narrow::manifold;
     use crate::narrow::tests::{at, circle};
     use voltra_render::glam::Vec2;
 
     #[test]
     fn separated_circles_do_not_touch() {
-        assert!(contact((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(5.0, 0.0))).is_none());
+        assert!(manifold((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(5.0, 0.0))).is_none());
     }
 
     #[test]
     fn overlapping_circles_report_the_overlap_along_the_centre_line() {
-        let (normal, penetration, _) =
-            contact((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(1.5, 0.0)))
-                .expect("they overlap");
+        let m = manifold((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(1.5, 0.0)))
+            .expect("they overlap");
 
         // The normal pushes `a` away from `b`, so it points in -x.
         assert!(
-            (normal - Vec2::new(-1.0, 0.0)).length() < 1e-6,
-            "{normal:?}"
+            (m.normal - Vec2::new(-1.0, 0.0)).length() < 1e-6,
+            "{:?}",
+            m.normal
         );
-        assert!((penetration - 0.5).abs() < 1e-6, "{penetration}");
+        assert!((m.points()[0].separation + 0.5).abs() < 1e-6, "{m:?}");
+    }
+
+    #[test]
+    fn a_circle_pair_is_one_point_with_no_feature() {
+        let m = manifold((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(1.5, 0.0)))
+            .expect("they overlap");
+
+        assert_eq!(m.points().len(), 1);
+        assert_eq!(m.points()[0].id, 0);
     }
 
     #[test]
@@ -54,27 +70,27 @@ mod tests {
         // Zero penetration is not a collision. Reporting it hands the solver a
         // contact with nothing to resolve, every frame, for every pair of
         // bodies resting against each other.
-        assert!(contact((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(2.0, 0.0))).is_none());
+        assert!(manifold((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(2.0, 0.0))).is_none());
     }
 
     #[test]
     fn concentric_circles_give_a_unit_normal_rather_than_nan() {
-        let (normal, penetration, _) =
-            contact((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(0.0, 0.0)))
-                .expect("fully overlapping");
+        let m = manifold((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(0.0, 0.0)))
+            .expect("fully overlapping");
 
-        assert!(normal.is_finite(), "{normal:?}");
-        assert!((normal.length() - 1.0).abs() < 1e-6, "{normal:?}");
-        assert!(penetration.is_finite() && penetration > 0.0);
+        assert!(m.normal.is_finite(), "{m:?}");
+        assert!((m.normal.length() - 1.0).abs() < 1e-6, "{m:?}");
+        let separation = m.points()[0].separation;
+        assert!(separation.is_finite() && separation < 0.0, "{m:?}");
     }
 
     #[test]
     fn swapping_two_circles_negates_the_normal() {
-        let one =
-            contact((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(1.5, 0.0))).expect("overlap");
-        let other =
-            contact((&circle(1.0), &at(1.5, 0.0)), (&circle(1.0), &at(0.0, 0.0))).expect("overlap");
+        let one = manifold((&circle(1.0), &at(0.0, 0.0)), (&circle(1.0), &at(1.5, 0.0)))
+            .expect("overlap");
+        let other = manifold((&circle(1.0), &at(1.5, 0.0)), (&circle(1.0), &at(0.0, 0.0)))
+            .expect("overlap");
 
-        assert!((one.0 + other.0).length() < 1e-6);
+        assert!((one.normal + other.normal).length() < 1e-6);
     }
 }

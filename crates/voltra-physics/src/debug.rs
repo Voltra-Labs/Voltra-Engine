@@ -59,13 +59,18 @@ pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
         }
     }
 
+    // One arrow per manifold point, not per contact: a resting box touches its
+    // floor at two, and drawing one would hide exactly the case the second
+    // point exists for.
     for contact in contacts {
-        lines.push(
-            contact.point,
-            contact.point + contact.normal * NORMAL_LENGTH,
-            WIDTH,
-            CONTACT_COLOR,
-        );
+        for point in contact.points() {
+            lines.push(
+                point.point,
+                point.point + contact.normal() * NORMAL_LENGTH,
+                WIDTH,
+                CONTACT_COLOR,
+            );
+        }
     }
 }
 
@@ -100,6 +105,7 @@ fn circle(lines: &mut LineBatch, centre: Vec2, radius: f32, color: [f32; 4]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::narrow::{Manifold, ManifoldPoint};
     use voltra_ecs::Entity;
 
     fn box_at(world: &mut World, at: Vec2) -> Entity {
@@ -153,13 +159,18 @@ mod tests {
         let mut world = World::new();
         let a = box_at(&mut world, Vec2::ZERO);
         let b = box_at(&mut world, Vec2::new(1.5, 0.0));
-        let contact = Contact {
+        let contact = Contact::new(
             a,
             b,
-            normal: Vec2::X,
-            penetration: 0.5,
-            point: Vec2::new(0.75, 0.0),
-        };
+            Manifold::new(
+                Vec2::X,
+                &[ManifoldPoint {
+                    point: Vec2::new(0.75, 0.0),
+                    separation: -0.5,
+                    id: 0,
+                }],
+            ),
+        );
         let mut lines = LineBatch::default();
 
         draw(&world, &[contact], &mut lines);
