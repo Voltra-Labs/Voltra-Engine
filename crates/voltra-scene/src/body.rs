@@ -31,12 +31,26 @@ pub enum BodyType {
 pub struct RigidBody {
     pub body_type: BodyType,
     pub velocity: Vec2,
+    /// Radians per second, counter-clockwise.
+    pub angular_velocity: f32,
     /// `1.0 / mass`, or `0.0` for a body that cannot be pushed.
     pub inverse_mass: f32,
     /// Multiplier on the world's gravity. `0.0` for a floating body.
     pub gravity_scale: f32,
     /// Fraction of speed shed per second. `0.0` keeps all of it.
     pub linear_damping: f32,
+    /// Fraction of spin shed per second. `0.0` keeps all of it.
+    ///
+    /// Its own value rather than a share of `linear_damping`: a body that
+    /// slides freely and stops spinning quickly is an ordinary thing to want,
+    /// and every engine keeps the two apart.
+    pub angular_damping: f32,
+    /// Whether this body takes torque but never turns.
+    ///
+    /// `freezeRotation` in Unity, `lock_rotation` in Godot, `fixedRotation` in
+    /// Box2D. A platformer character must stay upright, and nothing about its
+    /// shape says so — the body has to.
+    pub lock_rotation: bool,
 }
 
 impl Default for RigidBody {
@@ -44,9 +58,12 @@ impl Default for RigidBody {
         Self {
             body_type: BodyType::Static,
             velocity: Vec2::ZERO,
+            angular_velocity: 0.0,
             inverse_mass: 0.0,
             gravity_scale: 1.0,
             linear_damping: 0.0,
+            angular_damping: 0.0,
+            lock_rotation: false,
         }
     }
 }
@@ -89,6 +106,32 @@ mod tests {
     }
 
     #[test]
+    fn a_default_body_does_not_spin_and_is_free_to_turn() {
+        let body = RigidBody::default();
+
+        assert_eq!(body.angular_velocity, 0.0);
+        assert_eq!(body.angular_damping, 0.0);
+        assert!(!body.lock_rotation, "locking is opt-in, as freezing is");
+    }
+
+    #[test]
+    fn the_rotation_fields_survive_a_round_trip() {
+        // A body that loses its spin or its lock on save is a scene that plays
+        // differently the second time it is opened.
+        let body = RigidBody {
+            angular_velocity: 1.5,
+            angular_damping: 0.25,
+            lock_rotation: true,
+            ..RigidBody::new_dynamic(2.0)
+        };
+
+        let text = ron::to_string(&body).expect("a body serialises");
+        let restored: RigidBody = ron::from_str(&text).expect("and comes back");
+
+        assert_eq!(restored, body);
+    }
+
+    #[test]
     fn a_dynamic_body_stores_the_reciprocal_of_its_mass() {
         let body = RigidBody::new_dynamic(4.0);
 
@@ -124,9 +167,12 @@ mod tests {
         let body = RigidBody {
             body_type: BodyType::Kinematic,
             velocity: Vec2::new(1.5, -2.5),
+            angular_velocity: -0.75,
             inverse_mass: 0.5,
             gravity_scale: 2.0,
             linear_damping: 0.1,
+            angular_damping: 0.2,
+            lock_rotation: false,
         };
 
         let text = ron::to_string(&body).expect("serialise");

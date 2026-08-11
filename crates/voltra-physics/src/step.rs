@@ -61,7 +61,7 @@ pub fn step(
     warm_start(&constraints, &mut bodies);
 
     for _ in 0..sub_steps {
-        integrate_velocities(&mut bodies, gravity, h);
+        integrate_velocities(&mut bodies, gravity, h, params.max_rotation);
         solve(
             &mut constraints,
             &mut bodies,

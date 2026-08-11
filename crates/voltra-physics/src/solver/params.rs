@@ -1,5 +1,7 @@
 //! What the solver is allowed to be tuned by.
 
+use std::f32::consts::PI;
+
 use super::softness::Softness;
 
 /// The solver's tuning, all of it.
@@ -26,6 +28,12 @@ pub struct SolverParams {
     /// Approach speed below which restitution is discarded. This is what stops
     /// a resting body from bouncing forever on its own numerical noise.
     pub restitution_threshold: f32,
+    /// Most a body may turn within one sub-step, in radians.
+    ///
+    /// Box2D's `B2_MAX_ROTATION`, a quarter turn. Past it a body has rotated
+    /// its contact face out from under the normal the step is being solved
+    /// against, so the cap is what keeps the constant-normal assumption true.
+    pub max_rotation: f32,
     /// Whether to seed each contact with the previous step's impulses.
     ///
     /// A switch rather than an assumption, because turning it off is how its
@@ -41,6 +49,7 @@ impl Default for SolverParams {
             contact_damping_ratio: 10.0,
             max_push_speed: 3.0,
             restitution_threshold: 1.0,
+            max_rotation: 0.25 * PI,
             warm_starting: true,
         }
     }
