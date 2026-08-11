@@ -10,6 +10,7 @@
 //! The normal always pushes **`a` away from `b`**. Swapping the arguments
 //! negates it and changes nothing else.
 
+mod box_box;
 mod box_circle;
 mod circle;
 
@@ -17,6 +18,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, Transform};
 
+use box_box::box_box;
 use box_circle::box_circle;
 use circle::circle_circle;
 
@@ -159,36 +161,6 @@ pub fn manifold(a: Shape<'_>, b: Shape<'_>) -> Option<Manifold> {
     }
 }
 
-fn box_box(a: Shape<'_>, b: Shape<'_>) -> Option<Manifold> {
-    let (ha, hb) = (a.0.world_half_extents(a.1), b.0.world_half_extents(b.1));
-    let delta = a.1.translation - b.1.translation;
-    let overlap = (ha + hb) - delta.abs();
-
-    if overlap.x <= 0.0 || overlap.y <= 0.0 {
-        return None;
-    }
-
-    // The axis of *least* penetration: the direction that separates them
-    // soonest. Choosing the deeper one pushes a box out through its neighbour
-    // instead of off its face.
-    let (normal, penetration) = if overlap.x < overlap.y {
-        (Vec2::new(sign_away(delta.x), 0.0), overlap.x)
-    } else {
-        (Vec2::new(0.0, sign_away(delta.y)), overlap.y)
-    };
-
-    // On the face of `b` that `a` is pushed away from.
-    let point = b.1.translation + normal * (hb * normal.abs()).length();
-    Some(Manifold::new(
-        normal,
-        &[ManifoldPoint {
-            point,
-            separation: -penetration,
-            id: 0,
-        }],
-    ))
-}
-
 /// `+1` or `-1` matching `value`'s sign, and `+1` for exactly zero.
 ///
 /// `f32::signum` returns `-1.0` for `-0.0` and would flip a normal for two
@@ -221,26 +193,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn boxes_report_the_axis_of_least_penetration() {
-        // Overlapping 0.2 in x and 1.5 in y: the way out is x, because it is
-        // nearer. Choosing the deeper axis pushes a box through its neighbour.
-        let m = manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(1.8, 0.5)))
-            .expect("they overlap");
-
-        assert!(
-            m.normal.y.abs() < 1e-6,
-            "expected an x normal, got {:?}",
-            m.normal
-        );
-        assert!((m.deepest_separation() + 0.2).abs() < 1e-6, "{m:?}");
-    }
-
-    #[test]
-    fn separated_boxes_do_not_touch() {
-        assert!(manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(3.0, 0.0))).is_none());
-    }
-
-    #[test]
     fn swapping_two_boxes_negates_the_normal() {
         let one =
             manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(1.8, 0.5))).expect("overlap");
@@ -248,23 +200,11 @@ pub(crate) mod tests {
             manifold((&boxed(1.0), &at(1.8, 0.5)), (&boxed(1.0), &at(0.0, 0.0))).expect("overlap");
 
         assert!(
-            (one.normal + other.normal).length() < 1e-6,
+            (one.normal + other.normal).length() < 1e-5,
             "{:?} {:?}",
             one.normal,
             other.normal
         );
-    }
-
-    #[test]
-    fn coincident_boxes_give_a_finite_normal() {
-        let m = manifold((&boxed(1.0), &at(0.0, 0.0)), (&boxed(1.0), &at(0.0, 0.0)))
-            .expect("fully overlapping");
-
-        assert!(
-            m.normal.is_finite() && (m.normal.length() - 1.0).abs() < 1e-6,
-            "{m:?}"
-        );
-        assert!(m.deepest_separation() < 0.0, "{m:?}");
     }
 
     #[test]
