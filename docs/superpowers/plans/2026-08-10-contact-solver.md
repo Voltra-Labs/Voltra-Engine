@@ -47,7 +47,7 @@ for the new component. No new dependencies.
   `PhysicsMaterial::combine(a: Option<&Self>, b: Option<&Self>) -> (f32, f32)`
   returning `(friction, restitution)` already mixed and clamped.
 
-- [ ] **Step 1: Write the failing tests** in `material.rs`
+- [x] **Step 1: Write the failing tests** in `material.rs`
 
 ```rust
 #[test]
@@ -85,11 +85,11 @@ fn a_material_round_trips_through_ron() {
 }
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
 `cargo test -p voltra-scene material` → fails to compile, `PhysicsMaterial` not found.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```rust
 //! How a surface rubs and how it bounces.
@@ -142,11 +142,11 @@ impl PhysicsMaterial {
 `registry.register::<PhysicsMaterial>("PhysicsMaterial");` in `with_defaults`,
 next to `RigidBody`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 `cargo test -p voltra-scene` → all pass, including the registry's round-trip.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/voltra-scene
@@ -172,7 +172,7 @@ git commit -m "feat(scene): add a physics material component"
   `SolverParams::softness(&self, h: f32) -> (Softness, Softness)` returning
   `(dynamic, against_immovable)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 // softness.rs
@@ -229,9 +229,9 @@ fn zero_sub_steps_still_produces_a_usable_step() {
 }
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 ```rust
 // softness.rs
@@ -282,9 +282,9 @@ impl Softness {
     }
 ```
 
-- [ ] **Step 4: Run the tests** — `cargo test -p voltra-physics`
+- [x] **Step 4: Run the tests** — `cargo test -p voltra-physics`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/voltra-physics
@@ -310,7 +310,7 @@ git commit -m "feat(physics): add soft constraint coefficients"
   `integrate_velocities(&mut SolverBodies, gravity: Vec2, h: f32)` and
   `integrate_positions(&mut SolverBodies, h: f32)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
@@ -439,9 +439,9 @@ fn a_body_without_a_transform_simulates_and_moves_nothing() {
 }
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
-- [ ] **Step 3: Implement `body.rs`**
+- [x] **Step 3: Implement `body.rs`**
 
 Gather walks `world.query::<RigidBody>()` first, then `world.query::<Collider>()`
 adding only entities not already present, so every collider has a solver body and
@@ -475,9 +475,9 @@ pub fn integrate_positions(bodies: &mut SolverBodies, h: f32) {
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/voltra-physics
@@ -499,7 +499,7 @@ git commit -m "feat(physics): gather bodies for the solver"
   `ImpulseCache::commit(&mut self)`, `ImpulseCache::len(&self) -> usize`,
   `ImpulseCache::is_empty(&self) -> bool`, `ImpulseCache::clear(&mut self)`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
@@ -533,15 +533,15 @@ fn a_pair_that_stops_touching_is_forgotten() {
 }
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
-- [ ] **Step 3: Implement** — two `HashMap`s, `current` read by `warm_start` and
+- [x] **Step 3: Implement** — two `HashMap`s, `current` read by `warm_start` and
 `next` written by `record`; `commit` swaps them and clears the new `next`, which
 evicts everything untouched without a second pass and without reallocating.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/voltra-physics
@@ -570,7 +570,7 @@ git commit -m "feat(physics): keep contact impulses between steps"
   `apply_restitution(&mut [ContactConstraint], &mut SolverBodies, threshold: f32)`;
   `step(&mut World, &mut ImpulseCache, &SolverParams, gravity: Vec2, dt: f32) -> Vec<Contact>`.
 
-- [ ] **Step 1: Write the failing tests** in `step.rs`
+- [x] **Step 1: Write the failing tests** in `step.rs`
 
 ```rust
 #[test]
@@ -715,9 +715,9 @@ of half-extents `(10, 0.5)` at `(0, -2)` and a dynamic circle of radius `0.5` at
 the origin; `spawn_box(world, at, half_extents, mass)` where `None` means static
 geometry with no `RigidBody`; `translation`, `first_entity`.
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 `constraint.rs` holds the struct and `prepare`, which for each contact looks up
 both solver-body indices, computes
@@ -739,9 +739,9 @@ scaled by the separation push.
 solve without bias, restitution, record every constraint's impulses, commit the
 cache, scatter. `dt <= 0.0` returns early with no contacts.
 
-- [ ] **Step 4: Run the tests** — `cargo test -p voltra-physics`
+- [x] **Step 4: Run the tests** — `cargo test -p voltra-physics`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/voltra-physics
@@ -758,7 +758,7 @@ git commit -m "feat(physics): resolve contacts with a soft TGS solver"
 
 **Interfaces:** unchanged.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
@@ -840,9 +840,9 @@ fn a_dead_body_does_not_bounce_on_its_own_noise() {
 }
 ```
 
-- [ ] **Step 2: Run, fix the passes until green**
+- [x] **Step 2: Run, fix the passes until green**
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add crates/voltra-physics
@@ -867,7 +867,7 @@ git commit -m "feat(physics): add friction and restitution to contacts"
   `PhysicsWorld::advance(&mut self, &mut World, gravity: Vec2, delta: f32) -> &[Contact]`,
   `PhysicsWorld::cached_pairs(&self) -> usize`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```rust
 #[test]
@@ -901,18 +901,18 @@ fn contacts_survive_a_frame_that_owed_no_step() {
 }
 ```
 
-- [ ] **Step 2: Run and watch it fail**
+- [x] **Step 2: Run and watch it fail**
 
-- [ ] **Step 3: Implement `PhysicsWorld`**, then rewire `voltra-core::App`:
+- [x] **Step 3: Implement `PhysicsWorld`**, then rewire `voltra-core::App`:
 replace the `physics_clock: PhysicsClock` and `contacts: Vec<Contact>` fields
 with a single `physics_world: PhysicsWorld`, and make `step_physics` call
 `advance`. The UI frame reads `self.physics_world.contacts()`; if the borrow
 checker objects at the construction site, take the slice into a local binding
 before the `&mut` borrow of the world.
 
-- [ ] **Step 4: Run the workspace tests**
+- [x] **Step 4: Run the workspace tests**
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/voltra-physics crates/voltra-core
@@ -929,7 +929,7 @@ git commit -m "feat(physics): own the clock, params and impulse cache"
 - Modify: `crates/voltra-core/src/app.rs` (the `with_physics` doc says nothing
   resolves contacts — it does now)
 
-- [ ] **Step 1: Write the decisions**
+- [x] **Step 1: Write the decisions**
 
 Three entries, each with its rejected alternatives: TGS Soft as implemented
 here (the sub-step order, friction in the relax pass, the coefficient formulas
@@ -938,7 +938,7 @@ owned by the world, with what Box2D, Godot and Avian each do; the material as a
 component rather than fields on `Collider` or `RigidBody`. Add the note that a
 second manifold point in 11b-3 needs a per-point key.
 
-- [ ] **Step 2: Run everything**
+- [x] **Step 2: Run everything**
 
 ```bash
 cargo fmt --all
@@ -946,13 +946,13 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 ```
 
-- [ ] **Step 3: Look at it**
+- [x] **Step 3: Look at it**
 
 Launch the editor detached with a stacked scene, wait a few seconds, read the
 log, kill it. Contacts drawn by the debug overlay should sit on the touching
 faces and the stack should be still.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs crates

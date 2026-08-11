@@ -72,8 +72,8 @@ re-exports, so a version bump is a one-line change.
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-assets` | Asset identity, the texture cache, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
-| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider` |
-| `voltra-physics` | Simulation over those components: integration and contact detection | `PhysicsClock`, `integrate`, `candidate_pairs`, `Contact`, `step` |
+| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial` |
+| `voltra-physics` | Simulation over those components: integration, contact detection and the solver that resolves them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `step`, `SolverParams`, `SolverBodies`, `ImpulseCache`, `Softness` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `scratch_root`, `write_png` |
@@ -95,7 +95,7 @@ winit event loop  (voltra-core::App)
   ├─ Resized(size)    → Renderer::resize → GpuContext reconfigures surface
   └─ RedrawRequested
        │
-       ├─ App::update                 input → camera
+       ├─ App::update                 input → camera → the physics steps owed
        ├─ RenderTarget::resize        to whatever the viewport panel asked for
        ├─ SpriteBatch::from_world     world → vertices → Mesh
        ├─ Renderer::render_scene      draws into the target, not the window
@@ -870,14 +870,14 @@ options and both are worse:
 
 So the split is the one the repo already has: `voltra-scene` is components and
 the geometry they turn into, and the crate that *acts* on them is separate.
-`voltra-physics` owns `PhysicsClock`, `Contact` and the four steps, and nothing
-a scene file contains. Nothing depends on it but `voltra-core` and
-`voltra-editor`, so the cycle cannot reappear.
+`voltra-physics` owns `PhysicsWorld`, `PhysicsClock`, `Contact`, the solver and
+its tuning, and nothing a scene file contains. Nothing depends on it but
+`voltra-core` and `voltra-editor`, so the cycle cannot reappear.
 
-`step` **returns** its contacts rather than storing them in a resource. Nothing
-consumes them yet except the debug draw, and a `Contacts` resource with no
-reader would be a structure designed for an imagined caller. 11b-2's solver
-takes this list as its input.
+`step` **returns** its contacts rather than storing them in a resource, and
+`PhysicsWorld` holds the last step's list for whoever asks — today the debug
+overlay. A `Contacts` resource would be the same data behind a concept
+`voltra-ecs` does not have, invented for one reader.
 
 #### Rejected
 
@@ -935,7 +935,7 @@ normalised — `glam`'s `normalize` of a zero vector is `NaN`, not an error, and
 - **Explicit Euler.** Two lines cheaper, and it adds energy for free.
 - **Storing mass.** A divide and a zero-check at every use site.
 
-### The broad phase is O(n²), and 11b-2's solver is already chosen
+### The broad phase is O(n²), and detection shipped before resolution
 
 **`candidate_pairs` compares every pair, rejecting on world-space AABBs.** For
 the tens of bodies a scene holds today this beats a spatial hash, which pays for
@@ -949,18 +949,12 @@ Pairs are emitted once and never mirrored, by starting the inner loop at `i + 1`
 impulse the solver applies. The same bound is what stops a body pairing with
 itself.
 
-**The solver for 11b-2 is TGS Soft ("Soft Step"), and this is recorded so it is
-not re-argued.** Erin Catto compared eight solvers in
-[Solver2D](https://box2d.org/posts/2024/02/solver2d/) and took TGS Soft for
-Box2D v3; XPBD, the obvious alternative, lost on friction and on precision far
-from the origin. Nothing in 11b-1 resolves a contact — a body sinks through a
-floor — and that is the stated limit of the stage rather than a bug.
-
-Detection ships without resolution because it is *visible*: `voltra-physics`'s
-debug draw puts collider outlines and contact normals through stage 11a's line
-pipeline, so a wrong normal is a line pointing the wrong way rather than a
-number nobody reads. The solver is then built against contacts someone has
-already looked at.
+**Stage 11b-1 detected contacts without resolving them, deliberately.**
+Detection is *visible*: `voltra-physics`'s debug draw puts collider outlines and
+contact normals through stage 11a's line pipeline, so a wrong normal is a line
+pointing the wrong way rather than a number nobody reads. The solver was then
+built against contacts someone had already looked at — it is the next section,
+and 11b-1's "a body sinks through the floor" no longer holds.
 
 #### Rejected
 
@@ -972,6 +966,144 @@ already looked at.
 - **Ellipses.** A circle under a non-uniform scale takes its larger axis. A true
   ellipse is a different shape, not a parameter of this one, and the larger axis
   keeps the collider covering the sprite rather than cutting into it.
+
+### The solver is TGS Soft: sub-step, relax, then restitution
+
+**The contact solver is TGS Soft ("Soft Step"), the algorithm Box2D v3 uses.**
+Erin Catto compared eight solvers in
+[Solver2D](https://box2d.org/posts/2024/02/solver2d/) and took this one; XPBD,
+the obvious alternative, lost on friction and on precision far from the origin.
+It is a velocity solver with sub-stepping, soft constraints and a relaxation
+pass, and every part of `step`'s order is load-bearing:
+
+1. **Collide once**, from the positions the step starts at. The normal is then
+   held constant and each contact's separation is tracked from `delta_position`,
+   so the narrow phase runs once per step rather than once per sub-step.
+2. **Prepare and warm start.** Masses, mixed surface, spring and base separation
+   are computed once; the accumulated impulses are seeded from last step and
+   applied to the velocities before anything else runs.
+3. **Sub-step** four times: integrate velocities, solve the contacts with the
+   soft bias pushing overlap apart, integrate positions. TGS spends its budget
+   on short steps rather than on iterations over one long one — four sub-steps
+   beat four passes, because gravity and position both advance between them.
+4. **Relax**: solve once more with the bias off and positions frozen. The bias
+   is added energy, and this pass is what takes it back out; without it a stack
+   creeps upward. **Friction runs only here**, against a normal impulse that is
+   by then the real one, so Coulomb's `μ·λ_n` limit is not measured against a
+   number the bias inflated.
+5. **Restitution**, from the approach speed captured *before* the solve, then
+   record the impulses for the next step.
+
+The details that are not free to change: the accumulated impulse is clamped, not
+the increment — clamping the increment is a classic jitter source, because a
+later pass can then no longer undo an earlier overshoot. `max_push_speed` caps
+how fast overlap is pushed out, so a body spawned inside a wall walks out instead
+of being launched. Contact frequency is capped at `0.125/h` — a spring faster
+than its sample rate is noise, not stiffness — and a contact against something
+immovable is solved at twice the frequency, since all the correction has to come
+from the one body that can move. A contact that separated *within* the step is
+solved speculatively at `separation/h`: exactly the velocity that closes the gap
+and no more.
+
+The coefficient formulas are `b2MakeSoft` verbatim, in `solver/softness.rs`, and
+the defaults are `b2DefaultWorldDef`'s: 4 sub-steps, 30 Hz, damping ratio 10.
+30 Hz is not arbitrary — four sub-steps of a 60 Hz step is `h = 1/240`, and
+`0.125/h` is 30 exactly, so the default sits on the Nyquist cap.
+
+#### Rejected
+
+- **XPBD.** Loses on friction and on precision away from the origin; Solver2D
+  measured it.
+- **Sequential impulses with Baumgarte.** What 11b-1 would have grown into. The
+  magic bias fraction has no physical meaning, must be retuned per step rate,
+  and pumps energy that nothing removes. Soft constraints are the same code with
+  coefficients a human can reason about.
+- **Position projection (pushing bodies apart after the solve).** Corrects the
+  symptom, does not conserve momentum, and jitters when several contacts fight.
+- **More iterations instead of sub-steps.** Solver2D's point exactly: iterations
+  converge on a stale gravity and a stale position.
+- **Friction in the biased pass.** The limit would be `μ` times an impulse the
+  bias inflated, so a sliding box would grip harder the deeper it overlapped.
+
+### Warm starting, and the pair is what persists
+
+**Contact impulses survive between steps, and `PhysicsWorld` owns them.** Warm
+starting — seeding a contact with the impulse it needed last step — is the
+single largest quality difference in the solver. Without it every step
+rediscovers the force holding a stack up from zero, the lower boxes give way
+before the solve converges, and the stack sinks and jitters. This is pinned by
+`warm_starting_switched_off_settles_worse`, which is also why the switch is a
+parameter rather than an assumption.
+
+That is what forced `PhysicsWorld` into existence: 11b-1 got away with a free
+`step` function because nothing survived a step. Something has to remember, and
+this is the crate's owner for everything of that kind — the fixed clock and its
+debt, the tuning, the impulses, and later sleeping islands, joints and events.
+
+**The persistent unit is the pair, keyed `(a, b)` as the broad phase emits it.**
+Box2D v3 keeps impulses on the manifold points of a persistent contact owned by
+the world, matched across steps by feature ID; Godot keeps a `GodotBodyPair2D`
+and inherits a previous contact's impulses within `contact_recycle_radius`;
+Avian keys by the contact-graph edge's `ContactId`. All three agree on the
+shape — the world owns it, the pair is the unit, an entry dies when the pair
+stops being reported. The per-point matching that separates them exists because
+their manifolds carry several points. Ours carries one, so the pair *is* the
+key. **When 11b-3 gives a manifold its second point, this key gains a point
+identifier**, which is precisely the problem feature IDs and recycle radii
+solve.
+
+Eviction is structural rather than a sweep: `ImpulseCache` holds two maps,
+`current` is read and `next` is written, and `commit` swaps them. A pair that
+separated, a body that was despawned and a scene that was reloaded all disappear
+by the same rule — none of them recorded anything this step — so there is no
+eviction path that can be forgotten. `Entity` carries a generation, so a
+recycled index cannot inherit a dead entity's impulses either.
+
+#### Rejected
+
+- **A pure `step` function with the impulses in the ECS.** A `ContactImpulses`
+  component belongs to no single entity; a pair is an edge, not a node.
+- **One map with a "touched this step" flag.** Same effect, plus a sweep that
+  has to run even on the frame that owed no step, and a bug the first time
+  someone returns early.
+- **Clearing the cache each step.** That is warm starting switched off, and a
+  test shows what it costs.
+- **Keying by entity index.** A recycled index would inherit a dead body's
+  impulses and push the new one out of the scene.
+
+### `PhysicsMaterial` is a component, mixed at the contact
+
+**Friction and restitution live in their own component, not on `Collider` or
+`RigidBody`.** `Collider` is an enum, so two fields there would be repeated in
+every variant and in every shape 11b-3 adds. `RigidBody` would leave static
+geometry — a collider with no body, which the solver already handles — with no
+surface at all, and a floor with no friction is the one surface that matters
+most. Unity's `PhysicsMaterial2D` makes the same separation; ours is a component
+rather than an asset reference, because that is what this ECS composes with and
+an asset indirection buys nothing until materials are shared and edited.
+
+**A contact mixes `sqrt(fa·fb)` and `max(ra, rb)`**, as Box2D does: the
+geometric mean lets one slippery surface make the pair slippery, the maximum
+lets one bouncy surface make the pair bounce. Averaging both would make ice on
+rubber behave like neither. A missing component reads as the default surface —
+friction `0.6`, restitution `0.0` — so an entity nobody has given a material
+still rubs. Both values are clamped where they are mixed, since a scene file is
+external input: a negative friction reverses the friction impulse, and a
+restitution above one adds energy to every bounce until the body leaves the
+world.
+
+Restitution is applied in its own pass, from the approach speed captured before
+the solve, and only above `restitution_threshold` (1 m/s). Below it a resting
+body would bounce forever on its own numerical noise. A contact whose
+`max_normal_impulse` stayed at zero never pushed, so it has nothing to bounce.
+
+#### Rejected
+
+- **Fields on `Collider`.** Duplicated per enum variant, and again per shape.
+- **Fields on `RigidBody`.** Static geometry would have no surface.
+- **A material asset with a handle.** Indirection with no sharing to justify it
+  yet; the component can gain one without moving the fields.
+- **Averaging friction.** Ice on rubber behaves like neither surface.
 
 ### wgpu 30 API notes
 
