@@ -20,13 +20,12 @@
 //!   and stores the warm-start impulses on the manifold point.
 //!
 //! All three agree on the shape: the persistent unit is the *pair*, the world
-//! owns it, and an entry dies when the pair stops being reported. The per-point
-//! matching that separates them exists because their manifolds carry several
-//! points; ours carries one, so the pair itself is the key.
-//!
-//! When 11b-3 gives a manifold its second point, this key gains a point
-//! identifier — which is exactly the problem Box2D's feature IDs and Godot's
-//! recycle radius solve, and the reason both exist.
+//! owns it, and an entry dies when the pair stops being reported. What separates
+//! them is how a *point* is matched across steps, and 11b-3 needed an answer as
+//! soon as a manifold carried two: the key here is the pair plus the point's
+//! feature id, Box2D's approach rather than Godot's recycle radius, because our
+//! narrow phase can name the two corners a point came from exactly and a radius
+//! is a guess at the same question.
 
 use std::collections::HashMap;
 
