@@ -95,6 +95,7 @@ impl App {
             queue: &queue,
             lines: &mut self.lines,
             contacts: self.physics_world.contacts(),
+            simulation: &mut self.simulation,
             viewport,
             viewport_size: (target.width(), target.height()),
             requested_size: &mut self.requested_size,
