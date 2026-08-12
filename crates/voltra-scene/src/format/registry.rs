@@ -28,13 +28,22 @@ type SaveFn = fn(&World, Entity) -> Option<Result<Box<RawValue>, SceneError>>;
 /// with the real name instead of `T`'s Rust path.
 type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::error::SpannedError>;
 
-/// One component type's name and the two conversions that go with it.
+/// A registered type's removal.
 ///
-/// `save`/`load` are read by `save_one`/`load_one` below.
+/// Needed because a record describes an entity *exactly*: putting one back has
+/// to take off the components it does not carry, not only put on the ones it
+/// does. Without this, undoing the addition of a component leaves it behind and
+/// reports success.
+type RemoveFn = fn(&mut World, Entity);
+
+/// One component type's name and the three conversions that go with it.
+///
+/// `save`/`load`/`remove` are read by `save_one`/`load_one`/`remove_one` below.
 struct Entry {
     name: &'static str,
     save: SaveFn,
     load: LoadFn,
+    remove: RemoveFn,
 }
 
 /// The component types a scene file may contain.
@@ -87,6 +96,9 @@ impl ComponentRegistry {
                 world.insert(entity, component);
                 Ok(())
             },
+            remove: |world, entity| {
+                world.remove::<T>(entity);
+            },
         });
     }
 
@@ -124,6 +136,18 @@ impl ComponentRegistry {
                 source: source.into(),
             }),
         )
+    }
+
+    /// Takes `name` off `entity`, returning whether the name was registered.
+    ///
+    /// Removing a component the entity does not have is not an error: the
+    /// postcondition is "the entity does not have one", and it already held.
+    pub(crate) fn remove_one(&self, world: &mut World, entity: Entity, name: &str) -> bool {
+        let Some(entry) = self.entries.iter().find(|e| e.name == name) else {
+            return false;
+        };
+        (entry.remove)(world, entity);
+        true
     }
 }
 
@@ -228,6 +252,38 @@ mod tests {
             matches!(result, Err(SceneError::Component { .. })),
             "expected a Component error, got {result:?}"
         );
+    }
+
+    #[test]
+    fn remove_one_takes_the_component_off() {
+        let (mut world, entity) = world_with_one_sprite();
+        let registry = ComponentRegistry::with_defaults();
+
+        assert!(registry.remove_one(&mut world, entity, "Sprite"));
+
+        assert_eq!(world.get::<Sprite>(entity), None);
+        assert!(
+            world.get::<Transform>(entity).is_some(),
+            "and leaves the others alone"
+        );
+    }
+
+    #[test]
+    fn remove_one_is_false_for_an_unregistered_name() {
+        let (mut world, entity) = world_with_one_sprite();
+        let registry = ComponentRegistry::with_defaults();
+        assert!(!registry.remove_one(&mut world, entity, "Physics"));
+    }
+
+    #[test]
+    fn removing_a_component_the_entity_lacks_is_not_an_error() {
+        // The postcondition is "the entity does not have one", and it already
+        // held. A caller making an entity match a record hits this for every
+        // registered type the entity never had.
+        let mut world = World::new();
+        let bare = world.spawn();
+        let registry = ComponentRegistry::with_defaults();
+        assert!(registry.remove_one(&mut world, bare, "Sprite"));
     }
 
     #[test]

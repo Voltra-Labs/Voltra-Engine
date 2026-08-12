@@ -10,7 +10,7 @@ use voltra_ecs::World;
 use super::atomic;
 use super::error::SceneError;
 use super::registry::ComponentRegistry;
-use crate::scene_id::{SceneId, UnknownComponents};
+use crate::scene_id::SceneId;
 
 /// The only scene format version this build writes or reads.
 ///
@@ -59,29 +59,10 @@ fn pretty() -> ron::ser::PrettyConfig {
 pub fn to_scene_file(world: &World, registry: &ComponentRegistry) -> Result<SceneFile, SceneError> {
     let mut entities: Vec<EntityRecord> = Vec::new();
 
-    for (entity, id) in world.query::<SceneId>() {
-        let mut components = BTreeMap::new();
-
-        for name in registry.names() {
-            if let Some(value) = registry.save_one(world, entity, name) {
-                components.insert(name.to_owned(), value?);
-            }
-        }
-
-        // Merged after the known ones so a component that has since become
-        // registered wins over the stale copy kept from an older load.
-        if let Some(unknown) = world.get::<UnknownComponents>(entity) {
-            for (name, value) in &unknown.0 {
-                components
-                    .entry(name.clone())
-                    .or_insert_with(|| value.clone());
-            }
-        }
-
-        entities.push(EntityRecord {
-            id: *id,
-            components,
-        });
+    for (entity, _) in world.query::<SceneId>() {
+        let record = super::record::record_entity(world, registry, entity)
+            .expect("the query yields only entities that carry a SceneId")?;
+        entities.push(record);
     }
 
     // Ordering by id is ordering by creation, because the ids are UUIDv7. That
@@ -116,6 +97,7 @@ pub fn save(world: &World, registry: &ComponentRegistry, path: &Path) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scene_id::UnknownComponents;
     use crate::{Sprite, Transform};
     use voltra_render::glam::Vec2;
 

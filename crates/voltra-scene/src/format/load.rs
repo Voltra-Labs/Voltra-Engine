@@ -11,7 +11,6 @@ use super::save::EntityRecord;
 use super::save::{SceneFile, VERSION};
 #[cfg(test)]
 use crate::scene_id::SceneId;
-use crate::scene_id::UnknownComponents;
 
 /// Spawns every entity in `file` into `world`.
 ///
@@ -73,25 +72,16 @@ fn spawn_entities(
         spawned.push(entity);
         world.insert(entity, record.id);
 
-        let mut unknown = UnknownComponents::default();
-
-        for (name, value) in &record.components {
-            match registry.load_one(world, entity, name, value) {
-                // Registered: a failure here is ours. The name says this build
-                // understands the component, so data it cannot read is broken
-                // rather than foreign — and it takes the whole load down with
-                // it, rather than leaving this entity half-built.
-                Some(Ok(())) => {}
-                Some(Err(error)) => return (spawned, Err(error)),
-                // Not registered: keep it verbatim so saving writes it back.
-                // Dropping it is how a build silently deletes work done by a
-                // build that knew more.
-                None => {
-                    log::warn!("scene contains unknown component `{name}`; keeping it unread");
-                    unknown.0.insert(name.clone(), value.clone());
-                }
-            }
-        }
+        // Shared with `apply_record`, which reads the same components onto an
+        // entity that may already exist. A load always spawns, so it keeps the
+        // spawn and hands over only the reading.
+        let unknown =
+            match super::record::insert_components(world, registry, entity, &record.components) {
+                Ok(unknown) => unknown,
+                // The whole load goes down rather than leaving this entity
+                // half-built; the caller despawns everything in `spawned`.
+                Err(error) => return (spawned, Err(error)),
+            };
 
         if !unknown.0.is_empty() {
             world.insert(entity, unknown);
