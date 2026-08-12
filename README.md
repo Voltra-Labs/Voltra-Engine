@@ -55,6 +55,20 @@ be selected by clicking it in the viewport; clicking empty space clears the
 selection. `Scene ▸ Save` and `Scene ▸ Open` write and read
 `assets/scenes/scene.ron`.
 
+The toolbar above the viewport is the transport. The editor starts in edit mode
+and simulates nothing until Play is pressed; the viewport is tinted while it is
+not editing, so the mode is never in doubt.
+
+| Button | Action |
+| --- | --- |
+| ▶ / ⏸ | Play, or pause without leaving play |
+| ⏭ | Run exactly one fixed physics step (while paused) |
+| ⏹ | Stop: put the scene back as it was when play began |
+
+Stop discards every change made while playing — it is a restore, not an undo,
+and there is no undo stack. `Scene ▸ Open`, `Scene ▸ Clear` and `Scene ▸ Save`
+stop play first, so none of them acts on a mid-flight scene.
+
 Camera controls. These belong to the editor, not the engine, and a game built
 on `voltra-core` moves its own camera. Scroll, `WASD` and `R` act only while
 the pointer is over the scene; a middle-drag pan, once started, keeps going
@@ -117,6 +131,7 @@ privileged and plain `cargo build` covers everything.
 | 12a | Asset store: handles, paths, cache | done |
 | 12b | Textures per sprite, batched by texture | done |
 | 12c | Hot reload: watch, debounce, swap under a stable handle | done |
+| 13 | Play mode: snapshot on Play, restore on Stop | done |
 
 ## Contributing
 
