@@ -52,7 +52,7 @@ mod tests {
         world.insert(entity, Transform::from_translation(at));
         world.insert(
             entity,
-            Collider::Aabb {
+            Collider::Box {
                 half_extents: Vec2::splat(half),
             },
         );

@@ -112,7 +112,8 @@ privileged and plain `cargo build` covers everything.
 | 10 | Picking: click to select, stable draw order | done |
 | 11a | Translate gizmo, and a line pipeline to draw it | done |
 | 11b-1 | Rigid bodies, fixed-step integration, contact detection | done |
-| 11b-2 | The contact solver: bodies stop overlapping and stack | planned |
+| 11b-2 | The contact solver: bodies stop overlapping and stack | done |
+| 11b-3 | Rotation, oriented boxes, two-point manifolds | done |
 | 12a | Asset store: handles, paths, cache | done |
 | 12b | Textures per sprite, batched by texture | done |
 | 12c | Hot reload: watch, debounce, swap under a stable handle | done |

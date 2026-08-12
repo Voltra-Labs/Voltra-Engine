@@ -960,9 +960,10 @@ and 11b-1's "a body sinks through the floor" no longer holds.
 
 - **A spatial hash or a BVH now.** Bucketing costs more than it saves at tens of
   bodies, and the replacement threshold is written down instead.
-- **Oriented boxes and polygons.** 11b-3. An `Aabb` is axis-aligned in *world*
-  space, so a rotated sprite keeps an upright box — a real limitation, and
-  better stated than half-implemented.
+- **Oriented boxes and polygons.** Deferred to 11b-3, which landed the oriented
+  half: `Collider::Box` turns with its transform and `world_aabb` bounds the
+  rotated shape, so the broad phase still rejects on an axis-aligned box while
+  the narrow phase sees the real one. General convex polygons are still open.
 - **Ellipses.** A circle under a non-uniform scale takes its larger axis. A true
   ellipse is a different shape, not a parameter of this one, and the larger axis
   keeps the collider covering the sprite rather than cutting into it.
@@ -988,9 +989,17 @@ pass, and every part of `step`'s order is load-bearing:
    beat four passes, because gravity and position both advance between them.
 4. **Relax**: solve once more with the bias off and positions frozen. The bias
    is added energy, and this pass is what takes it back out; without it a stack
-   creeps upward. **Friction runs only here**, against a normal impulse that is
-   by then the real one, so Coulomb's `μ·λ_n` limit is not measured against a
-   number the bias inflated.
+   creeps upward.
+
+**Friction runs in every pass**, after the normals and against the impulse they
+have just accumulated, which is what `b2SolveContact` does. 11b-2 confined it to
+the relax pass on the argument that the bias inflates the `μ·λ_n` limit, and
+11b-3's slope tests showed the price: warm starting applies last step's friction
+impulse up the slope at the start of the step, the sub-steps cancel it against
+gravity, and with nothing resisting in between a box on a rough ramp crept
+*uphill* at a steady 2 cm/s. A friction impulse that is a little too large in a
+biased sub-step is corrected by the relax pass that follows; a friction impulse
+that is absent for four sub-steps out of five is not.
 5. **Restitution**, from the approach speed captured *before* the solve, then
    record the impulses for the next step.
 
@@ -1022,8 +1031,9 @@ the defaults are `b2DefaultWorldDef`'s: 4 sub-steps, 30 Hz, damping ratio 10.
   symptom, does not conserve momentum, and jitters when several contacts fight.
 - **More iterations instead of sub-steps.** Solver2D's point exactly: iterations
   converge on a stale gravity and a stale position.
-- **Friction in the biased pass.** The limit would be `μ` times an impulse the
-  bias inflated, so a sliding box would grip harder the deeper it overlapped.
+- **Friction in the relax pass only.** 11b-2's reading of Box2D, and wrong: it
+  leaves the sub-steps with no tangential resistance at all, and a warm-started
+  box walks up a rough slope.
 
 ### Warm starting, and the pair is what persists
 
@@ -1046,11 +1056,12 @@ the world, matched across steps by feature ID; Godot keeps a `GodotBodyPair2D`
 and inherits a previous contact's impulses within `contact_recycle_radius`;
 Avian keys by the contact-graph edge's `ContactId`. All three agree on the
 shape — the world owns it, the pair is the unit, an entry dies when the pair
-stops being reported. The per-point matching that separates them exists because
-their manifolds carry several points. Ours carries one, so the pair *is* the
-key. **When 11b-3 gives a manifold its second point, this key gains a point
-identifier**, which is precisely the problem feature IDs and recycle radii
-solve.
+stops being reported. What separates them is how a *point* is matched across
+steps, and that became a real question the moment 11b-3 gave a manifold two
+points: **the key is `(a, b, id)`, the pair plus the point's feature id.**
+Box2D's answer rather than Godot's recycle radius, because our narrow phase can
+name the two corners a clipped point came from exactly, and a radius is a guess
+at the same question that also mismatches under fast motion.
 
 Eviction is structural rather than a sweep: `ImpulseCache` holds two maps,
 `current` is read and `next` is written, and `commit` swaps them. A pair that
@@ -1070,17 +1081,24 @@ recycled index cannot inherit a dead entity's impulses either.
   test shows what it costs.
 - **Keying by entity index.** A recycled index would inherit a dead body's
   impulses and push the new one out of the scene.
+- **Keying the pair alone, once manifolds carried two points.** The two points
+  would share one entry, so a box resting on a floor would warm-start both
+  corners from whichever was written last.
+- **Godot's recycle radius.** A distance threshold that has to be tuned, and
+  that matches the wrong point when a body moves far in one step. Feature ids
+  are exact and cost a `u16`.
 
 ### `PhysicsMaterial` is a component, mixed at the contact
 
 **Friction and restitution live in their own component, not on `Collider` or
 `RigidBody`.** `Collider` is an enum, so two fields there would be repeated in
-every variant and in every shape 11b-3 adds. `RigidBody` would leave static
-geometry — a collider with no body, which the solver already handles — with no
-surface at all, and a floor with no friction is the one surface that matters
-most. Unity's `PhysicsMaterial2D` makes the same separation; ours is a component
-rather than an asset reference, because that is what this ECS composes with and
-an asset indirection buys nothing until materials are shared and edited.
+every variant and in every shape a later stage adds. `RigidBody` would leave
+static geometry — a collider with no body, which the solver already handles —
+with no surface at all, and a floor with no friction is the one surface that
+matters most. Unity's `PhysicsMaterial2D` makes the same separation; ours is a
+component rather than an asset reference, because that is what this ECS composes
+with and an asset indirection buys nothing until materials are shared and
+edited.
 
 **A contact mixes `sqrt(fa·fb)` and `max(ra, rb)`**, as Box2D does: the
 geometric mean lets one slippery surface make the pair slippery, the maximum
@@ -1104,6 +1122,127 @@ body would bounce forever on its own numerical noise. A contact whose
 - **A material asset with a handle.** Indirection with no sharing to justify it
   yet; the component can gain one without moving the fields.
 - **Averaging friction.** Ice on rubber behaves like neither surface.
+
+### A contact is a manifold, and box–box is SAT with a flip bias
+
+**A `Contact` carries up to two points, and the reason is a box that will not
+stop rocking.** A box resting flat on a floor touches it along a whole face.
+Given the single deepest point, the solver corrects one corner, the box tips,
+the next step reports the other corner, and it oscillates forever without ever
+being wrong at any one step. Two points is the smallest number that lets a
+single contact apply a torque of zero. Box2D, Godot, Unity and Avian all carry a
+manifold for exactly this; none of them stops at one point.
+
+Two is also the maximum in 2D — a convex face pair clips to at most two points —
+so the storage is `[ManifoldPoint; 2]` with a count, not a `Vec`. `Contact::new`
+is the only constructor and truncates, so the count cannot disagree with the
+array. The narrow phase returns an entity-free `Manifold`; `Contact` is that
+plus the pair, which keeps the pair functions testable without a `World`.
+
+**Box–box is Box2D v3's `b2CollidePolygons`**: the separating axis over both
+boxes' face normals, a reference face, then the incident face clipped against
+the reference face's two side planes. It is written against a four-vertex list
+from `Collider::corners` rather than half extents, so the convex polygon of a
+later stage is a different caller and not a different algorithm.
+
+Two details are load-bearing. **The reference face only flips when B's axis beats
+A's by `FLIP_BIAS = 5e-4`** — Box2D's `0.1 · linear_slop`. Two axes that separate
+equally would otherwise swap between steps on a resting box, and since the point
+ids are built from the face indices, every swap discards every accumulated
+impulse. And **`id = (reference_index << 8) | incident_index`, built after the
+flip**, so the same physical pair of corners keeps its id whichever box was
+reference — which is what makes the id usable as the warm-start key above.
+
+Separation replaced penetration at this boundary: the solver wants a signed
+number that is negative while overlapping, and the sign flip now happens once,
+in the narrow phase, rather than at each of the solver's uses.
+
+#### Rejected
+
+- **One point per contact, with the rocking accepted.** It is the visible bug of
+  the whole stage; every engine surveyed carries a manifold.
+- **A `Vec<ManifoldPoint>`.** An allocation per contact per step for a length
+  that is at most two.
+- **GJK/EPA.** The general answer for arbitrary convex shapes, and it returns
+  one point — a manifold still has to be built afterwards. SAT over face normals
+  gives the reference face directly, which is what the clipping needs.
+- **Keeping penetration and negating in the solver.** The same flip written in
+  three places, and one of them will be missed.
+
+### Rotation: inertia is derived at gather, not stored
+
+**`SolverBody::inverse_inertia` is computed in `gather` from the body's mass and
+its collider** — `I = m(hx² + hy²)/3` for a box, `I = m·r²/2` for a disc, both in
+world units so a scaled collider resists exactly as much as it looks like it
+should. It is not a component field. Inertia is a function of two values a user
+edits in the inspector, and a stored copy would need an invalidation this ECS
+has no mechanism for: dragging a collider's size would leave the body spinning
+like the shape it used to be. An engine whose API funnels shape changes through
+a setter can cache it and recompute there; this ECS has no setter to hook, so
+the derived value is computed where it is used. It costs four multiplies per
+body per step and cannot go stale.
+
+`lock_rotation` is how a body opts out, named after the same switch in every
+engine that has one — Unity's `freezeRotation`, Godot's `lock_rotation`, Box2D's
+`fixedRotation`. A platformer character must not topple, and its shape says
+nothing about that, so it cannot be inferred.
+
+Zero means infinitely resistant to torque, matching what zero `inverse_mass`
+already meant: static, kinematic, `lock_rotation`, mass zero, no collider, and a
+degenerate zero-extent collider all land there. That last one is a guard, not a
+formality — `3·inv_mass/0` is infinity, and an infinite inverse inertia spins a
+body out of the world on its first contact.
+
+Angular velocity is capped per sub-step at `max_rotation = 0.25·π`. The step
+collides once and holds the normal for the whole step, so a body that turns more
+than a quarter turn inside one sub-step is being solved against a normal that no
+longer describes its surface. Angular damping is applied as Box2D applies linear
+damping, `1/(1 + h·damping)`, which cannot go negative however large the damping
+is; the naive `(1 − h·damping)` reverses the spin past `1/h` and is a catapult.
+
+#### Rejected
+
+- **`RigidBody::inertia` as a serialised field.** Stale the moment the collider
+  is resized, and a scene file could contradict its own shape.
+- **A separate `MassProperties` component kept up to date by a system.** It
+  needs change detection this ECS does not have.
+- **Per-shape inertia on `Collider`.** Inertia depends on mass, which lives on
+  the body; the collider would have to reach across.
+- **`(1 − h·damping)`.** Negative past `1/h`, and it launches the body.
+
+### Anchors, split masses, and friction on anchors that do not move
+
+**Every contact point holds two anchors** — the point relative to each body's
+centre — and they do three jobs: the torque arm, the point velocity, and the
+separation tracking. The effective mass gains the rotational terms,
+`k = mA + mB + iA·rnA² + iB·rnB²` with `rn = cross(r, n)`, and the normal and the
+tangent now differ because the arms differ, so 11b-2's single `effective_mass`
+became `normal_mass` and `tangent_mass`. A contact straight through both centres
+has `rn = 0` and reduces to `1/(mA + mB)` exactly, which is pinned by a test:
+rotation must not change the head-on case. A zero `k` yields a mass of zero
+rather than an infinity, as Box2D does.
+
+**The sub-steps rotate the anchors, but friction does not.** Tracking separation
+through a sub-step means asking where the anchor is *now*, so the solve rotates
+it by the body's accumulated `delta_rotation`. The friction Jacobian instead uses
+the anchors as they were when the step began. This is Box2D's split and the
+reason is drift: a friction anchor that moves with the body measures a tangential
+velocity that includes its own rotation, and static friction turns into a slow
+creep. Friction is clamped per point against that point's own normal impulse —
+sharing one clamp across the manifold would let a lightly loaded corner borrow
+grip from a heavily loaded one.
+
+#### Rejected
+
+- **A single anchor at the contact centroid.** That is one point again, with the
+  rocking back.
+- **Rotating the friction anchors too.** Symmetric and wrong: it is the drift
+  above, and it shows up as a resting box sliding without a force on it.
+- **One friction clamp for the whole manifold.** Coulomb's limit is per contact
+  point; sharing it lets an unloaded corner grip.
+- **Recomputing the anchors from the transform each sub-step.** The ECS is not
+  written until scatter, so there is nothing newer to read — `delta_rotation` is
+  the newer value.
 
 ### wgpu 30 API notes
 

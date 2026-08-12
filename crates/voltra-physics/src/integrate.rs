@@ -17,7 +17,7 @@ use crate::solver::SolverBodies;
 /// *first*, then [`integrate_positions`] moves from the new velocity. Explicit
 /// Euler — position from the old velocity — injects energy, and a stack of
 /// boxes slowly climbs. The correct order costs nothing but being written down.
-pub fn integrate_velocities(bodies: &mut SolverBodies, gravity: Vec2, h: f32) {
+pub fn integrate_velocities(bodies: &mut SolverBodies, gravity: Vec2, h: f32, max_rotation: f32) {
     for body in bodies.iter_mut() {
         // No gravity, no damping for a kinematic body: it moves exactly as it
         // was told to, which is what makes it usable as a platform. A static
@@ -32,7 +32,28 @@ pub fn integrate_velocities(bodies: &mut SolverBodies, gravity: Vec2, h: f32) {
         // contain any number.
         let retained = (1.0 - body.linear_damping * h).max(0.0);
         body.velocity = accelerated * retained;
+
+        // Gravity is a force through the centre of mass, so it applies no
+        // torque: spin only changes by damping and by what the solver does.
+        let retained = (1.0 - body.angular_damping * h).max(0.0);
+        body.angular_velocity = clamp_spin(body.angular_velocity * retained, h, max_rotation);
     }
+}
+
+/// Caps a spin at `max_rotation` radians per sub-step.
+///
+/// The whole step is solved against a normal measured once, at the start. A
+/// body that turns further than this within one sub-step has taken its contact
+/// face away from under that normal, and the solver would be resolving a
+/// collision with a surface that is no longer there. Box2D caps it for the same
+/// reason, at the same quarter turn.
+fn clamp_spin(angular_velocity: f32, h: f32, max_rotation: f32) -> f32 {
+    if h <= 0.0 || max_rotation <= 0.0 {
+        return angular_velocity;
+    }
+
+    let limit = max_rotation / h;
+    angular_velocity.clamp(-limit, limit)
 }
 
 /// Accumulates each body's move for this sub-step.
@@ -46,5 +67,6 @@ pub fn integrate_positions(bodies: &mut SolverBodies, h: f32) {
             continue;
         }
         body.delta_position += body.velocity * h;
+        body.delta_rotation += body.angular_velocity * h;
     }
 }

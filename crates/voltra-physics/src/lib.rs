@@ -10,12 +10,15 @@
 //! [`PhysicsWorld`] is the entry point: it owns the fixed clock, the solver's
 //! tuning and the contact impulses that have to survive from one step to the
 //! next. The solver is TGS Soft — sub-stepping, warm starting, soft constraints
-//! and relaxation — and [`solver`] documents each piece where it lives.
+//! and relaxation — and [`solver`] documents each piece where it lives. Bodies
+//! rotate, boxes are oriented, and a contact carries up to two points.
 //!
 //! What is not simulated yet, so that its absence is not mistaken for a bug:
-//! **rotation** (no angular velocity, and an `Aabb` stays upright in world
-//! space), **sleeping** (a settled body is still solved every step) and
-//! **continuous collision** (a fast enough body tunnels).
+//! **sleeping** (a settled body is still solved every step, and keeps a
+//! millimetre of jitter), **continuous collision** (a fast enough body tunnels)
+//! and **rolling resistance** (a circle on a floor rolls forever). Mass ratios
+//! past roughly a hundred to one squeeze the lighter body out sideways rather
+//! than holding it, which is the ordinary limit of an impulse solver.
 
 pub mod broad;
 pub mod clock;
@@ -29,7 +32,7 @@ pub mod world;
 pub use broad::candidate_pairs;
 pub use clock::PhysicsClock;
 pub use integrate::{integrate_positions, integrate_velocities};
-pub use narrow::Contact;
+pub use narrow::{Contact, Manifold, ManifoldPoint};
 pub use solver::{ImpulseCache, Softness, SolverBodies, SolverParams};
 pub use step::step;
 pub use world::PhysicsWorld;
