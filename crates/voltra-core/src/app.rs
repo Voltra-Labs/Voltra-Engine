@@ -1,6 +1,7 @@
 //! Event loop driver.
 
 mod draw;
+mod simulation;
 mod ui_frame;
 
 use std::path::PathBuf;
@@ -16,6 +17,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+use crate::app::simulation::Simulation;
 use crate::input::Input;
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
@@ -54,8 +56,8 @@ pub struct App {
     ui: Option<UiFn>,
     clock: Clock,
     input: Input,
-    /// Whether to simulate physics. Off by default, like every other opt-in.
-    physics: bool,
+    /// Whether frames simulate, and the one-off steps and resets a UI asks for.
+    simulation: Simulation,
     /// The simulation: its fixed clock, its tuning, and the contact impulses
     /// that have to survive from one step to the next.
     physics_world: PhysicsWorld,
@@ -122,12 +124,33 @@ impl App {
     /// an editor that starts simulating the moment a body is added would move
     /// the thing being placed out from under the cursor.
     ///
+    /// This is the *initial* value of a runtime switch, not a build-time
+    /// choice. A game says it once and never thinks about it again; the editor
+    /// says nothing and drives [`App::set_simulating`] from its play mode.
+    ///
     /// Contacts are resolved: bodies rest on each other and stacks settle. Set
     /// [`App::gravity`] to change or disable the acceleration, and reach the
     /// solver's tuning through [`App::physics_mut`].
     pub fn with_physics(mut self) -> Self {
-        self.physics = true;
+        self.simulation.set_running(true);
         self
+    }
+
+    /// Whether each frame runs the physics steps it owes.
+    pub fn set_simulating(&mut self, simulating: bool) {
+        self.simulation.set_running(simulating);
+    }
+
+    pub fn is_simulating(&self) -> bool {
+        self.simulation.is_running()
+    }
+
+    /// Runs `count` fixed steps on the next frame regardless of the switch.
+    ///
+    /// What a paused editor's Step button asks for. Additive, so two presses in
+    /// one frame run two steps rather than one.
+    pub fn request_steps(&mut self, count: u32) {
+        self.simulation.request_steps(count);
     }
 
     /// The last physics step's contacts.
@@ -157,20 +180,6 @@ impl App {
         let delta = self.clock.tick();
         self.step_physics(delta.as_secs_f32());
         self.reload_changed_assets();
-    }
-
-    /// Runs however many fixed physics steps this frame owes.
-    ///
-    /// The contacts kept are the last step's — the state the frame ends in,
-    /// which is what the debug overlay should show. Earlier steps' contacts
-    /// describe positions nothing was ever drawn at.
-    fn step_physics(&mut self, delta: f32) {
-        if !self.physics {
-            return;
-        }
-
-        self.physics_world
-            .advance(&mut self.world, self.gravity, delta);
     }
 
     /// Applies whatever the watcher saw since the last frame.

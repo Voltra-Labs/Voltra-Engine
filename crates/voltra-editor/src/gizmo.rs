@@ -32,6 +32,15 @@ pub struct Gizmo {
 }
 
 impl Gizmo {
+    /// Abandons any grab in progress, leaving the entity where it is.
+    ///
+    /// For when the world changes under the drag rather than the pointer
+    /// ending it: a play-mode Stop despawns and respawns every entity, so the
+    /// `Entity` and the grab offset a [`Drag`] holds are both stale.
+    pub fn cancel_drag(&mut self) {
+        self.drag = None;
+    }
+
     /// Applies one frame of interaction, returning whether it consumed the
     /// pointer.
     ///
@@ -184,6 +193,26 @@ mod tests {
         let sa = camera.world_to_viewport(a, VIEWPORT);
         let sb = camera.world_to_viewport(b, VIEWPORT);
         sa.distance(sb)
+    }
+
+    #[test]
+    fn cancelling_ends_the_drag() {
+        // What Stop needs: `Drag` holds an `Entity` and a grab offset, and both
+        // address a world that a restore is about to despawn and respawn.
+        let mut world = voltra_ecs::World::new();
+        let entity = world.spawn();
+        let mut gizmo = Gizmo {
+            drag: Some(Drag {
+                entity,
+                handle: Handle::Both,
+                grab: Vec2::ZERO,
+                start: Vec2::ZERO,
+            }),
+        };
+
+        gizmo.cancel_drag();
+
+        assert!(gizmo.drag.is_none());
     }
 
     #[test]

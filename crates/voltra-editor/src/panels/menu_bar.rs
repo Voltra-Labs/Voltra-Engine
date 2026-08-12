@@ -6,7 +6,7 @@ use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, ComponentRegistry, RigidBody, SceneId, Sprite, Transform};
+use voltra_scene::{Collider, RigidBody, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 
@@ -27,6 +27,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.close();
                 }
                 if ui.button("Clear").clicked() {
+                    // Silently, because Clear is destructive anyway: a scene
+                    // being emptied has no mid-flight state worth protecting.
+                    editor.stop_play(frame);
                     // Predicate is identity, not appearance: `SceneId` is what
                     // makes an entity part of the scene — the same rule `save`
                     // uses to decide what gets written. Querying `Sprite`
@@ -48,13 +51,20 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 ui.separator();
 
                 if ui.button("Save").clicked() {
-                    let registry = ComponentRegistry::with_defaults();
+                    // Stops first so what lands on disk is the authored scene
+                    // rather than a mid-flight one, and says so — unlike Clear
+                    // and Open, saving is not itself destructive, so a silent
+                    // mode change would be a surprise.
+                    if editor.stop_play(frame) {
+                        log::info!("stopped play so the saved scene is the authored one");
+                    }
                     if let Some(parent) = default_path().parent() {
                         if let Err(e) = std::fs::create_dir_all(parent) {
                             log::error!("could not create {}: {e}", parent.display());
                         }
                     }
-                    match voltra_scene::format::save(frame.world, &registry, default_path()) {
+                    match voltra_scene::format::save(frame.world, &editor.registry, default_path())
+                    {
                         Ok(()) => log::info!("scene saved"),
                         Err(e) => log::error!("could not save the scene: {e}"),
                     }
@@ -62,7 +72,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
 
                 if ui.button("Open").clicked() {
-                    let registry = ComponentRegistry::with_defaults();
+                    // Silently: Open replaces the world the snapshot belongs
+                    // to, so keeping play alive across it is meaningless. This
+                    // is Unity's answer — opening a scene exits play mode.
+                    editor.stop_play(frame);
                     // Replaces rather than merges: "Open" meaning "add another
                     // copy of everything" would surprise anyone. But the world
                     // is not cleared up front — `load` can fail (missing file,
@@ -87,7 +100,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     // file's copy wins.
                     let previous: Vec<Entity> =
                         frame.world.query::<SceneId>().map(|(e, _)| e).collect();
-                    match voltra_scene::format::load(default_path(), &registry, frame.world) {
+                    match voltra_scene::format::load(default_path(), &editor.registry, frame.world)
+                    {
                         Ok(()) => {
                             for entity in previous {
                                 frame.world.despawn(entity);

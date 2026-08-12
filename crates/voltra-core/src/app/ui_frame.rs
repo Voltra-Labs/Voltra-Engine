@@ -11,6 +11,7 @@ use voltra_physics::Contact;
 use voltra_render::{wgpu, Camera2D, LineBatch};
 use voltra_scene::Sprite;
 
+use super::simulation::Simulation;
 use crate::ui::TextureId;
 
 /// What the UI may reach while it is being laid out.
@@ -47,6 +48,12 @@ pub struct UiFrame<'a> {
     ///
     /// [`App::with_physics`]: crate::app::App::with_physics
     pub(super) contacts: &'a [Contact],
+    /// The simulation switch, so a play-mode panel can turn stepping on and
+    /// off, ask for a single step, or clear the solver after a restore.
+    ///
+    /// Reached through the four methods below rather than exposed, so a panel
+    /// cannot consume a pending step itself and leave `App` nothing to run.
+    pub(super) simulation: &'a mut Simulation,
     /// The rendered scene, ready for `egui::Image::new`.
     pub(super) viewport: TextureId,
     pub(super) viewport_size: (u32, u32),
@@ -91,6 +98,37 @@ impl<'a> UiFrame<'a> {
     /// outlines, and later any other debug draw — expressible at all.
     pub fn world_and_lines(&mut self) -> (&World, &mut LineBatch) {
         (self.world, self.lines)
+    }
+
+    /// Whether each frame runs the physics steps it owes.
+    pub fn simulating(&self) -> bool {
+        self.simulation.is_running()
+    }
+
+    /// Turns per-frame stepping on or off, from the next frame onwards.
+    ///
+    /// One frame of latency by construction: `App::update` runs before this
+    /// callback, so a switch thrown here first applies on the next frame. At
+    /// 60 Hz nobody can see it, and the alternative — the UI reaching back into
+    /// the frame that already ran — is worse.
+    pub fn set_simulating(&mut self, simulating: bool) {
+        self.simulation.set_running(simulating);
+    }
+
+    /// Runs `count` fixed steps on the next frame regardless of the switch.
+    ///
+    /// Additive, so two requests in one frame run two steps.
+    pub fn request_steps(&mut self, count: u32) {
+        self.simulation.request_steps(count);
+    }
+
+    /// Forgets the accumulated impulses and the clock's banked time, before
+    /// the next frame steps anything.
+    ///
+    /// For a world that is no longer the same world: an editor's Stop, which
+    /// despawns and respawns every entity the scene holds.
+    pub fn reset_physics(&mut self) {
+        self.simulation.request_reset();
     }
 
     /// Asks for a different scene resolution, honoured on the *next* frame.

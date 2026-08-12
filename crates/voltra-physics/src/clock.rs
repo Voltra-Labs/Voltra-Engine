@@ -70,6 +70,17 @@ impl PhysicsClock {
     pub fn step(&self) -> f32 {
         self.step
     }
+
+    /// Forgets the time banked so far.
+    ///
+    /// For a world that is no longer the same world — a scene load, or an
+    /// editor's Stop. The accumulator can hold up to one step of owed time, and
+    /// leaving it behind means the next frame opens by running the *previous*
+    /// scene's debt against the restored one. The step length and the cap are
+    /// configuration, not state, and stay.
+    pub fn reset(&mut self) {
+        self.accumulator = 0.0;
+    }
 }
 
 #[cfg(test)]
@@ -131,6 +142,22 @@ mod tests {
 
         assert_eq!(clock.steps(-1.0), 0);
         assert_eq!(clock.steps(STEP), 1);
+    }
+
+    #[test]
+    fn a_reset_clock_owes_nothing() {
+        // Stop would otherwise open the next play by running a step of the
+        // previous session's owed time against the restored scene.
+        let mut clock = PhysicsClock::default();
+        assert_eq!(clock.steps(STEP * 0.9), 0, "0.9 of a step owes nothing yet");
+
+        clock.reset();
+
+        assert_eq!(
+            clock.steps(STEP * 0.2),
+            0,
+            "the banked 0.9 must be gone, or this owes a whole step"
+        );
     }
 
     #[test]

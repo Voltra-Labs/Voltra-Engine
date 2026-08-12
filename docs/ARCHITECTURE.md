@@ -1244,6 +1244,94 @@ grip from a heavily loaded one.
   written until scatter, so there is nothing newer to read — `delta_rotation` is
   the newer value.
 
+### Play mode restores a snapshot, and core gets a switch rather than a mode
+
+The editor has an edit state and a play state. Play snapshots the scene, Stop
+puts the snapshot back, and everything done in between is discarded. Before it,
+`voltra-editor` called `App::with_physics()` unconditionally and a box placed
+with the gizmo started falling while it was being placed.
+
+**The snapshot is a `SceneFile`**, taken with `to_scene_file` when Play is
+pressed and restored with `from_scene_file` by Stop. That reuses a format which
+is already the definition of what a scene is, is already tested both ways, and
+already preserves components this build does not know. The captured set is
+exactly the entities carrying a `SceneId`, which is the same rule `save` and
+`Scene ▸ Clear` use, so an entity with no identity is transient in both
+directions: never captured, never despawned.
+
+A snapshot that cannot be taken refuses the transition. `to_scene_file` returns
+a `Result`, and the failure is real — a component whose `Serialize` fails.
+Entering play with no way back is the one outcome the mode exists to prevent.
+
+Stop's order is load-bearing: simulation off, cancel the gizmo drag, despawn,
+restore, reset physics, re-resolve textures, re-resolve the selection. The
+selection is matched by `SceneId` and never by `Entity`, because every handle is
+stale after a despawn-and-respawn. Textures are re-resolved because
+`Sprite::texture_handle` is `#[serde(skip)]` — a handle addresses a slot in this
+session's `Textures` and does not survive a round trip.
+
+The transitions reach the running app through a `PlayHost` trait rather than
+through `UiFrame` directly. It keeps the state machine testable — a `UiFrame`
+cannot exist without a `wgpu::Device` — and it names exactly what play may
+touch, which is narrower than what a panel can reach.
+
+**Core gets a boolean, not a mode.** `App` grew `set_simulating`,
+`is_simulating` and `request_steps`, and `with_physics()` became the initial
+value of that switch rather than a build-time choice. `PlayState` stays in the
+editor: play, pause and stop are an editor's vocabulary and a shipped game has
+one mode, so putting the enum in the platform layer would make every game binary
+carry it forever. What core needs to know is whether this frame steps.
+
+One frame of latency is structural: a UI callback runs after `App::update`, so a
+Play pressed this frame first steps on the next. At 60 Hz it is invisible, and
+the alternative — the UI reaching back into the frame that already ran — is
+worse.
+
+Rejected:
+
+- **Duplicating the `World` (Unreal's PIE).** The most faithful answer: play
+  simulates a copy and the editor's world cannot be lost at all. It needs a
+  type-erased clone in `voltra-ecs` — every component type registering a clone
+  fn — and a second world for the renderer and every panel to be told about.
+  Revisit if snapshot cost ever shows up in a frame; the scenes here are tens of
+  entities.
+- **Snapshotting to a temporary file.** Puts disk errors and a temp path into
+  the one button that must not fail, to save an in-memory `SceneFile` that
+  already exists.
+- **A read-only inspector during play.** Less code, and it removes the reason to
+  have play mode in an editor rather than in a separate binary. Unity and Unreal
+  PIE both allow the edits and discard them; dragging a body while gravity acts
+  on it is how a scene gets tuned.
+- **Godot's separate game process.** The right answer once a runtime binary
+  exists to launch, and it survives a crash in game code. There is no runtime
+  binary, and a crash here is a crash of one process either way.
+- **Unreal's "keep simulation changes".** Needs a per-entity diff and a UI to
+  resolve it. A stage of its own; `play.rs` splits into `play.rs` + `play/` when
+  it arrives.
+- **Stop as an undo entry.** There is no undo stack, and pretending Stop is one
+  sets an expectation the next stage would have to break.
+- **Re-snapshotting on Pause.** Makes Pause destructive and Stop unpredictable:
+  the paused mid-air scene would silently become the thing Stop restores.
+
+### A fixed step is expressible on its own, and a reset clears the debt
+
+`PhysicsWorld::step_once` runs exactly one fixed step with no accumulator and no
+cap, and `advance` is written in terms of it, so there is one place in the crate
+where a step happens. The editor's Step button needs the single step; `advance`
+would run zero, because a paused frame owes nothing.
+
+`PhysicsWorld::reset` also calls `PhysicsClock::reset`. The clock's accumulator
+can hold up to one step of banked time, and leaving it behind meant the next
+Play would open by running a step of the *previous* session's owed time against
+the restored scene. The step length and the cap are configuration, not state,
+and stay.
+
+Requests reach the simulation through `App`'s switch rather than by the editor
+calling `PhysicsWorld` itself: `App::update` runs before the UI callback and
+`PhysicsWorld` is `App`'s, so a panel can only ask. Steps are additive and
+consumed exactly once; the reset is a flag consumed at the top of the next
+`step_physics`, before any step, which is the ordering Stop requires.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
