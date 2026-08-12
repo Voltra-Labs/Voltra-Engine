@@ -7,7 +7,16 @@ use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 
 use crate::editor::Editor;
+use crate::play::PlayState;
 use crate::tool::Tool;
+
+/// What the viewport image is multiplied by while the editor is not editing.
+///
+/// Unity's play-mode tint, and for Unity's reason: the oldest complaint about
+/// that editor is work lost because play mode was not obvious. Applied through
+/// egui's image tint, so it is a UI-level effect — nothing in the render path
+/// or in the scene knows that play mode exists.
+const PLAY_TINT: egui::Color32 = egui::Color32::from_rgb(150, 175, 225);
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::CentralPanel::default()
@@ -22,12 +31,15 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             let scale = ui.ctx().pixels_per_point();
             frame.request_viewport_size((available.x * scale) as u32, (available.y * scale) as u32);
 
-            let scene = ui.add(
+            let mut image =
                 egui::Image::new(egui::load::SizedTexture::new(frame.viewport(), available))
                     // Without this the image is inert decoration and the
                     // pointer never reaches the camera or the selection.
-                    .sense(egui::Sense::click_and_drag()),
-            );
+                    .sense(egui::Sense::click_and_drag());
+            if editor.play.state() != PlayState::Editing {
+                image = image.tint(PLAY_TINT);
+            }
+            let scene = ui.add(image);
 
             // `W` picks the translate tool. Scoped the same way the camera
             // scopes its own keys — hovered, and egui not wanting the keyboard

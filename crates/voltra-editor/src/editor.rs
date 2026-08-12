@@ -3,10 +3,12 @@
 use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
+use voltra_scene::ComponentRegistry;
 
 use crate::camera::ViewportCamera;
 use crate::gizmo::Gizmo;
 use crate::panels;
+use crate::play::{Play, PlayContext, PlayState};
 use crate::tool::Tool;
 
 /// Editor state that outlives a frame.
@@ -27,16 +29,77 @@ pub struct Editor {
     /// of the picture being authored. Unity, Unreal and Godot all hide their
     /// collision shapes behind a toggle for the same reason.
     pub(crate) show_colliders: bool,
+    /// Whether the editor is authoring the scene or simulating it, and the
+    /// snapshot Stop will put back.
+    pub(crate) play: Play,
+    /// The one registry every save, load, snapshot and restore in this editor
+    /// goes through.
+    ///
+    /// Owned rather than built per call: a snapshot and the restore that undoes
+    /// it must agree on which component types exist, and sharing the field is
+    /// how that is guaranteed rather than remembered. `ComponentRegistry`'s own
+    /// `Default` is `with_defaults`, not an empty registry, so the derive on
+    /// `Editor` cannot quietly produce one that persists nothing.
+    pub(crate) registry: ComponentRegistry,
 }
 
 impl Editor {
     /// Lays out the whole editor. Called once per frame with the root `Ui`.
     pub fn ui(&mut self, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         panels::menu_bar::show(self, ui, frame);
+        // Between the menu bar and everything else, which is where Unity and
+        // Unreal both put the transport. The state of the window is the most
+        // important thing on screen while it is not `Editing`, and a menu that
+        // has to be opened to see it is not a state indicator.
+        panels::toolbar::show(self, ui, frame);
         panels::hierarchy::show(self, ui, frame);
         panels::inspector::show(self, ui, frame);
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);
+    }
+
+    /// Enters play, snapshotting the scene the first time.
+    pub(crate) fn start_play(&mut self, frame: &mut UiFrame<'_>) {
+        self.play.play(
+            PlayContext {
+                registry: &self.registry,
+                selected: &mut self.selected,
+                gizmo: &mut self.gizmo,
+            },
+            frame,
+        );
+    }
+
+    /// Stops stepping and leaves the scene where it is.
+    pub(crate) fn pause_play(&mut self, frame: &mut UiFrame<'_>) {
+        self.play.pause(frame);
+    }
+
+    /// Runs exactly one fixed step, while paused.
+    pub(crate) fn step_play(&mut self, frame: &mut UiFrame<'_>) {
+        self.play.step(frame);
+    }
+
+    /// Leaves play and puts the snapshot back. Returns whether it had to.
+    ///
+    /// `Scene ▸ Open`, `Scene ▸ Clear` and `Scene ▸ Save` all call this first.
+    /// Each of them means something incoherent mid-play — Open discards the
+    /// world the snapshot belongs to, Save writes a mid-flight scene as if it
+    /// were the authored one — and stopping first is both Unity's answer and
+    /// cheaper than three special cases.
+    pub(crate) fn stop_play(&mut self, frame: &mut UiFrame<'_>) -> bool {
+        if self.play.state() == PlayState::Editing {
+            return false;
+        }
+        self.play.stop(
+            PlayContext {
+                registry: &self.registry,
+                selected: &mut self.selected,
+                gizmo: &mut self.gizmo,
+            },
+            frame,
+        );
+        true
     }
 }
