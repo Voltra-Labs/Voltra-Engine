@@ -15,3 +15,9 @@ voltra-render.workspace = true
 voltra-scene.workspace = true
 env_logger.workspace = true
 log.workspace = true
+
+# Only the tests need these: a component whose `Serialize` fails is the one real
+# way to make a snapshot refuse, and `UnknownComponents` holds RON values.
+[dev-dependencies]
+ron.workspace = true
+serde.workspace = true
