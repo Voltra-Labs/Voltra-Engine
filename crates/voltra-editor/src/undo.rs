@@ -2,6 +2,7 @@
 
 pub mod edit;
 pub mod history;
+pub mod shortcut;
 
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
@@ -9,7 +10,7 @@ use voltra_scene::{ComponentRegistry, SceneId};
 
 use crate::gizmo::Gizmo;
 
-pub use history::{History, MAX_EDITS};
+pub use history::History;
 
 /// What the history needs from the running application to put a scene back.
 ///

@@ -227,6 +227,12 @@ impl History {
     }
 
     /// How many entries can be undone.
+    ///
+    /// The UI asks [`History::is_empty`] and [`History::undo_label`]; the count
+    /// itself is only ever a test's question — "one entry for the whole drag,
+    /// not one per frame" is the property this whole design exists for, and it
+    /// cannot be stated without it.
+    #[cfg(test)]
     pub fn len(&self) -> usize {
         self.done.len()
     }

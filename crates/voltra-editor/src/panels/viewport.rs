@@ -55,13 +55,21 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // The gizmo gets first refusal, for the same reason egui gets it
             // before the scene does: a handle drawn over a sprite has to be
             // grabbable, and a drag on one must not also re-select.
-            let consumed = match editor.tool {
+            let outcome = match editor.tool {
                 Tool::Translate => editor.gizmo.update(&scene, frame, editor.selected),
             };
 
+            // Every frame the drag holds an entity, so the history keeps one
+            // entry open for the whole drag instead of one per frame. The entry
+            // closes on the release frame, which is the first frame no claim
+            // arrives.
+            if outcome.dragging.is_some() {
+                editor.history.claim("Move");
+            }
+
             // Before navigation: a click and a drag are mutually exclusive in
             // egui, so this cannot swallow a pan.
-            if !consumed && scene.clicked() {
+            if !outcome.consumed && scene.clicked() {
                 editor.selected = crate::picking::clicked_entity(&scene, frame);
             }
 

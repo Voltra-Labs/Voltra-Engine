@@ -31,6 +31,20 @@ pub struct Gizmo {
     drag: Option<Drag>,
 }
 
+/// What one frame of gizmo interaction did.
+///
+/// A struct rather than the bare `bool` this used to return: the caller needs
+/// both whether the pointer was taken *and* which entity a drag is holding, and
+/// the second is what tells the history the interaction is still live. The gizmo
+/// itself stays free of undo — it reports, the panel records.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GizmoOutcome {
+    /// Whether the pointer was consumed; the caller must not also select.
+    pub consumed: bool,
+    /// The entity a drag is holding, on every frame it holds one.
+    pub dragging: Option<Entity>,
+}
+
 impl Gizmo {
     /// Abandons any grab in progress, leaving the entity where it is.
     ///
@@ -41,23 +55,22 @@ impl Gizmo {
         self.drag = None;
     }
 
-    /// Applies one frame of interaction, returning whether it consumed the
-    /// pointer.
+    /// Applies one frame of interaction, reporting what it did.
     ///
-    /// The caller uses that to decide whether the click was also a selection. A
-    /// handle drawn on top of a sprite has to win, or the gizmo becomes
-    /// unusable exactly when the sprite fills the viewport.
+    /// The caller uses [`GizmoOutcome::consumed`] to decide whether the click
+    /// was also a selection. A handle drawn on top of a sprite has to win, or
+    /// the gizmo becomes unusable exactly when the sprite fills the viewport.
     pub fn update(
         &mut self,
         response: &Response,
         frame: &mut UiFrame<'_>,
         selected: Option<Entity>,
-    ) -> bool {
+    ) -> GizmoOutcome {
         let viewport = viewport_size(response);
         if viewport.x <= 0.0 || viewport.y <= 0.0 {
             // A minimised window. Every conversion below divides by this.
             self.drag = None;
-            return false;
+            return GizmoOutcome::default();
         }
 
         // A release ends the drag wherever it happens, including outside the
@@ -65,11 +78,17 @@ impl Gizmo {
         // being over a handle.
         if self.drag.is_some() && !response.is_pointer_button_down_on() {
             self.drag = None;
-            return true;
+            return GizmoOutcome {
+                consumed: true,
+                dragging: None,
+            };
         }
 
         let Some(pointer) = response.interact_pointer_pos().or(response.hover_pos()) else {
-            return self.drag.is_some();
+            return GizmoOutcome {
+                consumed: self.drag.is_some(),
+                dragging: self.drag.map(|drag| drag.entity),
+            };
         };
         // Global screen points; the camera works in viewport-local ones, so the
         // panel's own corner comes off first.
@@ -85,26 +104,32 @@ impl Gizmo {
                 // Despawned mid-drag, or its Transform removed. Ending the drag
                 // is the whole response: there is nothing left to move.
                 self.drag = None;
-                return true;
+                return GizmoOutcome {
+                    consumed: true,
+                    dragging: None,
+                };
             };
             transform.translation = translation;
-            return true;
+            return GizmoOutcome {
+                consumed: true,
+                dragging: Some(active.entity),
+            };
         }
 
         if !response.drag_started_by(PointerButton::Primary) {
-            return false;
+            return GizmoOutcome::default();
         }
 
         let Some(entity) = selected else {
-            return false;
+            return GizmoOutcome::default();
         };
         let Some(transform) = frame.world.get::<Transform>(entity) else {
-            return false;
+            return GizmoOutcome::default();
         };
         let start = transform.translation;
         let origin = frame.camera.world_to_viewport(start, viewport);
         let Some(handle) = Handle::at(local, origin) else {
-            return false;
+            return GizmoOutcome::default();
         };
 
         self.drag = Some(Drag {
@@ -113,7 +138,10 @@ impl Gizmo {
             grab: cursor_world,
             start,
         });
-        true
+        GizmoOutcome {
+            consumed: true,
+            dragging: Some(entity),
+        }
     }
 
     /// Pushes this frame's segments for the selection, if there is one.

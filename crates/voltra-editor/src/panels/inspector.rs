@@ -4,9 +4,10 @@ use voltra_assets::{AssetPath, Textures};
 use voltra_core::egui::{self, Color32, DragValue, RichText, TextEdit, Ui};
 use voltra_core::UiFrame;
 use voltra_render::wgpu;
-use voltra_scene::{Sprite, Transform};
+use voltra_scene::{SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
+use crate::undo::SceneView;
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::right("inspector")
@@ -37,12 +38,27 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 ));
                 ui.separator();
 
+                let mut claim = None;
                 if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
-                    transform_ui(ui, transform);
+                    claim = transform_ui(ui, transform);
                 }
                 if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
                     ui.separator();
-                    sprite_ui(ui, sprite, frame.textures, frame.device, frame.queue);
+                    claim = claim.or(sprite_ui(
+                        ui,
+                        sprite,
+                        frame.textures,
+                        frame.device,
+                        frame.queue,
+                    ));
+                }
+                // A field held down or focused keeps one entry open for the
+                // whole edit, the way a gizmo drag does. Collected and applied
+                // here rather than pushed from inside the widget helpers: they
+                // hold a `&mut` borrowed out of the world, and the history has
+                // to read the world.
+                if let Some(label) = claim {
+                    editor.history.claim(label);
                 }
 
                 ui.separator();
@@ -50,35 +66,79 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     .button(RichText::new("Delete").color(Color32::LIGHT_RED))
                     .clicked()
                 {
+                    // Explicit rather than watched: the watcher's `after` is
+                    // read at the end of the frame from an entity that no longer
+                    // exists, which is right, but the selection has to be
+                    // recorded as it was *before* the despawn cleared it.
+                    let id = frame.world.get::<SceneId>(entity).copied();
+                    let view = SceneView {
+                        world: frame.world,
+                        registry: &editor.registry,
+                        selected: id,
+                    };
+                    editor.history.begin("Delete", view, id);
+
                     frame.world.despawn(entity);
                     editor.selected = None;
+
+                    let view = SceneView {
+                        world: frame.world,
+                        registry: &editor.registry,
+                        selected: None,
+                    };
+                    editor.history.commit(view);
                 }
             });
         });
 }
 
-fn transform_ui(ui: &mut Ui, transform: &mut Transform) {
+/// What to call an edit made through this widget this frame, if it is live.
+///
+/// Dragged *or* focused: a `DragValue` can also be clicked into and typed in,
+/// and an entry that closed between two keystrokes would be one undo per
+/// character.
+fn active(response: &egui::Response, label: &'static str) -> Option<&'static str> {
+    (response.dragged() || response.has_focus()).then_some(label)
+}
+
+fn transform_ui(ui: &mut Ui, transform: &mut Transform) -> Option<&'static str> {
     ui.label(RichText::new("Transform").strong());
 
+    let mut claim = None;
     egui::Grid::new("transform").num_columns(2).show(ui, |ui| {
         ui.label("position");
         ui.horizontal(|ui| {
-            ui.add(DragValue::new(&mut transform.translation.x).speed(0.01));
-            ui.add(DragValue::new(&mut transform.translation.y).speed(0.01));
+            claim = claim
+                .or(active(
+                    &ui.add(DragValue::new(&mut transform.translation.x).speed(0.01)),
+                    "Move",
+                ))
+                .or(active(
+                    &ui.add(DragValue::new(&mut transform.translation.y).speed(0.01)),
+                    "Move",
+                ));
         });
         ui.end_row();
 
         ui.label("rotation");
-        ui.drag_angle(&mut transform.rotation);
+        claim = claim.or(active(&ui.drag_angle(&mut transform.rotation), "Rotate"));
         ui.end_row();
 
         ui.label("scale");
         ui.horizontal(|ui| {
-            ui.add(DragValue::new(&mut transform.scale.x).speed(0.01));
-            ui.add(DragValue::new(&mut transform.scale.y).speed(0.01));
+            claim = claim
+                .or(active(
+                    &ui.add(DragValue::new(&mut transform.scale.x).speed(0.01)),
+                    "Scale",
+                ))
+                .or(active(
+                    &ui.add(DragValue::new(&mut transform.scale.y).speed(0.01)),
+                    "Scale",
+                ));
         });
         ui.end_row();
     });
+    claim
 }
 
 fn sprite_ui(
@@ -87,21 +147,36 @@ fn sprite_ui(
     textures: &mut Textures,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) {
+) -> Option<&'static str> {
     ui.label(RichText::new("Sprite").strong());
 
+    let mut claim = None;
     egui::Grid::new("sprite").num_columns(2).show(ui, |ui| {
         ui.label("colour");
-        ui.color_edit_button_rgba_unmultiplied(&mut sprite.color);
+        // The colour is edited inside a popup, so the button itself is never
+        // dragged or focused while the value moves and [`active`] would report
+        // nothing — one entry per frame of the pick. The popup's id is
+        // `ui.auto_id_with("popup")` taken before the button is allocated
+        // (egui-0.35 `widgets/color_picker.rs:519`), and `auto_id_with` does
+        // not advance the counter, so reading it here gives the same id the
+        // widget will derive a line later.
+        let popup = ui.auto_id_with("popup");
+        let response = ui.color_edit_button_rgba_unmultiplied(&mut sprite.color);
+        if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
+            claim = claim.or(Some("Set colour"));
+        }
         ui.end_row();
 
         ui.label("sort order");
-        ui.add(DragValue::new(&mut sprite.sort_order));
+        claim = claim.or(active(
+            &ui.add(DragValue::new(&mut sprite.sort_order)),
+            "Set sort order",
+        ));
         ui.end_row();
     });
 
     ui.separator();
-    texture_ui(ui, sprite, textures, device, queue);
+    claim.or(texture_ui(ui, sprite, textures, device, queue))
 }
 
 /// The texture path editor: a `TextEdit` plus a `Clear` button.
@@ -119,7 +194,7 @@ fn texture_ui(
     textures: &mut Textures,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) {
+) -> Option<&'static str> {
     ui.label(RichText::new("Texture").strong());
 
     let buffer_id = ui.id().with("texture_path");
@@ -139,6 +214,7 @@ fn texture_ui(
             .clone()
     });
 
+    let mut claim = None;
     ui.horizontal(|ui| {
         let response = ui.add(TextEdit::singleline(&mut buffer).hint_text("path/to/texture.png"));
         let clear_clicked = ui.button("Clear").clicked();
@@ -153,9 +229,11 @@ fn texture_ui(
         // and out without editing does not re-run `set_texture` for no
         // reason.
         if clear_clicked {
+            claim = Some("Set texture");
             sprite.set_texture(None, textures, device, queue);
             buffer.clear();
         } else if response.lost_focus() && buffer != committed {
+            claim = Some("Set texture");
             match AssetPath::new(&buffer) {
                 Ok(path) => sprite.set_texture(Some(path), textures, device, queue),
                 Err(e) => log::error!("invalid texture path {buffer:?}: {e}"),
@@ -174,4 +252,6 @@ fn texture_ui(
 
     ui.ctx()
         .data_mut(|data| data.insert_temp(buffer_id, buffer));
+
+    claim
 }
