@@ -41,13 +41,15 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             }
             let scene = ui.add(image);
 
-            // `W` picks the translate tool. Scoped the same way the camera
+            // `W`, `E` and `R` pick the tool. Scoped the same way the camera
             // scopes its own keys — hovered, and egui not wanting the keyboard
             // — so typing a `w` into the inspector cannot switch tools.
             if scene.hovered() && !ui.ctx().egui_wants_keyboard_input() {
                 ui.input(|i| {
-                    if i.key_pressed(egui::Key::W) {
-                        editor.tool = Tool::Translate;
+                    for tool in Tool::ALL {
+                        if i.key_pressed(tool.key()) {
+                            editor.tool = tool;
+                        }
                     }
                 });
             }
@@ -55,16 +57,21 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // The gizmo gets first refusal, for the same reason egui gets it
             // before the scene does: a handle drawn over a sprite has to be
             // grabbable, and a drag on one must not also re-select.
-            let outcome = match editor.tool {
-                Tool::Translate => editor.gizmo.update(&scene, frame, editor.selected),
-            };
+            let outcome = editor
+                .gizmo
+                .update(&scene, frame, editor.selected, editor.tool);
 
             // Every frame the drag holds an entity, so the history keeps one
             // entry open for the whole drag instead of one per frame. The entry
             // closes on the release frame, which is the first frame no claim
             // arrives.
+            //
+            // The label comes off the drag rather than off `editor.tool`: a key
+            // pressed mid-drag arms the next grab, and an entry that changed its
+            // name halfway through would be undone under a verb it never did.
             if outcome.dragging.is_some() {
-                editor.history.claim("Move");
+                let tool = editor.gizmo.active_tool().unwrap_or(editor.tool);
+                editor.history.claim(tool.label());
             }
 
             // Before navigation: a click and a drag are mutually exclusive in
@@ -75,11 +82,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             editor.camera.navigate(ui, &scene, frame.camera);
 
-            // After navigation, so the arms are laid out against the camera
+            // After navigation, so the gizmo is laid out against the camera
             // this frame ends with rather than the one it started with.
-            match editor.tool {
-                Tool::Translate => editor.gizmo.draw(&scene, frame, editor.selected),
-            }
+            editor
+                .gizmo
+                .draw(&scene, frame, editor.selected, editor.tool);
 
             // Last of all: the overlay is drawn in the order it is pushed, and
             // a collider outline must not cover the handle being dragged over
