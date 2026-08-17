@@ -132,6 +132,7 @@ privileged and plain `cargo build` covers everything.
 | 12b | Textures per sprite, batched by texture | done |
 | 12c | Hot reload: watch, debounce, swap under a stable handle | done |
 | 13 | Play mode: snapshot on Play, restore on Stop | done |
+| 14 | Undo and redo: per-entity records, one entry per interaction | done |
 
 ## Contributing
 

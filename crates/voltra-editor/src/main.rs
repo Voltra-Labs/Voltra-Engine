@@ -5,6 +5,7 @@ mod panels;
 mod picking;
 mod play;
 mod tool;
+mod undo;
 
 use editor::Editor;
 use voltra_assets::AssetPath;

@@ -1332,6 +1332,66 @@ calling `PhysicsWorld` itself: `App::update` runs before the UI callback and
 consumed exactly once; the reset is a flag consumed at the top of the next
 `step_physics`, before any step, which is the ordering Stop requires.
 
+### Undo holds serialized records of the entities an action touched
+
+An entry is a `Vec<EntityChange>`, each an `Option<EntityRecord>` on both sides,
+addressed by `SceneId`. That is Unity's `Undo.RecordObject` and Unreal's
+`FTransaction::FObjectRecord` rather than Godot's typed `add_do_property` /
+`add_undo_property`: `ComponentRegistry` already converts any registered
+component without the caller naming its type, so typed inverses would be a
+variant per component and a case per call site for nothing. `Option` on both
+sides makes spawn, delete, modify and clear one type with no per-action code —
+`None` on a side means the entity did not exist there.
+
+Rejected: a `SceneFile` per step, the shape play mode uses. Correct and already
+written, but memory is O(scene × depth) and every undo despawns and respawns the
+whole scene, invalidating every `Entity` handle on each keystroke.
+
+`apply_record` makes the entity **equal** to its record rather than "at least":
+a registered component the record does not carry is removed, and
+`UnknownComponents` goes with it. Anything less makes undoing the addition of a
+component a partial undo that reports success.
+
+### The `before` side is captured at the top of the frame
+
+Unreal opens an `FScopedTransaction` before the mutation because retained-mode UI
+can. An immediate-mode `DragValue` has already written its new value by the time
+it reports `dragged()`, and egui only reports a drag past its threshold, so a
+scope opened there is several pixels late.
+
+`History` instead watches the selection from the top of the frame, and a panel
+`claim`s the open edit by name each frame the interaction is live; the entry
+closes on the first frame no claim arrives. That is what makes a gizmo drag one
+`Ctrl+Z` instead of one per frame. Actions the watcher cannot see — spawn,
+delete, `Clear` — open and close their own entry with `begin` / `commit`, and a
+spawn hands its id to `commit_including` because it has none to name at `begin`
+time.
+
+The claim rule has one hole worth knowing: a widget that edits through a popup
+is neither dragged nor focused while the value moves, so the colour button
+claims on the popup being open instead. Any future popup-driven field needs the
+same treatment.
+
+`watch` is also what "a new frame" means, and it clears the recorded flag an
+undo sets. Relying on `end_frame` to consume that flag left an undo taken
+outside a watched frame swallowing the next frame's real edit.
+
+### A capture that fails clears the history
+
+`record_scene_id` can fail on a component whose `Serialize` fails. Dropping just
+that entry would leave a stack that lies: the next undo would restore a state
+from before the unrecorded action and silently discard it. Clearing is visible
+and recoverable; a history that misrepresents itself is not. `Scene ▸ Open`
+clears for the same reason — every id in the stack belongs to the scene that was
+just closed, which is Unity's answer.
+
+Undo is gated on `PlayState::Editing` rather than allowed and undone on Stop:
+while playing, the world is the simulation's, and the snapshot Stop restores is
+the authored scene the entries are addressed against. Every apply also cancels
+the gizmo drag, resets physics and re-resolves sprite textures — a `Drag` holds
+an `Entity`, the contact cache is keyed by one, and `Sprite::texture_handle` is
+`#[serde(skip)]`.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -1369,3 +1429,5 @@ Same problem, same rule: read the source, not a tutorial.
 | Widget input | `egui::Image` is inert unless given `.sense(Sense::drag())`; without it the `Response` reports no drag and no hover |
 | Scroll | Read `InputState::smooth_scroll_delta`, not the raw one — a `ScrollArea` zeroes it once it has consumed it, which is what scopes the wheel to a panel |
 | Pointer position | `Response::hover_pos` is in global screen points; subtract `response.rect.min` for widget-local ones |
+| Shortcuts | `InputState::consume_shortcut` matches modifiers *logically* — extra Shift and Alt are ignored, so `Ctrl+Z`'s pattern also accepts `Ctrl+Shift+Z`. Test the most specific one first |
+| Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |

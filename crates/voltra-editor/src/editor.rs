@@ -10,6 +10,7 @@ use crate::gizmo::Gizmo;
 use crate::panels;
 use crate::play::{Play, PlayContext, PlayState};
 use crate::tool::Tool;
+use crate::undo::{selected_id, shortcut, History, SceneView, UndoContext};
 
 /// Editor state that outlives a frame.
 ///
@@ -41,11 +42,39 @@ pub struct Editor {
     /// `Default` is `with_defaults`, not an empty registry, so the derive on
     /// `Editor` cannot quietly produce one that persists nothing.
     pub(crate) registry: ComponentRegistry,
+    /// Every scene edit that can be undone, and every one that has been.
+    pub(crate) history: History,
 }
 
 impl Editor {
     /// Lays out the whole editor. Called once per frame with the root `Ui`.
     pub fn ui(&mut self, ui: &mut Ui, frame: &mut UiFrame<'_>) {
+        // Only while editing: play steps the world every frame, and none of
+        // that is an edit.
+        let editing = self.play.state() == PlayState::Editing;
+
+        if editing {
+            // The scene as this frame found it, before any panel can write to
+            // it. The watched set is the selection, which is the only entity
+            // the gizmo or the inspector can reach; everything else — spawn,
+            // delete, clear — records itself explicitly.
+            let watched = selected_id(frame.world, self.selected);
+            let view = SceneView {
+                world: frame.world,
+                registry: &self.registry,
+                selected: watched,
+            };
+            self.history.watch(view, watched);
+
+            // After the watch, so an undo taken this frame is the change the
+            // watcher sees rather than one it records a second time.
+            match shortcut::poll(ui.ctx()) {
+                Some(shortcut::UndoAction::Undo) => self.undo(frame),
+                Some(shortcut::UndoAction::Redo) => self.redo(frame),
+                None => {}
+            }
+        }
+
         panels::menu_bar::show(self, ui, frame);
         // Between the menu bar and everything else, which is where Unity and
         // Unreal both put the transport. The state of the window is the most
@@ -57,6 +86,50 @@ impl Editor {
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);
+
+        // Last, so it sees everything every panel did.
+        if editing {
+            let view = SceneView {
+                world: frame.world,
+                registry: &self.registry,
+                selected: selected_id(frame.world, self.selected),
+            };
+            self.history.end_frame(view);
+        }
+    }
+
+    /// Puts the last edit back. A no-op outside [`PlayState::Editing`].
+    ///
+    /// Gated rather than allowed and undone on Stop: while playing, the world
+    /// is the simulation's, and the snapshot Stop restores is the authored
+    /// scene the history's entries are addressed against.
+    pub(crate) fn undo(&mut self, frame: &mut UiFrame<'_>) {
+        if self.play.state() != PlayState::Editing {
+            return;
+        }
+        let ctx = UndoContext {
+            registry: &self.registry,
+            selected: &mut self.selected,
+            gizmo: &mut self.gizmo,
+        };
+        if !self.history.undo(ctx, frame) {
+            log::info!("nothing to undo");
+        }
+    }
+
+    /// Replays the last undone edit. A no-op outside [`PlayState::Editing`].
+    pub(crate) fn redo(&mut self, frame: &mut UiFrame<'_>) {
+        if self.play.state() != PlayState::Editing {
+            return;
+        }
+        let ctx = UndoContext {
+            registry: &self.registry,
+            selected: &mut self.selected,
+            gizmo: &mut self.gizmo,
+        };
+        if !self.history.redo(ctx, frame) {
+            log::info!("nothing to redo");
+        }
     }
 
     /// Enters play, snapshotting the scene the first time.
@@ -101,5 +174,17 @@ impl Editor {
             frame,
         );
         true
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_history_starts_empty() {
+        let editor = Editor::default();
+        assert!(editor.history.is_empty());
+        assert_eq!(editor.history.undo_label(), None);
     }
 }
