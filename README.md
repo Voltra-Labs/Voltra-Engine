@@ -65,9 +65,10 @@ not editing, so the mode is never in doubt.
 | ⏭ | Run exactly one fixed physics step (while paused) |
 | ⏹ | Stop: put the scene back as it was when play began |
 
-Stop discards every change made while playing — it is a restore, not an undo,
-and there is no undo stack. `Scene ▸ Open`, `Scene ▸ Clear` and `Scene ▸ Save`
-stop play first, so none of them acts on a mid-flight scene.
+Stop discards every change made while playing — it is a restore, not an undo.
+While editing, `Ctrl+Z` / `Ctrl+Y` undo and redo scene edits. `Scene ▸ Open`,
+`Scene ▸ Clear` and `Scene ▸ Save` stop play first, so none of them acts on a
+mid-flight scene.
 
 Camera controls. These belong to the editor, not the engine, and a game built
 on `voltra-core` moves its own camera. Scroll, `WASD` and `R` act only while
