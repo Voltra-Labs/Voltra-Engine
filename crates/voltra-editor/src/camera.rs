@@ -13,6 +13,14 @@
 //! widget holds focus — so `ViewportCamera::navigate` scopes them itself, by
 //! gating on `response.hovered()` and on `Context::egui_wants_keyboard_input`,
 //! so typing into a focused field cannot also pan the camera.
+//!
+//! **`WASD` pans only while the right mouse button is held**, and the camera
+//! goes home on `F` rather than on `R`. Both were bare keys until the transform
+//! tools arrived and `W`, `E` and `R` became Unity's, Unreal's and Godot's
+//! binding for move, rotate and scale — a binding worth more than an unmodified
+//! pan key, because it is the one every user of another editor already has in
+//! their fingers. Unreal and Unity both gate `WASD` behind a held mouse button
+//! for exactly this reason, and `F` is what both use to frame the view.
 
 use voltra_core::egui::{Key, PointerButton, Response, Ui};
 use voltra_render::glam::Vec2;
@@ -28,7 +36,7 @@ pub struct ViewportCamera {
     /// the property Godot's `2^(index/12)` steps have and an additive step
     /// does not.
     pub zoom_per_scroll_point: f32,
-    /// Where `R` sends the camera.
+    /// Where `F` sends the camera.
     pub home_position: Vec2,
     pub home_zoom: f32,
 }
@@ -73,7 +81,7 @@ impl ViewportCamera {
             return;
         }
 
-        let (dt, axis, reset) = ui.input(|i| {
+        let (dt, axis, reset, panning) = ui.input(|i| {
             (
                 // Clamped, so a stalled frame cannot teleport the camera.
                 i.stable_dt.min(0.1),
@@ -81,11 +89,16 @@ impl ViewportCamera {
                     axis(i.key_down(Key::D), i.key_down(Key::A)),
                     axis(i.key_down(Key::W), i.key_down(Key::S)),
                 ),
-                i.key_pressed(Key::R),
+                i.key_pressed(Key::F),
+                // The held button that turns `WASD` from tool keys into pan
+                // keys. Read off the pointer rather than off `response`, which
+                // reports a *drag*: a pan that holds the button still and only
+                // presses keys never moves the pointer at all.
+                i.pointer.button_down(PointerButton::Secondary),
             )
         });
 
-        if axis != Vec2::ZERO {
+        if panning && axis != Vec2::ZERO {
             // Normalised so diagonal movement is not faster than axis-aligned,
             // and scaled by the visible height so a keypress covers the same
             // fraction of the screen at any zoom.
