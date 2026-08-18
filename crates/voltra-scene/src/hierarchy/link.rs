@@ -78,22 +78,37 @@ impl std::error::Error for HierarchyError {}
 ///
 /// [`set_world_transform`]: super::world_transform::set_world_transform
 pub fn set_parent(world: &mut World, child: Entity, parent: Entity) -> Result<(), HierarchyError> {
+    can_parent(world, child, parent)?;
+    let id = *world
+        .get::<SceneId>(parent)
+        .expect("can_parent rejects a parent without an identity");
+
+    world.insert(child, Parent::resolved(id, parent));
+    Ok(())
+}
+
+/// Whether [`set_parent`] would accept this pair, and why not if it would not.
+///
+/// Separate from the write so a UI can answer "may this be dropped here?" while
+/// the pointer is still moving, without either duplicating the rules or
+/// performing the reparent to find out. Every caller that asks and then writes
+/// gets the same answer, because the write asks this too.
+pub fn can_parent(world: &World, child: Entity, parent: Entity) -> Result<(), HierarchyError> {
     if child == parent {
         return Err(HierarchyError::Itself);
     }
     if takes_part_in_physics(world, child) || takes_part_in_physics(world, parent) {
         return Err(HierarchyError::PhysicsBody);
     }
-    let Some(id) = world.get::<SceneId>(parent).copied() else {
+    if world.get::<SceneId>(parent).is_none() {
         return Err(HierarchyError::ParentHasNoIdentity);
-    };
+    }
     // The parent must not already hang off the child. Checked before the write,
     // because after it the walk itself would be the cycle.
     if is_ancestor(world, child, parent) {
         return Err(HierarchyError::Cycle);
     }
 
-    world.insert(child, Parent::resolved(id, parent));
     Ok(())
 }
 
@@ -343,6 +358,26 @@ mod tests {
             set_parent(&mut world, child, body),
             Err(HierarchyError::PhysicsBody)
         );
+    }
+
+    #[test]
+    fn can_parent_answers_without_writing_anything() {
+        // What the hierarchy panel asks on every frame of a drag. It must agree
+        // with `set_parent` and must not change the scene to find out.
+        let mut world = World::new();
+        let parent = spawn(&mut world);
+        let child = spawn(&mut world);
+        set_parent(&mut world, child, parent).expect("a plain reparent");
+
+        assert_eq!(
+            can_parent(&world, parent, child),
+            Err(HierarchyError::Cycle)
+        );
+        assert_eq!(parent_of(&world, parent), None, "asking wrote nothing");
+
+        let other = spawn(&mut world);
+        assert_eq!(can_parent(&world, other, parent), Ok(()));
+        assert_eq!(parent_of(&world, other), None, "still only an answer");
     }
 
     #[test]
