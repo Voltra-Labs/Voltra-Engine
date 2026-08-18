@@ -142,6 +142,13 @@ pub fn apply_record(
         world.insert(entity, unknown);
     }
 
+    // A record carries a parent as a `SceneId`, and the `Entity` it resolved to
+    // when the record was taken may not exist any more — an undo that spawns an
+    // entity back gives it a new handle. Resolving the whole world rather than
+    // this one link is deliberate: the entity coming back may itself be some
+    // other entity's parent, and that link is just as stale.
+    crate::hierarchy::resolve_parents(world);
+
     Ok(entity)
 }
 

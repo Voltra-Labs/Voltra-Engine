@@ -48,6 +48,11 @@ pub fn from_scene_file(
         return Err(error);
     }
 
+    // Only now: a file is a list, and a child may name a parent that appears
+    // after it. Resolving as each entity spawned would leave every forward
+    // reference permanently unresolved.
+    crate::hierarchy::resolve_parents(world);
+
     log::info!("loaded {} entities", spawned.len());
     Ok(())
 }
@@ -108,6 +113,73 @@ mod tests {
     use crate::format::save::{save, to_scene_file};
     use crate::{Sprite, Transform};
     use voltra_render::glam::Vec2;
+
+    use crate::hierarchy::{children_of, parent_of, set_parent};
+
+    #[test]
+    fn a_parent_link_survives_a_save_and_a_load() {
+        // The point of storing the link by `SceneId`: the entities the second
+        // world hands out are different handles entirely.
+        let mut source = World::new();
+        let parent = source.spawn();
+        source.insert(parent, SceneId::new());
+        source.insert(parent, Transform::from_translation(Vec2::new(10.0, 0.0)));
+        let child = source.spawn();
+        source.insert(child, SceneId::new());
+        source.insert(child, Transform::from_translation(Vec2::new(1.0, 0.0)));
+        set_parent(&mut source, child, parent).expect("a plain reparent");
+
+        let registry = ComponentRegistry::with_defaults();
+        let file = to_scene_file(&source, &registry).expect("a valid world saves");
+
+        let mut target = World::new();
+        from_scene_file(&file, &registry, &mut target).expect("what we just wrote");
+
+        let loaded_child = crate::format::entity_with_id(
+            &target,
+            *source.get::<SceneId>(child).expect("spawned with one"),
+        )
+        .expect("the child is in the file");
+        let loaded_parent = crate::format::entity_with_id(
+            &target,
+            *source.get::<SceneId>(parent).expect("spawned with one"),
+        )
+        .expect("the parent is in the file");
+
+        assert_eq!(parent_of(&target, loaded_child), Some(loaded_parent));
+        assert_eq!(children_of(&target, loaded_parent), vec![loaded_child]);
+    }
+
+    #[test]
+    fn a_child_listed_before_its_parent_still_resolves() {
+        // A file is sorted by id, and an entity made before its parent sorts
+        // first. Resolving per entity as it spawned would leave this dangling.
+        let mut source = World::new();
+        let child = source.spawn();
+        source.insert(child, SceneId::new());
+        source.insert(child, Transform::default());
+        let parent = source.spawn();
+        source.insert(parent, SceneId::new());
+        source.insert(parent, Transform::default());
+        set_parent(&mut source, child, parent).expect("a plain reparent");
+
+        let registry = ComponentRegistry::with_defaults();
+        let file = to_scene_file(&source, &registry).expect("a valid world saves");
+        assert!(
+            file.entities[0].id < file.entities[1].id,
+            "the child was created first, so it is written first"
+        );
+
+        let mut target = World::new();
+        from_scene_file(&file, &registry, &mut target).expect("what we just wrote");
+
+        let loaded_child = crate::format::entity_with_id(
+            &target,
+            *source.get::<SceneId>(child).expect("spawned with one"),
+        )
+        .expect("the child is in the file");
+        assert!(parent_of(&target, loaded_child).is_some());
+    }
 
     fn source_world() -> World {
         let mut world = World::new();

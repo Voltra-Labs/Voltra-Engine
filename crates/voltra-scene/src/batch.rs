@@ -2,9 +2,10 @@
 
 use voltra_assets::Handle;
 use voltra_ecs::World;
-use voltra_render::glam::Vec2;
+use voltra_render::glam::{Mat3, Vec2};
 use voltra_render::{Texture, Vertex};
 
+use crate::hierarchy::WorldTransforms;
 use crate::sprite::{draw_key, Sprite};
 use crate::transform::Transform;
 
@@ -80,14 +81,25 @@ impl SpriteBatch {
         let mut sprites: Vec<_> = world.query2::<Transform, Sprite>().collect();
         sprites.sort_unstable_by_key(|(entity, _, sprite)| draw_key(*entity, sprite));
 
+        // Composed once for the whole world rather than walked per sprite: a
+        // deep tree would otherwise cost one matrix chain per descendant, every
+        // frame.
+        let transforms = WorldTransforms::from_world(world);
+
         let mut batch = Self::default();
-        for (_entity, transform, sprite) in sprites {
-            batch.push(transform, sprite);
+        for (entity, _transform, sprite) in sprites {
+            batch.push(transforms.matrix(entity), sprite);
         }
         batch
     }
 
     /// Appends one quad, extending or starting a [`SpriteRange`] to match.
+    ///
+    /// Takes the sprite's **world** matrix, not its [`Transform`]: a parented
+    /// entity's transform is local to its parent, and composing the chain is
+    /// [`WorldTransforms`]'s job. Passing a matrix rather than a composed
+    /// `Transform` also keeps the shear a chain of parents can produce, which
+    /// three fields cannot hold.
     ///
     /// Grows the last range when this sprite's handle matches it, so two
     /// pushes in a row for the same texture draw in one call; starts a new
@@ -95,8 +107,7 @@ impl SpriteBatch {
     /// texture that reappears later still gets its own run — the same
     /// painter's-order-over-batching rule `from_world`'s sort already commits
     /// to.
-    pub fn push(&mut self, transform: &Transform, sprite: &Sprite) {
-        let matrix = transform.matrix();
+    pub fn push(&mut self, matrix: Mat3, sprite: &Sprite) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
         // batch holds every sprite in the world, not one object's geometry.
@@ -431,8 +442,8 @@ mod tests {
     fn push_alone_merges_contiguous_same_handles_into_one_range() {
         let a = Handle::forge(0, 0);
         let mut batch = SpriteBatch::default();
-        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
-        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
+        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
+        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
 
         assert_eq!(
             batch.ranges,
@@ -448,9 +459,9 @@ mod tests {
         let a = Handle::forge(0, 0);
         let b = Handle::forge(1, 0);
         let mut batch = SpriteBatch::default();
-        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
-        batch.push(&Transform::default(), &sprite_with_texture(Some(b)));
-        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
+        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
+        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(b)));
+        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
 
         assert_eq!(
             batch.ranges,
@@ -475,8 +486,8 @@ mod tests {
     fn push_alone_keeps_none_and_some_in_separate_ranges() {
         let a = Handle::forge(0, 0);
         let mut batch = SpriteBatch::default();
-        batch.push(&Transform::default(), &sprite_with_texture(None));
-        batch.push(&Transform::default(), &sprite_with_texture(Some(a)));
+        batch.push(Transform::default().matrix(), &sprite_with_texture(None));
+        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
 
         assert_eq!(
             batch.ranges,
@@ -578,7 +589,7 @@ mod tests {
 
         let mut batch = SpriteBatch::default();
         for _ in 0..SPRITES {
-            batch.push(&Transform::default(), &Sprite::default());
+            batch.push(Transform::default().matrix(), &Sprite::default());
         }
 
         let last = batch
