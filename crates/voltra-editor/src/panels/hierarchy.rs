@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use voltra_core::egui::{self, Frame, Id, RichText, Ui};
+use voltra_core::egui::{self, CursorIcon, Frame, Id, RichText, Sense, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_scene::hierarchy;
@@ -107,13 +107,24 @@ fn row(
     }
 
     let selected = editor.selected == Some(entity);
+    // A row is a click target first and a drag source second, which is the
+    // order Unity's hierarchy works in: a click selects, and only a press that
+    // moves past egui's drag threshold picks the row up. `dnd_drag_source`
+    // interacts with `Sense::drag()` alone, which swallows nearly every click —
+    // the entity became almost impossible to select. `dnd_set_drag_payload`
+    // publishes the payload on `drag_started` instead, so both gestures live on
+    // one response and neither has to win a race with the other.
     let response = ui
-        .dnd_drag_source(Id::new(("hierarchy-row", entity)), entity, |ui| {
-            // The row's own click is merged into the drag source's response
-            // below, which is what `dnd_drag_source` returns.
-            let _ = ui.selectable_label(selected, label(frame.world, entity));
-        })
-        .response;
+        .selectable_label(selected, label(frame.world, entity))
+        .interact(Sense::drag());
+
+    response.dnd_set_drag_payload(entity);
+    if response.dragged() {
+        // The only cursor feedback left once the row senses click too:
+        // `dnd_set_drag_payload` deliberately withholds its `Grab` icon from a
+        // clickable widget, which is why hovering no longer reads as "move me".
+        ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+    }
 
     if response.clicked() {
         editor.selected = Some(entity);
