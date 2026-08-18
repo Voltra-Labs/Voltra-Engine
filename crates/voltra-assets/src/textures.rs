@@ -191,6 +191,17 @@ impl Textures {
         &self.root
     }
 
+    /// Every handle a path currently resolves to, in no particular order.
+    ///
+    /// For a caller mirroring the store somewhere else — the editor's egui
+    /// thumbnails — this is the set to mirror. A path whose file would not load
+    /// resolves to the placeholder, so the same handle can appear twice; a
+    /// caller keyed by handle collapses those, which is correct, because they
+    /// really are one texture.
+    pub fn loaded(&self) -> impl Iterator<Item = Handle<Texture>> + '_ {
+        self.by_path.values().copied()
+    }
+
     /// How many textures are stored, the placeholder included.
     pub fn len(&self) -> usize {
         self.store.len()
