@@ -175,6 +175,45 @@ pub fn depth(world: &World, entity: Entity) -> usize {
     ancestors(world, entity).len()
 }
 
+/// `entity`'s children, their children, and so on, parents before children.
+///
+/// Cycle-safe: an entity already reported is never walked a second time, so a
+/// hand-edited file that loops cannot make this list grow forever.
+pub fn descendants(world: &World, entity: Entity) -> Vec<Entity> {
+    let mut found = Vec::new();
+    let mut seen = HashSet::from([entity]);
+    let mut frontier = vec![entity];
+
+    while let Some(current) = frontier.pop() {
+        for child in children_of(world, current) {
+            if seen.insert(child) {
+                found.push(child);
+                frontier.push(child);
+            }
+        }
+    }
+
+    found
+}
+
+/// Despawns `entity` and everything under it, returning what went.
+///
+/// Deleting a parent deletes its children, as it does in Unity, Unreal and
+/// Godot. The alternative — leaving them behind — silently reinterprets every
+/// orphan's local transform as a world one, so a deleted parent scatters its
+/// children across the scene instead of taking them with it.
+///
+/// Children first, so nothing is ever left pointing at a despawned parent even
+/// if the caller stops reading half way.
+pub fn despawn_recursive(world: &mut World, entity: Entity) -> Vec<Entity> {
+    let mut going = descendants(world, entity);
+    going.reverse();
+    going.push(entity);
+
+    going.retain(|e| world.despawn(*e));
+    going
+}
+
 /// Whether the simulation reads this entity's transform as a world value.
 fn takes_part_in_physics(world: &World, entity: Entity) -> bool {
     world.get::<RigidBody>(entity).is_some() || world.get::<Collider>(entity).is_some()
@@ -377,6 +416,71 @@ mod tests {
         // Terminates, and does not report an entity as its own ancestor twice.
         let chain = ancestors(&world, a);
         assert!(chain.len() <= MAX_DEPTH, "walked {} deep", chain.len());
+    }
+
+    #[test]
+    fn descendants_reach_every_level() {
+        let mut world = World::new();
+        let root = spawn(&mut world);
+        let child = spawn(&mut world);
+        let grandchild = spawn(&mut world);
+        let unrelated = spawn(&mut world);
+        set_parent(&mut world, child, root).expect("a plain reparent");
+        set_parent(&mut world, grandchild, child).expect("a plain reparent");
+
+        let found = descendants(&world, root);
+
+        assert_eq!(found.len(), 2, "got {found:?}");
+        assert!(found.contains(&child) && found.contains(&grandchild));
+        assert!(!found.contains(&unrelated));
+        assert!(descendants(&world, grandchild).is_empty());
+    }
+
+    #[test]
+    fn deleting_a_parent_takes_its_children() {
+        // The alternative reinterprets every orphan's local transform as a
+        // world one, scattering the children across the scene.
+        let mut world = World::new();
+        let root = spawn(&mut world);
+        let child = spawn(&mut world);
+        let grandchild = spawn(&mut world);
+        set_parent(&mut world, child, root).expect("a plain reparent");
+        set_parent(&mut world, grandchild, child).expect("a plain reparent");
+
+        let gone = despawn_recursive(&mut world, root);
+
+        assert_eq!(gone.len(), 3, "got {gone:?}");
+        assert!(!world.is_alive(root));
+        assert!(!world.is_alive(child));
+        assert!(!world.is_alive(grandchild));
+    }
+
+    #[test]
+    fn deleting_a_leaf_leaves_its_parent_alone() {
+        let mut world = World::new();
+        let root = spawn(&mut world);
+        let child = spawn(&mut world);
+        set_parent(&mut world, child, root).expect("a plain reparent");
+
+        assert_eq!(despawn_recursive(&mut world, child), vec![child]);
+        assert!(world.is_alive(root));
+        assert!(children_of(&world, root).is_empty());
+    }
+
+    #[test]
+    fn a_recursive_delete_terminates_on_a_cycle() {
+        let mut world = World::new();
+        let a = spawn(&mut world);
+        let b = spawn(&mut world);
+        let a_id = *world.get::<SceneId>(a).expect("spawned with one");
+        let b_id = *world.get::<SceneId>(b).expect("spawned with one");
+        world.insert(a, Parent::resolved(b_id, b));
+        world.insert(b, Parent::resolved(a_id, a));
+
+        let gone = despawn_recursive(&mut world, a);
+
+        assert_eq!(gone.len(), 2, "got {gone:?}");
+        assert_eq!(world.entity_count(), 0);
     }
 
     #[test]

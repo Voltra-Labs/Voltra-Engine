@@ -4,7 +4,7 @@ use voltra_assets::{AssetPath, Textures};
 use voltra_core::egui::{self, Color32, DragValue, RichText, TextEdit, Ui};
 use voltra_core::UiFrame;
 use voltra_render::wgpu;
-use voltra_scene::{SceneId, Sprite, Transform};
+use voltra_scene::{hierarchy, Name, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 use crate::undo::SceneView;
@@ -36,9 +36,16 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     entity.index(),
                     entity.generation()
                 ));
-                ui.separator();
 
-                let mut claim = None;
+                // The name, then what it hangs off. Both are identity rather
+                // than geometry, so they sit above the components.
+                let mut claim: Option<&'static str> = name_ui(ui, frame.world, entity);
+                if let Some(parent) = hierarchy::parent_of(frame.world, entity) {
+                    ui.label(
+                        RichText::new(format!("child of {}", name_of(frame.world, parent))).weak(),
+                    );
+                }
+                ui.separator();
                 if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
                     claim = transform_ui(ui, transform);
                 }
@@ -71,14 +78,25 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     // exists, which is right, but the selection has to be
                     // recorded as it was *before* the despawn cleared it.
                     let id = frame.world.get::<SceneId>(entity).copied();
+                    // Everything under it goes too, so everything under it has
+                    // to be in the entry — an undo that revived the parent
+                    // alone would leave its children deleted for good.
+                    let going: Vec<SceneId> = id
+                        .into_iter()
+                        .chain(
+                            hierarchy::descendants(frame.world, entity)
+                                .into_iter()
+                                .filter_map(|e| frame.world.get::<SceneId>(e).copied()),
+                        )
+                        .collect();
                     let view = SceneView {
                         world: frame.world,
                         registry: &editor.registry,
                         selected: id,
                     };
-                    editor.history.begin("Delete", view, id);
+                    editor.history.begin("Delete", view, going);
 
-                    frame.world.despawn(entity);
+                    hierarchy::despawn_recursive(frame.world, entity);
                     editor.selected = None;
 
                     let view = SceneView {
@@ -99,6 +117,45 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 /// character.
 fn active(response: &egui::Response, label: &'static str) -> Option<&'static str> {
     (response.dragged() || response.has_focus()).then_some(label)
+}
+
+/// The name field, and the claim that keeps a whole rename in one undo entry.
+///
+/// The component is inserted on the first keystroke rather than being there
+/// from the start: an entity is not required to have a name, and typing one is
+/// what says it wants one.
+fn name_ui(
+    ui: &mut Ui,
+    world: &mut voltra_ecs::World,
+    entity: voltra_ecs::Entity,
+) -> Option<&'static str> {
+    let mut name = world
+        .get::<Name>(entity)
+        .map(|name| name.0.clone())
+        .unwrap_or_default();
+
+    let response = ui.add(
+        TextEdit::singleline(&mut name)
+            .hint_text("name")
+            .desired_width(f32::INFINITY),
+    );
+
+    if response.changed() {
+        world.insert(entity, Name::new(name));
+    }
+
+    // Focused, not only changed: a rename is one interaction from the first
+    // keystroke to the moment the field is left, the same rule a held
+    // `DragValue` follows.
+    (response.has_focus() || response.changed()).then_some("Rename")
+}
+
+/// What to call `entity` in a sentence.
+fn name_of(world: &voltra_ecs::World, entity: voltra_ecs::Entity) -> String {
+    match world.get::<Name>(entity) {
+        Some(name) if !name.as_str().is_empty() => name.as_str().to_owned(),
+        _ => format!("Entity {}", entity.index()),
+    }
 }
 
 fn transform_ui(ui: &mut Ui, transform: &mut Transform) -> Option<&'static str> {

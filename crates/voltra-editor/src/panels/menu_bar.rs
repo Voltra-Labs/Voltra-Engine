@@ -6,7 +6,7 @@ use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, RigidBody, SceneId, Sprite, Transform};
+use voltra_scene::{Collider, Name, RigidBody, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 use crate::play::PlayState;
@@ -212,6 +212,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     record_spawn(editor, frame, "Spawn body", |frame| {
                         spawn_body(
                             frame,
+                            "Falling body",
                             Vec2::new(0.0, 1.5),
                             Vec2::splat(0.4),
                             0.3,
@@ -225,6 +226,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     record_spawn(editor, frame, "Spawn floor", |frame| {
                         spawn_body(
                             frame,
+                            "Floor",
                             Vec2::new(0.0, -1.2),
                             Vec2::new(3.0, 0.3),
                             0.0,
@@ -282,6 +284,7 @@ fn record_spawn(
 /// the picture by a hair is a bug that reads as a physics bug.
 fn spawn_body(
     frame: &mut UiFrame<'_>,
+    name: &str,
     at: Vec2,
     scale: Vec2,
     rotation: f32,
@@ -290,6 +293,7 @@ fn spawn_body(
 ) -> Entity {
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
+    frame.world.insert(entity, Name::new(name));
     frame.world.insert(
         entity,
         Transform::from_translation(at)
@@ -311,6 +315,9 @@ fn spawn_body(
 fn spawn_sprite(frame: &mut UiFrame<'_>) -> Entity {
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
+    // Named on spawn, the way Unity names a new object after what made it. The
+    // hierarchy is unreadable when every row says `Entity 7`.
+    frame.world.insert(entity, Name::new("Sprite"));
     frame
         .world
         .insert(entity, Transform::default().with_scale(Vec2::splat(0.4)));

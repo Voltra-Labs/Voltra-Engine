@@ -6,6 +6,7 @@ use voltra_ecs::{Entity, World};
 
 use super::parent::Parent;
 use crate::scene_id::SceneId;
+use crate::{Collider, RigidBody};
 
 /// Points every [`Parent`] link at the entity its [`SceneId`] names.
 ///
@@ -38,6 +39,16 @@ pub fn resolve_parents(world: &mut World) {
         .collect();
 
     for (entity, id) in links {
+        // `set_parent` refuses this combination, so it can only arrive from a
+        // file. Warned rather than repaired: dropping the link or the body
+        // would both be edits to someone's scene, made without asking, on the
+        // strength of a rule this build happens to have today.
+        if world.get::<RigidBody>(entity).is_some() || world.get::<Collider>(entity).is_some() {
+            log::warn!(
+                "{entity:?} is parented and takes part in physics; the solver reads its transform as world space"
+            );
+        }
+
         let resolved = by_id.get(&id).copied();
         if resolved.is_none() {
             log::warn!(
@@ -121,6 +132,22 @@ mod tests {
         resolve_parents(&mut world);
 
         assert_eq!(parent_of(&world, child), Some(parent));
+    }
+
+    #[test]
+    fn a_parented_body_from_a_file_is_kept_as_it_is() {
+        // Warned, not repaired. Deleting either component would be an edit to
+        // someone's scene made without asking.
+        let mut world = World::new();
+        let (parent, parent_id) = spawn_with_id(&mut world);
+        let (child, _) = spawn_with_id(&mut world);
+        world.insert(child, Parent::new(parent_id));
+        world.insert(child, crate::RigidBody::new_dynamic(1.0));
+
+        resolve_parents(&mut world);
+
+        assert_eq!(parent_of(&world, child), Some(parent));
+        assert!(world.get::<crate::RigidBody>(child).is_some());
     }
 
     #[test]
