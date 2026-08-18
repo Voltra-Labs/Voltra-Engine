@@ -63,10 +63,24 @@ impl From<Filter> for wgpu::FilterMode {
     }
 }
 
+/// The format every loaded texture takes.
+///
+/// Srgb, not Unorm: image files store gamma-encoded colour, and this format
+/// makes the GPU convert to linear on every sample. Getting it wrong makes
+/// everything look washed out.
+const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
 /// A 2D texture with the sampler it is drawn through.
 #[derive(Debug)]
 pub struct Texture {
     view: wgpu::TextureView,
+    /// The same pixels seen as non-sRGB, for a consumer that converts itself.
+    ///
+    /// The pair exists for the same reason [`RenderTarget`](crate::RenderTarget)
+    /// carries one: egui blends in gamma space and converts at the end of its
+    /// shader, so letting the sampler convert as well darkens every mid-tone,
+    /// and nothing reports it.
+    raw_view: wgpu::TextureView,
     sampler: wgpu::Sampler,
     width: u32,
     height: u32,
@@ -105,12 +119,12 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            // Srgb, not Unorm: image files store gamma-encoded colour, and
-            // this format makes the GPU convert to linear on every sample.
-            // Getting it wrong makes everything look washed out.
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: FORMAT,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
+            // Reinterpreting these pixels as plain `Rgba8Unorm` has to be
+            // declared up front; a view format missing from this list is
+            // rejected when the view is created, not when it is sampled.
+            view_formats: &[FORMAT.remove_srgb_suffix()],
         });
 
         // `write_texture` has no 256-byte row alignment requirement, unlike
@@ -147,6 +161,10 @@ impl Texture {
 
         Ok(Self {
             view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            raw_view: texture.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(FORMAT.remove_srgb_suffix()),
+                ..Default::default()
+            }),
             sampler,
             width,
             height,
@@ -192,6 +210,16 @@ impl Texture {
 
     pub fn height(&self) -> u32 {
         self.height
+    }
+
+    /// The non-sRGB view of the same pixels.
+    ///
+    /// What egui must sample — an editor thumbnail goes through egui's shader,
+    /// which converts at the end, so sampling the sRGB view there converts
+    /// twice. The scene's own draws use the bind group, which holds the sRGB
+    /// view, because the sprite pipeline does not convert.
+    pub fn raw_view(&self) -> &wgpu::TextureView {
+        &self.raw_view
     }
 
     /// Binds this texture and its sampler against [`bind_group_layout`].

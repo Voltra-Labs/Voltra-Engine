@@ -247,6 +247,52 @@ fn a_registered_view_can_be_drawn_as_a_texture() {
 }
 
 #[test]
+fn a_loaded_texture_keeps_its_colour_as_a_thumbnail() {
+    let Some((device, queue, mut backend, target)) = setup() else {
+        eprintln!("no GPU adapter available; skipping");
+        return;
+    };
+
+    // The asset-browser path: a texture loaded for the scene, shown in a panel.
+    // Its format is sRGB because the sprite pipeline does not convert, so the
+    // thumbnail has the same trap the viewport does and needs the same answer.
+    // Mid-tones on purpose: 0 and 255 survive a stray conversion unchanged.
+    let pixels_in = [128, 64, 200, 255];
+    let texture = voltra_render::Texture::from_rgba8(
+        &device,
+        &queue,
+        "asset",
+        &pixels_in,
+        1,
+        1,
+        Filter::Nearest,
+    )
+    .expect("a 1x1 texture has a valid size");
+
+    let id = backend.register_view(&device, texture.raw_view(), Filter::Nearest);
+    let primitives = vec![ClippedPrimitive {
+        clip_rect: full_screen(),
+        primitive: Primitive::Mesh(quad(id, full_screen(), Color32::WHITE)),
+    }];
+    let pixels = draw(
+        &device,
+        &queue,
+        &mut backend,
+        &target,
+        &primitives,
+        &TexturesDelta::default(),
+    );
+
+    let centre = at(&pixels, SIZE / 2, SIZE / 2);
+    let close = |got: u8, want: u8| (got as i32 - want as i32).abs() <= 3;
+    assert!(
+        close(centre.r, 128) && close(centre.g, 64) && close(centre.b, 200),
+        "a thumbnail should come through unchanged; sampling the sRGB view \
+         instead would land near (56, 15, 145). Got {centre:?}"
+    );
+}
+
+#[test]
 fn a_partial_delta_patches_the_texture_in_place() {
     let Some((device, queue, mut backend, target)) = setup() else {
         eprintln!("no GPU adapter available; skipping");
