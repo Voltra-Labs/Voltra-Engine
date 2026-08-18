@@ -8,7 +8,7 @@ A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs
 > rewrite starts from an empty slate; the C++ tree is preserved on the `main`
 > branch history and tagged `v0-cpp-final`. Today it runs an editor: an
 > in-house ECS, textured sprite batching, a 2D camera, and an egui interface
-> with a hierarchy, an inspector and a live viewport.
+> with a hierarchy, an inspector, an asset browser and a live viewport.
 
 ## Design stance
 
@@ -66,6 +66,15 @@ entity where it is on screen, and is one undo entry.
 Physics and parenting do not mix yet: an entity carrying a `RigidBody` or a
 `Collider` cannot be parented, because the solver reads its transform as a
 world-space value. The refusal is logged rather than silent.
+
+The bottom panel is the asset browser: everything under the asset root, one
+tile per entry, a path bar to walk into a directory and `..` to leave it. A PNG
+shows its own pixels; a file this engine has no loader for is listed but dimmed.
+Dragging a texture onto the scene adds a sprite where it was dropped, named after
+the file and sized to the texture's aspect ratio; dragging it onto the
+inspector's `Texture` field assigns it to the selected sprite. Both are one undo
+entry. The listing re-reads itself once a second, so a file saved from an image
+editor shows up without a refresh.
 
 The left of the toolbar holds the transform tools, and the gizmo drawn over the
 selection says what a drag will do before it is started. The gizmos work in

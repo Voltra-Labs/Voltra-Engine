@@ -4,7 +4,7 @@
 //! reports a pointer in screen points, the world is in world units, and the
 //! camera is the only thing that knows the mapping between them.
 
-use voltra_core::egui::Response;
+use voltra_core::egui::{Pos2, Response};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
@@ -17,14 +17,20 @@ use voltra_scene::pick;
 /// than clearing the selection on every frame.
 pub fn clicked_entity(response: &Response, frame: &UiFrame<'_>) -> Option<Entity> {
     let pointer = response.interact_pointer_pos()?;
+    pick::sprite_at(frame.world, world_at(response, pointer, frame))
+}
 
-    // `interact_pointer_pos` is in global screen points; the camera works in
-    // viewport-local ones, so the panel's own corner comes off first.
+/// Where a screen point over `response` is in the world.
+///
+/// Separate from the pick because a drop needs the position and not what is
+/// under it: an asset dragged onto the viewport lands where it was released,
+/// whether or not a sprite is already there.
+pub fn world_at(response: &Response, pointer: Pos2, frame: &UiFrame<'_>) -> Vec2 {
+    // Screen points are global; the camera works in viewport-local ones, so the
+    // panel's own corner comes off first.
     let local = pointer - response.rect.min;
     let viewport = Vec2::new(response.rect.width(), response.rect.height());
-    let world = frame
+    frame
         .camera
-        .viewport_to_world(Vec2::new(local.x, local.y), viewport);
-
-    pick::sprite_at(frame.world, world)
+        .viewport_to_world(Vec2::new(local.x, local.y), viewport)
 }

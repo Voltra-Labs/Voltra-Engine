@@ -8,14 +8,14 @@
 use std::collections::HashSet;
 
 use voltra_core::egui::{
-    self, Align2, Color32, CornerRadius, CursorIcon, Frame, Id, LayerId, Order, Rect, RichText,
-    Sense, Stroke, StrokeKind, TextStyle, Ui, Vec2,
+    self, Align2, CursorIcon, Frame, Id, RichText, Sense, TextStyle, Ui, Vec2,
 };
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_scene::hierarchy::{self, HierarchyError};
 use voltra_scene::{Name, SceneId};
 
+use crate::drag;
 use crate::editor::Editor;
 use crate::undo::SceneView;
 
@@ -141,7 +141,7 @@ fn row(
         // `dnd_set_drag_payload` deliberately withholds its `Grab` icon from a
         // clickable widget, which is why hovering no longer reads as "move me".
         ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
-        ghost(ui, &label(frame.world, entity));
+        drag::ghost(ui, &label(frame.world, entity));
     }
 
     // What the drop would do, drawn while the pointer is still moving. A drag
@@ -151,13 +151,13 @@ fn row(
     // swallowing the drop silently.
     if let Some(held) = response.dnd_hover_payload::<Entity>() {
         match hierarchy::can_parent(frame.world, *held, entity) {
-            Ok(()) => outline(ui, response.rect, ui.visuals().selection.bg_fill),
+            Ok(()) => drag::outline(ui, response.rect, ui.visuals().selection.bg_fill),
             // `Itself` is the row the drag started on, and marking your own row
             // as rejected reads as a broken panel rather than as a rule.
             Err(HierarchyError::Itself) => {}
             Err(_) => {
                 ui.ctx().set_cursor_icon(CursorIcon::NoDrop);
-                outline(ui, response.rect, ui.visuals().error_fg_color);
+                drag::outline(ui, response.rect, ui.visuals().error_fg_color);
             }
         }
     }
@@ -240,42 +240,6 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Reparent) {
         selected: Some(id),
     };
     editor.history.commit(view);
-}
-
-/// Draws the box that says a drop would land here.
-///
-/// An outline rather than a filled highlight: the row is drawn by the time this
-/// runs, and a fill over it would hide the name the user is aiming at.
-fn outline(ui: &Ui, rect: Rect, color: Color32) {
-    ui.painter().rect_stroke(
-        rect,
-        CornerRadius::same(2),
-        Stroke::new(1.5, color),
-        StrokeKind::Inside,
-    );
-}
-
-/// Draws the dragged row's name at the cursor.
-///
-/// On the tooltip layer, so it is over every panel: a drag that leaves the
-/// hierarchy still has to show what is being carried. This is the part
-/// `dnd_drag_source` used to do for free, and the reason it is hand-rolled is
-/// that the same call also swallowed the click.
-fn ghost(ui: &Ui, text: &str) {
-    let Some(pointer) = ui.ctx().pointer_interact_pos() else {
-        return;
-    };
-    let painter = ui.ctx().layer_painter(LayerId::new(
-        Order::Tooltip,
-        Id::new("hierarchy-drag-ghost"),
-    ));
-    painter.text(
-        pointer + Vec2::new(12.0, 0.0),
-        Align2::LEFT_CENTER,
-        text,
-        TextStyle::Body.resolve(ui.style()),
-        ui.visuals().strong_text_color(),
-    );
 }
 
 /// What a row calls this entity.

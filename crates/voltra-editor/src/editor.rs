@@ -8,6 +8,7 @@ use voltra_scene::ComponentRegistry;
 use crate::camera::ViewportCamera;
 use crate::gizmo::Gizmo;
 use crate::panels;
+use crate::panels::assets::AssetBrowser;
 use crate::play::{Play, PlayContext, PlayState};
 use crate::tool::Tool;
 use crate::undo::{selected_id, shortcut, History, SceneView, UndoContext};
@@ -44,6 +45,8 @@ pub struct Editor {
     pub(crate) registry: ComponentRegistry,
     /// Every scene edit that can be undone, and every one that has been.
     pub(crate) history: History,
+    /// Where the asset browser is looking, and what it last read there.
+    pub(crate) assets: AssetBrowser,
 }
 
 impl Editor {
@@ -83,6 +86,10 @@ impl Editor {
         panels::toolbar::show(self, ui, frame);
         panels::hierarchy::show(self, ui, frame);
         panels::inspector::show(self, ui, frame);
+        // After the two side panels, so it is docked between them rather than
+        // across the whole window: its drop targets are the viewport above and
+        // the inspector beside it, and a browser far from both is a long drag.
+        panels::assets::show(self, ui, frame);
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);

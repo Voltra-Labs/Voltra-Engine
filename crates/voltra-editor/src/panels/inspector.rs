@@ -1,7 +1,7 @@
 //! Right panel: the components of the selected entity.
 
 use voltra_assets::{AssetPath, Textures};
-use voltra_core::egui::{self, Color32, DragValue, RichText, TextEdit, Ui};
+use voltra_core::egui::{self, Color32, DragValue, Frame, RichText, Stroke, TextEdit, Ui};
 use voltra_core::UiFrame;
 use voltra_render::wgpu;
 use voltra_scene::{hierarchy, Name, SceneId, Sprite, Transform};
@@ -260,55 +260,80 @@ fn texture_ui(
     // `&str` still borrowing `sprite` at that point would fight that
     // mutation for no reason — the committed path does not change shape
     // once read.
-    let committed = sprite
-        .texture
-        .as_ref()
-        .map(AssetPath::as_str)
-        .unwrap_or("")
-        .to_owned();
+    let committed = committed_path(sprite);
     let mut buffer = ui.ctx().data_mut(|data| {
         data.get_temp_mut_or_insert_with::<String>(buffer_id, || committed.clone())
             .clone()
     });
 
     let mut claim = None;
-    ui.horizontal(|ui| {
-        let response = ui.add(TextEdit::singleline(&mut buffer).hint_text("path/to/texture.png"));
-        let clear_clicked = ui.button("Clear").clicked();
+    // The field is a drop target as well as a text box, which is how the same
+    // assignment is made in Unity, Unreal and Godot: a path is typed once and
+    // dragged from the browser every time after that. The frame gains a border
+    // while a payload is in the air so the target is visible before the release
+    // rather than discovered by trying it.
+    let armed = egui::DragAndDrop::has_payload_of_type::<AssetPath>(ui.ctx());
+    let zone = if armed {
+        Frame::default().stroke(Stroke::new(1.5, ui.visuals().selection.bg_fill))
+    } else {
+        Frame::default()
+    };
 
-        // Clicking `Clear` also moves focus off the `TextEdit`, so both
-        // conditions can be true on the same frame; `else if` makes Clear win
-        // rather than letting the stale buffer commit and then immediately
-        // get overwritten, which loaded a texture just to discard it.
-        //
-        // `lost_focus` alone also covers Enter: a singleline `TextEdit`
-        // surrenders focus on it. Guarded on a real change so clicking in
-        // and out without editing does not re-run `set_texture` for no
-        // reason.
-        if clear_clicked {
-            claim = Some("Set texture");
-            sprite.set_texture(None, textures, device, queue);
-            buffer.clear();
-        } else if response.lost_focus() && buffer != committed {
-            claim = Some("Set texture");
-            match AssetPath::new(&buffer) {
-                Ok(path) => sprite.set_texture(Some(path), textures, device, queue),
-                Err(e) => log::error!("invalid texture path {buffer:?}: {e}"),
+    let (_, dropped) = ui.dnd_drop_zone::<AssetPath, _>(zone, |ui| {
+        ui.horizontal(|ui| {
+            let response =
+                ui.add(TextEdit::singleline(&mut buffer).hint_text("path/to/texture.png"));
+            let clear_clicked = ui.button("Clear").clicked();
+
+            // Clicking `Clear` also moves focus off the `TextEdit`, so both
+            // conditions can be true on the same frame; `else if` makes Clear
+            // win rather than letting the stale buffer commit and then
+            // immediately get overwritten, which loaded a texture just to
+            // discard it.
+            //
+            // `lost_focus` alone also covers Enter: a singleline `TextEdit`
+            // surrenders focus on it. Guarded on a real change so clicking in
+            // and out without editing does not re-run `set_texture` for no
+            // reason.
+            if clear_clicked {
+                claim = Some("Set texture");
+                sprite.set_texture(None, textures, device, queue);
+                buffer.clear();
+            } else if response.lost_focus() && buffer != committed {
+                claim = Some("Set texture");
+                match AssetPath::new(&buffer) {
+                    Ok(path) => sprite.set_texture(Some(path), textures, device, queue),
+                    Err(e) => log::error!("invalid texture path {buffer:?}: {e}"),
+                }
+                // Resyncs the box: an accepted edit shows the normalised path,
+                // a rejected one reverts rather than leaving bad text sitting
+                // there looking committed.
+                buffer = committed_path(sprite);
             }
-            // Resyncs the box: an accepted edit shows the normalised path,
-            // a rejected one reverts rather than leaving bad text sitting
-            // there looking committed.
-            buffer = sprite
-                .texture
-                .as_ref()
-                .map(AssetPath::as_str)
-                .unwrap_or("")
-                .to_owned();
-        }
+        });
     });
+
+    // After the box, so a path dropped onto a field being typed into wins: the
+    // drop is the more deliberate of the two gestures, and the text it replaces
+    // was never committed.
+    if let Some(path) = dropped {
+        claim = Some("Set texture");
+        sprite.set_texture(Some((*path).clone()), textures, device, queue);
+        buffer = committed_path(sprite);
+    }
 
     ui.ctx()
         .data_mut(|data| data.insert_temp(buffer_id, buffer));
 
     claim
+}
+
+/// The path a sprite is actually showing, as the text box spells it.
+fn committed_path(sprite: &Sprite) -> String {
+    sprite
+        .texture
+        .as_ref()
+        .map(AssetPath::as_str)
+        .unwrap_or("")
+        .to_owned()
 }

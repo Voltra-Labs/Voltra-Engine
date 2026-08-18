@@ -2,6 +2,7 @@
 
 mod draw;
 mod simulation;
+mod thumbnails;
 mod ui_frame;
 
 use std::path::PathBuf;
@@ -18,6 +19,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
 use crate::app::simulation::Simulation;
+use crate::app::thumbnails::Thumbnails;
 use crate::input::Input;
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
@@ -51,6 +53,11 @@ pub struct App {
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
     viewport: Option<TextureId>,
+    /// The egui id of every loaded texture, so a panel can draw one.
+    ///
+    /// Filled before each layout rather than on demand: the layout callback
+    /// runs inside `EguiLayer::prepare`, which holds the layer mutably.
+    thumbnails: Thumbnails,
     /// Size the UI last asked the scene to be rendered at.
     requested_size: (u32, u32),
     ui: Option<UiFn>,
@@ -196,12 +203,20 @@ impl App {
             return;
         };
 
+        let device = renderer.context().device();
         for path in watcher.drain() {
-            textures.reload(
-                renderer.context().device(),
-                renderer.context().queue(),
-                &path,
-            );
+            if !textures.reload(device, renderer.context().queue(), &path) {
+                continue;
+            }
+            // The handle survived the swap; the view behind it did not. A
+            // thumbnail still pointing at the old view draws a texture that has
+            // been destroyed, which is a validation error rather than a stale
+            // picture.
+            let (Some(egui), Some(handle)) = (self.egui.as_mut(), textures.by_path_handle(&path))
+            else {
+                continue;
+            };
+            self.thumbnails.refresh(egui, device, textures, handle);
         }
     }
 }

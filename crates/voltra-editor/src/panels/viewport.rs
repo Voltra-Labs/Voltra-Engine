@@ -3,11 +3,14 @@
 //! Layout only. What the pointer and keyboard do with it is
 //! [`crate::camera::ViewportCamera`]'s job.
 
+use voltra_assets::AssetPath;
 use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 
+use crate::drag;
 use crate::editor::Editor;
 use crate::play::PlayState;
+use crate::spawn;
 use crate::tool::Tool;
 
 /// What the viewport image is multiplied by while the editor is not editing.
@@ -74,6 +77,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 editor.history.claim(tool.label());
             }
 
+            // Before the click and the camera: a release that carries an asset
+            // is a drop, not a selection and not the end of a pan.
+            drop_asset(editor, frame, ui, &scene);
+
             // Before navigation: a click and a drag are mutually exclusive in
             // egui, so this cannot swallow a pan.
             if !outcome.consumed && scene.clicked() {
@@ -97,4 +104,40 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 voltra_physics::debug::draw(world, contacts, lines);
             }
         });
+}
+
+/// Adds a sprite where an asset was dropped, as one undo entry.
+///
+/// Unity, Unreal and Godot all instantiate on drop rather than opening a
+/// dialogue, and all three put the new object where the pointer released rather
+/// than at the origin — the drop *is* the placement, and a sprite that appears
+/// somewhere else has to be moved for no reason.
+///
+/// Refused while playing, like every other edit: the scene the history is
+/// addressed against is the authored one, and Stop would throw the sprite away
+/// without saying so.
+fn drop_asset(editor: &mut Editor, frame: &mut UiFrame<'_>, ui: &Ui, scene: &egui::Response) {
+    if editor.play.state() != PlayState::Editing {
+        return;
+    }
+
+    // What the drop would do, before the release. A viewport that accepts a
+    // drag silently and only reacts once it is too late to change your mind is
+    // the complaint every content browser gets.
+    if scene.dnd_hover_payload::<AssetPath>().is_some() {
+        drag::outline(ui, scene.rect, ui.visuals().selection.bg_fill);
+    }
+
+    let Some(path) = scene.dnd_release_payload::<AssetPath>() else {
+        return;
+    };
+    // `Response::interact_pointer_pos` is `None` on the release frame of a drag
+    // that started in another widget, which is every drop this handles.
+    let Some(pointer) = ui.ctx().pointer_interact_pos() else {
+        return;
+    };
+    let at = crate::picking::world_at(scene, pointer, frame);
+    spawn::record(editor, frame, "Add sprite", |frame| {
+        spawn::textured_sprite(frame, at, &path)
+    });
 }

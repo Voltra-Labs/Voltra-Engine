@@ -5,6 +5,7 @@
 //! it. Sits below `voltra-scene` and above `voltra-render`, and reaches wgpu
 //! only through `voltra_render::wgpu`.
 
+pub mod browse;
 pub mod error;
 pub mod handle;
 pub mod path;
@@ -14,6 +15,7 @@ pub mod store;
 pub mod textures;
 pub mod watch;
 
+pub use browse::{Entry, EntryKind};
 pub use error::AssetError;
 pub use handle::Handle;
 pub use path::AssetPath;
