@@ -55,8 +55,21 @@ be selected by clicking it in the viewport; clicking empty space clears the
 selection. `Scene ▸ Save` and `Scene ▸ Open` write and read
 `assets/scenes/scene.ron`.
 
+The hierarchy lists the scene as a tree. An entity's `Name` is what a row says —
+the inspector renames it, and an unnamed one falls back to its index. Dragging a
+row onto another makes it that entity's child; dragging it onto the empty space
+below the tree makes it a root again. A child's transform is **relative to its
+parent**, so moving, turning or scaling a parent carries its children with it,
+and `Delete` on a parent deletes everything under it. A reparent keeps the
+entity where it is on screen, and is one undo entry.
+
+Physics and parenting do not mix yet: an entity carrying a `RigidBody` or a
+`Collider` cannot be parented, because the solver reads its transform as a
+world-space value. The refusal is logged rather than silent.
+
 The left of the toolbar holds the transform tools, and the gizmo drawn over the
-selection says what a drag will do before it is started.
+selection says what a drag will do before it is started. The gizmos work in
+world space, so a child's handles sit where the child is drawn.
 
 | Tool | Key | Gizmo | Drag |
 | --- | --- | --- | --- |
@@ -151,6 +164,7 @@ privileged and plain `cargo build` covers everything.
 | 13 | Play mode: snapshot on Play, restore on Stop | done |
 | 14 | Undo and redo: per-entity records, one entry per interaction | done |
 | 15 | Rotate and scale gizmos, `W`/`E`/`R` tools | done |
+| 16 | Names, parent/child transforms, the hierarchy as a tree | done |
 
 ## Contributing
 
