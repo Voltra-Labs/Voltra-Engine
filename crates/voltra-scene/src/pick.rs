@@ -4,8 +4,9 @@
 //! volume. 3D picking is a different subsystem and will not reuse this.
 
 use voltra_ecs::{Entity, World};
-use voltra_render::glam::Vec2;
+use voltra_render::glam::{Mat3, Vec2};
 
+use crate::hierarchy::WorldTransforms;
 use crate::sprite::{draw_key, Sprite};
 use crate::transform::Transform;
 
@@ -39,23 +40,25 @@ const MIN_DETERMINANT: f32 = 1e-12;
 ///
 /// [`SpriteBatch::from_world`]: crate::batch::SpriteBatch::from_world
 pub fn sprite_at(world: &World, point: Vec2) -> Option<Entity> {
+    // The same composed matrices the batch draws with, so what is picked is
+    // what is on screen. A parented sprite is nowhere near its own `Transform`.
+    let transforms = WorldTransforms::from_world(world);
+
     world
         .query2::<Transform, Sprite>()
-        .filter(|(_entity, transform, _sprite)| contains(transform, point))
+        .filter(|(entity, _transform, _sprite)| contains(transforms.matrix(*entity), point))
         .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite))
         .map(|(entity, _transform, _sprite)| entity)
 }
 
-/// Whether `point`, in world space, falls inside this transform's quad.
+/// Whether `point`, in world space, falls inside the quad `matrix` places.
 ///
 /// Carries the point into the sprite's local space rather than building an
 /// oriented bounding box in world space. Every sprite is the same axis-aligned
 /// unit quad before its transform, so once the point is local the test is two
 /// comparisons — and rotation and non-uniform scale come out exact with no
 /// second code path.
-fn contains(transform: &Transform, point: Vec2) -> bool {
-    let matrix = transform.matrix();
-
+fn contains(matrix: Mat3, point: Vec2) -> bool {
     // A zero scale on either axis makes the matrix singular. `Mat3::inverse`
     // does not panic on one: it returns infinities and NaN, and every
     // comparison against NaN is false. `inverse_or_zero` is worse rather than

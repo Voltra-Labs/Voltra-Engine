@@ -191,8 +191,8 @@ fn two_sprites_naming_one_path_sample_the_same_texture() {
     );
 
     let mut batch = SpriteBatch::default();
-    batch.push(&left.0, &left.1);
-    batch.push(&right.0, &right.1);
+    batch.push(left.0.matrix(), &left.1);
+    batch.push(right.0.matrix(), &right.1);
     assert_eq!(batch.ranges.len(), 1, "one texture must be one run");
 
     let pixels = render_batch(&device, &queue, &batch, &textures, &wide_camera());
@@ -224,8 +224,8 @@ fn two_paths_reach_their_own_textures_in_one_frame() {
     let right = sprite_at(1.0, Some("blue.png"), &mut textures, &device, &queue);
 
     let mut batch = SpriteBatch::default();
-    batch.push(&left.0, &left.1);
-    batch.push(&right.0, &right.1);
+    batch.push(left.0.matrix(), &left.1);
+    batch.push(right.0.matrix(), &right.1);
     assert_eq!(batch.ranges.len(), 2, "two textures must be two runs");
 
     let pixels = render_batch(&device, &queue, &batch, &textures, &wide_camera());
@@ -261,7 +261,7 @@ fn a_path_that_does_not_load_draws_the_placeholder_checker() {
     );
 
     let mut batch = SpriteBatch::default();
-    batch.push(&missing.0, &missing.1);
+    batch.push(missing.0.matrix(), &missing.1);
 
     let pixels = render_batch(&device, &queue, &batch, &textures, &close_camera());
 
@@ -304,7 +304,7 @@ fn an_untextured_sprite_still_tints_through_white() {
     assert!(sprite.texture_handle.is_none());
 
     let mut batch = SpriteBatch::default();
-    batch.push(&Transform::default(), &sprite);
+    batch.push(Transform::default().matrix(), &sprite);
     assert_eq!(batch.ranges.len(), 1);
     assert!(
         batch.ranges[0].texture.is_none(),
@@ -335,7 +335,7 @@ fn a_reloaded_texture_changes_what_is_drawn() {
     let sprite = sprite_at(0.0, Some("swap.png"), &mut textures, &device, &queue);
 
     let mut batch = SpriteBatch::default();
-    batch.push(&sprite.0, &sprite.1);
+    batch.push(sprite.0.matrix(), &sprite.1);
 
     let before = render_batch(&device, &queue, &batch, &textures, &close_camera());
     let centre = at(&before, SIZE / 2, SIZE / 2);

@@ -72,7 +72,7 @@ re-exports, so a version bump is a one-line change.
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-assets` | Asset identity, the texture cache, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
-| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial` |
+| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection and the solver that resolves them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `step`, `SolverParams`, `SolverBodies`, `ImpulseCache`, `Softness` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
@@ -1431,6 +1431,95 @@ the authored scene the entries are addressed against. Every apply also cancels
 the gizmo drag, resets physics and re-resolves sprite textures — a `Drag` holds
 an `Entity`, the contact cache is keyed by one, and `Sprite::texture_handle` is
 `#[serde(skip)]`.
+
+### The hierarchy is a link on the child, stored by identity
+
+`Parent` lives on the child and names its parent by `SceneId`; there is no
+`Children` list. Bevy carries both and spends real API surface keeping them
+agreeing through every spawn, despawn and reparent — one direction cannot
+disagree with itself, and the list a panel wants is one pass (`children_of`).
+The cost is that finding a parent's children is O(entities) rather than O(1),
+which is a panel-per-frame cost over a scene that fits in a hierarchy list.
+
+Stored as an id, resolved to an `Entity`: exactly the shape `Sprite` already
+uses for a texture (`texture: AssetPath` plus a skipped `texture_handle`), and
+for the same reason — an `Entity` is an index and a generation, both recycled by
+the allocator, so writing one to a file would make the file mean something
+different every run. `resolve_parents` runs after every load, undo and play
+restore, in one pass over an id map rather than a linear `entity_with_id` per
+link. A link naming an id that is not there stays unresolved and is **kept**:
+the child draws as a root, and the next save writes the id back rather than
+quietly deleting a relationship a build with more of the scene could resolve.
+
+The scene file stays a flat list in id order — Unity's shape (a transform with
+a parent pointer), not Godot's (a node tree that *is* the scene). Moving an
+entity in the tree is then a one-line diff, and the loader never has to order
+its spawns; the price is that a child may be written before its parent, which
+is why resolution is a pass after the load rather than per record.
+
+Rules live in `set_parent` because a rule enforced at the only write is a rule:
+no self-parent, no cycle, and no parent without a `SceneId` (a link that cannot
+be saved is worse than a refused drag). Every walk up or down the tree — the
+panel's recursion included — terminates on a cycle anyway, because a hand-edited
+file can name one and the editor has to open that file rather than hang on it.
+
+### A transform is local, and the composed one is computed per frame
+
+`Transform` means "relative to my parent". Two shapes of consumer need the
+composed matrix, and they get different tools: `world_matrix` walks one chain
+for a single lookup (a gizmo, an inspector), and `WorldTransforms::from_world`
+composes the whole world in one memoised pass for the callers that walk
+everything (the sprite batch, picking). The pass stops each walk at the first
+ancestor already composed, so a chain of depth *d* over *n* entities is O(n)
+rather than O(n·d).
+
+Rejected: a stored `GlobalTransform` component kept up to date on every write,
+which is Bevy's and Unity's answer. It is the right answer when a frame reads
+world transforms many times more often than it writes them; ours reads them
+twice — draw and pick — and an editor writes one every frame a gizmo is
+dragged. A cached component would also need invalidation on reparent, on
+despawn and on any direct write to a `Transform`, which is three places to
+forget. Revisit when something reads world transforms per contact.
+
+`SpriteBatch::push` and picking's `contains` take a `Mat3` rather than a
+`&Transform` for a reason worth stating: a chain of parents can express a shear
+(a rotated child under a non-uniformly scaled parent) that three fields cannot,
+and passing the matrix keeps the drawn geometry exact. `Transform::from_matrix`
+does drop the shear — Unity has the same hole and calls it skew — and is used
+only where a value has to land back in the three fields, which is a gizmo drag
+on a parented entity.
+
+### Physics and parenting are exclusive, for now
+
+The solver reads and writes `Transform` as a world-space value, in the broad
+phase, the narrow phase, the gather and the scatter. A parented body would fall
+along its parent's rotated axes and resolve contacts in a frame nothing else
+knows about, silently. `set_parent` therefore refuses any entity carrying a
+`RigidBody` or a `Collider`, and refuses to parent anything *to* one.
+
+Rejected for now: gathering world transforms in `SolverBodies::gather` and
+decomposing back to local at scatter. That is the real answer and it is Unity's
+(a child rigidbody simulates in world space), but it touches the whole physics
+crate, and the decomposition is lossy exactly where a hierarchy is interesting
+— a non-uniformly scaled parent. Doing it badly to avoid saying no would make
+the simulation quietly wrong, which is the one failure mode physics must not
+have. A file that already pairs the two is warned about on load and left alone:
+dropping either component would be an edit to someone's scene made without
+asking.
+
+### Deleting a parent deletes its children
+
+Unity, Unreal and Godot all do this, and the alternative is worse than it
+sounds: an orphan keeps its local transform, which now means a world transform,
+so a deleted parent scatters its children across the scene instead of taking
+them with it. `despawn_recursive` returns everything it despawned so the undo
+entry can name every id — an undo that revived the parent alone would leave the
+children deleted for good.
+
+A *despawn* that is not recursive (a load rollback, `Clear`) still leaves links
+dangling, and that is handled the other way: an unresolved link draws as a root
+and is kept. The two rules cover the two cases — a deliberate delete takes the
+subtree, an accident of bookkeeping never loses data.
 
 ### wgpu 30 API notes
 

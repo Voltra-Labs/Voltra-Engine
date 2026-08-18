@@ -22,7 +22,7 @@ use voltra_core::egui::{PointerButton, Response};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::Transform;
+use voltra_scene::{hierarchy, Transform};
 
 use crate::tool::Tool;
 use drag::Drag;
@@ -115,16 +115,20 @@ impl Gizmo {
         if let Some(active) = self.drag.as_mut() {
             let entity = active.entity;
             let updated = active.transform(cursor_world);
-            let Some(transform) = frame.world.get_mut::<Transform>(entity) else {
-                // Despawned mid-drag, or its Transform removed. Ending the drag
-                // is the whole response: there is nothing left to transform.
+            // The drag works in world space, because that is where the cursor
+            // is; the entity stores a transform local to its parent. This is
+            // the one conversion between the two, and it is why the drag
+            // arithmetic needs to know nothing about the hierarchy.
+            if !hierarchy::set_world_transform(frame.world, entity, &updated) {
+                // Despawned mid-drag, its Transform removed, or its parent
+                // collapsed to a point. Ending the drag is the whole response:
+                // there is nothing left to transform.
                 self.drag = None;
                 return GizmoOutcome {
                     consumed: true,
                     dragging: None,
                 };
-            };
-            *transform = updated;
+            }
             return GizmoOutcome {
                 consumed: true,
                 dragging: Some(entity),
@@ -138,10 +142,12 @@ impl Gizmo {
         let Some(entity) = selected else {
             return GizmoOutcome::default();
         };
-        let Some(transform) = frame.world.get::<Transform>(entity) else {
+        if frame.world.get::<Transform>(entity).is_none() {
             return GizmoOutcome::default();
-        };
-        let start = *transform;
+        }
+        // Where the entity is drawn, not what it stores: the handles are over
+        // the picture, and so is the grab that lands on one.
+        let start = hierarchy::world_transform(frame.world, entity);
         let origin = frame.camera.world_to_viewport(start.translation, viewport);
         let Some(handle) = grab_handle(tool, local, origin, &start) else {
             return GizmoOutcome::default();
@@ -169,9 +175,10 @@ impl Gizmo {
         let Some(entity) = selected else {
             return;
         };
-        let Some(transform) = frame.world.get::<Transform>(entity).copied() else {
+        if frame.world.get::<Transform>(entity).is_none() {
             return;
-        };
+        }
+        let transform = hierarchy::world_transform(frame.world, entity);
 
         // A drag keeps drawing the gizmo it began with, so switching tools
         // mid-drag cannot leave the picture disagreeing with the arithmetic.

@@ -1,6 +1,6 @@
 //! Where a thing is, how big it is, and which way it faces.
 
-use voltra_render::glam::{Mat3, Vec2};
+use voltra_render::glam::{Affine2, Mat3, Vec2};
 
 /// A 2D position, rotation and scale.
 ///
@@ -51,6 +51,29 @@ impl Transform {
     pub fn matrix(&self) -> Mat3 {
         Mat3::from_scale_angle_translation(self.scale, self.rotation, self.translation)
     }
+
+    /// The transform an affine `matrix` describes.
+    ///
+    /// The inverse of [`matrix`](Self::matrix) for anything this type can
+    /// produce, and the way a world-space answer — a gizmo drag, a parent's
+    /// frame — comes back to the three fields an entity actually stores.
+    ///
+    /// **Lossy for a matrix this type could not have produced.** Scale, angle
+    /// and translation cannot express shear, and a chain of parents can: a
+    /// rotated child under a non-uniformly scaled parent shears, and the shear
+    /// is dropped here rather than represented. Unity has the same hole and
+    /// calls it skew. It only bites when a *parented* entity is manipulated in
+    /// world space, which is why the editor writes local values wherever it
+    /// can and comes through here only for a drag.
+    pub fn from_matrix(matrix: Mat3) -> Self {
+        let (scale, rotation, translation) =
+            Affine2::from_mat3(matrix).to_scale_angle_translation();
+        Self {
+            translation,
+            rotation,
+            scale,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -95,6 +118,34 @@ mod tests {
         // it at (1 + 10) * 2 = 22. Getting this backwards makes objects drift
         // further from the origin the bigger they are.
         assert!((apply(&t, Vec2::new(1.0, 0.0)) - Vec2::new(12.0, 0.0)).length() < 1e-6);
+    }
+
+    #[test]
+    fn a_transform_survives_a_trip_through_its_matrix() {
+        let t = Transform::from_translation(Vec2::new(-3.0, 7.0))
+            .with_rotation(FRAC_PI_2 * 0.5)
+            .with_scale(Vec2::new(2.0, 5.0));
+
+        let back = Transform::from_matrix(t.matrix());
+
+        assert!((back.translation - t.translation).length() < 1e-5);
+        assert!((back.rotation - t.rotation).abs() < 1e-5);
+        assert!((back.scale - t.scale).length() < 1e-5);
+    }
+
+    #[test]
+    fn from_matrix_reads_a_composed_chain_as_one_transform() {
+        // What a parented entity's world transform is: the parent's matrix
+        // times the child's. With the parent scaled uniformly there is no
+        // shear, so the answer is exact and the child ends up at the parent's
+        // scale times its own.
+        let parent = Transform::from_translation(Vec2::new(10.0, 0.0)).with_scale(Vec2::splat(2.0));
+        let child = Transform::from_translation(Vec2::new(1.0, 0.0));
+
+        let world = Transform::from_matrix(parent.matrix() * child.matrix());
+
+        assert!((world.translation - Vec2::new(12.0, 0.0)).length() < 1e-5);
+        assert!((world.scale - Vec2::splat(2.0)).length() < 1e-5);
     }
 
     #[test]
