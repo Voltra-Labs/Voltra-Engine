@@ -1,14 +1,22 @@
-//! The translate gizmo: what is drawn over the selection, and what a drag does.
+//! The transform gizmos: what is drawn over the selection, and what a drag does.
 //!
-//! Split three ways because the three parts fail differently. [`handle`] is
-//! screen-space geometry, [`drag`] is world-space arithmetic, and this file is
-//! the frame around them: it reads the pointer, decides whether a press begins
-//! a drag, and asks the world for the transform. The first two are pure and
-//! unit-tested; this one needs egui and a world, and is verified by driving the
-//! editor.
+//! Split four ways because the parts fail differently. [`handle`] is
+//! screen-space hit testing, [`shape`] is the screen-space picture, [`drag`] is
+//! world-space arithmetic, and this file is the frame around them: it reads the
+//! pointer, decides whether a press begins a drag, and asks the world for the
+//! transform. The first three are pure and unit-tested; this one needs egui and
+//! a world, and is verified by driving the editor.
+//!
+//! One `Gizmo` serves all three tools rather than one type each. A press picks
+//! the handle the active tool draws and a [`Drag`] carries that tool with it, so
+//! the difference between moving, turning and scaling is which arithmetic runs —
+//! not which object owns the pointer. Unity, Unreal and Godot all share one
+//! manipulator this way; three would mean three copies of the grab, release and
+//! despawned-mid-drag handling below.
 
 pub mod drag;
 pub mod handle;
+pub mod shape;
 
 use voltra_core::egui::{PointerButton, Response};
 use voltra_core::UiFrame;
@@ -16,15 +24,11 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::Transform;
 
+use crate::tool::Tool;
 use drag::Drag;
-use handle::{Handle, AXIS_LENGTH, CENTRE_HALF, LINE_WIDTH};
+use handle::{Axes, Handle, LINE_WIDTH};
 
-/// x red, y green — the axis convention every editor shares.
-const X_COLOR: [f32; 4] = [0.90, 0.25, 0.25, 1.0];
-const Y_COLOR: [f32; 4] = [0.35, 0.85, 0.35, 1.0];
-const CENTRE_COLOR: [f32; 4] = [0.95, 0.95, 0.95, 1.0];
-
-/// The translate gizmo's state between frames.
+/// The gizmo's state between frames.
 #[derive(Debug, Default)]
 pub struct Gizmo {
     /// `Some` only between a press on a handle and the release that ends it.
@@ -50,9 +54,18 @@ impl Gizmo {
     ///
     /// For when the world changes under the drag rather than the pointer
     /// ending it: a play-mode Stop despawns and respawns every entity, so the
-    /// `Entity` and the grab offset a [`Drag`] holds are both stale.
+    /// `Entity` and the anchors a [`Drag`] holds are all stale.
     pub fn cancel_drag(&mut self) {
         self.drag = None;
+    }
+
+    /// What a live drag is doing, if one is live.
+    ///
+    /// The tool of the *drag*, not the editor's: pressing another tool's key
+    /// mid-drag changes what the next grab will do, and the history has to keep
+    /// calling this one what it started as.
+    pub fn active_tool(&self) -> Option<Tool> {
+        self.drag.map(|drag| drag.tool)
     }
 
     /// Applies one frame of interaction, reporting what it did.
@@ -65,6 +78,7 @@ impl Gizmo {
         response: &Response,
         frame: &mut UiFrame<'_>,
         selected: Option<Entity>,
+        tool: Tool,
     ) -> GizmoOutcome {
         let viewport = viewport_size(response);
         if viewport.x <= 0.0 || viewport.y <= 0.0 {
@@ -98,21 +112,22 @@ impl Gizmo {
         );
         let cursor_world = frame.camera.viewport_to_world(local, viewport);
 
-        if let Some(active) = self.drag {
-            let translation = active.translation(cursor_world);
-            let Some(transform) = frame.world.get_mut::<Transform>(active.entity) else {
+        if let Some(active) = self.drag.as_mut() {
+            let entity = active.entity;
+            let updated = active.transform(cursor_world);
+            let Some(transform) = frame.world.get_mut::<Transform>(entity) else {
                 // Despawned mid-drag, or its Transform removed. Ending the drag
-                // is the whole response: there is nothing left to move.
+                // is the whole response: there is nothing left to transform.
                 self.drag = None;
                 return GizmoOutcome {
                     consumed: true,
                     dragging: None,
                 };
             };
-            transform.translation = translation;
+            *transform = updated;
             return GizmoOutcome {
                 consumed: true,
-                dragging: Some(active.entity),
+                dragging: Some(entity),
             };
         }
 
@@ -126,18 +141,13 @@ impl Gizmo {
         let Some(transform) = frame.world.get::<Transform>(entity) else {
             return GizmoOutcome::default();
         };
-        let start = transform.translation;
-        let origin = frame.camera.world_to_viewport(start, viewport);
-        let Some(handle) = Handle::at(local, origin) else {
+        let start = *transform;
+        let origin = frame.camera.world_to_viewport(start.translation, viewport);
+        let Some(handle) = grab_handle(tool, local, origin, &start) else {
             return GizmoOutcome::default();
         };
 
-        self.drag = Some(Drag {
-            entity,
-            handle,
-            grab: cursor_world,
-            start,
-        });
+        self.drag = Some(Drag::begin(entity, tool, handle, cursor_world, start));
         GizmoOutcome {
             consumed: true,
             dragging: Some(entity),
@@ -145,7 +155,13 @@ impl Gizmo {
     }
 
     /// Pushes this frame's segments for the selection, if there is one.
-    pub fn draw(&self, response: &Response, frame: &mut UiFrame<'_>, selected: Option<Entity>) {
+    pub fn draw(
+        &self,
+        response: &Response,
+        frame: &mut UiFrame<'_>,
+        selected: Option<Entity>,
+        tool: Tool,
+    ) {
         let viewport = viewport_size(response);
         if viewport.x <= 0.0 || viewport.y <= 0.0 {
             return;
@@ -153,13 +169,17 @@ impl Gizmo {
         let Some(entity) = selected else {
             return;
         };
-        let Some(transform) = frame.world.get::<Transform>(entity) else {
+        let Some(transform) = frame.world.get::<Transform>(entity).copied() else {
             return;
         };
 
+        // A drag keeps drawing the gizmo it began with, so switching tools
+        // mid-drag cannot leave the picture disagreeing with the arithmetic.
+        let drawn = self.active_tool().unwrap_or(tool);
+
         // Laid out before `lines()` is called: that borrows the frame mutably,
         // and the layout needs the camera off the same frame.
-        let segments = segments(frame.camera, viewport, transform.translation);
+        let segments = shape::segments(drawn, frame.camera, viewport, &transform);
 
         let lines = frame.lines();
         for (a, b, color) in segments {
@@ -168,41 +188,13 @@ impl Gizmo {
     }
 }
 
-/// The gizmo's six segments, in world units, for an origin at `origin`.
-///
-/// Pure, and separated from [`Gizmo::draw`] for exactly that: the property that
-/// matters — an arm the same length on screen at every zoom — is a statement
-/// about these numbers, and testing it through egui and a GPU would be testing
-/// it nowhere.
-///
-/// The arms are a length in *pixels*, so they are laid out in screen space and
-/// converted back. Any other order gives arms that grow and shrink with the
-/// camera.
-fn segments(
-    camera: &voltra_render::Camera2D,
-    viewport: Vec2,
-    origin: Vec2,
-) -> [(Vec2, Vec2, [f32; 4]); 6] {
-    let screen = camera.world_to_viewport(origin, viewport);
-    let to_world = |offset: Vec2| camera.viewport_to_world(screen + offset, viewport);
-
-    let x_tip = to_world(Vec2::new(AXIS_LENGTH, 0.0));
-    // Screen y grows downward, so the arm drawn upward is negative.
-    let y_tip = to_world(Vec2::new(0.0, -AXIS_LENGTH));
-
-    let half = (to_world(Vec2::splat(CENTRE_HALF)) - origin).abs();
-    let (lo, hi) = (origin - half, origin + half);
-
-    [
-        (origin, x_tip, X_COLOR),
-        (origin, y_tip, Y_COLOR),
-        // The centre square as four segments. A filled quad would need the
-        // sprite pipeline and a texture; four lines need nothing new.
-        (Vec2::new(lo.x, lo.y), Vec2::new(hi.x, lo.y), CENTRE_COLOR),
-        (Vec2::new(hi.x, lo.y), Vec2::new(hi.x, hi.y), CENTRE_COLOR),
-        (Vec2::new(hi.x, hi.y), Vec2::new(lo.x, hi.y), CENTRE_COLOR),
-        (Vec2::new(lo.x, hi.y), Vec2::new(lo.x, lo.y), CENTRE_COLOR),
-    ]
+/// The handle `tool` offers at `cursor`, in viewport-local pixels.
+fn grab_handle(tool: Tool, cursor: Vec2, origin: Vec2, transform: &Transform) -> Option<Handle> {
+    match tool {
+        Tool::Translate => Handle::on_arms(cursor, origin, Axes::WORLD),
+        Tool::Rotate => Handle::on_ring(cursor, origin),
+        Tool::Scale => Handle::on_arms(cursor, origin, Axes::from_rotation(transform.rotation)),
+    }
 }
 
 fn viewport_size(response: &Response) -> Vec2 {
@@ -212,110 +204,91 @@ fn viewport_size(response: &Response) -> Vec2 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_render::Camera2D;
+    use handle::{AXIS_LENGTH, RING_RADIUS};
+    use std::f32::consts::FRAC_PI_2;
 
-    const VIEWPORT: Vec2 = Vec2::new(800.0, 600.0);
+    /// The gizmo's origin in these tests, in screen pixels.
+    const O: Vec2 = Vec2::new(100.0, 100.0);
 
-    /// How long a segment is once projected back to the screen.
-    fn screen_length(camera: &Camera2D, a: Vec2, b: Vec2) -> f32 {
-        let sa = camera.world_to_viewport(a, VIEWPORT);
-        let sb = camera.world_to_viewport(b, VIEWPORT);
-        sa.distance(sb)
+    fn transform() -> Transform {
+        Transform::from_translation(Vec2::ZERO)
     }
 
     #[test]
     fn cancelling_ends_the_drag() {
-        // What Stop needs: `Drag` holds an `Entity` and a grab offset, and both
-        // address a world that a restore is about to despawn and respawn.
+        // What Stop needs: `Drag` holds an `Entity` and world-space anchors, and
+        // both address a world that a restore is about to despawn and respawn.
         let mut world = voltra_ecs::World::new();
         let entity = world.spawn();
         let mut gizmo = Gizmo {
-            drag: Some(Drag {
+            drag: Some(Drag::begin(
                 entity,
-                handle: Handle::Both,
-                grab: Vec2::ZERO,
-                start: Vec2::ZERO,
-            }),
+                Tool::Translate,
+                Handle::Both,
+                Vec2::ZERO,
+                transform(),
+            )),
         };
 
         gizmo.cancel_drag();
 
         assert!(gizmo.drag.is_none());
+        assert_eq!(gizmo.active_tool(), None);
     }
 
     #[test]
-    fn the_arms_are_the_declared_pixel_length() {
-        let camera = Camera2D::new(Vec2::ZERO, 1.0, VIEWPORT.x / VIEWPORT.y);
-        let [x, y, ..] = segments(&camera, VIEWPORT, Vec2::ZERO);
+    fn each_tool_grabs_its_own_handles() {
+        let on_arm = O + Vec2::new(AXIS_LENGTH * 0.5, 0.0);
+        let on_ring = O + Vec2::new(RING_RADIUS, 0.0);
+        let t = transform();
 
-        assert!((screen_length(&camera, x.0, x.1) - AXIS_LENGTH).abs() < 0.01);
-        assert!((screen_length(&camera, y.0, y.1) - AXIS_LENGTH).abs() < 0.01);
-    }
-
-    #[test]
-    fn the_arms_keep_their_pixel_length_at_any_zoom() {
-        // The whole reason the layout happens in screen space. A gizmo laid out
-        // in world units doubles on screen when the camera zooms in.
-        for zoom in [0.1, 0.5, 1.0, 4.0, 25.0] {
-            let camera = Camera2D::new(Vec2::new(3.0, -2.0), zoom, VIEWPORT.x / VIEWPORT.y);
-            let [x, ..] = segments(&camera, VIEWPORT, Vec2::new(1.0, 1.0));
-
-            let length = screen_length(&camera, x.0, x.1);
-            assert!(
-                (length - AXIS_LENGTH).abs() < 0.01,
-                "at zoom {zoom} the arm was {length} px, not {AXIS_LENGTH}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_x_arm_runs_right_and_the_y_arm_runs_up_on_screen() {
-        let camera = Camera2D::new(Vec2::ZERO, 1.0, VIEWPORT.x / VIEWPORT.y);
-        let [x, y, ..] = segments(&camera, VIEWPORT, Vec2::ZERO);
-
-        let origin = camera.world_to_viewport(Vec2::ZERO, VIEWPORT);
-        let x_tip = camera.world_to_viewport(x.1, VIEWPORT);
-        let y_tip = camera.world_to_viewport(y.1, VIEWPORT);
-
-        assert!(x_tip.x > origin.x, "the x arm must run right on screen");
-        // Screen y grows downward, so up is a smaller y.
-        assert!(y_tip.y < origin.y, "the y arm must run up on screen");
-    }
-
-    #[test]
-    fn the_arms_start_at_the_selection() {
-        let camera = Camera2D::new(Vec2::new(-4.0, 7.0), 2.0, VIEWPORT.x / VIEWPORT.y);
-        let origin = Vec2::new(2.5, -1.5);
-        let [x, y, ..] = segments(&camera, VIEWPORT, origin);
-
-        assert_eq!(x.0, origin);
-        assert_eq!(y.0, origin);
-    }
-
-    #[test]
-    fn the_centre_square_closes_on_itself() {
-        let camera = Camera2D::new(Vec2::ZERO, 1.0, VIEWPORT.x / VIEWPORT.y);
-        let [_, _, a, b, c, d] = segments(&camera, VIEWPORT, Vec2::ZERO);
-
-        // Each side starts where the previous one ended, and the last returns
-        // to the first. An open square is four strokes that look like three.
-        assert_eq!(a.1, b.0);
-        assert_eq!(b.1, c.0);
-        assert_eq!(c.1, d.0);
-        assert_eq!(d.1, a.0);
-    }
-
-    #[test]
-    fn the_centre_square_is_the_declared_pixel_size() {
-        let camera = Camera2D::new(Vec2::ZERO, 3.0, VIEWPORT.x / VIEWPORT.y);
-        let [_, _, side, ..] = segments(&camera, VIEWPORT, Vec2::ZERO);
-
-        // Laid out from the centre, so a side spans twice the half-extent.
-        let length = screen_length(&camera, side.0, side.1);
-        assert!(
-            (length - CENTRE_HALF * 2.0).abs() < 0.01,
-            "a side was {length} px, not {}",
-            CENTRE_HALF * 2.0
+        assert_eq!(grab_handle(Tool::Translate, on_arm, O, &t), Some(Handle::X));
+        assert_eq!(grab_handle(Tool::Scale, on_arm, O, &t), Some(Handle::X));
+        assert_eq!(
+            grab_handle(Tool::Rotate, on_ring, O, &t),
+            Some(Handle::Ring)
         );
+    }
+
+    #[test]
+    fn a_tool_does_not_grab_another_tools_handle() {
+        // The ring passes through empty space for the arm gizmos, and the arms
+        // sit inside the ring's middle, which the rotate tool leaves clickable.
+        let on_ring = O + Vec2::new(0.0, RING_RADIUS);
+        let on_arm = O + Vec2::new(AXIS_LENGTH * 0.5, 0.0);
+        let t = transform();
+
+        assert_eq!(grab_handle(Tool::Translate, on_ring, O, &t), None);
+        assert_eq!(grab_handle(Tool::Rotate, on_arm, O, &t), None);
+    }
+
+    #[test]
+    fn the_scale_tool_grabs_the_arms_where_the_rotation_puts_them() {
+        // The translate tool's arms stay on the world axes; the scale tool's
+        // follow the entity. A quarter turn is where the two disagree.
+        let turned = transform().with_rotation(FRAC_PI_2);
+        let up = O + Vec2::new(0.0, -AXIS_LENGTH * 0.5);
+
+        assert_eq!(grab_handle(Tool::Scale, up, O, &turned), Some(Handle::X));
+        assert_eq!(
+            grab_handle(Tool::Translate, up, O, &turned),
+            Some(Handle::Y)
+        );
+    }
+
+    #[test]
+    fn a_live_drag_reports_its_own_tool() {
+        let mut world = voltra_ecs::World::new();
+        let gizmo = Gizmo {
+            drag: Some(Drag::begin(
+                world.spawn(),
+                Tool::Rotate,
+                Handle::Ring,
+                Vec2::new(1.0, 0.0),
+                transform(),
+            )),
+        };
+
+        assert_eq!(gizmo.active_tool(), Some(Tool::Rotate));
     }
 }

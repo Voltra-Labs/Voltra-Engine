@@ -55,7 +55,22 @@ be selected by clicking it in the viewport; clicking empty space clears the
 selection. `Scene ▸ Save` and `Scene ▸ Open` write and read
 `assets/scenes/scene.ron`.
 
-The toolbar above the viewport is the transport. The editor starts in edit mode
+The left of the toolbar holds the transform tools, and the gizmo drawn over the
+selection says what a drag will do before it is started.
+
+| Tool | Key | Gizmo | Drag |
+| --- | --- | --- | --- |
+| Move | `W` | Two arms on the world axes | An arm moves along it, the centre square moves freely |
+| Rotate | `E` | A ring | Anywhere on the ring turns the entity about its own origin |
+| Scale | `R` | Two arms on the entity's own axes, square-tipped | An arm grows that local axis, the centre square grows both |
+
+A scale is a ratio of distances from the origin, so dragging a handle to twice
+its distance doubles the entity whatever size it already was, and dragging it
+through the origin mirrors. A rotate keeps a running total, so a drag that
+carries past half a turn keeps turning instead of snapping back. Each drag is
+one undo entry, whatever it passes through on the way.
+
+The middle of the toolbar is the transport. The editor starts in edit mode
 and simulates nothing until Play is pressed; the viewport is tinted while it is
 not editing, so the mode is never in doubt.
 
@@ -71,16 +86,17 @@ While editing, `Ctrl+Z` / `Ctrl+Y` undo and redo scene edits. `Scene ▸ Open`,
 mid-flight scene.
 
 Camera controls. These belong to the editor, not the engine, and a game built
-on `voltra-core` moves its own camera. Scroll, `WASD` and `R` act only while
-the pointer is over the scene; a middle-drag pan, once started, keeps going
-even after the pointer leaves it.
+on `voltra-core` moves its own camera. Scroll and the keys act only while the
+pointer is over the scene; a middle-drag pan, once started, keeps going even
+after the pointer leaves it. `WASD` pans only with the right mouse button held,
+as it does in Unity and Unreal, because the bare keys belong to the tools.
 
 | Input | Action |
 | --- | --- |
 | Middle-drag | Pan |
 | Scroll wheel | Zoom about the cursor |
-| `W` `A` `S` `D` | Pan |
-| `R` | Reset the camera |
+| Right-hold + `W` `A` `S` `D` | Pan |
+| `F` | Reset the camera |
 
 Useful environment variables (read by `wgpu`):
 
@@ -134,6 +150,7 @@ privileged and plain `cargo build` covers everything.
 | 12c | Hot reload: watch, debounce, swap under a stable handle | done |
 | 13 | Play mode: snapshot on Play, restore on Stop | done |
 | 14 | Undo and redo: per-entity records, one entry per interaction | done |
+| 15 | Rotate and scale gizmos, `W`/`E`/`R` tools | done |
 
 ## Contributing
 

@@ -844,6 +844,46 @@ arm is 60 px long at zoom 0.1 and at zoom 25, and that is a statement about
 numbers. Verified through egui and a GPU it would have been verified at one
 zoom, by eye.
 
+### Three tools, one gizmo, and the camera gave up its bare keys
+
+**`W`/`E`/`R` select move, rotate and scale.** Unity, Unreal and Godot 2D all
+bind those three letters, and a shared binding is worth more than any local
+improvement: it is the one thing a user of another editor already knows before
+reading anything. That cost the scene camera its bare `WASD` pan and its `R`
+reset — `WASD` now pans only while the right mouse button is held, which is what
+Unity and Unreal do with it, and the camera goes home on `F`, which is the frame
+key in both. Rebinding the camera was the cheaper side: it is one editor's
+navigation, against a manipulator binding shared across the industry.
+
+**One `Gizmo` serves all three tools.** A press picks the handle the active tool
+draws, and the `Drag` carries the tool with it, so the difference between the
+tools is which arithmetic runs on the anchors — not which object owns the
+pointer. Three gizmo types would mean three copies of the grab, the release, the
+despawned-mid-drag path and the undo claim. The drag holding its own tool is
+also what makes a tool key pressed mid-drag arm the *next* grab instead of
+turning a move already under way into a rotation, and what keeps the history
+entry named after the verb it actually performed.
+
+**Translate draws on the world axes, scale on the entity's own.** Unity's
+Global/Local switch, with the half of it that is not a choice: a scale is
+applied in the entity's frame, so an arm drawn along a world axis on a turned
+entity would grow a different axis than the one it points at. The hit test
+therefore takes arm *directions* rather than assuming axis alignment, and the
+scale drag maps both anchors through `Mat2::from_angle(-rotation)` before
+dividing.
+
+**Rotation accumulates; scale is a ratio.** A rotate that measured the angle
+between grab and cursor would snap back the short way round the moment a drag
+passed half a turn, so the drag keeps a running total and folds only the
+per-frame difference into `[−π, π)` — what Blender and Unity track. A scale
+divides the current distance from the origin by the distance at the grab, so
+dragging a handle to twice its distance doubles the entity whatever size it was,
+and repeated drags compose. Both guard the degenerate case the geometry allows:
+a cursor on the pivot has no angle, and a grab on the origin has no distance to
+divide by. A scale component is kept clear of exact zero, because zero is a
+one-way door — every later factor multiplies it and stays zero — while negative
+stays reachable, since a mirrored sprite is a legitimate thing to author.
+
 ### Physics is in-house, and its components live in `voltra-scene`
 
 **Written here rather than adopted from Rapier2D.** The reason is the ECS, not
