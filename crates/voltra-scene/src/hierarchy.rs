@@ -27,8 +27,8 @@ pub mod resolve;
 pub mod world_transform;
 
 pub use link::{
-    ancestors, children_of, clear_parent, depth, descendants, despawn_recursive, is_ancestor,
-    parent_of, roots, set_parent, HierarchyError, MAX_DEPTH,
+    ancestors, can_parent, children_of, clear_parent, depth, descendants, despawn_recursive,
+    is_ancestor, parent_of, roots, set_parent, HierarchyError, MAX_DEPTH,
 };
 pub use parent::Parent;
 pub use resolve::resolve_parents;

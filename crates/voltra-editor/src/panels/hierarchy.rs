@@ -7,10 +7,13 @@
 
 use std::collections::HashSet;
 
-use voltra_core::egui::{self, CursorIcon, Frame, Id, RichText, Sense, Ui};
+use voltra_core::egui::{
+    self, Align2, Color32, CornerRadius, CursorIcon, Frame, Id, LayerId, Order, Rect, RichText,
+    Sense, Stroke, StrokeKind, TextStyle, Ui, Vec2,
+};
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
-use voltra_scene::hierarchy;
+use voltra_scene::hierarchy::{self, HierarchyError};
 use voltra_scene::{Name, SceneId};
 
 use crate::editor::Editor;
@@ -72,8 +75,22 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             row(editor, ui, frame, orphan, &mut drawn, &mut request);
                         }
                         // Fills the panel, so the drop zone covers the empty
-                        // space below the tree rather than only the rows.
-                        ui.allocate_space(egui::vec2(ui.available_width(), ui.available_height()));
+                        // space below the tree rather than only the rows — and
+                        // says what releasing there does, because an empty
+                        // area that is secretly a target is not a target.
+                        let free = egui::vec2(ui.available_width(), ui.available_height());
+                        if egui::DragAndDrop::has_payload_of_type::<Entity>(ui.ctx()) {
+                            let (rect, _) = ui.allocate_exact_size(free, Sense::hover());
+                            ui.painter().text(
+                                rect.center_top() + Vec2::new(0.0, 8.0),
+                                Align2::CENTER_TOP,
+                                "drop here to unparent",
+                                TextStyle::Small.resolve(ui.style()),
+                                ui.visuals().weak_text_color(),
+                            );
+                        } else {
+                            ui.allocate_space(free);
+                        }
                     })
                 })
                 .inner;
@@ -124,6 +141,25 @@ fn row(
         // `dnd_set_drag_payload` deliberately withholds its `Grab` icon from a
         // clickable widget, which is why hovering no longer reads as "move me".
         ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+        ghost(ui, &label(frame.world, entity));
+    }
+
+    // What the drop would do, drawn while the pointer is still moving. A drag
+    // with no target feedback is the complaint every hierarchy gets: the row
+    // under the cursor has to say "this one becomes my parent" *before* the
+    // release, and a target the rules refuse has to say so too rather than
+    // swallowing the drop silently.
+    if let Some(held) = response.dnd_hover_payload::<Entity>() {
+        match hierarchy::can_parent(frame.world, *held, entity) {
+            Ok(()) => outline(ui, response.rect, ui.visuals().selection.bg_fill),
+            // `Itself` is the row the drag started on, and marking your own row
+            // as rejected reads as a broken panel rather than as a rule.
+            Err(HierarchyError::Itself) => {}
+            Err(_) => {
+                ui.ctx().set_cursor_icon(CursorIcon::NoDrop);
+                outline(ui, response.rect, ui.visuals().error_fg_color);
+            }
+        }
     }
 
     if response.clicked() {
@@ -204,6 +240,42 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Reparent) {
         selected: Some(id),
     };
     editor.history.commit(view);
+}
+
+/// Draws the box that says a drop would land here.
+///
+/// An outline rather than a filled highlight: the row is drawn by the time this
+/// runs, and a fill over it would hide the name the user is aiming at.
+fn outline(ui: &Ui, rect: Rect, color: Color32) {
+    ui.painter().rect_stroke(
+        rect,
+        CornerRadius::same(2),
+        Stroke::new(1.5, color),
+        StrokeKind::Inside,
+    );
+}
+
+/// Draws the dragged row's name at the cursor.
+///
+/// On the tooltip layer, so it is over every panel: a drag that leaves the
+/// hierarchy still has to show what is being carried. This is the part
+/// `dnd_drag_source` used to do for free, and the reason it is hand-rolled is
+/// that the same call also swallowed the click.
+fn ghost(ui: &Ui, text: &str) {
+    let Some(pointer) = ui.ctx().pointer_interact_pos() else {
+        return;
+    };
+    let painter = ui.ctx().layer_painter(LayerId::new(
+        Order::Tooltip,
+        Id::new("hierarchy-drag-ghost"),
+    ));
+    painter.text(
+        pointer + Vec2::new(12.0, 0.0),
+        Align2::LEFT_CENTER,
+        text,
+        TextStyle::Body.resolve(ui.style()),
+        ui.visuals().strong_text_color(),
+    );
 }
 
 /// What a row calls this entity.
