@@ -1521,6 +1521,65 @@ dangling, and that is handled the other way: an unresolved link draws as a root
 and is kept. The two rules cover the two cases — a deliberate delete takes the
 subtree, an accident of bookkeeping never loses data.
 
+### The asset browser is a dock, and a drop is the placement
+
+Unity's Project window, Unreal's Content Browser and Godot's FileSystem dock are
+the same panel three times: a listing of the asset root, a thumbnail per entry,
+and a drag that ends either on the scene or on a property field. All three dock
+it rather than opening it as a picker, and all three instantiate where the
+pointer released. Adopted whole — a modal picker cannot be dragged from, and a
+sprite that appears at the origin has to be moved for no reason.
+
+Two pieces of theirs are not adopted. There is no folder-tree pane beside the
+tiles: it is a second tree next to the hierarchy, and Unreal's path bar reaches
+the same directories in one row. And a directory is not scanned recursively into
+one flat "all assets" view; the tree on disk is the tree on screen.
+
+The listing lives in `voltra-assets` (`browse::list`) and the panel in the
+editor, on the seam this crate already has — `AssetWatcher` produces paths and
+`Textures` consumes them, with `voltra_core::App` joining the two. `browse`
+knows about names, directories and extensions, and nothing about the GPU.
+
+Everything under the root is listed, including files no loader claims. Those are
+dimmed and cannot be dragged: hiding them reads as a failed copy, and letting
+them be dragged would promise a loader that does not exist. Dotfiles are the one
+exception, because `.gitkeep` and `.DS_Store` are bookkeeping.
+
+The listing is re-read on a 1-second throttle rather than per frame or on a
+button. Per frame is a syscall storm for a picture that changes a few times an
+hour; a button is stale exactly when it matters, which is the moment an artist
+alt-tabs back from an image editor. The asset watcher — which is already
+running — is not the answer: it filters to the extensions that can become
+textures, and this panel also lists directories and everything else.
+
+A texture dropped on the viewport spawns a sprite named after the file, sized to
+the texture's aspect with its longest side at the default scale, in one undo
+entry, and refused outside `Editing` like every other edit. A texture dropped on
+the inspector's texture field assigns it, and beats whatever was half-typed in
+the box, because a drop is the more deliberate of the two gestures.
+
+### A thumbnail is registered before the layout, and sampled raw
+
+A panel cannot hand egui a texture while it is being laid out: the layout
+callback runs *inside* `EguiLayer::prepare`, which already holds the layer
+mutably. So `App` walks `Textures::loaded` before every layout and registers
+whatever is new, and `UiFrame::thumbnail` hands the panel a finished
+`TextureId`. The cost is that a texture named during a layout is drawable on the
+*next* frame — the same lag, for the same reason, as "The viewport is one frame
+behind" above. A blank tile for one frame is the whole of it.
+
+Hot reload swaps a texture's contents under a stable handle, which leaves the id
+correct and the view stale, addressing a texture that no longer exists. So
+`reload_changed_assets` calls `update_view` for the handle whose file changed.
+
+Sprite textures are `Rgba8UnormSrgb`, because the sprite pipeline does not
+convert gamma and the sampler must. egui does convert, at the end of its own
+shader, so a thumbnail sampled through that same view is converted twice and
+every mid-tone darkens — the failure the viewport already had. `Texture`
+therefore carries a second, non-sRGB view exactly as `RenderTarget` does, and
+`Texture::raw_view` is what egui gets. Pinned by
+`a_loaded_texture_keeps_its_colour_as_a_thumbnail` in `tests/headless_egui.rs`.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
