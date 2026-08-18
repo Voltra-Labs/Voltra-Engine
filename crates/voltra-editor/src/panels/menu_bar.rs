@@ -6,10 +6,11 @@ use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Name, RigidBody, SceneId, Sprite, Transform};
+use voltra_scene::{RigidBody, SceneId};
 
 use crate::editor::Editor;
 use crate::play::PlayState;
+use crate::spawn;
 use crate::undo::{selected_id, SceneView};
 
 /// Where the editor saves when no path has been chosen.
@@ -25,7 +26,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("Scene", |ui| {
                 if ui.button("Spawn sprite").clicked() {
-                    record_spawn(editor, frame, "Spawn sprite", spawn_sprite);
+                    spawn::record(editor, frame, "Spawn sprite", |frame| {
+                        spawn::sprite(frame, "Sprite", Vec2::ZERO)
+                    });
                     ui.close();
                 }
                 if ui.button("Clear").clicked() {
@@ -209,8 +212,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 // exactly like the stage before it. The inspector edits the
                 // rotation afterwards like any other field.
                 if ui.button("Spawn falling body").clicked() {
-                    record_spawn(editor, frame, "Spawn body", |frame| {
-                        spawn_body(
+                    spawn::record(editor, frame, "Spawn body", |frame| {
+                        spawn::body(
                             frame,
                             "Falling body",
                             Vec2::new(0.0, 1.5),
@@ -223,8 +226,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.close();
                 }
                 if ui.button("Spawn floor").clicked() {
-                    record_spawn(editor, frame, "Spawn floor", |frame| {
-                        spawn_body(
+                    spawn::record(editor, frame, "Spawn floor", |frame| {
+                        spawn::body(
                             frame,
                             "Floor",
                             Vec2::new(0.0, -1.2),
@@ -245,82 +248,4 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             ui.label(format!("{} entities", frame.world.entity_count()));
         });
     });
-}
-
-/// Runs `spawn`, selects what it made, and records the whole thing as one entry.
-///
-/// A spawn has no id to name when the edit opens, so the id can only be handed
-/// to the commit — which is what `commit_including` is for, and what makes the
-/// undo of a spawn a despawn.
-fn record_spawn(
-    editor: &mut Editor,
-    frame: &mut UiFrame<'_>,
-    label: &'static str,
-    spawn: impl FnOnce(&mut UiFrame<'_>) -> Entity,
-) {
-    let view = SceneView {
-        world: frame.world,
-        registry: &editor.registry,
-        selected: selected_id(frame.world, editor.selected),
-    };
-    editor.history.begin(label, view, []);
-
-    let entity = spawn(frame);
-    editor.selected = Some(entity);
-
-    let id = frame.world.get::<SceneId>(entity).copied();
-    let view = SceneView {
-        world: frame.world,
-        registry: &editor.registry,
-        selected: id,
-    };
-    editor.history.commit_including(view, id);
-}
-
-/// Drops a sprite with a body and a collider that match its outline.
-///
-/// The collider is [`Sprite::HALF_EXTENT`] rather than a literal, so the green
-/// outline lands exactly on the sprite's edge. A collider that disagrees with
-/// the picture by a hair is a bug that reads as a physics bug.
-fn spawn_body(
-    frame: &mut UiFrame<'_>,
-    name: &str,
-    at: Vec2,
-    scale: Vec2,
-    rotation: f32,
-    body: RigidBody,
-    color: [f32; 4],
-) -> Entity {
-    let entity = frame.world.spawn();
-    frame.world.insert(entity, SceneId::new());
-    frame.world.insert(entity, Name::new(name));
-    frame.world.insert(
-        entity,
-        Transform::from_translation(at)
-            .with_scale(scale)
-            .with_rotation(rotation),
-    );
-    frame.world.insert(entity, Sprite::new(color));
-    frame.world.insert(entity, body);
-    frame.world.insert(
-        entity,
-        Collider::Box {
-            half_extents: Vec2::splat(Sprite::HALF_EXTENT),
-        },
-    );
-    entity
-}
-
-/// Drops a white unit sprite at the origin, ready to be moved.
-fn spawn_sprite(frame: &mut UiFrame<'_>) -> Entity {
-    let entity = frame.world.spawn();
-    frame.world.insert(entity, SceneId::new());
-    // Named on spawn, the way Unity names a new object after what made it. The
-    // hierarchy is unreadable when every row says `Entity 7`.
-    frame.world.insert(entity, Name::new("Sprite"));
-    frame
-        .world
-        .insert(entity, Transform::default().with_scale(Vec2::splat(0.4)));
-    frame.world.insert(entity, Sprite::default());
-    entity
 }
