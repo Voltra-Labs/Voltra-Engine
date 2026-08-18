@@ -66,6 +66,10 @@ impl App {
             renderer.camera.aspect = target.aspect();
         }
 
+        // Before the layout that reads it, so a texture loaded by last frame's
+        // layout is drawable by this one.
+        self.thumbnails.sync(egui, &device, textures);
+
         let batch = SpriteBatch::from_world(&self.world);
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -99,6 +103,7 @@ impl App {
             viewport,
             viewport_size: (target.width(), target.height()),
             requested_size: &mut self.requested_size,
+            thumbnails: self.thumbnails.ids(),
         };
         egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
 

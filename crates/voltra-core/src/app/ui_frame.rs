@@ -5,10 +5,12 @@
 //! cannot reach the frame already in flight. `resolve_world_textures` exists
 //! only to back `UiFrame::resolve_sprite_textures`.
 
-use voltra_assets::Textures;
+use std::collections::HashMap;
+
+use voltra_assets::{Handle, Textures};
 use voltra_ecs::World;
 use voltra_physics::Contact;
-use voltra_render::{wgpu, Camera2D, LineBatch};
+use voltra_render::{wgpu, Camera2D, LineBatch, Texture};
 use voltra_scene::Sprite;
 
 use super::simulation::Simulation;
@@ -58,6 +60,8 @@ pub struct UiFrame<'a> {
     pub(super) viewport: TextureId,
     pub(super) viewport_size: (u32, u32),
     pub(super) requested_size: &'a mut (u32, u32),
+    /// Loaded textures as egui knows them, for a panel that draws one.
+    pub(super) thumbnails: &'a HashMap<Handle<Texture>, TextureId>,
 }
 
 impl<'a> UiFrame<'a> {
@@ -69,6 +73,16 @@ impl<'a> UiFrame<'a> {
     /// Physical size the scene was rendered at this frame.
     pub fn viewport_size(&self) -> (u32, u32) {
         self.viewport_size
+    }
+
+    /// The id egui draws a loaded texture by, if it has one yet.
+    ///
+    /// `None` for the frame a texture is first named: the registration happens
+    /// before the layout, and a panel that names one is by definition inside
+    /// the layout. Draw a blank tile and ask again next frame — the same
+    /// one-frame lag the viewport has, for the same reason.
+    pub fn thumbnail(&self, handle: Handle<Texture>) -> Option<TextureId> {
+        self.thumbnails.get(&handle).copied()
     }
 
     /// The overlay a panel draws into: world-unit endpoints, pixel widths.
