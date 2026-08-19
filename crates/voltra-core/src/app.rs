@@ -1,6 +1,7 @@
 //! Event loop driver.
 
 mod draw;
+mod framing;
 mod simulation;
 mod thumbnails;
 mod ui_frame;
@@ -18,6 +19,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+use crate::app::framing::SceneFraming;
 use crate::app::simulation::Simulation;
 use crate::app::thumbnails::Thumbnails;
 use crate::input::Input;
@@ -65,6 +67,12 @@ pub struct App {
     input: Input,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
     simulation: Simulation,
+    /// Points the frame at the scene's camera when there is no UI.
+    ///
+    /// Unused on the editor's path: there the viewport panel decides which
+    /// camera the frame is drawn through, because it has an editor camera to
+    /// choose between and a place to say so.
+    framing: SceneFraming,
     /// The simulation: its fixed clock, its tuning, and the contact impulses
     /// that have to survive from one step to the next.
     physics_world: PhysicsWorld,
@@ -179,10 +187,13 @@ impl App {
     /// One simulation step, between the events arriving and `Input::end_frame`
     /// wiping the per-frame sets.
     ///
-    /// Deliberately empty of camera work. How a scene is navigated is the
-    /// editor's business, not the platform layer's; `voltra-editor` does it
-    /// from the viewport panel. A game reads [`Input`] and moves its own
-    /// camera.
+    /// Deliberately empty of camera *navigation*. How a scene is flown around
+    /// is the editor's business, not the platform layer's; `voltra-editor`
+    /// does it from the viewport panel. A game reads [`Input`] and moves its
+    /// own camera — or authors a [`Camera`] into the scene, which the no-UI
+    /// draw path frames through.
+    ///
+    /// [`Camera`]: voltra_scene::Camera
     fn update(&mut self) {
         let delta = self.clock.tick();
         self.step_physics(delta.as_secs_f32());

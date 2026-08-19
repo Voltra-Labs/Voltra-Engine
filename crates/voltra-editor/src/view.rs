@@ -97,10 +97,7 @@ impl View {
     /// last framing on screen is more use than a black rectangle while the
     /// author works out which camera to enable, and the panel says so in words.
     pub fn show_game_camera(&self, world: &World, camera: &mut Camera2D) -> bool {
-        let Some(entity) = camera::active(world) else {
-            return false;
-        };
-        let Some(view) = camera::view(world, entity, camera.aspect) else {
+        let Some(view) = camera::active_view(world, camera.aspect) else {
             return false;
         };
         *camera = view;

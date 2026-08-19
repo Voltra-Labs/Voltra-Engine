@@ -121,6 +121,16 @@ pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<Camera2D> {
     Some(Camera2D::new(position, camera.zoom(), aspect))
 }
 
+/// The view the scene renders through at `aspect`: [`active`], then [`view`].
+///
+/// `None` when no camera is active, which is the state both callers have to
+/// answer for — the editor's game view keeps the last framing and says so in
+/// words, and the player keeps the default framing and logs it once. They
+/// answer it differently, so this composes the two lookups and nothing more.
+pub fn active_view(world: &World, aspect: f32) -> Option<Camera2D> {
+    view(world, active(world)?, aspect)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,5 +285,36 @@ mod tests {
     fn the_size_bounds_are_the_zoom_bounds_the_other_way_up() {
         assert!((Camera::new(Camera::MAX_SIZE).zoom() - Camera2D::MIN_ZOOM).abs() < 1e-9);
         assert!((Camera::new(Camera::MIN_SIZE).zoom() - Camera2D::MAX_ZOOM).abs() < 1e-3);
+    }
+
+    #[test]
+    fn the_active_view_frames_the_camera_that_wins() {
+        let mut world = World::new();
+        spawn(&mut world, Camera::new(2.0), Vec2::new(-5.0, 0.0));
+        spawn(
+            &mut world,
+            Camera::new(4.0).with_priority(1),
+            Vec2::new(7.0, -3.0),
+        );
+
+        let view = active_view(&world, 1.5).expect("one of them is active");
+        assert_eq!(view.position, Vec2::new(7.0, -3.0));
+        assert_eq!(view.zoom(), 0.25);
+        assert_eq!(view.aspect, 1.5);
+    }
+
+    #[test]
+    fn a_scene_without_an_active_camera_has_no_active_view() {
+        let mut world = World::new();
+        spawn(
+            &mut world,
+            Camera {
+                active: false,
+                ..Default::default()
+            },
+            Vec2::ZERO,
+        );
+
+        assert!(active_view(&world, 1.0).is_none());
     }
 }

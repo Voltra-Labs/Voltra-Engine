@@ -15,9 +15,9 @@
 ## Layers
 
 ```
-        ┌──────────────────┐  binary — wires everything together
-        │  voltra-editor   │
-        └──────────────────┘
+  ┌──────────────┐  ┌──────────────┐  binaries — each wires its own front end
+  │voltra-editor │  │voltra-player │
+  └──────────────┘  └──────────────┘
                   │
         ┌─────────▼────────┐  platform: event loop, window, input, time
         │   voltra-core    │
@@ -76,6 +76,7 @@ re-exports, so a version bump is a one-line change.
 | `voltra-physics` | Simulation over those components: integration, contact detection and the solver that resolves them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `step`, `SolverParams`, `SolverBodies`, `ImpulseCache`, `Softness` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
+| `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `scratch_root`, `write_png` |
 
 ### Planned crates
@@ -1652,6 +1653,74 @@ Rejected:
   per section becomes a screenful of overlapping rectangles. The selected one is
   drawn, which is Unity's answer, and the active one is drawn solid so the
   distinction is legible without opening the inspector.
+
+### The player is a second binary, and the command line is what a build is told
+
+A shipped game is `voltra-player`, not `voltra-editor --game`. Unity builds a
+Player, Godot exports against a template that has no editor in it, and Unreal
+ships without the editor module — all three separate the two *binaries* rather
+than branching inside one, because the guarantee wanted here is a compile-time
+one: egui, the panels, undo, the gizmos and the asset watcher cannot end up in
+a build that does not link them. A flag can be got wrong at runtime; a
+dependency edge that does not exist cannot be.
+
+The player is wiring and nothing else — parse, load, `App::run` — because
+everything it needs already exists one layer down. That is the test the split
+was worth making: if the player had needed engine code the editor already had,
+that code was in the wrong crate.
+
+**The scene's camera is applied by `voltra-core`, not by the player.** The
+no-UI draw path frames through `camera::active_view` before it builds the
+batch, so the `Camera` component means the same thing in a build as it does in
+the editor's game view. Leaving it to the binary would make every game written
+against this engine re-implement it, and would leave the editor as the only
+thing that ever read a component authored for the opposite case. The editor
+keeps its own answer — `View::show_game_camera` — because it has a second
+camera to fall back to and a panel to say so in; both now go through one
+lookup in `voltra-scene`, and only the "no active camera" answer differs: the
+editor keeps the last framing and writes it into the viewport, the player keeps
+the default framing and logs it once, latched, so a sixty-a-second complaint
+does not bury the log.
+
+**The scene loads before the window opens.** A build that cannot read its scene
+has nothing to be, and a window onto an empty world looks like a working build
+of a broken game. Godot says "Cannot load main scene" and stops; the player
+logs the error and exits non-zero.
+
+**Physics runs from the first frame and hot reload is off.** There is no
+authoring state to protect and no reason to watch files that will not change —
+the two switches `App` already had, set the way a game sets them.
+
+**What a build is told arrives as arguments** — `<scene>`, `--asset-root`,
+`--title`, `--size` — parsed in `args.rs` rather than read inline in `main`.
+Godot's export templates take `--main-pack`, Unreal's shipped binary takes a map
+name and `-ResX`/`-ResY`. An unknown flag is refused rather than ignored, and a
+second positional argument is refused rather than merged, because additive
+scene loading is a real feature and not one this stage decided on. The window
+title falls back to the scene file's stem, which is the closest thing to a
+project name the player has been handed.
+
+`assets/scenes/sandbox.ron` is what the player is run against: a camera, a
+floor and two crates that fall onto it. It is pinned by a test in the player
+crate — the sample a `cargo run` in the README points at must keep parsing, and
+a scene file is exactly the kind of artefact that rots silently.
+
+Rejected:
+
+- **A `--editor` flag on one binary.** One target to build, and every editor
+  dependency in the shipped game forever.
+- **A project settings file now** (Godot's `project.godot`, Unity's
+  ProjectSettings). It is the right shape for the same information — which
+  scene boots, window size, title — and it is a stage of its own, with an
+  editor UI to author it and an export step to write it. The command line is
+  what that stage will read *into*, so nothing here has to be undone.
+- **A `voltra-runtime` library between `voltra-core` and the player**, holding
+  the wiring "any game" needs. The wiring is sixty lines with one caller; a
+  crate for it would be an abstraction invented before its second user.
+- **Loading several scenes into one world.** Additive loading is real — Unity
+  has it — but it needs an answer for duplicate `SceneId`s and for which scene
+  an entity belongs to when one is unloaded. Refusing a second scene now costs
+  nothing later.
 
 ### wgpu 30 API notes
 

@@ -42,6 +42,7 @@ needed — everything else comes from Cargo.
 
 ```sh
 cargo run -p voltra-editor      # launch the editor
+cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no editor
 cargo build --workspace         # build everything
 cargo test --workspace          # run tests
 cargo clippy --workspace --all-targets -- -D warnings
@@ -120,6 +121,15 @@ as it does in Unity and Unreal, because the bare keys belong to the tools.
 | Right-hold + `W` `A` `S` `D` | Pan |
 | `F` | Reset the camera |
 
+The player is what a shipped game is: a scene, a window, and no editor in the
+binary at all. It takes the scene as its one argument, simulates from the first
+frame, and draws through the `Camera` the scene authored — with no active
+camera it keeps the default framing and says so in the log.
+
+```sh
+voltra-player [--asset-root DIR] [--title TEXT] [--size WxH] <SCENE>
+```
+
 Useful environment variables (read by `wgpu`):
 
 ```sh
@@ -136,11 +146,13 @@ Voltra-Engine/
 ├── assets/               # runtime assets (shaders, textures, scenes)
 ├── crates/
 │   ├── voltra-ecs/       # entities and components — zero dependencies
+│   ├── voltra-assets/    # handles, paths, the texture cache, hot reload
 │   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
 │   ├── voltra-physics/   # rigid bodies, integration, contact detection
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
-│   └── voltra-editor/    # binary: the editor and its panels
+│   ├── voltra-editor/    # binary: the editor and its panels
+│   └── voltra-player/    # binary: runs a scene with no editor in it
 └── docs/
     ├── ARCHITECTURE.md   # layering, crate graph, planned crates
     └── CONVENTIONS.md    # naming, file/folder rules, code style
@@ -176,6 +188,7 @@ privileged and plain `cargo build` covers everything.
 | 16 | Names, parent/child transforms, the hierarchy as a tree | done |
 | 17 | Asset browser: a dock of the asset root, drag to place | done |
 | 18 | The game camera: a scene component, and a game view | done |
+| 19 | The player: a second binary that runs a scene with no editor | done |
 
 ## Contributing
 

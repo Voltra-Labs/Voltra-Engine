@@ -1,0 +1,46 @@
+(
+    version: 1,
+    entities: [
+        (
+            id: "019fe300-0000-7000-8000-000000000001",
+            components: {
+                "Name": "Camera",
+                "Transform": (translation:(0.0,0.5),rotation:0.0,scale:(1.0,1.0)),
+                "Camera": (size:3.0,priority:0,active:true),
+            },
+        ),
+        (
+            id: "019fe300-0000-7000-8000-000000000002",
+            components: {
+                "Name": "Floor",
+                "Transform": (translation:(0.0,-2.0),rotation:0.0,scale:(8.0,0.5)),
+                "Sprite": (color:(0.25,0.27,0.32,1.0),sort_order:0,texture:None),
+                "RigidBody": (body_type:Static,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:0.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false),
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "PhysicsMaterial": (friction:0.6,restitution:0.0),
+            },
+        ),
+        (
+            id: "019fe300-0000-7000-8000-000000000003",
+            components: {
+                "Name": "Crate",
+                "Transform": (translation:(-0.6,1.6),rotation:0.2,scale:(0.6,0.6)),
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:1,texture:Some(Path("sprites/checker.png"))),
+                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:1.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.05,lock_rotation:false),
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "PhysicsMaterial": (friction:0.6,restitution:0.1),
+            },
+        ),
+        (
+            id: "019fe300-0000-7000-8000-000000000004",
+            components: {
+                "Name": "Crate",
+                "Transform": (translation:(0.5,3.2),rotation:-0.35,scale:(0.6,0.6)),
+                "Sprite": (color:(1.0,0.55,0.3,1.0),sort_order:2,texture:None),
+                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:1.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.05,lock_rotation:false),
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "PhysicsMaterial": (friction:0.6,restitution:0.1),
+            },
+        ),
+    ],
+)
