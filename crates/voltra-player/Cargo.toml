@@ -1,0 +1,14 @@
+[package]
+name = "voltra-player"
+description = "Runs a Voltra scene with no editor in it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-core.workspace = true
+voltra-ecs.workspace = true
+voltra-scene.workspace = true
+env_logger.workspace = true
+log.workspace = true

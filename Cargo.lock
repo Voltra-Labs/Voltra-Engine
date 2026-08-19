@@ -2917,6 +2917,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-player"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "voltra-core",
+ "voltra-ecs",
+ "voltra-scene",
+]
+
+[[package]]
 name = "voltra-render"
 version = "0.1.0"
 dependencies = [
