@@ -31,6 +31,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     });
                     ui.close();
                 }
+                if ui.button("Spawn camera").clicked() {
+                    spawn::record(editor, frame, "Spawn camera", |frame| {
+                        spawn::camera(frame, "Camera", Vec2::ZERO)
+                    });
+                    ui.close();
+                }
                 if ui.button("Clear").clicked() {
                     // Silently, because Clear is destructive anyway: a scene
                     // being emptied has no mid-flight state worth protecting.
