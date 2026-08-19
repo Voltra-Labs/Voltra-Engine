@@ -16,3 +16,8 @@ winit.workspace = true
 egui.workspace = true
 egui-winit.workspace = true
 log.workspace = true
+
+# The examples are real games written against the loop: they need a logger
+# and nothing else the crate does not already depend on.
+[dev-dependencies]
+env_logger.workspace = true

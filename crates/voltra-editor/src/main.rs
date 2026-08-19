@@ -35,7 +35,7 @@ fn main() {
     let mut editor = Editor::default();
     app.with_ui(move |ui, frame| editor.ui(ui, frame))
         .with_hot_reload()
-        // No `with_physics`: the editor starts in `Editing`, which is the
+        // No `with_simulation`: the editor starts in `Editing`, which is the
         // correct default for an authoring tool, and the toolbar's Play is what
         // turns the switch on.
         .run();

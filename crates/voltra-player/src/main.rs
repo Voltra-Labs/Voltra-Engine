@@ -62,7 +62,7 @@ fn main() -> ExitCode {
     // Physics from the first frame, and no hot reload: a game simulates the
     // moment it starts — there is no authoring state to protect — and it has
     // no reason to watch files it will never see change.
-    let mut app = app.with_physics();
+    let mut app = app.with_simulation();
     if let Some(root) = args.asset_root {
         app = app.with_asset_root(root);
     }
