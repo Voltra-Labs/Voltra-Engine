@@ -12,6 +12,7 @@ use crate::panels::assets::AssetBrowser;
 use crate::play::{Play, PlayContext, PlayState};
 use crate::tool::Tool;
 use crate::undo::{selected_id, shortcut, History, SceneView, UndoContext};
+use crate::view::View;
 
 /// Editor state that outlives a frame.
 ///
@@ -47,6 +48,9 @@ pub struct Editor {
     pub(crate) history: History,
     /// Where the asset browser is looking, and what it last read there.
     pub(crate) assets: AssetBrowser,
+    /// Whether the viewport shows the editor's camera or the scene's, and the
+    /// editor camera parked while the scene's has it.
+    pub(crate) view: View,
 }
 
 impl Editor {

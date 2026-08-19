@@ -1580,6 +1580,79 @@ therefore carries a second, non-sRGB view exactly as `RenderTarget` does, and
 `Texture::raw_view` is what egui gets. Pinned by
 `a_loaded_texture_keeps_its_colour_as_a_thumbnail` in `tests/headless_egui.rs`.
 
+### A game camera is a component, and the viewport picks which camera it shows
+
+The editor camera is not a scene camera. `ViewportCamera` moves the renderer's
+`Camera2D` and belongs to the tool ("The editor owns the editor camera" above);
+what a *shipped game* sees has to be authored, saved with the scene and present
+in a build with no editor in it. Every engine draws this line in the same place:
+Unity's `Camera` is a component on a `GameObject`, Godot's `Camera2D` is a node,
+Unreal's is an actor, Bevy's is an entity — and none of them is the editor's own
+viewport camera.
+
+**`Camera` stores Unity's `orthographicSize`, not `Camera2D`'s zoom.** `size` is
+half the world-space height the camera shows, so "this camera sees three units
+of world" is a fact about the scene; a zoom factor is a fact about a viewport,
+and the two differ by a reciprocal that would sit in a file forever. `size` is
+converted at the seam, by `camera::view`, and `Camera2D::set_zoom` clamps
+whatever comes out of it — a size dragged to zero produces an infinity that the
+existing clamp already answers, so there is one place that decides what a broken
+camera does rather than two.
+
+**Which camera wins is `priority`, then the lower entity index.** Unity calls it
+`depth` and Bevy calls it `order`; both, plus Godot's `enabled`, exist because a
+scene holds several framings and renders through one, and deleting the others to
+choose is not a choice anyone should have to make. `active` is the same flag
+under Godot's and Bevy's name. The index tiebreak matters more than it looks:
+without it the answer depends on query order, and a scene would silently change
+which camera it renders through after a reload.
+
+**Position comes from the composed `Transform`, and rotation is read for
+nothing.** A camera parented to the thing it follows works before any follow
+system exists, which is what `hierarchy::world_matrix` already gives for free. A
+*turned* camera is not free: `Camera2D` is a position and a zoom, so rotation
+would need a rotated view matrix and, behind it, a rotated `viewport_to_world`
+that picking and every gizmo also read. That is a stage, not a field.
+
+**The viewport is one panel with two modes, not two panels.** Unity, Unreal and
+Godot all dock a Scene view and a Game view side by side. There is one viewport
+here, so `View` switches which camera the frame was drawn with and parks the
+editor camera while the game camera has it — pan and zoom survive the round trip,
+which is what makes the toggle cheap enough to press. In `Game` the panel does
+nothing else: no navigation, no `W`/`E`/`R`, no gizmo, no picking, no asset drop,
+because none of those exist in a running game.
+
+**Play does not touch the switch.** The transport already allows a gizmo drag
+during play on purpose — it is how a body gets tuned while gravity acts on it —
+and a Play that seized the viewport for the game camera would take that away
+from whoever had the scene view up. Two docked views make that a non-question
+for Unity; with one panel, leaving the choice with the user is the honest form
+of the same answer.
+
+**No active camera leaves the last framing on screen and says so in words.**
+Unity writes "No cameras rendering" into a black Game view. The words are the
+part that matters — they name a cause the author can fix — while blacking the
+image out throws away the more useful of the two pictures for no gain.
+
+Rejected:
+
+- **A camera resource on the world rather than a component.** One camera, no
+  priority, no serialisation question. It cannot express a scene with a menu
+  camera and a gameplay camera, which is the first thing anyone builds, and it
+  puts the framing somewhere a scene file does not reach.
+- **Making the editor camera a scene entity too** (Godot briefly did something
+  like this). It would put an editor-only object into every saved file and into
+  every game build, and the previous entry rejected the same coupling from the
+  other direction.
+- **Per-camera viewport rectangles and render targets** (Unity's `rect`, split
+  screen). Real, and it needs a second render target and a pass per camera. The
+  frame today draws one scene into one target; this is the stage that follows,
+  not a field on the component.
+- **Drawing every camera's rectangle in the scene view.** A scene with a camera
+  per section becomes a screenful of overlapping rectangles. The selected one is
+  drawn, which is Unity's answer, and the active one is drawn solid so the
+  distinction is legible without opening the inspector.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

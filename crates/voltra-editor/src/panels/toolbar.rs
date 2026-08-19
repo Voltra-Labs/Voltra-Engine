@@ -1,4 +1,5 @@
-//! The toolbar: the transform tools on the left, the transport in the middle.
+//! The toolbar: the transform tools on the left, the transport in the middle,
+//! the viewport's camera on the right.
 //!
 //! Layout and dispatch only. Every transition and every rule about which one is
 //! legal lives in [`crate::play`]; this file decides which button is on screen
@@ -15,6 +16,7 @@ use voltra_core::UiFrame;
 use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::tool::Tool;
+use crate::view::ViewMode;
 
 /// Square transport buttons, in points.
 ///
@@ -78,6 +80,14 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             if stop.clicked() {
                 editor.stop_play(frame);
             }
+
+            // Right-aligned, where Unity, Unreal and Godot all put the view
+            // switch: it says which picture is on screen rather than doing
+            // anything to the scene, so it does not belong beside either the
+            // tools or the transport.
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                views(editor, ui, frame);
+            });
         });
     });
 }
@@ -93,6 +103,20 @@ fn tools(editor: &mut Editor, ui: &mut Ui) {
             .min_size(egui::Vec2::splat(BUTTON));
         if ui.add(button).on_hover_text(tool.hint()).clicked() {
             editor.tool = tool;
+        }
+    }
+}
+
+/// Which camera the viewport draws through, the current one pressed.
+///
+/// Reversed, because a right-to-left layout adds widgets from the right: the
+/// row reads `Scene | Game` on screen either way, and the order of
+/// [`ViewMode::ALL`] stays the order they are written in everywhere else.
+fn views(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
+    for mode in ViewMode::ALL.into_iter().rev() {
+        let button = egui::Button::selectable(editor.view.mode() == mode, mode.label());
+        if ui.add(button).on_hover_text(mode.hint()).clicked() {
+            editor.view.set_mode(mode, frame.camera);
         }
     }
 }

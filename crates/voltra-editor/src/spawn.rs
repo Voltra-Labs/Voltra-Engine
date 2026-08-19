@@ -9,7 +9,7 @@ use voltra_assets::AssetPath;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Name, RigidBody, SceneId, Sprite, Transform};
+use voltra_scene::{Camera, Collider, Name, RigidBody, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 use crate::undo::{selected_id, SceneView};
@@ -62,6 +62,22 @@ pub(crate) fn sprite(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
         Transform::from_translation(at).with_scale(Vec2::splat(DEFAULT_SCALE)),
     );
     frame.world.insert(entity, Sprite::default());
+    entity
+}
+
+/// Drops a camera at `at`, framing what the editor frames at its home zoom.
+///
+/// No sprite and no scale of its own: a camera is a framing, and the entity
+/// carrying it is drawn by [`crate::view::overlay`] rather than by the sprite
+/// batch. `Camera::default` is active, so the first one added to a scene is
+/// immediately the one the game view shows — an added camera that changes
+/// nothing until a checkbox is found is the worse default.
+pub(crate) fn camera(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
+    let entity = frame.world.spawn();
+    frame.world.insert(entity, SceneId::new());
+    frame.world.insert(entity, Name::new(name));
+    frame.world.insert(entity, Transform::from_translation(at));
+    frame.world.insert(entity, Camera::default());
     entity
 }
 

@@ -174,6 +174,8 @@ privileged and plain `cargo build` covers everything.
 | 14 | Undo and redo: per-entity records, one entry per interaction | done |
 | 15 | Rotate and scale gizmos, `W`/`E`/`R` tools | done |
 | 16 | Names, parent/child transforms, the hierarchy as a tree | done |
+| 17 | Asset browser: a dock of the asset root, drag to place | done |
+| 18 | The game camera: a scene component, and a game view | done |
 
 ## Contributing
 
