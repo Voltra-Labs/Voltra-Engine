@@ -6,6 +6,7 @@
 
 pub mod batch;
 pub mod body;
+pub mod camera;
 pub mod collider;
 pub mod format;
 pub mod hierarchy;
@@ -18,6 +19,7 @@ pub mod transform;
 
 pub use batch::{SpriteBatch, SpriteRange};
 pub use body::{BodyType, RigidBody};
+pub use camera::Camera;
 pub use collider::Collider;
 pub use format::{ComponentRegistry, SceneError};
 pub use hierarchy::{Parent, WorldTransforms};
