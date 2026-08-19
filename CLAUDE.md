@@ -35,6 +35,7 @@ Rules:
 
 ```sh
 cargo run -p voltra-editor                                  # launch the editor
+cargo run -p voltra-player -- assets/scenes/sandbox.ron      # run a scene, no editor
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings       # must be clean
@@ -43,8 +44,8 @@ cargo fmt --all
 
 Before calling work done: `fmt`, then tests (and clippy) **scoped to what
 changed** when possible; full workspace clippy when touching shared surfaces
-or before a PR. The editor has an infinite event loop — launch detached, check
-the log, kill it; never run it in the foreground.
+or before a PR. The editor and the player both have an infinite event loop —
+launch detached, check the log, kill it; never run one in the foreground.
 
 ## Layout
 
@@ -55,6 +56,7 @@ crates/
   voltra-render/     GPU layer: device, surface, passes     — owns wgpu
   voltra-core/       platform layer: event loop, window     — owns winit
   voltra-editor/     the editor binary
+  voltra-player/     the player binary: runs a scene, no editor linked
 docs/                ARCHITECTURE.md, CONVENTIONS.md
 ```
 
