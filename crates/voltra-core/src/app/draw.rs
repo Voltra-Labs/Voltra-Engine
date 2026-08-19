@@ -16,6 +16,10 @@ impl App {
         else {
             return;
         };
+        // Before the batch, not after: the frame about to be recorded has to be
+        // the one the scene's camera describes. `aspect` is the window's and
+        // stays the window's — `Renderer::resize` owns it.
+        self.framing.apply(&self.world, &mut renderer.camera);
         // Rebuilt every frame. Caching it means tracking every Transform and
         // Sprite write, which is not worth it until the batch actually shows up
         // in a profile.
