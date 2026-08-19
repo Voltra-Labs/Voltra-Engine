@@ -8,6 +8,7 @@ mod play;
 mod spawn;
 mod tool;
 mod undo;
+mod view;
 
 use editor::Editor;
 use voltra_assets::AssetPath;

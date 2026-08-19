@@ -12,6 +12,7 @@ use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::spawn;
 use crate::tool::Tool;
+use crate::view;
 
 /// What the viewport image is multiplied by while the editor is not editing.
 ///
@@ -43,6 +44,17 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 image = image.tint(PLAY_TINT);
             }
             let scene = ui.add(image);
+
+            // The game view is the scene's camera looking at the scene, and
+            // nothing else: no navigation, no tools, no handles and no drop
+            // target, because none of those exist in a running game. Everything
+            // below this is the editor looking at the scene instead.
+            if editor.view.is_game() {
+                if !editor.view.show_game_camera(frame.world, frame.camera) {
+                    no_camera(ui, &scene);
+                }
+                return;
+            }
 
             // `W`, `E` and `R` pick the tool. Scoped the same way the camera
             // scopes its own keys — hovered, and egui not wanting the keyboard
@@ -95,6 +107,17 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 .gizmo
                 .draw(&scene, frame, editor.selected, editor.tool);
 
+            // What the selected camera would show, if it is one. After the
+            // gizmo, whose handles are what the pointer is aiming at, and
+            // before the colliders, which are the noisiest layer of the three.
+            if let Some(entity) = editor.selected.filter(|e| frame.world.is_alive(*e)) {
+                // Read before the split borrow below, which takes the frame
+                // mutably and would rule out reaching the camera.
+                let aspect = frame.camera.aspect;
+                let (world, lines) = frame.world_and_lines();
+                view::overlay::draw(world, entity, aspect, lines);
+            }
+
             // Last of all: the overlay is drawn in the order it is pushed, and
             // a collider outline must not cover the handle being dragged over
             // it.
@@ -104,6 +127,25 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 voltra_physics::debug::draw(world, contacts, lines);
             }
         });
+}
+
+/// Says the game view has nothing to show, over the frame it cannot draw.
+///
+/// The last framing stays on screen underneath rather than being blacked out:
+/// it is the more useful of the two pictures while the author works out which
+/// camera to add or enable, and the words are what say it is not the game's.
+/// Unity writes the same sentence into its Game view for the same reason.
+fn no_camera(ui: &mut Ui, scene: &egui::Response) {
+    ui.put(
+        scene.rect,
+        egui::Label::new(
+            egui::RichText::new("No active camera")
+                .heading()
+                .color(egui::Color32::WHITE)
+                .background_color(egui::Color32::from_black_alpha(160)),
+        )
+        .selectable(false),
+    );
 }
 
 /// Adds a sprite where an asset was dropped, as one undo entry.
