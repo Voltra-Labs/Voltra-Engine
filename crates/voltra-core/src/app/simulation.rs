@@ -69,16 +69,27 @@ impl App {
             self.physics_world.reset();
         }
 
-        // Requested steps run first and unconditionally: a Step press while
-        // paused must advance the world by exactly one step, and `advance`
-        // would run zero.
-        for _ in 0..self.simulation.take_steps() {
-            self.physics_world.step_once(&mut self.world, self.gravity);
-        }
+        // Requested steps run unconditionally: a Step press while paused must
+        // advance the world by exactly one step, and the clock would owe zero.
+        // They are counted in with the owed ones rather than looped separately
+        // so there is one place a step runs from, and so the game's fixed tick
+        // cannot be forgotten on one of two paths.
+        let requested = self.simulation.take_steps();
+        let owed = if self.simulation.is_running() {
+            // Only while running: a stopped world must not bank the frames it
+            // spent stopped and run them all at once when Play is pressed.
+            self.physics_world.owed_steps(delta)
+        } else {
+            0
+        };
 
-        if self.simulation.is_running() {
-            self.physics_world
-                .advance(&mut self.world, self.gravity, delta);
+        let step = self.physics_world.step();
+        for _ in 0..requested.saturating_add(owed) {
+            // Before the step, not after: a force the tick applies is meant to
+            // act during the step that follows it, which is the whole reason
+            // the hook is per step rather than per frame.
+            self.run_fixed_update(step);
+            self.physics_world.step_once(&mut self.world, self.gravity);
         }
     }
 }
@@ -204,10 +215,10 @@ mod tests {
     }
 
     #[test]
-    fn with_physics_starts_the_switch_on() {
+    fn with_simulation_starts_the_switch_on() {
         // It keeps its name and becomes the *initial* value: a game says it
         // once, the editor says nothing and starts in `Editing`.
         assert!(!App::default().is_simulating());
-        assert!(App::default().with_physics().is_simulating());
+        assert!(App::default().with_simulation().is_simulating());
     }
 }
