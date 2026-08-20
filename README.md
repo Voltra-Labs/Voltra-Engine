@@ -130,6 +130,24 @@ camera it keeps the default framing and says so in the log.
 voltra-player [--asset-root DIR] [--title TEXT] [--size WxH] <SCENE>
 ```
 
+A game is written against the loop with two hooks. `with_update` runs once per
+frame and is where input belongs — an edge is only seen once there.
+`with_fixed_update` runs before each physics step, with `delta` always the fixed
+step, and is where velocities and forces belong. Both are handed a `Tick`: the
+world, the input, the delta that applies, and the last step's contacts.
+
+```rust
+App::new(config)
+    .with_simulation()
+    .with_update(|tick| { /* input, cameras, anything per frame */ })
+    .with_fixed_update(|tick| { /* velocities, forces, per step */ })
+    .run();
+```
+
+```sh
+cargo run -p voltra-core --example platformer   # A/D to walk, Space to jump
+```
+
 Useful environment variables (read by `wgpu`):
 
 ```sh
@@ -189,6 +207,7 @@ privileged and plain `cargo build` covers everything.
 | 17 | Asset browser: a dock of the asset root, drag to place | done |
 | 18 | The game camera: a scene component, and a game view | done |
 | 19 | The player: a second binary that runs a scene with no editor | done |
+| 20 | The game's turn: a per-frame tick, a fixed tick, and input | done |
 
 ## Contributing
 

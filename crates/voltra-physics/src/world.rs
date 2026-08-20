@@ -87,6 +87,28 @@ impl PhysicsWorld {
         &self.contacts
     }
 
+    /// The fixed step, in seconds: how much time one step covers.
+    ///
+    /// What a caller tells a game's fixed tick it is being run for. Read off
+    /// the clock rather than kept anywhere else, so `with_step` stays the one
+    /// place the rate is decided.
+    pub fn step(&self) -> f32 {
+        self.clock.step()
+    }
+
+    /// How many fixed steps a frame of `delta` seconds owes, banked time
+    /// included and the debt consumed.
+    ///
+    /// [`PhysicsWorld::advance`] is this plus the loop. It is separate because
+    /// a caller that has to do something *between* steps — run a game's fixed
+    /// tick, in `voltra-core` — cannot use `advance` and must not own a second
+    /// copy of the clock to work the count out for itself. Asking twice in one
+    /// frame returns zero the second time, which is what consuming the debt
+    /// means.
+    pub fn owed_steps(&mut self, delta: f32) -> u32 {
+        self.clock.steps(delta)
+    }
+
     /// Runs however many fixed steps a frame of `delta` seconds owes.
     ///
     /// The clock caps that count and drops the excess, so a stalled frame makes
@@ -95,7 +117,7 @@ impl PhysicsWorld {
     /// Written in terms of [`PhysicsWorld::step_once`] so there is exactly one
     /// place in the crate where a step happens.
     pub fn advance(&mut self, world: &mut World, gravity: Vec2, delta: f32) -> &[Contact] {
-        let owed = self.clock.steps(delta);
+        let owed = self.owed_steps(delta);
         for _ in 0..owed {
             self.step_once(world, gravity);
         }
@@ -254,6 +276,43 @@ mod tests {
 
         physics.advance(&mut world, G, (1.0 / 60.0) * 0.2);
         assert_eq!(height(&world, ball), 0.0, "the banked 0.9 must be gone");
+    }
+
+    #[test]
+    fn the_owed_steps_are_consumed_by_asking() {
+        // A caller that steps them itself must not be able to ask twice and
+        // run the same debt twice.
+        let mut physics = PhysicsWorld::new();
+
+        assert_eq!(physics.owed_steps(2.5 / 60.0), 2);
+        assert_eq!(
+            physics.owed_steps(0.0),
+            0,
+            "the debt was already handed out"
+        );
+        assert_eq!(
+            physics.owed_steps(0.6 / 60.0),
+            1,
+            "and the half step left over is still banked"
+        );
+    }
+
+    #[test]
+    fn asking_for_the_owed_steps_is_what_advance_does() {
+        let mut counted = PhysicsWorld::new();
+        let (mut counted_world, counted_ball) = floor_and_ball();
+        for _ in 0..counted.owed_steps(3.0 / 60.0) {
+            counted.step_once(&mut counted_world, G);
+        }
+
+        let mut advanced = PhysicsWorld::new();
+        let (mut advanced_world, advanced_ball) = floor_and_ball();
+        advanced.advance(&mut advanced_world, G, 3.0 / 60.0);
+
+        assert_eq!(
+            height(&counted_world, counted_ball),
+            height(&advanced_world, advanced_ball)
+        );
     }
 
     #[test]

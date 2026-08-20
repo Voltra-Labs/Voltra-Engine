@@ -4,6 +4,7 @@ mod draw;
 mod framing;
 mod simulation;
 mod thumbnails;
+mod tick;
 mod ui_frame;
 
 use std::path::PathBuf;
@@ -22,10 +23,12 @@ use winit::window::{Window, WindowId};
 use crate::app::framing::SceneFraming;
 use crate::app::simulation::Simulation;
 use crate::app::thumbnails::Thumbnails;
+use crate::app::tick::TickFn;
 use crate::input::Input;
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
+pub use tick::Tick;
 pub use ui_frame::UiFrame;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
@@ -63,6 +66,10 @@ pub struct App {
     /// Size the UI last asked the scene to be rendered at.
     requested_size: (u32, u32),
     ui: Option<UiFn>,
+    /// The game's per-frame tick, run before the frame's physics steps.
+    update: Option<TickFn>,
+    /// The game's fixed tick, run before each physics step.
+    fixed_update: Option<TickFn>,
     clock: Clock,
     input: Input,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
@@ -133,11 +140,13 @@ impl App {
         self
     }
 
-    /// Simulates rigid bodies on a fixed step.
+    /// Starts with the world live: physics steps, and the game's ticks run.
     ///
     /// Off by default: a scene with no `RigidBody` pays nothing either way, but
-    /// an editor that starts simulating the moment a body is added would move
-    /// the thing being placed out from under the cursor.
+    /// an editor that started simulating the moment a body was added would move
+    /// the thing being placed out from under the cursor, and one that ran game
+    /// logic while authoring would edit the scene behind the author's back —
+    /// which is why Unity runs scripts in play mode only.
     ///
     /// This is the *initial* value of a runtime switch, not a build-time
     /// choice. A game says it once and never thinks about it again; the editor
@@ -146,8 +155,30 @@ impl App {
     /// Contacts are resolved: bodies rest on each other and stacks settle. Set
     /// [`App::gravity`] to change or disable the acceleration, and reach the
     /// solver's tuning through [`App::physics_mut`].
-    pub fn with_physics(mut self) -> Self {
+    pub fn with_simulation(mut self) -> Self {
         self.simulation.set_running(true);
+        self
+    }
+
+    /// Installs the game's per-frame tick, run once before the frame's steps.
+    ///
+    /// This is where input belongs: it is read once per frame, so an edge — a
+    /// key that went down *this* frame — is only counted once here. Runs only
+    /// while the world is live, which for a game is always and for the editor
+    /// is play mode.
+    pub fn with_update(mut self, update: impl FnMut(&mut Tick<'_>) + 'static) -> Self {
+        self.update = Some(Box::new(update));
+        self
+    }
+
+    /// Installs the game's fixed tick, run before each physics step.
+    ///
+    /// Zero, one or several times per frame, with `delta` always the fixed
+    /// step. This is where a force or a velocity belongs: applied per frame it
+    /// would be scaled by the frame rate, which is the bug Unity's
+    /// `FixedUpdate` and Godot's `_physics_process` exist to prevent.
+    pub fn with_fixed_update(mut self, fixed: impl FnMut(&mut Tick<'_>) + 'static) -> Self {
+        self.fixed_update = Some(Box::new(fixed));
         self
     }
 
@@ -196,8 +227,23 @@ impl App {
     /// [`Camera`]: voltra_scene::Camera
     fn update(&mut self) {
         let delta = self.clock.tick();
-        self.step_physics(delta.as_secs_f32());
+        self.advance(delta.as_secs_f32());
         self.reload_changed_assets();
+    }
+
+    /// One frame of world time: the game's tick, then the steps it owes.
+    ///
+    /// Separated from [`App::update`] so a test can hand it a delta instead of
+    /// waiting for one.
+    ///
+    /// **The game's tick runs before the steps, not after.** Unity's order is
+    /// the other way round — `FixedUpdate`, then `Update` — which costs a
+    /// velocity set from input one step of latency before it is integrated.
+    /// Nothing here has to inherit that: input is read at the top of the frame,
+    /// so the frame that saw the key is the frame that moves.
+    fn advance(&mut self, delta: f32) {
+        self.run_update(delta);
+        self.step_physics(delta);
     }
 
     /// Applies whatever the watcher saw since the last frame.

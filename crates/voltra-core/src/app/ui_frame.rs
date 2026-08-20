@@ -46,9 +46,9 @@ pub struct UiFrame<'a> {
     /// What the last physics step found overlapping.
     ///
     /// Read-only: a panel draws these, it does not author them. Empty when
-    /// physics is off, which is the default — see [`App::with_physics`].
+    /// physics is off, which is the default — see [`App::with_simulation`].
     ///
-    /// [`App::with_physics`]: crate::app::App::with_physics
+    /// [`App::with_simulation`]: crate::app::App::with_simulation
     pub(super) contacts: &'a [Contact],
     /// The simulation switch, so a play-mode panel can turn stepping on and
     /// off, ask for a single step, or clear the solver after a restore.

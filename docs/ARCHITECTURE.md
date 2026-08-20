@@ -96,7 +96,8 @@ winit event loop  (voltra-core::App)
   ├─ Resized(size)    → Renderer::resize → GpuContext reconfigures surface
   └─ RedrawRequested
        │
-       ├─ App::update                 input → camera → the physics steps owed
+       ├─ App::update                 game tick → the steps owed, each one
+       │                              preceded by the game's fixed tick
        ├─ RenderTarget::resize        to whatever the viewport panel asked for
        ├─ SpriteBatch::from_world     world → vertices → Mesh
        ├─ Renderer::render_scene      draws into the target, not the window
@@ -1721,6 +1722,78 @@ Rejected:
   has it — but it needs an answer for duplicate `SceneId`s and for which scene
   an entity belongs to when one is unloaded. Refusing a second scene now costs
   nothing later.
+
+### The game gets two ticks, and they run before the steps
+
+Stage 19 shipped a binary that could show a scene and not react to a key. The
+loop now hands the game its turn through two hooks — `App::with_update`, once
+per frame, and `App::with_fixed_update`, once before each physics step — both
+taking a `Tick`: the world, the frame's `Input`, the `delta` that applies, and
+the last step's contacts.
+
+**Two hooks, because a frame and a step are not the same clock.** Unity splits
+`Update` from `FixedUpdate`, Godot `_process` from `_physics_process`, and both
+for the reason the split is unavoidable here: a frame owes zero, one or several
+fixed steps, so a velocity written per frame is scaled by the frame rate, while
+an *edge* — the frame a key went down — is only seen once per frame and would
+be read twice, or missed entirely, by a per-step hook. `Tick::input` is in both
+and the doc comment says which reads belong where, because the compiler cannot.
+
+**One context type for both.** Unity's callbacks take no arguments and read
+`Time.deltaTime` or `Time.fixedDeltaTime` off a global — a tick that can read
+the wrong clock. Godot passes the right `delta` in, which is the better shape,
+and once `delta` is a field the two hooks want the same four things and a second
+type would differ only in its name.
+
+**The tick runs before the steps, not after.** Unity's nominal order is
+`FixedUpdate` → `Update` → render, which costs a velocity set from input one
+step of latency before anything integrates it. Input here is read at the top of
+the frame, so the frame that saw the key is the frame that moves. The fixed tick
+runs immediately before its own step, so a force it applies acts during that
+step rather than the next one.
+
+**The per-frame tick is gated on the simulation switch; the fixed tick is gated
+on a step happening.** Game logic must not run while an editor is authoring —
+Unity runs scripts in play mode only, and `[ExecuteInEditMode]` is the opt-in
+exception — so `run_update` checks `is_running`. A *requested* step, which is
+what the editor's Step button asks for while paused, still runs the fixed tick:
+"advance the world by one step" has to mean the whole world, logic included.
+The two paths were merged into one loop for exactly this reason; two loops meant
+two places to forget the hook.
+
+`PhysicsWorld::owed_steps` exists because of the interleaving: `advance` runs
+the whole loop internally, and a caller that must do something *between* steps
+cannot use it. Splitting the count out keeps `step_once` the one place in
+`voltra-physics` where a step happens, and stops `voltra-core` from owning a
+second clock to work the count out for itself.
+
+**`with_physics` became `with_simulation`.** The switch was never only about
+physics — it is whether the world is live — and a game with no rigid bodies had
+to ask for physics to get its logic ticking. The runtime names (`set_simulating`,
+`is_simulating`) already said this; the builder now agrees with them.
+
+`crates/voltra-core/examples/platformer.rs` is the API's first user: walk with
+`A`/`D`, jump with `Space` when the last step's contacts say something flat is
+underfoot, and a camera that eases after the walker. It is an example rather
+than a crate because it is documentation that has to keep compiling, and
+`cargo clippy --workspace --all-targets` builds it.
+
+Rejected:
+
+- **One hook, per frame only.** Simpler, and it makes every game that touches a
+  rigid body frame-rate dependent — the bug both other engines split their
+  callbacks to prevent.
+- **A `Vec` of systems, Bevy-style scheduling.** Ordering, change detection and
+  parameter injection are a scheduler, and a scheduler is a subsystem with its
+  own stage. Two closures cover a game today and do not have to be undone to
+  add one later.
+- **Handing the callback `&mut App`.** Every private field of the platform
+  layer becomes public surface, and the borrow checker stops the callback from
+  touching the renderer mid-frame anyway.
+- **Collision events (`on_collision_enter`).** Real, and it needs the solver to
+  diff its pairs from step to step and an ordering answer for despawns during a
+  callback. `Tick::contacts` answers "am I standing on something" now without
+  deciding any of that.
 
 ### wgpu 30 API notes
 
