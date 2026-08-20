@@ -6,6 +6,7 @@
 mod camera;
 mod collision;
 mod name;
+mod path_field;
 mod sprite;
 mod transform;
 
