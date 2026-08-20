@@ -2,36 +2,17 @@
 
 use voltra_assets::Handle;
 use voltra_ecs::World;
-use voltra_render::glam::{Mat3, Vec2};
+use voltra_render::glam::Mat3;
 use voltra_render::{Texture, Vertex};
 
 use crate::hierarchy::WorldTransforms;
+use crate::sprite::quad::quad;
+use crate::sprite::sheets::Sheets;
 use crate::sprite::{draw_key, Sprite};
 use crate::transform::Transform;
 
-/// The unit quad every sprite is built from, as `(corner, uv)` pairs.
-///
-/// Centred on the origin so scale and rotation act about the sprite's middle
-/// rather than dragging it away from its own position. V runs opposite to Y
-/// because image rows go down while clip space goes up.
-const CORNERS: [(Vec2, [f32; 2]); 4] = [
-    (
-        Vec2::new(-Sprite::HALF_EXTENT, Sprite::HALF_EXTENT),
-        [0.0, 0.0],
-    ),
-    (
-        Vec2::new(-Sprite::HALF_EXTENT, -Sprite::HALF_EXTENT),
-        [0.0, 1.0],
-    ),
-    (
-        Vec2::new(Sprite::HALF_EXTENT, -Sprite::HALF_EXTENT),
-        [1.0, 1.0],
-    ),
-    (
-        Vec2::new(Sprite::HALF_EXTENT, Sprite::HALF_EXTENT),
-        [1.0, 0.0],
-    ),
-];
+/// Corners per quad. Where they land is [`quad`]'s question, not this one's.
+const CORNERS_PER_QUAD: usize = 4;
 
 /// Two triangles over those four corners.
 const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
@@ -77,7 +58,7 @@ impl SpriteBatch {
     /// Sorted with the unstable variant: `draw_key` is unique per entity, so
     /// there are never any equal keys for stability to preserve, and a
     /// dropped tiebreaker fails louder without it.
-    pub fn from_world(world: &World) -> Self {
+    pub fn from_world(world: &World, sheets: Sheets<'_>) -> Self {
         let mut sprites: Vec<_> = world.query2::<Transform, Sprite>().collect();
         sprites.sort_unstable_by_key(|(entity, _, sprite)| draw_key(*entity, sprite));
 
@@ -88,7 +69,7 @@ impl SpriteBatch {
 
         let mut batch = Self::default();
         for (entity, _transform, sprite) in sprites {
-            batch.push(transforms.matrix(entity), sprite);
+            batch.push(transforms.matrix(entity), sprite, sheets);
         }
         batch
     }
@@ -107,13 +88,17 @@ impl SpriteBatch {
     /// texture that reappears later still gets its own run — the same
     /// painter's-order-over-batching rule `from_world`'s sort already commits
     /// to.
-    pub fn push(&mut self, matrix: Mat3, sprite: &Sprite) {
+    pub fn push(&mut self, matrix: Mat3, sprite: &Sprite, sheets: Sheets<'_>) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
         // batch holds every sprite in the world, not one object's geometry.
         let base = self.vertices.len() as u32;
 
-        for (corner, uv) in CORNERS {
+        // One `quad` call, shared with `pick::sprite_at`. A second opinion
+        // about where a sprite's corners are is a click that misses the pixels
+        // it lands on, and nothing reports it.
+        let quad = quad(sprite, sheets);
+        for (corner, uv) in quad.corners().into_iter().zip(quad.uvs) {
             let world = matrix.transform_point2(corner);
             self.vertices.push(Vertex::new(
                 [world.x, world.y],
@@ -128,16 +113,16 @@ impl SpriteBatch {
         let end = self.indices.len() as u32;
 
         match self.ranges.last_mut() {
-            Some(range) if range.texture == sprite.texture_handle => range.indices.end = end,
+            Some(range) if range.texture == quad.texture => range.indices.end = end,
             _ => self.ranges.push(SpriteRange {
-                texture: sprite.texture_handle,
+                texture: quad.texture,
                 indices: start..end,
             }),
         }
     }
 
     pub fn sprite_count(&self) -> usize {
-        self.vertices.len() / CORNERS.len()
+        self.vertices.len() / CORNERS_PER_QUAD
     }
 
     /// Uploads the batch, or `None` when there is nothing to draw.
@@ -165,6 +150,13 @@ impl SpriteBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use voltra_render::glam::Vec2;
+
+    /// The geometry a world produces with no sheets loaded, which is what a
+    /// sprite that names neither an atlas nor a region draws.
+    fn batch_of(world: &World) -> SpriteBatch {
+        SpriteBatch::from_world(world, Sheets::default())
+    }
 
     fn world_with(sprites: &[(Transform, Sprite)]) -> World {
         let mut world = World::new();
@@ -178,7 +170,7 @@ mod tests {
 
     #[test]
     fn an_empty_world_produces_no_geometry() {
-        let batch = SpriteBatch::from_world(&World::new());
+        let batch = batch_of(&World::new());
         assert!(batch.vertices.is_empty());
         assert!(batch.indices.is_empty());
         assert_eq!(batch.sprite_count(), 0);
@@ -190,13 +182,12 @@ mod tests {
         let e = world.spawn();
         world.insert(e, Transform::default());
 
-        assert_eq!(SpriteBatch::from_world(&world).sprite_count(), 0);
+        assert_eq!(batch_of(&world).sprite_count(), 0);
     }
 
     #[test]
     fn one_sprite_becomes_a_quad() {
-        let batch =
-            SpriteBatch::from_world(&world_with(&[(Transform::default(), Sprite::default())]));
+        let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
 
         assert_eq!(batch.vertices.len(), 4);
         assert_eq!(batch.indices.len(), 6);
@@ -205,8 +196,7 @@ mod tests {
 
     #[test]
     fn an_untransformed_sprite_spans_one_unit_around_the_origin() {
-        let batch =
-            SpriteBatch::from_world(&world_with(&[(Transform::default(), Sprite::default())]));
+        let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
 
         let xs: Vec<f32> = batch.vertices.iter().map(|v| v.position[0]).collect();
         let ys: Vec<f32> = batch.vertices.iter().map(|v| v.position[1]).collect();
@@ -219,7 +209,7 @@ mod tests {
 
     #[test]
     fn the_transform_moves_the_quad() {
-        let batch = SpriteBatch::from_world(&world_with(&[(
+        let batch = batch_of(&world_with(&[(
             Transform::from_translation(Vec2::new(10.0, 0.0)),
             Sprite::default(),
         )]));
@@ -234,7 +224,7 @@ mod tests {
 
     #[test]
     fn scale_grows_the_quad() {
-        let batch = SpriteBatch::from_world(&world_with(&[(
+        let batch = batch_of(&world_with(&[(
             Transform::default().with_scale(Vec2::splat(4.0)),
             Sprite::default(),
         )]));
@@ -246,7 +236,7 @@ mod tests {
     #[test]
     fn the_sprite_colour_reaches_every_vertex() {
         let sprite = Sprite::new([0.25, 0.5, 0.75, 1.0]);
-        let batch = SpriteBatch::from_world(&world_with(&[(Transform::default(), sprite)]));
+        let batch = batch_of(&world_with(&[(Transform::default(), sprite)]));
 
         for v in &batch.vertices {
             assert_eq!(v.color, [0.25, 0.5, 0.75]);
@@ -255,8 +245,7 @@ mod tests {
 
     #[test]
     fn uvs_cover_the_whole_texture_with_v_pointing_down() {
-        let batch =
-            SpriteBatch::from_world(&world_with(&[(Transform::default(), Sprite::default())]));
+        let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
 
         let top = batch
             .vertices
@@ -268,7 +257,7 @@ mod tests {
 
     #[test]
     fn a_second_sprite_gets_its_own_index_range() {
-        let batch = SpriteBatch::from_world(&world_with(&[
+        let batch = batch_of(&world_with(&[
             (Transform::default(), Sprite::default()),
             (
                 Transform::from_translation(Vec2::new(5.0, 0.0)),
@@ -291,7 +280,7 @@ mod tests {
 
     #[test]
     fn indices_never_point_past_the_vertices() {
-        let batch = SpriteBatch::from_world(&world_with(&[
+        let batch = batch_of(&world_with(&[
             (Transform::default(), Sprite::default()),
             (Transform::default(), Sprite::default()),
             (Transform::default(), Sprite::default()),
@@ -349,7 +338,7 @@ mod tests {
             ),
         ]);
 
-        let batch = SpriteBatch::from_world(&world);
+        let batch = batch_of(&world);
         let xs = draw_order(&batch);
 
         // The -3 sprite sits at x = 20 and must come first; painter's order
@@ -378,7 +367,7 @@ mod tests {
         // A baseline, and deliberately named as one. With nothing despawned,
         // storage order already equals spawn order, so this would pass with no
         // sort at all — the test that actually exercises the ordering is below.
-        let xs = draw_order(&SpriteBatch::from_world(&world));
+        let xs = draw_order(&batch_of(&world));
         assert_eq!(xs, vec![1.0, 2.0, 3.0]);
     }
 
@@ -417,7 +406,7 @@ mod tests {
         // `sort_by_key`'s stability preserves storage order and this fails.
         world.despawn(entities[1]);
 
-        let xs = draw_order(&SpriteBatch::from_world(&world));
+        let xs = draw_order(&batch_of(&world));
         assert_eq!(xs, vec![1.0, 3.0, 4.0]);
     }
 
@@ -442,8 +431,16 @@ mod tests {
     fn push_alone_merges_contiguous_same_handles_into_one_range() {
         let a = Handle::forge(0, 0);
         let mut batch = SpriteBatch::default();
-        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
-        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
+        batch.push(
+            Transform::default().matrix(),
+            &sprite_with_texture(Some(a)),
+            Sheets::default(),
+        );
+        batch.push(
+            Transform::default().matrix(),
+            &sprite_with_texture(Some(a)),
+            Sheets::default(),
+        );
 
         assert_eq!(
             batch.ranges,
@@ -459,9 +456,21 @@ mod tests {
         let a = Handle::forge(0, 0);
         let b = Handle::forge(1, 0);
         let mut batch = SpriteBatch::default();
-        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
-        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(b)));
-        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
+        batch.push(
+            Transform::default().matrix(),
+            &sprite_with_texture(Some(a)),
+            Sheets::default(),
+        );
+        batch.push(
+            Transform::default().matrix(),
+            &sprite_with_texture(Some(b)),
+            Sheets::default(),
+        );
+        batch.push(
+            Transform::default().matrix(),
+            &sprite_with_texture(Some(a)),
+            Sheets::default(),
+        );
 
         assert_eq!(
             batch.ranges,
@@ -486,8 +495,16 @@ mod tests {
     fn push_alone_keeps_none_and_some_in_separate_ranges() {
         let a = Handle::forge(0, 0);
         let mut batch = SpriteBatch::default();
-        batch.push(Transform::default().matrix(), &sprite_with_texture(None));
-        batch.push(Transform::default().matrix(), &sprite_with_texture(Some(a)));
+        batch.push(
+            Transform::default().matrix(),
+            &sprite_with_texture(None),
+            Sheets::default(),
+        );
+        batch.push(
+            Transform::default().matrix(),
+            &sprite_with_texture(Some(a)),
+            Sheets::default(),
+        );
 
         assert_eq!(
             batch.ranges,
@@ -534,7 +551,7 @@ mod tests {
             ),
         ]);
 
-        let batch = SpriteBatch::from_world(&world);
+        let batch = batch_of(&world);
         let xs = draw_order(&batch);
 
         assert!(xs[0] > 19.0, "expected the -3 sprite first, got {xs:?}");
@@ -557,7 +574,7 @@ mod tests {
 
     #[test]
     fn from_world_builds_one_range_for_untextured_sprites() {
-        let batch = SpriteBatch::from_world(&world_with(&[
+        let batch = batch_of(&world_with(&[
             (Transform::default(), sprite_with_texture(None)),
             (
                 Transform::from_translation(Vec2::new(5.0, 0.0)),
@@ -576,7 +593,7 @@ mod tests {
 
     #[test]
     fn an_empty_world_produces_no_ranges() {
-        assert!(SpriteBatch::from_world(&World::new()).ranges.is_empty());
+        assert!(batch_of(&World::new()).ranges.is_empty());
     }
 
     #[test]
@@ -589,7 +606,11 @@ mod tests {
 
         let mut batch = SpriteBatch::default();
         for _ in 0..SPRITES {
-            batch.push(Transform::default().matrix(), &Sprite::default());
+            batch.push(
+                Transform::default().matrix(),
+                &Sprite::default(),
+                Sheets::default(),
+            );
         }
 
         let last = batch

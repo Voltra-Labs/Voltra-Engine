@@ -1,5 +1,8 @@
 //! The sprite component: a coloured quad, sized by its entity's transform.
 
+pub mod quad;
+pub mod sheets;
+
 use voltra_assets::{AssetPath, Atlas, Atlases, Frame, Handle, Textures};
 use voltra_ecs::Entity;
 use voltra_render::Texture;

@@ -10,7 +10,7 @@ mod ui_frame;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use voltra_assets::{AssetWatcher, Textures};
+use voltra_assets::{AssetWatcher, Atlases, Textures};
 use voltra_ecs::World;
 use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
@@ -54,6 +54,7 @@ pub struct App {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     textures: Option<Textures>,
+    atlases: Option<Atlases>,
     watcher: Option<AssetWatcher>,
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
@@ -267,9 +268,10 @@ impl App {
     /// is on screen this frame rather than next. Costs one non-blocking
     /// `try_recv` when nothing changed, which is almost every frame.
     fn reload_changed_assets(&mut self) {
-        let (Some(watcher), Some(textures), Some(renderer)) = (
+        let (Some(watcher), Some(textures), Some(atlases), Some(renderer)) = (
             self.watcher.as_mut(),
             self.textures.as_mut(),
+            self.atlases.as_mut(),
             self.renderer.as_ref(),
         ) else {
             return;
@@ -277,6 +279,12 @@ impl App {
 
         let device = renderer.context().device();
         for path in watcher.drain() {
+            // A re-cut sheet changes no pixels, and a repainted one changes no
+            // slicing, so whichever store owns the path answers and the other
+            // ignores it.
+            if atlases.reload(&path) {
+                continue;
+            }
             if !textures.reload(device, renderer.context().queue(), &path) {
                 continue;
             }
@@ -335,6 +343,12 @@ impl ApplicationHandler for App {
             renderer.context().device(),
             renderer.context().queue(),
         );
+
+        // The slicing half of the same problem, and for the same reason: a
+        // sprite naming an atlas has never met an `Atlases` either.
+        let mut atlases = Atlases::new(asset_root.clone());
+        ui_frame::resolve_world_atlases(&mut self.world, &mut atlases);
+        self.atlases = Some(atlases);
 
         if self.hot_reload {
             match AssetWatcher::new(&asset_root) {

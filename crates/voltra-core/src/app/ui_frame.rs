@@ -7,10 +7,11 @@
 
 use std::collections::HashMap;
 
-use voltra_assets::{Handle, Textures};
+use voltra_assets::{Atlases, Handle, Textures};
 use voltra_ecs::World;
 use voltra_physics::Contact;
 use voltra_render::{wgpu, Camera2D, LineBatch, Texture};
+use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::Sprite;
 
 use super::simulation::Simulation;
@@ -32,6 +33,10 @@ pub struct UiFrame<'a> {
     /// never a `Textures` of its own — so the handle it produces is valid
     /// against the bind groups the very same frame is about to draw with.
     pub textures: &'a mut Textures,
+    /// Loaded slicings, shared with this frame's draws for the same reason
+    /// `textures` is: a panel that assigns an atlas must produce a handle the
+    /// batch about to run can resolve.
+    pub atlases: &'a mut Atlases,
     /// Needed to load a texture a panel just named.
     pub device: &'a wgpu::Device,
     /// Needed to upload a texture a panel just named.
@@ -165,6 +170,15 @@ impl<'a> UiFrame<'a> {
     /// for a `Textures::load` cache lookup.
     pub fn resolve_sprite_textures(&mut self) {
         resolve_world_textures(self.world, self.textures, self.device, self.queue);
+        resolve_world_atlases(self.world, self.atlases);
+    }
+
+    /// The stores a sprite's geometry resolves against, as the batch has them.
+    ///
+    /// A panel picking an entity has to ask the same question the draw asked,
+    /// or a click lands somewhere other than the pixels it appears to.
+    pub fn sheets(&self) -> Sheets<'_> {
+        Sheets::new(self.atlases, self.textures)
     }
 }
 
@@ -183,5 +197,17 @@ pub(super) fn resolve_world_textures(
     for (_, sprite) in world.query_mut::<Sprite>() {
         let path = sprite.texture.clone();
         sprite.set_texture(path, textures, device, queue);
+    }
+}
+
+/// Re-resolves every [`Sprite`]'s atlas handle from its path.
+///
+/// The slicing half of [`resolve_world_textures`], and separate from it
+/// because it needs no device: a world can be re-sliced headless, and only the
+/// pixels need a GPU.
+pub(super) fn resolve_world_atlases(world: &mut World, atlases: &mut Atlases) {
+    for (_, sprite) in world.query_mut::<Sprite>() {
+        let path = sprite.atlas.clone();
+        sprite.set_atlas(path, atlases);
     }
 }

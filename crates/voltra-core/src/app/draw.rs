@@ -5,6 +5,7 @@
 use voltra_assets::Textures;
 use voltra_render::egui_backend::ScreenDescriptor;
 use voltra_render::{wgpu, Filter, MeshDraw};
+use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::SpriteBatch;
 
 use super::{App, UiFrame};
@@ -12,8 +13,11 @@ use super::{App, UiFrame};
 impl App {
     /// Draws the world straight to the window. No UI, no intermediate texture.
     pub(super) fn redraw_without_ui(&mut self) {
-        let (Some(renderer), Some(textures)) = (self.renderer.as_mut(), self.textures.as_ref())
-        else {
+        let (Some(renderer), Some(textures), Some(atlases)) = (
+            self.renderer.as_mut(),
+            self.textures.as_ref(),
+            self.atlases.as_ref(),
+        ) else {
             return;
         };
         // Before the batch, not after: the frame about to be recorded has to be
@@ -23,7 +27,7 @@ impl App {
         // Rebuilt every frame. Caching it means tracking every Transform and
         // Sprite write, which is not worth it until the batch actually shows up
         // in a profile.
-        let batch = SpriteBatch::from_world(&self.world);
+        let batch = SpriteBatch::from_world(&self.world, Sheets::new(atlases, textures));
         let mesh = batch.upload(renderer.context().device());
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
@@ -43,6 +47,7 @@ impl App {
             Some(viewport),
             Some(ui),
             Some(textures),
+            Some(atlases),
         ) = (
             self.renderer.as_mut(),
             self.window.as_ref(),
@@ -51,6 +56,7 @@ impl App {
             self.viewport,
             self.ui.as_mut(),
             self.textures.as_mut(),
+            self.atlases.as_mut(),
         )
         else {
             return;
@@ -74,7 +80,9 @@ impl App {
         // layout is drawable by this one.
         self.thumbnails.sync(egui, &device, textures);
 
-        let batch = SpriteBatch::from_world(&self.world);
+        // The immutable reborrow ends with the batch, well before the UI takes
+        // both stores mutably below.
+        let batch = SpriteBatch::from_world(&self.world, Sheets::new(atlases, textures));
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
@@ -99,6 +107,7 @@ impl App {
             world: &mut self.world,
             camera: &mut renderer.camera,
             textures,
+            atlases,
             device: &device,
             queue: &queue,
             lines: &mut self.lines,

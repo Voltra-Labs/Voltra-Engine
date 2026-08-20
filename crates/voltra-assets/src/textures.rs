@@ -176,9 +176,18 @@ impl Textures {
     /// at construction and nothing here ever removes from the store. Only a
     /// handle forged from a different store can reach the `expect`.
     pub fn get(&self, handle: Handle<Texture>) -> &Texture {
-        self.store
-            .get(handle)
+        self.try_get(handle)
             .expect("Textures never removes, so every handle it issued resolves")
+    }
+
+    /// The texture `handle` names, or `None` for a handle this store never
+    /// issued.
+    ///
+    /// [`get`](Self::get)'s answer without the invariant, for a caller that
+    /// holds a handle it did not obtain from this store — two stores in one
+    /// process is a question, not a crash.
+    pub fn try_get(&self, handle: Handle<Texture>) -> Option<&Texture> {
+        self.store.get(handle)
     }
 
     /// The checker drawn in place of a texture that would not load.

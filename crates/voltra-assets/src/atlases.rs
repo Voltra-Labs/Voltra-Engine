@@ -108,9 +108,15 @@ impl Atlases {
     /// construction and nothing here ever removes. Only a handle forged
     /// elsewhere can reach the `expect`.
     pub fn get(&self, handle: Handle<Atlas>) -> &Atlas {
-        self.store
-            .get(handle)
+        self.try_get(handle)
             .expect("Atlases never removes, so every handle it issued resolves")
+    }
+
+    /// The slicing `handle` names, or `None` for a handle this store never
+    /// issued — the same question [`get`](Self::get) answers, without the
+    /// invariant, for a caller holding a handle from some other store.
+    pub fn try_get(&self, handle: Handle<Atlas>) -> Option<&Atlas> {
+        self.store.get(handle)
     }
 
     /// The slicing with no frames, drawn as no frame at all.
