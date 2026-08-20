@@ -4,13 +4,14 @@
 //! them and the rule that turns an edit into an undo entry.
 
 mod camera;
+mod collision;
 mod name;
 mod sprite;
 mod transform;
 
 use voltra_core::egui::{self, Color32, RichText, Ui};
 use voltra_core::UiFrame;
-use voltra_scene::{hierarchy, Camera, SceneId, Sprite, Transform};
+use voltra_scene::{hierarchy, Camera, Collider, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 use crate::undo::SceneView;
@@ -68,6 +69,14 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();
                     claim = claim.or(camera::show(ui, camera));
+                }
+                // Keyed off the collider rather than off the filter itself:
+                // both filter components are absent by default, and an entity
+                // whose filter cannot be reached until it has one would never
+                // get its first.
+                if frame.world.get::<Collider>(entity).is_some() {
+                    ui.separator();
+                    claim = claim.or(collision::show(ui, frame.world, entity));
                 }
                 // A field held down or focused keeps one entry open for the
                 // whole edit, the way a gizmo drag does. Collected and applied
