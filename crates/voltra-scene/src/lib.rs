@@ -4,6 +4,7 @@
 //! `voltra-render`, which knows nothing about entities. Dependencies point
 //! down into both and never back up.
 
+pub mod animation;
 pub mod batch;
 pub mod body;
 pub mod camera;
@@ -18,6 +19,7 @@ pub mod scene_id;
 pub mod sprite;
 pub mod transform;
 
+pub use animation::SpriteAnimation;
 pub use batch::{SpriteBatch, SpriteRange};
 pub use body::{BodyType, RigidBody};
 pub use camera::Camera;

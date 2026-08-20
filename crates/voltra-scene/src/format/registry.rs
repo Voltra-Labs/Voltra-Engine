@@ -15,7 +15,7 @@ use voltra_ecs::{Entity, World};
 use super::error::SceneError;
 use crate::{
     Camera, Collider, CollisionLayers, Name, Parent, PhysicsMaterial, RigidBody, Sensor, Sprite,
-    Transform,
+    SpriteAnimation, Transform,
 };
 
 /// A registered type's save conversion: entity to stored value, or `None` when
@@ -78,6 +78,7 @@ impl ComponentRegistry {
         // the whole file is in, by `hierarchy::resolve_parents`.
         registry.register::<Parent>("Parent");
         registry.register::<Sprite>("Sprite");
+        registry.register::<SpriteAnimation>("SpriteAnimation");
         registry.register::<Camera>("Camera");
         registry.register::<RigidBody>("RigidBody");
         registry.register::<Collider>("Collider");
