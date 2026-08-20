@@ -297,7 +297,7 @@ mod tests {
     }
 
     fn constraints_of(world: &World, cache: &ImpulseCache, warm: bool) -> Vec<ContactConstraint> {
-        let contacts = crate::step::collide(world);
+        let contacts = crate::step::collide(world).contacts;
         let bodies = SolverBodies::gather(world);
         let params = SolverParams::default();
         let softness = params.softness(params.sub_step(1.0 / 60.0));

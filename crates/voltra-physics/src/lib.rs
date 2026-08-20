@@ -23,6 +23,7 @@
 pub mod broad;
 pub mod clock;
 pub mod debug;
+pub mod events;
 pub mod integrate;
 pub mod narrow;
 pub mod solver;
@@ -31,8 +32,9 @@ pub mod world;
 
 pub use broad::candidate_pairs;
 pub use clock::PhysicsClock;
+pub use events::{CollisionEvent, Touch, Touching};
 pub use integrate::{integrate_positions, integrate_velocities};
 pub use narrow::{Contact, Manifold, ManifoldPoint};
 pub use solver::{ImpulseCache, Softness, SolverBodies, SolverParams};
-pub use step::step;
+pub use step::{step, Overlaps};
 pub use world::PhysicsWorld;

@@ -66,7 +66,7 @@ fn a_falling_body_eventually_reaches_the_floor() {
 
     let mut contacts = Vec::new();
     for _ in 0..240 {
-        contacts = step(&mut world, &mut cache, &params, G, DT);
+        contacts = step(&mut world, &mut cache, &params, G, DT).contacts;
         if !contacts.is_empty() {
             break;
         }
@@ -85,7 +85,11 @@ fn an_empty_world_steps_without_contacts() {
     let mut world = World::new();
     let mut cache = ImpulseCache::default();
 
-    assert!(step(&mut world, &mut cache, &SolverParams::default(), G, DT).is_empty());
+    assert!(
+        step(&mut world, &mut cache, &SolverParams::default(), G, DT)
+            .contacts
+            .is_empty()
+    );
 }
 
 #[test]
@@ -94,7 +98,7 @@ fn a_zero_length_step_changes_nothing() {
     let before = translation(&world, ball);
     let mut cache = ImpulseCache::default();
 
-    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, 0.0);
+    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, 0.0).contacts;
 
     assert!(contacts.is_empty());
     assert_eq!(translation(&world, ball), before);
@@ -108,7 +112,7 @@ fn a_body_with_no_collider_moves_and_never_collides() {
     world.insert(entity, RigidBody::new_dynamic(1.0));
 
     let mut cache = ImpulseCache::default();
-    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT);
+    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;
 
     assert!(contacts.is_empty());
     assert!(translation(&world, entity).y < 0.0);
@@ -131,7 +135,7 @@ fn a_collider_with_no_body_is_static_geometry() {
     world.insert(ball, Collider::Circle { radius: 0.5 });
 
     let mut cache = ImpulseCache::default();
-    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT);
+    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;
 
     assert_eq!(contacts.len(), 1);
     assert_eq!(
@@ -152,7 +156,7 @@ fn the_contact_names_the_entities_it_is_between() {
     world.insert(b, Collider::Circle { radius: 1.0 });
 
     let mut cache = ImpulseCache::default();
-    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT);
+    let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;
 
     assert_eq!(contacts.len(), 1);
     assert_eq!((contacts[0].a, contacts[0].b), (a, b));
@@ -173,8 +177,8 @@ fn a_scene_of_immovable_shapes_reports_the_same_contacts_every_step() {
 
     let mut cache = ImpulseCache::default();
     let params = SolverParams::default();
-    let first = step(&mut world, &mut cache, &params, Vec2::ZERO, DT);
-    let second = step(&mut world, &mut cache, &params, Vec2::ZERO, DT);
+    let first = step(&mut world, &mut cache, &params, Vec2::ZERO, DT).contacts;
+    let second = step(&mut world, &mut cache, &params, Vec2::ZERO, DT).contacts;
 
     assert_eq!(first, second);
 }
