@@ -5,6 +5,19 @@ use voltra_render::glam::UVec2;
 
 use crate::path::AssetPath;
 
+/// The suffix that marks a RON file as a slicing: `hero.atlas.ron`.
+///
+/// A suffix rather than an extension, because the extension is `ron` and the
+/// scene format owns that already. Matching the whole tail is what keeps a
+/// scene save out of the atlas reload path without a rule about either.
+pub const ATLAS_SUFFIX: &str = ".atlas.ron";
+
+/// Whether a file name is an atlas file. Case-insensitive, as the texture
+/// extensions are: an artist on Windows types `Coin.Atlas.RON` and means it.
+pub fn is_atlas(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(ATLAS_SUFFIX)
+}
+
 /// One rectangle of a sheet, in texels.
 ///
 /// Texels rather than UVs because texels are what a sheet is authored in: a
@@ -256,7 +269,7 @@ impl AtlasFile {
         }
 
         let texture = match self.texture {
-            Some(raw) => Some(AssetPath::new(&raw).map_err(AtlasError::Texture)?),
+            Some(raw) => Some(AssetPath::new(&raw).map_err(|e| AtlasError::Texture(Box::new(e)))?),
             None => None,
         };
 
@@ -279,7 +292,12 @@ pub enum AtlasError {
     /// would be a guess.
     NoSheet,
     /// The texture hint is not a usable asset path.
-    Texture(crate::error::AssetError),
+    ///
+    /// Boxed because [`AssetError`](crate::error::AssetError) carries this
+    /// type in turn — a file that will not parse is an asset error, and a path
+    /// that will not validate is an atlas error — and two enums holding each
+    /// other by value have no size.
+    Texture(Box<crate::error::AssetError>),
 }
 
 impl std::fmt::Display for AtlasError {

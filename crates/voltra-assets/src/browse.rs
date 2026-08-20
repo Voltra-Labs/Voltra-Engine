@@ -13,7 +13,7 @@ use std::path::Path;
 
 use crate::error::AssetError;
 use crate::path::AssetPath;
-use crate::watch::TEXTURE_EXTENSIONS;
+use crate::watch::is_texture;
 
 /// What one row of a listing is.
 ///
@@ -23,7 +23,8 @@ use crate::watch::TEXTURE_EXTENSIONS;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
     Directory,
-    /// A file with an extension in [`TEXTURE_EXTENSIONS`].
+    /// A file with an extension in
+    /// [`TEXTURE_EXTENSIONS`](crate::watch::TEXTURE_EXTENSIONS).
     Texture,
     /// A file this engine has no loader for.
     Other,
@@ -139,15 +140,6 @@ pub fn parent(dir: &AssetPath) -> Option<AssetPath> {
     let (head, _) = dir.as_str().rsplit_once('/')?;
     // Cannot fail: `head` is a non-empty prefix of an already validated path.
     AssetPath::new(head).ok()
-}
-
-/// Whether a file name ends in an extension this engine can load as a texture.
-fn is_texture(name: &str) -> bool {
-    let Some((_, extension)) = name.rsplit_once('.') else {
-        return false;
-    };
-    let extension = extension.to_lowercase();
-    TEXTURE_EXTENSIONS.contains(&extension.as_str())
 }
 
 #[cfg(test)]

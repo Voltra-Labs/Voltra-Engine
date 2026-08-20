@@ -27,6 +27,20 @@ pub enum AssetError {
         path: PathBuf,
         source: TextureError,
     },
+    /// A file that should have been RON was not.
+    ///
+    /// Boxed because a parse error carries the offending source line and its
+    /// position, and inlining that widens every `Result` in the crate — which
+    /// is `clippy::result_large_err`.
+    Parse {
+        path: PathBuf,
+        source: Box<ron::error::SpannedError>,
+    },
+    /// Valid RON that does not describe a slicing.
+    Atlas {
+        path: PathBuf,
+        source: crate::atlas::AtlasError,
+    },
     /// The filesystem watch could not be established.
     Watch {
         root: PathBuf,
@@ -53,6 +67,12 @@ impl fmt::Display for AssetError {
             Self::Decode { path, source } => {
                 write!(f, "could not decode {}: {source}", path.display())
             }
+            Self::Parse { path, source } => {
+                write!(f, "could not parse {}: {source}", path.display())
+            }
+            Self::Atlas { path, source } => {
+                write!(f, "{} is not a usable atlas: {source}", path.display())
+            }
             Self::Watch { root, source } => {
                 write!(f, "could not watch {}: {source}", root.display())
             }
@@ -65,6 +85,8 @@ impl std::error::Error for AssetError {
         match self {
             Self::Read { source, .. } => Some(source),
             Self::Decode { source, .. } => Some(source),
+            Self::Parse { source, .. } => Some(source),
+            Self::Atlas { source, .. } => Some(source),
             Self::Watch { source, .. } => Some(source),
             Self::Absolute(_) | Self::EscapesRoot(_) | Self::Empty => None,
         }

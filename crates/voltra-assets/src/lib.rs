@@ -6,6 +6,7 @@
 //! only through `voltra_render::wgpu`.
 
 pub mod atlas;
+pub mod atlases;
 pub mod browse;
 pub mod error;
 pub mod handle;
@@ -17,6 +18,7 @@ pub mod textures;
 pub mod watch;
 
 pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, Grid};
+pub use atlases::Atlases;
 pub use browse::{Entry, EntryKind};
 pub use error::AssetError;
 pub use handle::Handle;

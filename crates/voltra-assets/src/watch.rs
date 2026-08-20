@@ -16,6 +16,7 @@ use std::time::Duration;
 use notify_debouncer_full::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 
+use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
 
@@ -36,6 +37,17 @@ const DEBOUNCE: Duration = Duration::from_millis(200);
 /// renamed over `demo.ron` — is ignored without a rule about our own temporary
 /// files.
 pub const TEXTURE_EXTENSIONS: &[&str] = &["png"];
+
+/// Whether a file name ends in an extension this engine can load as a texture.
+///
+/// Here rather than beside the browser because this is where the list lives,
+/// and a second copy of the match would drift from it.
+pub fn is_texture(name: &str) -> bool {
+    let Some((_, extension)) = name.rsplit_once('.') else {
+        return false;
+    };
+    TEXTURE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+}
 
 /// Watches the asset root and reports which assets changed.
 ///
@@ -97,7 +109,7 @@ impl AssetWatcher {
     /// varies by platform and by the program doing the writing — an overwrite
     /// is `Create` on some, `Modify` on others, a rename pair on a third — and
     /// matching on them is what makes a watcher miss changes
-    /// (bevyengine/bevy#10576). Any event on a path that could be a texture is
+    /// (bevyengine/bevy#10576). Any event on a path that could be an asset is
     /// a reload *attempt*; whether the file is readable is `Textures::reload`'s
     /// question, not this one's.
     pub fn drain(&mut self) -> Vec<AssetPath> {
@@ -143,8 +155,8 @@ impl AssetWatcher {
     /// bug: a file deleted between the notification and this call, a junction,
     /// a path from a volume we do not own.
     fn to_asset_path(&self, path: &Path) -> Option<AssetPath> {
-        let extension = path.extension()?.to_str()?.to_ascii_lowercase();
-        if !TEXTURE_EXTENSIONS.contains(&extension.as_str()) {
+        let name = path.file_name()?.to_str()?;
+        if !is_texture(name) && !is_atlas(name) {
             return None;
         }
 
