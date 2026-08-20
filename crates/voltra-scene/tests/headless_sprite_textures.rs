@@ -355,3 +355,74 @@ fn a_reloaded_texture_changes_what_is_drawn() {
         "the reload must reach the screen: {centre:?}"
     );
 }
+
+/// Writes a 32×16 PNG: `left` over the first sixteen columns, `right` over the
+/// rest — a two-cell sheet whose cells are told apart by colour alone.
+fn write_strip_png(root: &Path, name: &str, left: [u8; 4], right: [u8; 4]) {
+    use image::ImageEncoder;
+
+    let path = root.join(name);
+    std::fs::create_dir_all(path.parent().expect("the PNG has a parent")).expect("asset subdir");
+
+    let pixels: Vec<u8> = (0..16)
+        .flat_map(|_| (0..32).flat_map(move |x| if x < 16 { left } else { right }))
+        .collect();
+    let file = std::fs::File::create(&path).expect("creating the PNG");
+    image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
+        .write_image(&pixels, 32, 16, image::ExtendedColorType::Rgba8)
+        .expect("encoding the PNG");
+}
+
+#[test]
+fn the_frame_a_sprite_names_is_the_cell_that_reaches_the_screen() {
+    // The whole point of the sheet: the UVs the batch computes have to select
+    // one cell of the texture on the GPU, not merely in an assertion about
+    // `Quad`.
+    let (device, queue) = device_or_skip!();
+    let root = scratch_root();
+    write_strip_png(&root, "strip.png", [0, 255, 0, 255], [0, 0, 255, 255]);
+    std::fs::write(
+        root.join("strip.atlas.ron"),
+        b"(version: 1, grid: Some((cell: (16, 16), columns: 2, rows: 1)))",
+    )
+    .expect("the fixture writes");
+
+    let layout = texture::bind_group_layout(&device);
+    let mut textures = Textures::new(&device, &queue, &layout, root.clone());
+    let mut atlases = voltra_assets::Atlases::new(&root);
+    let mut sprite = Sprite::default();
+    sprite.set_texture(
+        Some(AssetPath::new("strip.png").expect("valid")),
+        &mut textures,
+        &device,
+        &queue,
+    );
+    sprite.set_atlas(
+        Some(AssetPath::new("strip.atlas.ron").expect("valid")),
+        &mut atlases,
+    );
+
+    let mut seen = Vec::new();
+    for frame in [0, 1] {
+        sprite.frame = frame;
+        let mut batch = SpriteBatch::default();
+        batch.push(
+            Transform::default().matrix(),
+            &sprite,
+            Sheets::new(&atlases, &textures),
+        );
+        let pixels = render_batch(&device, &queue, &batch, &textures, &close_camera());
+        seen.push(at(&pixels, SIZE / 2, SIZE / 2));
+    }
+
+    assert!(
+        seen[0].g > 200 && seen[0].b < 60,
+        "frame 0 is the green cell, got {:?}",
+        seen[0]
+    );
+    assert!(
+        seen[1].b > 200 && seen[1].g < 60,
+        "frame 1 is the blue cell, got {:?}",
+        seen[1]
+    );
+}

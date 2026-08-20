@@ -14,10 +14,13 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use voltra_assets::AssetPath;
 use voltra_core::{query, App, KeyCode, QueryFilter, Tick, Touch, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Camera, Collider, PhysicsMaterial, RigidBody, Sensor, Sprite, Transform};
+use voltra_scene::{
+    Camera, Collider, PhysicsMaterial, RigidBody, Sensor, Sprite, SpriteAnimation, Transform,
+};
 
 /// This example's own component, in the same world as the engine's.
 ///
@@ -242,10 +245,18 @@ fn coin(app: &mut App, at: Vec2) {
         entity,
         Transform::from_translation(at).with_scale(Vec2::splat(0.4)),
     );
-    app.world.insert(
-        entity,
-        Sprite::new([1.0, 0.85, 0.2, 1.0]).with_sort_order(5),
-    );
+    // White, so the sheet's own colours come through untinted. The handles are
+    // left unresolved on purpose: the world is populated before there is a
+    // device, and `App` resolves every sprite's texture and atlas when the
+    // loop resumes.
+    let mut sprite = Sprite::new([1.0, 1.0, 1.0, 1.0]).with_sort_order(5);
+    sprite.texture = Some(asset("sprites/coin.png"));
+    sprite.atlas = Some(asset("sprites/coin.atlas.ron"));
+    app.world.insert(entity, sprite);
+    // Eight frames a second over a four-frame sheet: one spin every half
+    // second, which reads as turning rather than flickering.
+    app.world
+        .insert(entity, SpriteAnimation::new(vec![0, 1, 2, 3], 8.0));
     app.world.insert(entity, Collider::Circle { radius: 0.5 });
     // No `RigidBody`: it is static geometry that happens to be a sensor. A
     // body would fall, and a sensor cannot rest on anything.
@@ -266,4 +277,9 @@ fn ground(app: &mut App, at: Vec2, size: Vec2) {
             half_extents: Vec2::splat(0.5),
         },
     );
+}
+
+/// A path under the asset root, for the sheets this example ships with.
+fn asset(path: &str) -> AssetPath {
+    AssetPath::new(path).expect("the paths in this file are literals under the asset root")
 }
