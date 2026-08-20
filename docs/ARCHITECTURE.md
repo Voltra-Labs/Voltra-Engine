@@ -72,8 +72,8 @@ re-exports, so a version bump is a one-line change.
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-assets` | Asset identity, the texture cache, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
-| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `Name`, `Parent`, `WorldTransforms` |
-| `voltra-physics` | Simulation over those components: integration, contact detection and the solver that resolves them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `step`, `SolverParams`, `SolverBodies`, `ImpulseCache`, `Softness` |
+| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
+| `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
@@ -1773,8 +1773,8 @@ to ask for physics to get its logic ticking. The runtime names (`set_simulating`
 `is_simulating`) already said this; the builder now agrees with them.
 
 `crates/voltra-core/examples/platformer.rs` is the API's first user: walk with
-`A`/`D`, jump with `Space` when the last step's contacts say something flat is
-underfoot, and a camera that eases after the walker. It is an example rather
+`A`/`D`, jump with `Space` when there is something flat underfoot, and a camera
+that eases after the walker. It is an example rather
 than a crate because it is documentation that has to keep compiling, and
 `cargo clippy --workspace --all-targets` builds it.
 
@@ -1792,8 +1792,108 @@ Rejected:
   touching the renderer mid-frame anyway.
 - **Collision events (`on_collision_enter`).** Real, and it needs the solver to
   diff its pairs from step to step and an ordering answer for despawns during a
-  callback. `Tick::contacts` answers "am I standing on something" now without
-  deciding any of that.
+  callback. `Tick::contacts` answered "am I standing on something" without
+  deciding any of that. The stage below decides it.
+
+### A collider carries two masks, a sensor is a mark, events are a stream
+
+Stage 20 gave a game its turn and nothing to react to. Every collider collided
+with every other one, the example worked out whether it was standing on
+anything by scanning `tick.contacts` by hand, and there was no way to ask the
+world a question without a body already touching the answer. Coins, doors,
+checkpoints, one-way platforms and a reliable ground check were all blocked on
+the same four missing pieces: filtering, sensors, events and queries.
+
+**Two masks per collider, not a global matrix.** Unity has thirty-two *named*
+layers and one collision matrix in Project Settings; Godot, Box2D and Rapier
+each put a pair of bitmasks on the collider itself. The matrix is a project
+settings file, and stage 19 deliberately decided there is no project settings
+file — a `CollisionLayers { layers, mask }` serialises next to the collider it
+belongs to and needs no global anything. The rule is **symmetric**: a pair
+interacts only when each side is on a layer the other looks at. Godot's
+one-sided test, where A detects B while B walks straight through A, is the
+source of its most reported confusion. The test happens in `candidate_pairs`,
+before the bounds test, because it is cheaper and because a pair that can never
+interact is not a candidate.
+
+**A sensor is a marker component.** `Sensor` is Unity's `isTrigger` and Box2D's
+sensor fixture; Godot's `Area2D` is a separate *node*, which has no equivalent
+here because this engine has components, not nodes. It is a marker rather than
+a flag on `Collider` for the reason `PhysicsMaterial` is its own component:
+`Collider` is an enum, and a flag on it is repeated in every variant and in
+every shape added later. `collide` splits its findings into
+`Overlaps { contacts, sensors }`, so a sensor never reaches the solver, never
+enters the impulse cache and never appears in `PhysicsWorld::contacts`. That
+keeps `contacts()` meaning "what the solver resolved", which is what a ground
+check reads: nothing can stand on a trigger.
+
+**Events are a diff of what was touching.** `Touching` keeps the last step's
+pairs and diffs them: new pairs `Began`, missing pairs `Ended`. There is no
+`Stayed` — that is what `contacts()` already is, and one event per resting pair
+per step would mean a settled stack generating events forever for standing
+still. A despawned entity is not a special case: it stops being a candidate, so
+its pairs go missing and end like any other, which is what a pickup that
+deletes itself needs. `reset()` clears the set silently, or the editor's Stop
+would open the next session by ending every pair of a scene that is no longer
+loaded. The set is a `BTreeMap`, so the order is fixed — an event order that
+changes between two runs of one scene is a bug nobody can reproduce.
+
+**Each hook is handed every event exactly once.** Contacts are *state* and
+events are a *stream*, so they cannot follow the same rule. The fixed tick
+reads the last step's, since the step it precedes has not run. The per-frame
+tick reads everything since its own last turn, which is why `App` buffers them:
+a frame can owe two steps and `PhysicsWorld` only keeps the latest, so a pickup
+taken on the first would vanish. The buffer is emptied every frame whether or
+not a game installed a hook, so it cannot grow for a session. Unity delivers
+its trigger callbacks in the physics loop only and leaves the per-frame case
+undefined; defining it costs one `Vec`.
+
+**Queries take `&World` and nothing else.** `query::ray`, `query::point` and
+`query::overlap_aabb` are not methods on `PhysicsWorld` because they need none
+of its state — which means the editor can ask, a test can ask with no
+simulation at all, and a game can ask from either tick. `QueryFilter` carries
+*one* mask, not the pair a collider has: a query has no layers of its own to be
+looked at, which is the shape of Unity's `LayerMask` argument and Rapier's
+`QueryFilter`. Sensors are skipped unless asked for, so a shot does not stop at
+a trigger volume. A ray that starts inside a shape hits it at distance zero
+with the ray reversed as the normal — silence there is the classic surprise,
+where a ground check begun a hair inside the floor reports thin air. Box casts
+are the slab test in the box's own frame, so an oriented box is one inverse
+rotation away rather than a second code path, and `overlap_aabb` runs the real
+narrow phase rather than comparing bounds: the corner of a turned crate is
+empty space, and a query that says otherwise is worse than no query.
+
+The editor gains the rows to author both — a `Sensor` checkbox and a toggle per
+layer, hung off the *collider* rather than off the filter, because an entity
+whose filter cannot be reached until it has one would never get its first — and
+the debug overlay draws sensors in their own colour, since a trigger is an
+invisible rectangle by design. Drawing the widget writes nothing: only a real
+change inserts a component, so selecting a collider does not add a filter that
+says nothing to the scene file.
+
+The platformer example is the first user of all of it. Its ground check is now
+one short ray per foot, which answers before the first contact exists and keeps
+a walker whose middle overhangs a ledge standing on it, and its coins are
+static sensors carrying a `Coin` component the *example* defines — nothing
+registers that type and nothing in the engine knows it exists, which is what an
+in-house ECS is for.
+
+Rejected:
+
+- **Named layers and a collision matrix.** Both need a project settings file
+  and a UI to edit it. The masks work today and a name table can be laid over
+  them later without changing what is stored.
+- **Box2D's `groupIndex`.** A third rule that overrules the other two: nobody
+  can predict the result of a filter with three interacting mechanisms.
+- **`Area2D` as an entity kind.** Nodes are Godot's model, not this one.
+- **A `Stayed` event.** `contacts()` is that state, every step, already.
+- **Callbacks on the component (`on_enter: fn`).** A `dyn Fn` inside a
+  component that has to serialise into a scene file is not serialisable, and
+  the ordering questions — despawning during a callback, reentrancy — are
+  exactly what a stream read in the tick avoids.
+- **Filtering after the narrow phase.** Correct and wasteful: it pays for the
+  bounds test, and for the manifold, of every pair that was never going to
+  interact.
 
 ### wgpu 30 API notes
 

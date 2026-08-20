@@ -64,6 +64,11 @@ parent**, so moving, turning or scaling a parent carries its children with it,
 and `Delete` on a parent deletes everything under it. A reparent keeps the
 entity where it is on screen, and is one undo entry.
 
+The inspector edits what a collider touches: a `sensor` checkbox and a toggle
+per collision layer, on the row it is on and on the rows it looks at. Sensors
+are drawn in their own colour in the debug overlay, since a trigger volume is
+otherwise an invisible rectangle.
+
 Physics and parenting do not mix yet: an entity carrying a `RigidBody` or a
 `Collider` cannot be parented, because the solver reads its transform as a
 world-space value. The refusal is logged rather than silent.
@@ -134,15 +139,39 @@ A game is written against the loop with two hooks. `with_update` runs once per
 frame and is where input belongs — an edge is only seen once there.
 `with_fixed_update` runs before each physics step, with `delta` always the fixed
 step, and is where velocities and forces belong. Both are handed a `Tick`: the
-world, the input, the delta that applies, and the last step's contacts.
+world, the input, the delta that applies, the last step's contacts, and the
+collision events neither hook has been given yet.
 
 ```rust
 App::new(config)
     .with_simulation()
     .with_update(|tick| { /* input, cameras, anything per frame */ })
-    .with_fixed_update(|tick| { /* velocities, forces, per step */ })
+    .with_fixed_update(|tick| { /* velocities, forces, events, per step */ })
     .run();
 ```
+
+What a collider touches is two bitmasks, `CollisionLayers { layers, mask }`: a
+pair interacts only when each side is on a layer the other looks at, so there
+is no way for one of them to detect the other and be walked through in return.
+A collider marked `Sensor` is detected and never solved — it reports what
+enters it and stops nothing, which is what a coin, a checkpoint or a damage
+zone is. Both are absent by default, meaning "every layer, and solid".
+
+`Tick::events` is the stream of what began and ended touching, sensors
+included. Each hook is handed every event exactly once, so a pickup can be
+taken in the fixed tick without arriving twice on a fast frame. `Tick::contacts`
+stays the state — what the solver resolved this step — and never holds sensors.
+
+The world also answers questions without being touched:
+
+```rust
+let hit = query::ray(tick.world, foot, Vec2::NEG_Y, 0.7, QueryFilter::new().excluding(player));
+let inside = query::overlap_aabb(tick.world, min, max, QueryFilter::new());
+```
+
+A ray reports the nearest hit — its point, its normal and its distance — and a
+ray that starts inside a shape hits it at distance zero rather than reporting
+thin air. Queries skip sensors unless asked for them.
 
 ```sh
 cargo run -p voltra-core --example platformer   # A/D to walk, Space to jump
@@ -208,6 +237,7 @@ privileged and plain `cargo build` covers everything.
 | 18 | The game camera: a scene component, and a game view | done |
 | 19 | The player: a second binary that runs a scene with no editor | done |
 | 20 | The game's turn: a per-frame tick, a fixed tick, and input | done |
+| 21 | Gameplay physics: layers, sensors, collision events, queries | done |
 
 ## Contributing
 
