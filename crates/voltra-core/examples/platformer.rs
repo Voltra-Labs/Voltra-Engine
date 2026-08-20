@@ -8,15 +8,23 @@
 //! `_process`/`_physics_process` over the same two facts.
 //!
 //! Run it with `cargo run -p voltra-core --example platformer`.
-//! `A`/`D` or the arrow keys walk, `Space` jumps.
+//! `A`/`D` or the arrow keys walk, `Space` jumps, and walking into a coin
+//! takes it.
 
 use std::cell::Cell;
 use std::rc::Rc;
 
-use voltra_core::{App, KeyCode, Tick, WindowConfig};
+use voltra_core::{query, App, KeyCode, QueryFilter, Tick, Touch, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Camera, Collider, PhysicsMaterial, RigidBody, Sprite, Transform};
+use voltra_scene::{Camera, Collider, PhysicsMaterial, RigidBody, Sensor, Sprite, Transform};
+
+/// This example's own component, in the same world as the engine's.
+///
+/// Nothing registers it and nothing else knows it exists: an in-house ECS
+/// stores whatever type a game hands it, so gameplay tags need no engine
+/// change and no enum with a variant per game.
+struct Coin;
 
 /// World units per second the walker travels at full tilt.
 const WALK_SPEED: f32 = 4.0;
@@ -32,6 +40,16 @@ const CAMERA_FOLLOW: f32 = 6.0;
 /// `0.5` is 60°, Unity's default slope limit. Below it a wall would count as a
 /// floor and the walker could climb it by holding the jump key.
 const GROUND_NORMAL: f32 = 0.5;
+/// Half the walker's height, in world units: its scale times its half extent.
+const WALKER_HALF_HEIGHT: f32 = 0.6;
+/// Half its width, likewise.
+const WALKER_HALF_WIDTH: f32 = 0.35;
+/// How far past its feet the ground check looks.
+///
+/// Long enough to survive the fraction of a unit the solver leaves between two
+/// resting bodies, short enough that a jump stops counting as grounded on the
+/// frame it leaves the floor.
+const GROUND_PROBE: f32 = 0.08;
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
@@ -57,6 +75,8 @@ fn main() {
             follow(tick, camera, walker);
         })
         .with_fixed_update(move |tick| {
+            take_coins(tick, walker);
+
             let direction = tick.input.axis(KeyCode::KeyA, KeyCode::KeyD)
                 + tick.input.axis(KeyCode::ArrowLeft, KeyCode::ArrowRight);
             let grounded = is_grounded(tick, walker);
@@ -78,17 +98,49 @@ fn main() {
         .run();
 }
 
-/// Whether `entity` is resting on something roughly flat.
+/// Takes any coin the walker began touching, in the step it touched it.
 ///
-/// Read off the last step's contacts, which is all a game has until collision
-/// events exist. The normal pushes `a` away from `b`, so which side of the
-/// contact the walker is on decides which way "up" is.
+/// In the fixed tick because that is where an event is handed over exactly
+/// once. Read per frame, the same `Began` would arrive on every frame that
+/// owed no step, and a coin would be worth three of itself.
+fn take_coins(tick: &mut Tick<'_>, walker: Entity) {
+    let taken: Vec<Entity> = tick
+        .events
+        .iter()
+        .filter(|event| event.touch == Touch::Began)
+        .filter_map(|event| event.other(walker))
+        .filter(|&other| tick.world.get::<Coin>(other).is_some())
+        .collect();
+
+    for coin in taken {
+        // Despawned mid-overlap on purpose: the pair ends by disappearing, and
+        // the `Ended` event that follows is what a game would close a door on.
+        tick.world.despawn(coin);
+        log::info!("coin taken");
+    }
+}
+
+/// Whether `entity` has ground under its feet.
+///
+/// A pair of short rays rather than a scan of the contacts: they answer before
+/// the first contact exists, they cost two queries instead of the whole
+/// manifold list, and one ray per foot is what keeps a walker whose middle
+/// overhangs the edge of the ledge standing on it. `QueryFilter` skips sensors
+/// by default, so standing in a coin is not standing on one.
 fn is_grounded(tick: &Tick<'_>, entity: Entity) -> bool {
-    tick.contacts.iter().any(|contact| {
-        let normal = contact.normal();
-        (contact.a == entity && normal.y > GROUND_NORMAL)
-            || (contact.b == entity && -normal.y > GROUND_NORMAL)
-    })
+    let Some(&Transform { translation, .. }) = tick.world.get::<Transform>(entity) else {
+        return false;
+    };
+    let filter = QueryFilter::new().excluding(entity);
+    let reach = WALKER_HALF_HEIGHT + GROUND_PROBE;
+
+    [-WALKER_HALF_WIDTH, WALKER_HALF_WIDTH]
+        .into_iter()
+        .any(|x| {
+            let foot = translation + Vec2::new(x, 0.0);
+            query::ray(tick.world, foot, Vec2::NEG_Y, reach, filter)
+                .is_some_and(|hit| hit.normal.y > GROUND_NORMAL)
+        })
 }
 
 /// Eases the camera towards the walker, horizontally.
@@ -134,6 +186,10 @@ fn spawn_scene(app: &mut App) -> Entity {
         );
     }
 
+    for x in [2.0, 6.0, 8.0] {
+        coin(app, Vec2::new(x, -1.6));
+    }
+
     let walker = app.world.spawn();
     app.world.insert(
         walker,
@@ -177,6 +233,24 @@ fn spawn_camera(app: &mut App) -> Entity {
         .insert(camera, Transform::from_translation(Vec2::new(0.0, -0.5)));
     app.world.insert(camera, Camera::new(4.0));
     camera
+}
+
+/// A coin: a shape that reports being walked into and stops nothing.
+fn coin(app: &mut App, at: Vec2) {
+    let entity = app.world.spawn();
+    app.world.insert(
+        entity,
+        Transform::from_translation(at).with_scale(Vec2::splat(0.4)),
+    );
+    app.world.insert(
+        entity,
+        Sprite::new([1.0, 0.85, 0.2, 1.0]).with_sort_order(5),
+    );
+    app.world.insert(entity, Collider::Circle { radius: 0.5 });
+    // No `RigidBody`: it is static geometry that happens to be a sensor. A
+    // body would fall, and a sensor cannot rest on anything.
+    app.world.insert(entity, Sensor);
+    app.world.insert(entity, Coin);
 }
 
 fn ground(app: &mut App, at: Vec2, size: Vec2) {
