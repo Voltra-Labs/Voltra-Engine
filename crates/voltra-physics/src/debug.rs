@@ -8,12 +8,20 @@
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::LineBatch;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider, Sensor, Transform};
 
 use crate::narrow::Contact;
 
 /// Collider outlines.
 const SHAPE_COLOR: [f32; 4] = [0.35, 0.9, 0.45, 0.9];
+
+/// Sensor outlines, in their own colour.
+///
+/// A trigger is an invisible rectangle by design, so the only way to author
+/// one is to see that it is there *and* that nothing will stand on it. Amber
+/// rather than a dashed green line: a dash pattern is a per-segment decision
+/// this line pipeline does not have, and the colour says the same thing.
+const SENSOR_COLOR: [f32; 4] = [1.0, 0.75, 0.2, 0.9];
 
 /// Contacts, in the colour that already means "look here" in this engine.
 const CONTACT_COLOR: [f32; 4] = [1.0, 0.2, 1.0, 1.0];
@@ -43,20 +51,25 @@ pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
             // nothing collided with it either — `candidate_pairs` skips it too.
             continue;
         };
+        let color = if world.get::<Sensor>(entity).is_some() {
+            SENSOR_COLOR
+        } else {
+            SHAPE_COLOR
+        };
         match collider {
             Collider::Box { .. } => {
                 // The four turned corners, not the world AABB: the AABB is what
                 // the broad phase compares, and drawing it would show a box
                 // that grows as it rotates — the outline has to be the shape
                 // the narrow phase actually collides.
-                outline(lines, &collider.corners(transform), SHAPE_COLOR);
+                outline(lines, &collider.corners(transform), color);
             }
             Collider::Circle { .. } => {
                 circle(
                     lines,
                     transform.translation,
                     collider.world_radius(transform),
-                    SHAPE_COLOR,
+                    color,
                 );
             }
         }
@@ -230,6 +243,21 @@ mod tests {
         draw(&world, &[contact], &mut lines);
 
         assert_eq!(lines.len(), 4 + 4 + 2);
+    }
+
+    #[test]
+    fn a_sensor_is_drawn_in_its_own_colour() {
+        let mut world = World::new();
+        box_at(&mut world, Vec2::ZERO);
+        let trigger = box_at(&mut world, Vec2::new(5.0, 0.0));
+        world.insert(trigger, Sensor);
+        let mut lines = LineBatch::default();
+
+        draw(&world, &[], &mut lines);
+
+        let colors: Vec<_> = lines.vertices().iter().map(|v| v.color).collect();
+        assert!(colors.contains(&SENSOR_COLOR), "the trigger");
+        assert!(colors.contains(&SHAPE_COLOR), "and the solid box beside it");
     }
 
     #[test]
