@@ -13,7 +13,10 @@ use serde::Serialize;
 use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
-use crate::{Camera, Collider, Name, Parent, PhysicsMaterial, RigidBody, Sprite, Transform};
+use crate::{
+    Camera, Collider, CollisionLayers, Name, Parent, PhysicsMaterial, RigidBody, Sensor, Sprite,
+    Transform,
+};
 
 /// A registered type's save conversion: entity to stored value, or `None` when
 /// the entity has no such component.
@@ -79,6 +82,8 @@ impl ComponentRegistry {
         registry.register::<RigidBody>("RigidBody");
         registry.register::<Collider>("Collider");
         registry.register::<PhysicsMaterial>("PhysicsMaterial");
+        registry.register::<CollisionLayers>("CollisionLayers");
+        registry.register::<Sensor>("Sensor");
         registry
     }
 

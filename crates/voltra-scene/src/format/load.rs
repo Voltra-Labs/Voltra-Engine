@@ -111,7 +111,7 @@ pub fn load(
 mod tests {
     use super::*;
     use crate::format::save::{save, to_scene_file};
-    use crate::{Sprite, Transform};
+    use crate::{CollisionLayers, Sensor, Sprite, Transform};
     use voltra_render::glam::Vec2;
 
     use crate::hierarchy::{children_of, parent_of, set_parent};
@@ -228,6 +228,58 @@ mod tests {
         after.sort_by_key(|(id, _, _)| *id);
 
         assert_eq!(before, after);
+    }
+
+    #[test]
+    fn a_filter_and_a_sensor_survive_a_round_trip() {
+        let registry = ComponentRegistry::with_defaults();
+        let mut original = World::new();
+        let entity = original.spawn();
+        original.insert(entity, SceneId::new());
+        original.insert(entity, Transform::default());
+        original.insert(entity, CollisionLayers::on(3).looking_at(1));
+        original.insert(entity, Sensor);
+
+        let file = to_scene_file(&original, &registry).expect("saving cannot fail here");
+        let mut loaded = World::new();
+        from_scene_file(&file, &registry, &mut loaded).expect("loading cannot fail here");
+
+        let (loaded_entity, _) = loaded
+            .query::<SceneId>()
+            .next()
+            .expect("the one entity is in the file");
+        assert_eq!(
+            loaded.get::<CollisionLayers>(loaded_entity),
+            Some(&CollisionLayers::on(3).looking_at(1))
+        );
+        assert_eq!(loaded.get::<Sensor>(loaded_entity), Some(&Sensor));
+    }
+
+    #[test]
+    fn a_scene_written_before_filters_existed_still_loads() {
+        // Which is what "absent means everything, and solid" is for: a file
+        // with no filter is not a file with an empty one.
+        let registry = ComponentRegistry::with_defaults();
+        let text = r#"(
+            version: 1,
+            entities: [
+                (
+                    id: "018f3a2b-7c41-7000-8000-2b1d4e5f6a70",
+                    components: {
+                        "Collider": Box(half_extents: (0.5, 0.5)),
+                    },
+                ),
+            ],
+        )"#;
+        let file: SceneFile = ron::from_str(text).expect("the fixture is valid RON");
+
+        let mut world = World::new();
+        from_scene_file(&file, &registry, &mut world).expect("loading cannot fail here");
+
+        let (entity, _) = world.query::<SceneId>().next().expect("one entity");
+        assert_eq!(world.get::<CollisionLayers>(entity), None);
+        assert_eq!(world.get::<Sensor>(entity), None);
+        assert!(CollisionLayers::interact(None, None));
     }
 
     #[test]
