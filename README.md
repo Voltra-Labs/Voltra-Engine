@@ -79,8 +79,12 @@ shows its own pixels; a file this engine has no loader for is listed but dimmed.
 Dragging a texture onto the scene adds a sprite where it was dropped, named after
 the file and sized to the texture's aspect ratio; dragging it onto the
 inspector's `Texture` field assigns it to the selected sprite. Both are one undo
-entry. The listing re-reads itself once a second, so a file saved from an image
-editor shows up without a refresh.
+entry. An `.atlas.ron` — a sheet's slicing — shows its first frame as its
+tile and drops in as a sprite on frame 0 with the sheet it names already
+assigned. The inspector picks the frame, mirrors it on either axis, sizes it
+from a pixels-per-unit, and adds an animation: a list of frames and a rate that
+plays while the scene is playing. The listing re-reads itself once a second,
+so a file saved from an image editor shows up without a refresh.
 
 The left of the toolbar holds the transform tools, and the gizmo drawn over the
 selection says what a drag will do before it is started. The gizmos work in
@@ -238,6 +242,7 @@ privileged and plain `cargo build` covers everything.
 | 19 | The player: a second binary that runs a scene with no editor | done |
 | 20 | The game's turn: a per-frame tick, a fixed tick, and input | done |
 | 21 | Gameplay physics: layers, sensors, collision events, queries | done |
+| 22 | Sprite sheets: atlases, regions, flips, frame animation | done |
 
 ## Contributing
 

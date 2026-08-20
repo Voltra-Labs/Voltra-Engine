@@ -1895,6 +1895,89 @@ Rejected:
   bounds test, and for the manifold, of every pair that was never going to
   interact.
 
+### A sheet is a slicing, a sprite is an index into it
+
+A sprite used to be a whole texture, so there were no character sheets, no
+tilesets and no animation of any kind. Three things fix that: a rectangle of a
+texture, a named set of those rectangles, and a clock that walks through them.
+
+**A frame is texels, not UVs.** Unity, Godot, Bevy and Aseprite's exporter all
+store a region in pixels, because pixels are what a sheet is authored in and
+what a slicer produces. `0.0625` is nobody's idea of a sixteen-pixel cell. The
+conversion happens once, at batch time, against the sheet size the atlas
+carries.
+
+**The slicing is an asset; what a sprite shows is an index into it.** Bevy's
+`TextureAtlasLayout` made the same split and it is the right one: a slicing is
+geometry, so one file serves every sheet cut the same way — four palette swaps
+of a character share it instead of copying it four times. Godot's `AtlasTexture`
+binds region to texture and needs one resource per frame; Unity's slice table
+lives in an importer `.meta` this engine has no equivalent of. `Atlas::texture`
+is only an authoring hint, so the editor can assign both in one drag; nothing at
+draw time reads it.
+
+`hero.atlas.ron` is versioned like `SceneFile`, and a wrong version is refused
+rather than guessed at. It describes a `grid` — cell, columns, rows, margin,
+padding — or explicit `frames`, or both, because a sheet that is a grid plus two
+odd rectangles is one file. `Atlases` is `Textures`' shape exactly: `load`,
+`by_path_handle`, `reload`, `get`, keyed by `Handle<Atlas>`, so the two stores
+have one hot-reload story between them. It needs no GPU, which is what keeps
+every test of it headless. The watcher filters on the `.atlas.ron` suffix rather
+than the `ron` extension, so re-cutting a sheet reloads and a scene save stays
+silent.
+
+**One function decides where a sprite's corners are.** `sprite::quad::quad`
+returns the extents, the UVs and the texture to bind, and both `SpriteBatch` and
+`pick::sprite_at` call it. `Sprite::HALF_EXTENT` as a shared constant was enough
+while every sprite was a unit square; once a frame's size and a pixels-per-unit
+decide the extents, two call sites computing them separately is a click that
+lands somewhere other than the pixels it appears to, with nothing to report it.
+
+Both callers take a `Sheets`: the atlas store, and a `TextureSizes`. A trait
+rather than `&Textures` because `Textures` cannot exist without a device, and
+this geometry is exactly what has to stay assertable headless — the editor and
+the draw path pass `Textures`, a test passes a map. Both stores are optional,
+and absent gives the unit quad every scene on disk was authored against.
+
+**A frame that is not there draws the placeholder checker**, which is what a
+missing texture already draws. Drawing nothing is a silent failure; clamping to
+the last frame hides an authoring mistake in the one place it would be seen.
+
+**The flips are explicit**, as they are in all three of Unity, Godot and Bevy,
+even though a negative scale already mirrors: scale is the transform's, shared
+with the collider and the gizmo, and turning a character round must not resize
+its physics. `pixels_per_unit` is `Option`: `None` keeps the original rule — the
+quad is one unit and the transform's scale is its size — so no scene changes
+meaning.
+
+**An animation is a list of indices, not a range.** A run cycle that returns to
+frame 1 between 0 and 2 is the common case and a range cannot say it.
+`SpriteAnimation` advances once per *frame*, not per physics step: what is drawn
+is not what is simulated, and a clip on the fixed clock would show two frames at
+once whenever a frame owed two steps and none when it owed zero. It is gated on
+the same simulation switch the game's tick is, so an editor that is authoring
+does not animate the sprite being placed. Looping wraps on the elapsed time
+rather than by stepping the index, so a stalled frame lands on the phase it
+would have reached anyway and `elapsed` stays bounded; not looping stops on the
+last frame and stays, which is what a death animation is. Where a clip had
+reached is never serialised — a scene that reopened mid-blink would change its
+own diff on every save.
+
+Rejected:
+
+- **A state machine.** Unity's `Animator` graph and Godot's `AnimationTree` are
+  a subsystem of their own — transitions, conditions, blending. A game today
+  changes clips by writing the component, which is what Bevy's users did for
+  years with a timer and an index.
+- **Per-frame durations.** Aseprite exports them; a second rate per frame is a
+  timeline, and a timeline wants tracks, keys and an editor for them.
+- **`AtlasTexture`-per-region.** One resource per frame of every sheet, and the
+  slicing stops being reusable across palette swaps.
+- **A negative scale as the flip.** It resizes the collider and moves the
+  gizmo, because it is the same number.
+- **Clamping an out-of-range frame.** The mistake becomes invisible exactly
+  where it would have been seen.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
