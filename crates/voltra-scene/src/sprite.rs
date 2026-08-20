@@ -1,6 +1,6 @@
 //! The sprite component: a coloured quad, sized by its entity's transform.
 
-use voltra_assets::{AssetPath, Handle, Textures};
+use voltra_assets::{AssetPath, Atlas, Atlases, Frame, Handle, Textures};
 use voltra_ecs::Entity;
 use voltra_render::Texture;
 
@@ -50,6 +50,52 @@ pub struct Sprite {
     /// load, by [`set_texture`](Sprite::set_texture) or its world-wide caller.
     #[serde(skip)]
     pub texture_handle: Option<Handle<Texture>>,
+    /// The slicing this sprite takes its frame from, by path.
+    ///
+    /// `None` draws the whole texture, which is what every sprite written
+    /// before atlases existed does.
+    #[serde(default)]
+    pub atlas: Option<AssetPath>,
+    /// The handle `atlas` currently resolves to, if any.
+    ///
+    /// Never serialised, for the same reason `texture_handle` is not: it
+    /// addresses a slot in whichever store loaded this session.
+    #[serde(skip)]
+    pub atlas_handle: Option<Handle<Atlas>>,
+    /// Which frame of the atlas to draw. Ignored without an atlas.
+    ///
+    /// An index past the last frame draws the placeholder rather than the
+    /// nearest frame: clamping would hide an authoring mistake in the one
+    /// place it would have been seen.
+    #[serde(default)]
+    pub frame: u32,
+    /// A rectangle of the texture, in texels, for a sheet with no atlas file.
+    ///
+    /// Godot's `region_rect` and Bevy's `Sprite::rect`, and worth keeping
+    /// beside the atlas: a UI element cut once out of a shared sheet does not
+    /// need a file of its own. The atlas wins when both are set — a sprite
+    /// that names one is asking for its frames.
+    #[serde(default)]
+    pub region: Option<Frame>,
+    /// Mirrors the drawn image horizontally, without touching the transform.
+    ///
+    /// Explicit rather than a negative scale, which is how Unity, Godot and
+    /// Bevy all spell it: scale is shared with the collider and the gizmo, and
+    /// turning a character round must not resize its physics.
+    #[serde(default)]
+    pub flip_x: bool,
+    /// Mirrors the drawn image vertically. See [`flip_x`](Self::flip_x).
+    #[serde(default)]
+    pub flip_y: bool,
+    /// Texels per world unit.
+    ///
+    /// `None` keeps the original rule — the quad is one unit square and the
+    /// transform's scale is its size — so every scene already on disk draws
+    /// exactly as it did. `Some(ppu)` sizes the quad from the frame instead,
+    /// which is what keeps the frames of a sheet with different-sized cells
+    /// from stretching to a common square.
+    #[serde(default)]
+    pub pixels_per_unit: Option<f32>,
 }
 
 impl Default for Sprite {
@@ -59,6 +105,13 @@ impl Default for Sprite {
             sort_order: 0,
             texture: None,
             texture_handle: None,
+            atlas: None,
+            atlas_handle: None,
+            frame: 0,
+            region: None,
+            flip_x: false,
+            flip_y: false,
+            pixels_per_unit: None,
         }
     }
 }
@@ -105,6 +158,24 @@ impl Sprite {
                 let handle = textures.load(device, queue, &path);
                 self.texture = Some(path);
                 self.texture_handle = Some(handle);
+            }
+        }
+    }
+
+    /// Sets or clears the atlas path and refreshes the runtime handle.
+    ///
+    /// No device, unlike [`set_texture`](Self::set_texture): a slicing is
+    /// arithmetic, and `Atlases` needs no GPU to read one.
+    pub fn set_atlas(&mut self, path: Option<AssetPath>, atlases: &mut Atlases) {
+        match path {
+            None => {
+                self.atlas = None;
+                self.atlas_handle = None;
+            }
+            Some(path) => {
+                let handle = atlases.load(&path);
+                self.atlas = Some(path);
+                self.atlas_handle = Some(handle);
             }
         }
     }
@@ -169,5 +240,80 @@ mod texture_tests {
         let hostile =
             r#"(color:(1.0,1.0,1.0,1.0),sort_order:0,texture:Some(Path("../../etc/passwd")))"#;
         assert!(ron::from_str::<Sprite>(hostile).is_err());
+    }
+}
+
+#[cfg(test)]
+mod atlas_tests {
+    use super::*;
+    use voltra_testkit::scratch_root;
+
+    #[test]
+    fn a_default_sprite_has_no_slicing_at_all() {
+        let sprite = Sprite::default();
+
+        assert!(sprite.atlas.is_none());
+        assert!(sprite.atlas_handle.is_none());
+        assert!(sprite.region.is_none());
+        assert_eq!(sprite.frame, 0);
+        assert!(!sprite.flip_x && !sprite.flip_y);
+        assert!(sprite.pixels_per_unit.is_none());
+    }
+
+    #[test]
+    fn a_scene_written_before_atlases_existed_still_loads() {
+        // The whole point of `#[serde(default)]` on every new field: a project
+        // on disk must open unchanged and draw exactly as it did.
+        let text = "(color:(1.0,1.0,1.0,1.0),sort_order:0)";
+
+        let sprite: Sprite = ron::from_str(text).expect("old scene shape");
+
+        assert_eq!(sprite, Sprite::default());
+    }
+
+    #[test]
+    fn the_slicing_round_trips_without_its_handle() {
+        let sprite = Sprite {
+            atlas: Some(AssetPath::new("sprites/coin.atlas.ron").expect("valid")),
+            frame: 3,
+            flip_x: true,
+            pixels_per_unit: Some(16.0),
+            region: Some(Frame::new(8, 0, 8, 16)),
+            ..Default::default()
+        };
+
+        let text = ron::to_string(&sprite).expect("serialize");
+        assert!(
+            !text.contains("atlas_handle"),
+            "handle leaked into RON: {text}"
+        );
+        let back: Sprite = ron::from_str(&text).expect("deserialize");
+        assert_eq!(back, sprite);
+        assert!(back.atlas_handle.is_none(), "handle must not deserialize");
+    }
+
+    #[test]
+    fn setting_an_atlas_resolves_a_handle_and_clearing_it_drops_both() {
+        let root = scratch_root();
+        std::fs::write(
+            root.join("coin.atlas.ron"),
+            "(version: 1, grid: Some((cell: (16, 16), columns: 4, rows: 1)))",
+        )
+        .expect("the fixture writes");
+        let mut atlases = Atlases::new(&root);
+        let mut sprite = Sprite::default();
+
+        sprite.set_atlas(
+            Some(AssetPath::new("coin.atlas.ron").expect("valid")),
+            &mut atlases,
+        );
+
+        let handle = sprite.atlas_handle.expect("a handle was resolved");
+        assert_eq!(atlases.get(handle).len(), 4);
+
+        sprite.set_atlas(None, &mut atlases);
+
+        assert!(sprite.atlas.is_none());
+        assert!(sprite.atlas_handle.is_none());
     }
 }
