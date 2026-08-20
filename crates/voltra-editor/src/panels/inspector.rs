@@ -3,6 +3,7 @@
 //! One file per component's widget, under [`show`], which is only the list of
 //! them and the rule that turns an edit into an undo entry.
 
+mod animation;
 mod camera;
 mod collision;
 mod name;
@@ -57,15 +58,38 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
                     claim = transform::show(ui, transform);
                 }
+                // Both are read before the world is borrowed mutably below:
+                // the thumbnail map and the atlas store hang off `frame`, and
+                // a widget holding a component out of `frame.world` rules out
+                // asking `frame` anything else.
+                let preview = frame
+                    .world
+                    .get::<Sprite>(entity)
+                    .and_then(|sprite| sprite.texture_handle)
+                    .and_then(|handle| frame.thumbnail(handle));
+                let frames_in_atlas = frame
+                    .world
+                    .get::<Sprite>(entity)
+                    .and_then(|sprite| sprite.atlas_handle)
+                    .and_then(|handle| frame.atlases.try_get(handle))
+                    .map(|atlas| atlas.len())
+                    .unwrap_or(0);
+
                 if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
                     ui.separator();
                     claim = claim.or(sprite::show(
                         ui,
                         sprite,
                         frame.textures,
+                        frame.atlases,
                         frame.device,
                         frame.queue,
+                        preview,
                     ));
+                }
+                if frame.world.get::<Sprite>(entity).is_some() {
+                    ui.separator();
+                    claim = claim.or(animation::show(ui, frame.world, entity, frames_in_atlas));
                 }
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();

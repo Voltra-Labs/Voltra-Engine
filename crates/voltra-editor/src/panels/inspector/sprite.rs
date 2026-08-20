@@ -1,7 +1,10 @@
 //! The sprite's colour, draw order and texture.
 
-use voltra_assets::{AssetPath, Textures};
+mod atlas;
+
+use voltra_assets::{AssetPath, Atlases, Textures};
 use voltra_core::egui::{self, DragValue, RichText, Ui};
+use voltra_core::ui::TextureId;
 use voltra_render::wgpu;
 use voltra_scene::Sprite;
 
@@ -12,8 +15,10 @@ pub(super) fn show(
     ui: &mut Ui,
     sprite: &mut Sprite,
     textures: &mut Textures,
+    atlases: &mut Atlases,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    preview: Option<TextureId>,
 ) -> Option<&'static str> {
     ui.label(RichText::new("Sprite").strong());
 
@@ -43,7 +48,9 @@ pub(super) fn show(
     });
 
     ui.separator();
-    claim.or(texture_ui(ui, sprite, textures, device, queue))
+    claim = claim.or(texture_ui(ui, sprite, textures, device, queue));
+    ui.separator();
+    claim.or(atlas::show(ui, sprite, atlases, preview))
 }
 
 /// The texture path editor.
