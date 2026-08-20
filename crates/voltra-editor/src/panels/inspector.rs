@@ -1,10 +1,16 @@
 //! Right panel: the components of the selected entity.
+//!
+//! One file per component's widget, under [`show`], which is only the list of
+//! them and the rule that turns an edit into an undo entry.
 
-use voltra_assets::{AssetPath, Textures};
-use voltra_core::egui::{self, Color32, DragValue, Frame, RichText, Stroke, TextEdit, Ui};
+mod camera;
+mod name;
+mod sprite;
+mod transform;
+
+use voltra_core::egui::{self, Color32, RichText, Ui};
 use voltra_core::UiFrame;
-use voltra_render::wgpu;
-use voltra_scene::{hierarchy, Camera, Name, SceneId, Sprite, Transform};
+use voltra_scene::{hierarchy, Camera, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 use crate::undo::SceneView;
@@ -39,19 +45,19 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
                 // The name, then what it hangs off. Both are identity rather
                 // than geometry, so they sit above the components.
-                let mut claim: Option<&'static str> = name_ui(ui, frame.world, entity);
+                let mut claim: Option<&'static str> = name::show(ui, frame.world, entity);
                 if let Some(parent) = hierarchy::parent_of(frame.world, entity) {
                     ui.label(
-                        RichText::new(format!("child of {}", name_of(frame.world, parent))).weak(),
+                        RichText::new(format!("child of {}", name::of(frame.world, parent))).weak(),
                     );
                 }
                 ui.separator();
                 if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
-                    claim = transform_ui(ui, transform);
+                    claim = transform::show(ui, transform);
                 }
                 if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
                     ui.separator();
-                    claim = claim.or(sprite_ui(
+                    claim = claim.or(sprite::show(
                         ui,
                         sprite,
                         frame.textures,
@@ -61,7 +67,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();
-                    claim = claim.or(camera_ui(ui, camera));
+                    claim = claim.or(camera::show(ui, camera));
                 }
                 // A field held down or focused keeps one entry open for the
                 // whole edit, the way a gizmo drag does. Collected and applied
@@ -119,269 +125,6 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 /// Dragged *or* focused: a `DragValue` can also be clicked into and typed in,
 /// and an entry that closed between two keystrokes would be one undo per
 /// character.
-fn active(response: &egui::Response, label: &'static str) -> Option<&'static str> {
+pub(super) fn active(response: &egui::Response, label: &'static str) -> Option<&'static str> {
     (response.dragged() || response.has_focus()).then_some(label)
-}
-
-/// The name field, and the claim that keeps a whole rename in one undo entry.
-///
-/// The component is inserted on the first keystroke rather than being there
-/// from the start: an entity is not required to have a name, and typing one is
-/// what says it wants one.
-fn name_ui(
-    ui: &mut Ui,
-    world: &mut voltra_ecs::World,
-    entity: voltra_ecs::Entity,
-) -> Option<&'static str> {
-    let mut name = world
-        .get::<Name>(entity)
-        .map(|name| name.0.clone())
-        .unwrap_or_default();
-
-    let response = ui.add(
-        TextEdit::singleline(&mut name)
-            .hint_text("name")
-            .desired_width(f32::INFINITY),
-    );
-
-    if response.changed() {
-        world.insert(entity, Name::new(name));
-    }
-
-    // Focused, not only changed: a rename is one interaction from the first
-    // keystroke to the moment the field is left, the same rule a held
-    // `DragValue` follows.
-    (response.has_focus() || response.changed()).then_some("Rename")
-}
-
-/// What to call `entity` in a sentence.
-fn name_of(world: &voltra_ecs::World, entity: voltra_ecs::Entity) -> String {
-    match world.get::<Name>(entity) {
-        Some(name) if !name.as_str().is_empty() => name.as_str().to_owned(),
-        _ => format!("Entity {}", entity.index()),
-    }
-}
-
-fn transform_ui(ui: &mut Ui, transform: &mut Transform) -> Option<&'static str> {
-    ui.label(RichText::new("Transform").strong());
-
-    let mut claim = None;
-    egui::Grid::new("transform").num_columns(2).show(ui, |ui| {
-        ui.label("position");
-        ui.horizontal(|ui| {
-            claim = claim
-                .or(active(
-                    &ui.add(DragValue::new(&mut transform.translation.x).speed(0.01)),
-                    "Move",
-                ))
-                .or(active(
-                    &ui.add(DragValue::new(&mut transform.translation.y).speed(0.01)),
-                    "Move",
-                ));
-        });
-        ui.end_row();
-
-        ui.label("rotation");
-        claim = claim.or(active(&ui.drag_angle(&mut transform.rotation), "Rotate"));
-        ui.end_row();
-
-        ui.label("scale");
-        ui.horizontal(|ui| {
-            claim = claim
-                .or(active(
-                    &ui.add(DragValue::new(&mut transform.scale.x).speed(0.01)),
-                    "Scale",
-                ))
-                .or(active(
-                    &ui.add(DragValue::new(&mut transform.scale.y).speed(0.01)),
-                    "Scale",
-                ));
-        });
-        ui.end_row();
-    });
-    claim
-}
-
-/// The camera's framing, in the units the component stores it in.
-///
-/// `size` is dragged rather than typed as a zoom because that is what the field
-/// means — half the world height on screen — and it is the number an artist can
-/// check against the scene. Bounded by the component's own constants, so a drag
-/// stops at the wall instead of running to infinity and being silently clamped
-/// somewhere else.
-fn camera_ui(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
-    ui.label(RichText::new("Camera").strong());
-
-    let mut claim = None;
-    egui::Grid::new("camera").num_columns(2).show(ui, |ui| {
-        ui.label("size")
-            .on_hover_text("half the world height this camera shows");
-        claim = claim.or(active(
-            &ui.add(
-                DragValue::new(&mut camera.size)
-                    .speed(0.01)
-                    .range(Camera::MIN_SIZE..=Camera::MAX_SIZE),
-            ),
-            "Set camera size",
-        ));
-        ui.end_row();
-
-        ui.label("priority")
-            .on_hover_text("the highest active camera is the one the game renders through");
-        claim = claim.or(active(
-            &ui.add(DragValue::new(&mut camera.priority)),
-            "Set camera priority",
-        ));
-        ui.end_row();
-
-        ui.label("active");
-        // A checkbox is one click, not a held interaction, so `active` — which
-        // asks whether a widget is being dragged or holds focus — would never
-        // report it. `changed` is the whole of the edit.
-        if ui.checkbox(&mut camera.active, "").changed() {
-            claim = claim.or(Some("Toggle camera"));
-        }
-        ui.end_row();
-    });
-    claim
-}
-
-fn sprite_ui(
-    ui: &mut Ui,
-    sprite: &mut Sprite,
-    textures: &mut Textures,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-) -> Option<&'static str> {
-    ui.label(RichText::new("Sprite").strong());
-
-    let mut claim = None;
-    egui::Grid::new("sprite").num_columns(2).show(ui, |ui| {
-        ui.label("colour");
-        // The colour is edited inside a popup, so the button itself is never
-        // dragged or focused while the value moves and [`active`] would report
-        // nothing — one entry per frame of the pick. The popup's id is
-        // `ui.auto_id_with("popup")` taken before the button is allocated
-        // (egui-0.35 `widgets/color_picker.rs:519`), and `auto_id_with` does
-        // not advance the counter, so reading it here gives the same id the
-        // widget will derive a line later.
-        let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgba_unmultiplied(&mut sprite.color);
-        if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
-            claim = claim.or(Some("Set colour"));
-        }
-        ui.end_row();
-
-        ui.label("sort order");
-        claim = claim.or(active(
-            &ui.add(DragValue::new(&mut sprite.sort_order)),
-            "Set sort order",
-        ));
-        ui.end_row();
-    });
-
-    ui.separator();
-    claim.or(texture_ui(ui, sprite, textures, device, queue))
-}
-
-/// The texture path editor: a `TextEdit` plus a `Clear` button.
-///
-/// The typed text lives in egui's own per-id storage, not a field on
-/// `Editor` — the id is salted by `entity` through the caller's `push_id`,
-/// so switching the selection lands on a fresh slot instead of showing the
-/// previous entity's half-typed path. Seeded once from `sprite.texture` and
-/// left alone after that: re-cloning the path into the buffer every frame
-/// would erase whatever the user just typed the moment the buffer is read
-/// back before a commit.
-fn texture_ui(
-    ui: &mut Ui,
-    sprite: &mut Sprite,
-    textures: &mut Textures,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-) -> Option<&'static str> {
-    ui.label(RichText::new("Texture").strong());
-
-    let buffer_id = ui.id().with("texture_path");
-    // Owned rather than borrowed from `sprite.texture`: the comparison below
-    // runs inside a closure that also calls `sprite.set_texture`, and a
-    // `&str` still borrowing `sprite` at that point would fight that
-    // mutation for no reason — the committed path does not change shape
-    // once read.
-    let committed = committed_path(sprite);
-    let mut buffer = ui.ctx().data_mut(|data| {
-        data.get_temp_mut_or_insert_with::<String>(buffer_id, || committed.clone())
-            .clone()
-    });
-
-    let mut claim = None;
-    // The field is a drop target as well as a text box, which is how the same
-    // assignment is made in Unity, Unreal and Godot: a path is typed once and
-    // dragged from the browser every time after that. The frame gains a border
-    // while a payload is in the air so the target is visible before the release
-    // rather than discovered by trying it.
-    let armed = egui::DragAndDrop::has_payload_of_type::<AssetPath>(ui.ctx());
-    let zone = if armed {
-        Frame::default().stroke(Stroke::new(1.5, ui.visuals().selection.bg_fill))
-    } else {
-        Frame::default()
-    };
-
-    let (_, dropped) = ui.dnd_drop_zone::<AssetPath, _>(zone, |ui| {
-        ui.horizontal(|ui| {
-            let response =
-                ui.add(TextEdit::singleline(&mut buffer).hint_text("path/to/texture.png"));
-            let clear_clicked = ui.button("Clear").clicked();
-
-            // Clicking `Clear` also moves focus off the `TextEdit`, so both
-            // conditions can be true on the same frame; `else if` makes Clear
-            // win rather than letting the stale buffer commit and then
-            // immediately get overwritten, which loaded a texture just to
-            // discard it.
-            //
-            // `lost_focus` alone also covers Enter: a singleline `TextEdit`
-            // surrenders focus on it. Guarded on a real change so clicking in
-            // and out without editing does not re-run `set_texture` for no
-            // reason.
-            if clear_clicked {
-                claim = Some("Set texture");
-                sprite.set_texture(None, textures, device, queue);
-                buffer.clear();
-            } else if response.lost_focus() && buffer != committed {
-                claim = Some("Set texture");
-                match AssetPath::new(&buffer) {
-                    Ok(path) => sprite.set_texture(Some(path), textures, device, queue),
-                    Err(e) => log::error!("invalid texture path {buffer:?}: {e}"),
-                }
-                // Resyncs the box: an accepted edit shows the normalised path,
-                // a rejected one reverts rather than leaving bad text sitting
-                // there looking committed.
-                buffer = committed_path(sprite);
-            }
-        });
-    });
-
-    // After the box, so a path dropped onto a field being typed into wins: the
-    // drop is the more deliberate of the two gestures, and the text it replaces
-    // was never committed.
-    if let Some(path) = dropped {
-        claim = Some("Set texture");
-        sprite.set_texture(Some((*path).clone()), textures, device, queue);
-        buffer = committed_path(sprite);
-    }
-
-    ui.ctx()
-        .data_mut(|data| data.insert_temp(buffer_id, buffer));
-
-    claim
-}
-
-/// The path a sprite is actually showing, as the text box spells it.
-fn committed_path(sprite: &Sprite) -> String {
-    sprite
-        .texture
-        .as_ref()
-        .map(AssetPath::as_str)
-        .unwrap_or("")
-        .to_owned()
 }
