@@ -11,26 +11,39 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider, CollisionLayers, Transform};
 
-/// Pairs whose bounds overlap, each once, with the lower entity index first.
+/// A collider's world bounds and what it is allowed to touch.
+type Candidate = (Entity, (Vec2, Vec2), Option<CollisionLayers>);
+
+/// Pairs whose bounds overlap and whose layers let them interact, each once,
+/// with the lower entity index first.
+///
+/// The layer test comes first because it is the cheaper of the two and because
+/// a pair that can never interact is not a candidate — filtering it later
+/// would mean paying for its bounds test on every step for the whole life of
+/// the scene. Sensors stay candidates: they are detected here and only stop
+/// being ordinary at the solver.
 pub fn candidate_pairs(world: &World) -> Vec<(Entity, Entity)> {
-    let bounds: Vec<(Entity, (Vec2, Vec2))> = world
+    let bounds: Vec<Candidate> = world
         .query::<Collider>()
         .filter_map(|(entity, collider)| {
             let transform = world.get::<Transform>(entity)?;
-            Some((entity, collider.world_aabb(transform)))
+            let layers = world.get::<CollisionLayers>(entity).copied();
+            Some((entity, collider.world_aabb(transform), layers))
         })
         .collect();
 
     let mut pairs = Vec::new();
-    for (i, (a, a_bounds)) in bounds.iter().enumerate() {
+    for (i, (a, a_bounds, a_layers)) in bounds.iter().enumerate() {
         // From `i + 1`, which is what gives each pair exactly once, never
         // mirrored, and never a body against itself. Emitting both `(a,b)` and
         // `(b,a)` would double every impulse the solver applies in the next
         // stage.
-        for (b, b_bounds) in &bounds[i + 1..] {
-            if overlaps(*a_bounds, *b_bounds) {
+        for (b, b_bounds, b_layers) in &bounds[i + 1..] {
+            if CollisionLayers::interact(a_layers.as_ref(), b_layers.as_ref())
+                && overlaps(*a_bounds, *b_bounds)
+            {
                 pairs.push((*a, *b));
             }
         }
@@ -84,6 +97,55 @@ mod tests {
         spawn(&mut world, Vec2::new(0.5, 0.0), 1.0);
 
         assert_eq!(candidate_pairs(&world).len(), 1);
+    }
+
+    #[test]
+    fn a_pair_the_layers_separate_is_not_a_candidate() {
+        let mut world = World::new();
+        let a = spawn(&mut world, Vec2::ZERO, 1.0);
+        let b = spawn(&mut world, Vec2::new(0.5, 0.0), 1.0);
+        world.insert(a, CollisionLayers::on(0).looking_at(0));
+        world.insert(b, CollisionLayers::on(1).looking_at(1));
+
+        assert!(
+            candidate_pairs(&world).is_empty(),
+            "they overlap, but neither looks at the other"
+        );
+    }
+
+    #[test]
+    fn one_side_looking_away_separates_the_pair() {
+        // The symmetric rule, at the only place it can still be got wrong.
+        let mut world = World::new();
+        let a = spawn(&mut world, Vec2::ZERO, 1.0);
+        let b = spawn(&mut world, Vec2::new(0.5, 0.0), 1.0);
+        // `a` looks at every layer, so it sees `b`. `b` looks only at layer
+        // one, which `a` is not on. Asymmetric rules would pair them.
+        world.insert(a, CollisionLayers::on(0));
+        world.insert(b, CollisionLayers::on(1).looking_at(1));
+
+        assert!(candidate_pairs(&world).is_empty());
+    }
+
+    #[test]
+    fn layers_that_look_at_each_other_still_pair() {
+        let mut world = World::new();
+        let a = spawn(&mut world, Vec2::ZERO, 1.0);
+        let b = spawn(&mut world, Vec2::new(0.5, 0.0), 1.0);
+        world.insert(a, CollisionLayers::on(0).looking_at(1));
+        world.insert(b, CollisionLayers::on(1).looking_at(0));
+
+        assert_eq!(candidate_pairs(&world), vec![(a, b)]);
+    }
+
+    #[test]
+    fn a_collider_with_no_layers_still_pairs_with_a_filtered_one() {
+        let mut world = World::new();
+        let a = spawn(&mut world, Vec2::ZERO, 1.0);
+        let b = spawn(&mut world, Vec2::new(0.5, 0.0), 1.0);
+        world.insert(b, CollisionLayers::on(2));
+
+        assert_eq!(candidate_pairs(&world), vec![(a, b)]);
     }
 
     #[test]
