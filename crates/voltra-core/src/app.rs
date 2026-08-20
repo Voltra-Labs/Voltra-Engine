@@ -1,5 +1,6 @@
 //! Event loop driver.
 
+mod animation;
 mod draw;
 mod framing;
 mod simulation;
@@ -255,6 +256,9 @@ impl App {
     /// so the frame that saw the key is the frame that moves.
     fn advance(&mut self, delta: f32) {
         self.run_update(delta);
+        // After the tick, so a clip the game just switched to is on screen this
+        // frame rather than next.
+        self.advance_animations(delta);
         // Spent, whether or not a game installed a tick to read them. Left to
         // pile up they would grow for the length of the session, and a game
         // that installed its hook later would be handed a backlog.
