@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use voltra_assets::{AssetWatcher, Textures};
 use voltra_ecs::World;
-use voltra_physics::{Contact, PhysicsWorld};
+use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
 use voltra_render::{Filter, LineBatch, RenderTarget, Renderer};
 use winit::application::ApplicationHandler;
@@ -70,6 +70,12 @@ pub struct App {
     update: Option<TickFn>,
     /// The game's fixed tick, run before each physics step.
     fixed_update: Option<TickFn>,
+    /// Collision events the per-frame tick has not been handed yet.
+    ///
+    /// A frame can owe two steps, and `PhysicsWorld` only keeps the last
+    /// step's: without this the per-frame tick would miss the pickup taken on
+    /// the first of them. Emptied once the tick has had it.
+    pending_events: Vec<CollisionEvent>,
     clock: Clock,
     input: Input,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
@@ -204,6 +210,11 @@ impl App {
         self.physics_world.contacts()
     }
 
+    /// What began and ended touching in the last physics step.
+    pub fn events(&self) -> &[CollisionEvent] {
+        self.physics_world.events()
+    }
+
     /// The simulation, to tune or to reset after loading a scene.
     pub fn physics_mut(&mut self) -> &mut PhysicsWorld {
         &mut self.physics_world
@@ -243,6 +254,10 @@ impl App {
     /// so the frame that saw the key is the frame that moves.
     fn advance(&mut self, delta: f32) {
         self.run_update(delta);
+        // Spent, whether or not a game installed a tick to read them. Left to
+        // pile up they would grow for the length of the session, and a game
+        // that installed its hook later would be handed a backlog.
+        self.pending_events.clear();
         self.step_physics(delta);
     }
 

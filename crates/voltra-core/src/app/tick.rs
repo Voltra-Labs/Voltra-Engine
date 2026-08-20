@@ -14,7 +14,7 @@
 //! things and a second type would differ only in its name.
 
 use voltra_ecs::World;
-use voltra_physics::Contact;
+use voltra_physics::{CollisionEvent, Contact};
 
 use crate::app::App;
 use crate::input::Input;
@@ -42,10 +42,20 @@ pub struct Tick<'a> {
     pub delta: f32,
     /// What the last physics step found overlapping.
     ///
-    /// Empty until something steps. This is how a game asks "am I standing on
-    /// anything" without a collision-event system existing yet; events, layers
-    /// and filtering are a stage of their own.
+    /// State, not a stream: the same resting contact is here on every step it
+    /// lasts. Empty until something steps, and sensors are never in it.
     pub contacts: &'a [Contact],
+    /// What began and ended touching, sensors included.
+    ///
+    /// A stream, unlike [`Tick::contacts`]: each hook is handed every event
+    /// exactly once. The fixed hook gets the step it is about to follow's
+    /// predecessor; the per-frame hook gets everything since its last turn,
+    /// however many steps that was. Neither can miss a pickup, and neither can
+    /// take it twice.
+    ///
+    /// `a` is always the lower entity of the pair, so
+    /// [`CollisionEvent::other`] is how a game asks what *it* touched.
+    pub events: &'a [CollisionEvent],
 }
 
 /// A hook the game installs on the loop.
@@ -72,6 +82,7 @@ impl App {
             input: &self.input,
             delta,
             contacts: self.physics_world.contacts(),
+            events: &self.pending_events,
         };
         update(&mut tick);
     }
@@ -92,6 +103,9 @@ impl App {
             input: &self.input,
             delta,
             contacts: self.physics_world.contacts(),
+            // The step before this one's: the step this tick precedes has not
+            // run, so there is nothing newer to hand it.
+            events: self.physics_world.events(),
         };
         fixed(&mut tick);
     }
@@ -101,10 +115,11 @@ impl App {
 mod tests {
     use super::*;
     use std::cell::Cell;
+    use std::cell::RefCell;
     use std::rc::Rc;
     use voltra_ecs::Entity;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Collider, RigidBody, Transform};
+    use voltra_scene::{Collider, RigidBody, Sensor, Transform};
 
     const FRAME: f32 = 1.0 / 60.0;
     const G: Vec2 = Vec2::new(0.0, -10.0);
@@ -256,6 +271,105 @@ mod tests {
         assert!(
             height(&app, body) > 0.0,
             "the body should have risen this frame, not next"
+        );
+    }
+
+    /// A static sensor box at the origin with a dynamic ball sitting inside
+    /// it, and no gravity to move either of them.
+    fn app_with_a_trigger() -> (App, Entity, Entity) {
+        let mut app = App::default();
+
+        let trigger = app.world.spawn();
+        app.world.insert(trigger, Transform::default());
+        app.world.insert(
+            trigger,
+            Collider::Box {
+                half_extents: Vec2::splat(1.0),
+            },
+        );
+        app.world.insert(trigger, Sensor);
+
+        let ball = app.world.spawn();
+        app.world.insert(ball, Transform::default());
+        app.world.insert(ball, Collider::Circle { radius: 0.5 });
+        app.world.insert(ball, RigidBody::new_dynamic(1.0));
+
+        (app, trigger, ball)
+    }
+
+    /// How many events each turn of a hook was handed, in order.
+    type Log = Rc<RefCell<Vec<usize>>>;
+
+    fn log() -> (Log, Log) {
+        let seen = Rc::new(RefCell::new(Vec::new()));
+        (seen.clone(), seen)
+    }
+
+    #[test]
+    fn the_per_frame_tick_is_handed_each_event_exactly_once() {
+        let (app, trigger, ball) = app_with_a_trigger();
+        let (record, seen) = log();
+        let touched = Rc::new(Cell::new(None));
+        let other = touched.clone();
+        let mut app = app.with_simulation().with_update(move |tick| {
+            record.borrow_mut().push(tick.events.len());
+            if let Some(event) = tick.events.first() {
+                other.set(event.other(ball));
+            }
+        });
+
+        app.advance(FRAME);
+        app.advance(FRAME);
+        app.advance(FRAME * 0.1);
+
+        assert_eq!(
+            *seen.borrow(),
+            vec![0, 1, 0],
+            "nothing has stepped, then the overlap begins, then it is spent"
+        );
+        assert_eq!(touched.get(), Some(trigger));
+    }
+
+    #[test]
+    fn the_per_frame_tick_sees_every_step_of_the_frame_not_only_the_last() {
+        // A pickup taken on the first of two steps in one frame must not be
+        // lost because the second step replaced what physics remembers.
+        let (mut app, _, ball) = app_with_a_trigger();
+        app.world
+            .get_mut::<RigidBody>(ball)
+            .expect("it is a body")
+            .velocity = Vec2::new(0.0, -100.0);
+
+        let (record, seen) = log();
+        let mut app = app
+            .with_simulation()
+            .with_update(move |tick| record.borrow_mut().push(tick.events.len()));
+
+        app.advance(FRAME * 2.0);
+        app.advance(FRAME * 0.1);
+
+        assert_eq!(
+            *seen.borrow(),
+            vec![0, 2],
+            "it began inside and ended outside, both in one frame"
+        );
+    }
+
+    #[test]
+    fn the_fixed_tick_sees_the_events_of_the_step_before_it() {
+        let (app, _, _) = app_with_a_trigger();
+        let (record, seen) = log();
+        let mut app = app
+            .with_simulation()
+            .with_fixed_update(move |tick| record.borrow_mut().push(tick.events.len()));
+
+        app.advance(FRAME);
+        app.advance(FRAME);
+
+        assert_eq!(
+            *seen.borrow(),
+            vec![0, 1],
+            "the first step has nothing behind it; the second follows the overlap"
         );
     }
 
