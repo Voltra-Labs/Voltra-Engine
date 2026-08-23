@@ -30,13 +30,14 @@
                   │
          ┌────────┴────────┐
          │                 │
-  ┌──────▼─────┐   ┌───────▼───────┐  identity, texture cache, loading
+  ┌──────▼─────┐   ┌───────▼───────┐  identity, texture and clip caches
   │ voltra-ecs │   │ voltra-assets │
   │ (no deps)  │   └───────────────┘
-  └────────────┘           │
-                   ┌───────▼───────┐  owns wgpu
-                   │ voltra-render │
-                   └───────────────┘
+  └────────────┘       │       │
+       ┌───────────────┘       └───────────┐
+┌──────▼────────┐                  ┌───────▼──────┐  owns cpal + symphonia
+│ voltra-render │  owns wgpu       │ voltra-audio │
+└───────────────┘                  └──────────────┘
 ```
 
 `voltra-scene` is the only crate that knows about both entities and vertices.
@@ -61,18 +62,26 @@ all: it is a dev-only crate, `publish = false` and never anything but a
 `[dev-dependencies]` entry, so it carries no edge a shipped binary's dependency
 graph — which this diagram is — would ever need to show.
 
-**Rule:** exactly one crate may depend on `winit` (`voltra-core`) and exactly one
-may depend on `wgpu` (`voltra-render`). Everything else consumes them through
-re-exports, so a version bump is a one-line change.
+`voltra-assets` points into `voltra-audio` for the same reason it points into
+`voltra-render`: what it caches is a decoded `Clip`, and the crate that knows
+how to make one is the crate that owns the decoder. `Clips` needs no device —
+decoding is arithmetic over a file — which is what keeps its tests headless on
+a machine with no sound card.
+
+**Rule:** exactly one crate may depend on `winit` (`voltra-core`), exactly one
+on `wgpu` (`voltra-render`), and exactly one on `cpal` and `symphonia`
+(`voltra-audio`). Everything else consumes them through re-exports, so a
+version bump is a one-line change.
 
 ### Current crates
 
 | Crate | Owns | Key types |
 | --- | --- | --- |
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
-| `voltra-assets` | Asset identity, the texture cache, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures` |
+| `voltra-assets` | Asset identity, the texture, atlas and clip caches, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures`, `Atlases`, `Clips` |
+| `voltra-audio` | The mixer, decoding, and the output device | `Audio`, `Mixer`, `Voice`, `Clip`, `PlayParams`, `VoiceId`, `decode`, `spatial` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
-| `voltra-scene` | Scene components and their geometry | `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
+| `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
@@ -1978,6 +1987,111 @@ Rejected:
 - **Clamping an out-of-range frame.** The mistake becomes invisible exactly
   where it would have been seen.
 
+### The mixer is ours; `cpal` is a device and `symphonia` a decoder
+
+Stage 23a. Nothing made a sound; stage 21 had already given a game the moment a
+coin is taken.
+
+**What the engines actually do.** Unity ships a native mixer of FMOD descent
+and drives the platform under it, with FMOD Studio and Wwise as replacements
+rather than as the thing being wrapped. Unreal's Audio Mixer is Epic's, with
+XAudio2, CoreAudio and SDL as backends beneath it. Godot writes its mixer and
+its buses and talks to WASAPI, ALSA, PulseAudio and CoreAudio. The one engine
+that delegates is Bevy, whose `bevy_audio` is a thin layer over `rodio` — and
+the ecosystem's answer to it is `bevy_kira_audio`, which people reach for the
+moment they want a bus or a tween. Four data points, and the odd one out is the
+one that hands the mixer away.
+
+So the layer we own is the mixer, and the layer we take is the same one they
+take: a device to hand finished buffers to, and a decoder to turn files into
+samples. `cpal` is the first, `symphonia` the second. `kira` and `rodio` were
+rejected not for weight but for position — both sit exactly where the mixer
+belongs, and every question below would have been answered by their API instead
+of by this engine.
+
+The second reason is testability. `Mixer` and `Voice` have no thread, no device
+and no clock: they are `&mut [f32]` in, samples out. Every rule in this section
+is a unit test that runs on a build machine with no sound card, which is the
+property a wrapped mixer cannot give and the one that made the missing-device
+question easy to answer.
+
+**The layering.** `voltra-audio` owns `cpal` and `symphonia`, the way
+`voltra-render` owns `wgpu` and `voltra-core` owns `winit`. Inside it, `mixer`
+and `voice` are pure arithmetic, `decode` is the only file reader, `device` is
+the thin `cpal` shell with no tests of its own — what could be tested there is
+`cpal` — and `audio` is the seam the engine holds. `voltra-assets::Clips` is
+the cache, beside `Textures` and `Atlases` and shaped like them.
+
+**Nothing shared, nothing locked.** The device callback runs on a thread the OS
+will not wait for: a mutex it blocks on is a gap in the speakers. The main
+thread posts `Command`s down an `mpsc` channel and the callback drains them
+with `try_iter` before rendering, so a sound triggered this frame starts in
+this buffer. Clips travel *back* out through a second channel when a voice
+ends, so the last `Arc` is dropped by the thread that can afford to free a
+megabyte — freeing it inside the callback is the one unbounded piece of work
+that would otherwise be there.
+
+**A silent `Audio` is a working `Audio`.** No device is not an error: it logs
+once and hands back an `Audio` that accepts every call and issues real
+`VoiceId`s. That is the rule the rest of the engine already follows — a missing
+texture draws the checker, a missing camera keeps the default framing — and it
+is also why `App::default()` needs no sound card and every test above stays
+headless. A device that dies mid-run collapses to the same state on the first
+failed send.
+
+**The decisions inside the mix.**
+
+- *Panning* is constant power: the gains are `cos` and `sin` of the angle the
+  pan describes, so a sound does not swell as it crosses the centre. A centred
+  sound is −3 dB in each ear, as it is on every mixing desk.
+- *Falloff* is squared linear, reaching exactly zero at the source's `range`.
+  Unity and Godot default to an inverse law, which never reaches zero and
+  therefore needs a `maxDistance` cut-off bolted on — a step in the curve
+  exactly where a sound is quietest and most likely to be crossing it. A curve
+  that arrives at zero on its own has no cut-off to hear, and near the listener
+  it is within a few decibels of the inverse law. A tilemap of ambient sources
+  (stage 25) is what makes this matter.
+- *Only x* panning. Both ears are on the same horizontal line and this is a 2D
+  engine; height reaches the mix through the distance, which is where it
+  belongs. A vertical pan would be a head model for an axis with no interaural
+  difference.
+- *Voice stealing* takes the oldest at a ceiling of 64. The sound just asked
+  for is tied to something that happened on screen; the one half-played is the
+  one a listener misses least. Unity's rule, and its default too.
+- *Hard clipping* at the end of the buffer, because a host handed a sample out
+  of range may wrap it into a crack. A limiter that ducks the mix instead of
+  squaring it off is a bus effect, and buses are 23b.
+- *Whole-file decode*, no streaming. Streaming is a second asset kind with its
+  own buffering, which is the line Unity draws between `Decompress On Load` and
+  `Streaming`; nothing this engine ships is long enough to need the other side
+  of it yet.
+- *WAV and OGG Vorbis only*, `default-features = false`, exactly as `image` is
+  PNG-only. MP3 buys nothing over Vorbis for a game's own assets.
+
+**In the scene.** `AudioSource` carries a path and a `#[serde(skip)]` handle,
+like `Sprite`, and `App` resolves every one of them when the loop resumes and
+when Open replaces the world. `AudioListener` deliberately has no `priority`
+where `Camera` has one: a scene holds several framings and renders through one,
+which is real authoring; a scene does not hold several sets of ears. Two active
+listeners is a mistake to make deterministic — lowest entity index wins — not a
+knob to add. No listener at all plays every source flat with a line in the log,
+which is the same call `SceneFraming` makes for a missing camera: a scene that
+went silent because nobody added a component would be a worse answer than one
+that plays.
+
+`play_on_spawn` is started once, recorded by the same map that tracks which
+voice each source is playing on, and the whole thing is gated on the simulation
+switch — so an editor's Stop silences everything and its Play starts the
+scene's sounds afresh. Sources are moved every frame from the listener; a
+one-shot from `Tick::audio` is not, because it is not tied to an entity, which
+is exactly what lets a coin be heard after it is despawned.
+
+**Deferred to 23b:** buses and per-category volume, tweens, auditioning a clip
+from the inspector, and hot reload. Reload is not the same problem as swapping
+a texture between frames — the audio thread is inside the buffer while the
+samples would be replaced — and the handle is already stable, so adding it
+later changes nothing above.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -2017,3 +2131,22 @@ Same problem, same rule: read the source, not a tutorial.
 | Pointer position | `Response::hover_pos` is in global screen points; subtract `response.rect.min` for widget-local ones |
 | Shortcuts | `InputState::consume_shortcut` matches modifiers *logically* — extra Shift and Alt are ignored, so `Ctrl+Z`'s pattern also accepts `Ctrl+Shift+Z`. Test the most specific one first |
 | Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |
+
+### `cpal` 0.18 and `symphonia` 0.6 API notes
+
+Both differ from most training data and from every tutorial written against
+`cpal` 0.15 or `symphonia` 0.5.
+
+| Thing | 0.18 / 0.6 |
+| --- | --- |
+| `cpal::SampleRate` | a `u32` type alias, not a newtype — `sample_rate: 48_000`, not `SampleRate(48_000)` |
+| `build_output_stream` | takes `config: StreamConfig` **by value**, plus a trailing `timeout: Option<Duration>` |
+| Starting a stream | `stream.play()` is required on every backend; before 0.18 some started themselves |
+| Error type | one `cpal::Error` with an `ErrorKind`, in place of the old per-operation error enums |
+| Picking a format | `default_output_config()` may not be `F32`; filter `supported_output_configs()` by `sample_format()` and take `try_with_standard_sample_rate()` |
+| `symphonia` probe | `get_probe().probe(&hint, mss, fmt_opts, meta_opts)` returns the `FormatReader` directly, not a `ProbedFormat` with a `.format` field |
+| Track selection | `reader.default_track(TrackType::Audio)`, which falls back to the first track with a known codec |
+| Decoder | `get_codecs().make_audio_decoder(params.audio()?, &AudioDecoderOptions)` — audio codec params are a variant of `CodecParameters` now |
+| End of stream | `next_packet()` returns `Ok(None)`; it is not an `IoError` of kind `UnexpectedEof` any more |
+| Samples out | `decoded.copy_to_vec_interleaved(&mut vec)` **resizes** its destination, so decode into a scratch `Vec` and extend from it |
+| `AudioSpec` | not `Copy`; read `rate()` and `channels().count()` rather than storing the spec |

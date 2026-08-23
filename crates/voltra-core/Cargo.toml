@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 voltra-assets.workspace = true
+voltra-audio.workspace = true
 voltra-ecs.workspace = true
 voltra-physics.workspace = true
 voltra-render.workspace = true
@@ -17,7 +18,9 @@ egui.workspace = true
 egui-winit.workspace = true
 log.workspace = true
 
-# The examples are real games written against the loop: they need a logger
-# and nothing else the crate does not already depend on.
+# The examples are real games written against the loop and need a logger;
+# `voltra-testkit` is here for `scratch_root`, which the audio tests use to
+# build an asset root without a fixture on disk.
 [dev-dependencies]
 env_logger.workspace = true
+voltra-testkit.workspace = true

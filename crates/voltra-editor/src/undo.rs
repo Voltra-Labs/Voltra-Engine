@@ -33,7 +33,7 @@ pub trait UndoHost {
     /// A record carries the path and `Sprite::texture_handle` is
     /// `#[serde(skip)]`, so without this an undone texture edit draws flat
     /// white.
-    fn resolve_sprite_textures(&mut self);
+    fn resolve_scene_assets(&mut self);
 }
 
 impl UndoHost for UiFrame<'_> {
@@ -45,8 +45,8 @@ impl UndoHost for UiFrame<'_> {
         UiFrame::reset_physics(self);
     }
 
-    fn resolve_sprite_textures(&mut self) {
-        UiFrame::resolve_sprite_textures(self);
+    fn resolve_scene_assets(&mut self) {
+        UiFrame::resolve_scene_assets(self);
     }
 }
 

@@ -16,6 +16,7 @@
 use voltra_ecs::World;
 use voltra_physics::{CollisionEvent, Contact};
 
+use crate::app::tick_audio::TickAudio;
 use crate::app::App;
 use crate::input::Input;
 
@@ -56,6 +57,11 @@ pub struct Tick<'a> {
     /// `a` is always the lower entity of the pair, so
     /// [`CollisionEvent::other`] is how a game asks what *it* touched.
     pub events: &'a [CollisionEvent],
+    /// The sound, for the one-shot a tick is usually reacting with.
+    ///
+    /// A field like the rest, but not a bare `&mut Audio`: playing takes a
+    /// handle, and resolving one takes the store — see [`TickAudio`].
+    pub audio: TickAudio<'a>,
 }
 
 /// A hook the game installs on the loop.
@@ -83,6 +89,7 @@ impl App {
             delta,
             contacts: self.physics_world.contacts(),
             events: &self.pending_events,
+            audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
         };
         update(&mut tick);
     }
@@ -106,6 +113,7 @@ impl App {
             // The step before this one's: the step this tick precedes has not
             // run, so there is nothing newer to hand it.
             events: self.physics_world.events(),
+            audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
         };
         fixed(&mut tick);
     }

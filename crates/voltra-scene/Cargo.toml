@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 voltra-assets.workspace = true
+voltra-audio.workspace = true
 voltra-ecs.workspace = true
 voltra-render.workspace = true
 log.workspace = true

@@ -1,0 +1,17 @@
+[package]
+name = "voltra-audio"
+description = "Mixing and playing the sounds a scene asks for."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The only crate in the workspace allowed to name either of these, the same way
+# `voltra-render` owns `wgpu` and `voltra-core` owns `winit`.
+cpal.workspace = true
+symphonia.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+voltra-testkit.workspace = true

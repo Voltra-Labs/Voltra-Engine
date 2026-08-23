@@ -3,6 +3,7 @@
 use std::fmt;
 use std::path::PathBuf;
 
+use voltra_audio::AudioError;
 use voltra_render::TextureError;
 
 /// A failure to name or load an asset.
@@ -35,6 +36,15 @@ pub enum AssetError {
     Parse {
         path: PathBuf,
         source: Box<ron::error::SpannedError>,
+    },
+    /// A sound that would not decode, or a file that is not one.
+    ///
+    /// Boxed for the same reason [`Self::Parse`] is: an `AudioError` carries a
+    /// path and a decoder error of its own, and inlining it widens every
+    /// `Result` in the crate.
+    Audio {
+        path: PathBuf,
+        source: Box<AudioError>,
     },
     /// Valid RON that does not describe a slicing.
     Atlas {
@@ -70,6 +80,9 @@ impl fmt::Display for AssetError {
             Self::Parse { path, source } => {
                 write!(f, "could not parse {}: {source}", path.display())
             }
+            Self::Audio { path, source } => {
+                write!(f, "could not load {}: {source}", path.display())
+            }
             Self::Atlas { path, source } => {
                 write!(f, "{} is not a usable atlas: {source}", path.display())
             }
@@ -86,6 +99,7 @@ impl std::error::Error for AssetError {
             Self::Read { source, .. } => Some(source),
             Self::Decode { source, .. } => Some(source),
             Self::Parse { source, .. } => Some(source),
+            Self::Audio { source, .. } => Some(source),
             Self::Atlas { source, .. } => Some(source),
             Self::Watch { source, .. } => Some(source),
             Self::Absolute(_) | Self::EscapesRoot(_) | Self::Empty => None,

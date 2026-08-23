@@ -25,6 +25,12 @@ pub use winit::keyboard::KeyCode;
 // standing on something" needs one dependency, not two.
 pub use voltra_physics::{query, CollisionEvent, Contact, QueryFilter, RayHit, Touch};
 
+// A game plays a sound through `Tick::audio` and has to be able to name what
+// it hands over and what comes back. Re-exported for the reason the physics
+// types above are: one dependency for a game that wants a coin to make a
+// noise, not two.
+pub use voltra_audio::{Clip, PlayParams, VoiceId};
+
 // The editor builds its panels with these, and must use the exact versions the
 // layer above was compiled against.
 pub use egui;

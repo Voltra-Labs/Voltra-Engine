@@ -48,6 +48,7 @@ impl App {
             Some(ui),
             Some(textures),
             Some(atlases),
+            Some(clips),
         ) = (
             self.renderer.as_mut(),
             self.window.as_ref(),
@@ -57,6 +58,7 @@ impl App {
             self.ui.as_mut(),
             self.textures.as_mut(),
             self.atlases.as_mut(),
+            self.clips.as_mut(),
         )
         else {
             return;
@@ -108,6 +110,7 @@ impl App {
             camera: &mut renderer.camera,
             textures,
             atlases,
+            clips,
             device: &device,
             queue: &queue,
             lines: &mut self.lines,

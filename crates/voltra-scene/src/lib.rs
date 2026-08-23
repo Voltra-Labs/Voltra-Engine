@@ -5,6 +5,8 @@
 //! down into both and never back up.
 
 pub mod animation;
+pub mod audio_listener;
+pub mod audio_source;
 pub mod batch;
 pub mod body;
 pub mod camera;
@@ -20,6 +22,8 @@ pub mod sprite;
 pub mod transform;
 
 pub use animation::SpriteAnimation;
+pub use audio_listener::AudioListener;
+pub use audio_source::AudioSource;
 pub use batch::{SpriteBatch, SpriteRange};
 pub use body::{BodyType, RigidBody};
 pub use camera::Camera;

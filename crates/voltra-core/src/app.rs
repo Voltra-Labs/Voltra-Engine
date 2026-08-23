@@ -1,17 +1,20 @@
 //! Event loop driver.
 
 mod animation;
+mod audio;
 mod draw;
 mod framing;
 mod simulation;
 mod thumbnails;
 mod tick;
+mod tick_audio;
 mod ui_frame;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use voltra_assets::{AssetWatcher, Atlases, Textures};
+use voltra_assets::{AssetWatcher, Atlases, Clips, Textures};
+use voltra_audio::Audio;
 use voltra_ecs::World;
 use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
@@ -21,6 +24,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+use crate::app::audio::SceneAudio;
 use crate::app::framing::SceneFraming;
 use crate::app::simulation::Simulation;
 use crate::app::thumbnails::Thumbnails;
@@ -30,6 +34,7 @@ use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 pub use tick::Tick;
+pub use tick_audio::TickAudio;
 pub use ui_frame::UiFrame;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
@@ -56,6 +61,10 @@ pub struct App {
     renderer: Option<Renderer>,
     textures: Option<Textures>,
     atlases: Option<Atlases>,
+    /// Decoded sounds. `None` until `resumed`, like the stores above — not
+    /// because a clip needs a device, but because it needs the asset root,
+    /// and that is resolved when the window is.
+    clips: Option<Clips>,
     watcher: Option<AssetWatcher>,
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
@@ -82,6 +91,15 @@ pub struct App {
     input: Input,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
     simulation: Simulation,
+    /// The output device, or a silent stand-in when there is none.
+    ///
+    /// Not an `Option`: [`Audio::silent`] already is the "no device" case, and
+    /// wrapping it would mean every caller answering the same question twice.
+    /// `App::default` therefore needs no sound card, which is what keeps every
+    /// test below headless.
+    audio: Audio,
+    /// Which of the scene's own sources are sounding, and from where.
+    scene_audio: SceneAudio,
     /// Points the frame at the scene's camera when there is no UI.
     ///
     /// Unused on the editor's path: there the viewport panel decides which
@@ -259,6 +277,9 @@ impl App {
         // After the tick, so a clip the game just switched to is on screen this
         // frame rather than next.
         self.advance_animations(delta);
+        // After the tick too, and for the matching reason: a source the game
+        // just spawned or moved is heard from where it is now.
+        self.update_audio();
         // Spent, whether or not a game installed a tick to read them. Left to
         // pile up they would grow for the length of the session, and a game
         // that installed its hook later would be handed a backlog.
@@ -353,6 +374,17 @@ impl ApplicationHandler for App {
         let mut atlases = Atlases::new(asset_root.clone());
         ui_frame::resolve_world_atlases(&mut self.world, &mut atlases);
         self.atlases = Some(atlases);
+
+        // The audible third of the same problem: a source in a world populated
+        // before `run` has never met a `Clips` either.
+        let mut clips = Clips::new(asset_root.clone());
+        ui_frame::resolve_world_clips(&mut self.world, &mut clips);
+        self.clips = Some(clips);
+
+        // Last of the three, and the only one that can fail without stopping
+        // anything: with no device this is the silent `Audio` and the game
+        // runs on.
+        self.audio = Audio::open();
 
         if self.hot_reload {
             match AssetWatcher::new(&asset_root) {
