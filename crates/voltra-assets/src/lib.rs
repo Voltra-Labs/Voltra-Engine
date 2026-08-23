@@ -8,6 +8,7 @@
 pub mod atlas;
 pub mod atlases;
 pub mod browse;
+pub mod clips;
 pub mod error;
 pub mod handle;
 pub mod path;
@@ -21,6 +22,7 @@ pub mod watch;
 pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, Grid};
 pub use atlases::Atlases;
 pub use browse::{Entry, EntryKind};
+pub use clips::Clips;
 pub use error::AssetError;
 pub use handle::Handle;
 pub use path::AssetPath;
