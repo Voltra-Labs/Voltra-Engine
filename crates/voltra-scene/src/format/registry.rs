@@ -14,8 +14,8 @@ use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
 use crate::{
-    Camera, Collider, CollisionLayers, Name, Parent, PhysicsMaterial, RigidBody, Sensor, Sprite,
-    SpriteAnimation, Transform,
+    AudioListener, AudioSource, Camera, Collider, CollisionLayers, Name, Parent, PhysicsMaterial,
+    RigidBody, Sensor, Sprite, SpriteAnimation, Transform,
 };
 
 /// A registered type's save conversion: entity to stored value, or `None` when
@@ -80,6 +80,8 @@ impl ComponentRegistry {
         registry.register::<Sprite>("Sprite");
         registry.register::<SpriteAnimation>("SpriteAnimation");
         registry.register::<Camera>("Camera");
+        registry.register::<AudioSource>("AudioSource");
+        registry.register::<AudioListener>("AudioListener");
         registry.register::<RigidBody>("RigidBody");
         registry.register::<Collider>("Collider");
         registry.register::<PhysicsMaterial>("PhysicsMaterial");
