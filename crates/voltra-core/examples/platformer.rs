@@ -9,7 +9,7 @@
 //!
 //! Run it with `cargo run -p voltra-core --example platformer`.
 //! `A`/`D` or the arrow keys walk, `Space` jumps, and walking into a coin
-//! takes it.
+//! takes it — with a sound, which is the point of the ears on the camera.
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -19,7 +19,8 @@ use voltra_core::{query, App, KeyCode, QueryFilter, Tick, Touch, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    Camera, Collider, PhysicsMaterial, RigidBody, Sensor, Sprite, SpriteAnimation, Transform,
+    AudioListener, AudioSource, Camera, Collider, PhysicsMaterial, RigidBody, Sensor, Sprite,
+    SpriteAnimation, Transform,
 };
 
 /// This example's own component, in the same world as the engine's.
@@ -116,6 +117,19 @@ fn take_coins(tick: &mut Tick<'_>, walker: Entity) {
         .collect();
 
     for coin in taken {
+        // Read before the despawn, obviously, but also *played* before it: the
+        // sound outlives the entity that named it, because a one-shot from the
+        // tick is not tied to a source the loop is following. A coin that had
+        // to stay alive to be heard would be the wrong shape for every pickup
+        // in every game.
+        if let Some(clip) = tick
+            .world
+            .get::<AudioSource>(coin)
+            .and_then(|source| source.clip_handle)
+        {
+            tick.audio.play(clip);
+        }
+
         // Despawned mid-overlap on purpose: the pair ends by disappearing, and
         // the `Ended` event that follows is what a game would close a door on.
         tick.world.despawn(coin);
@@ -235,6 +249,10 @@ fn spawn_camera(app: &mut App) -> Entity {
     app.world
         .insert(camera, Transform::from_translation(Vec2::new(0.0, -0.5)));
     app.world.insert(camera, Camera::new(4.0));
+    // The ears ride with the eyes, which is where Unity puts them by default:
+    // a listener somewhere else would pan sounds to the side the camera is not
+    // looking from.
+    app.world.insert(camera, AudioListener::default());
     camera
 }
 
@@ -257,6 +275,17 @@ fn coin(app: &mut App, at: Vec2) {
     // second, which reads as turning rather than flickering.
     app.world
         .insert(entity, SpriteAnimation::new(vec![0, 1, 2, 3], 8.0));
+    // The sound the coin makes when it is taken. `play_on_spawn` is off: this
+    // is a sound the game triggers, and the component is here to say which
+    // file it is — the path is authored beside the sprite rather than typed
+    // into the tick. The handle is left unresolved for the same reason the
+    // sprite's is: `App` resolves every source's clip when the loop resumes.
+    let mut voice = AudioSource::new(asset("audio/coin.wav"));
+    // Not positional: the coin is taken by walking into it, so it is always at
+    // the walker's feet, and a falloff would only ever attenuate it by a
+    // fraction nobody can hear.
+    voice.range = 0.0;
+    app.world.insert(entity, voice);
     app.world.insert(entity, Collider::Circle { radius: 0.5 });
     // No `RigidBody`: it is static geometry that happens to be a sensor. A
     // body would fall, and a sensor cannot rest on anything.
