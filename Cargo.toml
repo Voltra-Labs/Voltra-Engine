@@ -12,6 +12,7 @@ repository = "https://github.com/Voltra-Labs/Voltra-Engine"
 # `dep.workspace = true` so the whole workspace can never split a version.
 [workspace.dependencies]
 voltra-assets = { path = "crates/voltra-assets" }
+voltra-audio = { path = "crates/voltra-audio" }
 voltra-core = { path = "crates/voltra-core" }
 voltra-ecs = { path = "crates/voltra-ecs" }
 voltra-physics = { path = "crates/voltra-physics" }
@@ -31,6 +32,18 @@ ron = "0.12.2"
 uuid = { version = "1.24.0", features = ["v7", "serde"] }
 # PNG only: the default feature set drags in jpeg, gif, tiff, webp and more.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
+# The output device and nothing else: the mixer is ours, the way Godot's and
+# Unreal's are theirs. Only `voltra-audio` may name it.
+cpal = "0.18.2"
+# The decoder, trimmed the way `image` is: WAV (`pcm` is its codec) and OGG
+# (`vorbis` is its codec). `default` would also drag in FLAC, MKV, ADPCM and
+# three metadata parsers for formats no scene names.
+symphonia = { version = "0.6.1", default-features = false, features = [
+    "wav",
+    "pcm",
+    "ogg",
+    "vorbis",
+] }
 # Immediate-mode UI for the editor. `egui-wgpu` is pinned to wgpu 29 and cannot
 # be used against wgpu 30, so the backend is ours; `epaint` is the tessellated
 # output it consumes, and is all the render layer needs to know about.
