@@ -316,7 +316,7 @@ fn apply(edit: &Edit, side: Side, ctx: UndoContext<'_>, host: &mut dyn UndoHost)
     }
 
     host.reset_physics();
-    host.resolve_sprite_textures();
+    host.resolve_scene_assets();
 
     *ctx.selected = edit.selected_entity(side, host.world());
 }
@@ -354,7 +354,7 @@ mod tests {
         fn reset_physics(&mut self) {
             self.resets += 1;
         }
-        fn resolve_sprite_textures(&mut self) {
+        fn resolve_scene_assets(&mut self) {
             self.resolves += 1;
         }
     }

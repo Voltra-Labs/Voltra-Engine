@@ -7,12 +7,12 @@
 
 use std::collections::HashMap;
 
-use voltra_assets::{Atlases, Handle, Textures};
+use voltra_assets::{Atlases, Clips, Handle, Textures};
 use voltra_ecs::World;
 use voltra_physics::Contact;
 use voltra_render::{wgpu, Camera2D, LineBatch, Texture};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::Sprite;
+use voltra_scene::{AudioSource, Sprite};
 
 use super::simulation::Simulation;
 use crate::ui::TextureId;
@@ -37,6 +37,10 @@ pub struct UiFrame<'a> {
     /// `textures` is: a panel that assigns an atlas must produce a handle the
     /// batch about to run can resolve.
     pub atlases: &'a mut Atlases,
+    /// Loaded sounds, shared with the loop's own playback for the same reason
+    /// the two stores above are shared: a panel that names a clip must produce
+    /// a handle the frame's audio can already resolve.
+    pub clips: &'a mut Clips,
     /// Needed to load a texture a panel just named.
     pub device: &'a wgpu::Device,
     /// Needed to upload a texture a panel just named.
@@ -160,17 +164,24 @@ impl<'a> UiFrame<'a> {
         *self.requested_size = (width.max(1), height.max(1));
     }
 
-    /// Re-resolves every sprite's texture handle from its path.
+    /// Re-resolves every runtime asset handle in the world from its path:
+    /// textures, atlases and clips.
     ///
-    /// For after a world-replacing edit — Open is the only caller today.
+    /// For after a world-replacing edit — Open and undo are the callers.
     /// Handles from whatever was in the world before mean nothing once the
-    /// entities they pointed at are gone, so this reloads every `Sprite`
+    /// entities they pointed at are gone, so this reloads every component
     /// unconditionally rather than trying to detect which ones changed. Not
     /// for per-frame use: a path whose handle is already correct still pays
-    /// for a `Textures::load` cache lookup.
-    pub fn resolve_sprite_textures(&mut self) {
+    /// for a store's cache lookup.
+    ///
+    /// Named for the whole job rather than the first part of it. It has
+    /// resolved atlases since sheets existed and clips since sound did, and a
+    /// name that still said `sprite_textures` would be the one place a caller
+    /// could reasonably believe a scene had loaded when a third of it had not.
+    pub fn resolve_scene_assets(&mut self) {
         resolve_world_textures(self.world, self.textures, self.device, self.queue);
         resolve_world_atlases(self.world, self.atlases);
+        resolve_world_clips(self.world, self.clips);
     }
 
     /// The stores a sprite's geometry resolves against, as the batch has them.
@@ -197,6 +208,18 @@ pub(super) fn resolve_world_textures(
     for (_, sprite) in world.query_mut::<Sprite>() {
         let path = sprite.texture.clone();
         sprite.set_texture(path, textures, device, queue);
+    }
+}
+
+/// Re-resolves every [`AudioSource`]'s clip handle from its path.
+///
+/// The audible member of the same family as [`resolve_world_textures`] and
+/// [`resolve_world_atlases`], and needed for the same two reasons: a world can
+/// arrive already populated, and Open replaces every entity in it.
+pub(super) fn resolve_world_clips(world: &mut World, clips: &mut Clips) {
+    for (_, source) in world.query_mut::<AudioSource>() {
+        let path = source.clip.clone();
+        source.set_clip(path, clips);
     }
 }
 

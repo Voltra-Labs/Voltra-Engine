@@ -55,7 +55,7 @@ pub trait PlayHost {
     /// `#[serde(skip)]` — a handle addresses a slot in this session's
     /// `Textures` and means nothing across a round trip. Without this every
     /// textured sprite draws flat white after Stop.
-    fn resolve_sprite_textures(&mut self);
+    fn resolve_scene_assets(&mut self);
 }
 
 impl PlayHost for UiFrame<'_> {
@@ -75,8 +75,8 @@ impl PlayHost for UiFrame<'_> {
         UiFrame::reset_physics(self);
     }
 
-    fn resolve_sprite_textures(&mut self) {
-        UiFrame::resolve_sprite_textures(self);
+    fn resolve_scene_assets(&mut self) {
+        UiFrame::resolve_scene_assets(self);
     }
 }
 
@@ -218,7 +218,7 @@ impl Play {
         }
 
         host.reset_physics();
-        host.resolve_sprite_textures();
+        host.resolve_scene_assets();
 
         // An entity selected during play that did not exist at snapshot time
         // leaves the selection empty. There is nothing left for it to name.
@@ -286,7 +286,7 @@ mod tests {
         fn reset_physics(&mut self) {
             self.resets += 1;
         }
-        fn resolve_sprite_textures(&mut self) {
+        fn resolve_scene_assets(&mut self) {
             self.resolves += 1;
         }
     }

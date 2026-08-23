@@ -144,7 +144,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             // yet. Runs after the despawns above so it never
                             // wastes a lookup loading a texture for an
                             // entity about to disappear.
-                            frame.resolve_sprite_textures();
+                            frame.resolve_scene_assets();
                             // Not load-bearing: a stale `selected` cannot come
                             // back to address a different entity, since
                             // `Entities::is_alive` checks the generation and a
