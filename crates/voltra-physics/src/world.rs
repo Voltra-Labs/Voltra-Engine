@@ -4,6 +4,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 
 use crate::clock::PhysicsClock;
+use crate::events::{CollisionEvent, Touching};
 use crate::narrow::Contact;
 use crate::solver::{ImpulseCache, SolverParams};
 use crate::step::step;
@@ -22,6 +23,8 @@ pub struct PhysicsWorld {
     params: SolverParams,
     impulses: ImpulseCache,
     contacts: Vec<Contact>,
+    touching: Touching,
+    events: Vec<CollisionEvent>,
 }
 
 impl PhysicsWorld {
@@ -59,6 +62,23 @@ impl PhysicsWorld {
         &self.contacts
     }
 
+    /// What began and ended touching in the last step that ran.
+    ///
+    /// A stream, unlike [`PhysicsWorld::contacts`], which is state: an event
+    /// is handed out once and the next step replaces it. Read it from a game's
+    /// *fixed* tick, which runs exactly once per step — a per-frame reader
+    /// would see the same event on every frame that owed no step, and take the
+    /// same pickup twice.
+    pub fn events(&self) -> &[CollisionEvent] {
+        &self.events
+    }
+
+    /// Pairs currently touching, sensors included. For tests and for a debug
+    /// panel.
+    pub fn touching(&self) -> &Touching {
+        &self.touching
+    }
+
     /// Pairs currently warm-started. For tests and for a debug panel; the
     /// number is bounded by the last step's contacts.
     pub fn cached_pairs(&self) -> usize {
@@ -74,6 +94,10 @@ impl PhysicsWorld {
     pub fn reset(&mut self) {
         self.impulses.clear();
         self.contacts.clear();
+        // Cleared, not diffed: the next step must not open by ending every
+        // pair of a scene that is no longer loaded.
+        self.touching.clear();
+        self.events.clear();
         self.clock.reset();
     }
 
@@ -83,7 +107,9 @@ impl PhysicsWorld {
     /// one step and no more, and [`PhysicsWorld::advance`] would run zero.
     pub fn step_once(&mut self, world: &mut World, gravity: Vec2) -> &[Contact] {
         let dt = self.clock.step();
-        self.contacts = step(world, &mut self.impulses, &self.params, gravity, dt);
+        let overlaps = step(world, &mut self.impulses, &self.params, gravity, dt);
+        self.events = self.touching.update(overlaps.pairs());
+        self.contacts = overlaps.contacts;
         &self.contacts
     }
 
@@ -128,8 +154,9 @@ impl PhysicsWorld {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::events::Touch;
     use voltra_ecs::Entity;
-    use voltra_scene::{Collider, RigidBody, Transform};
+    use voltra_scene::{Collider, RigidBody, Sensor, Transform};
 
     const G: Vec2 = Vec2::new(0.0, -10.0);
 
@@ -152,6 +179,13 @@ mod tests {
         world.insert(ball, RigidBody::new_dynamic(1.0));
 
         (world, ball)
+    }
+
+    fn translation(world: &World, entity: Entity) -> Vec2 {
+        world
+            .get::<Transform>(entity)
+            .expect("the transform is there")
+            .translation
     }
 
     fn height(world: &World, entity: Entity) -> f32 {
@@ -313,6 +347,151 @@ mod tests {
             height(&counted_world, counted_ball),
             height(&advanced_world, advanced_ball)
         );
+    }
+
+    /// A static box at the origin and a dynamic ball sitting inside it.
+    fn overlapping(sensor: bool) -> (PhysicsWorld, World, Entity, Entity) {
+        let mut world = World::new();
+
+        let trigger = world.spawn();
+        world.insert(trigger, Transform::default());
+        world.insert(
+            trigger,
+            Collider::Box {
+                half_extents: Vec2::splat(1.0),
+            },
+        );
+        if sensor {
+            world.insert(trigger, Sensor);
+        }
+
+        let ball = world.spawn();
+        world.insert(ball, Transform::from_translation(Vec2::new(0.25, 0.0)));
+        world.insert(ball, Collider::Circle { radius: 0.5 });
+        world.insert(ball, RigidBody::new_dynamic(1.0));
+
+        (PhysicsWorld::new(), world, trigger, ball)
+    }
+
+    #[test]
+    fn a_sensor_is_detected_and_never_solved() {
+        let (mut physics, mut world, trigger, ball) = overlapping(true);
+        let before = translation(&world, ball);
+
+        for _ in 0..10 {
+            physics.step_once(&mut world, Vec2::ZERO);
+        }
+
+        assert!(
+            physics.contacts().is_empty(),
+            "a sensor overlap is not a contact"
+        );
+        assert_eq!(physics.cached_pairs(), 0, "and never warm starts");
+        assert_eq!(translation(&world, ball), before, "nor pushes anything out");
+        assert!(physics.touching().contains(trigger, ball));
+    }
+
+    #[test]
+    fn the_same_overlap_without_the_sensor_is_solved() {
+        // The other half of the test above: what changes is the mark, not the
+        // scene.
+        let (mut physics, mut world, _, ball) = overlapping(false);
+        let before = translation(&world, ball);
+
+        for _ in 0..10 {
+            physics.step_once(&mut world, Vec2::ZERO);
+        }
+
+        assert_eq!(physics.contacts().len(), 1);
+        assert!(translation(&world, ball).x > before.x, "it is pushed out");
+    }
+
+    #[test]
+    fn a_pair_begins_once_and_then_says_nothing() {
+        let (mut physics, mut world, trigger, ball) = overlapping(true);
+
+        physics.step_once(&mut world, Vec2::ZERO);
+        assert_eq!(
+            physics.events(),
+            [CollisionEvent {
+                a: trigger,
+                b: ball,
+                touch: Touch::Began,
+                sensor: true,
+            }]
+        );
+
+        physics.step_once(&mut world, Vec2::ZERO);
+        assert!(physics.events().is_empty(), "it is still the same overlap");
+    }
+
+    #[test]
+    fn walking_out_of_a_sensor_ends_the_pair() {
+        let (mut physics, mut world, trigger, ball) = overlapping(true);
+        physics.step_once(&mut world, Vec2::ZERO);
+
+        world
+            .get_mut::<Transform>(ball)
+            .expect("the transform is there")
+            .translation = Vec2::new(50.0, 0.0);
+        physics.step_once(&mut world, Vec2::ZERO);
+
+        assert_eq!(
+            physics.events(),
+            [CollisionEvent {
+                a: trigger,
+                b: ball,
+                touch: Touch::Ended,
+                sensor: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn despawning_one_side_ends_the_pair_rather_than_losing_it() {
+        // What a pickup does to itself. Silence here would leave a door that
+        // opened on Began with nothing to close it.
+        let (mut physics, mut world, trigger, ball) = overlapping(true);
+        physics.step_once(&mut world, Vec2::ZERO);
+
+        world.despawn(trigger);
+        physics.step_once(&mut world, Vec2::ZERO);
+
+        assert_eq!(physics.events().len(), 1);
+        assert_eq!(physics.events()[0].touch, Touch::Ended);
+        assert_eq!(physics.events()[0].other(ball), Some(trigger));
+    }
+
+    #[test]
+    fn resetting_ends_nothing() {
+        let (mut physics, mut world, _, _) = overlapping(true);
+        physics.step_once(&mut world, Vec2::ZERO);
+        assert_eq!(physics.touching().len(), 1);
+
+        physics.reset();
+
+        assert!(physics.events().is_empty());
+        assert!(physics.touching().is_empty());
+        physics.step_once(&mut world, Vec2::ZERO);
+        assert_eq!(
+            physics.events().len(),
+            1,
+            "the pair begins again, and never ended"
+        );
+        assert_eq!(physics.events()[0].touch, Touch::Began);
+    }
+
+    #[test]
+    fn a_frame_that_owed_no_step_leaves_the_events_alone() {
+        // Same rule the contacts have: a fast frame reports the frame rate if
+        // it blanks what the last step found.
+        let (mut physics, mut world, _, _) = overlapping(true);
+        physics.advance(&mut world, Vec2::ZERO, 1.0 / 60.0);
+        assert_eq!(physics.events().len(), 1);
+
+        physics.advance(&mut world, Vec2::ZERO, 0.0);
+
+        assert_eq!(physics.events().len(), 1);
     }
 
     #[test]

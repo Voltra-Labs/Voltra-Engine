@@ -17,6 +17,7 @@ use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::glam::Vec2;
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Texture};
+use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{Sprite, SpriteBatch, Transform};
 use voltra_testkit::{headless_device, read_texture, scratch_root, Rgba, CLEAR};
 
@@ -191,8 +192,8 @@ fn two_sprites_naming_one_path_sample_the_same_texture() {
     );
 
     let mut batch = SpriteBatch::default();
-    batch.push(left.0.matrix(), &left.1);
-    batch.push(right.0.matrix(), &right.1);
+    batch.push(left.0.matrix(), &left.1, Sheets::default());
+    batch.push(right.0.matrix(), &right.1, Sheets::default());
     assert_eq!(batch.ranges.len(), 1, "one texture must be one run");
 
     let pixels = render_batch(&device, &queue, &batch, &textures, &wide_camera());
@@ -224,8 +225,8 @@ fn two_paths_reach_their_own_textures_in_one_frame() {
     let right = sprite_at(1.0, Some("blue.png"), &mut textures, &device, &queue);
 
     let mut batch = SpriteBatch::default();
-    batch.push(left.0.matrix(), &left.1);
-    batch.push(right.0.matrix(), &right.1);
+    batch.push(left.0.matrix(), &left.1, Sheets::default());
+    batch.push(right.0.matrix(), &right.1, Sheets::default());
     assert_eq!(batch.ranges.len(), 2, "two textures must be two runs");
 
     let pixels = render_batch(&device, &queue, &batch, &textures, &wide_camera());
@@ -261,7 +262,7 @@ fn a_path_that_does_not_load_draws_the_placeholder_checker() {
     );
 
     let mut batch = SpriteBatch::default();
-    batch.push(missing.0.matrix(), &missing.1);
+    batch.push(missing.0.matrix(), &missing.1, Sheets::default());
 
     let pixels = render_batch(&device, &queue, &batch, &textures, &close_camera());
 
@@ -304,7 +305,7 @@ fn an_untextured_sprite_still_tints_through_white() {
     assert!(sprite.texture_handle.is_none());
 
     let mut batch = SpriteBatch::default();
-    batch.push(Transform::default().matrix(), &sprite);
+    batch.push(Transform::default().matrix(), &sprite, Sheets::default());
     assert_eq!(batch.ranges.len(), 1);
     assert!(
         batch.ranges[0].texture.is_none(),
@@ -335,7 +336,7 @@ fn a_reloaded_texture_changes_what_is_drawn() {
     let sprite = sprite_at(0.0, Some("swap.png"), &mut textures, &device, &queue);
 
     let mut batch = SpriteBatch::default();
-    batch.push(sprite.0.matrix(), &sprite.1);
+    batch.push(sprite.0.matrix(), &sprite.1, Sheets::default());
 
     let before = render_batch(&device, &queue, &batch, &textures, &close_camera());
     let centre = at(&before, SIZE / 2, SIZE / 2);
@@ -352,5 +353,76 @@ fn a_reloaded_texture_changes_what_is_drawn() {
     assert!(
         centre.b > centre.g,
         "the reload must reach the screen: {centre:?}"
+    );
+}
+
+/// Writes a 32×16 PNG: `left` over the first sixteen columns, `right` over the
+/// rest — a two-cell sheet whose cells are told apart by colour alone.
+fn write_strip_png(root: &Path, name: &str, left: [u8; 4], right: [u8; 4]) {
+    use image::ImageEncoder;
+
+    let path = root.join(name);
+    std::fs::create_dir_all(path.parent().expect("the PNG has a parent")).expect("asset subdir");
+
+    let pixels: Vec<u8> = (0..16)
+        .flat_map(|_| (0..32).flat_map(move |x| if x < 16 { left } else { right }))
+        .collect();
+    let file = std::fs::File::create(&path).expect("creating the PNG");
+    image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
+        .write_image(&pixels, 32, 16, image::ExtendedColorType::Rgba8)
+        .expect("encoding the PNG");
+}
+
+#[test]
+fn the_frame_a_sprite_names_is_the_cell_that_reaches_the_screen() {
+    // The whole point of the sheet: the UVs the batch computes have to select
+    // one cell of the texture on the GPU, not merely in an assertion about
+    // `Quad`.
+    let (device, queue) = device_or_skip!();
+    let root = scratch_root();
+    write_strip_png(&root, "strip.png", [0, 255, 0, 255], [0, 0, 255, 255]);
+    std::fs::write(
+        root.join("strip.atlas.ron"),
+        b"(version: 1, grid: Some((cell: (16, 16), columns: 2, rows: 1)))",
+    )
+    .expect("the fixture writes");
+
+    let layout = texture::bind_group_layout(&device);
+    let mut textures = Textures::new(&device, &queue, &layout, root.clone());
+    let mut atlases = voltra_assets::Atlases::new(&root);
+    let mut sprite = Sprite::default();
+    sprite.set_texture(
+        Some(AssetPath::new("strip.png").expect("valid")),
+        &mut textures,
+        &device,
+        &queue,
+    );
+    sprite.set_atlas(
+        Some(AssetPath::new("strip.atlas.ron").expect("valid")),
+        &mut atlases,
+    );
+
+    let mut seen = Vec::new();
+    for frame in [0, 1] {
+        sprite.frame = frame;
+        let mut batch = SpriteBatch::default();
+        batch.push(
+            Transform::default().matrix(),
+            &sprite,
+            Sheets::new(&atlases, &textures),
+        );
+        let pixels = render_batch(&device, &queue, &batch, &textures, &close_camera());
+        seen.push(at(&pixels, SIZE / 2, SIZE / 2));
+    }
+
+    assert!(
+        seen[0].g > 200 && seen[0].b < 60,
+        "frame 0 is the green cell, got {:?}",
+        seen[0]
+    );
+    assert!(
+        seen[1].b > 200 && seen[1].g < 60,
+        "frame 1 is the blue cell, got {:?}",
+        seen[1]
     );
 }

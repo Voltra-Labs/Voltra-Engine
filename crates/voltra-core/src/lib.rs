@@ -19,10 +19,11 @@ pub use window::WindowConfig;
 // `winit` dependency — the same reason `voltra-render` re-exports `wgpu`.
 pub use winit::keyboard::KeyCode;
 
-// A game reads `Tick::contacts` and has to be able to name what is in it. The
-// type belongs to `voltra-physics`; re-exporting it here means a game that only
-// asks "am I standing on something" needs one dependency, not two.
-pub use voltra_physics::Contact;
+// A game reads `Tick::contacts` and `Tick::events`, asks the world a question
+// with `query`, and has to be able to name what comes back. The types belong to
+// `voltra-physics`; re-exporting them here means a game that only asks "am I
+// standing on something" needs one dependency, not two.
+pub use voltra_physics::{query, CollisionEvent, Contact, QueryFilter, RayHit, Touch};
 
 // The editor builds its panels with these, and must use the exact versions the
 // layer above was compiled against.

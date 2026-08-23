@@ -165,3 +165,47 @@ pub(crate) fn body(
     );
     entity
 }
+
+/// Drops a sprite at `at` showing the first frame of the slicing `path` names.
+///
+/// Assigns the sheet the atlas file points at as well, which is what that hint
+/// exists for: an author dragging a slicing in means "this picture, cut this
+/// way", and making them find the PNG afterwards is a second step for one
+/// intent.
+///
+/// Sized to the *frame's* aspect ratio rather than the whole sheet's — a
+/// four-cell strip dropped in at 4:1 would be the sheet, not the sprite.
+pub(crate) fn atlas_sprite(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPath) -> Entity {
+    let name = name_of(path);
+    let entity = sprite(frame, name.trim_end_matches(".atlas"), at);
+
+    // Read out before the world is touched: the slicing is borrowed from
+    // `frame.atlases`, and the component below is borrowed from `frame.world`.
+    let handle = frame.atlases.load(path);
+    let atlas = frame.atlases.get(handle);
+    let texture = atlas.texture().cloned();
+    let first = atlas.frame(0);
+
+    let Some(component) = frame.world.get_mut::<Sprite>(entity) else {
+        return entity;
+    };
+    component.set_atlas(Some(path.clone()), frame.atlases);
+    component.frame = 0;
+    if texture.is_some() {
+        component.set_texture(texture, frame.textures, frame.device, frame.queue);
+    }
+
+    let Some(size) = first.map(|frame| (frame.width as f32, frame.height as f32)) else {
+        return entity;
+    };
+    // A zero-sided frame cannot come out of a grid, but a division that
+    // produced `inf` would put the sprite's scale beyond repair.
+    let longest = size.0.max(size.1);
+    if longest <= 0.0 {
+        return entity;
+    }
+    if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
+        transform.scale = Vec2::new(size.0 / longest, size.1 / longest) * DEFAULT_SCALE;
+    }
+    entity
+}

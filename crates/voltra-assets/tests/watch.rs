@@ -111,3 +111,28 @@ fn a_root_that_does_not_exist_is_an_error_not_a_panic() {
     let missing = Path::new("voltra-no-such-root-anywhere");
     assert!(AssetWatcher::new(missing).is_err());
 }
+
+#[test]
+fn a_rewritten_atlas_arrives_too() {
+    // Re-cutting a sheet is an asset edit like repainting one, and the two
+    // have to reach the editor the same way or slicing would need a restart.
+    let root = scratch_root();
+    std::fs::write(
+        root.join("hero.atlas.ron"),
+        b"(version: 1, grid: Some((cell: (16, 16), columns: 2, rows: 1)))",
+    )
+    .expect("the fixture writes");
+
+    let mut watcher = AssetWatcher::new(&root).expect("watching a scratch dir");
+    std::fs::write(
+        root.join("hero.atlas.ron"),
+        b"(version: 1, grid: Some((cell: (8, 16), columns: 4, rows: 1)))",
+    )
+    .expect("the re-cut writes");
+
+    let expected = AssetPath::new("hero.atlas.ron").expect("valid");
+    assert!(
+        wait_for(&mut watcher, &expected),
+        "no event for the rewritten atlas within {DEADLINE:?}"
+    );
+}

@@ -90,6 +90,10 @@ impl App {
             // the hook is per step rather than per frame.
             self.run_fixed_update(step);
             self.physics_world.step_once(&mut self.world, self.gravity);
+            // Every step's events, not just the last one's: the per-frame tick
+            // gets one turn per frame and a frame can owe several steps.
+            self.pending_events
+                .extend_from_slice(self.physics_world.events());
         }
     }
 }

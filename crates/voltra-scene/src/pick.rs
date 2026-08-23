@@ -7,6 +7,8 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
 use crate::hierarchy::WorldTransforms;
+use crate::sprite::quad::quad;
+use crate::sprite::sheets::Sheets;
 use crate::sprite::{draw_key, Sprite};
 use crate::transform::Transform;
 
@@ -39,14 +41,16 @@ const MIN_DETERMINANT: f32 = 1e-12;
 /// whose pixels are actually visible at that point.
 ///
 /// [`SpriteBatch::from_world`]: crate::batch::SpriteBatch::from_world
-pub fn sprite_at(world: &World, point: Vec2) -> Option<Entity> {
+pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entity> {
     // The same composed matrices the batch draws with, so what is picked is
     // what is on screen. A parented sprite is nowhere near its own `Transform`.
     let transforms = WorldTransforms::from_world(world);
 
     world
         .query2::<Transform, Sprite>()
-        .filter(|(entity, _transform, _sprite)| contains(transforms.matrix(*entity), point))
+        .filter(|(entity, _transform, sprite)| {
+            contains(transforms.matrix(*entity), point, sprite, sheets)
+        })
         .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite))
         .map(|(entity, _transform, _sprite)| entity)
 }
@@ -58,7 +62,7 @@ pub fn sprite_at(world: &World, point: Vec2) -> Option<Entity> {
 /// unit quad before its transform, so once the point is local the test is two
 /// comparisons — and rotation and non-uniform scale come out exact with no
 /// second code path.
-fn contains(matrix: Mat3, point: Vec2) -> bool {
+fn contains(matrix: Mat3, point: Vec2, sprite: &Sprite, sheets: Sheets<'_>) -> bool {
     // A zero scale on either axis makes the matrix singular. `Mat3::inverse`
     // does not panic on one: it returns infinities and NaN, and every
     // comparison against NaN is false. `inverse_or_zero` is worse rather than
@@ -74,7 +78,7 @@ fn contains(matrix: Mat3, point: Vec2) -> bool {
     // other. A sub-pixel disagreement on a measure-zero set, and not worth a
     // second rule to reconcile.
     let local = matrix.inverse().transform_point2(point);
-    local.x.abs() <= Sprite::HALF_EXTENT && local.y.abs() <= Sprite::HALF_EXTENT
+    quad(sprite, sheets).contains(local)
 }
 
 #[cfg(test)]
@@ -86,6 +90,11 @@ mod tests {
     // `super::*` — do not import them again here, or the glob and the explicit
     // import name the same item twice.
 
+    /// A pick with no sheets loaded: every sprite here is a plain unit quad.
+    fn pick(world: &World, point: Vec2) -> Option<Entity> {
+        sprite_at(world, point, Sheets::default())
+    }
+
     fn spawn(world: &mut World, transform: Transform, sprite: Sprite) -> Entity {
         let e = world.spawn();
         world.insert(e, transform);
@@ -95,14 +104,14 @@ mod tests {
 
     #[test]
     fn an_empty_world_picks_nothing() {
-        assert_eq!(sprite_at(&World::new(), Vec2::ZERO), None);
+        assert_eq!(pick(&World::new(), Vec2::ZERO), None);
     }
 
     #[test]
     fn a_point_outside_every_sprite_picks_nothing() {
         let mut world = World::new();
         spawn(&mut world, Transform::default(), Sprite::default());
-        assert_eq!(sprite_at(&world, Vec2::new(5.0, 5.0)), None);
+        assert_eq!(pick(&world, Vec2::new(5.0, 5.0)), None);
     }
 
     #[test]
@@ -119,8 +128,8 @@ mod tests {
             Sprite::default(),
         );
 
-        assert_eq!(sprite_at(&world, Vec2::new(-2.1, 0.1)), Some(a));
-        assert_eq!(sprite_at(&world, Vec2::new(2.1, -0.1)), Some(b));
+        assert_eq!(pick(&world, Vec2::new(-2.1, 0.1)), Some(a));
+        assert_eq!(pick(&world, Vec2::new(2.1, -0.1)), Some(b));
     }
 
     #[test]
@@ -136,10 +145,10 @@ mod tests {
         );
 
         // Inside the diamond.
-        assert!(sprite_at(&world, Vec2::new(0.0, 0.6)).is_some());
+        assert!(pick(&world, Vec2::new(0.0, 0.6)).is_some());
         // Inside the bounding box, outside the diamond. An AABB test would
         // wrongly report a hit here, which is the whole point of this test.
-        assert_eq!(sprite_at(&world, Vec2::new(0.45, 0.45)), None);
+        assert_eq!(pick(&world, Vec2::new(0.45, 0.45)), None);
     }
 
     #[test]
@@ -152,9 +161,9 @@ mod tests {
             Sprite::default(),
         );
 
-        assert!(sprite_at(&world, Vec2::new(1.8, 0.0)).is_some());
+        assert!(pick(&world, Vec2::new(1.8, 0.0)).is_some());
         // Inside on x, outside on y.
-        assert_eq!(sprite_at(&world, Vec2::new(1.8, 0.4)), None);
+        assert_eq!(pick(&world, Vec2::new(1.8, 0.4)), None);
     }
 
     #[test]
@@ -171,7 +180,7 @@ mod tests {
             Sprite::default().with_sort_order(20),
         );
 
-        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(over));
+        assert_eq!(pick(&world, Vec2::ZERO), Some(over));
 
         // And the answer does not depend on which was spawned first.
         let mut reversed = World::new();
@@ -185,7 +194,7 @@ mod tests {
             Transform::default(),
             Sprite::default().with_sort_order(10),
         );
-        assert_eq!(sprite_at(&reversed, Vec2::ZERO), Some(over_first));
+        assert_eq!(pick(&reversed, Vec2::ZERO), Some(over_first));
     }
 
     #[test]
@@ -194,7 +203,7 @@ mod tests {
         let _first = spawn(&mut world, Transform::default(), Sprite::default());
         let second = spawn(&mut world, Transform::default(), Sprite::default());
 
-        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(second));
+        assert_eq!(pick(&world, Vec2::ZERO), Some(second));
     }
 
     #[test]
@@ -212,8 +221,8 @@ mod tests {
         // accident rather than by decision. Kept because it pins the behaviour
         // we want, but the test that makes the guard load-bearing is the next
         // one.
-        assert_eq!(sprite_at(&world, Vec2::ZERO), None);
-        assert_eq!(sprite_at(&world, Vec2::new(100.0, 100.0)), None);
+        assert_eq!(pick(&world, Vec2::ZERO), None);
+        assert_eq!(pick(&world, Vec2::new(100.0, 100.0)), None);
     }
 
     #[test]
@@ -230,7 +239,7 @@ mod tests {
             Sprite::default(),
         );
 
-        assert_eq!(sprite_at(&world, Vec2::ZERO), None);
+        assert_eq!(pick(&world, Vec2::ZERO), None);
     }
 
     #[test]
@@ -248,7 +257,7 @@ mod tests {
             Sprite::default(),
         );
 
-        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(sprite));
+        assert_eq!(pick(&world, Vec2::ZERO), Some(sprite));
     }
 
     #[test]
@@ -273,11 +282,11 @@ mod tests {
         let _first = spawn(&mut world, Transform::default(), Sprite::default());
         let second = spawn(&mut world, Transform::default(), Sprite::default());
 
-        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(second));
+        assert_eq!(pick(&world, Vec2::ZERO), Some(second));
 
         world.despawn(third);
 
-        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(second));
+        assert_eq!(pick(&world, Vec2::ZERO), Some(second));
     }
 
     #[test]
@@ -303,13 +312,93 @@ mod tests {
             Sprite::new([1.0, 0.0, 0.0, 1.0]).with_sort_order(1),
         );
 
-        let batch = crate::batch::SpriteBatch::from_world(&world);
+        let batch = crate::batch::SpriteBatch::from_world(&world, Sheets::default());
         let last_drawn_green = batch.vertices[batch.vertices.len() - 1].color[1];
 
-        assert_eq!(sprite_at(&world, Vec2::ZERO), Some(top));
+        assert_eq!(pick(&world, Vec2::ZERO), Some(top));
         assert!(
             last_drawn_green > 0.5,
             "the sort_order 2 sprite must be drawn last, got green {last_drawn_green}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod frame_tests {
+    use super::*;
+    use crate::batch::SpriteBatch;
+    use voltra_assets::{AssetPath, Atlases};
+    use voltra_testkit::scratch_root;
+
+    /// One 32×16 cell, so the frame is not the unit square and not square.
+    fn atlases() -> (Atlases, AssetPath) {
+        let root = scratch_root();
+        std::fs::write(
+            root.join("wide.atlas.ron"),
+            "(version: 1, grid: Some((cell: (32, 16), columns: 1, rows: 1)))",
+        )
+        .expect("the fixture writes");
+        (
+            Atlases::new(&root),
+            AssetPath::new("wide.atlas.ron").expect("valid"),
+        )
+    }
+
+    #[test]
+    fn a_pixels_per_unit_sprite_is_picked_over_the_size_it_draws() {
+        // The property `HALF_EXTENT` used to hold as a constant, now that the
+        // extents depend on a frame: batching and picking must agree, or a
+        // click lands somewhere other than the pixels it appears to.
+        let (mut atlases, path) = atlases();
+        let mut world = World::new();
+        let entity = world.spawn();
+        world.insert(entity, Transform::default());
+        let mut sprite = Sprite::default();
+        sprite.set_atlas(Some(path), &mut atlases);
+        sprite.pixels_per_unit = Some(16.0);
+        world.insert(entity, sprite);
+        let sheets = Sheets {
+            atlases: Some(&atlases),
+            textures: None,
+        };
+
+        assert_eq!(
+            sprite_at(&world, Vec2::new(0.9, 0.0), sheets),
+            Some(entity),
+            "two units wide at 16 texels per unit"
+        );
+        assert_eq!(sprite_at(&world, Vec2::new(1.1, 0.0), sheets), None);
+        assert_eq!(
+            sprite_at(&world, Vec2::new(0.0, 0.6), sheets),
+            None,
+            "and one unit tall, not two"
+        );
+
+        let batch = SpriteBatch::from_world(&world, sheets);
+        let left = batch
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position[0])
+            .fold(f32::INFINITY, f32::min);
+        assert_eq!(left, -1.0, "which is exactly where the batch drew it");
+    }
+
+    #[test]
+    fn the_same_sprite_without_the_sheets_is_the_unit_quad() {
+        // A caller that passes no stores gets the geometry every scene on disk
+        // was authored against, rather than a sprite that silently shrinks.
+        let mut world = World::new();
+        let entity = world.spawn();
+        world.insert(entity, Transform::default());
+        world.insert(entity, Sprite::default());
+
+        assert_eq!(
+            sprite_at(&world, Vec2::new(0.4, 0.4), Sheets::default()),
+            Some(entity)
+        );
+        assert_eq!(
+            sprite_at(&world, Vec2::new(0.9, 0.0), Sheets::default()),
+            None
         );
     }
 }

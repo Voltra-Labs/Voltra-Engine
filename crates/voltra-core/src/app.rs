@@ -1,5 +1,6 @@
 //! Event loop driver.
 
+mod animation;
 mod draw;
 mod framing;
 mod simulation;
@@ -10,9 +11,9 @@ mod ui_frame;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use voltra_assets::{AssetWatcher, Textures};
+use voltra_assets::{AssetWatcher, Atlases, Textures};
 use voltra_ecs::World;
-use voltra_physics::{Contact, PhysicsWorld};
+use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
 use voltra_render::{Filter, LineBatch, RenderTarget, Renderer};
 use winit::application::ApplicationHandler;
@@ -54,6 +55,7 @@ pub struct App {
     window: Option<Arc<Window>>,
     renderer: Option<Renderer>,
     textures: Option<Textures>,
+    atlases: Option<Atlases>,
     watcher: Option<AssetWatcher>,
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
@@ -70,6 +72,12 @@ pub struct App {
     update: Option<TickFn>,
     /// The game's fixed tick, run before each physics step.
     fixed_update: Option<TickFn>,
+    /// Collision events the per-frame tick has not been handed yet.
+    ///
+    /// A frame can owe two steps, and `PhysicsWorld` only keeps the last
+    /// step's: without this the per-frame tick would miss the pickup taken on
+    /// the first of them. Emptied once the tick has had it.
+    pending_events: Vec<CollisionEvent>,
     clock: Clock,
     input: Input,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
@@ -204,6 +212,11 @@ impl App {
         self.physics_world.contacts()
     }
 
+    /// What began and ended touching in the last physics step.
+    pub fn events(&self) -> &[CollisionEvent] {
+        self.physics_world.events()
+    }
+
     /// The simulation, to tune or to reset after loading a scene.
     pub fn physics_mut(&mut self) -> &mut PhysicsWorld {
         &mut self.physics_world
@@ -243,6 +256,13 @@ impl App {
     /// so the frame that saw the key is the frame that moves.
     fn advance(&mut self, delta: f32) {
         self.run_update(delta);
+        // After the tick, so a clip the game just switched to is on screen this
+        // frame rather than next.
+        self.advance_animations(delta);
+        // Spent, whether or not a game installed a tick to read them. Left to
+        // pile up they would grow for the length of the session, and a game
+        // that installed its hook later would be handed a backlog.
+        self.pending_events.clear();
         self.step_physics(delta);
     }
 
@@ -252,9 +272,10 @@ impl App {
     /// is on screen this frame rather than next. Costs one non-blocking
     /// `try_recv` when nothing changed, which is almost every frame.
     fn reload_changed_assets(&mut self) {
-        let (Some(watcher), Some(textures), Some(renderer)) = (
+        let (Some(watcher), Some(textures), Some(atlases), Some(renderer)) = (
             self.watcher.as_mut(),
             self.textures.as_mut(),
+            self.atlases.as_mut(),
             self.renderer.as_ref(),
         ) else {
             return;
@@ -262,6 +283,12 @@ impl App {
 
         let device = renderer.context().device();
         for path in watcher.drain() {
+            // A re-cut sheet changes no pixels, and a repainted one changes no
+            // slicing, so whichever store owns the path answers and the other
+            // ignores it.
+            if atlases.reload(&path) {
+                continue;
+            }
             if !textures.reload(device, renderer.context().queue(), &path) {
                 continue;
             }
@@ -320,6 +347,12 @@ impl ApplicationHandler for App {
             renderer.context().device(),
             renderer.context().queue(),
         );
+
+        // The slicing half of the same problem, and for the same reason: a
+        // sprite naming an atlas has never met an `Atlases` either.
+        let mut atlases = Atlases::new(asset_root.clone());
+        ui_frame::resolve_world_atlases(&mut self.world, &mut atlases);
+        self.atlases = Some(atlases);
 
         if self.hot_reload {
             match AssetWatcher::new(&asset_root) {

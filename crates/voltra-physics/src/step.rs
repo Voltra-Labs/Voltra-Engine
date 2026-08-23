@@ -1,8 +1,8 @@
 //! One fixed step: find what overlaps, then solve it away.
 
-use voltra_ecs::World;
+use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider, Sensor, Transform};
 
 use crate::broad::candidate_pairs;
 use crate::integrate::{integrate_positions, integrate_velocities};
@@ -12,7 +12,38 @@ use crate::solver::{
     SolverParams,
 };
 
-/// Advances the world by `dt` and returns the contacts it resolved.
+/// What a collide found: the contacts to solve, and the sensor pairs to
+/// report and nothing else.
+///
+/// Split here rather than filtered later so a sensor never reaches the solver,
+/// never enters the impulse cache and never appears in
+/// [`PhysicsWorld::contacts`] — which stays "what the solver resolved", so a
+/// character cannot stand on a trigger and a ground check needs no idea that
+/// sensors exist.
+///
+/// [`PhysicsWorld::contacts`]: crate::PhysicsWorld::contacts
+#[derive(Debug, Default, Clone)]
+pub struct Overlaps {
+    /// Solid overlaps, in the order the broad phase found them.
+    pub contacts: Vec<Contact>,
+    /// Overlaps where at least one side is a [`Sensor`].
+    pub sensors: Vec<(Entity, Entity)>,
+}
+
+impl Overlaps {
+    /// Every overlapping pair and whether it is a sensor pair, which is what
+    /// [`Touching::update`] diffs into events.
+    ///
+    /// [`Touching::update`]: crate::events::Touching::update
+    pub fn pairs(&self) -> impl Iterator<Item = (Entity, Entity, bool)> + '_ {
+        self.contacts
+            .iter()
+            .map(|contact| (contact.a, contact.b, false))
+            .chain(self.sensors.iter().map(|&(a, b)| (a, b, true)))
+    }
+}
+
+/// Advances the world by `dt` and returns what it found overlapping.
 ///
 /// The order is TGS Soft's, and each part of it is load-bearing:
 ///
@@ -36,21 +67,22 @@ pub fn step(
     params: &SolverParams,
     gravity: Vec2,
     dt: f32,
-) -> Vec<Contact> {
+) -> Overlaps {
     // A step of no time changes nothing, and dividing the sub-step by it would
     // produce an infinite speculative bias. Note the cache is left untouched:
     // a frame that owed no step must not evict contacts that are still there.
     if dt <= 0.0 {
-        return Vec::new();
+        return Overlaps::default();
     }
 
-    let contacts = collide(world);
+    let overlaps = collide(world);
+    let contacts = &overlaps.contacts;
     let mut bodies = SolverBodies::gather(world);
 
     let sub_steps = params.sub_steps.max(1);
     let h = params.sub_step(dt);
     let mut constraints = prepare(
-        &contacts,
+        contacts,
         &bodies,
         world,
         params.softness(h),
@@ -98,17 +130,38 @@ pub fn step(
 
     bodies.scatter(world);
 
-    contacts
+    overlaps
 }
 
-/// Every overlap in the world right now.
-pub(crate) fn collide(world: &World) -> Vec<Contact> {
-    candidate_pairs(world)
-        .into_iter()
-        .filter_map(|(a, b)| {
-            let a_shape = (world.get::<Collider>(a)?, world.get::<Transform>(a)?);
-            let b_shape = (world.get::<Collider>(b)?, world.get::<Transform>(b)?);
-            Some(Contact::new(a, b, manifold(a_shape, b_shape)?))
-        })
-        .collect()
+/// Every overlap in the world right now, sensors kept apart from the rest.
+pub(crate) fn collide(world: &World) -> Overlaps {
+    let mut overlaps = Overlaps::default();
+    for (a, b) in candidate_pairs(world) {
+        let Some(a_shape) = shape(world, a) else {
+            continue;
+        };
+        let Some(b_shape) = shape(world, b) else {
+            continue;
+        };
+        let Some(manifold) = manifold(a_shape, b_shape) else {
+            continue;
+        };
+
+        // Either side being a sensor makes the pair one: a trigger volume must
+        // not push the player out, and a player must not be stopped by it.
+        if world.get::<Sensor>(a).is_some() || world.get::<Sensor>(b).is_some() {
+            overlaps.sensors.push((a, b));
+        } else {
+            overlaps.contacts.push(Contact::new(a, b, manifold));
+        }
+    }
+    overlaps
+}
+
+/// The shape `entity` collides with, if it has one and sits somewhere.
+fn shape(world: &World, entity: Entity) -> Option<(&Collider, &Transform)> {
+    Some((
+        world.get::<Collider>(entity)?,
+        world.get::<Transform>(entity)?,
+    ))
 }

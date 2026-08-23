@@ -182,6 +182,15 @@ impl LineBatch {
         self.indices.clear();
     }
 
+    /// The vertices pushed so far, four per segment.
+    ///
+    /// For a caller that wants to look at what an overlay drew without a GPU
+    /// to draw it on — which is the only way a colour or a position picked by
+    /// a debug pass can be asserted at all.
+    pub fn vertices(&self) -> &[LineVertex] {
+        &self.vertices
+    }
+
     /// How many segments are held.
     pub fn len(&self) -> usize {
         self.vertices.len() / 4

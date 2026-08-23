@@ -17,7 +17,11 @@ use voltra_scene::pick;
 /// than clearing the selection on every frame.
 pub fn clicked_entity(response: &Response, frame: &UiFrame<'_>) -> Option<Entity> {
     let pointer = response.interact_pointer_pos()?;
-    pick::sprite_at(frame.world, world_at(response, pointer, frame))
+    pick::sprite_at(
+        frame.world,
+        world_at(response, pointer, frame),
+        frame.sheets(),
+    )
 }
 
 /// Where a screen point over `response` is in the world.

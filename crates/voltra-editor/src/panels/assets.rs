@@ -184,6 +184,7 @@ fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entry: &Entry
             }
         }
         EntryKind::Texture => texture_tile(ui, frame, entry, &response),
+        EntryKind::Atlas => atlas_tile(ui, frame, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
         EntryKind::Other => paint_block(ui, rect, ui.visuals().faint_bg_color),
@@ -218,12 +219,53 @@ fn texture_tile(ui: &mut Ui, frame: &mut UiFrame<'_>, entry: &Entry, response: &
         None => paint_block(ui, rect, ui.visuals().faint_bg_color),
     }
 
+    drag_source(ui, entry, response);
+}
+
+/// Arms a tile as the source of a drag carrying its path.
+///
+/// The one gesture the inspector's path fields and the viewport's drop both
+/// listen for, so every draggable tile has to arm it the same way.
+fn drag_source(ui: &Ui, entry: &Entry, response: &egui::Response) {
     let response = response.interact(Sense::drag());
     response.dnd_set_drag_payload(entry.path.clone());
     if response.dragged() {
         ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
         drag::ghost(ui, entry.path.as_str());
     }
+}
+
+/// An atlas tile: the first frame of the sheet it slices, and the same drag.
+///
+/// The sheet comes from the slicing's own texture hint, so a tile shows the
+/// picture an author recognises rather than a generic file icon. A slicing
+/// that names no sheet — or one that will not load — falls back to a block:
+/// the file is there and the engine cannot picture it, which is what the
+/// dimmed tile already says for everything else.
+fn atlas_tile(ui: &mut Ui, frame: &mut UiFrame<'_>, entry: &Entry, response: &egui::Response) {
+    let handle = frame.atlases.load(&entry.path);
+    let atlas = frame.atlases.get(handle);
+    let texture = atlas.texture().cloned();
+    let uv = atlas.frame(0).and_then(|first| first.uv(atlas.sheet()));
+
+    let rect = picture(response.rect);
+    let thumbnail = texture
+        .map(|path| frame.textures.load(frame.device, frame.queue, &path))
+        .and_then(|handle| frame.thumbnail(handle));
+
+    match (thumbnail, uv) {
+        (Some(id), Some((min, max))) => {
+            ui.painter().image(
+                id,
+                rect,
+                Rect::from_min_max(egui::pos2(min[0], min[1]), egui::pos2(max[0], max[1])),
+                Color32::WHITE,
+            );
+        }
+        _ => paint_block(ui, rect, ui.visuals().faint_bg_color),
+    }
+
+    drag_source(ui, entry, response);
 }
 
 /// Takes a tile's worth of room and senses a click and a hover.

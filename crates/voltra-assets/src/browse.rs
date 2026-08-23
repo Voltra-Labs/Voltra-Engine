@@ -11,9 +11,10 @@
 
 use std::path::Path;
 
+use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
-use crate::watch::TEXTURE_EXTENSIONS;
+use crate::watch::is_texture;
 
 /// What one row of a listing is.
 ///
@@ -23,8 +24,11 @@ use crate::watch::TEXTURE_EXTENSIONS;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
     Directory,
-    /// A file with an extension in [`TEXTURE_EXTENSIONS`].
+    /// A file with an extension in
+    /// [`TEXTURE_EXTENSIONS`](crate::watch::TEXTURE_EXTENSIONS).
     Texture,
+    /// A file named `*.atlas.ron`: a slicing of one of those.
+    Atlas,
     /// A file this engine has no loader for.
     Other,
 }
@@ -116,6 +120,10 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::Directory
         } else if is_texture(&name) {
             EntryKind::Texture
+        } else if is_atlas(&name) {
+            // Before `Other` and after `Texture`: the suffix is longer than an
+            // extension, and only one of the two can match a given name.
+            EntryKind::Atlas
         } else {
             EntryKind::Other
         };
@@ -139,15 +147,6 @@ pub fn parent(dir: &AssetPath) -> Option<AssetPath> {
     let (head, _) = dir.as_str().rsplit_once('/')?;
     // Cannot fail: `head` is a non-empty prefix of an already validated path.
     AssetPath::new(head).ok()
-}
-
-/// Whether a file name ends in an extension this engine can load as a texture.
-fn is_texture(name: &str) -> bool {
-    let Some((_, extension)) = name.rsplit_once('.') else {
-        return false;
-    };
-    let extension = extension.to_lowercase();
-    TEXTURE_EXTENSIONS.contains(&extension.as_str())
 }
 
 #[cfg(test)]
@@ -226,5 +225,32 @@ mod tests {
         assert_eq!(up.as_str(), "sprites");
 
         assert!(parent(&up).is_none());
+    }
+}
+
+#[cfg(test)]
+mod atlas_tests {
+    use super::*;
+
+    #[test]
+    fn a_slicing_is_its_own_kind_rather_than_unloadable() {
+        let root = voltra_testkit::scratch_root();
+        std::fs::write(root.join("coin.atlas.ron"), "(version: 1)").expect("the fixture writes");
+        std::fs::write(root.join("demo.ron"), "(version: 1)").expect("the fixture writes");
+
+        let entries = list(&root, None).expect("the root lists");
+
+        let kind = |name: &str| {
+            entries
+                .iter()
+                .find(|entry| entry.name == name)
+                .map(|entry| entry.kind)
+        };
+        assert_eq!(kind("coin.atlas.ron"), Some(EntryKind::Atlas));
+        assert_eq!(
+            kind("demo.ron"),
+            Some(EntryKind::Other),
+            "a scene is not a slicing"
+        );
     }
 }
