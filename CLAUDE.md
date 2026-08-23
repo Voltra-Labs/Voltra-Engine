@@ -54,6 +54,7 @@ Cargo.toml           virtual manifest — workspace members + shared dep version
 assets/              runtime assets (shaders, textures, scenes)
 crates/
   voltra-render/     GPU layer: device, surface, passes     — owns wgpu
+  voltra-audio/      mixer, decoding, output device         — owns cpal+symphonia
   voltra-core/       platform layer: event loop, window     — owns winit
   voltra-editor/     the editor binary
   voltra-player/     the player binary: runs a scene, no editor linked
@@ -64,9 +65,9 @@ docs/                ARCHITECTURE.md, CONVENTIONS.md
 
 - **No `src/` at the workspace root.** The root manifest is virtual.
 - **Only `voltra-core` depends on `winit`. Only `voltra-render` depends on
-  `wgpu`.** Other crates use the re-exports. If a change would make
-  `voltra-render` import `winit`, the design is wrong — pass a
-  `wgpu::SurfaceTarget` instead.
+  `wgpu`. Only `voltra-audio` depends on `cpal` and `symphonia`.** Other crates
+  use the re-exports. If a change would make `voltra-render` import `winit`,
+  the design is wrong — pass a `wgpu::SurfaceTarget` instead.
 - **No ECS, scene-graph or engine-framework crates.** Writing those in-house is
   the point. Leaf libraries (math, serde, physics, `egui`) are fine.
   `egui-wgpu` is unusable (pinned to wgpu 29); use
@@ -88,10 +89,11 @@ docs/                ARCHITECTURE.md, CONVENTIONS.md
   empty / resized / despawned when writing the code. If the robust version is
   much larger, say so and ask.
 
-## Verify graphics APIs, do not recall them
+## Verify graphics and audio APIs, do not recall them
 
-`wgpu` 30, `winit` 0.30 and `egui` 0.35 differ from most training data and
-tutorials. Before writing **GPU or editor UI** code:
+`wgpu` 30, `winit` 0.30, `egui` 0.35, `cpal` 0.18 and `symphonia` 0.6 all
+differ from most training data and tutorials. Before writing **GPU, editor UI
+or audio** code:
 
 1. Query **Context7** (MCP), or
 2. Read vendored sources under `~/.cargo/registry/src/index.crates.io-*/`.
