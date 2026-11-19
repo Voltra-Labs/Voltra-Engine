@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn every_pixel_is_opaque() {
         // A transparent placeholder is an invisible one, which defeats it.
-        for chunk in rgba().chunks_exact(4) {
+        for chunk in rgba().as_chunks::<4>().0 {
             assert_eq!(chunk[3], 255);
         }
     }
@@ -82,8 +82,18 @@ mod tests {
     #[test]
     fn both_colours_appear() {
         let pixels = rgba();
-        let magenta = pixels.chunks_exact(4).filter(|c| *c == MAGENTA).count();
-        let black = pixels.chunks_exact(4).filter(|c| *c == BLACK).count();
+        let magenta = pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|c| **c == MAGENTA)
+            .count();
+        let black = pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|c| **c == BLACK)
+            .count();
         assert_eq!(magenta, black, "the checker should be evenly split");
     }
 }
