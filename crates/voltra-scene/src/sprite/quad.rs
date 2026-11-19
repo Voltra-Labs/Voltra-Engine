@@ -14,7 +14,7 @@ use super::sheets::Sheets;
 use super::Sprite;
 
 /// The whole of a texture, as every sprite sampled before frames existed.
-const WHOLE: ([f32; 2], [f32; 2]) = ([0.0, 0.0], [1.0, 1.0]);
+pub(crate) const WHOLE: ([f32; 2], [f32; 2]) = ([0.0, 0.0], [1.0, 1.0]);
 
 /// One sprite's quad, before its transform: how big, what to sample, what to
 /// bind.
@@ -146,7 +146,7 @@ fn half_extents(pixels_per_unit: Option<f32>, size: Option<UVec2>) -> Vec2 {
 ///
 /// The UVs move and the corners do not: mirroring must not move the sprite,
 /// its collider or its gizmo.
-fn flipped(flip: bool, min: f32, max: f32) -> (f32, f32) {
+pub(crate) fn flipped(flip: bool, min: f32, max: f32) -> (f32, f32) {
     if flip {
         (max, min)
     } else {

@@ -20,6 +20,7 @@
 //! is: frames cut from one sheet. A cell stores a frame index into it.
 
 mod chunk;
+pub mod mesh;
 
 use std::collections::BTreeMap;
 
@@ -199,5 +200,7 @@ impl Tilemap {
     }
 }
 
+#[cfg(test)]
+mod mesh_tests;
 #[cfg(test)]
 mod tests;

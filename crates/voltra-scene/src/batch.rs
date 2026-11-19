@@ -1,15 +1,31 @@
 //! Turning a world full of sprites into vertex and index data.
 
 use voltra_assets::Handle;
-use voltra_ecs::World;
-use voltra_render::glam::Mat3;
+use voltra_ecs::{Entity, World};
+use voltra_render::glam::{Mat3, Vec2};
 use voltra_render::{Texture, Vertex};
 
 use crate::hierarchy::WorldTransforms;
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
 use crate::sprite::{draw_key, Sprite};
+use crate::tilemap::{mesh, Tilemap};
 use crate::transform::Transform;
+
+/// What the batch draws one of: both kinds sort by the same key.
+enum Drawn<'a> {
+    Sprite(&'a Sprite),
+    Tilemap(&'a Tilemap),
+}
+
+impl Drawn<'_> {
+    fn sort_order(&self) -> i32 {
+        match self {
+            Self::Sprite(sprite) => sprite.sort_order,
+            Self::Tilemap(map) => map.sort_order,
+        }
+    }
+}
 
 /// Corners per quad. Where they land is [`quad`]'s question, not this one's.
 const CORNERS_PER_QUAD: usize = 4;
@@ -46,7 +62,8 @@ pub struct SpriteBatch {
 }
 
 impl SpriteBatch {
-    /// Walks every entity holding both a [`Transform`] and a [`Sprite`].
+    /// Walks every entity holding a [`Transform`] and a [`Sprite`] or a
+    /// [`Tilemap`].
     ///
     /// Collected and sorted rather than pushed as we go. With no depth buffer,
     /// the order geometry is written in is the order it is drawn in — and
@@ -59,8 +76,19 @@ impl SpriteBatch {
     /// there are never any equal keys for stability to preserve, and a
     /// dropped tiebreaker fails louder without it.
     pub fn from_world(world: &World, sheets: Sheets<'_>) -> Self {
-        let mut sprites: Vec<_> = world.query2::<Transform, Sprite>().collect();
-        sprites.sort_unstable_by_key(|(entity, _, sprite)| draw_key(*entity, sprite));
+        // Sprites and tilemap layers in one list, because they share one draw
+        // order: a layer behind the player and one in front of it are both
+        // just a `sort_order` relative to the player's sprite.
+        let mut drawn: Vec<(Entity, Drawn<'_>)> = world
+            .query2::<Transform, Sprite>()
+            .map(|(entity, _, sprite)| (entity, Drawn::Sprite(sprite)))
+            .chain(
+                world
+                    .query2::<Transform, Tilemap>()
+                    .map(|(entity, _, map)| (entity, Drawn::Tilemap(map))),
+            )
+            .collect();
+        drawn.sort_unstable_by_key(|(entity, drawn)| draw_key(*entity, drawn.sort_order()));
 
         // Composed once for the whole world rather than walked per sprite: a
         // deep tree would otherwise cost one matrix chain per descendant, every
@@ -68,8 +96,12 @@ impl SpriteBatch {
         let transforms = WorldTransforms::from_world(world);
 
         let mut batch = Self::default();
-        for (entity, _transform, sprite) in sprites {
-            batch.push(transforms.matrix(entity), sprite, sheets);
+        for (entity, drawn) in drawn {
+            let matrix = transforms.matrix(entity);
+            match drawn {
+                Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
+                Drawn::Tilemap(map) => mesh::push(&mut batch, matrix, map, sheets),
+            }
         }
         batch
     }
@@ -89,20 +121,37 @@ impl SpriteBatch {
     /// painter's-order-over-batching rule `from_world`'s sort already commits
     /// to.
     pub fn push(&mut self, matrix: Mat3, sprite: &Sprite, sheets: Sheets<'_>) {
+        // One `quad` call, shared with `pick::sprite_at`. A second opinion
+        // about where a sprite's corners are is a click that misses the pixels
+        // it lands on, and nothing reports it.
+        let quad = quad(sprite, sheets);
+        self.push_quad(matrix, quad.corners(), quad.uvs, sprite.color, quad.texture);
+    }
+
+    /// Appends one quad given in its owner's space, extending or starting a
+    /// [`SpriteRange`] to match. What [`SpriteBatch::push`] does once it knows
+    /// where a sprite's corners are, and what a tilemap does once per tile.
+    ///
+    /// `corners` in [`Quad::corners`](crate::sprite::quad::Quad::corners)
+    /// order, with `uvs` matching them.
+    pub fn push_quad(
+        &mut self,
+        matrix: Mat3,
+        corners: [Vec2; 4],
+        uvs: [[f32; 2]; 4],
+        color: [f32; 4],
+        texture: Option<Handle<Texture>>,
+    ) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
         // batch holds every sprite in the world, not one object's geometry.
         let base = self.vertices.len() as u32;
 
-        // One `quad` call, shared with `pick::sprite_at`. A second opinion
-        // about where a sprite's corners are is a click that misses the pixels
-        // it lands on, and nothing reports it.
-        let quad = quad(sprite, sheets);
-        for (corner, uv) in quad.corners().into_iter().zip(quad.uvs) {
+        for (corner, uv) in corners.into_iter().zip(uvs) {
             let world = matrix.transform_point2(corner);
             self.vertices.push(Vertex::new(
                 [world.x, world.y],
-                [sprite.color[0], sprite.color[1], sprite.color[2]],
+                [color[0], color[1], color[2]],
                 uv,
             ));
         }
@@ -113,9 +162,9 @@ impl SpriteBatch {
         let end = self.indices.len() as u32;
 
         match self.ranges.last_mut() {
-            Some(range) if range.texture == quad.texture => range.indices.end = end,
+            Some(range) if range.texture == texture => range.indices.end = end,
             _ => self.ranges.push(SpriteRange {
-                texture: quad.texture,
+                texture,
                 indices: start..end,
             }),
         }
