@@ -1,7 +1,7 @@
 //! The editor's shared state and its frame layout.
 
 use voltra_core::egui::Ui;
-use voltra_core::UiFrame;
+use voltra_core::{UiFrame, VoiceId};
 use voltra_ecs::Entity;
 use voltra_scene::ComponentRegistry;
 
@@ -51,6 +51,9 @@ pub struct Editor {
     /// Whether the viewport shows the editor's camera or the scene's, and the
     /// editor camera parked while the scene's has it.
     pub(crate) view: View,
+    /// The sound the inspector's Play button started, so the next press or
+    /// Stop can end it.
+    pub(crate) audition: Option<VoiceId>,
 }
 
 impl Editor {

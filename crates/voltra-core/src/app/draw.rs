@@ -111,6 +111,7 @@ impl App {
             textures,
             atlases,
             clips,
+            audio: &mut self.audio,
             device: &device,
             queue: &queue,
             lines: &mut self.lines,
