@@ -117,6 +117,23 @@ impl App {
     pub fn prefabs(&mut self) -> &mut Prefabs {
         prefab_store(&mut self.prefabs, &self.asset_root)
     }
+
+    /// Spawns a copy of the prefab at `path` while the world is being set up.
+    ///
+    /// The setup-time twin of [`Tick::spawn`], for a level laid out in code
+    /// before [`App::run`]. Nothing is resolved here — there is no device yet
+    /// — and nothing needs to be: the loop resolves the whole world when it
+    /// resumes, which is what it already does for every entity a game
+    /// inserted by hand.
+    pub fn spawn(&mut self, path: &AssetPath, at: &Transform) -> Result<Instance, SceneError> {
+        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root);
+        let handle = prefabs.load(path);
+        let instance = prefab::spawn(&mut self.world, &self.registry, prefabs.get(handle), at)?;
+        // Queued as well, for a call made after the loop is already running —
+        // a UI callback, say — where nothing else would resolve them.
+        self.spawned.extend_from_slice(&instance.entities);
+        Ok(instance)
+    }
 }
 
 #[cfg(test)]
