@@ -179,6 +179,15 @@ fn drop_asset(editor: &mut Editor, frame: &mut UiFrame<'_>, ui: &Ui, scene: &egu
         return;
     };
     let at = crate::picking::world_at(scene, pointer, frame);
+
+    // A sound is not a sprite at all: it becomes something that plays it.
+    if voltra_assets::watch::is_clip(path.as_str()) {
+        spawn::record(editor, frame, "Add audio source", |frame| {
+            spawn::audio_source(frame, at, &path)
+        });
+        return;
+    }
+
     // Which of the two the drop means is the file it names: a slicing brings
     // its own sheet with it, a bare image is the sheet.
     let sliced = voltra_assets::atlas::is_atlas(path.as_str());

@@ -9,7 +9,7 @@ use voltra_assets::AssetPath;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Camera, Collider, Name, RigidBody, SceneId, Sprite, Transform};
+use voltra_scene::{AudioSource, Camera, Collider, Name, RigidBody, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 use crate::undo::{selected_id, SceneView};
@@ -118,6 +118,25 @@ pub(crate) fn textured_sprite(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPat
     if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
         transform.scale = Vec2::new(width / longest, height / longest) * DEFAULT_SCALE;
     }
+    entity
+}
+
+/// Drops an entity at `at` that plays `path`: Unity's answer to a clip dragged
+/// into a scene, a new object carrying an `AudioSource`.
+///
+/// No sprite. A sound has nothing to draw, and a white square standing in for
+/// it would be picked, moved and saved as if it were content. It is selected
+/// on arrival, which is how it is found again — and the hierarchy row it gets
+/// is named after the file.
+pub(crate) fn audio_source(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPath) -> Entity {
+    let entity = frame.world.spawn();
+    frame.world.insert(entity, SceneId::new());
+    frame.world.insert(entity, Name::new(name_of(path)));
+    frame.world.insert(entity, Transform::from_translation(at));
+
+    let mut source = AudioSource::default();
+    source.set_clip(Some(path.clone()), frame.clips);
+    frame.world.insert(entity, source);
     entity
 }
 
