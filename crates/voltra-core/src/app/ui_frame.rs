@@ -13,7 +13,7 @@ use voltra_ecs::{Entity, World};
 use voltra_physics::Contact;
 use voltra_render::{wgpu, Camera2D, LineBatch, Texture};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{AudioSource, Prefabs, Sprite};
+use voltra_scene::{AudioSource, Prefabs, Sprite, Tilemap};
 
 use super::simulation::Simulation;
 use crate::ui::TextureId;
@@ -241,6 +241,10 @@ pub(super) fn resolve_world_textures(
         let path = sprite.texture.clone();
         sprite.set_texture(path, textures, device, queue);
     }
+    for (_, map) in world.query_mut::<Tilemap>() {
+        let path = map.texture.clone();
+        map.set_texture(path, textures, device, queue);
+    }
 }
 
 /// Re-resolves every [`AudioSource`]'s clip handle from its path.
@@ -255,7 +259,8 @@ pub(super) fn resolve_world_clips(world: &mut World, clips: &mut Clips) {
     }
 }
 
-/// Re-resolves every [`Sprite`]'s atlas handle from its path.
+/// Re-resolves every [`Sprite`]'s and [`Tilemap`]'s atlas handle from its
+/// path.
 ///
 /// The slicing half of [`resolve_world_textures`], and separate from it
 /// because it needs no device: a world can be re-sliced headless, and only the
@@ -264,5 +269,9 @@ pub(super) fn resolve_world_atlases(world: &mut World, atlases: &mut Atlases) {
     for (_, sprite) in world.query_mut::<Sprite>() {
         let path = sprite.atlas.clone();
         sprite.set_atlas(path, atlases);
+    }
+    for (_, map) in world.query_mut::<Tilemap>() {
+        let path = map.atlas.clone();
+        map.set_atlas(path, atlases);
     }
 }

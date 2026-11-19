@@ -12,7 +12,9 @@ use std::path::PathBuf;
 use voltra_assets::{AssetPath, Atlases, Clips, Handle, Textures};
 use voltra_ecs::{Entity, World};
 use voltra_render::wgpu;
-use voltra_scene::{prefab, AudioSource, Instance, Prefab, Prefabs, SceneError, Sprite, Transform};
+use voltra_scene::{
+    prefab, AudioSource, Instance, Prefab, Prefabs, SceneError, Sprite, Tilemap, Transform,
+};
 
 use crate::app::tick::Tick;
 use crate::app::App;
@@ -82,14 +84,26 @@ pub(super) fn resolve_entity(
     atlases: Option<&mut Atlases>,
     clips: Option<&mut Clips>,
 ) {
+    let mut atlases = atlases;
+    let mut gpu = gpu;
     if let Some(sprite) = world.get_mut::<Sprite>(entity) {
-        if let Some(atlases) = atlases {
+        if let Some(atlases) = atlases.as_deref_mut() {
             let path = sprite.atlas.clone();
             sprite.set_atlas(path, atlases);
         }
-        if let Some((textures, device, queue)) = gpu {
+        if let Some((textures, device, queue)) = gpu.as_mut() {
             let path = sprite.texture.clone();
             sprite.set_texture(path, textures, device, queue);
+        }
+    }
+    if let Some(map) = world.get_mut::<Tilemap>(entity) {
+        if let Some(atlases) = atlases {
+            let path = map.atlas.clone();
+            map.set_atlas(path, atlases);
+        }
+        if let Some((textures, device, queue)) = gpu {
+            let path = map.texture.clone();
+            map.set_texture(path, textures, device, queue);
         }
     }
     if let (Some(source), Some(clips)) = (world.get_mut::<AudioSource>(entity), clips) {
