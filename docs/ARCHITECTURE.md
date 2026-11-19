@@ -2244,6 +2244,56 @@ overwrite, Unity's rule — then links the selection to it as one undo entry. Th
 undo removes the link and leaves the file: an undo that deleted assets would be
 the only one in the editor that touched the asset folder.
 
+### A tilemap layer is one entity, its chunks live inside it
+
+Stage 25a. The 2D content path, on top of stage 22's atlas.
+
+**Prior art.** Godot 4 split `TileMap` into one `TileMapLayer` node per layer,
+with rendering quadrants (16 by default) inside each. Unity: a `Tilemap`
+component per layer plus `TilemapRenderer`. bevy_ecs_tilemap: an entity per
+tile. Tiled and LDtk: infinite maps stored as chunks.
+
+**One entity per layer, not per chunk or per tile.** The plan sketch said one
+entity per chunk; dropped, because painting across a chunk border would then be
+an entity spawn, and the hierarchy would list chunks nobody authored. Per tile
+makes a 100×100 level ten thousand entities that every query, save and
+hierarchy walk carries. A layer ("ground", "foliage in front") is what an author
+thinks about, so it is the entity, with its own `Transform`, `sort_order` and
+place in the hierarchy.
+
+**Sparse chunks, dense cells.** `Tilemap` holds a `BTreeMap<(i32, i32), Chunk>`,
+each a 16×16 boxed array. Cell → chunk is `div_euclid`, so cell `-1` is chunk
+`-1`. Painting at negative coordinates or on a far island costs one chunk;
+erasing a chunk's last tile drops it, so an erased map saves as nothing. Cell
+`(x, y)` covers `x..x+1` × `y..y+1` tiles in the entity's space: its lower-left
+corner is on the origin, as in Godot, Unity and Tiled.
+
+**Cells use Tiled's encoding.** `0` is empty, otherwise frame + 1 with flip X/Y
+in bits 31/30, so a frame tops out at 2³⁰ − 2 and `set` refuses (logs) anything
+above it rather than wrapping. On disk a layer is `chunks: [(at: (x, y),
+cells: [...256])]` in key order, so two saves are byte-identical; a chunk of the
+wrong length or listed twice is a load error, not a guess.
+
+**The tileset is an atlas; the layer keeps both paths.** Like `Sprite`, a layer
+names `texture` and `atlas` and resolves both handles through the same stores,
+in the same places (`resolve_world_*`, the per-entity `spawning::resolve_entity`).
+A cell is a frame index into the atlas.
+
+**Meshed into the sprite batch.** `SpriteBatch::from_world` collects sprites and
+layers into one list sorted by `draw_key(entity, sort_order)` (now taking the
+order, not a `Sprite`), so a layer sits behind or in front of sprites by number.
+`tilemap::mesh::push` emits one quad per tile through `SpriteBatch::push_quad`,
+which `push` now uses as well; a layer binds one sheet, so it is one range. A
+frame the atlas lacks draws the placeholder, as a sprite's does. Rebuilt every
+frame with the sprites; caching a mesh per chunk, and culling chunks against the
+camera, are the next steps when a level makes them show.
+
+**Editor.** An inspector section edits colour, sort order, tile size and the two
+paths and shows the tile count and bounds; **Scene ▸ Spawn tilemap** adds an
+empty layer at sort order −1. Cells are not edited in 25a, and a layer is not
+picked by clicking in the viewport (the hierarchy selects it); both come with
+the paint tool.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
