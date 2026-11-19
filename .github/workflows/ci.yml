@@ -41,6 +41,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # `cpal` links ALSA on Linux, and `alsa-sys` finds it through
+      # pkg-config at build time. Hosted Ubuntu images ship neither the
+      # headers nor the `.pc` file.
+      - name: ALSA headers
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
