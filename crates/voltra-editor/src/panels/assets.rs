@@ -57,6 +57,18 @@ pub struct AssetBrowser {
 }
 
 impl AssetBrowser {
+    /// The directory being shown, `None` for the asset root: where a file
+    /// the editor writes goes, the way Unity writes into the open folder.
+    pub(crate) fn dir(&self) -> Option<&AssetPath> {
+        self.dir.as_ref()
+    }
+
+    /// Reads the directory again next frame rather than when the listing
+    /// ages out: the editor just wrote a file the author expects to see.
+    pub(crate) fn refresh(&mut self) {
+        self.scanned = None;
+    }
+
     /// Moves to `dir` and reads it on the next frame.
     pub(super) fn go(&mut self, dir: Option<AssetPath>) {
         self.dir = dir;
