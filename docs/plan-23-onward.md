@@ -9,7 +9,8 @@ once its stage has landed and its decisions are in ARCHITECTURE.md.
 Runs a game: ECS, scenes on disk, sprites with sheets and animation, a 2D
 camera, rigid bodies with filters, sensors, events and queries, two game ticks,
 an editor with hierarchy/inspector/gizmos/undo/play/asset browser, and a player
-binary, and since 23a it can make a sound. What it still cannot do: reuse a
+binary, and since 23 it can make a sound — mixed through buses, faded, limited,
+reloaded and auditioned from the inspector. What it still cannot do: reuse a
 piece of content, fill a screen with tiles, print a number, read a gamepad, or
 be handed to someone who does not have Rust installed.
 
@@ -18,7 +19,7 @@ be handed to someone who does not have Rust installed.
 | Stage | Scope | Why here |
 | --- | --- | --- |
 | ~~23a~~ | ~~Audio: the crate, the store, the components, one-shots~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 23b | Audio: buses, tweens, editor audition, hot reload | What 23a deliberately left; see below. |
+| ~~23b~~ | ~~Audio: buses, tweens, editor audition, hot reload~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | 24 | Prefabs and runtime spawning | Everything after this multiplies content: enemies, bullets, tiles, particles. Doing it before them means they all reuse one mechanism. |
 | 25 | Tilemaps | The classic 2D content path, and it needs 22's atlas underneath it. Also the first scene that makes stage 28 urgent. |
 | 26 | In-game UI: text and screen space | A game cannot show a score. Held until here because a HUD wants prefabs and fonts want the atlas work from 22. |
@@ -30,34 +31,6 @@ Defensible reorderings, if the goal changes: aiming at **a playable demo**
 soonest is 23 → 24 → 26 → 29 and tiles later; aiming at **content tooling** is
 25 first and audio later. What should not move is 24 before 25/26 and 28 after
 whatever generates the bodies.
-
----
-
-## 23b — Audio: buses, tweens, editor audition, hot reload
-
-23a landed: `voltra-audio` (mixer, voices, decoding, device), `Clips` beside
-`Textures` and `Atlases`, `AudioSource` and `AudioListener` in the scene,
-one-shots from `Tick::audio`, and the platformer coin that finally dings. The
-decisions are under "The mixer is ours" in ARCHITECTURE.md.
-
-What is left, and what each still has to answer:
-
-- **Buses.** Named tracks (music, sfx, ui) with a volume each, and the mixer
-  summing per bus before the master. Where the names live with no project
-  settings file is the open question — probably a field on `AudioSource` and a
-  table the game hands `Audio`, not a file.
-- **Tweens.** A volume that ramps rather than steps, which is what a fade-out
-  and a music cross-fade both need, and what stops a gain change from
-  clicking. Per voice and per bus.
-- **A limiter on the master**, replacing the hard clip 23a squares the mix off
-  with. Belongs with buses because it is a bus effect.
-- **Editor audition.** A play button on the `AudioSource` inspector — a button,
-  not a checkbox — plus the inspector fields themselves, which 23a did not add:
-  the component is authored in `.ron` for now.
-- **Hot reload.** `Clips::reload` under the stable handle, and the watcher's
-  extension filter widened to `wav` and `ogg`. The care it needs that textures
-  did not: the audio thread may be reading the samples being replaced, so the
-  swap is a command to the mixer, not a write through the store.
 
 ---
 
