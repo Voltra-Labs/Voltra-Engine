@@ -82,8 +82,18 @@ mod tests {
     #[test]
     fn both_colours_appear() {
         let pixels = rgba();
-        let magenta = pixels.as_chunks::<4>().0.iter().filter(|c| **c == MAGENTA).count();
-        let black = pixels.as_chunks::<4>().0.iter().filter(|c| **c == BLACK).count();
+        let magenta = pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|c| **c == MAGENTA)
+            .count();
+        let black = pixels
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .filter(|c| **c == BLACK)
+            .count();
         assert_eq!(magenta, black, "the checker should be evenly split");
     }
 }
