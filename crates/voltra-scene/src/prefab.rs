@@ -16,8 +16,11 @@
 //! component are where all three engines have paid, and they are their own
 //! stage. The link is recorded now so that stage finds it in every scene.
 
+mod cycle;
+mod fragment;
 mod link;
 mod store;
+mod write;
 
 use std::collections::HashMap;
 
@@ -29,8 +32,11 @@ use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 use crate::transform::Transform;
 
+pub use cycle::reaches;
+pub use fragment::fragment;
 pub use link::PrefabInstance;
 pub use store::Prefabs;
+pub use write::{write, WriteError};
 
 /// A scene fragment, read and checked once, ready to be spawned.
 #[derive(Debug, Clone, PartialEq, Default)]

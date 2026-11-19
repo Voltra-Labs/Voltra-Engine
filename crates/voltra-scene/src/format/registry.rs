@@ -87,7 +87,7 @@ impl ComponentRegistry {
         registry.register::<PhysicsMaterial>("PhysicsMaterial");
         registry.register::<CollisionLayers>("CollisionLayers");
         registry.register::<Sensor>("Sensor");
-        registry.register::<PrefabInstance>("PrefabInstance");
+        registry.register::<PrefabInstance>(PrefabInstance::NAME);
         registry
     }
 

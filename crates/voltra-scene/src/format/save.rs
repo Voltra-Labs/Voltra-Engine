@@ -83,8 +83,17 @@ pub fn to_scene_file(world: &World, registry: &ComponentRegistry) -> Result<Scen
 /// cannot leave a half-written scene where a whole one used to be. See
 /// [`atomic::replace`].
 pub fn save(world: &World, registry: &ComponentRegistry, path: &Path) -> Result<(), SceneError> {
-    let file = to_scene_file(world, registry)?;
-    let text = ron::ser::to_string_pretty(&file, pretty()).map_err(SceneError::Serialize)?;
+    write(&to_scene_file(world, registry)?, path)
+}
+
+/// Writes `file` to `path` with the one formatting every save uses, with the
+/// same all-or-nothing guarantee as [`save`].
+///
+/// Split out for a file that is not a whole world: a prefab written from a
+/// selection is a [`SceneFile`] too, and has to come out byte-for-byte the
+/// way a scene saved with the same entities would.
+pub fn write(file: &SceneFile, path: &Path) -> Result<(), SceneError> {
+    let text = ron::ser::to_string_pretty(file, pretty()).map_err(SceneError::Serialize)?;
     atomic::replace(path, text.as_bytes())?;
     log::info!(
         "saved {} entities to {}",

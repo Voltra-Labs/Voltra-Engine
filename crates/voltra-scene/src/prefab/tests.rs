@@ -319,3 +319,4 @@ fn write_ship(root: &std::path::Path, name: &str) {
 
 mod link;
 mod store;
+mod write;

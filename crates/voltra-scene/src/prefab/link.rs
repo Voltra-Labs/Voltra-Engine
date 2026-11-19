@@ -21,6 +21,10 @@ pub struct PrefabInstance {
 }
 
 impl PrefabInstance {
+    /// The name the component registry stores it under, which the code that
+    /// reads one out of a file without spawning it has to agree with.
+    pub const NAME: &'static str = "PrefabInstance";
+
     pub fn new(source: AssetPath) -> Self {
         Self { source }
     }
