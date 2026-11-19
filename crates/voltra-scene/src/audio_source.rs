@@ -9,7 +9,7 @@
 //! [`voltra_audio::spatial`].
 
 use voltra_assets::{AssetPath, Clips, Handle};
-use voltra_audio::{Clip, PlayParams};
+use voltra_audio::{Buses, Clip, PlayParams};
 
 /// A sound an entity can play, positioned by that entity's [`Transform`].
 ///
@@ -61,6 +61,14 @@ pub struct AudioSource {
     /// a `spatial: bool` beside it.
     #[serde(default = "default_range")]
     pub range: f32,
+    /// The bus this source is heard on, by name.
+    ///
+    /// A name and not an id, so the file still means the same bus after the
+    /// game's table changes order. Empty is the master, which is also what a
+    /// file written before buses existed gets: every source it has keeps
+    /// playing at the level it was authored at.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub bus: String,
 }
 
 /// `1.0`, for the fields a scene file may leave out.
@@ -95,6 +103,7 @@ impl Default for AudioSource {
             looping: false,
             play_on_spawn: false,
             range: DEFAULT_RANGE,
+            bus: String::new(),
         }
     }
 }
@@ -136,12 +145,16 @@ impl AudioSource {
     /// here rather than in the loop is what stops a second caller — a prefab
     /// spawning a sound, a tick playing one directly — inventing a slightly
     /// different one.
-    pub fn params(&self) -> PlayParams {
+    ///
+    /// `buses` resolves the bus name, registering it if this is the first
+    /// source to use it.
+    pub fn params(&self, buses: &mut Buses) -> PlayParams {
         PlayParams {
             volume: self.volume,
             pitch: self.pitch,
             pan: 0.0,
             looping: self.looping,
+            bus: buses.id(&self.bus),
         }
     }
 }
@@ -174,7 +187,7 @@ mod tests {
             ..Default::default()
         };
 
-        let params = source.params();
+        let params = source.params(&mut Buses::default());
 
         assert_eq!(params.volume, 0.5);
         assert_eq!(params.pitch, 2.0);
@@ -252,5 +265,27 @@ mod tests {
         assert_eq!(source.volume, 1.0);
         assert_eq!(source.pitch, 1.0);
         assert_eq!(source.range, DEFAULT_RANGE);
+        assert_eq!(source.bus, "", "and plays on the master");
+    }
+
+    #[test]
+    fn the_bus_is_resolved_by_name() {
+        let mut buses = Buses::default();
+        let source = AudioSource {
+            bus: "Music".to_owned(),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            source.params(&mut buses).bus,
+            buses.find("music").expect("default")
+        );
+    }
+
+    #[test]
+    fn a_source_on_the_master_writes_no_bus_to_the_file() {
+        // Keeps scenes written before buses byte-identical on their next save.
+        let text = ron::to_string(&AudioSource::default()).expect("serializes");
+        assert!(!text.contains("bus"), "got {text}");
     }
 }

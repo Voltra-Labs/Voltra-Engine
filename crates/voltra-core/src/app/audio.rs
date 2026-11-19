@@ -103,7 +103,7 @@ impl SceneAudio {
             };
 
             let (volume, pan) = mix_for(source, position_of(world, entity), listener);
-            let mut params = source.params();
+            let mut params = source.params(audio.buses_mut());
             params.volume = volume;
             params.pan = pan;
 
