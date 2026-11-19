@@ -59,6 +59,14 @@ pub fn is_clip(name: &str) -> bool {
     has_extension(name, CLIP_EXTENSIONS)
 }
 
+/// Whether a file name is a scene, which is also what a prefab is.
+///
+/// Any `.ron` that is not a slicing. The atomic save's `demo.ron.tmp` does
+/// not match, so a save is seen once, as the rename lands.
+pub fn is_scene(name: &str) -> bool {
+    has_extension(name, &["ron"]) && !is_atlas(name)
+}
+
 fn has_extension(name: &str, extensions: &[&str]) -> bool {
     let Some((_, extension)) = name.rsplit_once('.') else {
         return false;
@@ -173,7 +181,7 @@ impl AssetWatcher {
     /// a path from a volume we do not own.
     fn to_asset_path(&self, path: &Path) -> Option<AssetPath> {
         let name = path.file_name()?.to_str()?;
-        if !is_texture(name) && !is_atlas(name) && !is_clip(name) {
+        if !is_texture(name) && !is_atlas(name) && !is_clip(name) && !is_scene(name) {
             return None;
         }
 
