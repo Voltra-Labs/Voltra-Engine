@@ -7,6 +7,7 @@ use voltra_scene::ComponentRegistry;
 
 use crate::camera::ViewportCamera;
 use crate::gizmo::Gizmo;
+use crate::paint::Paint;
 use crate::panels;
 use crate::panels::assets::AssetBrowser;
 use crate::play::{Play, PlayContext, PlayState};
@@ -25,6 +26,9 @@ pub struct Editor {
     /// Which transform a viewport drag performs. Persistent, Unity-style.
     pub(crate) tool: Tool,
     pub(crate) gizmo: Gizmo,
+    /// The armed paint tool and its brush. While armed with a layer selected,
+    /// it has the viewport instead of the gizmo.
+    pub(crate) paint: Paint,
     /// Whether to outline every collider and draw every contact.
     ///
     /// Off by default: a scene full of green outlines is noise while sprites

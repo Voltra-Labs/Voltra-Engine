@@ -93,6 +93,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.separator();
                     claim = claim.or(animation::show(ui, frame.world, entity, frames_in_atlas));
                 }
+                let sheet = frame
+                    .world
+                    .get::<Tilemap>(entity)
+                    .and_then(|map| map.texture_handle)
+                    .and_then(|handle| frame.thumbnail(handle));
                 if let Some(map) = frame.world.get_mut::<Tilemap>(entity) {
                     ui.separator();
                     claim = claim.or(tilemap::show(
@@ -102,6 +107,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         frame.atlases,
                         frame.device,
                         frame.queue,
+                        tilemap::Palette {
+                            sheet,
+                            paint: &mut editor.paint,
+                        },
                     ));
                 }
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
@@ -122,7 +131,13 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 // both filter components are absent by default, and an entity
                 // whose filter cannot be reached until it has one would never
                 // get its first.
-                if frame.world.get::<Collider>(entity).is_some() {
+                // A solid layer too: its generated boxes copy the filter off
+                // the layer, so the layer is where it is authored.
+                let solid_layer = frame
+                    .world
+                    .get::<Tilemap>(entity)
+                    .is_some_and(|map| map.collision);
+                if frame.world.get::<Collider>(entity).is_some() || solid_layer {
                     ui.separator();
                     claim = claim.or(collision::show(ui, frame.world, entity));
                 }

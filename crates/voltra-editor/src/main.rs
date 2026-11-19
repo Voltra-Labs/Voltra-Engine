@@ -2,6 +2,7 @@ mod camera;
 mod drag;
 mod editor;
 mod gizmo;
+mod paint;
 mod panels;
 mod picking;
 mod play;
