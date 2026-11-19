@@ -10,8 +10,9 @@ Runs a game: ECS, scenes on disk, sprites with sheets and animation, a 2D
 camera, rigid bodies with filters, sensors, events and queries, two game ticks,
 an editor with hierarchy/inspector/gizmos/undo/play/asset browser, and a player
 binary, and since 23 it can make a sound — mixed through buses, faded, limited,
-reloaded and auditioned from the inspector. What it still cannot do: reuse a
-piece of content, fill a screen with tiles, print a number, read a gamepad, or
+reloaded and auditioned from the inspector — and since 24a it can stamp out
+copies of a prefab from a tick. What it still cannot do: author a prefab in the
+editor, fill a screen with tiles, print a number, read a gamepad, or
 be handed to someone who does not have Rust installed.
 
 ## The order, and why
@@ -20,7 +21,8 @@ be handed to someone who does not have Rust installed.
 | --- | --- | --- |
 | ~~23a~~ | ~~Audio: the crate, the store, the components, one-shots~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~23b~~ | ~~Audio: buses, tweens, editor audition, hot reload~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 24 | Prefabs and runtime spawning | Everything after this multiplies content: enemies, bullets, tiles, particles. Doing it before them means they all reuse one mechanism. |
+| ~~24a~~ | ~~Prefabs: spawn, ids, parent remap, tick API~~ | **Landed.** Decisions in ARCHITECTURE.md. |
+| 24b | Prefabs: editor authoring and the instance link | What 24a left; see below. |
 | 25 | Tilemaps | The classic 2D content path, and it needs 22's atlas underneath it. Also the first scene that makes stage 28 urgent. |
 | 26 | In-game UI: text and screen space | A game cannot show a score. Held until here because a HUD wants prefabs and fonts want the atlas work from 22. |
 | 27 | Input actions and gamepads | Raw `KeyCode` is fine for one example and wrong for a game. Late on purpose: an action map is a thin layer over input that already works. |
@@ -34,47 +36,28 @@ whatever generates the bodies.
 
 ---
 
-## 24 — Prefabs and runtime spawning
+## 24b — Prefabs: editor authoring and the instance link
 
-**Why now.** Every stage after this one wants to stamp out copies of something:
-enemies, bullets, tiles, particles, UI elements. Building the mechanism once
-means none of them invents its own.
+24a landed: `prefab::spawn` with fresh ids, remapped parents, cut outside
+links and placed roots; `Prefabs` beside the scene format; `Tick::spawn` and
+`App::spawn`, with per-entity asset resolution after each tick; the
+platformer's coins from `prefabs/coin.ron`. Decisions under "A prefab is a
+scene file" in ARCHITECTURE.md.
 
-**Prior art.** Unity: a prefab asset, instances that carry overrides, and
-variants. Godot: a scene *is* a node tree, and instancing is that tree
-inherited; "make local" breaks the link. Unreal: blueprint classes. All three
-separate *the asset* from *the instance*, and all three have paid for
-override propagation.
+What is left:
 
-**Shape.**
-
-- A prefab is a scene fragment on disk — the same `.ron` format, one or more
-  roots — so nothing new has to be able to read it, and `ComponentRegistry`
-  already covers every component.
-- `prefab::spawn(world, &prefab, at) -> Entity`: fresh `SceneId`s, `Parent`
-  links remapped through the existing resolver, and the whole subtree placed
-  relative to `at`.
-- `Tick` gets the same call, because bullets are spawned from a tick.
-- `PrefabInstance { source: AssetPath }` records where an instance came from,
-  even in v1 where nothing propagates. Without the link, adding propagation
-  later means every existing scene has forgotten what it was made from.
-- Editor: drag a prefab from the browser into the scene; "Create prefab from
-  selection" writes the fragment and turns the selection into an instance.
-
-**Decisions to make.**
-
-- **Overrides.** The whole difficulty. v1 should instantiate and forget
-  (Godot's "instance as plain nodes"), with the link recorded but inert. Per
-  entity per component override storage, "apply to prefab", and what happens
-  when the prefab gains a component afterwards are their own stage.
-- Nested prefabs: allowed by construction, and worth one test that a cycle is
-  refused rather than recursing forever.
-- Whether a prefab is a distinct asset kind or "any `.ron` scene can be
-  instanced". Leaning towards the second, with the browser showing scenes as
-  droppable.
-
-**Cut.** 24a = spawn, ids, parent remap, tick API. 24b = editor authoring and
-the instance link.
+- **`PrefabInstance { source: AssetPath }`** on each instance root, recorded
+  and inert. Without it, adding propagation later means every saved scene has
+  forgotten what it was made from.
+- **Drag a prefab from the browser into the viewport**, through the same undo
+  record as a sprite drop. The browser shows scenes as droppable — any `.ron`
+  that is not an atlas.
+- **"Create prefab from selection"**: writes the selection and its descendants
+  as a fragment, then turns the selection into an instance of it.
+- **Nested prefabs** become possible once a file can carry a `PrefabInstance`;
+  that is where the one test that a cycle is refused rather than recursed
+  belongs.
+- Still out: overrides, "apply to prefab", propagation. Their own stage.
 
 ---
 
