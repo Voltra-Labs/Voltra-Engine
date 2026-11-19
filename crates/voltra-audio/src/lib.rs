@@ -14,27 +14,33 @@
 //! and only `voltra-core` on `winit`. Everything above it deals in
 //! [`Clip`]s, [`VoiceId`]s and [`PlayParams`].
 //!
-//! The layering inside is the same rule again: [`mixer`] and [`voice`] are
-//! pure arithmetic with no thread and no device, [`device`] is the thin shell
+//! The layering inside is the same rule again: [`mixer`], [`voice`],
+//! [`ramp`] and [`limiter`] are pure arithmetic with no thread and no device, [`device`] is the thin shell
 //! that owns the `cpal` stream, and [`audio`] is the seam the engine holds.
 
 pub mod audio;
+pub mod bus;
 pub mod clip;
 pub mod command;
 pub mod decode;
 pub mod device;
 pub mod error;
+pub mod limiter;
 pub mod mixer;
 pub mod params;
+pub mod ramp;
 pub mod spatial;
 pub mod voice;
 
 pub use audio::Audio;
+pub use bus::{BusId, Buses, DEFAULT_BUSES, MAX_BUSES};
 pub use clip::Clip;
 pub use command::Command;
 pub use decode::decode;
 pub use device::Output;
 pub use error::AudioError;
+pub use limiter::Limiter;
 pub use mixer::{Mixer, DEFAULT_CAPACITY};
 pub use params::PlayParams;
-pub use voice::{Voice, VoiceId};
+pub use ramp::Ramp;
+pub use voice::{Voice, VoiceId, SMOOTHING};

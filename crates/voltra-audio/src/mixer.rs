@@ -7,13 +7,21 @@
 //! also buys the thing a wrapped mixer cannot give: this type is pure
 //! arithmetic with no thread, no device and no clock, so every rule it obeys
 //! is a test that runs on a build machine with no sound card.
+//!
+//! The signal path, in order: each voice's own gains and fader, its bus's
+//! gain, the sum, the master's gain, and the [`Limiter`]. Every gain on that
+//! path is a [`Ramp`], so nothing the game says can step a waveform.
 
 use std::sync::mpsc::Sender;
+use std::time::Duration;
 
+use crate::bus::{BusId, MAX_BUSES};
 use crate::clip::Clip;
 use crate::command::Command;
+use crate::limiter::Limiter;
 use crate::params::PlayParams;
-use crate::voice::{Voice, VoiceId};
+use crate::ramp::Ramp;
+use crate::voice::{frames, Voice, VoiceId};
 
 /// How many voices may sound at once before the oldest is taken for the
 /// newest.
@@ -41,6 +49,15 @@ pub struct Mixer {
     /// wired one up. `None` in tests, which drop on this thread and do not
     /// care.
     retired: Option<Sender<Clip>>,
+    /// One gain per bus, indexed by [`BusId::index`]; the master's is slot
+    /// zero and multiplies the finished sum.
+    ///
+    /// A fixed array rather than a `Vec` grown as buses are named: the main
+    /// thread registers names, and a table the audio thread had to grow
+    /// would be an allocation inside the callback. Thirty-two ramps is half a
+    /// kilobyte.
+    buses: [Ramp; MAX_BUSES],
+    limiter: Limiter,
 }
 
 impl Mixer {
@@ -59,6 +76,8 @@ impl Mixer {
             channels: channels.max(1),
             capacity,
             retired: None,
+            buses: [Ramp::new(1.0); MAX_BUSES],
+            limiter: Limiter::new(rate.max(1)),
         }
     }
 
@@ -86,20 +105,45 @@ impl Mixer {
         self.voices.len()
     }
 
+    /// The gain `bus` is at right now, or `1.0` for an id past the table.
+    pub fn bus_volume(&self, bus: BusId) -> f32 {
+        self.buses.get(bus.index()).map_or(1.0, Ramp::value)
+    }
+
     /// Carries out one message from the game.
+    ///
+    /// Every message naming a voice is ignored for a voice that is not here.
+    /// That is not an error: a game holding an id has no way to know the clip
+    /// ran out, and the id is never reused, so there is nothing else it could
+    /// hit.
     pub fn apply(&mut self, command: Command) {
         match command {
-            Command::Play { id, clip, params } => self.play(id, clip, params),
+            Command::Play {
+                id,
+                clip,
+                params,
+                fade_in,
+            } => self.play(id, clip, params, fade_in),
             Command::SetGain { id, volume, pan } => {
-                if let Some(voice) = self.voices.iter_mut().find(|v| v.id() == id) {
+                if let Some(voice) = self.voice(id) {
                     voice.set_gain(volume, pan);
                 }
             }
-            // A `Stop` for a voice that already finished is not an error: a
-            // game holding an id has no way to know the clip ran out, and the
-            // id is never reused, so there is nothing else it could hit.
-            Command::Stop(id) => self.remove(|voice| voice.id() == id),
-            Command::StopAll => self.remove(|_| true),
+            Command::Fade { id, volume, over } => {
+                if let Some(voice) = self.voice(id) {
+                    voice.fade(volume, over);
+                }
+            }
+            Command::Stop { id, over } => self.stop(|voice| voice.id() == id, over),
+            Command::StopAll { over } => self.stop(|_| true, over),
+            Command::SetBusVolume { bus, volume, over } => {
+                let frames = frames(over, self.rate);
+                // An id past the table can only come from a hand-built
+                // command; `Buses` never issues one.
+                if let Some(ramp) = self.buses.get_mut(bus.index()) {
+                    ramp.set(volume, frames);
+                }
+            }
         }
     }
 
@@ -112,26 +156,66 @@ impl Mixer {
         out.fill(0.0);
 
         let channels = usize::from(self.channels);
+        let frames = u32::try_from(out.len() / channels).unwrap_or(u32::MAX);
+
         for voice in &mut self.voices {
-            voice.mix(out, channels);
+            // A voice on the master feeds the sum directly: the master's gain
+            // is applied once, below, to everything.
+            let bus = match voice.bus() {
+                BusId::MASTER => Ramp::new(1.0),
+                bus => self
+                    .buses
+                    .get(bus.index())
+                    .copied()
+                    .unwrap_or(Ramp::new(1.0)),
+            };
+            voice.mix(out, channels, bus);
         }
 
-        // Hard clipping, because a device handed a sample outside the range
-        // will do something worse with it than this does — some hosts wrap,
-        // which turns a loud moment into a crack. A limiter that ducks the mix
-        // instead of squaring it off is a bus effect, and buses are their own
-        // stage.
-        for sample in out.iter_mut() {
-            *sample = sample.clamp(-1.0, 1.0);
+        // Every bus advances whether anything was routed into it or not, so a
+        // fade on a bus that fell silent still arrives on time.
+        for bus in &mut self.buses[1..] {
+            bus.advance(frames);
         }
+
+        let master = &mut self.buses[BusId::MASTER.index()];
+        for frame in out.chunks_mut(channels) {
+            let gain = master.tick();
+            for sample in frame {
+                *sample *= gain;
+            }
+        }
+
+        self.limiter.process(out, channels);
 
         self.remove(|voice| voice.is_finished());
     }
 
+    /// The voice playing under `id`, if it still is.
+    fn voice(&mut self, id: VoiceId) -> Option<&mut Voice> {
+        self.voices.iter_mut().find(|voice| voice.id() == id)
+    }
+
     /// Starts a voice, making room first if the mixer is full.
-    fn play(&mut self, id: VoiceId, clip: Clip, params: PlayParams) {
+    fn play(&mut self, id: VoiceId, clip: Clip, params: PlayParams, fade_in: Duration) {
         self.make_room();
-        self.voices.push(Voice::new(id, clip, params, self.rate));
+        self.voices
+            .push(Voice::new(id, clip, params, self.rate, fade_in));
+    }
+
+    /// Ends every voice matching `doomed`, fading it out over `over`.
+    ///
+    /// A stop shorter than one frame takes the voice out now rather than at
+    /// the next render, so a caller that stopped everything sees an empty
+    /// mixer straight away.
+    fn stop(&mut self, doomed: impl Fn(&Voice) -> bool, over: Duration) {
+        if frames(over, self.rate) == 0 {
+            self.remove(doomed);
+            return;
+        }
+        for voice in self.voices.iter_mut().filter(|voice| doomed(voice)) {
+            voice.stop(over);
+        }
     }
 
     /// Drops the oldest voice if there is no room for another.
@@ -184,10 +268,13 @@ mod tests {
         VoiceId::forge(raw)
     }
 
-    /// A clip of `frames` samples, every one of them `1.0`, at the mixer's own
+    /// A clip of `frames` samples, every one of them `0.5`, at the mixer's own
     /// rate so one output frame is one clip frame.
+    ///
+    /// Half scale so one voice sits under the limiter's threshold and the
+    /// tests read the mix arithmetic rather than the limiter's.
     fn tone(frames: usize) -> Clip {
-        Clip::new(vec![1.0; frames], 1, RATE)
+        Clip::new(vec![0.5; frames], 1, RATE)
     }
 
     /// Hard left, so a voice's contribution lands in channel 0 at full gain
@@ -205,8 +292,16 @@ mod tests {
             id,
             clip: tone(frames),
             params: left(),
+            fade_in: Duration::ZERO,
         });
         id
+    }
+
+    fn stop(id: VoiceId) -> Command {
+        Command::Stop {
+            id,
+            over: Duration::ZERO,
+        }
     }
 
     fn render(mixer: &mut Mixer, frames: usize) -> Vec<f32> {
@@ -238,11 +333,13 @@ mod tests {
             id: id(1),
             clip: Clip::new(vec![0.25, 0.25], 1, RATE),
             params: left(),
+            fade_in: Duration::ZERO,
         });
         mixer.apply(Command::Play {
             id: id(2),
             clip: Clip::new(vec![0.5, 0.5], 1, RATE),
             params: left(),
+            fade_in: Duration::ZERO,
         });
 
         let out = render(&mut mixer, 2);
@@ -250,14 +347,13 @@ mod tests {
     }
 
     #[test]
-    fn the_sum_is_clipped_rather_than_left_to_the_device() {
+    fn the_sum_never_leaves_the_range_a_device_accepts() {
         let mut mixer = Mixer::new(RATE, 2);
         for raw in 0..4 {
             play(&mut mixer, raw, 2);
         }
         let out = render(&mut mixer, 2);
-        assert!(out.iter().all(|s| *s <= 1.0), "got {out:?}");
-        assert!((out[0] - 1.0).abs() < 1e-6, "and reaches the ceiling");
+        assert!(out.iter().all(|s| (-1.0..=1.0).contains(s)), "got {out:?}");
     }
 
     #[test]
@@ -276,7 +372,7 @@ mod tests {
         let mut mixer = Mixer::new(RATE, 2);
         let voice = play(&mut mixer, 1, 64);
 
-        mixer.apply(Command::Stop(voice));
+        mixer.apply(stop(voice));
 
         assert_eq!(mixer.voices(), 0);
         assert_eq!(render(&mut mixer, 2), vec![0.0; 4]);
@@ -291,7 +387,7 @@ mod tests {
         render(&mut mixer, 4);
         let survivor = play(&mut mixer, 2, 64);
 
-        mixer.apply(Command::Stop(voice));
+        mixer.apply(stop(voice));
 
         assert_eq!(mixer.voices(), 1);
         mixer.apply(Command::SetGain {
@@ -307,7 +403,9 @@ mod tests {
         play(&mut mixer, 1, 64);
         play(&mut mixer, 2, 64);
 
-        mixer.apply(Command::StopAll);
+        mixer.apply(Command::StopAll {
+            over: Duration::ZERO,
+        });
 
         assert_eq!(mixer.voices(), 0);
     }
@@ -325,7 +423,7 @@ mod tests {
 
         let out = render(&mut mixer, 1);
         assert!(out[0].abs() < 1e-6, "it should have moved right: {out:?}");
-        assert!((out[1] - 1.0).abs() < 1e-6);
+        assert!((out[1] - 0.5).abs() < 1e-6);
     }
 
     #[test]
@@ -340,7 +438,7 @@ mod tests {
         });
 
         let out = render(&mut mixer, 1);
-        assert!((out[0] - 1.0).abs() < 1e-6, "the real voice changed");
+        assert!((out[0] - 0.5).abs() < 1e-6, "the real voice changed");
     }
 
     #[test]
@@ -352,7 +450,7 @@ mod tests {
         play(&mut mixer, 3, 64);
 
         assert_eq!(mixer.voices(), 2, "the ceiling holds");
-        mixer.apply(Command::Stop(oldest));
+        mixer.apply(stop(oldest));
         assert_eq!(mixer.voices(), 2, "and it was the oldest that went");
     }
 
@@ -408,5 +506,114 @@ mod tests {
         let mixer = Mixer::new(0, 0);
         assert_eq!(mixer.rate(), 1);
         assert_eq!(mixer.channels(), 1);
+    }
+
+    /// A long voice on `bus`, hard left.
+    fn play_on(mixer: &mut Mixer, raw: u64, bus: BusId) -> VoiceId {
+        let id = id(raw);
+        mixer.apply(Command::Play {
+            id,
+            clip: tone(64),
+            params: PlayParams { bus, ..left() },
+            fade_in: Duration::ZERO,
+        });
+        id
+    }
+
+    fn set_bus(mixer: &mut Mixer, bus: BusId, volume: f32) {
+        mixer.apply(Command::SetBusVolume {
+            bus,
+            volume,
+            over: Duration::ZERO,
+        });
+    }
+
+    #[test]
+    fn a_bus_s_volume_reaches_only_the_voices_on_it() {
+        let music = BusId::from_index(1);
+        let mut mixer = Mixer::new(RATE, 2);
+        play_on(&mut mixer, 1, music);
+        set_bus(&mut mixer, music, 0.0);
+
+        assert_eq!(render(&mut mixer, 1), vec![0.0, 0.0], "the music is muted");
+
+        play_on(&mut mixer, 2, BusId::from_index(2));
+        let out = render(&mut mixer, 1);
+        assert!((out[0] - 0.5).abs() < 1e-6, "the effects are not: {out:?}");
+    }
+
+    #[test]
+    fn the_master_turns_down_everything() {
+        let mut mixer = Mixer::new(RATE, 2);
+        play_on(&mut mixer, 1, BusId::from_index(1));
+        play_on(&mut mixer, 2, BusId::MASTER);
+        set_bus(&mut mixer, BusId::MASTER, 0.25);
+
+        let out = render(&mut mixer, 1);
+
+        assert!((out[0] - 0.25).abs() < 1e-6, "got {out:?}");
+    }
+
+    #[test]
+    fn a_bus_fade_arrives_on_time_even_with_nothing_on_the_bus() {
+        let music = BusId::from_index(1);
+        let mut mixer = Mixer::new(1_000, 2);
+        mixer.apply(Command::SetBusVolume {
+            bus: music,
+            volume: 0.0,
+            over: Duration::from_millis(10),
+        });
+
+        let mut out = vec![0.0; 20];
+        mixer.render(&mut out);
+
+        assert_eq!(mixer.bus_volume(music), 0.0);
+    }
+
+    #[test]
+    fn a_fading_stop_keeps_the_voice_until_it_is_silent() {
+        let mut mixer = Mixer::new(1_000, 2);
+        mixer.apply(Command::Play {
+            id: id(1),
+            clip: Clip::new(vec![0.5; 1_000], 1, 1_000),
+            params: left(),
+            fade_in: Duration::ZERO,
+        });
+        mixer.apply(Command::Stop {
+            id: id(1),
+            over: Duration::from_millis(4),
+        });
+        assert_eq!(mixer.voices(), 1, "a fade-out is still sounding");
+
+        let mut out = vec![0.0; 2 * 8];
+        mixer.render(&mut out);
+
+        assert_eq!(mixer.voices(), 0);
+        assert!(out[0] > 0.0 && out[6] < out[0], "it faded: {out:?}");
+    }
+
+    #[test]
+    fn a_fade_reaches_the_voice_it_names() {
+        let mut mixer = Mixer::new(RATE, 2);
+        let voice = play(&mut mixer, 1, 64);
+        mixer.apply(Command::Fade {
+            id: voice,
+            volume: 0.0,
+            over: Duration::ZERO,
+        });
+
+        assert_eq!(render(&mut mixer, 1), vec![0.0, 0.0]);
+        assert_eq!(mixer.voices(), 1, "a fade to silence is not a stop");
+    }
+
+    #[test]
+    fn a_bus_id_past_the_table_is_ignored_rather_than_panicking() {
+        let mut mixer = Mixer::new(RATE, 2);
+        // Only reachable by forging a command; `Buses` caps what it issues.
+        let wild = BusId::from_index(MAX_BUSES - 1);
+        set_bus(&mut mixer, wild, 0.5);
+        play_on(&mut mixer, 1, wild);
+        render(&mut mixer, 1);
+        assert_eq!(mixer.bus_volume(wild), 0.5);
     }
 }
