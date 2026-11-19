@@ -3157,6 +3157,7 @@ dependencies = [
  "egui-winit",
  "env_logger",
  "log",
+ "serde",
  "voltra-assets",
  "voltra-audio",
  "voltra-ecs",
