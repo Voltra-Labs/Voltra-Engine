@@ -9,8 +9,9 @@
 
 use std::path::PathBuf;
 
-use voltra_assets::{AssetPath, Handle};
-use voltra_ecs::Entity;
+use voltra_assets::{AssetPath, Atlases, Clips, Handle, Textures};
+use voltra_ecs::{Entity, World};
+use voltra_render::wgpu;
 use voltra_scene::{prefab, AudioSource, Instance, Prefab, Prefabs, SceneError, Sprite, Transform};
 
 use crate::app::tick::Tick;
@@ -67,6 +68,36 @@ pub(super) fn prefab_store<'a>(
     })
 }
 
+/// Resolves the asset handles one entity's components name, against
+/// whichever stores exist.
+///
+/// The one copy of "what a freshly made entity needs looked up", shared by
+/// the loop's queue and by the editor's drop of a prefab: a second would
+/// drift the day a component gains a path. The slicing goes before the
+/// texture, because a sprite's geometry reads both.
+pub(super) fn resolve_entity(
+    world: &mut World,
+    entity: Entity,
+    gpu: Option<(&mut Textures, &wgpu::Device, &wgpu::Queue)>,
+    atlases: Option<&mut Atlases>,
+    clips: Option<&mut Clips>,
+) {
+    if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+        if let Some(atlases) = atlases {
+            let path = sprite.atlas.clone();
+            sprite.set_atlas(path, atlases);
+        }
+        if let Some((textures, device, queue)) = gpu {
+            let path = sprite.texture.clone();
+            sprite.set_texture(path, textures, device, queue);
+        }
+    }
+    if let (Some(source), Some(clips)) = (world.get_mut::<AudioSource>(entity), clips) {
+        let path = source.clip.clone();
+        source.set_clip(path, clips);
+    }
+}
+
 impl App {
     /// Resolves the asset handles of everything a tick spawned since the last
     /// call.
@@ -91,26 +122,18 @@ impl App {
     }
 
     fn resolve_entity(&mut self, entity: Entity) {
-        if let Some(sprite) = self.world.get_mut::<Sprite>(entity) {
-            if let Some(atlases) = self.atlases.as_mut() {
-                let path = sprite.atlas.clone();
-                sprite.set_atlas(path, atlases);
-            }
-            if let (Some(textures), Some(renderer)) =
-                (self.textures.as_mut(), self.renderer.as_ref())
-            {
-                let path = sprite.texture.clone();
-                let context = renderer.context();
-                sprite.set_texture(path, textures, context.device(), context.queue());
-            }
-        }
-        if let (Some(source), Some(clips)) = (
-            self.world.get_mut::<AudioSource>(entity),
+        let context = self.renderer.as_ref().map(|renderer| renderer.context());
+        let gpu = match (self.textures.as_mut(), context) {
+            (Some(textures), Some(context)) => Some((textures, context.device(), context.queue())),
+            _ => None,
+        };
+        resolve_entity(
+            &mut self.world,
+            entity,
+            gpu,
+            self.atlases.as_mut(),
             self.clips.as_mut(),
-        ) {
-            let path = source.clip.clone();
-            source.set_clip(path, clips);
-        }
+        );
     }
 
     /// The prefab store, for a game loading its prefabs before the first tick.

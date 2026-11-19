@@ -14,7 +14,7 @@ use std::path::Path;
 use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
-use crate::watch::{is_clip, is_texture};
+use crate::watch::{is_clip, is_scene, is_texture};
 
 /// What one row of a listing is.
 ///
@@ -32,6 +32,9 @@ pub enum EntryKind {
     /// A file with an extension in
     /// [`CLIP_EXTENSIONS`](crate::watch::CLIP_EXTENSIONS): a sound.
     Clip,
+    /// A file [`is_scene`](crate::watch::is_scene) accepts: a scene, which is
+    /// also what a prefab is, so every one of them can be dropped in.
+    Scene,
     /// A file this engine has no loader for.
     Other,
 }
@@ -129,6 +132,10 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::Atlas
         } else if is_clip(&name) {
             EntryKind::Clip
+        } else if is_scene(&name) {
+            // After `Atlas`, which is a `.ron` too; `is_scene` refuses one
+            // anyway, and the order says so without having to read it.
+            EntryKind::Scene
         } else {
             EntryKind::Other
         };
@@ -254,7 +261,7 @@ mod atlas_tests {
         assert_eq!(kind("coin.atlas.ron"), Some(EntryKind::Atlas));
         assert_eq!(
             kind("demo.ron"),
-            Some(EntryKind::Other),
+            Some(EntryKind::Scene),
             "a scene is not a slicing"
         );
     }

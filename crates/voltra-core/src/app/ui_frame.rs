@@ -9,11 +9,11 @@ use std::collections::HashMap;
 
 use voltra_assets::{Atlases, Clips, Handle, Textures};
 use voltra_audio::Audio;
-use voltra_ecs::World;
+use voltra_ecs::{Entity, World};
 use voltra_physics::Contact;
 use voltra_render::{wgpu, Camera2D, LineBatch, Texture};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{AudioSource, Sprite};
+use voltra_scene::{AudioSource, Prefabs, Sprite};
 
 use super::simulation::Simulation;
 use crate::ui::TextureId;
@@ -42,6 +42,10 @@ pub struct UiFrame<'a> {
     /// the two stores above are shared: a panel that names a clip must produce
     /// a handle the frame's audio can already resolve.
     pub clips: &'a mut Clips,
+    /// Loaded prefabs, the same store a game's tick spawns from: a panel that
+    /// drops one into the scene and a hot reload of its file must agree on
+    /// what the file currently holds.
+    pub prefabs: &'a mut Prefabs,
     /// The game's own output, for a panel that auditions a sound.
     ///
     /// The same `Audio` the scene plays through rather than a second device:
@@ -190,6 +194,26 @@ impl<'a> UiFrame<'a> {
         resolve_world_textures(self.world, self.textures, self.device, self.queue);
         resolve_world_atlases(self.world, self.atlases);
         resolve_world_clips(self.world, self.clips);
+    }
+
+    /// [`UiFrame::resolve_scene_assets`] for just `entities`.
+    ///
+    /// What a panel that spawned a handful of entities wants: a prefab
+    /// dropped into a large level must not pay for re-resolving the level.
+    /// A despawned entity is skipped.
+    pub fn resolve_assets_of(&mut self, entities: &[Entity]) {
+        for &entity in entities {
+            if !self.world.is_alive(entity) {
+                continue;
+            }
+            super::spawning::resolve_entity(
+                self.world,
+                entity,
+                Some((self.textures, self.device, self.queue)),
+                Some(self.atlases),
+                Some(self.clips),
+            );
+        }
     }
 
     /// The stores a sprite's geometry resolves against, as the batch has them.

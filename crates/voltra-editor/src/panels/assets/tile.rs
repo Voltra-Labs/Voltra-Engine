@@ -30,6 +30,7 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
         EntryKind::Texture => texture_tile(ui, frame, entry, &response),
         EntryKind::Atlas => atlas_tile(ui, frame, entry, &response),
         EntryKind::Clip => clip_tile(ui, entry, &response),
+        EntryKind::Scene => scene_tile(ui, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
         EntryKind::Other => paint_block(ui, rect, ui.visuals().faint_bg_color),
@@ -44,12 +45,7 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
 /// that decides a texture is worth uploading: a directory of a thousand PNGs
 /// costs the ones on screen, not all of them. `Textures` caches, so this is a
 /// hash lookup on every frame after the first.
-pub(super) fn texture_tile(
-    ui: &mut Ui,
-    frame: &mut UiFrame<'_>,
-    entry: &Entry,
-    response: &egui::Response,
-) {
+fn texture_tile(ui: &mut Ui, frame: &mut UiFrame<'_>, entry: &Entry, response: &egui::Response) {
     let handle = frame.textures.load(frame.device, frame.queue, &entry.path);
 
     let rect = picture(response.rect);
@@ -76,7 +72,7 @@ pub(super) fn texture_tile(
 ///
 /// The one gesture the inspector's path fields and the viewport's drop both
 /// listen for, so every draggable tile has to arm it the same way.
-pub(super) fn drag_source(ui: &Ui, entry: &Entry, response: &egui::Response) {
+fn drag_source(ui: &Ui, entry: &Entry, response: &egui::Response) {
     let response = response.interact(Sense::drag());
     response.dnd_set_drag_payload(entry.path.clone());
     if response.dragged() {
@@ -92,12 +88,7 @@ pub(super) fn drag_source(ui: &Ui, entry: &Entry, response: &egui::Response) {
 /// that names no sheet — or one that will not load — falls back to a block:
 /// the file is there and the engine cannot picture it, which is what the
 /// dimmed tile already says for everything else.
-pub(super) fn atlas_tile(
-    ui: &mut Ui,
-    frame: &mut UiFrame<'_>,
-    entry: &Entry,
-    response: &egui::Response,
-) {
+fn atlas_tile(ui: &mut Ui, frame: &mut UiFrame<'_>, entry: &Entry, response: &egui::Response) {
     let handle = frame.atlases.load(&entry.path);
     let atlas = frame.atlases.get(handle);
     let texture = atlas.texture().cloned();
@@ -129,9 +120,7 @@ pub(super) fn atlas_tile(
 ///
 /// The colour rather than the dimmed fill is the point: dimmed already means
 /// "this engine cannot load it", and a sound can be loaded.
-pub(super) fn clip_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
-    paint_block(ui, response.rect, ui.visuals().selection.bg_fill);
-    let rect = picture(response.rect);
+fn clip_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
     // The format, which is what tells two takes of one sound apart, and which
     // every font egui ships can draw — a glyph like a note may not be.
     let format = entry
@@ -139,10 +128,33 @@ pub(super) fn clip_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
         .rsplit_once('.')
         .map(|(_, extension)| extension.to_ascii_uppercase())
         .unwrap_or_default();
+    badge_tile(ui, entry, response, &format, ui.visuals().selection.bg_fill);
+}
+
+/// A scene tile: a block with a word on it, and the same drag. Dropped on the
+/// viewport, a scene is spawned as a prefab.
+///
+/// A colour of its own rather than the sound's, so a folder holding both reads
+/// at a glance. Not a rendered thumbnail: that would mean spawning every scene
+/// on screen into a world of its own to draw it.
+fn scene_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
+    badge_tile(
+        ui,
+        entry,
+        response,
+        "SCENE",
+        ui.visuals().widgets.active.bg_fill,
+    );
+}
+
+/// A tile that is a coloured block with `text` on it, armed as a drag.
+fn badge_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response, text: &str, fill: Color32) {
+    paint_block(ui, response.rect, fill);
+    let rect = picture(response.rect);
     ui.painter().text(
         rect.center(),
         egui::Align2::CENTER_CENTER,
-        format,
+        text,
         egui::TextStyle::Heading.resolve(ui.style()),
         ui.visuals().strong_text_color(),
     );
@@ -155,7 +167,7 @@ pub(super) fn allocate(ui: &mut Ui) -> (Rect, egui::Response) {
 }
 
 /// The part of a tile the picture goes in — everything above the name.
-pub(super) fn picture(rect: Rect) -> Rect {
+fn picture(rect: Rect) -> Rect {
     Rect::from_min_size(rect.min, Vec2::splat(TILE))
 }
 
