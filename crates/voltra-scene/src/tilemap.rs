@@ -208,6 +208,22 @@ impl Tilemap {
         })
     }
 
+    /// The cell a point in the entity's own space falls in, or `None` when a
+    /// tile has no size on some axis and every point is in every cell.
+    ///
+    /// Floored rather than truncated, so the half-open rule [`Tilemap`]
+    /// states holds left of and below the origin too: `-0.5` is in cell `-1`.
+    pub fn cell_at(&self, local: Vec2) -> Option<IVec2> {
+        if self.tile_size.x == 0.0 || self.tile_size.y == 0.0 {
+            return None;
+        }
+        let cell = (local / self.tile_size).floor();
+        // Far enough out that the cast would saturate is nowhere a tile is.
+        cell.is_finite()
+            .then(|| cell.as_ivec2())
+            .filter(|_| cell.abs().max_element() < i32::MAX as f32)
+    }
+
     /// The lower-left corner of `cell`, in the entity's own space.
     pub fn cell_origin(&self, cell: IVec2) -> Vec2 {
         cell.as_vec2() * self.tile_size
