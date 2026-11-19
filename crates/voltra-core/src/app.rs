@@ -304,8 +304,32 @@ impl App {
     /// is on screen this frame rather than next. Costs one non-blocking
     /// `try_recv` when nothing changed, which is almost every frame.
     fn reload_changed_assets(&mut self) {
-        let (Some(watcher), Some(textures), Some(atlases), Some(renderer)) = (
-            self.watcher.as_mut(),
+        let Some(watcher) = self.watcher.as_mut() else {
+            return;
+        };
+        let changed = watcher.drain();
+        if changed.is_empty() {
+            return;
+        }
+
+        // Sounds first, and on their own: a clip needs no device, so a run
+        // whose renderer is not up yet still hears the edit.
+        let mut images = Vec::with_capacity(changed.len());
+        for path in changed {
+            let reloaded = match self.clips.as_mut() {
+                Some(clips) => match clips.reload(&path) {
+                    true => clips.by_path_handle(&path),
+                    false => None,
+                },
+                None => None,
+            };
+            match reloaded {
+                Some(clip) => self.scene_audio.restart(&self.world, clip, &mut self.audio),
+                None => images.push(path),
+            }
+        }
+
+        let (Some(textures), Some(atlases), Some(renderer)) = (
             self.textures.as_mut(),
             self.atlases.as_mut(),
             self.renderer.as_ref(),
@@ -314,7 +338,7 @@ impl App {
         };
 
         let device = renderer.context().device();
-        for path in watcher.drain() {
+        for path in images {
             // A re-cut sheet changes no pixels, and a repainted one changes no
             // slicing, so whichever store owns the path answers and the other
             // ignores it.
