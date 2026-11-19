@@ -139,6 +139,6 @@ impl Prefabs {
     fn read(&self, path: &AssetPath) -> Result<Prefab, SceneError> {
         let text = std::fs::read_to_string(self.root.join(path.as_str()))?;
         let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
-        Prefab::new(file)
+        Ok(Prefab::new(file)?.with_source(path.clone()))
     }
 }

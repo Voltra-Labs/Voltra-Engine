@@ -34,7 +34,7 @@ pub use format::{ComponentRegistry, SceneError};
 pub use hierarchy::{Parent, WorldTransforms};
 pub use material::PhysicsMaterial;
 pub use name::Name;
-pub use prefab::{Instance, Prefab, Prefabs};
+pub use prefab::{Instance, Prefab, PrefabInstance, Prefabs};
 pub use scene_id::{SceneId, UnknownComponents};
 pub use sprite::{draw_key, Sprite};
 pub use transform::Transform;

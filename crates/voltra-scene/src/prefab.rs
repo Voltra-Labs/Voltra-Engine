@@ -8,17 +8,20 @@
 //! saved as, read through the same [`ComponentRegistry`]. Nothing new has to
 //! be able to read one, and any scene can be instanced.
 //!
-//! **Instantiate and forget.** An instance is plain entities with nothing
-//! tying them back to the file, which is Godot's "make local" taken as the
-//! default. Override storage, propagating an edit to the prefab into its
-//! instances, and what an instance becomes when the prefab gains a component
-//! are where all three engines have paid; they are their own stage, and the
-//! link they need is recorded by 24b, not here.
+//! **Instantiate and forget.** An instance is plain entities, edited and
+//! saved like any other, which is Godot's "make local" taken as the default.
+//! Each root does carry a [`PrefabInstance`] naming its file, but nothing
+//! reads it back: override storage, propagating an edit to the prefab into
+//! its instances, and what an instance becomes when the prefab gains a
+//! component are where all three engines have paid, and they are their own
+//! stage. The link is recorded now so that stage finds it in every scene.
 
+mod link;
 mod store;
 
 use std::collections::HashMap;
 
+use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 
 use crate::format::{ComponentRegistry, SceneError, SceneFile, VERSION};
@@ -26,12 +29,16 @@ use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 use crate::transform::Transform;
 
+pub use link::PrefabInstance;
 pub use store::Prefabs;
 
 /// A scene fragment, read and checked once, ready to be spawned.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Prefab {
     file: Option<SceneFile>,
+    /// The path it was read from, which every root it spawns is linked to.
+    /// `None` for one built in memory, whose instances have no file to name.
+    source: Option<AssetPath>,
 }
 
 impl Prefab {
@@ -46,7 +53,23 @@ impl Prefab {
                 supported: VERSION,
             });
         }
-        Ok(Self { file: Some(file) })
+        Ok(Self {
+            file: Some(file),
+            source: None,
+        })
+    }
+
+    /// The same prefab, its instances linked to `source`.
+    pub fn with_source(self, source: AssetPath) -> Self {
+        Self {
+            source: Some(source),
+            ..self
+        }
+    }
+
+    /// The path this prefab's instances are linked to, if it has one.
+    pub fn source(&self) -> Option<&AssetPath> {
+        self.source.as_ref()
     }
 
     /// The prefab that spawns nothing: what a file that will not read becomes.
@@ -98,6 +121,10 @@ impl Instance {
 ///   offsets it was authored with. Children are left alone: they are local to
 ///   their parent, and moving the root moved them. A root with no `Transform`
 ///   is not positional and is not given one.
+/// - **Every root is linked to the prefab's source** with a
+///   [`PrefabInstance`], replacing whatever link the record itself carried:
+///   a root is an instance of the file it was just spawned from. A child's
+///   own link is kept — that child is a nested instance.
 ///
 /// All-or-nothing, like a load: a component that will not read despawns every
 /// entity this call spawned before the error is returned.
@@ -169,6 +196,9 @@ pub fn spawn(
     for &root in &roots {
         if let Some(transform) = world.get_mut::<Transform>(root) {
             *transform = place(at, transform);
+        }
+        if let Some(source) = &prefab.source {
+            world.insert(root, PrefabInstance::new(source.clone()));
         }
     }
 

@@ -307,4 +307,15 @@ fn the_empty_prefab_spawns_nothing() {
     assert_eq!(world.entity_count(), 0);
 }
 
+fn path(raw: &str) -> AssetPath {
+    AssetPath::new(raw).expect("a valid asset path")
+}
+
+fn write_ship(root: &std::path::Path, name: &str) {
+    let mut world = World::new();
+    named(&mut world, "hull", Vec2::ZERO);
+    crate::format::save(&world, &registry(), &root.join(name)).expect("the fixture writes");
+}
+
+mod link;
 mod store;
