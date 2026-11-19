@@ -185,6 +185,7 @@ fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entry: &Entry
         }
         EntryKind::Texture => texture_tile(ui, frame, entry, &response),
         EntryKind::Atlas => atlas_tile(ui, frame, entry, &response),
+        EntryKind::Clip => clip_tile(ui, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
         EntryKind::Other => paint_block(ui, rect, ui.visuals().faint_bg_color),
@@ -265,6 +266,32 @@ fn atlas_tile(ui: &mut Ui, frame: &mut UiFrame<'_>, entry: &Entry, response: &eg
         _ => paint_block(ui, rect, ui.visuals().faint_bg_color),
     }
 
+    drag_source(ui, entry, response);
+}
+
+/// A sound tile: a block in the selection colour, since a waveform thumbnail
+/// would mean decoding every file on screen, and the same drag as every other
+/// loadable tile.
+///
+/// The colour rather than the dimmed fill is the point: dimmed already means
+/// "this engine cannot load it", and a sound can be loaded.
+fn clip_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
+    paint_block(ui, response.rect, ui.visuals().selection.bg_fill);
+    let rect = picture(response.rect);
+    // The format, which is what tells two takes of one sound apart, and which
+    // every font egui ships can draw — a glyph like a note may not be.
+    let format = entry
+        .name
+        .rsplit_once('.')
+        .map(|(_, extension)| extension.to_ascii_uppercase())
+        .unwrap_or_default();
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        format,
+        egui::TextStyle::Heading.resolve(ui.style()),
+        ui.visuals().strong_text_color(),
+    );
     drag_source(ui, entry, response);
 }
 

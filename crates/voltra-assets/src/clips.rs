@@ -19,11 +19,13 @@ use crate::store::Assets;
 /// audio device: decoding is arithmetic over a file, which is what keeps every
 /// test of it headless.
 ///
-/// Hot reload is deliberately absent for now. Swapping the samples under a
-/// handle while a voice is reading them is not the same problem as swapping a
-/// texture between frames — the audio thread is inside the buffer — and it
-/// wants the same care the reload of a playing sound gets in Wwise. The handle
-/// is already stable, so adding it later changes nothing above.
+/// Hot reload swaps the clip under a stable handle, and needs no message to
+/// the audio thread because nothing is swapped *under* it: a [`Clip`] is an
+/// immutable, shared buffer, and a voice holds its own reference. A voice
+/// already playing finishes the samples it started with; the next play of the
+/// handle gets the new ones. Restarting what is sounding — so a looping
+/// ambience picks the edit up — is the caller's decision, because only it
+/// knows which voices came from which handle.
 #[derive(Debug)]
 pub struct Clips {
     root: PathBuf,
@@ -75,6 +77,40 @@ impl Clips {
 
         self.by_path.insert(path.clone(), handle);
         handle
+    }
+
+    /// Decodes `path` again and swaps it in under the handle it already has.
+    ///
+    /// `false`, changing nothing, for a path nobody loaded — the watcher sees
+    /// every sound in the tree, and decoding one no scene uses would be a
+    /// waste — and for a file that will not decode. The second keeps the
+    /// previous samples rather than going silent: an editor saving a file
+    /// leaves it briefly truncated, and degrading to nothing on every save
+    /// would be worse than hearing the old take for one more moment.
+    pub fn reload(&mut self, path: &AssetPath) -> bool {
+        let Some(&handle) = self.by_path.get(path) else {
+            return false;
+        };
+
+        let clip = match decode(&self.root.join(path.as_str())) {
+            Ok(clip) => clip,
+            Err(source) => {
+                let error = AssetError::Audio {
+                    path: self.root.join(path.as_str()),
+                    source: Box::new(source),
+                };
+                log::warn!("{error}; keeping the previously loaded clip");
+                return false;
+            }
+        };
+
+        let slot = self
+            .store
+            .get_mut(handle)
+            .expect("Clips never removes, so every handle it issued resolves");
+        *slot = clip;
+        log::info!("reloaded {}", path.as_str());
+        true
     }
 
     /// The handle `path` is cached to, if it has ever been loaded.
@@ -225,6 +261,67 @@ mod tests {
 
         assert_eq!(clips.by_path_handle(&path("coin.wav")), Some(handle));
         assert_eq!(clips.by_path_handle(&path("other.wav")), None);
+    }
+
+    #[test]
+    fn a_reload_swaps_the_samples_under_the_same_handle() {
+        let root = scratch_root();
+        std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
+        let mut clips = Clips::new(&root);
+        let handle = clips.load(&path("coin.wav"));
+        let playing = clips.get(handle).clone();
+
+        std::fs::write(root.join("coin.wav"), wav(32)).expect("the edit writes");
+        assert!(clips.reload(&path("coin.wav")));
+
+        assert_eq!(clips.get(handle).frames(), 32);
+        assert_eq!(
+            playing.frames(),
+            4,
+            "a voice already playing keeps its take"
+        );
+    }
+
+    #[test]
+    fn a_broken_file_is_repaired_by_a_reload() {
+        // The reason each broken path gets its own slot.
+        let root = scratch_root();
+        let mut clips = Clips::new(&root);
+        let handle = clips.load(&path("late.wav"));
+        assert!(clips.get(handle).is_empty());
+
+        std::fs::write(root.join("late.wav"), wav(8)).expect("the file arrives");
+        assert!(clips.reload(&path("late.wav")));
+
+        assert_eq!(clips.get(handle).frames(), 8);
+        assert!(
+            clips.get(clips.silent()).is_empty(),
+            "the shared silence is untouched"
+        );
+    }
+
+    #[test]
+    fn a_reload_that_will_not_decode_keeps_the_old_samples() {
+        // An editor mid-save leaves the file truncated.
+        let root = scratch_root();
+        std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
+        let mut clips = Clips::new(&root);
+        let handle = clips.load(&path("coin.wav"));
+
+        std::fs::write(root.join("coin.wav"), "RIFF").expect("the truncation writes");
+
+        assert!(!clips.reload(&path("coin.wav")));
+        assert_eq!(clips.get(handle).frames(), 4);
+    }
+
+    #[test]
+    fn reloading_a_path_nobody_loaded_does_nothing() {
+        let root = scratch_root();
+        std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
+        let mut clips = Clips::new(&root);
+
+        assert!(!clips.reload(&path("coin.wav")));
+        assert_eq!(clips.len(), 1);
     }
 
     #[test]

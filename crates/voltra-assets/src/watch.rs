@@ -43,10 +43,27 @@ pub const TEXTURE_EXTENSIONS: &[&str] = &["png"];
 /// Here rather than beside the browser because this is where the list lives,
 /// and a second copy of the match would drift from it.
 pub fn is_texture(name: &str) -> bool {
+    has_extension(name, TEXTURE_EXTENSIONS)
+}
+
+/// File extensions that can become a [`Clip`](voltra_audio::Clip), lowercase,
+/// without the dot.
+///
+/// Exactly the formats the workspace builds `symphonia` with. A name here
+/// whose decoder is not compiled in would be watched, listed as a sound, and
+/// then fail to decode every time.
+pub const CLIP_EXTENSIONS: &[&str] = &["wav", "ogg"];
+
+/// Whether a file name ends in an extension this engine can decode as a clip.
+pub fn is_clip(name: &str) -> bool {
+    has_extension(name, CLIP_EXTENSIONS)
+}
+
+fn has_extension(name: &str, extensions: &[&str]) -> bool {
     let Some((_, extension)) = name.rsplit_once('.') else {
         return false;
     };
-    TEXTURE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+    extensions.contains(&extension.to_ascii_lowercase().as_str())
 }
 
 /// Watches the asset root and reports which assets changed.
@@ -156,7 +173,7 @@ impl AssetWatcher {
     /// a path from a volume we do not own.
     fn to_asset_path(&self, path: &Path) -> Option<AssetPath> {
         let name = path.file_name()?.to_str()?;
-        if !is_texture(name) && !is_atlas(name) {
+        if !is_texture(name) && !is_atlas(name) && !is_clip(name) {
             return None;
         }
 
