@@ -15,7 +15,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use voltra_assets::AssetPath;
-use voltra_core::{query, App, KeyCode, QueryFilter, Tick, Touch, WindowConfig};
+use voltra_core::{query, App, KeyCode, PlayParams, QueryFilter, Tick, Touch, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
@@ -122,12 +122,19 @@ fn take_coins(tick: &mut Tick<'_>, walker: Entity) {
         // tick is not tied to a source the loop is following. A coin that had
         // to stay alive to be heard would be the wrong shape for every pickup
         // in every game.
-        if let Some(clip) = tick
-            .world
-            .get::<AudioSource>(coin)
-            .and_then(|source| source.clip_handle)
-        {
-            tick.audio.play(clip);
+        if let Some(source) = tick.world.get::<AudioSource>(coin) {
+            if let Some(clip) = source.clip_handle {
+                // On the source's own bus, so a game's effects slider reaches
+                // the pickup the same way it reaches everything else.
+                let bus = tick.audio.bus(&source.bus);
+                tick.audio.play_with(
+                    clip,
+                    PlayParams {
+                        bus,
+                        ..PlayParams::default()
+                    },
+                );
+            }
         }
 
         // Despawned mid-overlap on purpose: the pair ends by disappearing, and
@@ -285,6 +292,7 @@ fn coin(app: &mut App, at: Vec2) {
     // the walker's feet, and a falloff would only ever attenuate it by a
     // fraction nobody can hear.
     voice.range = 0.0;
+    voice.bus = "sfx".to_owned();
     app.world.insert(entity, voice);
     app.world.insert(entity, Collider::Circle { radius: 0.5 });
     // No `RigidBody`: it is static geometry that happens to be a sensor. A

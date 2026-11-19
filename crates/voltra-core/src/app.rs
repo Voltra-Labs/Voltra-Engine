@@ -166,6 +166,17 @@ impl App {
         self
     }
 
+    /// Mixes through `buses` instead of the default master, music, sfx and
+    /// ui.
+    ///
+    /// A builder rather than a settings file, because there is no settings
+    /// file: the table is code the game owns. Names a scene uses that are not
+    /// in it still work — see [`Buses::id`](voltra_audio::Buses::id).
+    pub fn with_buses(mut self, buses: voltra_audio::Buses) -> Self {
+        self.audio = std::mem::take(&mut self.audio).with_buses(buses);
+        self
+    }
+
     /// Starts with the world live: physics steps, and the game's ticks run.
     ///
     /// Off by default: a scene with no `RigidBody` pays nothing either way, but
@@ -384,7 +395,7 @@ impl ApplicationHandler for App {
         // Last of the three, and the only one that can fail without stopping
         // anything: with no device this is the silent `Audio` and the game
         // runs on.
-        self.audio = Audio::open();
+        self.audio.connect();
 
         if self.hot_reload {
             match AssetWatcher::new(&asset_root) {
