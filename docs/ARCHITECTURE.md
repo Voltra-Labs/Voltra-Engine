@@ -2288,11 +2288,89 @@ frame the atlas lacks draws the placeholder, as a sprite's does. Rebuilt every
 frame with the sprites; caching a mesh per chunk, and culling chunks against the
 camera, are the next steps when a level makes them show.
 
-**Editor.** An inspector section edits colour, sort order, tile size and the two
-paths and shows the tile count and bounds; **Scene ▸ Spawn tilemap** adds an
-empty layer at sort order −1. Cells are not edited in 25a, and a layer is not
-picked by clicking in the viewport (the hierarchy selects it); both come with
-the paint tool.
+**Editor.** An inspector section edits colour, sort order, tile size, the two
+paths and the collision flag, and shows the tile count and bounds; **Scene ▸
+Spawn tilemap** adds an empty layer at sort order −1. A click selects a layer
+where it has a tile — not its bounding box, which would cover the sky over an
+L-shaped level — weighed against the sprite under the same point by the same
+`draw_key` (`pick::entity_at`).
+
+### A solid layer's tiles become generated static boxes
+
+Stage 25b.
+
+**Solidity is per layer** (`Tilemap::collision`), Unity's `TilemapCollider2D`
+shape. Godot marks it per tile in the TileSet's physics layer instead, which
+lets one layer mix ground and decoration; a level keeps those on separate
+layers anyway, and per-frame solidity in the atlas is a later addition that
+this flag does not block.
+
+**Generated entities, not a compound shape.** The physics keys every contact,
+cached impulse and event by `Entity` and knows one collider per entity. A
+"tilemap collider" addressing parts of an entity would have to teach all of
+that; a static box per merged rectangle needs nothing. Each box is an entity
+with `Transform`, `RigidBody::new_static()`, `Collider::Box` and a
+`TileCollider { layer }` mark, plus copies of the layer's `CollisionLayers`,
+`PhysicsMaterial` and `Sensor`. No `SceneId`, so never saved, listed or picked
+— derived data, like a mesh. Events name the box; `TileCollider::layer` maps
+back. Physics reads a collider's `Transform` as world space, so a box is
+placed through the layer's composed matrix: a parented, turned or scaled
+layer is solid where it is drawn.
+
+**Merged greedily** (`tilemap::solid_boxes`): runs per row, a run grows upward
+while the row above holds the identical run. A solid block is one box
+whatever its size — the case that matters for both broad-phase count and the
+seam a body catches on between two boxes. Not the minimum cover; linear and
+deterministic instead.
+
+**Rebuilt when stale, checked every frame.** `sync_colliders` keeps on each
+box what it was built from — the layer's `Revision`, tile size, world matrix
+and copied filter — and rebuilds a layer whose inputs differ; boxes whose
+layer is gone or no longer solid are despawned. `App::advance` calls it before
+the physics steps (editing too, so the overlay shows them) and after each
+fixed tick inside the step loop. A rebuild means new entities, so bodies on a
+layer painted mid-play lose one step of warm start; reusing entities is not
+worth the bookkeeping yet.
+
+**`Revision` compares equal to every other revision.** A fresh number from a
+global counter on construction, on deserialize and on every `set`/`clear` that
+changes something; clones share it. Its `PartialEq` is always `true` so the
+derived `Tilemap` equality still means "same cells". An undo replaces the
+component with a deserialized copy, which is a fresh revision, so the boxes
+rebuild rather than trust a number that happened to match.
+
+### Painting is a viewport mode while a layer is selected
+
+Stage 25b. Godot's TileMap editor shape: with a paint tool armed and a
+`Tilemap` selected, a drag paints instead of grabbing the gizmo and a click
+paints instead of selecting. Unity's separate Tile Palette window owns the
+scene view the same way while one of its tools is active.
+
+**Keys are Unity's Tile Palette ones** — `B` brush, `U` rectangle, `D` eraser —
+for the reason `W`/`E`/`R` are the transform keys. Godot's put the rectangle
+on `R`, which is Scale here. Tool keys are ignored while the right button is
+held, since that is the WASD fly chord and `D` is in it. `W`/`E`/`R`, or
+selecting anything that is not a layer, disarms painting, so the toolbar never
+shows a paint tool pressed over a gizmo.
+
+**A stroke paints the segment, not the point.** A fast drag crosses several
+cells per frame; the brush and eraser walk every cell from the previous
+frame's (Bresenham) so the line has no gaps. A rectangle fills on release, and
+refuses — whole, logged — anything over `MAX_FILL` (2²⁰) cells, so a mis-drag
+across a zoomed-out view cannot freeze the editor.
+
+**One stroke, one undo entry.** The history watches the selection and a stroke
+edits only the selected layer, so it claims the open entry each frame it is
+live, the gizmo's mechanism. The stroke carries its own tool, so a key pressed
+mid-stroke arms the next one.
+
+**The palette is the tileset's frames, drawn from the sheet thumbnail**, in
+the inspector beside the tileset path. Picking a tile arms the brush if
+nothing is armed. The brush is editor state, not a scene edit.
+
+Not done, on purpose: a per-chunk mesh cache and camera culling (no level
+makes the per-frame rebuild show yet), auto-tiling, animated tiles,
+isometric/hex grids, per-tile solidity.
 
 ### wgpu 30 API notes
 

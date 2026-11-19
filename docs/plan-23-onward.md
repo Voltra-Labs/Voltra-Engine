@@ -12,8 +12,8 @@ an editor with hierarchy/inspector/gizmos/undo/play/asset browser, and a player
 binary, and since 23 it can make a sound — mixed through buses, faded, limited,
 reloaded and auditioned from the inspector — and since 24a it can stamp out
 copies of a prefab from a tick, and since 24b author one in the editor and
-drop it into a scene, and since 25a draw tilemap layers. What it still cannot
-do: paint tiles in the editor, print a number, read a gamepad, or be handed to
+drop it into a scene, and since 25 draw, paint and stand on tilemap layers.
+What it still cannot do: print a number, read a gamepad, or be handed to
 someone who does not have Rust installed.
 
 ## The order, and why
@@ -25,7 +25,7 @@ someone who does not have Rust installed.
 | ~~24a~~ | ~~Prefabs: spawn, ids, parent remap, tick API~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~24b~~ | ~~Prefabs: editor authoring and the instance link~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~25a~~ | ~~Tilemaps: data, format, mesh~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 25b | Tilemaps: collision and the paint tool | What 25a left; see below. Also the first scene that makes stage 28 urgent. |
+| ~~25b~~ | ~~Tilemaps: collision and the paint tool~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | 26 | In-game UI: text and screen space | A game cannot show a score. Held until here because a HUD wants prefabs and fonts want the atlas work from 22. |
 | 27 | Input actions and gamepads | Raw `KeyCode` is fine for one example and wrong for a game. Late on purpose: an action map is a thin layer over input that already works. |
 | 28 | Sleeping bodies and a real broad phase | `broad.rs` already names its own limit at ~200 bodies. A tilemap's generated colliders are what will cross it. |
@@ -35,29 +35,6 @@ Defensible reorderings, if the goal changes: aiming at **a playable demo**
 soonest is 23 → 24 → 26 → 29 and tiles later; aiming at **content tooling** is
 25 first and audio later. What should not move is 24 before 25/26 and 28 after
 whatever generates the bodies.
-
----
-
-## 25b — Tilemaps: collision and the paint tool
-
-25a landed: `Tilemap` as one entity per layer with sparse 16×16 chunks,
-Tiled-style cell encoding, meshed into the sprite batch by `sort_order`,
-resolved like a sprite, an inspector section and **Spawn tilemap**; the
-platformer's ground is drawn from `sprites/ground.atlas.ron`. Decisions under
-"A tilemap layer is one entity" in ARCHITECTURE.md.
-
-What is left:
-
-- **Collision**: merged boxes per run of solid tiles, generated from the layer
-  and stored as ordinary colliders — which tiles are solid is a property of
-  the tileset or the layer, to decide. Regenerated when the layer changes.
-  This is what makes stage 28 necessary. The platformer's ground boxes then
-  come from the tiles instead of beside them.
-- **Paint tool** alongside the transform tools: brush, rectangle, eraser, a
-  tile picker showing the atlas, undo per stroke; viewport picking of a layer.
-- **Per-chunk mesh cache and camera culling**, if a level makes the per-frame
-  rebuild show.
-- Still out: auto-tiling (rule tiles), animated tiles, isometric/hex grids.
 
 ---
 
@@ -167,7 +144,9 @@ graph — probably not now); Windows first, with Linux behind the same task.
 ## Cross-cutting, unscheduled
 
 Things that will want a stage of their own eventually, listed so they are not
-mistaken for oversights: particles (needs 22, wants 24), sorting layers and
+mistaken for oversights: particles (needs 22, wants 24), the tilemap's
+per-chunk mesh cache, camera culling, auto-tiling and animated tiles (after
+25; see its decisions), sorting layers and
 parallax, a render graph and post-processing, scene transitions and additive
 loading in the player, save games, a job system, and 3D — which per CLAUDE.md
 is a new subsystem with its own design, not a parameter added to any of the
