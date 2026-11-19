@@ -10,11 +10,12 @@ mod collision;
 mod name;
 mod path_field;
 mod sprite;
+mod tilemap;
 mod transform;
 
 use voltra_core::egui::{self, Color32, RichText, Ui};
 use voltra_core::UiFrame;
-use voltra_scene::{hierarchy, AudioSource, Camera, Collider, SceneId, Sprite, Transform};
+use voltra_scene::{hierarchy, AudioSource, Camera, Collider, SceneId, Sprite, Tilemap, Transform};
 
 use crate::editor::Editor;
 use crate::undo::SceneView;
@@ -91,6 +92,17 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if frame.world.get::<Sprite>(entity).is_some() {
                     ui.separator();
                     claim = claim.or(animation::show(ui, frame.world, entity, frames_in_atlas));
+                }
+                if let Some(map) = frame.world.get_mut::<Tilemap>(entity) {
+                    ui.separator();
+                    claim = claim.or(tilemap::show(
+                        ui,
+                        map,
+                        frame.textures,
+                        frame.atlases,
+                        frame.device,
+                        frame.queue,
+                    ));
                 }
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();
