@@ -14,8 +14,9 @@ use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
 use crate::{
-    AudioListener, AudioSource, Camera, Collider, CollisionLayers, Name, Parent, PhysicsMaterial,
-    PrefabInstance, RigidBody, Sensor, Sprite, SpriteAnimation, Text, Tilemap, Transform, UiRect,
+    AudioListener, AudioSource, Camera, Collider, CollisionLayers, Name, Parent, Persistent,
+    PhysicsMaterial, PrefabInstance, RigidBody, Sensor, Sprite, SpriteAnimation, Text, Tilemap,
+    Transform, UiRect,
 };
 
 /// A registered type's save conversion: entity to stored value, or `None` when
@@ -91,6 +92,7 @@ impl ComponentRegistry {
         registry.register::<Tilemap>("Tilemap");
         registry.register::<Text>("Text");
         registry.register::<UiRect>("UiRect");
+        registry.register::<Persistent>("Persistent");
         registry
     }
 

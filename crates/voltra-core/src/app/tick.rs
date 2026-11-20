@@ -69,6 +69,7 @@ pub struct Tick<'a> {
     /// [`Input::pressed_binding`] into [`ActionMap::rebind`]. A change is
     /// read from the next frame on; [`ActionMap::save`] keeps it.
     pub actions: &'a mut ActionMap,
+    pub(super) scenes: &'a mut super::scenes::Scenes,
     pub(super) prefabs: &'a mut Prefabs,
     pub(super) registry: &'a ComponentRegistry,
     pub(super) spawned: &'a mut Vec<Entity>,
@@ -97,6 +98,7 @@ impl App {
             world: &mut self.world,
             input: &self.input,
             actions: &mut self.actions,
+            scenes: &mut self.scenes,
             delta,
             contacts: self.physics_world.contacts(),
             events: &self.pending_events,
@@ -123,6 +125,7 @@ impl App {
             world: &mut self.world,
             input: &self.input,
             actions: &mut self.actions,
+            scenes: &mut self.scenes,
             delta,
             contacts: self.physics_world.contacts(),
             // The step before this one's: the step this tick precedes has not

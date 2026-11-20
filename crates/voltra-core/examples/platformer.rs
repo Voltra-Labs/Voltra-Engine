@@ -21,8 +21,8 @@ use voltra_core::{
 use voltra_ecs::Entity;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
-    Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, PhysicsMaterial,
-    RigidBody, Sprite, Text, Tile, Tilemap, Transform, UiRect,
+    Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, Persistent,
+    PhysicsMaterial, RigidBody, Sensor, Sprite, Text, Tile, Tilemap, Transform, UiRect,
 };
 
 /// This example's own component, in the same world as the engine's.
@@ -34,6 +34,14 @@ use voltra_scene::{
 /// which type the name means.
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Coin;
+
+/// The flag at the end of the level. Made in code, so it needs no name in
+/// the registry.
+struct Goal;
+
+/// Where touching the goal takes the walker: a scene file, so the second
+/// level is authored data rather than another function.
+const NEXT_LEVEL: &str = "scenes/platformer-2.ron";
 
 /// World units per second the walker travels at full tilt.
 const WALK_SPEED: f32 = 4.0;
@@ -106,6 +114,17 @@ fn main() {
                 coins += taken;
                 show_coins(tick, counter, coins);
             }
+            if reached_goal(tick, walker) {
+                // The walker, camera and HUD are `Persistent` and come along;
+                // everything else is replaced once this frame is over.
+                tick.load_scene(&asset(NEXT_LEVEL));
+                if let Some(transform) = tick.world.get_mut::<Transform>(walker) {
+                    transform.translation = Vec2::new(0.0, 0.0);
+                }
+                if let Some(body) = tick.world.get_mut::<RigidBody>(walker) {
+                    body.velocity = Vec2::ZERO;
+                }
+            }
 
             // Actions, from `assets/default.input.ron`: rebinding the keys
             // is an edit to that file, picked up while the game runs.
@@ -144,6 +163,8 @@ const COINS: [f32; 3] = [2.0, 6.0, 8.0];
 /// and it draws over the panel without a sort order of its own.
 fn spawn_hud(app: &mut App) -> Entity {
     let panel = app.world.spawn();
+    // Its counter is a child, and goes wherever the panel goes.
+    app.world.insert(panel, Persistent);
     app.world.insert(panel, voltra_scene::SceneId::new());
     app.world.insert(
         panel,
@@ -177,6 +198,15 @@ fn show_coins(tick: &mut Tick<'_>, counter: Entity, coins: usize) {
     if let Some(text) = tick.world.get_mut::<Text>(counter) {
         text.content = coins_label(coins);
     }
+}
+
+/// Whether the walker began touching the goal this step.
+fn reached_goal(tick: &Tick<'_>, walker: Entity) -> bool {
+    tick.events
+        .iter()
+        .filter(|event| event.touch == Touch::Began)
+        .filter_map(|event| event.other(walker))
+        .any(|other| tick.world.get::<Goal>(other).is_some())
 }
 
 /// Takes every coin the walker touched this step, and says how many.
@@ -314,7 +344,27 @@ Space",
         },
     );
 
+    // The flag at the far end of the ledge: a sensor, so it is walked
+    // through rather than stood on.
+    let goal = app.world.spawn();
+    app.world.insert(
+        goal,
+        Transform::from_translation(Vec2::new(7.5, -0.4)).with_scale(Vec2::new(0.3, 1.2)),
+    );
+    app.world
+        .insert(goal, Sprite::new([0.4, 1.0, 0.5, 1.0]).with_sort_order(4));
+    app.world.insert(
+        goal,
+        Collider::Box {
+            half_extents: Vec2::splat(0.5),
+        },
+    );
+    app.world.insert(goal, Sensor);
+    app.world.insert(goal, Goal);
+
     let walker = app.world.spawn();
+    // Carried into the next level; the level itself is not.
+    app.world.insert(walker, Persistent);
     app.world.insert(
         walker,
         Transform::from_translation(Vec2::new(0.0, 0.0)).with_scale(Vec2::new(0.7, 1.2)),
@@ -353,6 +403,7 @@ Space",
 /// The camera the frame is drawn through, since there is no editor here.
 fn spawn_camera(app: &mut App) -> Entity {
     let camera = app.world.spawn();
+    app.world.insert(camera, Persistent);
     app.world
         .insert(camera, Transform::from_translation(Vec2::new(0.0, -0.5)));
     app.world.insert(camera, Camera::new(4.0));

@@ -254,6 +254,7 @@ privileged and plain `cargo build` covers everything.
 | 27b | Gamepads: pad bindings, analog dead zones | done |
 | 28 | Sweep-and-prune broad phase, sleeping islands | done |
 | 29 | Export: `build.ron` manifest and `cargo xtask dist` | done |
+| 30 | Scene changes and additive loading from a tick, `Persistent` | done |
 
 ## Contributing
 

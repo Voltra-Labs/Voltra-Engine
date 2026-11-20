@@ -9,7 +9,7 @@ pub mod time;
 pub mod ui;
 pub mod window;
 
-pub use app::{App, Tick, UiFrame, DEFAULT_INPUT_MAP};
+pub use app::{App, SceneLoad, Tick, UiFrame, DEFAULT_INPUT_MAP};
 pub use input::{
     ActionMap, ActionState, Binding, Direction, Input, MouseButton, PadAxis, PadButton,
 };

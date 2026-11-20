@@ -6,6 +6,7 @@ mod draw;
 mod framing;
 mod gamepads;
 mod input_map;
+mod scenes;
 mod simulation;
 mod spawning;
 mod thumbnails;
@@ -38,6 +39,7 @@ use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 pub use input_map::DEFAULT_INPUT_MAP;
+pub use scenes::SceneLoad;
 pub use tick::Tick;
 pub use tick_audio::TickAudio;
 pub use ui_frame::UiFrame;
@@ -97,6 +99,9 @@ pub struct App {
     pending_events: Vec<CollisionEvent>,
     clock: Clock,
     input: Input,
+    /// Scene changes and additive loads the ticks asked for, and what each
+    /// additive load brought.
+    scenes: scenes::Scenes,
     /// Gamepads, once `resumed` has connected to the platform's API.
     gamepads: Option<gamepads::Gamepads>,
     /// The game's named actions, re-evaluated into `input` every frame.
@@ -349,6 +354,9 @@ impl App {
         self.step_physics(delta);
         // The fixed tick spawns too, from inside the steps.
         self.resolve_spawned();
+        // Last: a scene change despawns what the ticks and steps were holding,
+        // so it waits until they have let go.
+        self.apply_scene_requests();
     }
 
     /// Applies whatever the watcher saw since the last frame.

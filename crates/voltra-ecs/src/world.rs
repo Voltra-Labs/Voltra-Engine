@@ -71,6 +71,15 @@ impl World {
         self.entities.len()
     }
 
+    /// Every live entity, components or not, in index order.
+    ///
+    /// For the few callers that must reach entities a component query would
+    /// miss — a scene change despawning everything not kept, including
+    /// entities a game made in code with nothing a query could name them by.
+    pub fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.entities.iter()
+    }
+
     fn storage<T: 'static>(&self) -> Option<&SparseSet<T>> {
         self.storages
             .get(&TypeId::of::<T>())

@@ -92,6 +92,19 @@ impl Entities {
     pub fn is_empty(&self) -> bool {
         self.live_count == 0
     }
+
+    /// Every live entity, in index order.
+    pub fn iter(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.alive
+            .iter()
+            .zip(&self.generations)
+            .enumerate()
+            .filter(|(_, (alive, _))| **alive)
+            .map(|(index, (_, generation))| Entity {
+                index: index as u32,
+                generation: *generation,
+            })
+    }
 }
 
 #[cfg(test)]
@@ -161,5 +174,17 @@ mod tests {
         assert!(entities.is_alive(fresh));
         assert!(!entities.despawn(stale));
         assert!(entities.is_alive(fresh), "fresh survived the stale despawn");
+    }
+
+    #[test]
+    fn iteration_lists_the_live_entities_in_index_order() {
+        let mut entities = Entities::new();
+        let a = entities.spawn();
+        let b = entities.spawn();
+        let c = entities.spawn();
+        entities.despawn(b);
+        assert_eq!(entities.iter().collect::<Vec<_>>(), vec![a, c]);
+        let reused = entities.spawn();
+        assert_eq!(entities.iter().collect::<Vec<_>>(), vec![a, reused, c]);
     }
 }
