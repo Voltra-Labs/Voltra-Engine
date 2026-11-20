@@ -95,6 +95,10 @@ impl SpriteBatch {
                     .query2::<Transform, Text>()
                     .map(|(entity, _, text)| (entity, Drawn::Text(text))),
             )
+            // A `UiRect` puts an entity on the screen instead: the
+            // screen-space pass draws it, and drawing it here too would put a
+            // second copy in the world at its stale transform.
+            .filter(|(entity, _)| !crate::ui::is_ui(world, *entity))
             .collect();
         drawn.sort_unstable_by_key(|(entity, drawn)| draw_key(*entity, drawn.sort_order()));
 

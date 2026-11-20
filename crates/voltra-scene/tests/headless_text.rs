@@ -114,7 +114,7 @@ fn coverage_lands_in_alpha_and_the_colour_tints_it() {
         },
     );
     resolve_fonts(&mut world, &mut fonts);
-    prepare(&world, &mut fonts);
+    prepare(&world, &mut fonts, 1.0);
     fonts.upload(&mut textures, &device, &queue);
 
     let sheets = Sheets {

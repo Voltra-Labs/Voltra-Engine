@@ -9,7 +9,15 @@ use super::path_field::{self, PathEdit};
 
 /// Every field of a [`Text`]. One undo entry per edit through the caller's
 /// `claim`, as every other section.
-pub(super) fn show(ui: &mut Ui, text: &mut Text, fonts: &mut Fonts) -> Option<&'static str> {
+///
+/// `on_screen` for a text in a `UiRect`: its size is in points and it is
+/// rasterized at that size, so `pixels per em` does nothing and is hidden.
+pub(super) fn show(
+    ui: &mut Ui,
+    text: &mut Text,
+    fonts: &mut Fonts,
+    on_screen: bool,
+) -> Option<&'static str> {
     ui.label(RichText::new("Text").strong());
 
     // Multiline, and claimed while focused: one entry for a sentence typed,
@@ -24,8 +32,11 @@ pub(super) fn show(ui: &mut Ui, text: &mut Text, fonts: &mut Fonts) -> Option<&'
     );
 
     egui::Grid::new("text").num_columns(2).show(ui, |ui| {
-        ui.label("size")
-            .on_hover_text("the em height, in entity units");
+        ui.label("size").on_hover_text(if on_screen {
+            "the em height, in points"
+        } else {
+            "the em height, in entity units"
+        });
         claim = claim.or(active(
             &ui.add(
                 DragValue::new(&mut text.size)
@@ -36,13 +47,15 @@ pub(super) fn show(ui: &mut Ui, text: &mut Text, fonts: &mut Fonts) -> Option<&'
         ));
         ui.end_row();
 
-        ui.label("pixels per em")
-            .on_hover_text("raster resolution: higher is crisper when zoomed in");
-        claim = claim.or(active(
-            &ui.add(DragValue::new(&mut text.pixels_per_em).range(1..=Text::MAX_PIXELS_PER_EM)),
-            "Set text resolution",
-        ));
-        ui.end_row();
+        if !on_screen {
+            ui.label("pixels per em")
+                .on_hover_text("raster resolution: higher is crisper when zoomed in");
+            claim = claim.or(active(
+                &ui.add(DragValue::new(&mut text.pixels_per_em).range(1..=Text::MAX_PIXELS_PER_EM)),
+                "Set text resolution",
+            ));
+            ui.end_row();
+        }
 
         ui.label("colour");
         // A popup, as the sprite's colour is: see `sprite::show` for why the

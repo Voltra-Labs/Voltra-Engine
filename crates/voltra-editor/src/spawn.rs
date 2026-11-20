@@ -6,8 +6,10 @@
 //! and the same single history entry. A second copy of "spawn, select, commit"
 //! would drift.
 
+mod hud;
 mod text;
 
+pub(crate) use hud::{hud_panel, hud_text};
 pub(crate) use text::text;
 
 use voltra_assets::AssetPath;

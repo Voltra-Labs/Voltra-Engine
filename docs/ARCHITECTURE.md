@@ -2412,6 +2412,43 @@ yet — that is 26b.
 - Colour alpha is not drawn, as for sprites: the vertex is RGB. Widening it is
   its own change.
 
+### Screen-space UI is a `UiRect`, drawn in a second pass in pixels
+
+Stage 26b. Display-only — a HUD; input, buttons and focus are later.
+
+- **`UiRect` is Godot's anchors + offsets** (Unity's `RectTransform` without
+  the pivot): `anchor_min`/`anchor_max` are fractions of the parent rect,
+  `offset_min`/`offset_max` points added to the anchored corners. Equal
+  anchors pin a fixed-size box; spread anchors stretch it. `pinned(anchor,
+  offset, size)` and `stretched(margin)` are the two shapes everything is
+  authored with. Crossing offsets collapse to zero size rather than mirror.
+- **Points, y down, origin top-left.** Every UI toolkit authors that way, and
+  the world's y-up would make "16 points below the top" negative. Points are
+  physical pixels / window scale factor, so a HUD keeps its size on a dense
+  display; in the editor that is egui's points, which is what makes the
+  viewport pick line up with the draw.
+- **Parent = the nearest ancestor with a `UiRect`, else the screen.** Through
+  the existing `Parent` link — no second hierarchy. `UiLayout::from_world`
+  resolves every rect once per frame (memoised, cycle-safe), so a resize is
+  just the next frame.
+- **What draws:** an entity with a `UiRect` is screen-only — excluded from the
+  world batch and the world pick, its `Transform` ignored. Its `Sprite` fills
+  the rect (frame, region, flips kept); its `Text` is laid out in it, first
+  baseline one ascent below the top, aligned to the left edge / middle / right
+  edge. Both on one entity: sprite under text. Order is `(sort_order, UI
+  depth, entity index)`, so a child draws over its panel by default.
+- **UI text is rasterized at its on-screen size** (`ui_px` = size × scale,
+  `pixels_per_em` ignored) and its origin snapped to a whole pixel, so glyph
+  texels map 1:1. `text::prepare` takes the scale for exactly this.
+- **Render:** `voltra_render::screen_projection(w, h)` — not a `Camera2D`,
+  whose zoom floor cannot reach pixel units — in a second `CameraBinding`
+  (`sharing_layout`, its own buffer: two `write_buffer`s to one buffer before
+  a submit keep only the last). `draw_mesh_batches_over` loads instead of
+  clearing. `Renderer::render_mesh` / `render_scene` take a `Layer` drawn after
+  the world in the same encoder. Pinned by `voltra-scene/tests/headless_ui.rs`.
+- The editor draws the HUD over its viewport (what a build shows) and picks it
+  before the world.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -43,6 +43,18 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     });
                     ui.close();
                 }
+                if ui.button("Spawn HUD text").clicked() {
+                    spawn::record(editor, frame, "Spawn HUD text", |frame| {
+                        spawn::hud_text(frame, "HUD text")
+                    });
+                    ui.close();
+                }
+                if ui.button("Spawn HUD panel").clicked() {
+                    spawn::record(editor, frame, "Spawn HUD panel", |frame| {
+                        spawn::hud_panel(frame, "HUD panel")
+                    });
+                    ui.close();
+                }
                 if ui.button("Spawn camera").clicked() {
                     spawn::record(editor, frame, "Spawn camera", |frame| {
                         spawn::camera(frame, "Camera", Vec2::ZERO)

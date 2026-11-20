@@ -171,7 +171,7 @@ fn prepare_rasterizes_what_the_world_holds() {
     world.insert(e, Text::new("ab"));
     resolve_fonts(&mut world, &mut fonts);
 
-    prepare(&world, &mut fonts);
+    prepare(&world, &mut fonts, 1.0);
 
     let atlas = fonts
         .try_get(fonts.default_font())
@@ -192,7 +192,7 @@ mod in_the_world {
 
     fn ready(world: &mut World, fonts: &mut Fonts) {
         resolve_fonts(world, fonts);
-        prepare(world, fonts);
+        prepare(world, fonts, 1.0);
         // A texture handle from nowhere: the batch only compares it.
         fonts.forge_texture(fonts.default_font(), Handle::forge(7, 0));
     }

@@ -16,13 +16,13 @@ pub mod shader;
 pub mod target;
 pub mod texture;
 
-pub use camera::{Camera2D, CameraBinding};
+pub use camera::{screen_projection, Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
 pub use pass::MeshDraw;
-pub use renderer::Renderer;
+pub use renderer::{Layer, Renderer};
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};
 

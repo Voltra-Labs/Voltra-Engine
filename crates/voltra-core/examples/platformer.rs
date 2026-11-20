@@ -20,7 +20,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
     Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, PhysicsMaterial,
-    RigidBody, Sprite, Text, Tile, Tilemap, Transform,
+    RigidBody, Sprite, Text, Tile, Tilemap, Transform, UiRect,
 };
 
 /// This example's own component, in the same world as the engine's.
@@ -70,6 +70,8 @@ fn main() {
     .with_registry(registry);
     let walker = spawn_scene(&mut app);
     let camera = spawn_camera(&mut app);
+    let counter = spawn_hud(&mut app);
+    let mut coins = 0;
 
     // The one piece of state the two hooks share: a jump asked for this frame,
     // to be spent by the next step. Without it the fixed tick would have to
@@ -85,7 +87,11 @@ fn main() {
             follow(tick, camera, walker);
         })
         .with_fixed_update(move |tick| {
-            take_coins(tick, walker);
+            let taken = take_coins(tick, walker);
+            if taken > 0 {
+                coins += taken;
+                show_coins(tick, counter, coins);
+            }
 
             let direction = tick.input.axis(KeyCode::KeyA, KeyCode::KeyD)
                 + tick.input.axis(KeyCode::ArrowLeft, KeyCode::ArrowRight);
@@ -113,7 +119,53 @@ fn main() {
 /// In the fixed tick because that is where an event is handed over exactly
 /// once. Read per frame, the same `Began` would arrive on every frame that
 /// owed no step, and a coin would be worth three of itself.
-fn take_coins(tick: &mut Tick<'_>, walker: Entity) {
+/// The coins the level places, and so the most the counter can read.
+const COINS: [f32; 3] = [2.0, 6.0, 8.0];
+
+/// A HUD in the top-left corner: a dark panel and the coin counter on it.
+///
+/// Screen space, not world: it stays put while the camera follows the
+/// walker. The counter is the panel's child, so moving the panel moves it,
+/// and it draws over the panel without a sort order of its own.
+fn spawn_hud(app: &mut App) -> Entity {
+    let panel = app.world.spawn();
+    app.world.insert(panel, voltra_scene::SceneId::new());
+    app.world.insert(
+        panel,
+        UiRect::pinned(Vec2::ZERO, Vec2::splat(16.0), Vec2::new(180.0, 44.0)),
+    );
+    app.world
+        .insert(panel, Sprite::new([0.08, 0.09, 0.12, 1.0]));
+
+    let counter = app.world.spawn();
+    app.world.insert(counter, voltra_scene::SceneId::new());
+    app.world.insert(counter, UiRect::stretched(10.0));
+    app.world.insert(
+        counter,
+        Text {
+            size: 22.0,
+            color: [1.0, 0.85, 0.35, 1.0],
+            ..Text::new(coins_label(0))
+        },
+    );
+    if let Err(e) = voltra_scene::hierarchy::set_parent(&mut app.world, counter, panel) {
+        log::error!("could not put the counter on its panel: {e}");
+    }
+    counter
+}
+
+fn coins_label(coins: usize) -> String {
+    format!("Coins {coins} / {}", COINS.len())
+}
+
+fn show_coins(tick: &mut Tick<'_>, counter: Entity, coins: usize) {
+    if let Some(text) = tick.world.get_mut::<Text>(counter) {
+        text.content = coins_label(coins);
+    }
+}
+
+/// Takes every coin the walker touched this step, and says how many.
+fn take_coins(tick: &mut Tick<'_>, walker: Entity) -> usize {
     let taken: Vec<Entity> = tick
         .events
         .iter()
@@ -121,6 +173,7 @@ fn take_coins(tick: &mut Tick<'_>, walker: Entity) {
         .filter_map(|event| event.other(walker))
         .filter(|&other| tick.world.get::<Coin>(other).is_some())
         .collect();
+    let taken_count = taken.len();
 
     for coin in taken {
         // Read before the despawn, obviously, but also *played* before it: the
@@ -148,6 +201,7 @@ fn take_coins(tick: &mut Tick<'_>, walker: Entity) {
         tick.world.despawn(coin);
         log::info!("coin taken");
     }
+    taken_count
 }
 
 /// Whether `entity` has ground under its feet.
@@ -219,7 +273,7 @@ fn spawn_scene(app: &mut App) -> Entity {
     // Three copies of one file. The coin's sprite, spin, sound, sensor and
     // tag are authored once in `prefabs/coin.ron` rather than here, which is
     // the difference between a level and a function that builds one.
-    for x in [2.0, 6.0, 8.0] {
+    for x in COINS {
         let at = Transform::from_translation(Vec2::new(x, -1.6));
         if let Err(e) = app.spawn(&asset("prefabs/coin.ron"), &at) {
             log::error!("could not place a coin: {e}");

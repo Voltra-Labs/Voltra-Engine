@@ -50,9 +50,9 @@ fn font<'a>(text: &Text, fonts: &'a Fonts) -> Option<&'a Font> {
     Some(font)
 }
 
-/// Entity units per raster pixel.
-fn scale(text: &Text) -> f32 {
-    text.size / text.px() as f32
+/// Entity units per raster pixel, rasterized at `px`.
+fn scale(text: &Text, px: u32) -> f32 {
+    text.size / px.max(1) as f32
 }
 
 /// How far a line of `width` pixels is shifted to put its aligned end on
@@ -63,12 +63,18 @@ fn offset(text: &Text, width: f32) -> f32 {
 
 /// The laid-out box, or `None` with no usable font.
 pub fn bounds(text: &Text, fonts: &Fonts) -> Option<Bounds> {
-    let layout = font(text, fonts)?.layout(&text.content, text.px())?;
-    Some(bounds_of(text, &layout))
+    bounds_at(text, fonts, text.px())
 }
 
-fn bounds_of(text: &Text, layout: &TextLayout) -> Bounds {
-    let s = scale(text);
+/// [`bounds`] rasterized at `px` rather than the text's own
+/// `pixels_per_em` - what a screen-space text uses to land 1:1 on pixels.
+pub fn bounds_at(text: &Text, fonts: &Fonts, px: u32) -> Option<Bounds> {
+    let layout = font(text, fonts)?.layout(&text.content, px)?;
+    Some(bounds_of(text, &layout, px))
+}
+
+fn bounds_of(text: &Text, layout: &TextLayout, px: u32) -> Bounds {
+    let s = scale(text, px);
     let (mut left, mut right) = (f32::INFINITY, f32::NEG_INFINITY);
     for &width in &layout.line_widths {
         let start = offset(text, width);
@@ -90,15 +96,20 @@ fn bounds_of(text: &Text, layout: &TextLayout) -> Bounds {
 /// `None` until the atlas's first upload; the quads are computed anyway, so
 /// their placement is testable without a GPU.
 pub fn glyphs(text: &Text, fonts: &Fonts) -> (Vec<GlyphQuad>, Option<Handle<Texture>>) {
+    glyphs_at(text, fonts, text.px())
+}
+
+/// [`glyphs`] rasterized at `px`; see [`bounds_at`].
+pub fn glyphs_at(text: &Text, fonts: &Fonts, px: u32) -> (Vec<GlyphQuad>, Option<Handle<Texture>>) {
     let Some(font) = font(text, fonts) else {
         return (Vec::new(), None);
     };
     let texture = font.texture();
-    let Some(layout) = font.layout(&text.content, text.px()) else {
+    let Some(layout) = font.layout(&text.content, px) else {
         return (Vec::new(), None);
     };
 
-    let s = scale(text);
+    let s = scale(text, px);
     let atlas = font.atlas();
     let quads = layout
         .glyphs

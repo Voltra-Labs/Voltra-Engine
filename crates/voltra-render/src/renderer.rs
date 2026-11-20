@@ -2,7 +2,7 @@
 
 use wgpu::SurfaceTarget;
 
-use crate::camera::{Camera2D, CameraBinding};
+use crate::camera::{screen_projection, Camera2D, CameraBinding};
 use crate::context::GpuContext;
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
@@ -16,6 +16,9 @@ pub struct Renderer {
     ctx: GpuContext,
     flat_color: wgpu::RenderPipeline,
     camera_binding: CameraBinding,
+    /// The screen-space UI's projection, in its own buffer so it and the
+    /// world camera can both be written before one submit.
+    ui_camera_binding: CameraBinding,
     /// Layout group 1 was built against. Exposed so a texture cache outside
     /// this crate can build bind groups that actually match the pipeline —
     /// a second layout with the same descriptor does not.
@@ -35,6 +38,7 @@ impl Renderer {
     pub fn new(target: impl Into<SurfaceTarget<'static>>, width: u32, height: u32) -> Self {
         let ctx = GpuContext::new(target, width, height);
         let camera_binding = CameraBinding::new(ctx.device());
+        let ui_camera_binding = camera_binding.sharing_layout(ctx.device());
         let texture_layout = texture::bind_group_layout(ctx.device());
         let flat_color = pipeline::create_flat_color(
             ctx.device(),
@@ -63,6 +67,7 @@ impl Renderer {
             ctx,
             flat_color,
             camera_binding,
+            ui_camera_binding,
             texture_layout,
             white_bind_group,
             lines,
@@ -101,10 +106,11 @@ impl Renderer {
         self.camera.aspect = aspect_of(width, height);
     }
 
-    /// Draws `mesh` straight to the window, or just clears it.
+    /// Draws `mesh` straight to the window, or just clears it, then `ui`
+    /// over it in the window's pixels.
     ///
     /// The path a shipped game takes: no editor, no intermediate texture.
-    pub fn render_mesh(&mut self, mesh: Option<&Mesh>, draws: &[MeshDraw<'_>]) {
+    pub fn render_mesh(&mut self, mesh: Option<&Mesh>, draws: &[MeshDraw<'_>], ui: Layer<'_>) {
         let Some(frame) = self.ctx.acquire() else {
             return;
         };
@@ -121,6 +127,8 @@ impl Renderer {
                 });
 
         self.record_scene(&mut encoder, &view, mesh, draws);
+        let (width, height) = (self.ctx.config().width, self.ctx.config().height);
+        self.record_ui(&mut encoder, &view, width, height, ui);
 
         self.ctx.queue().submit(Some(encoder.finish()));
         self.ctx.present(frame);
@@ -136,6 +144,7 @@ impl Renderer {
         target: &RenderTarget,
         mesh: Option<&Mesh>,
         draws: &[MeshDraw<'_>],
+        ui: Layer<'_>,
     ) {
         let mut encoder =
             self.ctx
@@ -145,6 +154,13 @@ impl Renderer {
                 });
 
         self.record_scene(&mut encoder, target.view(), mesh, draws);
+        self.record_ui(
+            &mut encoder,
+            target.view(),
+            target.width(),
+            target.height(),
+            ui,
+        );
         self.ctx.queue().submit(Some(encoder.finish()));
     }
 
@@ -229,6 +245,32 @@ impl Renderer {
         self.ctx.present(frame);
     }
 
+    /// The screen-space layer, over the scene, in the target's pixels.
+    fn record_ui(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        view: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+        ui: Layer<'_>,
+    ) {
+        if ui.mesh.is_none() {
+            return;
+        }
+        self.ui_camera_binding.upload_matrix(
+            self.ctx.queue(),
+            screen_projection(width as f32, height as f32),
+        );
+        pass::draw_mesh_batches_over(
+            encoder,
+            view,
+            &self.flat_color,
+            self.ui_camera_binding.bind_group(),
+            ui.mesh,
+            ui.draws,
+        );
+    }
+
     fn record_scene(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -250,6 +292,21 @@ impl Renderer {
             self.clear_color,
         );
     }
+}
+
+/// Geometry drawn in a target's own pixels over the scene - y down, origin
+/// top-left - with the sprite pipeline. [`Layer::EMPTY`] draws nothing.
+#[derive(Clone, Copy)]
+pub struct Layer<'a> {
+    pub mesh: Option<&'a Mesh>,
+    pub draws: &'a [MeshDraw<'a>],
+}
+
+impl Layer<'_> {
+    pub const EMPTY: Layer<'static> = Layer {
+        mesh: None,
+        draws: &[],
+    };
 }
 
 /// Guards against the divide-by-zero a minimised window would otherwise cause.
