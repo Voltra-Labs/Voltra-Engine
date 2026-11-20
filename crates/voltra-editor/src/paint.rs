@@ -38,6 +38,10 @@ pub struct Paint {
     /// What the brush and the rectangle write. Picked in the inspector's
     /// palette; frame 0, unmirrored, until then.
     pub brush: Tile,
+    /// The terrain the brush, the rectangle and the eraser paint with
+    /// instead of `brush`, if one is chosen in the inspector: cells join up
+    /// with their neighbours as they are drawn.
+    pub terrain: Option<usize>,
     stroke: Option<Stroke>,
     /// The cell under the pointer this frame, for the outline.
     hovered: Option<IVec2>,
@@ -129,7 +133,14 @@ impl Paint {
             // last cell the pointer was over.
             if stroke.tool == PaintTool::Rectangle {
                 if let Some(map) = frame.world.get_mut::<Tilemap>(layer) {
-                    stroke::fill(map, stroke.anchor, stroke.last, Some(self.brush));
+                    match self.terrain_on(map) {
+                        Some(terrain) => {
+                            stroke::fill_terrain(map, stroke.anchor, stroke.last, Some(terrain));
+                        }
+                        None => {
+                            stroke::fill(map, stroke.anchor, stroke.last, Some(self.brush));
+                        }
+                    }
                 }
             }
             self.stroke = None;
@@ -146,8 +157,20 @@ impl Paint {
             PaintTool::Rectangle => return,
         };
         if let Some(map) = world.get_mut::<Tilemap>(stroke.layer) {
-            stroke::line(map, stroke.last, to, tile);
+            match self.terrain_on(map) {
+                Some(terrain) => {
+                    let terrain = tile.map(|_| terrain);
+                    stroke::line_terrain(map, stroke.last, to, terrain);
+                }
+                None => stroke::line(map, stroke.last, to, tile),
+            }
         }
+    }
+
+    /// The chosen terrain, if `map` has one at that index — a choice made on
+    /// one layer means nothing on a layer with fewer terrains.
+    fn terrain_on(&self, map: &Tilemap) -> Option<usize> {
+        self.terrain.filter(|&index| index < map.terrains.len())
     }
 
     /// Outlines the cell under the pointer, or the rectangle being dragged.

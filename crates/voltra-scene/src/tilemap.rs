@@ -25,6 +25,7 @@ mod chunk;
 pub mod colliders;
 pub mod mesh;
 mod revision;
+pub mod terrain;
 
 use std::collections::BTreeMap;
 
@@ -39,6 +40,7 @@ pub use chunk::CHUNK;
 use chunk::{cell_of, locate, Chunk, ChunkKey};
 pub use colliders::{sync_colliders, TileCollider};
 pub use revision::Revision;
+pub use terrain::Terrain;
 
 /// One cell's contents: which frame of the atlas, and which way round.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -96,6 +98,9 @@ pub struct Tilemap {
     /// that frame cycles through the animation instead.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub animations: BTreeMap<u32, TileAnimation>,
+    /// Frame sets that join up when painted: see [`terrain`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub terrains: Vec<Terrain>,
     #[serde(with = "chunk::layout")]
     chunks: BTreeMap<ChunkKey, Chunk>,
     /// Changes whenever a cell does. Never saved: a loaded layer is new.
@@ -115,6 +120,7 @@ impl Default for Tilemap {
             atlas: None,
             atlas_handle: None,
             animations: BTreeMap::new(),
+            terrains: Vec::new(),
             chunks: BTreeMap::new(),
             revision: Revision::fresh(),
         }

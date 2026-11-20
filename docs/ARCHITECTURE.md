@@ -2840,6 +2840,32 @@ reads as none (`skip_serializing_if` keeps it out of files that do not use it).
   animate it differently, and the atlas stays a pure slicing. The inspector
   edits base frame, frames (`4, 5, 6`) and seconds per frame.
 
+### Auto-tiling is a 16-frame terrain per layer, re-picked around each edit
+
+Stage 39. Godot's "Match Sides" terrain mode, the 16-tile set every 2D
+tool knows: `Tilemap::terrains` is a list of `Terrain { name, frames: [u32;
+16] }`, where `frames[mask]` is the frame for a cell whose same-terrain
+neighbours are the sides in `mask` (N = 1, E = 2, S = 4, W = 8; cell `y`
+grows up, as the layer does).
+
+- **Membership is read from the frame**, not stored: a cell belongs to the
+  first terrain whose frames include its tile's. The cell format does not
+  change, a level painted by hand keeps working, and a terrain can be added to
+  a layer already painted with its frames. The cost: a frame used both inside
+  a terrain and on its own is read as the terrain's.
+- **`Tilemap::paint_terrain(cell, Some(t) | None)`** paints or empties the
+  cell and re-picks it and its four neighbours — every cell whose
+  neighbourhood could have changed. Flips are kept; a terrain says which
+  frame, not which way round. Two terrains never join. An index the layer
+  does not have writes nothing.
+- **Editor**: the inspector lists a layer's terrains — name, the sixteen
+  frames in a 4 × 4 grid with each one's sides as a tooltip, *paint* to make
+  it the brush — and the brush, rectangle and eraser then paint by terrain
+  (`stroke::line_terrain`, `fill_terrain`, under the same fill limit). The
+  choice is editor state, ignored on a layer that lacks that index.
+- **Not yet:** the 47-tile "corners and sides" blob, which needs the
+  diagonals; it is the same shape with an 8-bit mask and a lookup.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
