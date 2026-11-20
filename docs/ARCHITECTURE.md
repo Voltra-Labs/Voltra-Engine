@@ -986,7 +986,9 @@ normalised — `glam`'s `normalize` of a zero vector is `NaN`, not an error, and
 - **Explicit Euler.** Two lines cheaper, and it adds energy for free.
 - **Storing mass.** A divide and a zero-check at every use site.
 
-### The broad phase is O(n²), and detection shipped before resolution
+### The broad phase was O(n²), and detection shipped before resolution
+
+*Superseded for the broad phase by "The broad phase is sweep-and-prune" below.*
 
 **`candidate_pairs` compares every pair, rejecting on world-space AABBs.** For
 the tens of bodies a scene holds today this beats a spatial hash, which pays for
@@ -2514,6 +2516,61 @@ Stage 27b. `gilrs` 0.11 in `voltra-core` only, in one file
   keys are.
 - **Polled** at the top of `App::update`, before the frame's actions are
   derived. `Gilrs::new` failing is logged; the game runs without pads.
+
+### The broad phase is sweep-and-prune, and settled islands sleep
+
+Stage 28, measured before and after with `cargo run --release -p
+voltra-physics --example stress` (10 simulated seconds, this machine):
+
+| Scene | Before (O(n²)) | Sweep-and-prune | + sleeping |
+| --- | --- | --- | --- |
+| level: 2 000 static tiles, 150 crates | 12.3 ms/step | 1.2–1.5 | 1.0–1.2 |
+| pyramid: 210 boxes, settled | 1.5–1.7 | 1.0–1.1 | **0.40** (all asleep) |
+
+- **Sweep-and-prune on x** replaces the n² loop behind the same
+  `candidate_pairs` signature (`sweep` also returns the bounds-test count,
+  which the tests pin — a timing is not a test). Pairs with no dynamic side
+  are dropped unless one is a sensor: tile against tile, wall against
+  kinematic platform. That also removes static–static contacts from
+  `PhysicsWorld::contacts`, which Box2D never makes either. Pairs come out
+  sorted by entity index, so the solve order no longer depends on storage
+  order.
+- **Sleeping is Box2D's island rule.** A dynamic body below
+  `SleepParams::{linear,angular}_tolerance` accumulates rest; an island
+  (dynamic bodies joined by solid contacts — static and kinematic bodies join
+  nothing) sleeps when its least-rested member has rested `time_to_sleep`. A
+  moving kinematic body *drives* what it touches, which never sleeps.
+- **Defaults: 0.1 u/s, 5°/s, 0.5 s.** Twice Box2D v3's linear tolerance: this
+  solver leaves a settled 20-row pyramid at ~6 cm/s of jitter, which never
+  sleeps at 5. 0.1 u/s is Unity's default (its 0.005 kinetic-energy-per-mass
+  threshold). Crates on the *seam* between two per-tile floor boxes jitter
+  above it and stay awake — the ghost-collision limit; real tilemaps merge
+  their boxes (25b), so the stress floor is the pessimistic case.
+- **Waking**, before the collide, from the body's own state: a velocity
+  written by the game, a transform moved from outside, a type change,
+  `can_sleep` turned off, or a *partner* (anything it rested against) gone,
+  stripped of its collider, or moved. Partner state rather than "is the
+  contact still reported": edge-to-edge boxes flicker in and out of contact,
+  and waking on that kept a whole level awake. After the collide, a sleeping
+  body touching an awake dynamic body or a moving kinematic one wakes, and
+  its sleeping neighbours with it (a flood fill, built only when there is a
+  seed — the usual settled step builds nothing).
+- **What sleeping skips:** integration and the solve (sleeping bodies are
+  `freeze`d in `SolverBodies`), and the narrow phase — a pair with nothing
+  awake reuses the contact it rested with, as Box2D keeps sleeping contacts.
+  Its impulses are carried over (`ImpulseCache::keep`) so a woken stack does
+  not jolt. `contacts()` and the events still include sleeping pairs: a
+  resting character is still standing on the floor, and falling asleep is not
+  an `Ended`.
+- **State lives in `PhysicsWorld`**, not on the component — a scene file
+  does not say a crate is asleep. `RigidBody::can_sleep` (serde default
+  `true`) is the one authored switch; `PhysicsWorld::{is_asleep, wake,
+  asleep_count}` and `SolverParams::sleep` (`enabled: false` restores
+  always-awake) are the code-side ones. `reset` wakes everything.
+- **Measured, then fixed:** the first version spent ~650 µs per settled step
+  in bookkeeping against 3 µs of solve. SipHash on entity keys and island
+  building every step were most of it; `physics::hash::FastMap` (FxHash's
+  mix, in-house) and seed-only flood fills took it out.
 
 ### wgpu 30 API notes
 

@@ -189,6 +189,14 @@ impl SolverBodies {
         Self { bodies, index }
     }
 
+    /// Treats `entity` as immovable for this step: a sleeping body is not
+    /// integrated, is not pushed, and is not written back.
+    pub fn freeze(&mut self, entity: Entity) {
+        if let Some(&index) = self.index.get(&entity) {
+            self.bodies[index] = SolverBody::immovable(entity);
+        }
+    }
+
     pub fn index_of(&self, entity: Entity) -> Option<usize> {
         self.index.get(&entity).copied()
     }

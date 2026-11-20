@@ -51,6 +51,16 @@ pub struct RigidBody {
     /// Box2D. A platformer character must stay upright, and nothing about its
     /// shape says so — the body has to.
     pub lock_rotation: bool,
+    /// Whether the body may go to sleep once at rest. On by default, as in
+    /// every engine; off for a body something reads every step and that must
+    /// never be skipped, or one moved only through its velocity by code that
+    /// sets the same value it already has.
+    #[serde(default = "can_sleep_by_default")]
+    pub can_sleep: bool,
+}
+
+fn can_sleep_by_default() -> bool {
+    true
 }
 
 impl Default for RigidBody {
@@ -64,6 +74,7 @@ impl Default for RigidBody {
             linear_damping: 0.0,
             angular_damping: 0.0,
             lock_rotation: false,
+            can_sleep: true,
         }
     }
 }
@@ -173,11 +184,19 @@ mod tests {
             linear_damping: 0.1,
             angular_damping: 0.2,
             lock_rotation: false,
+            can_sleep: false,
         };
 
         let text = ron::to_string(&body).expect("serialise");
         let back: RigidBody = ron::from_str(&text).expect("deserialise");
 
         assert_eq!(back, body);
+    }
+
+    #[test]
+    fn a_body_saved_before_sleeping_existed_may_sleep() {
+        let text = "(body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:1.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false)";
+        let body: RigidBody = ron::from_str(text).expect("an old body still reads");
+        assert!(body.can_sleep);
     }
 }

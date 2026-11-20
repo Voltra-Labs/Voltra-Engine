@@ -1,66 +1,128 @@
 //! Which pairs are worth an exact test.
 //!
-//! O(n²) with a world-space AABB rejection, deliberately. For the tens of
-//! bodies a scene holds today this beats a spatial hash, which pays for
-//! bucketing before it saves anything.
+//! Sweep-and-prune on x: every collider's world bounds sorted by their left
+//! edge, then each one tested only against those that start before it ends.
+//! A 2D level is wide, so x is the axis that separates most; a stack of
+//! crates shares an x range and pays roughly what the old O(n²) loop did,
+//! but a level of thousands of tiles stops paying for every tile against
+//! every other.
 //!
-//! **Replace it past roughly 200 bodies** — n² is 20 000 pair tests per step at
-//! 60 Hz there, which is the point it stops being free. Sweep-and-prune on the
-//! x axis is the replacement, because a 2D world is wide. The signature below
-//! does not change when that happens; that is what it is for.
+//! Pairs that could never produce anything are dropped before the exact
+//! test: two colliders neither of which is a dynamic body — tile against
+//! tile, wall against platform — unless one is a sensor, which still reports
+//! what overlaps it. Box2D never makes those contacts either.
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, CollisionLayers, Transform};
+use voltra_scene::{BodyType, Collider, CollisionLayers, RigidBody, Sensor, Transform};
 
-/// A collider's world bounds and what it is allowed to touch.
-type Candidate = (Entity, (Vec2, Vec2), Option<CollisionLayers>);
+/// A collider's world bounds, what it may touch, and whether a pair with it
+/// can matter on its own.
+struct Candidate {
+    entity: Entity,
+    min: Vec2,
+    max: Vec2,
+    layers: Option<CollisionLayers>,
+    /// A dynamic body: the only thing a contact can move.
+    dynamic: bool,
+    sensor: bool,
+}
+
+/// What a sweep found, and how much work it took — the count is what the
+/// tests pin, since a timing is not deterministic.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Sweep {
+    pub pairs: Vec<(Entity, Entity)>,
+    /// Bounds tests performed: pairs whose x ranges overlapped.
+    pub tests: usize,
+}
 
 /// Pairs whose bounds overlap and whose layers let them interact, each once,
-/// with the lower entity index first.
+/// lower entity index first, sorted — so the solver sees the same order
+/// whatever order the colliders were stored in.
 ///
-/// The layer test comes first because it is the cheaper of the two and because
-/// a pair that can never interact is not a candidate — filtering it later
-/// would mean paying for its bounds test on every step for the whole life of
-/// the scene. Sensors stay candidates: they are detected here and only stop
-/// being ordinary at the solver.
+/// The layer test runs before the y test because it is the cheaper of the
+/// two. Sensors stay candidates: they are detected here and only stop being
+/// ordinary at the solver.
 pub fn candidate_pairs(world: &World) -> Vec<(Entity, Entity)> {
-    let bounds: Vec<Candidate> = world
+    sweep(world).pairs
+}
+
+/// [`candidate_pairs`], with the number of bounds tests it took.
+pub fn sweep(world: &World) -> Sweep {
+    let mut candidates: Vec<Candidate> = world
         .query::<Collider>()
         .filter_map(|(entity, collider)| {
             let transform = world.get::<Transform>(entity)?;
-            let layers = world.get::<CollisionLayers>(entity).copied();
-            Some((entity, collider.world_aabb(transform), layers))
+            let (min, max) = collider.world_aabb(transform);
+            // A NaN edge would sort nowhere and overlap nothing; dropping it
+            // keeps one bad transform from disturbing the sweep for the rest.
+            if !(min.is_finite() && max.is_finite()) {
+                return None;
+            }
+            Some(Candidate {
+                entity,
+                min,
+                max,
+                layers: world.get::<CollisionLayers>(entity).copied(),
+                dynamic: world
+                    .get::<RigidBody>(entity)
+                    .is_some_and(|body| body.body_type == BodyType::Dynamic),
+                sensor: world.get::<Sensor>(entity).is_some(),
+            })
         })
         .collect();
+    candidates.sort_unstable_by(|a, b| {
+        a.min
+            .x
+            .total_cmp(&b.min.x)
+            .then(a.entity.index().cmp(&b.entity.index()))
+    });
 
-    let mut pairs = Vec::new();
-    for (i, (a, a_bounds, a_layers)) in bounds.iter().enumerate() {
-        // From `i + 1`, which is what gives each pair exactly once, never
-        // mirrored, and never a body against itself. Emitting both `(a,b)` and
-        // `(b,a)` would double every impulse the solver applies in the next
-        // stage.
-        for (b, b_bounds, b_layers) in &bounds[i + 1..] {
-            if CollisionLayers::interact(a_layers.as_ref(), b_layers.as_ref())
-                && overlaps(*a_bounds, *b_bounds)
+    let mut found = Sweep::default();
+    for (i, a) in candidates.iter().enumerate() {
+        // Everything after `a` starts at or right of `a`'s left edge; the
+        // first that starts past its right edge ends the run, and so do all
+        // after it. Each pair is met once, from its leftmost member.
+        for b in candidates[i + 1..]
+            .iter()
+            .take_while(|b| b.min.x <= a.max.x)
+        {
+            found.tests += 1;
+            if !(a.dynamic || b.dynamic || a.sensor || b.sensor) {
+                continue;
+            }
+            if CollisionLayers::interact(a.layers.as_ref(), b.layers.as_ref())
+                && a.min.y <= b.max.y
+                && a.max.y >= b.min.y
             {
-                pairs.push((*a, *b));
+                let pair = if a.entity.index() <= b.entity.index() {
+                    (a.entity, b.entity)
+                } else {
+                    (b.entity, a.entity)
+                };
+                found.pairs.push(pair);
             }
         }
     }
-    pairs
-}
-
-/// Whether two `(min, max)` boxes share any area.
-fn overlaps((a_min, a_max): (Vec2, Vec2), (b_min, b_max): (Vec2, Vec2)) -> bool {
-    a_min.x <= b_max.x && a_max.x >= b_min.x && a_min.y <= b_max.y && a_max.y >= b_min.y
+    found
+        .pairs
+        .sort_unstable_by_key(|(a, b)| (a.index(), b.index()));
+    found
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    /// A dynamic box: a pair needs a dynamic side to be worth testing.
     fn spawn(world: &mut World, at: Vec2, half: f32) -> Entity {
+        let entity = spawn_static(world, at, half);
+        world.insert(entity, RigidBody::new_dynamic(1.0));
+        entity
+    }
+
+    fn spawn_static(world: &mut World, at: Vec2, half: f32) -> Entity {
         let entity = world.spawn();
         world.insert(entity, Transform::from_translation(at));
         world.insert(
@@ -198,5 +260,74 @@ mod tests {
         spawn(&mut world, Vec2::new(2.0, 0.0), 1.0);
 
         assert_eq!(candidate_pairs(&world).len(), 1);
+    }
+
+    #[test]
+    fn two_static_colliders_are_never_a_pair() {
+        let mut world = World::new();
+        spawn_static(&mut world, Vec2::ZERO, 1.0);
+        spawn_static(&mut world, Vec2::new(0.5, 0.0), 1.0);
+        assert!(candidate_pairs(&world).is_empty());
+    }
+
+    #[test]
+    fn a_static_sensor_still_pairs_with_static_geometry() {
+        let mut world = World::new();
+        let wall = spawn_static(&mut world, Vec2::ZERO, 1.0);
+        let zone = spawn_static(&mut world, Vec2::new(0.5, 0.0), 1.0);
+        world.insert(zone, Sensor);
+        assert_eq!(candidate_pairs(&world), vec![(wall, zone)]);
+    }
+
+    #[test]
+    fn a_kinematic_body_and_a_wall_are_not_a_pair() {
+        let mut world = World::new();
+        spawn_static(&mut world, Vec2::ZERO, 1.0);
+        let platform = spawn_static(&mut world, Vec2::new(0.5, 0.0), 1.0);
+        world.insert(
+            platform,
+            RigidBody {
+                body_type: BodyType::Kinematic,
+                ..RigidBody::new_static()
+            },
+        );
+        assert!(candidate_pairs(&world).is_empty());
+    }
+
+    #[test]
+    fn pairs_come_out_in_index_order_whatever_the_positions() {
+        let mut world = World::new();
+        let a = spawn(&mut world, Vec2::new(3.0, 0.0), 1.0);
+        let b = spawn(&mut world, Vec2::new(2.0, 0.0), 1.0);
+        let c = spawn(&mut world, Vec2::new(1.0, 0.0), 1.0);
+        assert_eq!(candidate_pairs(&world), vec![(a, b), (a, c), (b, c)]);
+    }
+
+    #[test]
+    fn a_wide_level_costs_tests_per_neighbour_not_per_pair() {
+        // A tilemap's worth of floor and a few bodies on it. The O(n²) loop
+        // made two million tests of this; the sweep makes a few per tile.
+        let mut world = World::new();
+        for i in 0..2000 {
+            spawn_static(&mut world, Vec2::new(i as f32, 0.0), 0.5);
+        }
+        for i in 0..20 {
+            spawn(&mut world, Vec2::new(i as f32 * 50.0 + 0.5, 1.0), 0.5);
+        }
+        let found = sweep(&world);
+        assert!(found.tests < 10_000, "{} tests", found.tests);
+        assert_eq!(
+            found.pairs.len(),
+            20 * 2,
+            "each body touches the two tiles under it"
+        );
+    }
+
+    #[test]
+    fn a_collider_at_a_nan_position_is_left_out() {
+        let mut world = World::new();
+        spawn(&mut world, Vec2::ZERO, 1.0);
+        spawn(&mut world, Vec2::new(f32::NAN, 0.0), 1.0);
+        assert!(candidate_pairs(&world).is_empty());
     }
 }

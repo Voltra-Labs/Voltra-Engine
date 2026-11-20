@@ -30,36 +30,13 @@ someone who does not have Rust installed.
 | ~~26b~~ | ~~In-game UI: screen-space pass, `UiRect`, a HUD~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~27a~~ | ~~Input actions: the map, evaluation, rebinding~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~27b~~ | ~~Gamepads through `gilrs`, analog bindings and dead zones~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 28 | Sleeping bodies and a real broad phase | `broad.rs` already names its own limit at ~200 bodies. A tilemap's generated colliders are what will cross it. |
+| ~~28~~ | ~~Sleeping bodies and a real broad phase~~ | **Landed.** Decisions and numbers in ARCHITECTURE.md. |
 | 29 | Export: `xtask`, and a build manifest | Turning the tree into a folder someone else can run. Last, because it packages whatever exists. |
 
 Defensible reorderings, if the goal changes: aiming at **a playable demo**
 soonest is 23 → 24 → 26 → 29 and tiles later; aiming at **content tooling** is
 25 first and audio later. What should not move is 24 before 25/26 and 28 after
 whatever generates the bodies.
-
----
-
-## 28 — Sleeping bodies and a real broad phase
-
-**Why now.** `broad.rs` documents its own limit — O(n²) stops being free at
-roughly 200 bodies — and `lib.rs` lists sleeping among what is deliberately not
-simulated. A tilemap's generated colliders are what will cross both lines.
-
-**Shape.**
-
-- Sleeping: Box2D's rule — a body under a linear and angular threshold for a
-  time goes to sleep, an island sleeps together, and a touch or a force wakes
-  it. It removes both the cost and the millimetre of jitter a settled stack
-  keeps today.
-- Sweep-and-prune on x, which `broad.rs` already names as the intended
-  replacement, behind the same signature it kept for this reason.
-- A measurement harness first. Neither change is worth making without a number
-  before and after, and "it feels faster" is not a number.
-
-**Decisions to make.** Whether the harness is `criterion` as a dev-dependency
-or a small deterministic timing test; where islands live (the solver already
-gathers bodies); whether static geometry is excluded from the sweep entirely.
 
 ---
 

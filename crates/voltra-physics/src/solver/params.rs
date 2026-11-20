@@ -3,6 +3,7 @@
 use std::f32::consts::PI;
 
 use super::softness::Softness;
+use crate::sleep::SleepParams;
 
 /// The solver's tuning, all of it.
 ///
@@ -39,6 +40,8 @@ pub struct SolverParams {
     /// A switch rather than an assumption, because turning it off is how its
     /// effect is demonstrated: a stack that settles becomes a stack that sinks.
     pub warm_starting: bool,
+    /// When bodies at rest go to sleep. See [`crate::sleep`].
+    pub sleep: SleepParams,
 }
 
 impl Default for SolverParams {
@@ -51,6 +54,7 @@ impl Default for SolverParams {
             restitution_threshold: 1.0,
             max_rotation: 0.25 * PI,
             warm_starting: true,
+            sleep: SleepParams::default(),
         }
     }
 }
