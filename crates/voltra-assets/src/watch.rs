@@ -74,12 +74,19 @@ pub fn is_font(name: &str) -> bool {
     has_extension(name, FONT_EXTENSIONS)
 }
 
+/// Whether a file name is an input map: `*.input.ron`, the suffix that
+/// keeps it out of the scene list the way `*.atlas.ron` keeps a slicing out.
+pub fn is_input_map(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".input.ron")
+}
+
 /// Whether a file name is a scene, which is also what a prefab is.
 ///
-/// Any `.ron` that is not a slicing. The atomic save's `demo.ron.tmp` does
-/// not match, so a save is seen once, as the rename lands.
+/// Any `.ron` that is not a slicing or an input map. The atomic save's
+/// `demo.ron.tmp` does not match, so a save is seen once, as the rename
+/// lands.
 pub fn is_scene(name: &str) -> bool {
-    has_extension(name, &["ron"]) && !is_atlas(name)
+    has_extension(name, &["ron"]) && !is_atlas(name) && !is_input_map(name)
 }
 
 fn has_extension(name: &str, extensions: &[&str]) -> bool {
