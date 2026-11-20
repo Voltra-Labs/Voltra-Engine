@@ -50,5 +50,13 @@
                 "Text": (content:"Voltra sandbox",size:0.4,pixels_per_em:48,color:(0.9,0.92,1.0,1.0),align:Center,sort_order:5),
             },
         ),
+        (
+            id: "019fe300-0000-7000-8000-000000000006",
+            components: {
+                "Name": "Hint",
+                "UiRect": (anchor_min:(1.0,0.0),anchor_max:(1.0,0.0),offset_min:(-236.0,16.0),offset_max:(-16.0,44.0)),
+                "Text": (content:"falling crates",size:18.0,pixels_per_em:48,color:(0.7,0.74,0.82,1.0),align:Right,sort_order:0),
+            },
+        ),
     ],
 )

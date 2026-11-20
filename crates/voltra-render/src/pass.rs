@@ -88,6 +88,53 @@ pub fn draw_mesh_batches(
     draws: &[MeshDraw<'_>],
     clear: wgpu::Color,
 ) {
+    record_batches(
+        encoder,
+        view,
+        pipeline,
+        camera,
+        mesh,
+        draws,
+        wgpu::LoadOp::Clear(clear),
+    );
+}
+
+/// [`draw_mesh_batches`] over whatever is already in `view`: the
+/// screen-space UI, drawn after the world into the same target.
+///
+/// With nothing to draw no pass is recorded, for the reason [`draw_lines`]
+/// gives.
+pub fn draw_mesh_batches_over(
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    camera: &wgpu::BindGroup,
+    mesh: Option<&Mesh>,
+    draws: &[MeshDraw<'_>],
+) {
+    if mesh.is_none() || draws.is_empty() {
+        return;
+    }
+    record_batches(
+        encoder,
+        view,
+        pipeline,
+        camera,
+        mesh,
+        draws,
+        wgpu::LoadOp::Load,
+    );
+}
+
+fn record_batches(
+    encoder: &mut wgpu::CommandEncoder,
+    view: &wgpu::TextureView,
+    pipeline: &wgpu::RenderPipeline,
+    camera: &wgpu::BindGroup,
+    mesh: Option<&Mesh>,
+    draws: &[MeshDraw<'_>],
+    load: wgpu::LoadOp<wgpu::Color>,
+) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("mesh-batches-pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -95,7 +142,7 @@ pub fn draw_mesh_batches(
             depth_slice: None,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(clear),
+                load,
                 store: wgpu::StoreOp::Store,
             },
         })],

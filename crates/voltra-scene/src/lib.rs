@@ -23,6 +23,7 @@ pub mod sprite;
 pub mod text;
 pub mod tilemap;
 pub mod transform;
+pub mod ui;
 
 pub use animation::SpriteAnimation;
 pub use audio_listener::AudioListener;
@@ -42,3 +43,4 @@ pub use sprite::{draw_key, Sprite};
 pub use text::{Align, Text};
 pub use tilemap::{Tile, Tilemap};
 pub use transform::Transform;
+pub use ui::{UiLayout, UiRect};

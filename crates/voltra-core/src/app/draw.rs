@@ -5,9 +5,9 @@
 use voltra_assets::{Fonts, Textures};
 use voltra_ecs::World;
 use voltra_render::egui_backend::ScreenDescriptor;
-use voltra_render::{wgpu, Filter, MeshDraw};
+use voltra_render::{wgpu, Filter, Layer, MeshDraw};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::SpriteBatch;
+use voltra_scene::{ui, SpriteBatch, UiLayout};
 
 use super::{App, UiFrame};
 
@@ -26,12 +26,14 @@ impl App {
         // the one the scene's camera describes. `aspect` is the window's and
         // stays the window's — `Renderer::resize` owns it.
         self.framing.apply(&self.world, &mut renderer.camera);
+        let scale = ui_scale(self.window.as_deref());
         prepare_text(
             &self.world,
             fonts,
             textures,
             renderer.context().device(),
             renderer.context().queue(),
+            scale,
         );
         // Rebuilt every frame. Caching it means tracking every Transform and
         // Sprite write, which is not worth it until the batch actually shows up
@@ -44,7 +46,16 @@ impl App {
         // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
         let draws = mesh_draws(&batch, textures, &white);
-        renderer.render_mesh(mesh.as_ref(), &draws);
+
+        let config = renderer.context().config();
+        let hud = ui_batch(&self.world, sheets, config.width, config.height, scale);
+        let hud_mesh = hud.upload(renderer.context().device());
+        let hud_draws = mesh_draws(&hud, textures, &white);
+        let layer = Layer {
+            mesh: hud_mesh.as_ref(),
+            draws: &hud_draws,
+        };
+        renderer.render_mesh(mesh.as_ref(), &draws, layer);
     }
 
     /// Scene to an offscreen target, then the UI over the top of the window.
@@ -94,7 +105,8 @@ impl App {
         // layout is drawable by this one.
         self.thumbnails.sync(egui, &device, textures);
 
-        prepare_text(&self.world, fonts, textures, &device, &queue);
+        let scale = window.scale_factor() as f32;
+        prepare_text(&self.world, fonts, textures, &device, &queue, scale);
         // The immutable reborrow ends with the batch, well before the UI takes
         // both stores mutably below.
         let sheets = Sheets::new(atlases, textures).with_fonts(fonts);
@@ -105,7 +117,16 @@ impl App {
         // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
         let draws = mesh_draws(&batch, textures, &white);
-        renderer.render_scene(target, mesh.as_ref(), &draws);
+        // The game's HUD over the scene, in the viewport's pixels: what the
+        // window will show in a build, so the editor shows it too.
+        let hud = ui_batch(&self.world, sheets, target.width(), target.height(), scale);
+        let hud_mesh = hud.upload(&device);
+        let hud_draws = mesh_draws(&hud, textures, &white);
+        let layer = Layer {
+            mesh: hud_mesh.as_ref(),
+            draws: &hud_draws,
+        };
+        renderer.render_scene(target, mesh.as_ref(), &draws, layer);
 
         let size = window.inner_size();
         let screen = ScreenDescriptor {
@@ -159,9 +180,31 @@ fn prepare_text(
     textures: &mut Textures,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    ui_scale: f32,
 ) {
-    voltra_scene::text::prepare(world, fonts);
+    voltra_scene::text::prepare(world, fonts, ui_scale);
     fonts.upload(textures, device, queue);
+}
+
+/// Physical pixels per point: the window's scale factor, or 1 before there
+/// is a window to ask.
+fn ui_scale(window: Option<&winit::window::Window>) -> f32 {
+    window.map_or(1.0, |window| window.scale_factor() as f32)
+}
+
+/// The screen-space batch for a target `width` × `height` physical pixels.
+///
+/// Laid out in points — the size divided by `scale` — so a HUD authored at
+/// 16 points in from the corner is 16 points in on any display.
+fn ui_batch(world: &World, sheets: Sheets<'_>, width: u32, height: u32, scale: f32) -> SpriteBatch {
+    let scale = if scale.is_finite() && scale > 0.0 {
+        scale
+    } else {
+        1.0
+    };
+    let screen = voltra_render::glam::Vec2::new(width as f32, height as f32) / scale;
+    let layout = UiLayout::from_world(world, screen);
+    ui::mesh::batch(world, sheets, &layout, scale)
 }
 
 /// Turns a batch's texture-run ranges into the renderer's draw list.

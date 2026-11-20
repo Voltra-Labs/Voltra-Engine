@@ -138,6 +138,17 @@ impl Camera2D {
     }
 }
 
+/// The matrix for drawing in a target's own pixels: origin top-left, **y
+/// down**, one unit per pixel - what screen-space UI is laid out in.
+///
+/// Not a [`Camera2D`]: its zoom is clamped for navigation, and a
+/// 1080-pixel-tall target would need a zoom far below that floor. The same
+/// `directx` projection as [`Camera2D::view_projection`], with bottom and top
+/// swapped so y runs down.
+pub fn screen_projection(width: f32, height: f32) -> Mat4 {
+    rh::proj::directx::orthographic(0.0, width.max(1.0), height.max(1.0), 0.0, -1.0, 1.0)
+}
+
 /// The camera matrix as the GPU sees it.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
@@ -165,13 +176,6 @@ pub struct CameraBinding {
 
 impl CameraBinding {
     pub fn new(device: &wgpu::Device) -> Self {
-        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("camera-uniform"),
-            size: size_of::<CameraUniform>() as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("camera-bind-group-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -184,6 +188,27 @@ impl CameraBinding {
                 },
                 count: None,
             }],
+        });
+        Self::with_layout(device, &layout)
+    }
+
+    /// A second binding - its own buffer - against `self`'s layout, so it
+    /// binds to every pipeline built for this one.
+    ///
+    /// Two cameras drawn in one frame need two buffers: `write_buffer` lands
+    /// at the next submit, so a second write to one buffer would replace the
+    /// first before either pass ran.
+    pub fn sharing_layout(&self, device: &wgpu::Device) -> Self {
+        Self::with_layout(device, &self.layout)
+    }
+
+    fn with_layout(device: &wgpu::Device, layout: &wgpu::BindGroupLayout) -> Self {
+        let layout = layout.clone();
+        let buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("camera-uniform"),
+            size: size_of::<CameraUniform>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -205,6 +230,15 @@ impl CameraBinding {
     /// Writes the camera matrix to the GPU. Cheap enough to call every frame.
     pub fn upload(&self, queue: &wgpu::Queue, camera: &Camera2D) {
         let uniform = CameraUniform::from(camera);
+        queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&uniform));
+    }
+
+    /// Writes an arbitrary matrix - [`screen_projection`] - instead of a
+    /// camera's.
+    pub fn upload_matrix(&self, queue: &wgpu::Queue, view_proj: Mat4) {
+        let uniform = CameraUniform {
+            view_proj: view_proj.to_cols_array_2d(),
+        };
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&uniform));
     }
 
@@ -420,5 +454,34 @@ mod tests {
         let camera = Camera2D::default();
         let world = camera.viewport_to_world(Vec2::ZERO, Vec2::ZERO);
         assert!(world.is_finite(), "got {world}");
+    }
+}
+
+#[cfg(test)]
+mod screen_tests {
+    use super::*;
+
+    fn project(matrix: Mat4, point: Vec2) -> Vec2 {
+        let clip = matrix * point.extend(0.0).extend(1.0);
+        Vec2::new(clip.x, clip.y) / clip.w
+    }
+
+    #[test]
+    fn the_top_left_pixel_corner_is_the_top_left_of_clip_space() {
+        let m = screen_projection(800.0, 600.0);
+        assert!(project(m, Vec2::ZERO).abs_diff_eq(Vec2::new(-1.0, 1.0), 1e-6));
+    }
+
+    #[test]
+    fn y_runs_down_to_the_bottom_right() {
+        let m = screen_projection(800.0, 600.0);
+        assert!(project(m, Vec2::new(800.0, 600.0)).abs_diff_eq(Vec2::new(1.0, -1.0), 1e-6));
+        assert!(project(m, Vec2::new(400.0, 300.0)).abs_diff_eq(Vec2::ZERO, 1e-6));
+    }
+
+    #[test]
+    fn a_zero_sized_target_does_not_divide_by_zero() {
+        let m = screen_projection(0.0, 0.0);
+        assert!(project(m, Vec2::ONE).is_finite());
     }
 }

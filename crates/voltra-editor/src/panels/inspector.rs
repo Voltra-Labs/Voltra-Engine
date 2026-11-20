@@ -13,11 +13,14 @@ mod sprite;
 mod text;
 mod tilemap;
 mod transform;
+mod ui_rect;
 
 use voltra_core::egui::{self, Color32, RichText, Ui};
 use voltra_core::UiFrame;
+use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, AudioSource, Camera, Collider, SceneId, Sprite, Text, Tilemap, Transform,
+    hierarchy, ui, AudioSource, Camera, Collider, SceneId, Sprite, Text, Tilemap, Transform,
+    UiLayout, UiRect,
 };
 
 use crate::editor::Editor;
@@ -63,6 +66,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
                     claim = transform::show(ui, transform);
                 }
+                let parent_rect = ui_parent_rect(ui, frame, entity);
+                if let Some(rect) = frame.world.get_mut::<UiRect>(entity) {
+                    claim = claim.or(ui_rect::show(ui, rect, parent_rect));
+                }
+                let on_screen = ui::is_ui(frame.world, entity);
                 // Both are read before the world is borrowed mutably below:
                 // the thumbnail map and the atlas store hang off `frame`, and
                 // a widget holding a component out of `frame.world` rules out
@@ -118,7 +126,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
                 if let Some(text) = frame.world.get_mut::<Text>(entity) {
                     ui.separator();
-                    claim = claim.or(text::show(ui, text, frame.fonts));
+                    claim = claim.or(text::show(ui, text, frame.fonts, on_screen));
                 }
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();
@@ -197,6 +205,18 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
             });
         });
+}
+
+/// The box `entity`'s `UiRect` is anchored in, as the viewport lays it out:
+/// its nearest UI ancestor's rect, or the whole viewport.
+fn ui_parent_rect(ui: &Ui, frame: &UiFrame<'_>, entity: voltra_ecs::Entity) -> ui::Rect {
+    let (width, height) = frame.viewport_size();
+    let screen = Vec2::new(width as f32, height as f32) / ui.ctx().pixels_per_point();
+    let layout = UiLayout::from_world(frame.world, screen);
+    hierarchy::ancestors(frame.world, entity)
+        .into_iter()
+        .find_map(|ancestor| layout.rect(ancestor))
+        .unwrap_or(ui::Rect::screen(screen))
 }
 
 /// What to call an edit made through this widget this frame, if it is live.

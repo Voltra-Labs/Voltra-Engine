@@ -8,16 +8,25 @@ use voltra_core::egui::{Pos2, Response};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::pick;
+use voltra_scene::{pick, ui, UiLayout};
 
-/// The sprite or tilemap layer under the pointer for the interaction
-/// `response` describes.
+/// The HUD element, sprite, text or tilemap layer under the pointer for the
+/// interaction `response` describes.
 ///
 /// Returns `None` both when the click landed on empty space and when there was
 /// no interaction at all, so callers must test `Response::clicked` first rather
 /// than clearing the selection on every frame.
 pub fn clicked_entity(response: &Response, frame: &UiFrame<'_>) -> Option<Entity> {
     let pointer = response.interact_pointer_pos()?;
+    // The HUD first: it is drawn over the whole world, so whatever of it is
+    // under the pointer is what the click visibly landed on. In points from
+    // the viewport's corner, which is what the HUD is laid out in.
+    let local = pointer - response.rect.min;
+    let screen = Vec2::new(response.rect.width(), response.rect.height());
+    let layout = UiLayout::from_world(frame.world, screen);
+    if let Some(element) = ui::element_at(frame.world, &layout, Vec2::new(local.x, local.y)) {
+        return Some(element);
+    }
     pick::entity_at(
         frame.world,
         world_at(response, pointer, frame),

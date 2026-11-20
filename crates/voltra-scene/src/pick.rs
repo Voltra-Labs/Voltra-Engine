@@ -55,7 +55,9 @@ pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
     world
         .query2::<Transform, Sprite>()
         .filter(|(entity, _transform, sprite)| {
-            contains(transforms.matrix(*entity), point, sprite, sheets)
+            // Screen-space elements are not in the world to be clicked.
+            !crate::ui::is_ui(world, *entity)
+                && contains(transforms.matrix(*entity), point, sprite, sheets)
         })
         .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite.sort_order))
         .map(|(entity, _transform, _sprite)| entity)

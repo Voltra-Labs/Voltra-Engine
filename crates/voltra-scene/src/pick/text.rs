@@ -22,6 +22,9 @@ pub fn text_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<(Entity
     world
         .query2::<Transform, Text>()
         .filter(|(entity, _, text)| {
+            if crate::ui::is_ui(world, *entity) {
+                return false;
+            }
             let matrix = transforms.matrix(*entity);
             // See `MIN_DETERMINANT`: a collapsed text is nowhere.
             if matrix.determinant().abs() < MIN_DETERMINANT {

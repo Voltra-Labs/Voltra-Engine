@@ -5,6 +5,8 @@ pub mod shape;
 use voltra_assets::{AssetPath, Font, Fonts, Handle};
 use voltra_ecs::World;
 
+use crate::ui::UiRect;
+
 /// Which end of each line sits on the entity's origin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum Align {
@@ -126,12 +128,32 @@ pub fn resolve_fonts(world: &mut World, fonts: &mut Fonts) {
 ///
 /// Before the batch, never during it: the atlas may grow and repack as
 /// glyphs are added, and a UV taken before the last insertion would point at
-/// where a glyph used to be.
-pub fn prepare(world: &World, fonts: &mut Fonts) {
-    for (_, text) in world.query::<Text>() {
-        if let Some(handle) = text.font_handle {
-            fonts.prepare(handle, &text.content, text.px());
-        }
+/// where a glyph used to be. A screen-space text is rasterized at its
+/// on-screen size, [`ui_px`] at `ui_scale` physical pixels per point.
+pub fn prepare(world: &World, fonts: &mut Fonts, ui_scale: f32) {
+    for (entity, text) in world.query::<Text>() {
+        let Some(handle) = text.font_handle else {
+            continue;
+        };
+        let px = if world.get::<UiRect>(entity).is_some() {
+            ui_px(text, ui_scale)
+        } else {
+            text.px()
+        };
+        fonts.prepare(handle, &text.content, px);
+    }
+}
+
+/// The raster size of a text drawn in a [`UiRect`]: its `size` in points at
+/// `scale` physical pixels per point, so each glyph texel is one pixel on
+/// screen and stays crisp. `pixels_per_em` is a world-space concern and is
+/// ignored here.
+pub fn ui_px(text: &Text, scale: f32) -> u32 {
+    let px = (text.size * scale).round();
+    if px.is_finite() && px >= 1.0 {
+        (px as u32).min(Text::MAX_PIXELS_PER_EM)
+    } else {
+        1
     }
 }
 
