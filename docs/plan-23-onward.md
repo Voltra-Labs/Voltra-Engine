@@ -46,7 +46,7 @@ Things that will want a stage of their own eventually, listed so they are not
 mistaken for oversights: particles (needs 22, wants 24), the tilemap's
 per-chunk mesh cache, camera culling, auto-tiling and animated tiles (after
 25; see its decisions), sorting layers and
-parallax, a render graph and post-processing, scene transitions and additive
-loading in the player, save games, a job system, and 3D — which per CLAUDE.md
+parallax, a render graph and post-processing, save games, a job system, and
+3D — which per CLAUDE.md
 is a new subsystem with its own design, not a parameter added to any of the
 above.

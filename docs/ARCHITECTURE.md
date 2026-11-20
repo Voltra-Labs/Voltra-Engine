@@ -2606,6 +2606,35 @@ Unity's build settings).
   yet. Windows first; Linux and macOS take the same task with no suffix and
   are untested.
 
+### A tick changes scene by asking, and the loop does it at the end of the frame
+
+Stage 30. Unity's `SceneManager.LoadScene` (single and additive) and Godot's
+`change_scene_to_file`, as three `Tick` calls: `load_scene(path)` replaces,
+`add_scene(path) -> SceneLoad` loads beside, `unload_scene(load)` takes an
+additive load away again.
+
+- **Deferred** to the end of `App::advance`, after the ticks, the steps and
+  their spawns — Godot defers the same way. Nothing a tick holds is despawned
+  under it, and the new scene's first frame is a whole frame. Several
+  requests in one frame apply in order.
+- **A scene file is read as a prefab is**, through the prefab store, so
+  hot reload, caching and fresh ids come for free. `prefab::spawn_scene` is
+  `spawn` without placement and without stamping a `PrefabInstance` on the
+  roots: a level is not an instance of itself, and the coin prefabs placed in
+  it keep their own links.
+- **Replace spawns first and despawns after**, so a file that will not load —
+  or whose components will not read — leaves the old scene standing, logged.
+  What goes is every root, by `World::entities()` (new: a component query
+  would miss what a game made in code), except those marked `Persistent` —
+  Unity's `DontDestroyOnLoad`, and like it a property of roots: a persistent
+  child of a doomed root goes with it. Physics contacts, sleep and pending
+  events are reset, since they name a world that is gone.
+- **Additive loads are tracked by handle**: the entities each brought, so an
+  unload despawns exactly those still alive. A scene change sweeps every
+  additive load and its handle; unloading a swept handle does nothing.
+- The platformer's flag loads `scenes/platformer-2.ron` with the walker,
+  camera and HUD carried over.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -140,6 +140,32 @@ pub fn spawn(
     prefab: &Prefab,
     at: &Transform,
 ) -> Result<Instance, SceneError> {
+    spawn_copy(world, registry, prefab, Some(at))
+}
+
+/// Spawns a copy of a whole scene file into `world`: an additive load, or the
+/// new level of a scene change.
+///
+/// [`spawn`]'s rules — fresh ids, parents remapped, all-or-nothing — but
+/// nothing is placed and nothing is linked: a level is not an instance of
+/// itself, and the prefab links its own records carry (a coin placed in the
+/// level) are kept as authored.
+pub fn spawn_scene(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    scene: &Prefab,
+) -> Result<Instance, SceneError> {
+    spawn_copy(world, registry, scene, None)
+}
+
+/// The copy both share. `at` is `Some` for a prefab: roots placed by it and
+/// linked to the source.
+fn spawn_copy(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    prefab: &Prefab,
+    at: Option<&Transform>,
+) -> Result<Instance, SceneError> {
     let Some(file) = prefab.file.as_ref() else {
         return Ok(Instance::default());
     };
@@ -199,12 +225,14 @@ pub fn spawn(
         }
     }
 
-    for &root in &roots {
-        if let Some(transform) = world.get_mut::<Transform>(root) {
-            *transform = place(at, transform);
-        }
-        if let Some(source) = &prefab.source {
-            world.insert(root, PrefabInstance::new(source.clone()));
+    if let Some(at) = at {
+        for &root in &roots {
+            if let Some(transform) = world.get_mut::<Transform>(root) {
+                *transform = place(at, transform);
+            }
+            if let Some(source) = &prefab.source {
+                world.insert(root, PrefabInstance::new(source.clone()));
+            }
         }
     }
 
