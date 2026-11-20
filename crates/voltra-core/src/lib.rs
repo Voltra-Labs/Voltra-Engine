@@ -5,6 +5,7 @@
 
 pub mod app;
 pub mod input;
+pub mod logging;
 pub mod saves;
 pub mod time;
 pub mod ui;

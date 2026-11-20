@@ -18,5 +18,4 @@ ron.workspace = true
 serde.workspace = true
 voltra-ecs.workspace = true
 voltra-scene.workspace = true
-env_logger.workspace = true
 log.workspace = true

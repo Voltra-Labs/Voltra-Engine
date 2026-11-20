@@ -1,0 +1,10 @@
+// The platformer example as a build: `cargo xtask dist --manifest
+// platformer.build.ron`. A game with its own code, so it names its binary
+// instead of a start scene — the example builds its first level itself.
+(
+    version: 1,
+    name: "Voltra Platformer",
+    window: (width: 1280, height: 720),
+    assets: "assets",
+    game: (package: "voltra-core", example: "platformer"),
+)

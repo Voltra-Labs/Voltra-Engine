@@ -20,6 +20,9 @@ pub struct Launch {
 pub enum LaunchError {
     /// No scene on the command line and no manifest beside the player.
     NoScene,
+    /// A manifest describing a game with its own binary, which is that
+    /// binary's to run, not the player's.
+    GameBuild,
     Manifest(ManifestError),
 }
 
@@ -29,6 +32,10 @@ impl fmt::Display for LaunchError {
             Self::NoScene => write!(
                 f,
                 "no scene given, and no {MANIFEST_FILE} beside the player to say which"
+            ),
+            Self::GameBuild => write!(
+                f,
+                "this build names a game binary and no start scene; run the game, not the player"
             ),
             Self::Manifest(e) => write!(f, "{e}"),
         }
@@ -65,7 +72,7 @@ pub fn resolve(args: &Args, exe_dir: Option<&Path>) -> Result<Launch, LaunchErro
 
     let scene = match (&args.scene, &manifest) {
         (Some(scene), _) => scene.clone(),
-        (None, Some((manifest, dir))) => manifest.scene_path(dir),
+        (None, Some((manifest, dir))) => manifest.scene_path(dir).ok_or(LaunchError::GameBuild)?,
         (None, None) => return Err(LaunchError::NoScene),
     };
     let asset_root = args
@@ -178,5 +185,19 @@ mod tests {
         std::fs::write(dir.join(MANIFEST_FILE), "(version: 1").expect("writes");
         let error = resolve(&Args::default(), Some(&dir));
         assert!(matches!(error, Err(LaunchError::Manifest(_))));
+    }
+
+    #[test]
+    fn a_game_build_is_not_the_player_s_to_run() {
+        let dir = scratch_with_manifest();
+        std::fs::write(
+            dir.join(MANIFEST_FILE),
+            r#"(version: 1, name: "G", game: (package: "g"))"#,
+        )
+        .expect("writes");
+        assert!(matches!(
+            resolve(&Args::default(), Some(&dir)),
+            Err(LaunchError::GameBuild)
+        ));
     }
 }

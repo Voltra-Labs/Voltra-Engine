@@ -25,6 +25,11 @@ pub struct Plan {
     pub folder: PathBuf,
     /// `<folder>/<name><exe suffix>`.
     pub executable: PathBuf,
+    /// What `cargo build --release` is given: the player with `windowed`, or
+    /// the game's own target.
+    pub cargo_args: Vec<String>,
+    /// Where that build leaves the executable, under `target/release`.
+    pub built: PathBuf,
 }
 
 /// Reads `manifest_path` and lays the build out under `out`.
@@ -35,35 +40,52 @@ pub fn plan(manifest_path: &Path, out: &Path) -> Result<Plan, String> {
     if !assets.is_dir() {
         return Err(format!("no asset folder at {}", assets.display()));
     }
-    let scene = manifest.scene_path(dir);
-    if !scene.is_file() {
-        return Err(format!("the start scene {} is not there", scene.display()));
+    if let Some(scene) = manifest.scene_path(dir) {
+        if !scene.is_file() {
+            return Err(format!("the start scene {} is not there", scene.display()));
+        }
     }
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let (cargo_args, built) = match &manifest.game {
+        // The game's own binary: whatever windowing and logging it chose is
+        // in its own `main`.
+        Some(game) => {
+            let file = format!("{}{suffix}", game.target_name());
+            let built = if game.is_example() {
+                PathBuf::from("examples").join(file)
+            } else {
+                PathBuf::from(file)
+            };
+            (game.cargo_args(), built)
+        }
+        None => (
+            ["--package", "voltra-player", "--features", "windowed"]
+                .map(String::from)
+                .to_vec(),
+            PathBuf::from(format!("voltra-player{suffix}")),
+        ),
+    };
     let name = manifest.file_name();
     let folder = out.join(&name);
-    let executable = folder.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
+    let executable = folder.join(format!("{name}{suffix}"));
     Ok(Plan {
         manifest,
         assets,
         folder,
         executable,
+        cargo_args,
+        built,
     })
 }
 
-/// Builds the player and writes the build `plan` describes.
+/// Builds the executable and writes the build `plan` describes.
 pub fn run(plan: &Plan, workspace: &Path) -> Result<(), String> {
-    println!("building the player (release, windowed)…");
+    println!("building {} (release)…", plan.built.display());
     let cargo = std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
     let status = Command::new(cargo)
         .current_dir(workspace)
-        .args([
-            "build",
-            "--release",
-            "--package",
-            "voltra-player",
-            "--features",
-            "windowed",
-        ])
+        .args(["build", "--release"])
+        .args(&plan.cargo_args)
         .status()
         .map_err(|e| format!("could not run cargo: {e}"))?;
     if !status.success() {
@@ -73,9 +95,7 @@ pub fn run(plan: &Plan, workspace: &Path) -> Result<(), String> {
     let target = std::env::var_os("CARGO_TARGET_DIR")
         .map(PathBuf::from)
         .unwrap_or_else(|| workspace.join("target"));
-    let built = target
-        .join("release")
-        .join(format!("voltra-player{}", std::env::consts::EXE_SUFFIX));
+    let built = target.join("release").join(&plan.built);
 
     prepare_build_dir(&plan.folder, MANIFEST_FILE).map_err(|e| e.to_string())?;
     std::fs::copy(&built, &plan.executable)
@@ -141,6 +161,50 @@ mod tests {
                 .join(format!("Sky Rift{}", std::env::consts::EXE_SUFFIX))
         );
         assert_eq!(plan.assets, dir.join("assets"));
+    }
+
+    #[test]
+    fn a_scene_build_ships_the_windowed_player() {
+        let dir = scratch();
+        let manifest = write_manifest(&dir, "Game", "scenes/start.ron");
+        let plan = plan(&manifest, &dir.join("dist")).expect("plans");
+        assert!(plan.cargo_args.iter().any(|a| a == "voltra-player"));
+        assert!(plan.cargo_args.iter().any(|a| a == "windowed"));
+        assert_eq!(
+            plan.built,
+            PathBuf::from(format!("voltra-player{}", std::env::consts::EXE_SUFFIX))
+        );
+    }
+
+    #[test]
+    fn a_game_build_ships_its_own_binary_with_no_scene_needed() {
+        let dir = scratch();
+        let path = dir.join(MANIFEST_FILE);
+        std::fs::write(
+            &path,
+            r#"(version: 1, name: "Plat", game: (package: "voltra-core", example: "platformer"))"#,
+        )
+        .expect("manifest");
+        let plan = plan(&path, &dir.join("dist")).expect("plans");
+        assert_eq!(
+            plan.cargo_args,
+            vec!["--package", "voltra-core", "--example", "platformer"]
+        );
+        assert_eq!(
+            plan.built,
+            PathBuf::from("examples").join(format!("platformer{}", std::env::consts::EXE_SUFFIX))
+        );
+    }
+
+    #[test]
+    fn the_shipped_platformer_manifest_plans() {
+        let workspace = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let plan = plan(
+            &workspace.join("platformer.build.ron"),
+            &workspace.join("dist"),
+        )
+        .expect("the repository's platformer.build.ron describes a real build");
+        assert!(plan.manifest.game.is_some());
     }
 
     #[test]
