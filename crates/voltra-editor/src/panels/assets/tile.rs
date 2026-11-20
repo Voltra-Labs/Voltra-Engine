@@ -30,6 +30,7 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
         EntryKind::Texture => texture_tile(ui, frame, entry, &response),
         EntryKind::Atlas => atlas_tile(ui, frame, entry, &response),
         EntryKind::Clip => clip_tile(ui, entry, &response),
+        EntryKind::Font => font_tile(ui, entry, &response),
         EntryKind::Scene => scene_tile(ui, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
@@ -129,6 +130,21 @@ fn clip_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
         .map(|(_, extension)| extension.to_ascii_uppercase())
         .unwrap_or_default();
     badge_tile(ui, entry, response, &format, ui.visuals().selection.bg_fill);
+}
+
+/// A font tile: a block saying "Aa", and the same drag. Dropped on the
+/// viewport, a font becomes a label written in it.
+///
+/// Not the face itself: that would mean registering an egui font per file
+/// on screen.
+fn font_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
+    badge_tile(
+        ui,
+        entry,
+        response,
+        "Aa",
+        ui.visuals().widgets.hovered.bg_fill,
+    );
 }
 
 /// A scene tile: a block with a word on it, and the same drag. Dropped on the

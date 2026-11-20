@@ -4,8 +4,10 @@
 //! volume. 3D picking is a different subsystem and will not reuse this.
 
 mod layer;
+mod text;
 
 pub use layer::layer_at;
+pub use text::text_at;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
@@ -59,20 +61,25 @@ pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
         .map(|(entity, _transform, _sprite)| entity)
 }
 
-/// The topmost sprite *or* tilemap layer under `point`, in world space.
+/// The topmost sprite, tilemap layer *or* text under `point`, in world
+/// space.
 ///
-/// One draw order decides both, because the batch interleaves them by
+/// One draw order decides all three, because the batch interleaves them by
 /// `(sort_order, entity index)`: what is picked is what is visible there.
 pub fn entity_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entity> {
     let sprite = sprite_at(world, point, sheets).map(|entity| {
         let order = world.get::<Sprite>(entity).map_or(0, |s| s.sort_order);
         (entity, draw_key(entity, order))
     });
-    [sprite, layer_at(world, point)]
-        .into_iter()
-        .flatten()
-        .max_by_key(|(_, key)| *key)
-        .map(|(entity, _)| entity)
+    [
+        sprite,
+        layer_at(world, point),
+        text_at(world, point, sheets),
+    ]
+    .into_iter()
+    .flatten()
+    .max_by_key(|(_, key)| *key)
+    .map(|(entity, _)| entity)
 }
 
 /// Whether `point`, in world space, falls inside the quad `matrix` places.
@@ -399,6 +406,7 @@ mod frame_tests {
         let sheets = Sheets {
             atlases: Some(&atlases),
             textures: None,
+            fonts: None,
         };
 
         assert_eq!(

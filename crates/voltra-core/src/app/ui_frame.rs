@@ -7,7 +7,7 @@
 
 use std::collections::HashMap;
 
-use voltra_assets::{Atlases, Clips, Handle, Textures};
+use voltra_assets::{Atlases, Clips, Fonts, Handle, Textures};
 use voltra_audio::Audio;
 use voltra_ecs::{Entity, World};
 use voltra_physics::Contact;
@@ -38,6 +38,8 @@ pub struct UiFrame<'a> {
     /// `textures` is: a panel that assigns an atlas must produce a handle the
     /// batch about to run can resolve.
     pub atlases: &'a mut Atlases,
+    /// Faces and glyph atlases, for a panel resolving a text's font.
+    pub fonts: &'a mut Fonts,
     /// Loaded sounds, shared with the loop's own playback for the same reason
     /// the two stores above are shared: a panel that names a clip must produce
     /// a handle the frame's audio can already resolve.
@@ -193,6 +195,7 @@ impl<'a> UiFrame<'a> {
     pub fn resolve_scene_assets(&mut self) {
         resolve_world_textures(self.world, self.textures, self.device, self.queue);
         resolve_world_atlases(self.world, self.atlases);
+        voltra_scene::text::resolve_fonts(self.world, self.fonts);
         resolve_world_clips(self.world, self.clips);
     }
 
@@ -211,6 +214,7 @@ impl<'a> UiFrame<'a> {
                 entity,
                 Some((self.textures, self.device, self.queue)),
                 Some(self.atlases),
+                Some(self.fonts),
                 Some(self.clips),
             );
         }
@@ -221,7 +225,7 @@ impl<'a> UiFrame<'a> {
     /// A panel picking an entity has to ask the same question the draw asked,
     /// or a click lands somewhere other than the pixels it appears to.
     pub fn sheets(&self) -> Sheets<'_> {
-        Sheets::new(self.atlases, self.textures)
+        Sheets::new(self.atlases, self.textures).with_fonts(self.fonts)
     }
 }
 

@@ -19,8 +19,8 @@ use voltra_core::{query, App, KeyCode, PlayParams, QueryFilter, Tick, Touch, Win
 use voltra_ecs::Entity;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
-    AudioListener, AudioSource, Camera, Collider, ComponentRegistry, PhysicsMaterial, RigidBody,
-    Sprite, Tile, Tilemap, Transform,
+    Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, PhysicsMaterial,
+    RigidBody, Sprite, Text, Tile, Tilemap, Transform,
 };
 
 /// This example's own component, in the same world as the engine's.
@@ -225,6 +225,25 @@ fn spawn_scene(app: &mut App) -> Entity {
             log::error!("could not place a coin: {e}");
         }
     }
+
+    // A sign over the ledge, in the world rather than on the screen: it
+    // scrolls with the level and sorts behind the walker.
+    let sign = app.world.spawn();
+    app.world
+        .insert(sign, Transform::from_translation(Vec2::new(6.0, 0.4)));
+    app.world.insert(
+        sign,
+        Text {
+            size: 0.45,
+            color: [1.0, 0.92, 0.6, 1.0],
+            align: Align::Center,
+            sort_order: 5,
+            ..Text::new(
+                "Jump!
+Space",
+            )
+        },
+    );
 
     let walker = app.world.spawn();
     app.world.insert(

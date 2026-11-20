@@ -51,6 +51,13 @@ pub enum AssetError {
         path: PathBuf,
         source: crate::atlas::AtlasError,
     },
+    /// Bytes that are not a font `fontdue` can parse.
+    ///
+    /// `fontdue` reports a static message rather than an error type.
+    Font {
+        path: PathBuf,
+        message: &'static str,
+    },
     /// The filesystem watch could not be established.
     Watch {
         root: PathBuf,
@@ -86,6 +93,9 @@ impl fmt::Display for AssetError {
             Self::Atlas { path, source } => {
                 write!(f, "{} is not a usable atlas: {source}", path.display())
             }
+            Self::Font { path, message } => {
+                write!(f, "{} is not a usable font: {message}", path.display())
+            }
             Self::Watch { root, source } => {
                 write!(f, "could not watch {}: {source}", root.display())
             }
@@ -102,7 +112,7 @@ impl std::error::Error for AssetError {
             Self::Audio { source, .. } => Some(source),
             Self::Atlas { source, .. } => Some(source),
             Self::Watch { source, .. } => Some(source),
-            Self::Absolute(_) | Self::EscapesRoot(_) | Self::Empty => None,
+            Self::Absolute(_) | Self::EscapesRoot(_) | Self::Empty | Self::Font { .. } => None,
         }
     }
 }

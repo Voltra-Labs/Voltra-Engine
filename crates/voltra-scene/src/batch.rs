@@ -9,13 +9,15 @@ use crate::hierarchy::WorldTransforms;
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
 use crate::sprite::{draw_key, Sprite};
+use crate::text::{shape, Text};
 use crate::tilemap::{mesh, Tilemap};
 use crate::transform::Transform;
 
-/// What the batch draws one of: both kinds sort by the same key.
+/// What the batch draws one of: every kind sorts by the same key.
 enum Drawn<'a> {
     Sprite(&'a Sprite),
     Tilemap(&'a Tilemap),
+    Text(&'a Text),
 }
 
 impl Drawn<'_> {
@@ -23,6 +25,7 @@ impl Drawn<'_> {
         match self {
             Self::Sprite(sprite) => sprite.sort_order,
             Self::Tilemap(map) => map.sort_order,
+            Self::Text(text) => text.sort_order,
         }
     }
 }
@@ -87,6 +90,11 @@ impl SpriteBatch {
                     .query2::<Transform, Tilemap>()
                     .map(|(entity, _, map)| (entity, Drawn::Tilemap(map))),
             )
+            .chain(
+                world
+                    .query2::<Transform, Text>()
+                    .map(|(entity, _, text)| (entity, Drawn::Text(text))),
+            )
             .collect();
         drawn.sort_unstable_by_key(|(entity, drawn)| draw_key(*entity, drawn.sort_order()));
 
@@ -101,6 +109,7 @@ impl SpriteBatch {
             match drawn {
                 Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
                 Drawn::Tilemap(map) => mesh::push(&mut batch, matrix, map, sheets),
+                Drawn::Text(text) => batch.push_text(matrix, text, sheets),
             }
         }
         batch
@@ -126,6 +135,22 @@ impl SpriteBatch {
         // it lands on, and nothing reports it.
         let quad = quad(sprite, sheets);
         self.push_quad(matrix, quad.corners(), quad.uvs, sprite.color, quad.texture);
+    }
+
+    /// Appends one quad per glyph of `text`, all sampling its font's atlas.
+    ///
+    /// Nothing without fonts in `sheets`, or before the atlas's first upload:
+    /// with no texture to sample, a glyph would draw as a solid block.
+    pub fn push_text(&mut self, matrix: Mat3, text: &Text, sheets: Sheets<'_>) {
+        let Some(fonts) = sheets.fonts else {
+            return;
+        };
+        let (quads, Some(texture)) = shape::glyphs(text, fonts) else {
+            return;
+        };
+        for quad in quads {
+            self.push_quad(matrix, quad.corners, quad.uvs, text.color, Some(texture));
+        }
     }
 
     /// Appends one quad given in its owner's space, extending or starting a

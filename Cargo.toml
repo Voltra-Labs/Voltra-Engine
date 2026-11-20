@@ -54,6 +54,9 @@ pollster = "1.0.1"
 log = "0.4.33"
 notify-debouncer-full = "0.7"
 env_logger = "0.11.11"
+# Rasterizes and lays out glyphs for `Text`. A leaf crate: parses the font,
+# hands back coverage bitmaps; the atlas and the draw are ours.
+fontdue = "0.9.5"
 
 # Our crates stay debuggable; dependencies are compiled optimized because we
 # never step into them and wgpu/naga are painfully slow at opt-level 0.

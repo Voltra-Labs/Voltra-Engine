@@ -2372,6 +2372,46 @@ Not done, on purpose: a per-chunk mesh cache and camera culling (no level
 makes the per-frame rebuild show yet), auto-tiling, animated tiles,
 isometric/hex grids, per-tile solidity.
 
+### Text is quads in the sprite batch, from one glyph atlas per font
+
+Stage 26a. A `Text` (content, optional font path, `size` in entity units,
+`pixels_per_em` raster resolution, colour, `Align`, `sort_order`) is drawn in
+world space by the sprite pipeline: one quad per inked glyph, pushed into the
+same `(sort_order, entity)` list as sprites and tilemap layers, so a label sorts
+among them like any other drawable. No second pipeline and no screen-space pass
+yet — that is 26b.
+
+- **`fontdue` rasterizes; the layout is ours.** `fontdue::layout::Layout`
+  applies no kerning and aligns only inside a `max_width` box. Our
+  `voltra_assets::fonts::layout` is pens along `
+`-split lines with
+  `horizontal_kern_indexed`, plus each line's width; the scene aligns about the
+  entity's origin. Origin is the first baseline at the aligned end.
+- **`Fonts` is CPU-only except `upload`.** Same shape as `Textures`/`Atlases`:
+  load once per path, stable handle, reload in place. `fonts/Ubuntu-Light.ttf`
+  (egui's face, UFL beside it) is `DEFAULT_FONT`, loaded at construction and
+  registered under its path. A file that will not parse gets its own slot with
+  a clone of the default face; with no default either, a faceless slot that
+  draws nothing. A reload resets the font's atlas (glyph indices may mean other
+  shapes) and keeps its texture handle.
+- **One atlas per font, keyed by `(glyph, px)`.** Shelf packing (best fit by
+  height), 1 px padding right/below, white RGB with coverage in alpha — alpha
+  is linear in `Rgba8UnormSrgb`, so it reaches the blend as rasterized and the
+  vertex colour tints white. Starts 256², doubles and repacks (keeping each
+  glyph's coverage, no re-raster) up to 4096²; a glyph that cannot fit is
+  logged once and remembered with no rect. Pinned by
+  `voltra-scene/tests/headless_text.rs`.
+- **Prepare, upload, then batch.** A growth moves every glyph, so UVs are only
+  valid after the frame's last insertion. `text::prepare` rasterizes every
+  text's misses, `Fonts::upload` replaces dirty atlases through
+  `Textures::insert_generated` / `Textures::replace` (stable handle, new texture
+  + bind group), and only then does `SpriteBatch::from_world` read them.
+  `Sheets` carries `fonts`, so draw and pick ask the same store.
+- **Picking is the laid-out box**, ascent to last descent, through the world
+  matrix — a click between letters is a click on the label (Unity, Godot).
+- Colour alpha is not drawn, as for sprites: the vertex is RGB. Widening it is
+  its own change.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -2430,3 +2470,14 @@ Both differ from most training data and from every tutorial written against
 | End of stream | `next_packet()` returns `Ok(None)`; it is not an `IoError` of kind `UnexpectedEof` any more |
 | Samples out | `decoded.copy_to_vec_interleaved(&mut vec)` **resizes** its destination, so decode into a scratch `Vec` and extend from it |
 | `AudioSpec` | not `Copy`; read `rate()` and `channels().count()` rather than storing the spec |
+
+### `fontdue` 0.9 notes
+
+| Thing | 0.9.5 |
+| --- | --- |
+| `Layout` | does **not** kern, and `HorizontalAlign` does nothing without `max_width` — we lay out ourselves |
+| Kerning | `Font::horizontal_kern_indexed(left, right, px) -> Option<f32>` |
+| Bitmap | `rasterize_indexed(glyph, px) -> (Metrics, Vec<u8>)`: one coverage byte per pixel, rows from the top |
+| `Metrics` | `xmin`/`ymin` are the bitmap's bottom-left from the pen on the baseline, y up |
+| Errors | `Font::from_bytes` fails with a `&'static str`, not an error type |
+| `Font` | `Clone`, not `Debug` |

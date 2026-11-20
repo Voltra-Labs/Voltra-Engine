@@ -42,5 +42,13 @@
                 "PhysicsMaterial": (friction:0.6,restitution:0.1),
             },
         ),
+        (
+            id: "019fe300-0000-7000-8000-000000000005",
+            components: {
+                "Name": "Title",
+                "Transform": (translation:(0.0,2.6),rotation:0.0,scale:(1.0,1.0)),
+                "Text": (content:"Voltra sandbox",size:0.4,pixels_per_em:48,color:(0.9,0.92,1.0,1.0),align:Center,sort_order:5),
+            },
+        ),
     ],
 )

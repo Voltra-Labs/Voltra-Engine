@@ -240,6 +240,14 @@ fn drop_asset(editor: &mut Editor, frame: &mut UiFrame<'_>, ui: &Ui, scene: &egu
         return;
     }
 
+    // A face becomes a label written in it.
+    if voltra_assets::watch::is_font(path.as_str()) {
+        spawn::record(editor, frame, "Add text", |frame| {
+            spawn::text(frame, "Text", at, Some(&path))
+        });
+        return;
+    }
+
     // Which of the two the drop means is the file it names: a slicing brings
     // its own sheet with it, a bare image is the sheet.
     let sliced = voltra_assets::atlas::is_atlas(path.as_str());

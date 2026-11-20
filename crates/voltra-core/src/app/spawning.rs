@@ -9,11 +9,11 @@
 
 use std::path::PathBuf;
 
-use voltra_assets::{AssetPath, Atlases, Clips, Handle, Textures};
+use voltra_assets::{AssetPath, Atlases, Clips, Fonts, Handle, Textures};
 use voltra_ecs::{Entity, World};
 use voltra_render::wgpu;
 use voltra_scene::{
-    prefab, AudioSource, Instance, Prefab, Prefabs, SceneError, Sprite, Tilemap, Transform,
+    prefab, AudioSource, Instance, Prefab, Prefabs, SceneError, Sprite, Text, Tilemap, Transform,
 };
 
 use crate::app::tick::Tick;
@@ -82,6 +82,7 @@ pub(super) fn resolve_entity(
     entity: Entity,
     gpu: Option<(&mut Textures, &wgpu::Device, &wgpu::Queue)>,
     atlases: Option<&mut Atlases>,
+    fonts: Option<&mut Fonts>,
     clips: Option<&mut Clips>,
 ) {
     let mut atlases = atlases;
@@ -105,6 +106,10 @@ pub(super) fn resolve_entity(
             let path = map.texture.clone();
             map.set_texture(path, textures, device, queue);
         }
+    }
+    if let (Some(text), Some(fonts)) = (world.get_mut::<Text>(entity), fonts) {
+        let path = text.font.clone();
+        text.set_font(path, fonts);
     }
     if let (Some(source), Some(clips)) = (world.get_mut::<AudioSource>(entity), clips) {
         let path = source.clip.clone();
@@ -146,6 +151,7 @@ impl App {
             entity,
             gpu,
             self.atlases.as_mut(),
+            self.fonts.as_mut(),
             self.clips.as_mut(),
         );
     }

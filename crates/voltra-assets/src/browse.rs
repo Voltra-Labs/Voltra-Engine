@@ -14,7 +14,7 @@ use std::path::Path;
 use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
-use crate::watch::{is_clip, is_scene, is_texture};
+use crate::watch::{is_clip, is_font, is_scene, is_texture};
 
 /// What one row of a listing is.
 ///
@@ -32,6 +32,10 @@ pub enum EntryKind {
     /// A file with an extension in
     /// [`CLIP_EXTENSIONS`](crate::watch::CLIP_EXTENSIONS): a sound.
     Clip,
+    /// A file with an extension in
+    /// [`FONT_EXTENSIONS`](crate::watch::FONT_EXTENSIONS): a face a `Text`
+    /// can draw with.
+    Font,
     /// A file [`is_scene`](crate::watch::is_scene) accepts: a scene, which is
     /// also what a prefab is, so every one of them can be dropped in.
     Scene,
@@ -132,6 +136,8 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::Atlas
         } else if is_clip(&name) {
             EntryKind::Clip
+        } else if is_font(&name) {
+            EntryKind::Font
         } else if is_scene(&name) {
             // After `Atlas`, which is a `.ron` too; `is_scene` refuses one
             // anyway, and the order says so without having to read it.
@@ -249,6 +255,7 @@ mod atlas_tests {
         let root = voltra_testkit::scratch_root();
         std::fs::write(root.join("coin.atlas.ron"), "(version: 1)").expect("the fixture writes");
         std::fs::write(root.join("demo.ron"), "(version: 1)").expect("the fixture writes");
+        std::fs::write(root.join("label.ttf"), "").expect("the fixture writes");
 
         let entries = list(&root, None).expect("the root lists");
 
@@ -259,6 +266,7 @@ mod atlas_tests {
                 .map(|entry| entry.kind)
         };
         assert_eq!(kind("coin.atlas.ron"), Some(EntryKind::Atlas));
+        assert_eq!(kind("label.ttf"), Some(EntryKind::Font));
         assert_eq!(
             kind("demo.ron"),
             Some(EntryKind::Scene),
