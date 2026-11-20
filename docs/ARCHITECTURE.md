@@ -2411,8 +2411,7 @@ yet — that is 26b.
   `Sheets` carries `fonts`, so draw and pick ask the same store.
 - **Picking is the laid-out box**, ascent to last descent, through the world
   matrix — a click between letters is a click on the label (Unity, Godot).
-- Colour alpha is not drawn, as for sprites: the vertex is RGB. Widening it is
-  its own change.
+- Colour alpha is drawn since stage 34, when the vertex became RGBA.
 
 ### Screen-space UI is a `UiRect`, drawn in a second pass in pixels
 

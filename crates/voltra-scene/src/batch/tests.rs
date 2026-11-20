@@ -88,8 +88,16 @@ fn the_sprite_colour_reaches_every_vertex() {
     let batch = batch_of(&world_with(&[(Transform::default(), sprite)]));
 
     for v in &batch.vertices {
-        assert_eq!(v.color, [0.25, 0.5, 0.75]);
+        assert_eq!(v.color, [0.25, 0.5, 0.75, 1.0]);
     }
+}
+
+#[test]
+fn the_sprite_alpha_reaches_the_vertex_too() {
+    // Dropped before stage 34; a translucent sprite now draws translucent.
+    let sprite = Sprite::new([1.0, 1.0, 1.0, 0.4]);
+    let batch = batch_of(&world_with(&[(Transform::default(), sprite)]));
+    assert!(batch.vertices.iter().all(|v| v.color[3] == 0.4));
 }
 
 #[test]

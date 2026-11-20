@@ -196,11 +196,8 @@ impl SpriteBatch {
         let base = self.vertices.len() as u32;
 
         for (world, uv) in world.into_iter().zip(uvs) {
-            self.vertices.push(Vertex::new(
-                [world.x, world.y],
-                [color[0], color[1], color[2]],
-                uv,
-            ));
+            self.vertices
+                .push(Vertex::new([world.x, world.y], color, uv));
         }
 
         let start = self.indices.len() as u32;

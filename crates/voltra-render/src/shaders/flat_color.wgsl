@@ -4,7 +4,7 @@
 // @location numbers here must match the attribute shader_locations there.
 // Group 0 must match `CameraBinding`, group 1 `texture::bind_group_layout`.
 //
-// The final colour is texture * vertex colour, so binding a 1x1 white texture
+// The final colour is texture * vertex colour, alpha included, so binding a 1x1 white texture
 // (`Texture::white`) makes this behave exactly like a flat-colour shader.
 // That is what saves having a second pipeline for untextured geometry.
 
@@ -23,13 +23,13 @@ var albedo_sampler: sampler;
 
 struct VertexInput {
     @location(0) position: vec2<f32>,
-    @location(1) color: vec3<f32>,
+    @location(1) color: vec4<f32>,
     @location(2) uv: vec2<f32>,
 }
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) color: vec3<f32>,
+    @location(0) color: vec4<f32>,
     @location(1) uv: vec2<f32>,
 }
 
@@ -45,5 +45,5 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let sampled = textureSample(albedo, albedo_sampler, in.uv);
-    return vec4<f32>(sampled.rgb * in.color, sampled.a);
+    return sampled * in.color;
 }

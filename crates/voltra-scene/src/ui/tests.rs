@@ -216,7 +216,11 @@ fn a_childs_sprite_draws_over_its_panels_and_text_over_its_own_sprite() {
     let textures: Vec<_> = batch.ranges.iter().map(|r| r.texture).collect();
     assert_eq!(textures, vec![None, Some(Handle::forge(7, 0))]);
     let first = batch.vertices[0].color;
-    assert_eq!(first, [0.0, 0.0, 1.0], "the panel is first, under the rest");
+    assert_eq!(
+        first,
+        [0.0, 0.0, 1.0, 1.0],
+        "the panel is first, under the rest"
+    );
 }
 
 #[test]
