@@ -528,16 +528,15 @@ Space",
 
 /// Far hills behind the level: one parent with a [`Parallax`] and the hills
 /// under it. 0.3 across, so they slide by slowly and read as distant; 1 up
-/// and down, so a jump does not make the horizon bob.
+/// and down, so a jump does not make the horizon bob. Repeated every 30
+/// units — six hills five apart — so the range never ends.
 fn spawn_backdrop(app: &mut App) {
     let hills = app.world.spawn();
     app.world.insert(hills, voltra_scene::SceneId::new());
     app.world.insert(hills, Transform::default());
     app.world.insert(
         hills,
-        Parallax {
-            factor: Vec2::new(0.3, 1.0),
-        },
+        Parallax::new(Vec2::new(0.3, 1.0)).repeating(Vec2::new(30.0, 0.0)),
     );
     for (i, height) in [3.0, 4.5, 2.5, 5.0, 3.5, 4.0].into_iter().enumerate() {
         let hill = app.world.spawn();

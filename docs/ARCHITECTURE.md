@@ -2688,8 +2688,16 @@ camera, `0.3` is far hills.
   under one stays at its transform. The gizmo edits the transform, so in the
   editor a dragged layer moves by its own offset from where it is drawn —
   acceptable for decoration, worth revisiting if layers get interactive.
-- **Not yet:** repeating (Godot's `repeat_size`) for endless backgrounds,
-  which needs a layer drawn more than once.
+- **Repeating** (stage 37): `Parallax::repeat: Option<Vec2>`, Godot's
+  `repeat_size`. Each drawable under the layer is drawn again every period,
+  at the offsets that cover the view plus one period of margin either side —
+  computed per drawable from its own position, so a layer of several hills
+  tiles as one. Per axis (`0` does not repeat on it), capped at
+  `MAX_REPEATS` (64) per axis so a tiny period cannot flood the batch, and a
+  single copy with no view (picks, tests). The batch asks once whether any
+  layer repeats, so a world without one draws exactly as before. Picking sees
+  the original only: the copies are the same decoration again. The
+  platformer's hills repeat every 30 units, so the range never ends.
 
 ### The batch draws what the camera sees, chunk by chunk for tilemaps
 
