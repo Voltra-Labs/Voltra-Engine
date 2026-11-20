@@ -35,10 +35,9 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &mut Paint) -> Option<
             egui::Grid::new("terrain_frames")
                 .num_columns(4)
                 .show(ui, |ui| {
-                    for mask in 0..16 {
+                    for (mask, frame) in terrain.frames.iter_mut().enumerate() {
                         claim = claim.or(active(
-                            &ui.add(DragValue::new(&mut terrain.frames[mask]))
-                                .on_hover_text(sides(mask)),
+                            &ui.add(DragValue::new(frame)).on_hover_text(sides(mask)),
                             "Edit terrain",
                         ));
                         if mask % 4 == 3 {
