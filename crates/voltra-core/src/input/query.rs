@@ -36,24 +36,46 @@ impl Input {
         self.action(positive).strength() - self.action(negative).strength()
     }
 
+    /// Whether `binding` is down: a key or button held, a stick direction
+    /// past [`AXIS_PRESS`](super::pads::AXIS_PRESS). Actions apply their own
+    /// dead zone instead; this is the raw read.
     pub fn is_binding_down(&self, binding: Binding) -> bool {
         match binding {
             Binding::Key(code) => self.is_key_down(code),
             Binding::Mouse(button) => self.is_mouse_button_down(button),
+            Binding::Pad(button) => self.pads.is_down(button),
+            Binding::PadAxis(..) => self.binding_value(binding) >= super::pads::AXIS_PRESS,
         }
     }
 
+    /// Whether `binding` was pressed this frame. A stick has no press of its
+    /// own; see [`Input::pressed_binding`] for one being pushed.
     pub fn was_binding_pressed(&self, binding: Binding) -> bool {
         match binding {
             Binding::Key(code) => self.was_key_pressed(code),
             Binding::Mouse(button) => self.was_mouse_button_pressed(button),
+            Binding::Pad(button) => self.pads.was_pressed(button),
+            Binding::PadAxis(..) => false,
+        }
+    }
+
+    /// How far `binding` is in, `0` to `1`: a key is `0` or `1`, a trigger
+    /// its travel, a stick direction how far it is pushed that way.
+    pub fn binding_value(&self, binding: Binding) -> f32 {
+        match binding {
+            Binding::Key(_) | Binding::Mouse(_) => {
+                f32::from(u8::from(self.is_binding_down(binding)))
+            }
+            Binding::Pad(button) => self.pads.button_value(button),
+            Binding::PadAxis(axis, direction) => direction.amount(self.pads.axis(axis)),
         }
     }
 
     /// A control that went down this frame, for "press a key for jump".
     ///
-    /// Keys before mouse buttons, and the lowest of each when several went
-    /// down at once, so the answer does not depend on hash order.
+    /// Keys, then mouse buttons, then pad buttons, then a stick pushed past
+    /// half way — the lowest of each when several went at once, so the
+    /// answer does not depend on hash order.
     pub fn pressed_binding(&self) -> Option<Binding> {
         self.keys_pressed
             .iter()
@@ -65,12 +87,18 @@ impl Input {
                     .min()
                     .map(|button| Binding::Mouse(*button))
             })
+            .or_else(|| self.pads.pressed_button().map(Binding::Pad))
+            .or_else(|| {
+                self.pads
+                    .pushed_axis()
+                    .map(|(axis, direction)| Binding::PadAxis(axis, direction))
+            })
     }
 }
 
 impl BindingSource for Input {
-    fn is_down(&self, binding: Binding) -> bool {
-        self.is_binding_down(binding)
+    fn value(&self, binding: Binding) -> f32 {
+        self.binding_value(binding)
     }
 
     fn went_down(&self, binding: Binding) -> bool {

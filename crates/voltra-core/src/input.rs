@@ -18,13 +18,14 @@
 pub mod action;
 pub mod binding;
 pub mod map;
+pub mod pads;
 mod query;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 
 pub use action::ActionState;
-pub use binding::Binding;
+pub use binding::{Binding, Direction, PadAxis, PadButton};
 pub use map::{Action, ActionMap, MapError};
 
 use action::ActionStates;
@@ -55,6 +56,13 @@ pub struct Input {
     last_cursor: Option<Vec2>,
     mouse_delta: Vec2,
     scroll_delta: f32,
+
+    /// Every gamepad, merged: one player, any pad.
+    pads: pads::Pads,
+    /// Set while the window does not have focus. Pad events still arrive
+    /// then — `gilrs` is not tied to a window — and a game in the background
+    /// must not be steered by them.
+    unfocused: bool,
 
     /// Every action's state, re-derived by [`Input::update_actions`].
     actions: ActionStates,
@@ -108,12 +116,52 @@ impl Input {
         self.scroll_delta += lines;
     }
 
-    /// Drops every held key and button.
+    /// A pad button went down or up. Pads are numbered by the backend and
+    /// the number only tells pads apart. Ignored while unfocused.
+    pub fn on_pad_button(&mut self, pad: u32, button: PadButton, pressed: bool) {
+        if !self.unfocused {
+            self.pads.on_button(pad, button, pressed);
+        }
+    }
+
+    /// A pad button's analog travel changed — a trigger, `0` to `1`.
+    pub fn on_pad_button_value(&mut self, pad: u32, button: PadButton, value: f32) {
+        if !self.unfocused {
+            self.pads.on_button_value(pad, button, value);
+        }
+    }
+
+    /// A stick axis moved, `-1` to `+1`.
+    pub fn on_pad_axis(&mut self, pad: u32, axis: PadAxis, value: f32) {
+        if !self.unfocused {
+            self.pads.on_axis(pad, axis, value);
+        }
+    }
+
+    /// A pad went away: what it held is released.
+    pub fn on_pad_disconnected(&mut self, pad: u32) {
+        self.pads.release(Some(pad));
+    }
+
+    /// The window came back to the front; pad input counts again.
+    pub fn on_focus_gained(&mut self) {
+        self.unfocused = false;
+    }
+
+    /// Every pad's merged state, for a raw read.
+    pub fn pads(&self) -> &pads::Pads {
+        &self.pads
+    }
+
+    /// Drops every held key, button and pad control, and ignores pads
+    /// until focus returns.
     ///
     /// Without this, alt-tabbing while holding a key leaves it stuck down
     /// forever: the release lands on whatever window took focus. winit only
     /// synthesises releases on X11 and Windows, so this is the portable fix.
     pub fn on_focus_lost(&mut self) {
+        self.unfocused = true;
+        self.pads.release(None);
         for code in self.keys_held.drain() {
             self.keys_released.insert(code);
         }
@@ -148,6 +196,7 @@ impl Input {
                 self.on_scroll(lines);
             }
             WindowEvent::Focused(false) => self.on_focus_lost(),
+            WindowEvent::Focused(true) => self.on_focus_gained(),
             _ => {}
         }
     }
@@ -160,6 +209,7 @@ impl Input {
         self.buttons_released.clear();
         self.mouse_delta = Vec2::ZERO;
         self.scroll_delta = 0.0;
+        self.pads.end_frame();
     }
 
     // --- queries ------------------------------------------------------------

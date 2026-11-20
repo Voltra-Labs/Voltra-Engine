@@ -10,7 +10,9 @@ pub mod ui;
 pub mod window;
 
 pub use app::{App, Tick, UiFrame, DEFAULT_INPUT_MAP};
-pub use input::{ActionMap, ActionState, Binding, Input, MouseButton};
+pub use input::{
+    ActionMap, ActionState, Binding, Direction, Input, MouseButton, PadAxis, PadButton,
+};
 pub use time::{Clock, Timestep};
 pub use ui::EguiLayer;
 pub use window::WindowConfig;

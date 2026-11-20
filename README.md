@@ -248,7 +248,8 @@ privileged and plain `cargo build` covers everything.
 | 25 | Tilemaps: layers, generated colliders, paint tool | done |
 | 26 | Text and screen-space UI: fonts, glyph atlas, `UiRect` HUD | done |
 | 27a | Input actions: map file, action edges, rebinding | done |
-| 27b | Gamepads | next |
+| 27b | Gamepads: pad bindings, analog dead zones | done |
+| 28 | Sleeping bodies and a real broad phase | next |
 
 ## Contributing
 
