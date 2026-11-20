@@ -1,9 +1,10 @@
-//! A fast hasher for the entity-keyed maps the step rebuilds every frame.
+//! A fast hasher for the entity-keyed maps rebuilt every frame — the
+//! physics step's and the draw's.
 //!
 //! The standard library's SipHash resists collision attacks on keys an
 //! attacker chooses. Entity ids are handed out by the world, never chosen
-//! from outside, and the step hashes thousands of them per frame — measured,
-//! SipHash was most of what sleeping bookkeeping cost. This is the
+//! from outside, and a frame hashes thousands of them — measured, SipHash was
+//! most of what sleeping bookkeeping cost, and most of composing transforms. This is the
 //! multiply-rotate mix `rustc` itself uses (FxHash), in a dozen lines rather
 //! than a dependency.
 

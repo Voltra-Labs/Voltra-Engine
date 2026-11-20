@@ -40,7 +40,8 @@ impl App {
         // in a profile.
         let sheets = Sheets::new(atlases, textures)
             .with_fonts(fonts)
-            .seen_from(renderer.camera.position);
+            .seen_from(renderer.camera.position)
+            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera));
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(renderer.context().device());
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -113,7 +114,8 @@ impl App {
         // both stores mutably below.
         let sheets = Sheets::new(atlases, textures)
             .with_fonts(fonts)
-            .seen_from(renderer.camera.position);
+            .seen_from(renderer.camera.position)
+            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera));
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -233,4 +235,14 @@ fn mesh_draws<'a>(
             indices: range.indices.clone(),
         })
         .collect()
+}
+
+/// The lower-left corner of what `camera` sees, in world units.
+fn view_min(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
+    camera.position - camera.half_extents()
+}
+
+/// The upper-right corner of what `camera` sees, in world units.
+fn view_max(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
+    camera.position + camera.half_extents()
 }

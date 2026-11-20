@@ -55,6 +55,9 @@ pub struct SpriteRange {
 /// so it can be produced and asserted on without a device.
 #[derive(Debug, Default, Clone)]
 pub struct SpriteBatch {
+    /// The view quads are culled against, from the [`Sheets`] the batch was
+    /// built with. `None` keeps every quad.
+    visible: Option<(Vec2, Vec2)>,
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     /// Draw-order runs of same-texture sprites, covering all of `indices`.
@@ -107,7 +110,10 @@ impl SpriteBatch {
         // frame.
         let transforms = WorldTransforms::seen_from(world, sheets.camera);
 
-        let mut batch = Self::default();
+        let mut batch = Self {
+            visible: sheets.visible,
+            ..Self::default()
+        };
         for (entity, drawn) in drawn {
             let matrix = transforms.matrix(entity);
             match drawn {
@@ -171,13 +177,25 @@ impl SpriteBatch {
         color: [f32; 4],
         texture: Option<Handle<Texture>>,
     ) {
+        let world = corners.map(|corner| matrix.transform_point2(corner));
+        // Culled on the corners as they will be drawn, so a rotated, scaled,
+        // parented or parallax-displaced quad is tested where it really is.
+        let view = Sheets {
+            visible: self.visible,
+            ..Sheets::default()
+        };
+        let min = world.iter().copied().fold(Vec2::INFINITY, Vec2::min);
+        let max = world.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);
+        if !view.sees(min, max) {
+            return;
+        }
+
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
         // batch holds every sprite in the world, not one object's geometry.
         let base = self.vertices.len() as u32;
 
-        for (corner, uv) in corners.into_iter().zip(uvs) {
-            let world = matrix.transform_point2(corner);
+        for (world, uv) in world.into_iter().zip(uvs) {
             self.vertices.push(Vertex::new(
                 [world.x, world.y],
                 [color[0], color[1], color[2]],
@@ -225,5 +243,7 @@ impl SpriteBatch {
     }
 }
 
+#[cfg(test)]
+mod cull_tests;
 #[cfg(test)]
 mod tests;
