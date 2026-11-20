@@ -411,6 +411,7 @@ mod frame_tests {
             fonts: None,
             camera: voltra_render::glam::Vec2::ZERO,
             visible: None,
+            time: 0.0,
         };
 
         assert_eq!(

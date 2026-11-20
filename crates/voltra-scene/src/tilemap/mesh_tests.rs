@@ -211,3 +211,69 @@ fn a_layer_without_a_transform_is_not_drawn() {
 
     assert!(SpriteBatch::from_world(&world, Sheets::new(&atlases, &Sizes)).is_empty());
 }
+
+#[test]
+fn an_animated_frame_samples_the_frame_its_clock_is_on() {
+    use crate::tilemap::TileAnimation;
+
+    let (mut atlases, path) = atlases();
+    let mut map = layer(&mut atlases, &path);
+    map.set(IVec2::ZERO, Some(Tile::new(0)));
+    map.animations.insert(
+        0,
+        TileAnimation {
+            frames: vec![0, 2],
+            frame_time: 0.5,
+        },
+    );
+    let u_at = |time: f32| {
+        let mut batch = SpriteBatch::default();
+        super::mesh::push(
+            &mut batch,
+            Mat3::IDENTITY,
+            &map,
+            Sheets::new(&atlases, &Sizes).at_time(time),
+        );
+        batch.vertices[0].uv[0]
+    };
+    assert_eq!(u_at(0.0), 0.0, "frame 0 at the start");
+    assert_eq!(u_at(0.75), 0.5, "frame 2 of four is half way across");
+    assert_eq!(u_at(1.1), 0.0, "and round again");
+}
+
+#[test]
+fn a_frame_with_no_animation_is_unchanged_by_the_clock() {
+    let (mut atlases, path) = atlases();
+    let mut map = layer(&mut atlases, &path);
+    map.set(IVec2::ZERO, Some(Tile::new(1)));
+    let mut batch = SpriteBatch::default();
+    super::mesh::push(
+        &mut batch,
+        Mat3::IDENTITY,
+        &map,
+        Sheets::new(&atlases, &Sizes).at_time(123.0),
+    );
+    assert_eq!(batch.vertices[0].uv[0], 0.25);
+}
+
+#[test]
+fn animations_round_trip_and_an_old_layer_reads_without_them() {
+    use crate::tilemap::TileAnimation;
+
+    let mut map = Tilemap::default();
+    map.animations.insert(
+        3,
+        TileAnimation {
+            frames: vec![3, 4],
+            frame_time: 0.2,
+        },
+    );
+    let text = ron::to_string(&map).expect("writes");
+    let back: Tilemap = ron::from_str(&text).expect("reads");
+    assert_eq!(back.animations, map.animations);
+
+    let plain = ron::to_string(&Tilemap::default()).expect("writes");
+    assert!(!plain.contains("animations"), "nothing written when empty");
+    let read: Tilemap = ron::from_str(&plain).expect("an old layer reads");
+    assert!(read.animations.is_empty());
+}

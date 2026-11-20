@@ -41,7 +41,8 @@ impl App {
         let sheets = Sheets::new(atlases, textures)
             .with_fonts(fonts)
             .seen_from(renderer.camera.position)
-            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera));
+            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
+            .at_time(clock_seconds(self.elapsed));
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(renderer.context().device());
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -115,7 +116,8 @@ impl App {
         let sheets = Sheets::new(atlases, textures)
             .with_fonts(fonts)
             .seen_from(renderer.camera.position)
-            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera));
+            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
+            .at_time(clock_seconds(self.elapsed));
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -245,4 +247,10 @@ fn view_min(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
 /// The upper-right corner of what `camera` sees, in world units.
 fn view_max(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
     camera.position + camera.half_extents()
+}
+
+/// The elapsed clock as the batch takes it. Wrapped at a day, so an `f32`
+/// keeps millisecond precision however long the game has been open.
+fn clock_seconds(elapsed: f64) -> f32 {
+    (elapsed % 86_400.0) as f32
 }

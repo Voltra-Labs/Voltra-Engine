@@ -19,6 +19,7 @@
 //! **The tileset is an atlas.** Stage 22's slicing is exactly what a tileset
 //! is: frames cut from one sheet. A cell stores a frame index into it.
 
+pub mod animation;
 pub mod boxes;
 mod chunk;
 pub mod colliders;
@@ -32,6 +33,7 @@ use voltra_assets::{AssetPath, Atlas, Atlases, Handle, Textures};
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_render::Texture;
 
+pub use animation::TileAnimation;
 pub use boxes::{solid_boxes, CellRect};
 pub use chunk::CHUNK;
 use chunk::{cell_of, locate, Chunk, ChunkKey};
@@ -90,6 +92,10 @@ pub struct Tilemap {
     pub atlas: Option<AssetPath>,
     #[serde(skip)]
     pub atlas_handle: Option<Handle<Atlas>>,
+    /// Frames that animate, by the frame a cell names: every cell showing
+    /// that frame cycles through the animation instead.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub animations: BTreeMap<u32, TileAnimation>,
     #[serde(with = "chunk::layout")]
     chunks: BTreeMap<ChunkKey, Chunk>,
     /// Changes whenever a cell does. Never saved: a loaded layer is new.
@@ -108,6 +114,7 @@ impl Default for Tilemap {
             texture_handle: None,
             atlas: None,
             atlas_handle: None,
+            animations: BTreeMap::new(),
             chunks: BTreeMap::new(),
             revision: Revision::fresh(),
         }
@@ -222,6 +229,15 @@ impl Tilemap {
         cell.is_finite()
             .then(|| cell.as_ivec2())
             .filter(|_| cell.abs().max_element() < i32::MAX as f32)
+    }
+
+    /// The frame a cell naming `frame` shows `time` seconds in: the
+    /// animation's, if `frame` has one, else `frame` itself.
+    pub fn shown_frame(&self, frame: u32, time: f32) -> u32 {
+        self.animations
+            .get(&frame)
+            .and_then(|animation| animation.frame_at(time))
+            .unwrap_or(frame)
     }
 
     /// The lower-left corner of `cell`, in the entity's own space.

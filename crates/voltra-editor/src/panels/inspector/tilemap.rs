@@ -4,6 +4,7 @@
 //! palettes work; what this section edits is the layer as a whole, plus the
 //! palette that picks the brush.
 
+mod animations;
 mod palette;
 
 pub(super) use palette::Palette;
@@ -94,6 +95,8 @@ pub(super) fn show(
         ui.separator();
         palette::show(ui, set, palette);
     }
+    ui.separator();
+    claim = claim.or(animations::show(ui, map));
     claim
 }
 

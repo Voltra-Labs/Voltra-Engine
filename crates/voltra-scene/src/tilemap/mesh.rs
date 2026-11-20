@@ -85,7 +85,11 @@ fn sample(
     let found = if map.atlas.is_some() {
         sheets
             .atlas(map.atlas_handle)
-            .and_then(|atlas| atlas.frame(tile.frame)?.uv(atlas.sheet()))
+            .and_then(|atlas| {
+                atlas
+                    .frame(map.shown_frame(tile.frame, sheets.time))?
+                    .uv(atlas.sheet())
+            })
             .map(|uv| (uv, map.texture_handle))
     } else {
         Some((WHOLE, map.texture_handle))

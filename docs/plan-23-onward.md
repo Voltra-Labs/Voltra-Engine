@@ -44,8 +44,8 @@ whatever generates the bodies.
 
 Things that will want a stage of their own eventually, listed so they are not
 mistaken for oversights: GPU particles (CPU ones landed in 34), the tilemap's
-per-chunk mesh cache, auto-tiling and animated tiles (after
-25; see its decisions), sorting layers, a render graph and post-processing, a job system, and
+per-chunk mesh cache, auto-tiling (after 25; see its decisions), sorting
+layers, a render graph and post-processing, a job system, and
 3D — which per CLAUDE.md
 is a new subsystem with its own design, not a parameter added to any of the
 above.

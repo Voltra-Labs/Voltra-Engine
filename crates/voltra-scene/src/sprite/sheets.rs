@@ -32,6 +32,9 @@ pub struct Sheets<'a> {
     /// keeps everything, which is what a pick, a test and a caller with no
     /// camera want.
     pub visible: Option<(Vec2, Vec2)>,
+    /// Seconds on the clock the frame is drawn at, which animated tiles
+    /// pick their frame by.
+    pub time: f32,
 }
 
 impl<'a> Sheets<'a> {
@@ -43,6 +46,7 @@ impl<'a> Sheets<'a> {
             fonts: None,
             camera: Vec2::ZERO,
             visible: None,
+            time: 0.0,
         }
     }
 
@@ -69,6 +73,12 @@ impl<'a> Sheets<'a> {
             return true;
         }
         min.x <= view_max.x && max.x >= view_min.x && min.y <= view_max.y && max.y >= view_min.y
+    }
+
+    /// The same stores, drawn `time` seconds into the clock.
+    pub fn at_time(mut self, time: f32) -> Self {
+        self.time = time;
+        self
     }
 
     /// The same stores, seen through a camera at `camera`.

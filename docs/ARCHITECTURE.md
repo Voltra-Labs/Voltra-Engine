@@ -2819,6 +2819,27 @@ with code builds its own start.
   platformer does, and `platformer.build.ron` packages it: verified as a GUI
   (subsystem 2) executable, with the debug build still a console one.
 
+### Animated tiles are keyed by the frame they replace
+
+Stage 38. Tiled's and Godot's model: `Tilemap::animations` maps a frame to a
+`TileAnimation { frames, frame_time }`, and every cell naming that frame
+shows the animation instead. The cells are untouched, so a level already
+painted animates by adding one entry; a layer saved before has no field and
+reads as none (`skip_serializing_if` keeps it out of files that do not use it).
+
+- **The clock rides in `Sheets::at_time`**, beside the camera and the view,
+  so the mesh samples `Tilemap::shown_frame(frame, time)`. The draw path
+  passes `App::elapsed` — seconds since the loop started, accumulated every
+  frame whether or not the world simulates, so water moves in the editor
+  too, as Godot's does. Wrapped at a day before the `f32` cast, which keeps
+  millisecond precision however long the game runs.
+- An animation with no frames, or a frame time that is not a positive number,
+  draws the cell's own frame; a frame index past the atlas draws the
+  placeholder, as any missing frame does.
+- Per layer rather than in the atlas file: two layers sharing a sheet may
+  animate it differently, and the atlas stays a pure slicing. The inspector
+  edits base frame, frames (`4, 5, 6`) and seconds per frame.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -100,6 +100,9 @@ pub struct App {
     /// the first of them. Emptied once the tick has had it.
     pending_events: Vec<CollisionEvent>,
     clock: Clock,
+    /// Seconds since the loop started, simulating or not: the clock animated
+    /// tiles are drawn by, so water moves in the editor too, as in Godot.
+    elapsed: f64,
     input: Input,
     /// The game's buttons: hover, press, focus and this frame's clicks.
     ui_buttons: voltra_scene::UiButtons,
@@ -346,6 +349,7 @@ impl App {
             pads.poll(&mut self.input);
         }
         let delta = self.clock.tick();
+        self.elapsed += delta.as_secs_f64();
         self.advance(delta.as_secs_f32());
         self.reload_changed_assets();
     }
