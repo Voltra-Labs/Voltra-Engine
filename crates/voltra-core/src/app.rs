@@ -14,6 +14,7 @@ mod thumbnails;
 mod tick;
 mod tick_audio;
 mod ui_frame;
+mod ui_input;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -100,6 +101,8 @@ pub struct App {
     pending_events: Vec<CollisionEvent>,
     clock: Clock,
     input: Input,
+    /// The game's buttons: hover, press, focus and this frame's clicks.
+    ui_buttons: voltra_scene::UiButtons,
     /// The game's save slots, in its per-user folder.
     saves: crate::saves::Saves,
     /// Scene changes and additive loads the ticks asked for, and what each
@@ -361,6 +364,9 @@ impl App {
         // Once per frame, before anything reads an action: the fixed tick
         // below sees the same actions as the per-frame one.
         self.input.update_actions(&self.actions);
+        // After the actions, which navigate the focus, and before the tick,
+        // which reads this frame's clicks.
+        self.update_ui_buttons();
         self.run_update(delta);
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.

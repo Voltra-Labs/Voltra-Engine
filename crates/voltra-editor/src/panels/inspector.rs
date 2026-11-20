@@ -15,6 +15,7 @@ mod sprite;
 mod text;
 mod tilemap;
 mod transform;
+mod ui_button;
 mod ui_rect;
 
 use voltra_core::egui::{self, Color32, RichText, Ui};
@@ -22,7 +23,7 @@ use voltra_core::UiFrame;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
     hierarchy, ui, AudioSource, Camera, Collider, Parallax, ParticleEmitter, SceneId, Sprite, Text,
-    Tilemap, Transform, UiLayout, UiRect,
+    Tilemap, Transform, UiButton, UiLayout, UiRect,
 };
 
 use crate::editor::Editor;
@@ -71,6 +72,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 let parent_rect = ui_parent_rect(ui, frame, entity);
                 if let Some(rect) = frame.world.get_mut::<UiRect>(entity) {
                     claim = claim.or(ui_rect::show(ui, rect, parent_rect));
+                }
+                if let Some(button) = frame.world.get_mut::<UiButton>(entity) {
+                    claim = claim.or(ui_button::show(ui, button));
                 }
                 let on_screen = ui::is_ui(frame.world, entity);
                 // Both are read before the world is borrowed mutably below:

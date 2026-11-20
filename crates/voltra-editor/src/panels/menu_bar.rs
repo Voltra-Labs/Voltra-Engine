@@ -55,6 +55,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     });
                     ui.close();
                 }
+                if ui.button("Spawn HUD button").clicked() {
+                    spawn::record_all(editor, frame, "Spawn HUD button", |frame, _| {
+                        spawn::hud_button(frame, "HUD button")
+                    });
+                    ui.close();
+                }
                 if ui.button("Spawn particles").clicked() {
                     spawn::record(editor, frame, "Spawn particles", |frame| {
                         spawn::particles(frame, "Particles", Vec2::ZERO)

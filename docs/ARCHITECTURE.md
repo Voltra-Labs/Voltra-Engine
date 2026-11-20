@@ -2758,6 +2758,35 @@ half-way).
   like it; sorted with sprites by the emitter's `sort_order` and culled per
   quad like everything else. Inspector section and *Scene ▸ Spawn particles*.
 
+### Buttons take the pointer and the focus, and the tick reads the clicks
+
+Stage 35 — the interaction 26b left out. Godot's `Button` and its default
+geometric focus neighbours, on this engine's pieces.
+
+- **`UiButton`** on a `UiRect` element: colours for normal, hovered (or
+  focused), pressed and disabled, written into the entity's `Sprite` each
+  frame. The label is a `Text` child; a hit on it reaches the nearest
+  `UiButton` above it, as Godot's default `mouse_filter` passes a click on.
+- **The logic is a pure function** in `voltra-scene` —
+  `UiButtons::update(world, layout, Pointer, Navigation)` — so every rule is
+  tested without a window. A click is a press and a release over the same
+  button; releasing elsewhere cancels it; a press focuses. Clicks last one
+  frame. Disabled and despawned buttons drop out of hover, press and focus.
+- **Navigation:** `ui_up/down/left/right` move the focus to the nearest
+  usable button ahead (distance plus twice the sideways drift); with no focus
+  yet, the top-left-most. `ui_accept` presses the focused one. In
+  `default.input.ron`: arrows and D-pad, accept on Enter, keypad Enter and
+  pad South — not Space, which a game is likely to want for itself. A map
+  without the actions navigates nothing, and does not warn about them.
+- **The loop** updates the state after the frame's actions and before the
+  tick, from the cursor in points (physical ÷ scale factor) and the left
+  button's edges, laid out on the window in points — so `tick.ui.clicked(e)`
+  is this frame's. `tick.ui.focus(e)` moves the focus. Only in a window with
+  no editor around it: in the editor the HUD is being authored, and clicking
+  it selects rather than presses.
+- Inspector section, *Scene ▸ Spawn HUD button* (button and label in one undo
+  entry), and a "Save" button on the platformer's HUD.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

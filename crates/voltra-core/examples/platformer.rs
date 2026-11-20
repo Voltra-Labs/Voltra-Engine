@@ -23,7 +23,7 @@ use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
     Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, Parallax,
     ParticleEmitter, Persistent, PhysicsMaterial, RigidBody, Sensor, Sprite, Text, Tile, Tilemap,
-    Transform, UiRect,
+    Transform, UiButton, UiRect,
 };
 
 /// This example's own component, in the same world as the engine's.
@@ -84,6 +84,7 @@ fn main() {
     let walker = spawn_scene(&mut app);
     let camera = spawn_camera(&mut app);
     let counter = spawn_hud(&mut app);
+    let save_button = spawn_save_button(&mut app);
     // Shared: the fixed tick counts coins, the per-frame one saves and loads
     // them.
     let coins = Rc::new(Cell::new(0));
@@ -109,8 +110,13 @@ fn main() {
             } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F1)) {
                 log::info!("press a key for jump");
                 rebinding = true;
-            } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F5)) {
+            } else if tick.ui.clicked(save_button)
+                || tick.input.was_binding_pressed(Binding::Key(KeyCode::F5))
+            {
                 save_progress(tick, walker, coins.get());
+                // Let go of the focus a click gave it, or the pad's South —
+                // jump — would press it again on the next jump.
+                tick.ui.focus(None);
             } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F9)) {
                 if let Some(loaded) = load_progress(tick, walker) {
                     coins.set(loaded);
@@ -201,6 +207,35 @@ fn spawn_hud(app: &mut App) -> Entity {
         log::error!("could not put the counter on its panel: {e}");
     }
     counter
+}
+
+/// A "Save" button under the counter: what F5 does, for a mouse.
+fn spawn_save_button(app: &mut App) -> Entity {
+    let button = app.world.spawn();
+    app.world.insert(button, voltra_scene::SceneId::new());
+    app.world.insert(button, Persistent);
+    app.world.insert(
+        button,
+        UiRect::pinned(Vec2::ZERO, Vec2::new(16.0, 68.0), Vec2::new(110.0, 34.0)),
+    );
+    app.world.insert(button, Sprite::default());
+    app.world.insert(button, UiButton::default());
+
+    let label = app.world.spawn();
+    app.world.insert(label, voltra_scene::SceneId::new());
+    app.world.insert(label, UiRect::stretched(6.0));
+    app.world.insert(
+        label,
+        Text {
+            size: 18.0,
+            align: Align::Center,
+            ..Text::new("Save")
+        },
+    );
+    if let Err(e) = voltra_scene::hierarchy::set_parent(&mut app.world, label, button) {
+        log::error!("could not label the save button: {e}");
+    }
+    button
 }
 
 fn coins_label(coins: usize) -> String {

@@ -49,4 +49,4 @@ pub use sprite::{draw_key, Sprite};
 pub use text::{Align, Text};
 pub use tilemap::{Tile, Tilemap};
 pub use transform::Transform;
-pub use ui::{UiLayout, UiRect};
+pub use ui::{UiButton, UiButtons, UiLayout, UiRect};
