@@ -3,10 +3,9 @@
 //! A player has no menus, so everything it needs — which scene, where the
 //! assets are, how big the window opens — arrives as arguments. Godot's export
 //! templates take `--main-pack`, Unreal's shipped binary takes a map name and
-//! `-ResX`/`-ResY`, and Unity bakes the same set into the build. A project
-//! settings file is the shape those converge on and is a stage of its own; the
-//! command line is what that stage will read *into*, so the parsing lives
-//! behind one type rather than inside `main`.
+//! `-ResX`/`-ResY`, and Unity bakes the same set into the build. The build
+//! manifest (`build.ron`) is the shape those converge on; `launch` fills in
+//! from it whatever this leaves unsaid.
 
 use std::fmt;
 use std::path::PathBuf;
@@ -23,8 +22,10 @@ pub enum Parsed {
 /// A parsed command line.
 #[derive(Debug, Default, PartialEq)]
 pub struct Args {
-    /// The scene to run. The only required argument.
-    pub scene: PathBuf,
+    /// The scene to run. `None` runs the build the manifest describes.
+    pub scene: Option<PathBuf>,
+    /// A build manifest to read instead of the one beside the player.
+    pub manifest: Option<PathBuf>,
     /// Overrides the asset root every asset path resolves against.
     ///
     /// `None` leaves `voltra_assets::default_root`'s rules alone, which
@@ -38,12 +39,14 @@ pub struct Args {
 }
 
 pub const USAGE: &str = "\
-Usage: voltra-player [OPTIONS] <SCENE>
+Usage: voltra-player [OPTIONS] [SCENE]
 
 Arguments:
-  <SCENE>               Path to the .ron scene to run
+  [SCENE]               Path to the .ron scene to run (default: the scene
+                        build.ron beside the player names)
 
 Options:
+      --manifest FILE   Build manifest to read instead of ./build.ron
       --asset-root DIR  Directory every asset path resolves against
       --title TEXT      Window title (default: the scene file's name)
       --size WxH        Window size in logical pixels, e.g. 1280x720
@@ -52,8 +55,6 @@ Options:
 /// Everything a command line can get wrong.
 #[derive(Debug, PartialEq)]
 pub enum ArgError {
-    /// No scene, and a player with no scene has nothing to be.
-    NoScene,
     /// A second positional argument. Loading two scenes into one world is a
     /// real operation — additive loading — and not one this stage decided on,
     /// so it is refused rather than guessed at.
@@ -70,7 +71,6 @@ pub enum ArgError {
 impl fmt::Display for ArgError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::NoScene => write!(f, "no scene given"),
             Self::ExtraScene(extra) => {
                 write!(f, "only one scene can be run, and `{extra}` is a second")
             }
@@ -99,6 +99,10 @@ where
                 let value = args.next().ok_or(ArgError::MissingValue("--asset-root"))?;
                 parsed.asset_root = Some(PathBuf::from(value));
             }
+            "--manifest" => {
+                let value = args.next().ok_or(ArgError::MissingValue("--manifest"))?;
+                parsed.manifest = Some(PathBuf::from(value));
+            }
             "--title" => {
                 let value = args.next().ok_or(ArgError::MissingValue("--title"))?;
                 parsed.title = Some(value);
@@ -121,7 +125,7 @@ where
         }
     }
 
-    parsed.scene = scene.ok_or(ArgError::NoScene)?;
+    parsed.scene = scene;
     Ok(Parsed::Run(parsed))
 }
 
@@ -140,22 +144,6 @@ fn parse_size(value: &str) -> Result<(u32, u32), ArgError> {
         return Err(bad());
     }
     Ok((width, height))
-}
-
-/// The window title for `args`: what was asked for, or the scene's file name.
-///
-/// Godot titles a running project after the project rather than after the file
-/// it booted. There is no project here yet, so the scene is the closest thing
-/// to a name the player has been handed.
-pub fn title(args: &Args) -> String {
-    if let Some(title) = &args.title {
-        return title.clone();
-    }
-    args.scene
-        .file_stem()
-        .map(|stem| stem.to_string_lossy().into_owned())
-        .filter(|stem| !stem.is_empty())
-        .unwrap_or_else(|| "Voltra".to_string())
 }
 
 #[cfg(test)]
@@ -177,13 +165,24 @@ mod tests {
     fn the_scene_is_the_one_positional_argument() {
         assert_eq!(
             run(&["scenes/level.ron"]).scene,
-            PathBuf::from("scenes/level.ron")
+            Some(PathBuf::from("scenes/level.ron"))
         );
     }
 
     #[test]
-    fn a_player_without_a_scene_is_refused() {
-        assert_eq!(parse_str(&[]), Err(ArgError::NoScene));
+    fn no_scene_is_a_run_of_the_manifest_not_an_error() {
+        // Which manifest, and whether there is one, is `launch`'s question.
+        assert_eq!(run(&[]).scene, None);
+    }
+
+    #[test]
+    fn a_manifest_can_be_named() {
+        let args = run(&["--manifest", "builds/demo.ron"]);
+        assert_eq!(args.manifest, Some(PathBuf::from("builds/demo.ron")));
+        assert_eq!(
+            parse_str(&["--manifest"]),
+            Err(ArgError::MissingValue("--manifest"))
+        );
     }
 
     #[test]
@@ -206,7 +205,7 @@ mod tests {
             "build/assets",
         ]);
 
-        assert_eq!(args.scene, PathBuf::from("level.ron"));
+        assert_eq!(args.scene, Some(PathBuf::from("level.ron")));
         assert_eq!(args.title.as_deref(), Some("Sandbox"));
         assert_eq!(args.size, Some((800, 600)));
         assert_eq!(args.asset_root, Some(PathBuf::from("build/assets")));
@@ -247,11 +246,5 @@ mod tests {
         assert!(parse_size("0x720").is_err());
         assert!(parse_size("1280x-720").is_err());
         assert!(parse_size("12.8x72").is_err());
-    }
-
-    #[test]
-    fn the_title_falls_back_to_the_scene_name() {
-        assert_eq!(title(&run(&["assets/scenes/sandbox.ron"])), "sandbox");
-        assert_eq!(title(&run(&["--title", "My Game", "a.ron"])), "My Game");
     }
 }

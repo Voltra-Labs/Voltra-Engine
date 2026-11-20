@@ -31,38 +31,12 @@ someone who does not have Rust installed.
 | ~~27a~~ | ~~Input actions: the map, evaluation, rebinding~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~27b~~ | ~~Gamepads through `gilrs`, analog bindings and dead zones~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~28~~ | ~~Sleeping bodies and a real broad phase~~ | **Landed.** Decisions and numbers in ARCHITECTURE.md. |
-| 29 | Export: `xtask`, and a build manifest | Turning the tree into a folder someone else can run. Last, because it packages whatever exists. |
+| ~~29~~ | ~~Export: `xtask`, and a build manifest~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 
 Defensible reorderings, if the goal changes: aiming at **a playable demo**
 soonest is 23 → 24 → 26 → 29 and tiles later; aiming at **content tooling** is
 25 first and audio later. What should not move is 24 before 25/26 and 28 after
 whatever generates the bodies.
-
----
-
-## 29 — Export: `xtask` and a build manifest
-
-**Why now.** The tree is not a game anyone else can run: it needs Rust, a
-checkout and a command line.
-
-**Prior art.** Godot's export templates and export presets; Unity's build
-settings with a scene list; Unreal's cook and package.
-
-**Shape.**
-
-- `xtask`, the one crate ARCHITECTURE has been holding a slot for: `cargo xtask
-  dist` builds the player in release, copies the assets it needs beside it, and
-  produces a folder that runs by double-click.
-- A **build manifest** — the startup scene, the window title and size, the
-  asset root — read by the player when no command line says otherwise. This is
-  where the project settings file that stages 19 and 21 both rejected finally
-  earns its existence: it describes *a build*, not an editor.
-- Asset handling: loose files first, an archive later. The asset root already
-  resolves next to the executable, so a loose folder works today.
-
-**Decisions to make.** Whether the editor writes the manifest (a Build panel)
-or it is hand-written; whether unused assets are pruned (needs a dependency
-graph — probably not now); Windows first, with Linux behind the same task.
 
 ---
 

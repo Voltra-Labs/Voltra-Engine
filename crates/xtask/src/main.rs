@@ -1,0 +1,68 @@
+//! The repository's build tasks, run as `cargo xtask <task>`.
+//!
+//! The `xtask` convention: tasks are a binary in the workspace rather than a
+//! shell script, so they are written in the language the project already
+//! builds and run identically on every platform it does. `.cargo/config.toml`
+//! holds the alias.
+
+mod dist;
+mod files;
+
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use voltra_player::MANIFEST_FILE;
+
+const USAGE: &str = "\
+Usage: cargo xtask <TASK>
+
+Tasks:
+  dist [--manifest FILE] [--out DIR]
+        Build the player in release and package it with its assets and
+        manifest into DIR/<name> (default: build.ron, dist/)";
+
+fn main() -> ExitCode {
+    let mut args = std::env::args().skip(1);
+    let result = match args.next().as_deref() {
+        Some("dist") => dist_command(args),
+        Some("-h" | "--help") | None => {
+            println!("{USAGE}");
+            return ExitCode::SUCCESS;
+        }
+        Some(other) => Err(format!("unknown task `{other}`\n\n{USAGE}")),
+    };
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(error) => {
+            eprintln!("error: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn dist_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
+    let workspace = workspace_root();
+    let mut manifest = workspace.join(MANIFEST_FILE);
+    let mut out = workspace.join("dist");
+    while let Some(arg) = args.next() {
+        let mut value = || args.next().ok_or(format!("`{arg}` needs a value"));
+        match arg.as_str() {
+            "--manifest" => manifest = PathBuf::from(value()?),
+            "--out" => out = PathBuf::from(value()?),
+            other => return Err(format!("unknown option `{other}`\n\n{USAGE}")),
+        }
+    }
+    let plan = dist::plan(&manifest, &out)?;
+    dist::run(&plan, &workspace)
+}
+
+/// The workspace root: two levels above this crate's manifest. Not the
+/// working directory, which is wherever `cargo xtask` was typed.
+fn workspace_root() -> PathBuf {
+    let crate_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    crate_dir
+        .parent()
+        .and_then(|crates| crates.parent())
+        .map(PathBuf::from)
+        .unwrap_or(crate_dir)
+}

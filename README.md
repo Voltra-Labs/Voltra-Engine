@@ -43,6 +43,7 @@ needed — everything else comes from Cargo.
 ```sh
 cargo run -p voltra-editor      # launch the editor
 cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no editor
+cargo xtask dist                # package build.ron into dist/<name>/ to hand out
 cargo build --workspace         # build everything
 cargo test --workspace          # run tests
 cargo clippy --workspace --all-targets -- -D warnings
@@ -194,6 +195,7 @@ RUST_LOG=voltra_render=debug    # per-crate log filtering
 Voltra-Engine/
 ├── Cargo.toml            # virtual manifest: workspace + shared dep versions
 ├── CLAUDE.md             # instructions for AI agents working in this repo
+├── build.ron             # the build `cargo xtask dist` packages
 ├── assets/               # runtime assets (shaders, textures, scenes)
 ├── crates/
 │   ├── voltra-ecs/       # entities and components — zero dependencies
@@ -203,7 +205,8 @@ Voltra-Engine/
 │   ├── voltra-physics/   # rigid bodies, integration, contact detection
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
 │   ├── voltra-editor/    # binary: the editor and its panels
-│   └── voltra-player/    # binary: runs a scene with no editor in it
+│   ├── voltra-player/    # binary: runs a scene, or the build beside it
+│   └── xtask/            # `cargo xtask dist`: packages a build
 └── docs/
     ├── ARCHITECTURE.md   # layering, crate graph, planned crates
     └── CONVENTIONS.md    # naming, file/folder rules, code style
@@ -250,7 +253,7 @@ privileged and plain `cargo build` covers everything.
 | 27a | Input actions: map file, action edges, rebinding | done |
 | 27b | Gamepads: pad bindings, analog dead zones | done |
 | 28 | Sweep-and-prune broad phase, sleeping islands | done |
-| 29 | Export: `xtask dist` and a build manifest | next |
+| 29 | Export: `build.ron` manifest and `cargo xtask dist` | done |
 
 ## Contributing
 

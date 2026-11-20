@@ -6,8 +6,16 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+# Off for `cargo run`, on for `cargo xtask dist`: no console window, and the
+# log in a file beside the executable instead.
+[features]
+windowed = []
+
 [dependencies]
+voltra-assets.workspace = true
 voltra-core.workspace = true
+ron.workspace = true
+serde.workspace = true
 voltra-ecs.workspace = true
 voltra-scene.workspace = true
 env_logger.workspace = true
