@@ -264,6 +264,7 @@ privileged and plain `cargo build` covers everything.
 | 36 | `dist` for games with their own binary; shared logging | done |
 | 37 | Repeating parallax backgrounds | done |
 | 38 | Animated tiles | done |
+| 39 | Auto-tiling: 16-frame terrains, painted from the editor | done |
 
 ## Contributing
 

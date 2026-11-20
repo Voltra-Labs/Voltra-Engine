@@ -6,6 +6,7 @@
 
 mod animations;
 mod palette;
+mod terrains;
 
 pub(super) use palette::Palette;
 
@@ -91,10 +92,20 @@ pub(super) fn show(
     claim = claim.or(texture(ui, map, textures, device, queue));
     claim = claim.or(atlas(ui, map, atlases));
 
+    let Palette { sheet, paint } = palette;
     if let Some(set) = map.atlas_handle.and_then(|handle| atlases.try_get(handle)) {
         ui.separator();
-        palette::show(ui, set, palette);
+        palette::show(
+            ui,
+            set,
+            Palette {
+                sheet,
+                paint: &mut *paint,
+            },
+        );
     }
+    ui.separator();
+    claim = claim.or(terrains::show(ui, map, paint));
     ui.separator();
     claim = claim.or(animations::show(ui, map));
     claim
