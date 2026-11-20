@@ -2635,6 +2635,39 @@ additive load away again.
 - The platformer's flag loads `scenes/platformer-2.ron` with the walker,
   camera and HUD carried over.
 
+### A save is the game's own type in a named slot, in a per-user folder
+
+Stage 31. Unreal's `SaveGameToSlot` shape rather than a world snapshot: a
+world holds what the *level* is, and is mostly rebuilt from its scene file;
+what a save needs is what the *player* did, which only the game knows. So the
+game hands `Saves::save(slot, &T)` any `Serialize` type and reads it back
+with `load::<T>(slot) -> Result<Option<T>>`; the engine owns where, how and
+whether to trust it.
+
+- **Where**: `%APPDATA%/<game>/saves` (Windows), `~/Library/Application
+  Support/<game>/saves` (macOS), `$XDG_DATA_HOME` or `~/.local/share` (other
+  Unixes) — Godot's `user://`, resolved from the environment rather than a
+  dependency. `VOLTRA_SAVE_DIR` overrides everything; relative environment
+  paths are ignored, as XDG requires. `<game>` is `App::with_game_name`, the
+  window title by default, and the build manifest's name in the player —
+  sanitised by the one `saves::dir::safe_file_name` the manifest also uses, so
+  a build and its saves agree on what the game is called.
+  `App::with_save_dir` is the portable/test escape.
+- **Slots** are `<slot>.save.ron`, named `[A-Za-z0-9_-]{1,64}` — which is
+  what keeps a slot inside the folder: no separators, no dots, no drive
+  letters. `slots()` lists only files that are valid slots.
+- **Writes are atomic** (temporary file, then rename). **Reads are bounded**
+  (16 MiB, checked before reading): a save is a file the player can edit or a
+  full disk can corrupt. A file that will not parse as `T` is an error, not
+  `None` — an old-version save is something to tell the player about, not to
+  start over from silently. Versioning the type is the game's (a field in
+  `T`), since only it knows what changed.
+- **Synchronous**, from `tick.saves`: a save is small and a checkpoint wants
+  it on disk before anything else can go wrong. `Saves::path_of` also gives
+  `ActionMap::save` a home beside the slots.
+- The platformer saves its coin count and the walker's position on F5 and
+  restores them on F9.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

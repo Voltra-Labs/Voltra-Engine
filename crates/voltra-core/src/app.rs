@@ -99,6 +99,8 @@ pub struct App {
     pending_events: Vec<CollisionEvent>,
     clock: Clock,
     input: Input,
+    /// The game's save slots, in its per-user folder.
+    saves: crate::saves::Saves,
     /// Scene changes and additive loads the ticks asked for, and what each
     /// additive load brought.
     scenes: scenes::Scenes,
@@ -160,6 +162,9 @@ const DEFAULT_GRAVITY: Vec2 = Vec2::new(0.0, -9.81);
 impl App {
     pub fn new(config: WindowConfig) -> Self {
         Self {
+            // Named after the window until the game says otherwise: the
+            // title is the one name every app already has.
+            saves: crate::saves::Saves::for_game(&config.title),
             config,
             // Set here rather than in `Default`, which cannot express a
             // non-zero field without hand-writing the whole impl for a struct
@@ -184,6 +189,28 @@ impl App {
     pub fn with_asset_root(mut self, root: impl Into<PathBuf>) -> Self {
         self.asset_root = Some(root.into());
         self
+    }
+
+    /// Names the game, which names its per-user saves folder —
+    /// `%APPDATA%/<name>/saves` on Windows; see
+    /// [`saves::dir`](crate::saves::dir). Without this, the window title is
+    /// the name.
+    pub fn with_game_name(mut self, name: &str) -> Self {
+        self.saves = crate::saves::Saves::for_game(name);
+        self
+    }
+
+    /// Keeps the save slots in `dir` instead of the per-user folder: a
+    /// portable build, or a test.
+    pub fn with_save_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.saves = crate::saves::Saves::in_dir(dir);
+        self
+    }
+
+    /// The game's save slots, for setup code that reads one before the first
+    /// tick.
+    pub fn saves(&self) -> &crate::saves::Saves {
+        &self.saves
     }
 
     /// Watches the asset root and reloads textures as their files change.

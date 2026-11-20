@@ -81,7 +81,8 @@ fn main() -> ExitCode {
     // Physics from the first frame, and no hot reload: a game simulates the
     // moment it starts — there is no authoring state to protect — and it has
     // no reason to watch files it will never see change.
-    let mut app = app.with_simulation();
+    // Saves go under the game's own name, which a build's manifest gives.
+    let mut app = app.with_simulation().with_game_name(&launch.title);
     if let Some(root) = launch.asset_root {
         app = app.with_asset_root(root);
     }

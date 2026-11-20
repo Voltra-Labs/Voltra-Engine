@@ -77,11 +77,16 @@ fn main() {
         title: "Voltra — platformer".into(),
         ..Default::default()
     })
-    .with_registry(registry);
+    .with_registry(registry)
+    // Its saves folder: `%APPDATA%/Voltra Platformer/saves` on Windows.
+    .with_game_name("Voltra Platformer");
     let walker = spawn_scene(&mut app);
     let camera = spawn_camera(&mut app);
     let counter = spawn_hud(&mut app);
-    let mut coins = 0;
+    // Shared: the fixed tick counts coins, the per-frame one saves and loads
+    // them.
+    let coins = Rc::new(Cell::new(0));
+    let counted = coins.clone();
 
     // The one piece of state the two hooks share: a jump asked for this frame,
     // to be spent by the next step. Without it the fixed tick would have to
@@ -103,6 +108,13 @@ fn main() {
             } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F1)) {
                 log::info!("press a key for jump");
                 rebinding = true;
+            } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F5)) {
+                save_progress(tick, walker, coins.get());
+            } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F9)) {
+                if let Some(loaded) = load_progress(tick, walker) {
+                    coins.set(loaded);
+                    show_coins(tick, counter, loaded);
+                }
             } else if tick.input.action("jump").pressed() {
                 requested.set(true);
             }
@@ -111,8 +123,8 @@ fn main() {
         .with_fixed_update(move |tick| {
             let taken = take_coins(tick, walker);
             if taken > 0 {
-                coins += taken;
-                show_coins(tick, counter, coins);
+                counted.set(counted.get() + taken);
+                show_coins(tick, counter, counted.get());
             }
             if reached_goal(tick, walker) {
                 // The walker, camera and HUD are `Persistent` and come along;
@@ -198,6 +210,54 @@ fn show_coins(tick: &mut Tick<'_>, counter: Entity, coins: usize) {
     if let Some(text) = tick.world.get_mut::<Text>(counter) {
         text.content = coins_label(coins);
     }
+}
+
+/// What F5 keeps and F9 puts back. The game's own type: the engine stores
+/// it in a slot without knowing what is in it.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Progress {
+    coins: usize,
+    position: (f32, f32),
+}
+
+/// The one slot this example uses.
+const SLOT: &str = "quicksave";
+
+fn save_progress(tick: &mut Tick<'_>, walker: Entity, coins: usize) {
+    let Some(at) = tick.world.get::<Transform>(walker).map(|t| t.translation) else {
+        return;
+    };
+    let progress = Progress {
+        coins,
+        position: (at.x, at.y),
+    };
+    if let Err(e) = tick.saves.save(SLOT, &progress) {
+        log::error!("could not save: {e}");
+    }
+}
+
+/// Puts the walker back where the save left it and answers the coin count,
+/// or `None` with nothing saved — or a save this version cannot read, which
+/// is said rather than silently ignored.
+fn load_progress(tick: &mut Tick<'_>, walker: Entity) -> Option<usize> {
+    let progress = match tick.saves.load::<Progress>(SLOT) {
+        Ok(Some(progress)) => progress,
+        Ok(None) => {
+            log::info!("nothing saved yet; F5 saves");
+            return None;
+        }
+        Err(e) => {
+            log::error!("could not load: {e}");
+            return None;
+        }
+    };
+    if let Some(transform) = tick.world.get_mut::<Transform>(walker) {
+        transform.translation = Vec2::new(progress.position.0, progress.position.1);
+    }
+    if let Some(body) = tick.world.get_mut::<RigidBody>(walker) {
+        body.velocity = Vec2::ZERO;
+    }
+    Some(progress.coins)
 }
 
 /// Whether the walker began touching the goal this step.

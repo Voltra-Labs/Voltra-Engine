@@ -173,20 +173,10 @@ impl Manifest {
     }
 
     /// The name, reduced to what every filesystem accepts in a file or
-    /// folder name: letters, digits, `-`, `_` and single spaces, trimmed.
+    /// folder name — the rule the saves folder is named by too, so a build
+    /// and its saves agree on what the game is called.
     pub fn file_name(&self) -> String {
-        let kept: String = self
-            .name
-            .chars()
-            .map(|c| {
-                if c.is_alphanumeric() || c == '-' || c == '_' {
-                    c
-                } else {
-                    ' '
-                }
-            })
-            .collect();
-        kept.split_whitespace().collect::<Vec<_>>().join(" ")
+        voltra_core::saves::dir::safe_file_name(&self.name)
     }
 }
 
