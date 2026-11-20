@@ -133,6 +133,9 @@ fn a_collider_with_no_body_is_static_geometry() {
     let ball = world.spawn();
     world.insert(ball, Transform::from_translation(Vec2::new(0.5, 0.0)));
     world.insert(ball, Collider::Circle { radius: 0.5 });
+    // Dynamic: two static shapes are never a pair, so the wall needs
+    // something that can be pushed off it to show up in a contact.
+    world.insert(ball, RigidBody::new_dynamic(1.0));
 
     let mut cache = ImpulseCache::default();
     let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;
@@ -154,6 +157,7 @@ fn the_contact_names_the_entities_it_is_between() {
     let b = world.spawn();
     world.insert(b, Transform::from_translation(Vec2::new(1.0, 0.0)));
     world.insert(b, Collider::Circle { radius: 1.0 });
+    world.insert(b, RigidBody::new_dynamic(1.0));
 
     let mut cache = ImpulseCache::default();
     let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;

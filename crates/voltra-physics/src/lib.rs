@@ -31,7 +31,7 @@ pub mod solver;
 pub mod step;
 pub mod world;
 
-pub use broad::candidate_pairs;
+pub use broad::{candidate_pairs, sweep, Sweep};
 pub use clock::PhysicsClock;
 pub use events::{CollisionEvent, Touch, Touching};
 pub use integrate::{integrate_positions, integrate_velocities};
