@@ -51,7 +51,7 @@ pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
         .filter(|(entity, _transform, sprite)| {
             contains(transforms.matrix(*entity), point, sprite, sheets)
         })
-        .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite))
+        .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite.sort_order))
         .map(|(entity, _transform, _sprite)| entity)
 }
 

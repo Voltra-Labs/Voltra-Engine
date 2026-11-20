@@ -189,9 +189,10 @@ impl Sprite {
 ///
 /// One function rather than two matching tuples. If batching and picking ever
 /// disagreed, a click would select something other than the sprite whose pixels
-/// are visible, and nothing would report it.
-pub fn draw_key(entity: Entity, sprite: &Sprite) -> (i32, u32) {
-    (sprite.sort_order, entity.index())
+/// are visible, and nothing would report it. Takes the order rather than a
+/// [`Sprite`] because a tilemap layer sorts among sprites by the same key.
+pub fn draw_key(entity: Entity, sort_order: i32) -> (i32, u32) {
+    (sort_order, entity.index())
 }
 
 #[cfg(test)]

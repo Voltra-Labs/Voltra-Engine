@@ -12,9 +12,9 @@ an editor with hierarchy/inspector/gizmos/undo/play/asset browser, and a player
 binary, and since 23 it can make a sound — mixed through buses, faded, limited,
 reloaded and auditioned from the inspector — and since 24a it can stamp out
 copies of a prefab from a tick, and since 24b author one in the editor and
-drop it into a scene. What it still cannot do: fill a screen with tiles, print
-a number, read a gamepad, or be handed to someone who does not have Rust
-installed.
+drop it into a scene, and since 25a draw tilemap layers. What it still cannot
+do: paint tiles in the editor, print a number, read a gamepad, or be handed to
+someone who does not have Rust installed.
 
 ## The order, and why
 
@@ -24,7 +24,8 @@ installed.
 | ~~23b~~ | ~~Audio: buses, tweens, editor audition, hot reload~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~24a~~ | ~~Prefabs: spawn, ids, parent remap, tick API~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~24b~~ | ~~Prefabs: editor authoring and the instance link~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 25 | Tilemaps | The classic 2D content path, and it needs 22's atlas underneath it. Also the first scene that makes stage 28 urgent. |
+| ~~25a~~ | ~~Tilemaps: data, format, mesh~~ | **Landed.** Decisions in ARCHITECTURE.md. |
+| 25b | Tilemaps: collision and the paint tool | What 25a left; see below. Also the first scene that makes stage 28 urgent. |
 | 26 | In-game UI: text and screen space | A game cannot show a score. Held until here because a HUD wants prefabs and fonts want the atlas work from 22. |
 | 27 | Input actions and gamepads | Raw `KeyCode` is fine for one example and wrong for a game. Late on purpose: an action map is a thin layer over input that already works. |
 | 28 | Sleeping bodies and a real broad phase | `broad.rs` already names its own limit at ~200 bodies. A tilemap's generated colliders are what will cross it. |
@@ -37,34 +38,26 @@ whatever generates the bodies.
 
 ---
 
-## 25 — Tilemaps
+## 25b — Tilemaps: collision and the paint tool
 
-**Why now.** It is the 2D content path, and stage 22's atlas is exactly what a
-tileset is.
+25a landed: `Tilemap` as one entity per layer with sparse 16×16 chunks,
+Tiled-style cell encoding, meshed into the sprite batch by `sort_order`,
+resolved like a sprite, an inspector section and **Spawn tilemap**; the
+platformer's ground is drawn from `sprites/ground.atlas.ron`. Decisions under
+"A tilemap layer is one entity" in ARCHITECTURE.md.
 
-**Prior art.** Godot: `TileSet` resource plus a `TileMap` node with layers and
-per-tile collision baked into the set. Unity: `Tilemap` + `TilemapRenderer` +
-`TilemapCollider2D`, with rule tiles for auto-tiling. LDtk and Tiled are the
-import formats worth reading rather than reinventing.
+What is left:
 
-**Shape.**
-
-- `Tilemap { atlas, tile_size, layer of indices }` as a component on **one
-  entity per chunk**, not one entity per tile: a 100×100 map is 10 000
-  entities the ECS would carry for no reason, and the mesh is per chunk anyway.
-- A mesher that turns a chunk into the same `SpriteBatch` geometry the sprites
-  already use, so nothing new reaches the renderer.
-- Collision: merged boxes per run of solid tiles, generated once and stored as
-  ordinary colliders, which is what makes stage 28 necessary.
-- Editor: a paint tool alongside the transform tools — brush, rectangle,
-  eraser, and a tile picker showing the atlas.
-
-**Decisions to make.** Chunk size; sparse (`HashMap<IVec2, Chunk>`) versus
-dense with bounds; how many layers and whether a layer is an entity; whether
-auto-tiling (rule tiles) is in scope at all — probably not, it is a stage.
-
-**Cut.** 25a = data, format, mesh. 25b = collision generation and the paint
-tool.
+- **Collision**: merged boxes per run of solid tiles, generated from the layer
+  and stored as ordinary colliders — which tiles are solid is a property of
+  the tileset or the layer, to decide. Regenerated when the layer changes.
+  This is what makes stage 28 necessary. The platformer's ground boxes then
+  come from the tiles instead of beside them.
+- **Paint tool** alongside the transform tools: brush, rectangle, eraser, a
+  tile picker showing the atlas, undo per stroke; viewport picking of a layer.
+- **Per-chunk mesh cache and camera culling**, if a level makes the per-frame
+  rebuild show.
+- Still out: auto-tiling (rule tiles), animated tiles, isometric/hex grids.
 
 ---
 

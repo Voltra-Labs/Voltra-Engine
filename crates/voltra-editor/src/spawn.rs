@@ -12,7 +12,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
     prefab, AudioSource, Camera, Collider, ComponentRegistry, Name, RigidBody, SceneId, Sprite,
-    Transform,
+    Tilemap, Transform,
 };
 
 use crate::editor::Editor;
@@ -122,6 +122,23 @@ pub(crate) fn sprite(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
         Transform::from_translation(at).with_scale(Vec2::splat(DEFAULT_SCALE)),
     );
     frame.world.insert(entity, Sprite::default());
+    entity
+}
+
+/// Drops an empty tilemap layer at `at`, cells one unit across.
+///
+/// Empty rather than seeded with a tile: there is no tileset to take one from
+/// until the inspector names it, and a placeholder checker in the scene would
+/// be content nobody authored. Drawn behind sprites on 0, because a new layer
+/// is ground far more often than it is foreground.
+pub(crate) fn tilemap(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
+    let entity = frame.world.spawn();
+    frame.world.insert(entity, SceneId::new());
+    frame.world.insert(entity, Name::new(name));
+    frame.world.insert(entity, Transform::from_translation(at));
+    let mut map = Tilemap::default();
+    map.sort_order = -1;
+    frame.world.insert(entity, map);
     entity
 }
 

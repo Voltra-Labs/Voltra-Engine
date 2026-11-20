@@ -17,10 +17,10 @@ use std::rc::Rc;
 use voltra_assets::AssetPath;
 use voltra_core::{query, App, KeyCode, PlayParams, QueryFilter, Tick, Touch, WindowConfig};
 use voltra_ecs::Entity;
-use voltra_render::glam::Vec2;
+use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
     AudioListener, AudioSource, Camera, Collider, ComponentRegistry, PhysicsMaterial, RigidBody,
-    Sprite, Transform,
+    Sprite, Tile, Tilemap, Transform,
 };
 
 /// This example's own component, in the same world as the engine's.
@@ -275,12 +275,25 @@ fn spawn_camera(app: &mut App) -> Entity {
     camera
 }
 
+/// Side of one ground tile, in world units. Every ground block's size is a
+/// whole number of these.
+const TILE: f32 = 0.5;
+
+/// The tileset's frames, as `sprites/ground.atlas.ron` lays them out.
+const GRASS: u32 = 0;
+const DIRT: u32 = 1;
+
+/// A static block of ground: a box the bodies stand on, drawn as tiles.
+///
+/// Two entities rather than one. The body's transform is scaled to the box,
+/// and a tilemap under a scaled parent would have its tiles stretched with
+/// it; the layer sits on its own at the block's lower-left corner instead,
+/// grass along the top row and dirt below. Generating the box *from* the
+/// tiles is stage 25b; until then the two are laid out from the same numbers.
 fn ground(app: &mut App, at: Vec2, size: Vec2) {
     let entity = app.world.spawn();
     app.world
         .insert(entity, Transform::from_translation(at).with_scale(size));
-    app.world
-        .insert(entity, Sprite::new([0.25, 0.27, 0.32, 1.0]));
     app.world.insert(entity, RigidBody::new_static());
     app.world.insert(
         entity,
@@ -288,6 +301,23 @@ fn ground(app: &mut App, at: Vec2, size: Vec2) {
             half_extents: Vec2::splat(0.5),
         },
     );
+
+    let columns = (size.x / TILE).round() as i32;
+    let rows = (size.y / TILE).round() as i32;
+    let mut layer = Tilemap::new(Vec2::splat(TILE));
+    layer.texture = Some(asset("sprites/ground.png"));
+    layer.atlas = Some(asset("sprites/ground.atlas.ron"));
+    layer.sort_order = -1;
+    for x in 0..columns {
+        for y in 0..rows {
+            let frame = if y == rows - 1 { GRASS } else { DIRT };
+            layer.set(IVec2::new(x, y), Some(Tile::new(frame)));
+        }
+    }
+    let tiles = app.world.spawn();
+    app.world
+        .insert(tiles, Transform::from_translation(at - size / 2.0));
+    app.world.insert(tiles, layer);
 }
 
 /// A path under the asset root, for the sheets this example ships with.

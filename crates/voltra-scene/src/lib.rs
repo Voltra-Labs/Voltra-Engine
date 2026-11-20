@@ -20,6 +20,7 @@ pub mod pick;
 pub mod prefab;
 pub mod scene_id;
 pub mod sprite;
+pub mod tilemap;
 pub mod transform;
 
 pub use animation::SpriteAnimation;
@@ -37,4 +38,5 @@ pub use name::Name;
 pub use prefab::{Instance, Prefab, PrefabInstance, Prefabs};
 pub use scene_id::{SceneId, UnknownComponents};
 pub use sprite::{draw_key, Sprite};
+pub use tilemap::{Tile, Tilemap};
 pub use transform::Transform;

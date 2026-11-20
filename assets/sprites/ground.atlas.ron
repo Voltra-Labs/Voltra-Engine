@@ -1,0 +1,7 @@
+// A ground tileset, four 16x16 tiles left to right: grass on dirt, dirt,
+// stone, crate. Generated for the platformer example's floor.
+(
+    version: 1,
+    texture: Some("sprites/ground.png"),
+    grid: Some((cell: (16, 16), columns: 4, rows: 1)),
+)
