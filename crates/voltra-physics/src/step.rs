@@ -7,6 +7,7 @@ use voltra_scene::{Collider, Sensor, Transform};
 use crate::broad::candidate_pairs;
 use crate::integrate::{integrate_positions, integrate_velocities};
 use crate::narrow::{manifold, Contact};
+use crate::sleep::Sleep;
 use crate::solver::{
     apply_restitution, prepare, solve, warm_start, CachedImpulse, ImpulseCache, SolverBodies,
     SolverParams,
@@ -61,12 +62,33 @@ impl Overlaps {
 ///
 /// The contacts returned describe the state at the *start* of the step, which
 /// is what the debug overlay draws — the same one-step lag Box2D has.
+///
+/// Every body is simulated: there is no sleep state to carry between calls.
+/// [`step_sleeping`] is the same step with one, and is what
+/// [`PhysicsWorld`](crate::PhysicsWorld) runs.
 pub fn step(
     world: &mut World,
     cache: &mut ImpulseCache,
     params: &SolverParams,
     gravity: Vec2,
     dt: f32,
+) -> Overlaps {
+    step_sleeping(world, cache, params, gravity, dt, &mut Sleep::default())
+}
+
+/// [`step`], with bodies at rest put to sleep and left out of the solve
+/// until something disturbs them — see [`crate::sleep`].
+///
+/// The overlaps returned still include sleeping contacts: a resting
+/// character is still standing on the floor, and an event for a pair that
+/// went to sleep touching must not say it ended.
+pub fn step_sleeping(
+    world: &mut World,
+    cache: &mut ImpulseCache,
+    params: &SolverParams,
+    gravity: Vec2,
+    dt: f32,
+    sleep: &mut Sleep,
 ) -> Overlaps {
     // A step of no time changes nothing, and dividing the sub-step by it would
     // produce an infinite speculative bias. Note the cache is left untouched:
@@ -75,9 +97,31 @@ pub fn step(
         return Overlaps::default();
     }
 
-    let overlaps = collide(world);
-    let contacts = &overlaps.contacts;
+    sleep.wake_disturbed(world);
+    let overlaps = collide_with(world, |a, b| sleep.resting_contact(world, a, b).cloned());
+    sleep.wake_islands(world, &overlaps.contacts);
+
+    // Only contacts with an awake dynamic body are solved. After the wake
+    // above, a contact touching a sleeping body has nothing awake on the
+    // other side either, so the pair is at rest and its impulses are carried
+    // over untouched for when it wakes.
+    let mut solved: Vec<Contact> = Vec::with_capacity(overlaps.contacts.len());
+    let mut resting_pairs = crate::hash::FastSet::default();
+    for contact in &overlaps.contacts {
+        if sleep.is_awake_dynamic(world, contact.a) || sleep.is_awake_dynamic(world, contact.b) {
+            solved.push(*contact);
+        } else {
+            resting_pairs.insert((contact.a, contact.b));
+            sleep.remember_resting(contact);
+        }
+    }
+    sleep.keep_resting(&resting_pairs);
+    let contacts = &solved;
+
     let mut bodies = SolverBodies::gather(world);
+    for entity in sleep.asleep() {
+        bodies.freeze(entity);
+    }
 
     let sub_steps = params.sub_steps.max(1);
     let h = params.sub_step(dt);
@@ -126,17 +170,30 @@ pub fn step(
             );
         }
     }
+    cache.keep(|a, b| resting_pairs.contains(&(a, b)));
     cache.commit();
 
     bodies.scatter(world);
+    sleep.settle(world, contacts, &params.sleep, dt);
 
     overlaps
 }
 
 /// Every overlap in the world right now, sensors kept apart from the rest.
+#[cfg(test)]
 pub(crate) fn collide(world: &World) -> Overlaps {
+    collide_with(world, |_, _| None)
+}
+
+/// [`collide`], taking `reuse`'s contact for a pair instead of testing it
+/// when it has one — how sleeping pairs skip the narrow phase.
+fn collide_with(world: &World, reuse: impl Fn(Entity, Entity) -> Option<Contact>) -> Overlaps {
     let mut overlaps = Overlaps::default();
     for (a, b) in candidate_pairs(world) {
+        if let Some(contact) = reuse(a, b) {
+            overlaps.contacts.push(contact);
+            continue;
+        }
         let Some(a_shape) = shape(world, a) else {
             continue;
         };

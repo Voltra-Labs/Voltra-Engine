@@ -1,13 +1,14 @@
 //! What a simulated world owns between frames.
 
-use voltra_ecs::World;
+use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use crate::clock::PhysicsClock;
 use crate::events::{CollisionEvent, Touching};
 use crate::narrow::Contact;
+use crate::sleep::Sleep;
 use crate::solver::{ImpulseCache, SolverParams};
-use crate::step::step;
+use crate::step::step_sleeping;
 
 /// The physics simulation's own state, beside the ECS.
 ///
@@ -25,6 +26,7 @@ pub struct PhysicsWorld {
     contacts: Vec<Contact>,
     touching: Touching,
     events: Vec<CollisionEvent>,
+    sleep: Sleep,
 }
 
 impl PhysicsWorld {
@@ -73,6 +75,24 @@ impl PhysicsWorld {
         &self.events
     }
 
+    /// Whether `entity` is asleep: at rest, and left out of the solve until
+    /// something disturbs it.
+    pub fn is_asleep(&self, entity: Entity) -> bool {
+        self.sleep.is_asleep(entity)
+    }
+
+    /// How many bodies are asleep.
+    pub fn asleep_count(&self) -> usize {
+        self.sleep.asleep_count()
+    }
+
+    /// Wakes `entity`, and its island with it on the next step. Setting a
+    /// velocity or moving its transform does the same on its own; this is
+    /// for a game that wants a body to notice something it did not touch.
+    pub fn wake(&mut self, entity: Entity) {
+        self.sleep.wake(entity);
+    }
+
     /// Pairs currently touching, sensors included. For tests and for a debug
     /// panel.
     pub fn touching(&self) -> &Touching {
@@ -98,6 +118,7 @@ impl PhysicsWorld {
         // pair of a scene that is no longer loaded.
         self.touching.clear();
         self.events.clear();
+        self.sleep.clear();
         self.clock.reset();
     }
 
@@ -107,7 +128,14 @@ impl PhysicsWorld {
     /// one step and no more, and [`PhysicsWorld::advance`] would run zero.
     pub fn step_once(&mut self, world: &mut World, gravity: Vec2) -> &[Contact] {
         let dt = self.clock.step();
-        let overlaps = step(world, &mut self.impulses, &self.params, gravity, dt);
+        let overlaps = step_sleeping(
+            world,
+            &mut self.impulses,
+            &self.params,
+            gravity,
+            dt,
+            &mut self.sleep,
+        );
         self.events = self.touching.update(overlaps.pairs());
         self.contacts = overlaps.contacts;
         &self.contacts

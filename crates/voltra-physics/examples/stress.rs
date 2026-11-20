@@ -85,10 +85,25 @@ fn run(name: &str, mut world: World) {
     }
     let mean = |slice: &[f64]| slice.iter().sum::<f64>() / slice.len() as f64;
     println!(
-        "{name:8} first second {:7.3} ms/step   last second {:7.3} ms/step   contacts at end {}",
+        "{name:8} first second {:7.3} ms/step   last second {:7.3} ms/step   contacts {}   asleep {}",
         mean(&times[..60]),
         mean(&times[STEPS - 60..]),
         physics.contacts().len(),
+        physics.asleep_count(),
+    );
+    // The fastest body left: what keeps an island awake.
+    let (linear, angular) =
+        world
+            .query::<RigidBody>()
+            .fold((0.0f32, 0.0f32), |(l, a), (_, body)| {
+                (
+                    l.max(body.velocity.length()),
+                    a.max(body.angular_velocity.abs()),
+                )
+            });
+    println!(
+        "         fastest body at the end: {linear:.4} u/s, {:.3} deg/s",
+        angular.to_degrees()
     );
 }
 

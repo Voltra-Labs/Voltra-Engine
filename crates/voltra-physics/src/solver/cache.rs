@@ -27,7 +27,7 @@
 //! narrow phase can name the two corners a point came from exactly and a radius
 //! is a guess at the same question.
 
-use std::collections::HashMap;
+use crate::hash::FastMap;
 
 use voltra_ecs::Entity;
 
@@ -61,8 +61,8 @@ pub type ContactKey = (Entity, Entity, u16);
 /// because none of them recorded anything this step.
 #[derive(Debug, Default)]
 pub struct ImpulseCache {
-    current: HashMap<ContactKey, CachedImpulse>,
-    next: HashMap<ContactKey, CachedImpulse>,
+    current: FastMap<ContactKey, CachedImpulse>,
+    next: FastMap<ContactKey, CachedImpulse>,
 }
 
 impl ImpulseCache {
@@ -74,6 +74,17 @@ impl ImpulseCache {
     /// Remembers what this pair accumulated, for the next step to start from.
     pub fn record(&mut self, key: ContactKey, impulse: CachedImpulse) {
         self.next.insert(key, impulse);
+    }
+
+    /// Carries every point of `pairs` over to the next step unchanged — the
+    /// contacts of sleeping bodies, which are not solved but must wake with
+    /// the impulse that was holding them, or a woken stack jolts.
+    pub fn keep(&mut self, kept: impl Fn(Entity, Entity) -> bool) {
+        for (key, impulse) in &self.current {
+            if kept(key.0, key.1) {
+                self.next.entry(*key).or_insert(*impulse);
+            }
+        }
     }
 
     /// Ends the step: what was recorded becomes what is read, and everything
