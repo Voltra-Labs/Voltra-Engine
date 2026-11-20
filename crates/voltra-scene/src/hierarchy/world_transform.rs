@@ -8,8 +8,7 @@
 //! whole world once, so a deep tree costs one multiply per entity rather than
 //! one per entity per level.
 
-use std::collections::HashMap;
-
+use voltra_ecs::hash::FastMap;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
@@ -88,23 +87,24 @@ pub fn set_world_transform(world: &mut World, entity: Entity, target: &Transform
 /// does not hold, which is the same answer a root with no transform gets.
 #[derive(Debug, Default, Clone)]
 pub struct WorldTransforms {
-    matrices: HashMap<Entity, Mat3>,
+    matrices: FastMap<Entity, Mat3>,
 }
 
 impl WorldTransforms {
     /// Composes every entity that has a [`Transform`].
     pub fn from_world(world: &World) -> Self {
-        let locals: HashMap<Entity, Mat3> = world
+        let locals: FastMap<Entity, Mat3> = world
             .query::<Transform>()
             .map(|(entity, transform)| (entity, transform.matrix()))
             .collect();
-        let parents: HashMap<Entity, Entity> = world
+        let parents: FastMap<Entity, Entity> = world
             .query::<Parent>()
             .filter_map(|(entity, link)| link.entity.map(|parent| (entity, parent)))
             .filter(|(_, parent)| world.is_alive(*parent))
             .collect();
 
-        let mut matrices: HashMap<Entity, Mat3> = HashMap::with_capacity(locals.len());
+        let mut matrices: FastMap<Entity, Mat3> =
+            FastMap::with_capacity_and_hasher(locals.len(), Default::default());
         // Reused across entities: one allocation for the whole pass, not one
         // per chain walked.
         let mut chain: Vec<Entity> = Vec::new();

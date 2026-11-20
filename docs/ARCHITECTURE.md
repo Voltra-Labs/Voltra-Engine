@@ -2693,6 +2693,35 @@ camera, `0.3` is far hills.
 - **Not yet:** repeating (Godot's `repeat_size`) for endless backgrounds,
   which needs a layer drawn more than once.
 
+### The batch draws what the camera sees, chunk by chunk for tilemaps
+
+Stage 33, measured with `cargo run --release -p voltra-scene --example
+batch_stress` (a 512 × 64 tilemap and 5 000 sprites, a ~21 × 12 view):
+
+| | Before | Culled | + fast hashing |
+| --- | --- | --- | --- |
+| batch build | 8.06 ms, 37 768 quads | 2.92 ms, 209 quads | **1.82 ms**, 209 quads |
+| of which composing transforms | — | 1.86 ms | 0.82 ms |
+
+- **`Sheets::visible_in(min, max)`** carries the world rectangle the camera
+  sees; the draw path sets it from the camera it draws with
+  (`position ± half_extents`). `None`, the default, culls nothing — picks,
+  tests and the screen-space UI batch (whose quads are in pixels, not world
+  units) are unaffected.
+- **Per quad**, in `SpriteBatch::push_quad`, on the corners as drawn: one
+  test covers sprites, tiles and glyphs, rotated, scaled, parented or
+  parallax-displaced. Edges touching count as seen; a non-finite box is kept
+  rather than guessed away.
+- **Per chunk** for tilemaps: a 16 × 16 chunk whose transformed bounds are
+  out of view is skipped without visiting its cells, which is what makes a
+  level's size stop mattering.
+- **`voltra_ecs::hash::FastMap`** — the FxHash mix from stage 28, moved down
+  to the ECS so the scene can use it — now keys `WorldTransforms`. SipHash
+  over every entity's matrix was most of what was left.
+- **Next, if a profile asks:** the 5 000 sprites are still sorted and their
+  quads computed before the cull; a per-chunk mesh cache for tilemaps; a
+  spatial index for sprites.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

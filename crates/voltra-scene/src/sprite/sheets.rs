@@ -27,6 +27,11 @@ pub struct Sheets<'a> {
     /// [`Parallax`](crate::Parallax) layer is displaced by. The origin —
     /// the default — draws every layer where its transform says.
     pub camera: Vec2,
+    /// The world-space rectangle the camera sees, `(min, max)`. Geometry
+    /// wholly outside it is left out of the batch. `None` — the default —
+    /// keeps everything, which is what a pick, a test and a caller with no
+    /// camera want.
+    pub visible: Option<(Vec2, Vec2)>,
 }
 
 impl<'a> Sheets<'a> {
@@ -37,6 +42,7 @@ impl<'a> Sheets<'a> {
             textures: Some(textures),
             fonts: None,
             camera: Vec2::ZERO,
+            visible: None,
         }
     }
 
@@ -45,6 +51,24 @@ impl<'a> Sheets<'a> {
     pub fn with_fonts(mut self, fonts: &'a Fonts) -> Self {
         self.fonts = Some(fonts);
         self
+    }
+
+    /// The same stores, drawing only what falls inside `min`..`max`.
+    pub fn visible_in(mut self, min: Vec2, max: Vec2) -> Self {
+        self.visible = Some((min.min(max), min.max(max)));
+        self
+    }
+
+    /// Whether a world-space box `min`..`max` can be seen. Edges touching
+    /// count as seen; anything non-finite is kept rather than guessed away.
+    pub fn sees(&self, min: Vec2, max: Vec2) -> bool {
+        let Some((view_min, view_max)) = self.visible else {
+            return true;
+        };
+        if !(min.is_finite() && max.is_finite()) {
+            return true;
+        }
+        min.x <= view_max.x && max.x >= view_min.x && min.y <= view_max.y && max.y >= view_min.y
     }
 
     /// The same stores, seen through a camera at `camera`.

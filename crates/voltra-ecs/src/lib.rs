@@ -1,6 +1,7 @@
 //! In-house entity-component storage.
 
 pub mod entity;
+pub mod hash;
 pub mod storage;
 pub mod world;
 

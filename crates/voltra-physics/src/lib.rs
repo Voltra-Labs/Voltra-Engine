@@ -25,7 +25,9 @@ pub mod broad;
 pub mod clock;
 pub mod debug;
 pub mod events;
-pub mod hash;
+/// The fast entity-keyed maps, which live in `voltra-ecs` beside the type
+/// they hash.
+pub use voltra_ecs::hash;
 pub mod integrate;
 pub mod narrow;
 pub mod query;
