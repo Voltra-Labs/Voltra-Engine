@@ -6,6 +6,7 @@ use voltra_render::glam::{Mat3, Vec2};
 use voltra_render::{Texture, Vertex};
 
 use crate::hierarchy::WorldTransforms;
+use crate::particles::{self, ParticleEmitter};
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
 use crate::sprite::{draw_key, Sprite};
@@ -18,6 +19,7 @@ enum Drawn<'a> {
     Sprite(&'a Sprite),
     Tilemap(&'a Tilemap),
     Text(&'a Text),
+    Particles(&'a ParticleEmitter),
 }
 
 impl Drawn<'_> {
@@ -26,6 +28,7 @@ impl Drawn<'_> {
             Self::Sprite(sprite) => sprite.sort_order,
             Self::Tilemap(map) => map.sort_order,
             Self::Text(text) => text.sort_order,
+            Self::Particles(emitter) => emitter.sort_order,
         }
     }
 }
@@ -98,6 +101,11 @@ impl SpriteBatch {
                     .query2::<Transform, Text>()
                     .map(|(entity, _, text)| (entity, Drawn::Text(text))),
             )
+            .chain(
+                world
+                    .query2::<Transform, ParticleEmitter>()
+                    .map(|(entity, _, emitter)| (entity, Drawn::Particles(emitter))),
+            )
             // A `UiRect` puts an entity on the screen instead: the
             // screen-space pass draws it, and drawing it here too would put a
             // second copy in the world at its stale transform.
@@ -120,6 +128,7 @@ impl SpriteBatch {
                 Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
                 Drawn::Tilemap(map) => mesh::push(&mut batch, matrix, map, sheets),
                 Drawn::Text(text) => batch.push_text(matrix, text, sheets),
+                Drawn::Particles(emitter) => particles::mesh::push(&mut batch, matrix, emitter),
             }
         }
         batch

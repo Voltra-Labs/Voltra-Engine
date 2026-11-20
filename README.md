@@ -258,6 +258,7 @@ privileged and plain `cargo build` covers everything.
 | 31 | Save games: typed slots in a per-user folder | done |
 | 32 | Parallax layers, drawn and picked through the camera | done |
 | 33 | Camera culling: per quad, per tilemap chunk | done |
+| 34 | Vertex alpha, particle emitters | done |
 
 ## Contributing
 

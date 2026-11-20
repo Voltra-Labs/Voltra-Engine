@@ -2,7 +2,8 @@
 
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
-use voltra_scene::{Name, SceneId, Sprite, Text, UiRect};
+use voltra_render::glam::Vec2;
+use voltra_scene::{Name, ParticleEmitter, SceneId, Sprite, Text, Transform, UiRect};
 
 /// Size a new HUD label's text is, in points.
 const HUD_TEXT_SIZE: f32 = 24.0;
@@ -29,6 +30,17 @@ pub(crate) fn hud_panel(frame: &mut UiFrame<'_>, name: &str) -> Entity {
         entity,
         Sprite::new([0.08, 0.09, 0.12, 1.0]).with_sort_order(-1),
     );
+    entity
+}
+
+/// Drops a particle fountain at `at`: the default emitter, which plays once
+/// the world simulates.
+pub(crate) fn particles(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
+    let entity = frame.world.spawn();
+    frame.world.insert(entity, SceneId::new());
+    frame.world.insert(entity, Name::new(name));
+    frame.world.insert(entity, Transform::from_translation(at));
+    frame.world.insert(entity, ParticleEmitter::default());
     entity
 }
 
