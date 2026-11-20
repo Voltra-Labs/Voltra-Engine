@@ -16,7 +16,7 @@ use super::error::SceneError;
 use crate::{
     AudioListener, AudioSource, Camera, Collider, CollisionLayers, Name, Parallax, Parent,
     ParticleEmitter, Persistent, PhysicsMaterial, PrefabInstance, RigidBody, Sensor, Sprite,
-    SpriteAnimation, Text, Tilemap, Transform, UiRect,
+    SpriteAnimation, Text, Tilemap, Transform, UiButton, UiRect,
 };
 
 /// A registered type's save conversion: entity to stored value, or `None` when
@@ -92,6 +92,7 @@ impl ComponentRegistry {
         registry.register::<Tilemap>("Tilemap");
         registry.register::<Text>("Text");
         registry.register::<UiRect>("UiRect");
+        registry.register::<UiButton>("UiButton");
         registry.register::<Persistent>("Persistent");
         registry.register::<Parallax>("Parallax");
         registry.register::<ParticleEmitter>("ParticleEmitter");

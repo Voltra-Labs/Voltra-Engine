@@ -188,7 +188,16 @@ mod tests {
             .join("../../assets")
             .join(DEFAULT_INPUT_MAP);
         let map = ActionMap::load(&path).expect("the shipped map parses");
-        for action in ["jump", "move_left", "move_right"] {
+        for action in [
+            "jump",
+            "move_left",
+            "move_right",
+            "ui_up",
+            "ui_down",
+            "ui_left",
+            "ui_right",
+            "ui_accept",
+        ] {
             assert!(!map.bindings(action).is_empty(), "{action} is bound");
         }
     }

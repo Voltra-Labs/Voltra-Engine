@@ -1,13 +1,15 @@
 //! Screen-space UI: elements placed by [`UiRect`] on the target rather than
 //! in the world, drawn after it in the target's own pixels.
 //!
-//! Display-only for now — a HUD. Nothing here takes input; buttons and
-//! focus are a later stage.
+//! A HUD, and since stage 35 buttons: [`UiButton`] takes clicks, hover and
+//! keyboard/gamepad focus.
 
+pub mod button;
 pub mod layout;
 pub mod mesh;
 pub mod rect;
 
+pub use button::{Navigation, Pointer, UiButton, UiButtons};
 pub use layout::UiLayout;
 pub use rect::{Rect, UiRect};
 

@@ -259,6 +259,7 @@ privileged and plain `cargo build` covers everything.
 | 32 | Parallax layers, drawn and picked through the camera | done |
 | 33 | Camera culling: per quad, per tilemap chunk | done |
 | 34 | Vertex alpha, particle emitters | done |
+| 35 | UI buttons: pointer, focus navigation, `tick.ui` | done |
 
 ## Contributing
 

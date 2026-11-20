@@ -9,7 +9,7 @@
 mod hud;
 mod text;
 
-pub(crate) use hud::{hud_panel, hud_text, particles};
+pub(crate) use hud::{hud_button, hud_panel, hud_text, particles};
 pub(crate) use text::text;
 
 use voltra_assets::AssetPath;
