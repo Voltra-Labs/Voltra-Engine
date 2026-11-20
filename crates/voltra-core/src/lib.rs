@@ -5,6 +5,7 @@
 
 pub mod app;
 pub mod input;
+pub mod saves;
 pub mod time;
 pub mod ui;
 pub mod window;
@@ -13,6 +14,7 @@ pub use app::{App, SceneLoad, Tick, UiFrame, DEFAULT_INPUT_MAP};
 pub use input::{
     ActionMap, ActionState, Binding, Direction, Input, MouseButton, PadAxis, PadButton,
 };
+pub use saves::{SaveError, Saves};
 pub use time::{Clock, Timestep};
 pub use ui::EguiLayer;
 pub use window::WindowConfig;

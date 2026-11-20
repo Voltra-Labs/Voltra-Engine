@@ -69,6 +69,10 @@ pub struct Tick<'a> {
     /// [`Input::pressed_binding`] into [`ActionMap::rebind`]. A change is
     /// read from the next frame on; [`ActionMap::save`] keeps it.
     pub actions: &'a mut ActionMap,
+    /// The game's save slots. Reads and writes happen on the spot: a save is
+    /// a small file, and a game saving at a checkpoint wants it written
+    /// before anything else can go wrong.
+    pub saves: &'a crate::saves::Saves,
     pub(super) scenes: &'a mut super::scenes::Scenes,
     pub(super) prefabs: &'a mut Prefabs,
     pub(super) registry: &'a ComponentRegistry,
@@ -99,6 +103,7 @@ impl App {
             input: &self.input,
             actions: &mut self.actions,
             scenes: &mut self.scenes,
+            saves: &self.saves,
             delta,
             contacts: self.physics_world.contacts(),
             events: &self.pending_events,
@@ -126,6 +131,7 @@ impl App {
             input: &self.input,
             actions: &mut self.actions,
             scenes: &mut self.scenes,
+            saves: &self.saves,
             delta,
             contacts: self.physics_world.contacts(),
             // The step before this one's: the step this tick precedes has not
@@ -229,6 +235,27 @@ mod tests {
         app.advance(FRAME);
 
         assert!(seen.get(), "the edge must reach the game");
+    }
+
+    #[test]
+    fn a_tick_saves_to_the_game_s_slots() {
+        let dir = voltra_testkit::scratch_root();
+        let mut app = App::default()
+            .with_save_dir(&dir)
+            .with_simulation()
+            .with_update(|tick| {
+                if let Err(e) = tick.saves.save("checkpoint", &42u32) {
+                    panic!("the save failed: {e}");
+                }
+            });
+
+        app.advance(FRAME);
+
+        assert_eq!(
+            app.saves().load::<u32>("checkpoint").expect("reads"),
+            Some(42)
+        );
+        assert_eq!(app.saves().dir(), Some(dir.as_path()));
     }
 
     #[test]
