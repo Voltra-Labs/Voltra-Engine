@@ -4,3 +4,6 @@
 
 # agent worktrees
 .claude/worktrees/
+
+# `cargo xtask dist` output
+/dist

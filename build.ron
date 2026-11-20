@@ -1,0 +1,10 @@
+// The build `cargo xtask dist` packages, and what a player beside it runs
+// when started with no arguments. Paths: `assets` is relative to this file,
+// `scene` to the asset root.
+(
+    version: 1,
+    name: "Voltra Sandbox",
+    scene: "scenes/sandbox.ron",
+    window: (width: 1280, height: 720),
+    assets: "assets",
+)

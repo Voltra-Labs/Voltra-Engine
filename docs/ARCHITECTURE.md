@@ -94,7 +94,7 @@ Added only when there is code to put in them:
 
 | Crate | Purpose | Blocked on |
 | --- | --- | --- |
-| `xtask` | Repo automation written in Rust instead of shell | when scripts appear |
+| — | Every crate planned here exists | — |
 
 ## Frame flow
 
@@ -2571,6 +2571,40 @@ voltra-physics --example stress` (10 simulated seconds, this machine):
   in bookkeeping against 3 µs of solve. SipHash on entity keys and island
   building every step were most of it; `physics::hash::FastMap` (FxHash's
   mix, in-house) and seed-only flood fills took it out.
+
+### A build is a manifest, and `cargo xtask dist` packages it
+
+Stage 29. The project settings file stages 19 and 21 turned down, admitted
+now because it describes *a build*, not an editor (Godot's export preset,
+Unity's build settings).
+
+- **`build.ron`** — `version`, `name`, `scene` (an `AssetPath`, relative to
+  the asset root), `window`, `assets` (relative to the manifest, never
+  absolute, so a build folder can move). Parsed in `voltra_player::manifest`,
+  the player's one library module, because the player and `xtask` both read
+  it: one parser, not two. Checked before use: version, a name that survives
+  as a file name, a scene that cannot climb out of the root, a window with a
+  size.
+- **The player** runs the manifest beside its executable when started with
+  no scene — a double-click runs the game. `--manifest FILE` names another;
+  a scene on the command line without it is a plain run as before. The
+  command line wins field by field.
+- **`cargo xtask dist`** (`crates/xtask`, the slot ARCHITECTURE held; alias in
+  `.cargo/config.toml`) builds the player in release with `windowed`, copies
+  it as `<name>.exe`, copies the asset tree loose (no hidden files, no
+  `*.tmp`; no pruning — that needs a dependency graph), and writes the
+  shipped manifest with `assets: "assets"` into `dist/<name>/`. A bad manifest
+  or missing start scene fails *before* the three-minute release build. The
+  output folder is only emptied if it is empty or holds a `build.ron` — a
+  mistyped `--out` cannot delete someone's documents.
+- **`windowed`** (a player feature only `dist` turns on): no console window
+  on Windows, and the log goes to `log.txt` beside the executable, so a build
+  that fails on a double-click says why somewhere findable. `cargo run -p
+  voltra-player` is unchanged.
+- **Scene-only games.** The player runs a scene; a game with its own code
+  (the platformer example) is its own binary and does not go through `dist`
+  yet. Windows first; Linux and macOS take the same task with no suffix and
+  are untested.
 
 ### wgpu 30 API notes
 

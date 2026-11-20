@@ -1,0 +1,4 @@
+# `cargo xtask <task>`: the repository's own build tasks, in Rust rather than
+# a shell script, so they run the same on every platform the engine does.
+[alias]
+xtask = "run --quiet --package xtask --"

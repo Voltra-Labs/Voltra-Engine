@@ -36,6 +36,7 @@ Rules:
 ```sh
 cargo run -p voltra-editor                                  # launch the editor
 cargo run -p voltra-player -- assets/scenes/sandbox.ron      # run a scene, no editor
+cargo xtask dist                                            # package build.ron into dist/
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings       # must be clean
@@ -58,6 +59,7 @@ crates/
   voltra-core/       platform layer: event loop, window     — owns winit
   voltra-editor/     the editor binary
   voltra-player/     the player binary: runs a scene, no editor linked
+  xtask/             repo tasks (`cargo xtask dist`), not shipped
 docs/                ARCHITECTURE.md, CONVENTIONS.md
 ```
 
