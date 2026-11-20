@@ -147,6 +147,28 @@ impl WorldTransforms {
         Self { matrices }
     }
 
+    /// [`from_world`](Self::from_world), with every [`Parallax`] layer
+    /// displaced for a camera at `camera` — what the draw and the pick see.
+    ///
+    /// [`Parallax`]: crate::Parallax
+    pub fn seen_from(world: &World, camera: voltra_render::glam::Vec2) -> Self {
+        let mut transforms = Self::from_world(world);
+        crate::parallax::apply(&mut transforms, world, camera);
+        transforms
+    }
+
+    /// Every entity composed.
+    pub(crate) fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.matrices.keys().copied()
+    }
+
+    /// Moves `entity`'s composed matrix by `offset` in world space.
+    pub(crate) fn translate(&mut self, entity: Entity, offset: voltra_render::glam::Vec2) {
+        if let Some(matrix) = self.matrices.get_mut(&entity) {
+            *matrix = Mat3::from_translation(offset) * *matrix;
+        }
+    }
+
     /// `entity`'s world matrix, or [`Mat3::IDENTITY`] if it has none.
     pub fn matrix(&self, entity: Entity) -> Mat3 {
         self.get(entity).unwrap_or(Mat3::IDENTITY)

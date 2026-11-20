@@ -238,6 +238,7 @@ mod tests {
                 atlases: None,
                 textures: Some(&sizes),
                 fonts: None,
+                camera: voltra_render::glam::Vec2::ZERO,
             },
         );
 
@@ -259,6 +260,7 @@ mod tests {
                 atlases: Some(&atlases),
                 textures: None,
                 fonts: None,
+                camera: voltra_render::glam::Vec2::ZERO,
             },
         );
 
@@ -274,6 +276,7 @@ mod tests {
             atlases: Some(&atlases),
             textures: None,
             fonts: None,
+            camera: voltra_render::glam::Vec2::ZERO,
         };
         let upright = quad(&sprite, sheets);
 
@@ -309,6 +312,7 @@ mod tests {
                 atlases: None,
                 textures: Some(&sizes),
                 fonts: None,
+                camera: voltra_render::glam::Vec2::ZERO,
             },
         );
 
@@ -331,6 +335,7 @@ mod tests {
                 atlases: Some(&atlases),
                 textures: None,
                 fonts: None,
+                camera: voltra_render::glam::Vec2::ZERO,
             },
         );
 
@@ -350,6 +355,7 @@ mod tests {
                 atlases: Some(&atlases),
                 textures: Some(&sizes),
                 fonts: None,
+                camera: voltra_render::glam::Vec2::ZERO,
             },
         );
 
@@ -376,6 +382,7 @@ mod tests {
                 atlases: None,
                 textures: Some(&sizes),
                 fonts: None,
+                camera: voltra_render::glam::Vec2::ZERO,
             },
         );
 

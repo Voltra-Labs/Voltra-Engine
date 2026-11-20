@@ -256,6 +256,7 @@ privileged and plain `cargo build` covers everything.
 | 29 | Export: `build.ron` manifest and `cargo xtask dist` | done |
 | 30 | Scene changes and additive loading from a tick, `Persistent` | done |
 | 31 | Save games: typed slots in a per-user folder | done |
+| 32 | Parallax layers, drawn and picked through the camera | done |
 
 ## Contributing
 

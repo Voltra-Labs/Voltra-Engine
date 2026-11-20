@@ -1,7 +1,7 @@
 //! The loaded stores a sprite's geometry is resolved against.
 
 use voltra_assets::{Atlas, Atlases, Fonts, Handle, TextureSizes};
-use voltra_render::glam::UVec2;
+use voltra_render::glam::{UVec2, Vec2};
 use voltra_render::Texture;
 
 /// Where [`quad`](super::quad::quad) looks up the frame a sprite names and the
@@ -23,6 +23,10 @@ pub struct Sheets<'a> {
     /// The faces and glyph atlases a [`Text`](crate::Text) draws from.
     /// Absent draws and picks no text at all.
     pub fonts: Option<&'a Fonts>,
+    /// Where the camera the frame is drawn through sits, which is what a
+    /// [`Parallax`](crate::Parallax) layer is displaced by. The origin —
+    /// the default — draws every layer where its transform says.
+    pub camera: Vec2,
 }
 
 impl<'a> Sheets<'a> {
@@ -32,6 +36,7 @@ impl<'a> Sheets<'a> {
             atlases: Some(atlases),
             textures: Some(textures),
             fonts: None,
+            camera: Vec2::ZERO,
         }
     }
 
@@ -39,6 +44,12 @@ impl<'a> Sheets<'a> {
     /// them once text exists.
     pub fn with_fonts(mut self, fonts: &'a Fonts) -> Self {
         self.fonts = Some(fonts);
+        self
+    }
+
+    /// The same stores, seen through a camera at `camera`.
+    pub fn seen_from(mut self, camera: Vec2) -> Self {
+        self.camera = camera;
         self
     }
 

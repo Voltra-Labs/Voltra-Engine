@@ -16,8 +16,10 @@ use crate::tilemap::Tilemap;
 /// The topmost layer with a tile under `point`, in world space, and the key
 /// it draws at — so a caller can weigh it against the sprite under the same
 /// point.
-pub fn layer_at(world: &World, point: Vec2) -> Option<(Entity, (i32, u32))> {
-    let transforms = WorldTransforms::from_world(world);
+///
+/// `camera` is the view's position, for a layer under a [`Parallax`](crate::Parallax).
+pub fn layer_at(world: &World, point: Vec2, camera: Vec2) -> Option<(Entity, (i32, u32))> {
+    let transforms = WorldTransforms::seen_from(world, camera);
     world
         .query::<Tilemap>()
         .filter(|(entity, map)| has_tile_at(transforms.matrix(*entity), point, map))
@@ -56,7 +58,7 @@ mod tests {
     }
 
     fn hit(world: &World, point: Vec2) -> Option<Entity> {
-        layer_at(world, point).map(|(entity, _)| entity)
+        layer_at(world, point, Vec2::ZERO).map(|(entity, _)| entity)
     }
 
     #[test]

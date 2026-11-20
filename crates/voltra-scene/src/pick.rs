@@ -50,7 +50,7 @@ pub(crate) const MIN_DETERMINANT: f32 = 1e-12;
 pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entity> {
     // The same composed matrices the batch draws with, so what is picked is
     // what is on screen. A parented sprite is nowhere near its own `Transform`.
-    let transforms = WorldTransforms::from_world(world);
+    let transforms = WorldTransforms::seen_from(world, sheets.camera);
 
     world
         .query2::<Transform, Sprite>()
@@ -75,7 +75,7 @@ pub fn entity_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
     });
     [
         sprite,
-        layer_at(world, point),
+        layer_at(world, point, sheets.camera),
         text_at(world, point, sheets),
     ]
     .into_iter()
@@ -409,6 +409,7 @@ mod frame_tests {
             atlases: Some(&atlases),
             textures: None,
             fonts: None,
+            camera: voltra_render::glam::Vec2::ZERO,
         };
 
         assert_eq!(

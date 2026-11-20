@@ -21,7 +21,7 @@ use voltra_core::{
 use voltra_ecs::Entity;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
-    Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, Persistent,
+    Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, Parallax, Persistent,
     PhysicsMaterial, RigidBody, Sensor, Sprite, Text, Tile, Tilemap, Transform, UiRect,
 };
 
@@ -385,6 +385,8 @@ fn spawn_scene(app: &mut App) -> Entity {
         }
     }
 
+    spawn_backdrop(app);
+
     // A sign over the ledge, in the world rather than on the screen: it
     // scrolls with the level and sorts behind the walker.
     let sign = app.world.spawn();
@@ -458,6 +460,37 @@ Space",
     );
 
     walker
+}
+
+/// Far hills behind the level: one parent with a [`Parallax`] and the hills
+/// under it. 0.3 across, so they slide by slowly and read as distant; 1 up
+/// and down, so a jump does not make the horizon bob.
+fn spawn_backdrop(app: &mut App) {
+    let hills = app.world.spawn();
+    app.world.insert(hills, voltra_scene::SceneId::new());
+    app.world.insert(hills, Transform::default());
+    app.world.insert(
+        hills,
+        Parallax {
+            factor: Vec2::new(0.3, 1.0),
+        },
+    );
+    for (i, height) in [3.0, 4.5, 2.5, 5.0, 3.5, 4.0].into_iter().enumerate() {
+        let hill = app.world.spawn();
+        app.world.insert(hill, voltra_scene::SceneId::new());
+        app.world.insert(
+            hill,
+            Transform::from_translation(Vec2::new(i as f32 * 5.0 - 10.0, -3.0 + height / 2.0))
+                .with_scale(Vec2::new(4.5, height)),
+        );
+        app.world.insert(
+            hill,
+            Sprite::new([0.16, 0.2, 0.3, 1.0]).with_sort_order(-10),
+        );
+        if let Err(e) = voltra_scene::hierarchy::set_parent(&mut app.world, hill, hills) {
+            log::error!("could not hang a hill on the backdrop: {e}");
+        }
+    }
 }
 
 /// The camera the frame is drawn through, since there is no editor here.

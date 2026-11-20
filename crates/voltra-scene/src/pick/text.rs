@@ -18,7 +18,7 @@ use crate::transform::Transform;
 /// it draws at. Nothing without fonts in `sheets`.
 pub fn text_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<(Entity, (i32, u32))> {
     let fonts = sheets.fonts?;
-    let transforms = WorldTransforms::from_world(world);
+    let transforms = WorldTransforms::seen_from(world, sheets.camera);
     world
         .query2::<Transform, Text>()
         .filter(|(entity, _, text)| {
