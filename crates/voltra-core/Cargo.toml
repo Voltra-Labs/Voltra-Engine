@@ -23,4 +23,7 @@ log.workspace = true
 # build an asset root without a fixture on disk.
 [dev-dependencies]
 env_logger.workspace = true
+# The platformer's `Coin` marker is read out of a prefab file, which takes a
+# derive.
+serde.workspace = true
 voltra-testkit.workspace = true

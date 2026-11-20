@@ -5,6 +5,7 @@ mod audio;
 mod draw;
 mod framing;
 mod simulation;
+mod spawning;
 mod thumbnails;
 mod tick;
 mod tick_audio;
@@ -15,10 +16,11 @@ use std::sync::Arc;
 
 use voltra_assets::{AssetWatcher, Atlases, Clips, Textures};
 use voltra_audio::Audio;
-use voltra_ecs::World;
+use voltra_ecs::{Entity, World};
 use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
 use voltra_render::{Filter, LineBatch, RenderTarget, Renderer};
+use voltra_scene::{ComponentRegistry, Prefabs};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -118,6 +120,14 @@ pub struct App {
     lines: LineBatch,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
+    /// Which components a prefab can carry: the defaults, plus whatever a
+    /// game registered through [`App::with_registry`].
+    registry: ComponentRegistry,
+    /// Prefabs, made on first use — see [`spawning::prefab_store`].
+    prefabs: Option<Prefabs>,
+    /// Entities a tick spawned whose asset handles the loop has not resolved
+    /// yet. Emptied right after every tick.
+    spawned: Vec<Entity>,
 }
 
 /// Earth-ish gravity, in world units per second squared.
@@ -163,6 +173,17 @@ impl App {
     /// ignored — the app runs, it just does not notice file changes.
     pub fn with_hot_reload(mut self) -> Self {
         self.hot_reload = true;
+        self
+    }
+
+    /// Reads prefabs through `registry` instead of the default one.
+    ///
+    /// What a game with components of its own needs: a prefab carrying a
+    /// `Coin` marker spawns it only if the registry knows the name, and keeps
+    /// it unread otherwise. Start from [`ComponentRegistry::with_defaults`]
+    /// and register on top, or the engine's own components stop loading.
+    pub fn with_registry(mut self, registry: ComponentRegistry) -> Self {
+        self.registry = registry;
         self
     }
 
@@ -285,6 +306,9 @@ impl App {
     /// so the frame that saw the key is the frame that moves.
     fn advance(&mut self, delta: f32) {
         self.run_update(delta);
+        // Before anything else looks at what the tick made: a spawned sprite
+        // is drawn, and a spawned source started, with its handles in place.
+        self.resolve_spawned();
         // After the tick, so a clip the game just switched to is on screen this
         // frame rather than next.
         self.advance_animations(delta);
@@ -296,6 +320,8 @@ impl App {
         // that installed its hook later would be handed a backlog.
         self.pending_events.clear();
         self.step_physics(delta);
+        // The fixed tick spawns too, from inside the steps.
+        self.resolve_spawned();
     }
 
     /// Applies whatever the watcher saw since the last frame.
@@ -323,10 +349,20 @@ impl App {
                 },
                 None => None,
             };
-            match reloaded {
-                Some(clip) => self.scene_audio.restart(&self.world, clip, &mut self.audio),
-                None => images.push(path),
+            if let Some(clip) = reloaded {
+                self.scene_audio.restart(&self.world, clip, &mut self.audio);
+                continue;
             }
+            // Instances already spawned have forgotten their prefab; the next
+            // spawn gets the edit, which is all a reload can promise them.
+            if self
+                .prefabs
+                .as_mut()
+                .is_some_and(|prefabs| prefabs.reload(&path))
+            {
+                continue;
+            }
+            images.push(path);
         }
 
         let (Some(textures), Some(atlases), Some(renderer)) = (

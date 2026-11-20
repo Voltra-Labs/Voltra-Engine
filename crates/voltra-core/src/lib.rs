@@ -30,6 +30,8 @@ pub use voltra_physics::{query, CollisionEvent, Contact, QueryFilter, RayHit, To
 // types above are: one dependency for a game that wants a coin to make a
 // noise, not two.
 pub use voltra_audio::{Audio, BusId, Buses, Clip, PlayParams, VoiceId};
+// A game spawns prefabs through `Tick::spawn` and gets back an `Instance`.
+pub use voltra_scene::{Instance, Prefab};
 
 // The editor builds its panels with these, and must use the exact versions the
 // layer above was compiled against.

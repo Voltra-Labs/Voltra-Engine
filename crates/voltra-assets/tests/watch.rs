@@ -77,10 +77,11 @@ fn a_new_png_in_a_new_subdirectory_arrives() {
 }
 
 #[test]
-fn the_scene_save_is_not_an_asset_event() {
+fn a_scene_save_is_seen_once_as_the_scene_and_never_as_its_temporary() {
     // `voltra-scene` writes `demo.ron.tmp` and renames it over `demo.ron`.
-    // Neither has a texture extension, so the filter drops both without
-    // needing a rule about our own temporary files.
+    // The scene is an asset since prefabs — any scene can be one — but the
+    // temporary is not: its extension is `tmp`, so the filter drops it without
+    // a rule about our own temporary files.
     let root = scratch_root();
     let mut watcher = AssetWatcher::new(&root).expect("watching a scratch dir");
 
@@ -88,7 +89,11 @@ fn the_scene_save_is_not_an_asset_event() {
     std::fs::rename(root.join("demo.ron.tmp"), root.join("demo.ron")).expect("rename");
 
     let seen = drain_for(&mut watcher, Duration::from_secs(2));
-    assert!(seen.is_empty(), "a scene save must be silent: {seen:?}");
+    let scene = AssetPath::new("demo.ron").expect("valid");
+    // Deduplicated across drains as well as within one: the debouncer may
+    // split the write and the rename across two batches.
+    assert!(seen.contains(&scene), "the save was missed: {seen:?}");
+    assert!(seen.iter().all(|path| *path == scene), "got {seen:?}");
 }
 
 #[test]

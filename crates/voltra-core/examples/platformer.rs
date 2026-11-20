@@ -19,15 +19,18 @@ use voltra_core::{query, App, KeyCode, PlayParams, QueryFilter, Tick, Touch, Win
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    AudioListener, AudioSource, Camera, Collider, PhysicsMaterial, RigidBody, Sensor, Sprite,
-    SpriteAnimation, Transform,
+    AudioListener, AudioSource, Camera, Collider, ComponentRegistry, PhysicsMaterial, RigidBody,
+    Sprite, Transform,
 };
 
 /// This example's own component, in the same world as the engine's.
 ///
-/// Nothing registers it and nothing else knows it exists: an in-house ECS
-/// stores whatever type a game hands it, so gameplay tags need no engine
-/// change and no enum with a variant per game.
+/// An in-house ECS stores whatever type a game hands it, so gameplay tags
+/// need no engine change and no enum with a variant per game. It is
+/// registered under a name only because the coin is a prefab: a file can name
+/// a component only the game knows, and the registry is how the game says
+/// which type the name means.
+#[derive(serde::Serialize, serde::Deserialize)]
 struct Coin;
 
 /// World units per second the walker travels at full tilt.
@@ -58,10 +61,13 @@ const GROUND_PROBE: f32 = 0.08;
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    let mut registry = ComponentRegistry::with_defaults();
+    registry.register::<Coin>("Coin");
     let mut app = App::new(WindowConfig {
         title: "Voltra — platformer".into(),
         ..Default::default()
-    });
+    })
+    .with_registry(registry);
     let walker = spawn_scene(&mut app);
     let camera = spawn_camera(&mut app);
 
@@ -210,8 +216,14 @@ fn spawn_scene(app: &mut App) -> Entity {
         );
     }
 
+    // Three copies of one file. The coin's sprite, spin, sound, sensor and
+    // tag are authored once in `prefabs/coin.ron` rather than here, which is
+    // the difference between a level and a function that builds one.
     for x in [2.0, 6.0, 8.0] {
-        coin(app, Vec2::new(x, -1.6));
+        let at = Transform::from_translation(Vec2::new(x, -1.6));
+        if let Err(e) = app.spawn(&asset("prefabs/coin.ron"), &at) {
+            log::error!("could not place a coin: {e}");
+        }
     }
 
     let walker = app.world.spawn();
@@ -261,44 +273,6 @@ fn spawn_camera(app: &mut App) -> Entity {
     // looking from.
     app.world.insert(camera, AudioListener::default());
     camera
-}
-
-/// A coin: a shape that reports being walked into and stops nothing.
-fn coin(app: &mut App, at: Vec2) {
-    let entity = app.world.spawn();
-    app.world.insert(
-        entity,
-        Transform::from_translation(at).with_scale(Vec2::splat(0.4)),
-    );
-    // White, so the sheet's own colours come through untinted. The handles are
-    // left unresolved on purpose: the world is populated before there is a
-    // device, and `App` resolves every sprite's texture and atlas when the
-    // loop resumes.
-    let mut sprite = Sprite::new([1.0, 1.0, 1.0, 1.0]).with_sort_order(5);
-    sprite.texture = Some(asset("sprites/coin.png"));
-    sprite.atlas = Some(asset("sprites/coin.atlas.ron"));
-    app.world.insert(entity, sprite);
-    // Eight frames a second over a four-frame sheet: one spin every half
-    // second, which reads as turning rather than flickering.
-    app.world
-        .insert(entity, SpriteAnimation::new(vec![0, 1, 2, 3], 8.0));
-    // The sound the coin makes when it is taken. `play_on_spawn` is off: this
-    // is a sound the game triggers, and the component is here to say which
-    // file it is — the path is authored beside the sprite rather than typed
-    // into the tick. The handle is left unresolved for the same reason the
-    // sprite's is: `App` resolves every source's clip when the loop resumes.
-    let mut voice = AudioSource::new(asset("audio/coin.wav"));
-    // Not positional: the coin is taken by walking into it, so it is always at
-    // the walker's feet, and a falloff would only ever attenuate it by a
-    // fraction nobody can hear.
-    voice.range = 0.0;
-    voice.bus = "sfx".to_owned();
-    app.world.insert(entity, voice);
-    app.world.insert(entity, Collider::Circle { radius: 0.5 });
-    // No `RigidBody`: it is static geometry that happens to be a sensor. A
-    // body would fall, and a sensor cannot rest on anything.
-    app.world.insert(entity, Sensor);
-    app.world.insert(entity, Coin);
 }
 
 fn ground(app: &mut App, at: Vec2, size: Vec2) {

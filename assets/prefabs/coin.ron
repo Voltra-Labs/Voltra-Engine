@@ -1,0 +1,18 @@
+(
+    version: 1,
+    entities: [
+        (
+            id: "01a1f5b1-726a-7791-a142-4a5ac7826038",
+            components: {
+                "AudioSource": (clip:Some(Path("audio/coin.wav")),volume:1.0,pitch:1.0,looping:false,play_on_spawn:false,range:0.0,bus:"sfx"),
+                "Coin": (),
+                "Collider": Circle(radius:0.5),
+                "Name": "coin",
+                "Sensor": (),
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/coin.png")),atlas:Some(Path("sprites/coin.atlas.ron")),frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "SpriteAnimation": (frames:[0,1,2,3],fps:8.0,looping:true,playing:true),
+                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(0.4,0.4)),
+            },
+        ),
+    ],
+)

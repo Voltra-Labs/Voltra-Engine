@@ -13,8 +13,9 @@
 //! clock — and once `delta` is a field, the two hooks want exactly the same
 //! things and a second type would differ only in its name.
 
-use voltra_ecs::World;
+use voltra_ecs::{Entity, World};
 use voltra_physics::{CollisionEvent, Contact};
+use voltra_scene::{ComponentRegistry, Prefabs};
 
 use crate::app::tick_audio::TickAudio;
 use crate::app::App;
@@ -62,6 +63,11 @@ pub struct Tick<'a> {
     /// A field like the rest, but not a bare `&mut Audio`: playing takes a
     /// handle, and resolving one takes the store — see [`TickAudio`].
     pub audio: TickAudio<'a>,
+    /// Reached through [`Tick::prefab`] and [`Tick::spawn`], which keep the
+    /// three in step: a spawn that was not queued would never be resolved.
+    pub(super) prefabs: &'a mut Prefabs,
+    pub(super) registry: &'a ComponentRegistry,
+    pub(super) spawned: &'a mut Vec<Entity>,
 }
 
 /// A hook the game installs on the loop.
@@ -90,6 +96,9 @@ impl App {
             contacts: self.physics_world.contacts(),
             events: &self.pending_events,
             audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
+            prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
+            registry: &self.registry,
+            spawned: &mut self.spawned,
         };
         update(&mut tick);
     }
@@ -114,6 +123,9 @@ impl App {
             // run, so there is nothing newer to hand it.
             events: self.physics_world.events(),
             audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
+            prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
+            registry: &self.registry,
+            spawned: &mut self.spawned,
         };
         fixed(&mut tick);
     }

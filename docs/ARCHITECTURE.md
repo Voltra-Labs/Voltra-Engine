@@ -2154,6 +2154,55 @@ buses and the limiter — flat, at the source's volume, on its bus. One at a
 time; a second Play stops the first. A clip dropped on the viewport becomes an
 entity with an `AudioSource` and no sprite, Unity's answer.
 
+### A prefab is a scene file, and an instance forgets it
+
+Stage 24a. Everything after this stamps out copies — enemies, bullets, tiles,
+particles — and should share one mechanism.
+
+**Prior art.** Unity: a prefab asset, instances carrying overrides, variants.
+Godot: a scene is a node tree, instancing inherits it, "make local" breaks the
+link. Unreal: blueprint classes. All three separate the asset from the
+instance, and all three have paid for override propagation.
+
+**The asset is the format that already exists.** A prefab is a `SceneFile` —
+one or more roots, the same `.ron`, read through the same `ComponentRegistry`
+— so nothing new has to read one and any scene can be instanced. `Prefabs`
+lives in `voltra-scene`, not beside the other stores in `voltra-assets`,
+because parsing one is this crate's format and depends on its components.
+Version is checked once at read, not per spawn.
+
+**`prefab::spawn(world, registry, prefab, at)`**, all-or-nothing like a load:
+
+- *Fresh `SceneId` per entity*, so two instances never save under one id.
+- *Parent links inside the prefab are remapped and resolved on the spot.* No
+  whole-world `resolve_parents` pass: every entity a link can name was made by
+  this call, which matters for a bullet spawned every frame into a big level.
+- *Links to a parent outside the prefab are cut* and the entity becomes a
+  root. A fragment cut from a bigger scene still names its old parent, and
+  following it would hang every instance off one entity.
+- *Roots are placed by `at`*, composed in front of their own transform; a
+  translation-only `at` is an addition, so an authored rotation and scale are
+  not put through a matrix decomposition for nothing. Children stay local.
+- *Instantiate and forget.* No link to the source in 24a: overrides and
+  propagation are their own stage, and the inert `PrefabInstance` link is 24b
+  along with editor authoring.
+
+**The tick spawns, the loop resolves.** `Tick::spawn` cannot resolve a sprite's
+texture — that needs the GPU, which a tick is deliberately not handed — so it
+queues the entities, and `App` resolves textures, slicings and clips *per
+entity* right after each tick (and after the steps, for the fixed one). An
+entity is complete before anything but the tick that made it sees it. The
+prefab store is lazy and needs no window, so headless runs spawn too;
+`App::spawn` is the setup-time twin, and `App::with_registry` is how a game's
+own components (the platformer's `Coin`) ride in a prefab.
+
+**Hot reload** reaches prefabs through the watcher, which now treats any `.ron`
+that is not `*.atlas.ron` as an asset event. Existing instances are untouched —
+they have forgotten the file — and the next spawn gets the edit.
+
+**Nested prefabs** have no mechanism yet: nothing in a scene file names another
+prefab until 24b's instance link, so there is no cycle to refuse.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
