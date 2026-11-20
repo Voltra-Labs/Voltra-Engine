@@ -10,6 +10,7 @@ pub mod atlases;
 pub mod browse;
 pub mod clips;
 pub mod error;
+pub mod fonts;
 pub mod handle;
 pub mod path;
 pub mod placeholder;
@@ -24,6 +25,7 @@ pub use atlases::Atlases;
 pub use browse::{Entry, EntryKind};
 pub use clips::Clips;
 pub use error::AssetError;
+pub use fonts::{Font, Fonts, DEFAULT_FONT};
 pub use handle::Handle;
 pub use path::AssetPath;
 pub use root::{default_root, ROOT_ENV};
@@ -31,3 +33,7 @@ pub use size::TextureSizes;
 pub use store::Assets;
 pub use textures::Textures;
 pub use watch::AssetWatcher;
+
+/// The rasterizer, for a caller that needs a face's own metrics. Only this
+/// crate names it in its manifest.
+pub use fontdue;

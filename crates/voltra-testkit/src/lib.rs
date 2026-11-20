@@ -151,6 +151,21 @@ pub fn scratch_root() -> PathBuf {
     dir
 }
 
+/// The default font the workspace ships, for tests that lay out text.
+pub const BUNDLED_FONT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../assets/fonts/Ubuntu-Light.ttf"
+);
+
+/// Copies [`BUNDLED_FONT`] to `root/relative`, creating its directory.
+pub fn copy_bundled_font(root: &Path, relative: &str) {
+    let target = root.join(relative);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).expect("the font's directory writes");
+    }
+    std::fs::copy(BUNDLED_FONT, target).expect("the bundled font copies");
+}
+
 /// Writes a real PNG of `width` x `height` in one flat colour at `root/name`.
 ///
 /// Tests that tell two textures apart by what comes back need their own

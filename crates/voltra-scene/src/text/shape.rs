@@ -1,0 +1,127 @@
+//! Where a [`Text`]'s glyphs land in its entity's space, and what they
+//! sample.
+//!
+//! One function for the draw and the pick, for the reason
+//! [`quad`](crate::sprite::quad::quad) is one: a click must land on the
+//! pixels it appears to.
+
+use voltra_assets::fonts::TextLayout;
+use voltra_assets::{Font, Fonts, Handle};
+use voltra_render::glam::Vec2;
+use voltra_render::Texture;
+
+use super::Text;
+
+/// One glyph's quad, in the entity's space.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlyphQuad {
+    /// Top-left, bottom-left, bottom-right, top-right, as the batch takes
+    /// them.
+    pub corners: [Vec2; 4],
+    pub uvs: [[f32; 2]; 4],
+}
+
+/// A text's laid-out box, in the entity's space: from the leftmost line's
+/// start to the rightmost line's end, and from the first line's ascent to
+/// the last line's descent.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Bounds {
+    pub min: Vec2,
+    pub max: Vec2,
+}
+
+impl Bounds {
+    /// Whether `local` is inside, edges included. A box with no width — no
+    /// content — contains nothing.
+    pub fn contains(&self, local: Vec2) -> bool {
+        self.max.x > self.min.x
+            && local.x >= self.min.x
+            && local.x <= self.max.x
+            && local.y >= self.min.y
+            && local.y <= self.max.y
+    }
+}
+
+/// The resolved font a text draws with, if its handle names one with a
+/// face.
+fn font<'a>(text: &Text, fonts: &'a Fonts) -> Option<&'a Font> {
+    let font = fonts.try_get(text.font_handle?)?;
+    font.face()?;
+    Some(font)
+}
+
+/// Entity units per raster pixel.
+fn scale(text: &Text) -> f32 {
+    text.size / text.px() as f32
+}
+
+/// How far a line of `width` pixels is shifted to put its aligned end on
+/// the origin.
+fn offset(text: &Text, width: f32) -> f32 {
+    -width * text.align.share()
+}
+
+/// The laid-out box, or `None` with no usable font.
+pub fn bounds(text: &Text, fonts: &Fonts) -> Option<Bounds> {
+    let layout = font(text, fonts)?.layout(&text.content, text.px())?;
+    Some(bounds_of(text, &layout))
+}
+
+fn bounds_of(text: &Text, layout: &TextLayout) -> Bounds {
+    let s = scale(text);
+    let (mut left, mut right) = (f32::INFINITY, f32::NEG_INFINITY);
+    for &width in &layout.line_widths {
+        let start = offset(text, width);
+        left = left.min(start);
+        right = right.max(start + width);
+    }
+    let last = layout.line_widths.len().saturating_sub(1) as f32;
+    Bounds {
+        min: Vec2::new(left, -last * layout.line_height + layout.descent) * s,
+        max: Vec2::new(right, layout.ascent) * s,
+    }
+}
+
+/// Every glyph quad a text draws, and the texture they sample.
+///
+/// Empty when the font has no face, and missing the glyphs
+/// [`prepare`](super::prepare) has not rasterized — a text added since the
+/// last prepare appears a frame later, never with wrong UVs. The texture is
+/// `None` until the atlas's first upload; the quads are computed anyway, so
+/// their placement is testable without a GPU.
+pub fn glyphs(text: &Text, fonts: &Fonts) -> (Vec<GlyphQuad>, Option<Handle<Texture>>) {
+    let Some(font) = font(text, fonts) else {
+        return (Vec::new(), None);
+    };
+    let texture = font.texture();
+    let Some(layout) = font.layout(&text.content, text.px()) else {
+        return (Vec::new(), None);
+    };
+
+    let s = scale(text);
+    let atlas = font.atlas();
+    let quads = layout
+        .glyphs
+        .iter()
+        .filter_map(|placed| {
+            let glyph = atlas.get(placed.key)?;
+            let rect = glyph.rect?;
+            let m = glyph.metrics;
+            let start = offset(text, layout.line_widths[placed.line]);
+            let left = (start + placed.pen + m.xmin as f32) * s;
+            let bottom = (-(placed.line as f32) * layout.line_height + m.ymin as f32) * s;
+            let right = left + m.width as f32 * s;
+            let top = bottom + m.height as f32 * s;
+            Some(GlyphQuad {
+                corners: [
+                    Vec2::new(left, top),
+                    Vec2::new(left, bottom),
+                    Vec2::new(right, bottom),
+                    Vec2::new(right, top),
+                ],
+                uvs: atlas.uvs(rect),
+            })
+        })
+        .collect();
+    (quads, texture)
+}

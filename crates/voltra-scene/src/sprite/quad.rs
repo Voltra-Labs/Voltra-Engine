@@ -237,6 +237,7 @@ mod tests {
             Sheets {
                 atlases: None,
                 textures: Some(&sizes),
+                fonts: None,
             },
         );
 
@@ -257,6 +258,7 @@ mod tests {
             Sheets {
                 atlases: Some(&atlases),
                 textures: None,
+                fonts: None,
             },
         );
 
@@ -271,6 +273,7 @@ mod tests {
         let sheets = Sheets {
             atlases: Some(&atlases),
             textures: None,
+            fonts: None,
         };
         let upright = quad(&sprite, sheets);
 
@@ -305,6 +308,7 @@ mod tests {
             Sheets {
                 atlases: None,
                 textures: Some(&sizes),
+                fonts: None,
             },
         );
 
@@ -326,6 +330,7 @@ mod tests {
             Sheets {
                 atlases: Some(&atlases),
                 textures: None,
+                fonts: None,
             },
         );
 
@@ -344,6 +349,7 @@ mod tests {
             Sheets {
                 atlases: Some(&atlases),
                 textures: Some(&sizes),
+                fonts: None,
             },
         );
 
@@ -369,6 +375,7 @@ mod tests {
             Sheets {
                 atlases: None,
                 textures: Some(&sizes),
+                fonts: None,
             },
         );
 

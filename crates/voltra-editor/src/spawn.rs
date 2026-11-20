@@ -6,6 +6,10 @@
 //! and the same single history entry. A second copy of "spawn, select, commit"
 //! would drift.
 
+mod text;
+
+pub(crate) use text::text;
+
 use voltra_assets::AssetPath;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;

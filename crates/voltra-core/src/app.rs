@@ -14,7 +14,7 @@ mod ui_frame;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use voltra_assets::{AssetWatcher, Atlases, Clips, Textures};
+use voltra_assets::{AssetWatcher, Atlases, Clips, Fonts, Textures};
 use voltra_audio::Audio;
 use voltra_ecs::{Entity, World};
 use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
@@ -63,6 +63,9 @@ pub struct App {
     renderer: Option<Renderer>,
     textures: Option<Textures>,
     atlases: Option<Atlases>,
+    /// Faces and their glyph atlases. `None` until `resumed`, for the root,
+    /// like `clips`.
+    fonts: Option<Fonts>,
     /// Decoded sounds. `None` until `resumed`, like the stores above — not
     /// because a clip needs a device, but because it needs the asset root,
     /// and that is resolved when the window is.
@@ -366,6 +369,11 @@ impl App {
             {
                 continue;
             }
+            // A face needs no device either: its atlas starts over and is
+            // re-rasterized and uploaded by the next draw.
+            if self.fonts.as_mut().is_some_and(|fonts| fonts.reload(&path)) {
+                continue;
+            }
             images.push(path);
         }
 
@@ -449,6 +457,12 @@ impl ApplicationHandler for App {
         let mut atlases = Atlases::new(asset_root.clone());
         ui_frame::resolve_world_atlases(&mut self.world, &mut atlases);
         self.atlases = Some(atlases);
+
+        // And the legible part: a text in a world populated before `run`
+        // has never met a `Fonts`.
+        let mut fonts = Fonts::new(asset_root.clone());
+        voltra_scene::text::resolve_fonts(&mut self.world, &mut fonts);
+        self.fonts = Some(fonts);
 
         // The audible third of the same problem: a source in a world populated
         // before `run` has never met a `Clips` either.

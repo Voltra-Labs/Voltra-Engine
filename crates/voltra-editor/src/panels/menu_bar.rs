@@ -37,6 +37,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     });
                     ui.close();
                 }
+                if ui.button("Spawn text").clicked() {
+                    spawn::record(editor, frame, "Spawn text", |frame| {
+                        spawn::text(frame, "Text", Vec2::ZERO, None)
+                    });
+                    ui.close();
+                }
                 if ui.button("Spawn camera").clicked() {
                     spawn::record(editor, frame, "Spawn camera", |frame| {
                         spawn::camera(frame, "Camera", Vec2::ZERO)

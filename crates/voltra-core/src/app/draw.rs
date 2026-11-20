@@ -2,7 +2,8 @@
 //! screen — straight to the window with no UI, or into an offscreen target
 //! with the UI composited over the top.
 
-use voltra_assets::Textures;
+use voltra_assets::{Fonts, Textures};
+use voltra_ecs::World;
 use voltra_render::egui_backend::ScreenDescriptor;
 use voltra_render::{wgpu, Filter, MeshDraw};
 use voltra_scene::sprite::sheets::Sheets;
@@ -13,10 +14,11 @@ use super::{App, UiFrame};
 impl App {
     /// Draws the world straight to the window. No UI, no intermediate texture.
     pub(super) fn redraw_without_ui(&mut self) {
-        let (Some(renderer), Some(textures), Some(atlases)) = (
+        let (Some(renderer), Some(textures), Some(atlases), Some(fonts)) = (
             self.renderer.as_mut(),
-            self.textures.as_ref(),
+            self.textures.as_mut(),
             self.atlases.as_ref(),
+            self.fonts.as_mut(),
         ) else {
             return;
         };
@@ -24,10 +26,18 @@ impl App {
         // the one the scene's camera describes. `aspect` is the window's and
         // stays the window's — `Renderer::resize` owns it.
         self.framing.apply(&self.world, &mut renderer.camera);
+        prepare_text(
+            &self.world,
+            fonts,
+            textures,
+            renderer.context().device(),
+            renderer.context().queue(),
+        );
         // Rebuilt every frame. Caching it means tracking every Transform and
         // Sprite write, which is not worth it until the batch actually shows up
         // in a profile.
-        let batch = SpriteBatch::from_world(&self.world, Sheets::new(atlases, textures));
+        let sheets = Sheets::new(atlases, textures).with_fonts(fonts);
+        let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(renderer.context().device());
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
@@ -48,6 +58,7 @@ impl App {
             Some(ui),
             Some(textures),
             Some(atlases),
+            Some(fonts),
             Some(clips),
         ) = (
             self.renderer.as_mut(),
@@ -58,6 +69,7 @@ impl App {
             self.ui.as_mut(),
             self.textures.as_mut(),
             self.atlases.as_mut(),
+            self.fonts.as_mut(),
             self.clips.as_mut(),
         )
         else {
@@ -82,9 +94,11 @@ impl App {
         // layout is drawable by this one.
         self.thumbnails.sync(egui, &device, textures);
 
+        prepare_text(&self.world, fonts, textures, &device, &queue);
         // The immutable reborrow ends with the batch, well before the UI takes
         // both stores mutably below.
-        let batch = SpriteBatch::from_world(&self.world, Sheets::new(atlases, textures));
+        let sheets = Sheets::new(atlases, textures).with_fonts(fonts);
+        let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
@@ -110,6 +124,7 @@ impl App {
             camera: &mut renderer.camera,
             textures,
             atlases,
+            fonts,
             clips,
             prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
             audio: &mut self.audio,
@@ -133,6 +148,20 @@ impl App {
 
         renderer.present_with(|pass| egui.render(pass));
     }
+}
+
+/// Rasterizes the glyphs the world's texts draw and uploads the atlases
+/// that changed — before the batch, so its UVs are taken against the atlas
+/// as it will be sampled.
+fn prepare_text(
+    world: &World,
+    fonts: &mut Fonts,
+    textures: &mut Textures,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) {
+    voltra_scene::text::prepare(world, fonts);
+    fonts.upload(textures, device, queue);
 }
 
 /// Turns a batch's texture-run ranges into the renderer's draw list.

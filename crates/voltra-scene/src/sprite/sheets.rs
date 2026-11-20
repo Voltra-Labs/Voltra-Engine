@@ -1,6 +1,6 @@
 //! The loaded stores a sprite's geometry is resolved against.
 
-use voltra_assets::{Atlas, Atlases, Handle, TextureSizes};
+use voltra_assets::{Atlas, Atlases, Fonts, Handle, TextureSizes};
 use voltra_render::glam::UVec2;
 use voltra_render::Texture;
 
@@ -20,6 +20,9 @@ use voltra_render::Texture;
 pub struct Sheets<'a> {
     pub atlases: Option<&'a Atlases>,
     pub textures: Option<&'a dyn TextureSizes>,
+    /// The faces and glyph atlases a [`Text`](crate::Text) draws from.
+    /// Absent draws and picks no text at all.
+    pub fonts: Option<&'a Fonts>,
 }
 
 impl<'a> Sheets<'a> {
@@ -28,7 +31,15 @@ impl<'a> Sheets<'a> {
         Self {
             atlases: Some(atlases),
             textures: Some(textures),
+            fonts: None,
         }
+    }
+
+    /// The same stores plus the fonts, as the draw path and the editor have
+    /// them once text exists.
+    pub fn with_fonts(mut self, fonts: &'a Fonts) -> Self {
+        self.fonts = Some(fonts);
+        self
     }
 
     /// The slicing `handle` names, if there is a store holding it.
