@@ -148,6 +148,7 @@ mod tests {
         map.terrains.push(Terrain {
             name: "grass".to_owned(),
             frames: std::array::from_fn(|mask| 100 + mask as u32),
+            blob: Vec::new(),
         });
         line_terrain(&mut map, IVec2::new(0, 0), IVec2::new(2, 0), Some(0));
         let frames: Vec<u32> = (0..3)
