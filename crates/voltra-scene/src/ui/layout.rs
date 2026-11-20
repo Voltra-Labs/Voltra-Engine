@@ -37,30 +37,40 @@ impl UiLayout {
         layout
     }
 
-    fn resolve(&mut self, world: &World, entity: Entity, screen: Rect) -> (Rect, u32) {
-        if let Some(&known) = self.resolved.get(&entity) {
-            return known;
+    /// Resolves `entity` and its UI ancestors, top-down from the root.
+    ///
+    /// Iterative over one [`hierarchy::ancestors`] walk, never recursive: that
+    /// walk is bounded by `MAX_DEPTH` and stops at a cycle, so a scene file
+    /// with a pathologically deep or looping chain costs a bounded loop
+    /// rather than the stack. An ancestor already resolved — by an earlier
+    /// entity sharing the chain — is reused, not recomputed.
+    fn resolve(&mut self, world: &World, entity: Entity, screen: Rect) {
+        if self.resolved.contains_key(&entity) {
+            return;
         }
-        let Some(rect) = world.get::<UiRect>(entity) else {
-            return (screen, 0);
-        };
-        // Marked before recursing: `set_parent` refuses cycles, but a
-        // hand-edited file can still hold one, and a box resolved against the
-        // screen is a better answer than a stack overflow.
-        self.resolved.insert(entity, (screen, 0));
-        let parent = hierarchy::ancestors(world, entity)
+        let mut chain: Vec<Entity> = hierarchy::ancestors(world, entity)
             .into_iter()
-            .find(|&ancestor| world.get::<UiRect>(ancestor).is_some());
-        let (parent_rect, depth) = match parent {
-            Some(parent) => {
-                let (rect, depth) = self.resolve(world, parent, screen);
-                (rect, depth + 1)
+            .filter(|&ancestor| world.get::<UiRect>(ancestor).is_some())
+            .collect();
+        chain.reverse();
+        chain.push(entity);
+
+        let mut parent: Option<(Rect, u32)> = None;
+        for link in chain {
+            if let Some(&known) = self.resolved.get(&link) {
+                parent = Some(known);
+                continue;
             }
-            None => (screen, 0),
-        };
-        let resolved = (rect.resolve(parent_rect), depth);
-        self.resolved.insert(entity, resolved);
-        resolved
+            let Some(rect) = world.get::<UiRect>(link) else {
+                continue;
+            };
+            let resolved = match parent {
+                Some((parent_rect, depth)) => (rect.resolve(parent_rect), depth + 1),
+                None => (rect.resolve(screen), 0),
+            };
+            self.resolved.insert(link, resolved);
+            parent = Some(resolved);
+        }
     }
 
     /// The box `entity` occupies, or `None` if it has no `UiRect`.
@@ -174,6 +184,41 @@ mod tests {
 
         let layout = UiLayout::from_world(&world, SCREEN);
         assert!(layout.draw_key(label, 0) > layout.draw_key(panel, 0));
+    }
+
+    #[test]
+    fn a_chain_deeper_than_any_stack_resolves_without_overflowing() {
+        // A crafted scene file can link entities into a chain no editor
+        // would build; `set_parent` would refuse it, so `Parent` is written
+        // directly, the way a loaded file would.
+        let mut world = World::new();
+        let mut previous = ui(&mut world, UiRect::stretched(0.0));
+        let mut last = previous;
+        for _ in 0..20_000 {
+            last = ui(&mut world, UiRect::stretched(0.0));
+            let id = *world.get::<SceneId>(previous).expect("an id");
+            world.insert(last, hierarchy::Parent::resolved(id, previous));
+            previous = last;
+        }
+
+        let layout = UiLayout::from_world(&world, SCREEN);
+        assert_eq!(layout.rect(last), Some(Rect::screen(SCREEN)));
+    }
+
+    #[test]
+    fn a_parent_cycle_resolves_rather_than_looping() {
+        let mut world = World::new();
+        let a = ui(&mut world, UiRect::stretched(1.0));
+        let b = ui(&mut world, UiRect::stretched(1.0));
+        let (id_a, id_b) = (
+            *world.get::<SceneId>(a).expect("an id"),
+            *world.get::<SceneId>(b).expect("an id"),
+        );
+        world.insert(a, hierarchy::Parent::resolved(id_b, b));
+        world.insert(b, hierarchy::Parent::resolved(id_a, a));
+
+        let layout = UiLayout::from_world(&world, SCREEN);
+        assert!(layout.rect(a).is_some() && layout.rect(b).is_some());
     }
 
     #[test]
