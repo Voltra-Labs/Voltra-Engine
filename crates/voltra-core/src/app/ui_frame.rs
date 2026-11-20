@@ -225,7 +225,9 @@ impl<'a> UiFrame<'a> {
     /// A panel picking an entity has to ask the same question the draw asked,
     /// or a click lands somewhere other than the pixels it appears to.
     pub fn sheets(&self) -> Sheets<'_> {
-        Sheets::new(self.atlases, self.textures).with_fonts(self.fonts)
+        Sheets::new(self.atlases, self.textures)
+            .with_fonts(self.fonts)
+            .seen_from(self.camera.position)
     }
 }
 

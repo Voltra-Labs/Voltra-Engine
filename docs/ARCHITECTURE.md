@@ -2668,6 +2668,31 @@ whether to trust it.
 - The platformer saves its coin count and the walker's position on F5 and
   restores them on F9.
 
+### Parallax is a draw-time displacement, seen from the drawing camera
+
+Stage 32. `Parallax { factor: Vec2 }` on an entity draws it and everything
+under it as if the camera had moved only `factor` of how far it did — Godot's
+`Parallax2D::scroll_scale`, per axis. `1` is the world, `0` is pinned to the
+camera, `0.3` is far hills.
+
+- **In `WorldTransforms::seen_from(world, camera)`**, not in each drawable:
+  the composed matrices of a layer are displaced by `camera × (1 − factor)`,
+  so sprites, tilemap layers and texts all get it at once, and a world with
+  no `Parallax` pays one empty query. The nearest `Parallax` at or above an
+  entity applies; they do not multiply.
+- **The camera travels in `Sheets`** (`seen_from`), which both the batch and
+  every pick already take — the reason `Sheets` is one parameter is that the
+  draw and the click must ask the same question. The draw path passes the
+  renderer's camera; the editor's pick passes the viewport's. The origin, the
+  default, draws every layer where its transform says, so every caller that
+  does not care is unchanged.
+- **Physics does not see it.** A parallax layer is decoration; a collider
+  under one stays at its transform. The gizmo edits the transform, so in the
+  editor a dragged layer moves by its own offset from where it is drawn —
+  acceptable for decoration, worth revisiting if layers get interactive.
+- **Not yet:** repeating (Godot's `repeat_size`) for endless backgrounds,
+  which needs a layer drawn more than once.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

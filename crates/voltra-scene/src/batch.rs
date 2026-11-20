@@ -105,7 +105,7 @@ impl SpriteBatch {
         // Composed once for the whole world rather than walked per sprite: a
         // deep tree would otherwise cost one matrix chain per descendant, every
         // frame.
-        let transforms = WorldTransforms::from_world(world);
+        let transforms = WorldTransforms::seen_from(world, sheets.camera);
 
         let mut batch = Self::default();
         for (entity, drawn) in drawn {

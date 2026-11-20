@@ -38,7 +38,9 @@ impl App {
         // Rebuilt every frame. Caching it means tracking every Transform and
         // Sprite write, which is not worth it until the batch actually shows up
         // in a profile.
-        let sheets = Sheets::new(atlases, textures).with_fonts(fonts);
+        let sheets = Sheets::new(atlases, textures)
+            .with_fonts(fonts)
+            .seen_from(renderer.camera.position);
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(renderer.context().device());
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -109,7 +111,9 @@ impl App {
         prepare_text(&self.world, fonts, textures, &device, &queue, scale);
         // The immutable reborrow ends with the batch, well before the UI takes
         // both stores mutably below.
-        let sheets = Sheets::new(atlases, textures).with_fonts(fonts);
+        let sheets = Sheets::new(atlases, textures)
+            .with_fonts(fonts)
+            .seen_from(renderer.camera.position);
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)

@@ -213,6 +213,7 @@ mod in_the_world {
             atlases: Some(&atlases),
             textures: None,
             fonts: Some(&fonts),
+            camera: voltra_render::glam::Vec2::ZERO,
         };
         let batch = SpriteBatch::from_world(&world, sheets);
 
