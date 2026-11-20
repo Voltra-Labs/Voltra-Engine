@@ -5,6 +5,7 @@ mod gizmo;
 mod panels;
 mod picking;
 mod play;
+mod prefab;
 mod spawn;
 mod tool;
 mod undo;

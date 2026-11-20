@@ -1,15 +1,19 @@
 //! Putting a new entity into the scene, as one undo entry.
 //!
 //! Here rather than in the panel that first needed it: the menu bar spawns from
-//! a click on a button, the asset browser spawns from a texture dropped on the
-//! viewport, and both have to produce the same entity and the same single
-//! history entry. A second copy of "spawn, select, commit" would drift.
+//! a click on a button, the asset browser spawns from a texture or a prefab
+//! dropped on the viewport, and all of them have to produce the same entities
+//! and the same single history entry. A second copy of "spawn, select, commit"
+//! would drift.
 
 use voltra_assets::AssetPath;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{AudioSource, Camera, Collider, Name, RigidBody, SceneId, Sprite, Transform};
+use voltra_scene::{
+    prefab, AudioSource, Camera, Collider, ComponentRegistry, Name, RigidBody, SceneId, Sprite,
+    Transform,
+};
 
 use crate::editor::Editor;
 use crate::undo::{selected_id, SceneView};
@@ -31,6 +35,23 @@ pub(crate) fn record(
     label: &'static str,
     spawn: impl FnOnce(&mut UiFrame<'_>) -> Entity,
 ) {
+    record_all(editor, frame, label, |frame, _| {
+        let entity = spawn(frame);
+        (vec![entity], Some(entity))
+    });
+}
+
+/// [`record`] for a spawn that makes several entities at once: every one of
+/// them goes into the same entry, so one undo takes the whole lot back out.
+///
+/// `spawn` answers what it made and which of it to select, and is handed the
+/// editor's registry for a spawn that reads components from a file.
+pub(crate) fn record_all(
+    editor: &mut Editor,
+    frame: &mut UiFrame<'_>,
+    label: &'static str,
+    spawn: impl FnOnce(&mut UiFrame<'_>, &ComponentRegistry) -> (Vec<Entity>, Option<Entity>),
+) {
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
@@ -38,16 +59,55 @@ pub(crate) fn record(
     };
     editor.history.begin(label, view, []);
 
-    let entity = spawn(frame);
-    editor.selected = Some(entity);
+    let (entities, selected) = spawn(frame, &editor.registry);
+    if selected.is_some() {
+        editor.selected = selected;
+    }
 
-    let id = frame.world.get::<SceneId>(entity).copied();
+    let ids: Vec<SceneId> = entities
+        .iter()
+        .filter_map(|&entity| frame.world.get::<SceneId>(entity).copied())
+        .collect();
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
-        selected: id,
+        selected: selected_id(frame.world, editor.selected),
     };
-    editor.history.commit_including(view, id);
+    editor.history.commit_including(view, ids);
+}
+
+/// Spawns a copy of the prefab at `path` with its roots around `at`, and
+/// answers what it made and its first root to select.
+///
+/// Through the store the game's ticks spawn from, so a prefab edited on disk
+/// drops as it now is. A file that will not read is logged and drops nothing:
+/// the drop is a gesture, and an error dialogue for it would be the only one
+/// in the editor. The spawned sprites and sources are resolved on the spot —
+/// they are drawn this very frame.
+pub(crate) fn prefab(
+    frame: &mut UiFrame<'_>,
+    registry: &ComponentRegistry,
+    at: Vec2,
+    path: &AssetPath,
+) -> (Vec<Entity>, Option<Entity>) {
+    let handle = frame.prefabs.load(path);
+    let spawned = prefab::spawn(
+        frame.world,
+        registry,
+        frame.prefabs.get(handle),
+        &Transform::from_translation(at),
+    );
+    match spawned {
+        Ok(instance) => {
+            frame.resolve_assets_of(&instance.entities);
+            let root = instance.root();
+            (instance.entities, root)
+        }
+        Err(e) => {
+            log::error!("could not drop {}: {e}", path.as_str());
+            (Vec::new(), None)
+        }
+    }
 }
 
 /// Drops a white unit sprite at `at`, ready to be moved.

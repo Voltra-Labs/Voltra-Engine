@@ -37,6 +37,15 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     });
                     ui.close();
                 }
+                let selected = editor.selected.is_some();
+                if ui
+                    .add_enabled(selected, egui::Button::new("Create prefab from selection"))
+                    .on_disabled_hover_text("select an entity first")
+                    .clicked()
+                {
+                    crate::prefab::create_from_selection(editor, frame);
+                    ui.close();
+                }
                 if ui.button("Clear").clicked() {
                     // Silently, because Clear is destructive anyway: a scene
                     // being emptied has no mid-flight state worth protecting.

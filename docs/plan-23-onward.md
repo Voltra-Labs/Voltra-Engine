@@ -11,9 +11,10 @@ camera, rigid bodies with filters, sensors, events and queries, two game ticks,
 an editor with hierarchy/inspector/gizmos/undo/play/asset browser, and a player
 binary, and since 23 it can make a sound — mixed through buses, faded, limited,
 reloaded and auditioned from the inspector — and since 24a it can stamp out
-copies of a prefab from a tick. What it still cannot do: author a prefab in the
-editor, fill a screen with tiles, print a number, read a gamepad, or
-be handed to someone who does not have Rust installed.
+copies of a prefab from a tick, and since 24b author one in the editor and
+drop it into a scene. What it still cannot do: fill a screen with tiles, print
+a number, read a gamepad, or be handed to someone who does not have Rust
+installed.
 
 ## The order, and why
 
@@ -22,7 +23,7 @@ be handed to someone who does not have Rust installed.
 | ~~23a~~ | ~~Audio: the crate, the store, the components, one-shots~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~23b~~ | ~~Audio: buses, tweens, editor audition, hot reload~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~24a~~ | ~~Prefabs: spawn, ids, parent remap, tick API~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 24b | Prefabs: editor authoring and the instance link | What 24a left; see below. |
+| ~~24b~~ | ~~Prefabs: editor authoring and the instance link~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | 25 | Tilemaps | The classic 2D content path, and it needs 22's atlas underneath it. Also the first scene that makes stage 28 urgent. |
 | 26 | In-game UI: text and screen space | A game cannot show a score. Held until here because a HUD wants prefabs and fonts want the atlas work from 22. |
 | 27 | Input actions and gamepads | Raw `KeyCode` is fine for one example and wrong for a game. Late on purpose: an action map is a thin layer over input that already works. |
@@ -33,31 +34,6 @@ Defensible reorderings, if the goal changes: aiming at **a playable demo**
 soonest is 23 → 24 → 26 → 29 and tiles later; aiming at **content tooling** is
 25 first and audio later. What should not move is 24 before 25/26 and 28 after
 whatever generates the bodies.
-
----
-
-## 24b — Prefabs: editor authoring and the instance link
-
-24a landed: `prefab::spawn` with fresh ids, remapped parents, cut outside
-links and placed roots; `Prefabs` beside the scene format; `Tick::spawn` and
-`App::spawn`, with per-entity asset resolution after each tick; the
-platformer's coins from `prefabs/coin.ron`. Decisions under "A prefab is a
-scene file" in ARCHITECTURE.md.
-
-What is left:
-
-- **`PrefabInstance { source: AssetPath }`** on each instance root, recorded
-  and inert. Without it, adding propagation later means every saved scene has
-  forgotten what it was made from.
-- **Drag a prefab from the browser into the viewport**, through the same undo
-  record as a sprite drop. The browser shows scenes as droppable — any `.ron`
-  that is not an atlas.
-- **"Create prefab from selection"**: writes the selection and its descendants
-  as a fragment, then turns the selection into an instance of it.
-- **Nested prefabs** become possible once a file can carry a `PrefabInstance`;
-  that is where the one test that a cycle is refused rather than recursed
-  belongs.
-- Still out: overrides, "apply to prefab", propagation. Their own stage.
 
 ---
 

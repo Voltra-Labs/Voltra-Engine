@@ -2183,9 +2183,8 @@ Version is checked once at read, not per spawn.
 - *Roots are placed by `at`*, composed in front of their own transform; a
   translation-only `at` is an addition, so an authored rotation and scale are
   not put through a matrix decomposition for nothing. Children stay local.
-- *Instantiate and forget.* No link to the source in 24a: overrides and
-  propagation are their own stage, and the inert `PrefabInstance` link is 24b
-  along with editor authoring.
+- *Instantiate and forget.* An instance is plain entities. Since 24b each
+  root carries an inert `PrefabInstance { source }` (below); nothing reads it.
 
 **The tick spawns, the loop resolves.** `Tick::spawn` cannot resolve a sprite's
 texture — that needs the GPU, which a tick is deliberately not handed — so it
@@ -2200,8 +2199,50 @@ own components (the platformer's `Coin`) ride in a prefab.
 that is not `*.atlas.ron` as an asset event. Existing instances are untouched —
 they have forgotten the file — and the next spawn gets the edit.
 
-**Nested prefabs** have no mechanism yet: nothing in a scene file names another
-prefab until 24b's instance link, so there is no cycle to refuse.
+### The instance link, and authoring prefabs in the editor
+
+Stage 24b.
+
+**`PrefabInstance { source: AssetPath }` on every instance root, recorded and
+inert.** Unity's `m_SourcePrefab`, Godot's `instance=ExtResource(...)`. Nothing
+reads it back — overrides, "apply to prefab" and propagation are their own
+stage — but that stage must find every scene saved before it already saying
+what each instance came from; added later, the link would have to be guessed.
+`Prefabs::load` stamps the read path on the `Prefab` (`with_source`), and
+`spawn` writes the link on each root, *replacing* any link the root's record
+carried: a root is an instance of what it was just spawned from. A child's own
+link is kept — that child is a nested instance. A `Prefab` built in memory has
+no source and links nothing.
+
+**Nested prefabs are records, not references.** A file holding an instance of
+another holds that instance's entities in full, plus its link. A spawn copies
+records and never follows a link, so a cycle cannot hang a spawn today. It is
+refused anyway, at the one place one can be made — `prefab::write` — because the
+propagation stage *will* walk these links. `prefab::reaches` walks the nested
+sources (links on records parented inside the file; a root's link says nothing
+about content) through the `Prefabs` cache with a visited set, so a diamond is
+walked once and a hand-written loop that misses the target ends.
+
+**`prefab::fragment` cuts a root and its descendants out of a world.** On the
+root only: the parent link is dropped (it names an entity the prefab does not
+hold), its own `PrefabInstance` is dropped (it *is* the prefab now), and its
+translation is zeroed while rotation and scale stay — a spawn places roots
+around `at`, so a prefab saved where it stood in the level would land that far
+from every cursor. Godot's saved branch is likewise local to its own root;
+Unity keeps the position and authors reset it by hand. `format::write` is split
+out of `save` so the fragment comes out formatted exactly like a scene.
+
+**Editor.** The browser lists any `.ron` that is not a slicing as
+`EntryKind::Scene`, draggable like a texture. Dropping one on the viewport
+spawns it through the *same* `Prefabs` the game's ticks use (now on `UiFrame`),
+so a hot-reloaded prefab drops as it now is; every entity goes in one undo
+entry (`spawn::record_all`), and the spawned assets are resolved per entity
+(`UiFrame::resolve_assets_of`, sharing `spawning::resolve_entity` with the
+loop's queue). **Scene ▸ Create prefab from selection** writes the selection to
+the browser's open folder as `<name>.ron` — `<name> N.ron` when taken, never an
+overwrite, Unity's rule — then links the selection to it as one undo entry. The
+undo removes the link and leaves the file: an undo that deleted assets would be
+the only one in the editor that touched the asset folder.
 
 ### wgpu 30 API notes
 

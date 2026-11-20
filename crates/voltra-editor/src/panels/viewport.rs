@@ -148,7 +148,8 @@ fn no_camera(ui: &mut Ui, scene: &egui::Response) {
     );
 }
 
-/// Adds a sprite where an asset was dropped, as one undo entry.
+/// Adds what an asset makes — a sprite, a sound, a prefab's instance — where
+/// it was dropped, as one undo entry.
 ///
 /// Unity, Unreal and Godot all instantiate on drop rather than opening a
 /// dialogue, and all three put the new object where the pointer released rather
@@ -179,6 +180,14 @@ fn drop_asset(editor: &mut Editor, frame: &mut UiFrame<'_>, ui: &Ui, scene: &egu
         return;
     };
     let at = crate::picking::world_at(scene, pointer, frame);
+
+    // A scene is a prefab: the drop spawns a copy of everything in it.
+    if voltra_assets::watch::is_scene(path.as_str()) {
+        spawn::record_all(editor, frame, "Add prefab", |frame, registry| {
+            spawn::prefab(frame, registry, at, &path)
+        });
+        return;
+    }
 
     // A sound is not a sprite at all: it becomes something that plays it.
     if voltra_assets::watch::is_clip(path.as_str()) {
