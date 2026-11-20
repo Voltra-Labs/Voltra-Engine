@@ -14,7 +14,10 @@ use wgpu::util::DeviceExt;
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct Vertex {
     pub position: [f32; 2],
-    pub color: [f32; 3],
+    /// Multiplied with the texture, alpha included: an alpha below one
+    /// fades the texel, which is how a sprite turns translucent and a
+    /// particle fades out.
+    pub color: [f32; 4],
     /// Texture coordinates. `(0, 0)` is the top-left of the image, matching
     /// how the pixels are laid out in the file.
     pub uv: [f32; 2],
@@ -25,10 +28,10 @@ impl Vertex {
     pub const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
         array_stride: size_of::<Self>() as wgpu::BufferAddress,
         step_mode: wgpu::VertexStepMode::Vertex,
-        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x3, 2 => Float32x2],
+        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
     };
 
-    pub const fn new(position: [f32; 2], color: [f32; 3], uv: [f32; 2]) -> Self {
+    pub const fn new(position: [f32; 2], color: [f32; 4], uv: [f32; 2]) -> Self {
         Self {
             position,
             color,
@@ -139,19 +142,19 @@ impl Mesh {
 
 /// The built-in triangle, wound counter-clockwise in clip space.
 pub const TRIANGLE: [Vertex; 3] = [
-    Vertex::new([0.0, 0.5], [1.0, 0.0, 0.0], [0.5, 0.0]),
-    Vertex::new([-0.5, -0.5], [0.0, 1.0, 0.0], [0.0, 1.0]),
-    Vertex::new([0.5, -0.5], [0.0, 0.0, 1.0], [1.0, 1.0]),
+    Vertex::new([0.0, 0.5], [1.0, 0.0, 0.0, 1.0], [0.5, 0.0]),
+    Vertex::new([-0.5, -0.5], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    Vertex::new([0.5, -0.5], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
 ];
 
 /// A full-clip-space quad as four vertices, drawn with [`QUAD_INDICES`].
 ///
 /// V runs opposite to Y: clip space points up, image rows go down.
 pub const QUAD: [Vertex; 4] = [
-    Vertex::new([-1.0, 1.0], [1.0, 0.0, 0.0], [0.0, 0.0]),
-    Vertex::new([-1.0, -1.0], [0.0, 1.0, 0.0], [0.0, 1.0]),
-    Vertex::new([1.0, -1.0], [0.0, 0.0, 1.0], [1.0, 1.0]),
-    Vertex::new([1.0, 1.0], [1.0, 1.0, 0.0], [1.0, 0.0]),
+    Vertex::new([-1.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
+    Vertex::new([-1.0, -1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    Vertex::new([1.0, -1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex::new([1.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, 0.0]),
 ];
 
 /// Two triangles sharing the diagonal, so four vertices cover a quad.
@@ -164,7 +167,7 @@ mod tests {
     #[test]
     fn layout_stride_matches_the_struct() {
         assert_eq!(Vertex::LAYOUT.array_stride as usize, size_of::<Vertex>());
-        assert_eq!(size_of::<Vertex>(), 7 * size_of::<f32>());
+        assert_eq!(size_of::<Vertex>(), 8 * size_of::<f32>());
     }
 
     #[test]
@@ -180,10 +183,10 @@ mod tests {
         assert_eq!(attrs[1].shader_location, 1);
         // Colour starts right after the two position floats.
         assert_eq!(attrs[1].offset, 2 * f32_size);
-        assert_eq!(attrs[1].format, wgpu::VertexFormat::Float32x3);
+        assert_eq!(attrs[1].format, wgpu::VertexFormat::Float32x4);
 
         assert_eq!(attrs[2].shader_location, 2);
-        assert_eq!(attrs[2].offset, 5 * f32_size);
+        assert_eq!(attrs[2].offset, 6 * f32_size);
         assert_eq!(attrs[2].format, wgpu::VertexFormat::Float32x2);
     }
 

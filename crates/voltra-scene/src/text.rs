@@ -38,8 +38,8 @@ impl Align {
 /// downward. Drawn by the sprite pipeline, interleaved with sprites and
 /// tilemap layers by [`sort_order`](Self::sort_order).
 ///
-/// The colour's alpha is not drawn: the vertex carries RGB only, exactly as
-/// it does for [`Sprite`](crate::Sprite).
+/// The colour's alpha fades the glyphs, as it does a
+/// [`Sprite`](crate::Sprite).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Text {
     /// What is drawn. `\n` starts a new line.

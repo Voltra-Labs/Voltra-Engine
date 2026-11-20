@@ -9,6 +9,7 @@ mod camera;
 mod collision;
 mod name;
 mod parallax;
+mod particles;
 mod path_field;
 mod sprite;
 mod text;
@@ -20,8 +21,8 @@ use voltra_core::egui::{self, Color32, RichText, Ui};
 use voltra_core::UiFrame;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, ui, AudioSource, Camera, Collider, Parallax, SceneId, Sprite, Text, Tilemap,
-    Transform, UiLayout, UiRect,
+    hierarchy, ui, AudioSource, Camera, Collider, Parallax, ParticleEmitter, SceneId, Sprite, Text,
+    Tilemap, Transform, UiLayout, UiRect,
 };
 
 use crate::editor::Editor;
@@ -128,6 +129,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(text) = frame.world.get_mut::<Text>(entity) {
                     ui.separator();
                     claim = claim.or(text::show(ui, text, frame.fonts, on_screen));
+                }
+                if let Some(emitter) = frame.world.get_mut::<ParticleEmitter>(entity) {
+                    ui.separator();
+                    claim = claim.or(particles::show(ui, emitter));
                 }
                 if let Some(layer) = frame.world.get_mut::<Parallax>(entity) {
                     ui.separator();

@@ -102,10 +102,17 @@ pub(super) fn resolve_entity(
             let path = map.atlas.clone();
             map.set_atlas(path, atlases);
         }
-        if let Some((textures, device, queue)) = gpu {
+        if let Some((textures, device, queue)) = gpu.as_mut() {
             let path = map.texture.clone();
             map.set_texture(path, textures, device, queue);
         }
+    }
+    if let (Some(emitter), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::ParticleEmitter>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = emitter.texture.clone();
+        emitter.set_texture(path, textures, device, queue);
     }
     if let (Some(text), Some(fonts)) = (world.get_mut::<Text>(entity), fonts) {
         let path = text.font.clone();

@@ -21,8 +21,9 @@ use voltra_core::{
 use voltra_ecs::Entity;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
-    Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, Parallax, Persistent,
-    PhysicsMaterial, RigidBody, Sensor, Sprite, Text, Tile, Tilemap, Transform, UiRect,
+    Align, AudioListener, AudioSource, Camera, Collider, ComponentRegistry, Parallax,
+    ParticleEmitter, Persistent, PhysicsMaterial, RigidBody, Sensor, Sprite, Text, Tile, Tilemap,
+    Transform, UiRect,
 };
 
 /// This example's own component, in the same world as the engine's.
@@ -299,6 +300,28 @@ fn take_coins(tick: &mut Tick<'_>, walker: Entity) -> usize {
                     },
                 );
             }
+        }
+
+        // A spray of sparks where it was: a one-shot emitter, which the loop
+        // despawns once the last spark has faded.
+        if let Some(at) = tick.world.get::<Transform>(coin).map(|t| t.translation) {
+            let sparks = tick.world.spawn();
+            tick.world.insert(sparks, Transform::from_translation(at));
+            let mut emitter = ParticleEmitter {
+                emitting: false,
+                one_shot: true,
+                lifetime: (0.3, 0.6),
+                speed: (1.5, 3.0),
+                spread: std::f32::consts::TAU,
+                acceleration: Vec2::new(0.0, -6.0),
+                size: (0.15, 0.0),
+                color_start: [1.0, 0.9, 0.3, 1.0],
+                color_end: [1.0, 0.5, 0.1, 0.0],
+                sort_order: 12,
+                ..ParticleEmitter::default()
+            };
+            emitter.burst(18);
+            tick.world.insert(sparks, emitter);
         }
 
         // Despawned mid-overlap on purpose: the pair ends by disappearing, and

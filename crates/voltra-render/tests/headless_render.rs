@@ -197,10 +197,10 @@ fn moving_the_camera_moves_the_geometry() {
 /// A full-screen quad with white vertex colours, so the texture is the only
 /// thing deciding the output.
 const WHITE_QUAD: [voltra_render::Vertex; 4] = [
-    voltra_render::Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0], [0.0, 0.0]),
-    voltra_render::Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0], [0.0, 1.0]),
-    voltra_render::Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0], [1.0, 1.0]),
-    voltra_render::Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 0.0]),
+    voltra_render::Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
+    voltra_render::Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
+    voltra_render::Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    voltra_render::Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
 ];
 
 #[test]
@@ -320,14 +320,14 @@ fn zooming_out_shrinks_the_geometry() {
 /// the first, `[0, 1]` for the second. Each is its own indexed range so
 /// [`pass::draw_mesh_batches`] can bind a different texture per half.
 const TWO_HALVES: [Vertex; 8] = [
-    Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0], [0.0, 0.0]),
-    Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0], [0.0, 1.0]),
-    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0], [1.0, 1.0]),
-    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0], [1.0, 0.0]),
-    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0], [0.0, 0.0]),
-    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0], [0.0, 1.0]),
-    Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0], [1.0, 1.0]),
-    Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 0.0]),
+    Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
+    Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
+    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
+    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
 ];
 const TWO_HALVES_INDICES: [u32; 12] = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
 

@@ -251,6 +251,10 @@ pub(super) fn resolve_world_textures(
         let path = map.texture.clone();
         map.set_texture(path, textures, device, queue);
     }
+    for (_, emitter) in world.query_mut::<voltra_scene::ParticleEmitter>() {
+        let path = emitter.texture.clone();
+        emitter.set_texture(path, textures, device, queue);
+    }
 }
 
 /// Re-resolves every [`AudioSource`]'s clip handle from its path.

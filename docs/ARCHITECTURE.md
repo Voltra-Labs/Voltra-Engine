@@ -2411,8 +2411,7 @@ yet — that is 26b.
   `Sheets` carries `fonts`, so draw and pick ask the same store.
 - **Picking is the laid-out box**, ascent to last descent, through the world
   matrix — a click between letters is a click on the label (Unity, Godot).
-- Colour alpha is not drawn, as for sprites: the vertex is RGB. Widening it is
-  its own change.
+- Colour alpha is drawn since stage 34, when the vertex became RGBA.
 
 ### Screen-space UI is a `UiRect`, drawn in a second pass in pixels
 
@@ -2721,6 +2720,43 @@ batch_stress` (a 512 × 64 tilemap and 5 000 sprites, a ~21 × 12 view):
 - **Next, if a profile asks:** the 5 000 sprites are still sorted and their
   quads computed before the cull; a per-chunk mesh cache for tilemaps; a
   spatial index for sprites.
+
+### Colour alpha reaches the blend, and particles are quads in the batch
+
+Stage 34, in two parts.
+
+**The vertex is RGBA.** It had been RGB since stage 7, and the shader took
+alpha from the texture alone, so `Sprite.color[3]` and `Text.color[3]` were
+documented as "not drawn". `Vertex::color` is now `[f32; 4]`
+(`Float32x4`, stride 32 bytes) and the fragment is `texture * colour`.
+Existing scenes all author alpha `1.0`, so nothing on disk changes look;
+a translucent sprite now draws translucent. Pinned by
+`voltra-render/tests/headless_alpha.rs` (half-alpha red over black blends
+half-way).
+
+**`ParticleEmitter`** — CPU, 2D, drawn by the sprite pipeline (Godot's
+`CPUParticles2D` subset a 2D game reaches for first):
+
+- Rate per second (the fractional share carried frame to frame), `burst(n)`,
+  `max_particles` (capped at 10 000), lifetime / speed ranges, direction and
+  spread in the emitter's space, acceleration, size and colour from start to
+  end — fading to alpha 0 is how a particle disappears.
+- `world_space` (default): particles keep the world position they were born
+  at; otherwise they ride the emitter's matrix.
+- `one_shot`: once not emitting, owing no burst and empty, the loop despawns
+  the entity — Unity's "Stop Action: Destroy", so per-event emitters (the
+  platformer's coin sparks) clean up after themselves.
+- Live particles are `#[serde(skip)]` state: a scene says what an emitter is,
+  not which sparks were in the air. The state field is public with an opaque
+  type only so `ParticleEmitter { rate: 5.0, ..Default::default() }` works
+  outside the crate.
+- An in-house xorshift64* seeded per entity: deterministic, testable, no
+  `rand`. A frame longer than 0.1 s is simulated as 0.1 s, so a stall does not
+  fire a second's worth of particles in one place; non-finite numbers emit
+  nothing.
+- Advanced in `App::advance` after animation, gated on the simulation switch
+  like it; sorted with sprites by the emitter's `sort_order` and culled per
+  quad like everything else. Inspector section and *Scene ▸ Spawn particles*.
 
 ### wgpu 30 API notes
 

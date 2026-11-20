@@ -6,6 +6,7 @@ mod draw;
 mod framing;
 mod gamepads;
 mod input_map;
+mod particles;
 mod scenes;
 mod simulation;
 mod spawning;
@@ -367,6 +368,7 @@ impl App {
         // After the tick, so a clip the game just switched to is on screen this
         // frame rather than next.
         self.advance_animations(delta);
+        self.advance_particles(delta);
         // After the tick too, and for the matching reason: a source the game
         // just spawned or moved is heard from where it is now.
         self.update_audio();
