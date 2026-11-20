@@ -14,7 +14,7 @@ use std::path::Path;
 use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
-use crate::watch::is_texture;
+use crate::watch::{is_clip, is_texture};
 
 /// What one row of a listing is.
 ///
@@ -29,6 +29,9 @@ pub enum EntryKind {
     Texture,
     /// A file named `*.atlas.ron`: a slicing of one of those.
     Atlas,
+    /// A file with an extension in
+    /// [`CLIP_EXTENSIONS`](crate::watch::CLIP_EXTENSIONS): a sound.
+    Clip,
     /// A file this engine has no loader for.
     Other,
 }
@@ -124,6 +127,8 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             // Before `Other` and after `Texture`: the suffix is longer than an
             // extension, and only one of the two can match a given name.
             EntryKind::Atlas
+        } else if is_clip(&name) {
+            EntryKind::Clip
         } else {
             EntryKind::Other
         };

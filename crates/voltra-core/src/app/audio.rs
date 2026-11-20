@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 
-use voltra_assets::Clips;
-use voltra_audio::{spatial, Audio, VoiceId};
+use voltra_assets::{Clips, Handle};
+use voltra_audio::{spatial, Audio, Clip, VoiceId};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{audio_listener, AudioSource};
@@ -64,6 +64,23 @@ impl SceneAudio {
         self.playing.clear();
     }
 
+    /// Ends every source playing `clip` so it starts again with the new
+    /// samples — a hot reload of a looping ambience, heard straight away.
+    ///
+    /// Forgetting is what restarts it: a `play_on_spawn` source that is not
+    /// in `playing` is started on the next frame, exactly as after a Stop.
+    pub(super) fn restart(&mut self, world: &World, clip: Handle<Clip>, audio: &mut Audio) {
+        self.playing.retain(|&entity, &mut voice| {
+            let uses = world
+                .get::<AudioSource>(entity)
+                .is_some_and(|source| source.clip_handle == Some(clip));
+            if uses {
+                audio.stop(voice);
+            }
+            !uses
+        });
+    }
+
     /// How many of the scene's sources have been started.
     #[cfg(test)]
     pub(super) fn len(&self) -> usize {
@@ -103,7 +120,7 @@ impl SceneAudio {
             };
 
             let (volume, pan) = mix_for(source, position_of(world, entity), listener);
-            let mut params = source.params();
+            let mut params = source.params(audio.buses_mut());
             params.volume = volume;
             params.pan = pan;
 
@@ -338,6 +355,35 @@ mod tests {
 
         scene_audio.update(&world, Some(&clips), &mut audio);
         assert_eq!(scene_audio.len(), 1);
+    }
+
+    #[test]
+    fn a_reloaded_clip_restarts_the_sources_playing_it_and_no_others() {
+        let mut clips = Clips::new(scratch_root());
+        let coin = clips.load(&AssetPath::new("coin.wav").expect("valid"));
+        let wind = clips.load(&AssetPath::new("wind.wav").expect("valid"));
+        let mut world = World::new();
+        for clip in [coin, wind] {
+            spawn_source(
+                &mut world,
+                AudioSource {
+                    clip_handle: Some(clip),
+                    play_on_spawn: true,
+                    looping: true,
+                    ..Default::default()
+                },
+                Vec2::ZERO,
+            );
+        }
+        let mut scene_audio = SceneAudio::default();
+        let mut audio = Audio::silent();
+        scene_audio.update(&world, Some(&clips), &mut audio);
+
+        scene_audio.restart(&world, coin, &mut audio);
+        assert_eq!(scene_audio.len(), 1, "only the coin was forgotten");
+
+        scene_audio.update(&world, Some(&clips), &mut audio);
+        assert_eq!(scene_audio.len(), 2, "and it starts again");
     }
 
     #[test]

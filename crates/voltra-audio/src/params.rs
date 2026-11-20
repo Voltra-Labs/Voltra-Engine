@@ -1,5 +1,7 @@
 //! How a sound is to be played.
 
+use crate::bus::BusId;
+
 /// The settings a voice starts with.
 ///
 /// Everything here can also be changed while the voice runs — a source that
@@ -36,6 +38,13 @@ pub struct PlayParams {
     /// A looping voice runs until something stops it, so the caller must keep
     /// its [`VoiceId`](crate::VoiceId) — nothing else will ever end it.
     pub looping: bool,
+    /// Which bus the voice is heard on.
+    ///
+    /// An id rather than a name, resolved once on the main thread by
+    /// [`Buses::id`](crate::Buses::id): the audio thread compares it for every
+    /// voice on every buffer. Read once, like [`looping`](Self::looping) — a
+    /// voice that changed groups halfway through would jump in level.
+    pub bus: BusId,
 }
 
 impl Default for PlayParams {
@@ -45,6 +54,7 @@ impl Default for PlayParams {
             pitch: 1.0,
             pan: 0.0,
             looping: false,
+            bus: BusId::MASTER,
         }
     }
 }
@@ -109,6 +119,7 @@ mod tests {
         assert_eq!(params.volume, 1.0);
         assert_eq!(params.speed(), 1.0);
         assert!(!params.looping);
+        assert_eq!(params.bus, BusId::MASTER);
     }
 
     #[test]

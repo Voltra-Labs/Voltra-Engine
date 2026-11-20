@@ -4,6 +4,7 @@
 //! them and the rule that turns an edit into an undo entry.
 
 mod animation;
+mod audio_source;
 mod camera;
 mod collision;
 mod name;
@@ -13,7 +14,7 @@ mod transform;
 
 use voltra_core::egui::{self, Color32, RichText, Ui};
 use voltra_core::UiFrame;
-use voltra_scene::{hierarchy, Camera, Collider, SceneId, Sprite, Transform};
+use voltra_scene::{hierarchy, AudioSource, Camera, Collider, SceneId, Sprite, Transform};
 
 use crate::editor::Editor;
 use crate::undo::SceneView;
@@ -94,6 +95,16 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();
                     claim = claim.or(camera::show(ui, camera));
+                }
+                if let Some(source) = frame.world.get_mut::<AudioSource>(entity) {
+                    ui.separator();
+                    claim = claim.or(audio_source::show(
+                        ui,
+                        source,
+                        frame.clips,
+                        frame.audio,
+                        &mut editor.audition,
+                    ));
                 }
                 // Keyed off the collider rather than off the filter itself:
                 // both filter components are absent by default, and an entity

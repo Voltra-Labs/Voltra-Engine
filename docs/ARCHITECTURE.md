@@ -2059,8 +2059,8 @@ failed send.
   for is tied to something that happened on screen; the one half-played is the
   one a listener misses least. Unity's rule, and its default too.
 - *Hard clipping* at the end of the buffer, because a host handed a sample out
-  of range may wrap it into a crack. A limiter that ducks the mix instead of
-  squaring it off is a bus effect, and buses are 23b.
+  of range may wrap it into a crack. Replaced in 23b by a limiter, with the
+  clamp kept underneath it — see below.
 - *Whole-file decode*, no streaming. Streaming is a second asset kind with its
   own buffering, which is the line Unity draws between `Decompress On Load` and
   `Streaming`; nothing this engine ships is long enough to need the other side
@@ -2086,11 +2086,73 @@ scene's sounds afresh. Sources are moved every frame from the listener; a
 one-shot from `Tick::audio` is not, because it is not tied to an entity, which
 is exactly what lets a coin be heard after it is despawned.
 
-**Deferred to 23b:** buses and per-category volume, tweens, auditioning a clip
-from the inspector, and hot reload. Reload is not the same problem as swapping
-a texture between frames — the audio thread is inside the buffer while the
-samples would be replaced — and the handle is already stable, so adding it
-later changes nothing above.
+### Buses are names in code, every gain is a ramp, and a reload needs no message
+
+Stage 23b: what 23a left — groups with a volume, fades, a limiter instead of
+the clip, hot reload, and an inspector that can play the sound.
+
+**Where the bus names live.** Unity keeps them in an `AudioMixer` asset, Godot
+in `default_bus_layout.tres`, Unreal in `SoundClass` assets. This engine has no
+project settings file, and stages 19 and 21 both refused to invent one, so the
+table is code: `Buses::default()` is master, music, sfx, ui, and a game hands
+`App::with_buses` its own. The scene stores the *name*; the mixer sees a
+`BusId` resolved once on the main thread, so a file still means the same bus
+after the table changes order and the audio thread never compares a string.
+
+- *An unknown name registers a bus* at unity gain rather than being refused or
+  folded into the master. Refusing silences a sound for no visible reason;
+  folding plays it but leaves a slider that will never reach it. Registering
+  gives a working group under the name it was typed as. Past `MAX_BUSES` (32)
+  it falls back to the master — audible, with a warning — so a scene of typos
+  cannot grow the table forever.
+- *Routing is one level*, Godot's shape: every bus feeds the master. A bus
+  graph wants topology validation and a cycle check, and earns them when there
+  is an effect to put on an intermediate node.
+- *An empty name is the master*, and is not written to the file, so scenes from
+  before buses save byte-identical.
+
+**Every gain is a `Ramp`.** A gain written straight into the multiply steps
+inside a buffer, and a step is a click — the reason JUCE has `SmoothedValue`
+and Web Audio has `linearRampToValueAtTime`. A voice carries three: `left` and
+`right` (the pan law's gains, smoothed over `SMOOTHING` = 15 ms because a moving
+source is re-panned every frame) and a `fader` for fades, kept separate so the
+next frame's position cannot undo a fade. Linear, not exponential: the ramp
+that runs most is the 15 ms one, where the curves are indistinguishable. Stops
+are de-clicked over the same 15 ms; `fade_out` is the same command with a
+longer time, and a fade on a stopping voice cancels the stop.
+
+**Per-bus gain without per-bus buffers.** Each voice is handed a *copy* of its
+bus's ramp at the top of the buffer and steps it frame by frame; the mixer then
+advances the real one by the buffer's length. Every voice on a bus hears the
+same fade at the same frame, a bus with nothing on it still arrives on time,
+and nothing is allocated on the audio thread. The master's ramp multiplies the
+finished sum, then the limiter runs.
+
+**The limiter** is feed-forward, linked across channels, 1 ms attack and
+100 ms release, holding 0.99. No look-ahead: it would cost a buffer of latency
+on everything, which this engine spends nowhere else. A transient faster than
+the attack therefore still gets through, which is why the clamp stays under it
+— and why a `NaN` reaching it becomes silence there.
+
+**`Audio` mirrors the bus volumes** on the main thread, for a settings screen
+to read and so `Audio::connect` can hand a device opened late the mix a game
+set on the silent `Audio` before the window existed. `App` no longer replaces
+its `Audio` at resume; it connects the one it has.
+
+**Hot reload needs no command to the mixer.** 23a expected one, because it
+pictured the samples being replaced under a voice. They are not: a `Clip` is an
+immutable `Arc`, `Clips::reload` swaps which one the handle names, and a voice
+already playing finishes the take it started with. What *does* need doing is
+restarting the scene sources playing that clip, so a looping ambience picks up
+the edit; `App` stops and forgets them and `play_on_spawn` starts them on the
+next frame. A file that will not decode mid-save keeps the old samples, as
+textures and atlases do.
+
+**Audition** is a button pair in the inspector, not a checkbox: nothing about
+it is saved. It plays through the game's own `Audio` — one stream, through the
+buses and the limiter — flat, at the source's volume, on its bus. One at a
+time; a second Play stops the first. A clip dropped on the viewport becomes an
+entity with an `AudioSource` and no sprite, Unity's answer.
 
 ### wgpu 30 API notes
 

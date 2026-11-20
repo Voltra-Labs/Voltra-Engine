@@ -1,7 +1,9 @@
 //! What a game's tick may do to the sound.
 
+use std::time::Duration;
+
 use voltra_assets::{Clips, Handle};
-use voltra_audio::{Audio, Clip, PlayParams, VoiceId};
+use voltra_audio::{Audio, BusId, Clip, PlayParams, VoiceId};
 
 /// The sound half of a [`Tick`](super::Tick).
 ///
@@ -40,15 +42,53 @@ impl<'a> TickAudio<'a> {
     /// the same reason [`Audio`] with no device does: a caller that keeps the
     /// id must behave the same either way.
     pub fn play_with(&mut self, clip: Handle<Clip>, params: PlayParams) -> VoiceId {
+        self.play_fading_in(clip, params, Duration::ZERO)
+    }
+
+    /// As [`play_with`](Self::play_with), rising from silence over `fade_in`
+    /// — the incoming half of a music cross-fade.
+    pub fn play_fading_in(
+        &mut self,
+        clip: Handle<Clip>,
+        params: PlayParams,
+        fade_in: Duration,
+    ) -> VoiceId {
         match self.clips.and_then(|clips| clips.try_get(clip)) {
-            Some(clip) => self.audio.play(clip, params),
-            None => self.audio.play(&Clip::silent(), params),
+            Some(clip) => self.audio.play_fading_in(clip, params, fade_in),
+            None => self.audio.play_fading_in(&Clip::silent(), params, fade_in),
         }
     }
 
     /// Ends one voice now — how a looping sound a tick started is stopped.
     pub fn stop(&mut self, voice: VoiceId) {
         self.audio.stop(voice);
+    }
+
+    /// Fades a voice to silence over `over` and ends it: the outgoing half of
+    /// a cross-fade.
+    pub fn fade_out(&mut self, voice: VoiceId, over: Duration) {
+        self.audio.fade_out(voice, over);
+    }
+
+    /// Slides a voice's fader to `volume` over `over` without ending it.
+    pub fn fade(&mut self, voice: VoiceId, volume: f32, over: Duration) {
+        self.audio.fade(voice, volume, over);
+    }
+
+    /// The bus called `name`, for a [`PlayParams::bus`] or a volume change.
+    pub fn bus(&mut self, name: &str) -> BusId {
+        self.audio.bus(name)
+    }
+
+    /// Slides a whole bus to `volume` over `over` — the music down under a
+    /// dialogue line, everything down under a pause menu.
+    pub fn set_bus_volume(&mut self, bus: BusId, volume: f32, over: Duration) {
+        self.audio.set_bus_volume(bus, volume, over);
+    }
+
+    /// The volume `bus` was last set to.
+    pub fn bus_volume(&self, bus: BusId) -> f32 {
+        self.audio.bus_volume(bus)
     }
 
     /// Ends every voice, including the ones the scene's own sources started.
@@ -116,5 +156,29 @@ mod tests {
         );
 
         tick.stop(voice);
+    }
+
+    #[test]
+    fn a_tick_can_duck_a_bus_and_read_it_back() {
+        let mut audio = Audio::silent();
+        let mut tick = TickAudio::new(&mut audio, None);
+        let music = tick.bus("music");
+
+        tick.set_bus_volume(music, 0.3, Duration::from_millis(250));
+
+        assert_eq!(tick.bus_volume(music), 0.3, "the target, not the ramp");
+    }
+
+    #[test]
+    fn a_cross_fade_is_two_calls() {
+        let mut audio = Audio::silent();
+        let mut tick = TickAudio::new(&mut audio, None);
+        let over = Duration::from_secs(1);
+
+        let old = tick.play(Handle::forge(0, 0));
+        tick.fade_out(old, over);
+        let new = tick.play_fading_in(Handle::forge(0, 0), PlayParams::default(), over);
+
+        assert_ne!(old, new);
     }
 }

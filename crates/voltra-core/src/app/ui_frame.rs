@@ -8,6 +8,7 @@
 use std::collections::HashMap;
 
 use voltra_assets::{Atlases, Clips, Handle, Textures};
+use voltra_audio::Audio;
 use voltra_ecs::World;
 use voltra_physics::Contact;
 use voltra_render::{wgpu, Camera2D, LineBatch, Texture};
@@ -41,6 +42,13 @@ pub struct UiFrame<'a> {
     /// the two stores above are shared: a panel that names a clip must produce
     /// a handle the frame's audio can already resolve.
     pub clips: &'a mut Clips,
+    /// The game's own output, for a panel that auditions a sound.
+    ///
+    /// The same `Audio` the scene plays through rather than a second device:
+    /// a preview should go through the buses and the limiter the game will,
+    /// and two streams open on one device is a configuration some hosts
+    /// refuse.
+    pub audio: &'a mut Audio,
     /// Needed to load a texture a panel just named.
     pub device: &'a wgpu::Device,
     /// Needed to upload a texture a panel just named.

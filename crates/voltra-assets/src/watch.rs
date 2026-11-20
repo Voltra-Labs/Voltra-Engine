@@ -30,6 +30,12 @@ use crate::path::AssetPath;
 /// caller here to disagree with the value.
 const DEBOUNCE: Duration = Duration::from_millis(200);
 
+/// How deep a newly created directory is scanned for files already in it.
+///
+/// A bound rather than a parameter: it only stops a pathological tree from
+/// stalling a frame, and no asset layout comes near it.
+const MAX_SCAN_DEPTH: usize = 16;
+
 /// File extensions that can become a texture, lowercase, without the dot.
 ///
 /// The filter is by extension rather than by event kind, which is Unreal's
@@ -43,10 +49,27 @@ pub const TEXTURE_EXTENSIONS: &[&str] = &["png"];
 /// Here rather than beside the browser because this is where the list lives,
 /// and a second copy of the match would drift from it.
 pub fn is_texture(name: &str) -> bool {
+    has_extension(name, TEXTURE_EXTENSIONS)
+}
+
+/// File extensions that can become a [`Clip`](voltra_audio::Clip), lowercase,
+/// without the dot.
+///
+/// Exactly the formats the workspace builds `symphonia` with. A name here
+/// whose decoder is not compiled in would be watched, listed as a sound, and
+/// then fail to decode every time.
+pub const CLIP_EXTENSIONS: &[&str] = &["wav", "ogg"];
+
+/// Whether a file name ends in an extension this engine can decode as a clip.
+pub fn is_clip(name: &str) -> bool {
+    has_extension(name, CLIP_EXTENSIONS)
+}
+
+fn has_extension(name: &str, extensions: &[&str]) -> bool {
     let Some((_, extension)) = name.rsplit_once('.') else {
         return false;
     };
-    TEXTURE_EXTENSIONS.contains(&extension.to_ascii_lowercase().as_str())
+    extensions.contains(&extension.to_ascii_lowercase().as_str())
 }
 
 /// Watches the asset root and reports which assets changed.
@@ -105,13 +128,20 @@ impl AssetWatcher {
     /// Never blocks: this runs once per frame, and a frame that waits on a
     /// filesystem notification is a dropped frame.
     ///
-    /// Event *kinds* are deliberately not inspected. Which kind a save produces
+    /// Event *kinds* are deliberately not inspected, with one exception below. Which kind a save produces
     /// varies by platform and by the program doing the writing — an overwrite
     /// is `Create` on some, `Modify` on others, a rename pair on a third — and
     /// matching on them is what makes a watcher miss changes
     /// (bevyengine/bevy#10576). Any event on a path that could be an asset is
     /// a reload *attempt*; whether the file is readable is `Textures::reload`'s
     /// question, not this one's.
+    ///
+    /// The exception: a *created directory* is scanned for files already in
+    /// it. inotify watches a new subdirectory only once it has seen it
+    /// created, so a folder copied in — or made and filled in one go — has its
+    /// files written before the watch exists, and they raise no event of their
+    /// own. Windows and macOS watch the tree natively and never hit this; the
+    /// scan is harmless there, since every path is deduplicated.
     pub fn drain(&mut self) -> Vec<AssetPath> {
         let mut seen = HashSet::new();
         let mut changed = Vec::new();
@@ -121,9 +151,19 @@ impl AssetWatcher {
                 Ok(Ok(events)) => {
                     for event in events {
                         for path in &event.paths {
-                            if let Some(asset) = self.to_asset_path(path) {
-                                if seen.insert(asset.clone()) {
-                                    changed.push(asset);
+                            let mut found = Vec::new();
+                            // The one place the kind matters: a directory that
+                            // was just created may already hold files written
+                            // before the watch reached it.
+                            if event.kind.is_create() {
+                                files_under(path, &mut found);
+                            }
+                            found.push(path.clone());
+                            for path in &found {
+                                if let Some(asset) = self.to_asset_path(path) {
+                                    if seen.insert(asset.clone()) {
+                                        changed.push(asset);
+                                    }
                                 }
                             }
                         }
@@ -156,7 +196,7 @@ impl AssetWatcher {
     /// a path from a volume we do not own.
     fn to_asset_path(&self, path: &Path) -> Option<AssetPath> {
         let name = path.file_name()?.to_str()?;
-        if !is_texture(name) && !is_atlas(name) {
+        if !is_texture(name) && !is_atlas(name) && !is_clip(name) {
             return None;
         }
 
@@ -176,5 +216,34 @@ impl AssetWatcher {
         })?;
 
         AssetPath::new(&relative.to_string_lossy()).ok()
+    }
+}
+
+/// Every file below `dir`, if it is a directory, appended to `found`.
+///
+/// Symbolic links are not followed, so a link back up the tree cannot loop;
+/// [`MAX_SCAN_DEPTH`] bounds the rest.
+fn files_under(dir: &Path, found: &mut Vec<PathBuf>) {
+    fn walk(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
+        if depth > MAX_SCAN_DEPTH {
+            return;
+        }
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if kind.is_dir() {
+                walk(&entry.path(), depth + 1, found);
+            } else if kind.is_file() {
+                found.push(entry.path());
+            }
+        }
+    }
+    // `symlink_metadata`, so a created link to a directory is not walked.
+    if std::fs::symlink_metadata(dir).is_ok_and(|meta| meta.is_dir()) {
+        walk(dir, 0, found);
     }
 }
