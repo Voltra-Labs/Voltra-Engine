@@ -41,12 +41,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # `cpal` links ALSA on Linux, and `alsa-sys` finds it through
-      # pkg-config at build time. Hosted Ubuntu images ship neither the
-      # headers nor the `.pc` file.
-      - name: ALSA headers
+      # `cpal` links ALSA on Linux and `gilrs` links udev (gamepad hotplug),
+      # and both `-sys` crates find them through pkg-config at build time.
+      # Hosted Ubuntu images ship neither the headers nor the `.pc` files.
+      - name: ALSA and udev headers
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
