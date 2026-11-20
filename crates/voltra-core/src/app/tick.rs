@@ -19,7 +19,7 @@ use voltra_scene::{ComponentRegistry, Prefabs};
 
 use crate::app::tick_audio::TickAudio;
 use crate::app::App;
-use crate::input::Input;
+use crate::input::{ActionMap, Input};
 
 /// A game's turn at the world.
 ///
@@ -65,6 +65,10 @@ pub struct Tick<'a> {
     pub audio: TickAudio<'a>,
     /// Reached through [`Tick::prefab`] and [`Tick::spawn`], which keep the
     /// three in step: a spawn that was not queued would never be resolved.
+    /// The game's input map, to rebind from — "press a key for jump" is
+    /// [`Input::pressed_binding`] into [`ActionMap::rebind`]. A change is
+    /// read from the next frame on; [`ActionMap::save`] keeps it.
+    pub actions: &'a mut ActionMap,
     pub(super) prefabs: &'a mut Prefabs,
     pub(super) registry: &'a ComponentRegistry,
     pub(super) spawned: &'a mut Vec<Entity>,
@@ -92,6 +96,7 @@ impl App {
         let mut tick = Tick {
             world: &mut self.world,
             input: &self.input,
+            actions: &mut self.actions,
             delta,
             contacts: self.physics_world.contacts(),
             events: &self.pending_events,
@@ -117,6 +122,7 @@ impl App {
         let mut tick = Tick {
             world: &mut self.world,
             input: &self.input,
+            actions: &mut self.actions,
             delta,
             contacts: self.physics_world.contacts(),
             // The step before this one's: the step this tick precedes has not
@@ -220,6 +226,55 @@ mod tests {
         app.advance(FRAME);
 
         assert!(seen.get(), "the edge must reach the game");
+    }
+
+    #[test]
+    fn a_bound_key_reaches_the_tick_as_its_action() {
+        use crate::input::{ActionMap, Binding};
+
+        let mut map = ActionMap::new();
+        map.bind("jump", Binding::Key(crate::KeyCode::Space));
+        let pressed = Rc::new(Cell::new(false));
+        let seen = pressed.clone();
+        let mut app = App::default()
+            .with_actions(map)
+            .with_simulation()
+            .with_update(move |tick| pressed.set(tick.input.action("jump").pressed()));
+
+        app.input.on_key(crate::KeyCode::Space, true, false);
+        app.advance(FRAME);
+
+        assert!(seen.get());
+    }
+
+    #[test]
+    fn a_rebind_from_the_tick_drives_the_action_next_frame() {
+        use crate::input::{ActionMap, Binding};
+
+        let mut map = ActionMap::new();
+        map.bind("jump", Binding::Key(crate::KeyCode::Space));
+        let held = Rc::new(Cell::new(false));
+        let seen = held.clone();
+        let mut app = App::default()
+            .with_actions(map)
+            .with_simulation()
+            .with_update(move |tick| {
+                if let Some(binding) = tick.input.pressed_binding() {
+                    tick.actions.rebind("jump", 0, binding);
+                }
+                held.set(tick.input.action("jump").is_held());
+            });
+
+        app.input.on_key(crate::KeyCode::KeyJ, true, false);
+        app.advance(FRAME);
+        assert!(!seen.get(), "J was not jump when the frame began");
+        app.input.end_frame();
+        app.advance(FRAME);
+        assert!(seen.get(), "and is from the next frame on");
+        assert_eq!(
+            app.actions().bindings("jump"),
+            &[Binding::Key(crate::KeyCode::KeyJ)]
+        );
     }
 
     #[test]

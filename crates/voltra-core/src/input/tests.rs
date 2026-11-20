@@ -121,3 +121,99 @@ fn axis_cancels_when_both_are_held() {
     input.on_key(W, false, false);
     assert_eq!(input.axis(S, W), -1.0);
 }
+
+mod actions {
+    use super::*;
+
+    fn map() -> ActionMap {
+        let mut map = ActionMap::new();
+        map.bind("jump", Binding::Key(KeyCode::Space));
+        map.bind("left", Binding::Key(KeyCode::KeyA));
+        map.bind("right", Binding::Key(KeyCode::KeyD));
+        map.bind("fire", Binding::Mouse(MouseButton::Left));
+        map
+    }
+
+    #[test]
+    fn a_bound_key_drives_its_action() {
+        let mut input = Input::new();
+        input.on_key(KeyCode::Space, true, false);
+        input.update_actions(&map());
+        assert!(input.action("jump").pressed());
+
+        input.end_frame();
+        input.update_actions(&map());
+        assert!(input.action("jump").is_held());
+        assert!(!input.action("jump").pressed());
+    }
+
+    #[test]
+    fn a_mouse_button_drives_its_action() {
+        let mut input = Input::new();
+        input.on_mouse_button(MouseButton::Left, true);
+        input.update_actions(&map());
+        assert!(input.action("fire").pressed());
+    }
+
+    #[test]
+    fn an_unknown_action_is_never_held() {
+        let mut input = Input::new();
+        input.on_key(KeyCode::Space, true, false);
+        input.update_actions(&map());
+        assert_eq!(input.action("jmup"), ActionState::default());
+    }
+
+    #[test]
+    fn action_axis_is_the_difference_of_two_actions() {
+        let mut input = Input::new();
+        input.on_key(KeyCode::KeyD, true, false);
+        input.update_actions(&map());
+        assert_eq!(input.action_axis("left", "right"), 1.0);
+        input.on_key(KeyCode::KeyA, true, false);
+        input.update_actions(&map());
+        assert_eq!(input.action_axis("left", "right"), 0.0);
+    }
+
+    #[test]
+    fn focus_loss_releases_actions_too() {
+        let mut input = Input::new();
+        input.on_key(KeyCode::Space, true, false);
+        input.update_actions(&map());
+        input.end_frame();
+        input.on_focus_lost();
+        input.update_actions(&map());
+        assert!(input.action("jump").released());
+    }
+
+    #[test]
+    fn pressed_binding_reports_what_went_down_this_frame() {
+        let mut input = Input::new();
+        assert_eq!(input.pressed_binding(), None);
+        input.on_mouse_button(MouseButton::Right, true);
+        assert_eq!(
+            input.pressed_binding(),
+            Some(Binding::Mouse(MouseButton::Right))
+        );
+        input.on_key(KeyCode::KeyQ, true, false);
+        assert_eq!(
+            input.pressed_binding(),
+            Some(Binding::Key(KeyCode::KeyQ)),
+            "a key before a button"
+        );
+        input.end_frame();
+        assert_eq!(input.pressed_binding(), None);
+    }
+
+    #[test]
+    fn a_rebinding_is_seen_from_the_next_update() {
+        let mut map = map();
+        let mut input = Input::new();
+        input.on_key(KeyCode::KeyW, true, false);
+        input.update_actions(&map);
+        assert!(!input.action("jump").is_held());
+
+        map.rebind("jump", 0, Binding::Key(KeyCode::KeyW));
+        input.update_actions(&map);
+        assert!(input.action("jump").is_held());
+    }
+}

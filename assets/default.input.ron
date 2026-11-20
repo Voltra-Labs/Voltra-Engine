@@ -1,0 +1,10 @@
+// The actions a game reads with `tick.input.action("jump")`. Loaded from
+// here by convention when the game names no other map; hot reloaded.
+(
+    version: 1,
+    actions: {
+        "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp)]),
+        "move_left": (bindings: [Key(KeyA), Key(ArrowLeft)]),
+        "move_right": (bindings: [Key(KeyD), Key(ArrowRight)]),
+    },
+)

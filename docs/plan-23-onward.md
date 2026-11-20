@@ -26,8 +26,10 @@ someone who does not have Rust installed.
 | ~~24b~~ | ~~Prefabs: editor authoring and the instance link~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~25a~~ | ~~Tilemaps: data, format, mesh~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~25b~~ | ~~Tilemaps: collision and the paint tool~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 26 | In-game UI: text and screen space | A game cannot show a score. Held until here because a HUD wants prefabs and fonts want the atlas work from 22. |
-| 27 | Input actions and gamepads | Raw `KeyCode` is fine for one example and wrong for a game. Late on purpose: an action map is a thin layer over input that already works. |
+| ~~26a~~ | ~~In-game UI: fonts, glyph atlas, `Text` in the world~~ | **Landed.** Decisions in ARCHITECTURE.md. |
+| ~~26b~~ | ~~In-game UI: screen-space pass, `UiRect`, a HUD~~ | **Landed.** Decisions in ARCHITECTURE.md. |
+| ~~27a~~ | ~~Input actions: the map, evaluation, rebinding~~ | **Landed.** Decisions in ARCHITECTURE.md. |
+| 27b | Gamepads through `gilrs`, analog bindings and dead zones | The map exists; a pad is a second kind of binding. |
 | 28 | Sleeping bodies and a real broad phase | `broad.rs` already names its own limit at ~200 bodies. A tilemap's generated colliders are what will cross it. |
 | 29 | Export: `xtask`, and a build manifest | Turning the tree into a folder someone else can run. Last, because it packages whatever exists. |
 
@@ -38,34 +40,13 @@ whatever generates the bodies.
 
 ---
 
-## 26 — In-game UI: text and screen space
+## 27b — Gamepads
 
-**Why now.** A game cannot print a score, and every demo eventually needs one.
-
-**Prior art.** Unity: uGUI with `RectTransform` anchors, or UI Toolkit. Godot:
-`Control` nodes with anchors and containers. Both settled on *anchors plus
-offsets* for resolution independence.
-
-**Shape.**
-
-- Glyph rasterisation (`fontdue` or `ab_glyph`) into a glyph atlas in
-  `voltra-render`, drawn by the sprite pipeline — a glyph is a textured quad.
-- A screen-space pass with its own orthographic projection in pixels, drawn
-  after the world.
-- `Text { font, size, colour, align }` and `UiRect { anchors, offsets }` as
-  components, so a HUD is authored in the same hierarchy and saved in the same
-  scene file as everything else.
-- **egui stays the editor's.** Shipping an immediate-mode editor UI inside a
-  game means the game's look is egui's, and `voltra-player` does not link it —
-  that separation is stage 19's whole point.
-
-**Decisions to make.** SDF text versus bitmap-per-size (bitmap first, SDF is a
-later refinement); whether interaction — buttons, focus — is in scope or
-whether v1 is display-only; how a font becomes an asset with hot reload.
-
----
-
-## 27 — Input actions and gamepads
+27a landed the map, its evaluation and rebinding (keys and mouse). What is
+left of the original sketch below is the pad: `gilrs` in `voltra-core`,
+`Binding::GamepadButton` / `GamepadAxis` with a direction, a per-action dead
+zone, `ActionState::strength` becoming analog, and `pressed_binding` seeing
+pad buttons. One player still: any pad drives the one map.
 
 **Why now.** `Input::was_key_pressed(KeyCode::Space)` is correct and unshippable:
 no rebinding, no gamepad, no two-player.

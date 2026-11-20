@@ -21,7 +21,8 @@ voltra-scene = { path = "crates/voltra-scene" }
 voltra-testkit = { path = "crates/voltra-testkit" }
 
 wgpu = "30.0.0"
-winit = "0.30.13"
+# `serde` for `KeyCode` and `MouseButton` in an input map file.
+winit = { version = "0.30.13", features = ["serde"] }
 bytemuck = { version = "1.25.2", features = ["derive"] }
 glam = { version = "0.33.3", features = ["bytemuck", "serde"] }
 serde = { version = "1.0.229", features = ["derive"] }

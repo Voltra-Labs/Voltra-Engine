@@ -15,7 +15,9 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use voltra_assets::AssetPath;
-use voltra_core::{query, App, KeyCode, PlayParams, QueryFilter, Tick, Touch, WindowConfig};
+use voltra_core::{
+    query, App, Binding, KeyCode, PlayParams, QueryFilter, Tick, Touch, WindowConfig,
+};
 use voltra_ecs::Entity;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
@@ -78,10 +80,22 @@ fn main() {
     // read the key edge itself and would miss it on a frame that owes no step.
     let jump = Rc::new(Cell::new(false));
     let requested = jump.clone();
+    // F1, then any key: that key becomes jump. The whole of a rebinding
+    // screen, minus the screen.
+    let mut rebinding = false;
 
     app.with_simulation()
         .with_update(move |tick| {
-            if tick.input.was_key_pressed(KeyCode::Space) {
+            if rebinding {
+                if let Some(binding) = tick.input.pressed_binding() {
+                    tick.actions.rebind("jump", 0, binding);
+                    log::info!("jump is now {binding:?}");
+                    rebinding = false;
+                }
+            } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F1)) {
+                log::info!("press a key for jump");
+                rebinding = true;
+            } else if tick.input.action("jump").pressed() {
                 requested.set(true);
             }
             follow(tick, camera, walker);
@@ -93,8 +107,9 @@ fn main() {
                 show_coins(tick, counter, coins);
             }
 
-            let direction = tick.input.axis(KeyCode::KeyA, KeyCode::KeyD)
-                + tick.input.axis(KeyCode::ArrowLeft, KeyCode::ArrowRight);
+            // Actions, from `assets/default.input.ron`: rebinding the keys
+            // is an edit to that file, picked up while the game runs.
+            let direction = tick.input.action_axis("move_left", "move_right");
             let grounded = is_grounded(tick, walker);
             // Taken, not read: a jump is spent once, whether it was asked for
             // one step ago or three.

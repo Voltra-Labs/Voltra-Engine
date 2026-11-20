@@ -17,13 +17,13 @@ winit.workspace = true
 egui.workspace = true
 egui-winit.workspace = true
 log.workspace = true
+# An input map is a RON file, read in a pull request like a scene.
+ron.workspace = true
+serde.workspace = true
 
 # The examples are real games written against the loop and need a logger;
 # `voltra-testkit` is here for `scratch_root`, which the audio tests use to
 # build an asset root without a fixture on disk.
 [dev-dependencies]
 env_logger.workspace = true
-# The platformer's `Coin` marker is read out of a prefab file, which takes a
-# derive.
-serde.workspace = true
 voltra-testkit.workspace = true

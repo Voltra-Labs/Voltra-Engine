@@ -243,6 +243,12 @@ privileged and plain `cargo build` covers everything.
 | 20 | The game's turn: a per-frame tick, a fixed tick, and input | done |
 | 21 | Gameplay physics: layers, sensors, collision events, queries | done |
 | 22 | Sprite sheets: atlases, regions, flips, frame animation | done |
+| 23 | Audio: mixer, buses, sources, hot reload, audition | done |
+| 24 | Prefabs: spawn from a tick, author in the editor | done |
+| 25 | Tilemaps: layers, generated colliders, paint tool | done |
+| 26 | Text and screen-space UI: fonts, glyph atlas, `UiRect` HUD | done |
+| 27a | Input actions: map file, action edges, rebinding | done |
+| 27b | Gamepads | next |
 
 ## Contributing
 

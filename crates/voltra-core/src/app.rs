@@ -4,6 +4,7 @@ mod animation;
 mod audio;
 mod draw;
 mod framing;
+mod input_map;
 mod simulation;
 mod spawning;
 mod thumbnails;
@@ -14,7 +15,7 @@ mod ui_frame;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use voltra_assets::{AssetWatcher, Atlases, Clips, Fonts, Textures};
+use voltra_assets::{AssetPath, AssetWatcher, Atlases, Clips, Fonts, Textures};
 use voltra_audio::Audio;
 use voltra_ecs::{Entity, World};
 use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
@@ -31,10 +32,11 @@ use crate::app::framing::SceneFraming;
 use crate::app::simulation::Simulation;
 use crate::app::thumbnails::Thumbnails;
 use crate::app::tick::TickFn;
-use crate::input::Input;
+use crate::input::{ActionMap, Input};
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
+pub use input_map::DEFAULT_INPUT_MAP;
 pub use tick::Tick;
 pub use tick_audio::TickAudio;
 pub use ui_frame::UiFrame;
@@ -94,6 +96,13 @@ pub struct App {
     pending_events: Vec<CollisionEvent>,
     clock: Clock,
     input: Input,
+    /// The game's named actions, re-evaluated into `input` every frame.
+    actions: ActionMap,
+    /// The map file named by `with_input_map`; `None` reads the convention.
+    input_map_path: Option<AssetPath>,
+    /// Whether `actions` was handed in by `with_actions`, which the
+    /// conventional file must not then overwrite.
+    actions_from_code: bool,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
     simulation: Simulation,
     /// The output device, or a silent stand-in when there is none.
@@ -308,6 +317,9 @@ impl App {
     /// Nothing here has to inherit that: input is read at the top of the frame,
     /// so the frame that saw the key is the frame that moves.
     fn advance(&mut self, delta: f32) {
+        // Once per frame, before anything reads an action: the fixed tick
+        // below sees the same actions as the per-frame one.
+        self.input.update_actions(&self.actions);
         self.run_update(delta);
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.
@@ -367,6 +379,10 @@ impl App {
                 .as_mut()
                 .is_some_and(|prefabs| prefabs.reload(&path))
             {
+                continue;
+            }
+            // Nor do the bindings.
+            if self.reload_input_map(&path) {
                 continue;
             }
             // A face needs no device either: its atlas starts over and is
@@ -457,6 +473,8 @@ impl ApplicationHandler for App {
         let mut atlases = Atlases::new(asset_root.clone());
         ui_frame::resolve_world_atlases(&mut self.world, &mut atlases);
         self.atlases = Some(atlases);
+
+        self.load_input_map(&asset_root);
 
         // And the legible part: a text in a world populated before `run`
         // has never met a `Fonts`.

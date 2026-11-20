@@ -9,8 +9,8 @@ pub mod time;
 pub mod ui;
 pub mod window;
 
-pub use app::{App, Tick, UiFrame};
-pub use input::{Input, MouseButton};
+pub use app::{App, Tick, UiFrame, DEFAULT_INPUT_MAP};
+pub use input::{ActionMap, ActionState, Binding, Input, MouseButton};
 pub use time::{Clock, Timestep};
 pub use ui::EguiLayer;
 pub use window::WindowConfig;

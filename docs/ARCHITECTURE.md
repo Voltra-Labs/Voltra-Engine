@@ -2449,6 +2449,40 @@ Stage 26b. Display-only — a HUD; input, buttons and focus are later.
 - The editor draws the HUD over its viewport (what a build shows) and picks it
   before the world.
 
+### Input actions are a map file, evaluated into `Input` once per frame
+
+Stage 27a. Godot's `InputMap` (named actions, each a list of bindings) with
+Unity's rule that edges belong to the action, not the key.
+
+- **`ActionMap`** in `voltra-core` (it names `winit` types, which only core
+  may): `BTreeMap<String, Action { bindings: Vec<Binding> }>`, `Binding =
+  Key(KeyCode) | Mouse(MouseButton)` — physical keys, so WASD survives AZERTY.
+  RON with a `version`; a `BTreeMap` so a saved map diffs by the line that
+  changed. `winit`'s `serde` feature is on for this.
+- **Where it comes from:** `assets/default.input.ron` by convention, or
+  `App::with_input_map(path)`, or `App::with_actions(map)` from code. No file
+  is normal (debug line); a named-but-missing or broken one warns and the game
+  runs with no actions. `*.input.ron` is its own kind: not a scene, listed in
+  the browser, not draggable. Hot reloaded; a reload replaces runtime
+  rebinds, because the file is what the developer is editing.
+- **Evaluation:** `Input::update_actions(&map)` at the top of
+  `App::advance`, once per frame, so the per-frame and fixed ticks see the
+  same actions. Held = any binding down; pressed = not held last frame and
+  (held now or a binding went down); released = held last frame and not now,
+  or a sub-frame tap. Two keys on one action are one press. An unknown action
+  name reads as never-held and warns once (a typo is a missing texture).
+  `action_axis(neg, pos)` and `ActionState::strength` (0/1 now) are the
+  digital face of what 27b's sticks will feed.
+- **Rebinding** is `tick.actions: &mut ActionMap` plus
+  `Input::pressed_binding()` (keys before buttons, lowest first —
+  deterministic), into `ActionMap::rebind(action, slot, binding)`, which also
+  takes the control off every other action. Seen from the next frame.
+  `ActionMap::save(path)` writes atomically; where a player's settings live is
+  the game's call until a build manifest (stage 29) names a game.
+- **One player.** Every device drives the one map. Players/actors are a later
+  stage and can be added beside this API rather than through it.
+- Raw reads (`is_key_down`, …) stay: an editor shortcut is a key.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
