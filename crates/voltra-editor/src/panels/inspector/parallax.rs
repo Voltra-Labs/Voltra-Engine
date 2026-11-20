@@ -20,6 +20,25 @@ pub(super) fn show(ui: &mut Ui, parallax: &mut Parallax) -> Option<&'static str>
             ));
         }
         ui.end_row();
+
+        ui.label("repeat")
+            .on_hover_text("draw the layer again every this many units, to fill the view");
+        let mut repeats = parallax.repeat.is_some();
+        if ui.checkbox(&mut repeats, "").changed() {
+            parallax.repeat = repeats.then_some(voltra_render::glam::Vec2::new(10.0, 0.0));
+            claim = claim.or(Some("Set parallax"));
+        }
+        ui.end_row();
+        if let Some(period) = parallax.repeat.as_mut() {
+            ui.label("period");
+            for component in [&mut period.x, &mut period.y] {
+                claim = claim.or(active(
+                    &ui.add(DragValue::new(component).speed(0.1).range(0.0..=10_000.0)),
+                    "Set parallax",
+                ));
+            }
+            ui.end_row();
+        }
     });
     claim
 }

@@ -262,6 +262,7 @@ privileged and plain `cargo build` covers everything.
 | 34 | Vertex alpha, particle emitters | done |
 | 35 | UI buttons: pointer, focus navigation, `tick.ui` | done |
 | 36 | `dist` for games with their own binary; shared logging | done |
+| 37 | Repeating parallax backgrounds | done |
 
 ## Contributing
 

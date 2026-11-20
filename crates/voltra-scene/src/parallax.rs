@@ -22,18 +22,71 @@ use crate::hierarchy::{self, WorldTransforms};
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Parallax {
     pub factor: Vec2,
+    /// Draws the layer again every `repeat` units, as many times as it
+    /// takes to cover the view — Godot's `repeat_size`. Per axis; `0` on an
+    /// axis does not repeat on it. Picking sees the original only: the copies
+    /// are the same decoration again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<Vec2>,
 }
 
 impl Default for Parallax {
     /// Half speed on both axes: a background, the usual first use.
     fn default() -> Self {
-        Self {
-            factor: Vec2::splat(0.5),
-        }
+        Self::new(Vec2::splat(0.5))
     }
 }
 
+/// The most copies of one drawable a repeating layer draws, per axis: a
+/// period far smaller than the view must not turn one sprite into millions
+/// of quads.
+pub const MAX_REPEATS: i32 = 64;
+
 impl Parallax {
+    /// A layer moving at `factor` of the camera, not repeating.
+    pub fn new(factor: Vec2) -> Self {
+        Self {
+            factor,
+            repeat: None,
+        }
+    }
+
+    /// The same layer, drawn again every `period` units.
+    pub fn repeating(mut self, period: Vec2) -> Self {
+        self.repeat = Some(period);
+        self
+    }
+
+    /// The offsets at which a drawable at `at` is drawn so the copies cover
+    /// `visible` — `[ZERO]` when this layer does not repeat or there is no
+    /// view to cover. One period of margin either side, so a copy sliding in
+    /// is already there.
+    pub fn copies(&self, at: Vec2, visible: Option<(Vec2, Vec2)>) -> Vec<Vec2> {
+        let (Some(period), Some((min, max))) = (self.repeat, visible) else {
+            return vec![Vec2::ZERO];
+        };
+        let span = |axis: usize| -> std::ops::RangeInclusive<i32> {
+            let p = period[axis];
+            if !(p.is_finite() && p > 0.0) || !at[axis].is_finite() {
+                return 0..=0;
+            }
+            let first = ((min[axis] - p - at[axis]) / p).ceil();
+            let last = ((max[axis] + p - at[axis]) / p).floor();
+            if !(first.is_finite() && last.is_finite()) || last < first {
+                return 0..=0;
+            }
+            let first = first.max(-(MAX_REPEATS as f32)) as i32;
+            let last = (last as i32).min(first + MAX_REPEATS - 1);
+            first..=last
+        };
+        let mut offsets = Vec::new();
+        for y in span(1) {
+            for x in span(0) {
+                offsets.push(Vec2::new(x as f32 * period.x, y as f32 * period.y));
+            }
+        }
+        offsets
+    }
     /// How far a layer of this factor is drawn from where its transform puts
     /// it, seen through a camera at `camera`.
     pub fn offset(&self, camera: Vec2) -> Vec2 {
@@ -61,6 +114,23 @@ pub(crate) fn apply(transforms: &mut WorldTransforms, world: &World, camera: Vec
             transforms.translate(entity, offset);
         }
     }
+}
+
+/// Where `entity`, drawn by `matrix`, is drawn again for the nearest
+/// repeating layer above it — `[ZERO]` with none.
+pub(crate) fn copies_of(
+    world: &World,
+    entity: Entity,
+    matrix: voltra_render::glam::Mat3,
+    visible: Option<(Vec2, Vec2)>,
+) -> Vec<Vec2> {
+    std::iter::once(entity)
+        .chain(hierarchy::ancestors(world, entity))
+        .find_map(|e| world.get::<Parallax>(e))
+        .map_or_else(
+            || vec![Vec2::ZERO],
+            |layer| layer.copies(matrix.transform_point2(Vec2::ZERO), visible),
+        )
 }
 
 /// The offset of the nearest `Parallax` at or above `entity`, memoised so a
@@ -115,7 +185,7 @@ mod tests {
     fn a_factor_of_zero_is_pinned_to_the_camera() {
         let mut world = World::new();
         let sky = spawn(&mut world, Vec2::ZERO);
-        world.insert(sky, Parallax { factor: Vec2::ZERO });
+        world.insert(sky, Parallax::new(Vec2::ZERO));
         assert_eq!(
             drawn_at(&world, sky, Vec2::new(-7.0, 3.0)),
             Vec2::new(-7.0, 3.0)
@@ -127,7 +197,7 @@ mod tests {
         let mut world = World::new();
         let level = spawn(&mut world, Vec2::new(2.0, 0.0));
         let same = spawn(&mut world, Vec2::new(2.0, 0.0));
-        world.insert(same, Parallax { factor: Vec2::ONE });
+        world.insert(same, Parallax::new(Vec2::ONE));
         let camera = Vec2::new(5.0, 5.0);
         assert_eq!(drawn_at(&world, level, camera), Vec2::new(2.0, 0.0));
         assert_eq!(drawn_at(&world, same, camera), Vec2::new(2.0, 0.0));
@@ -137,12 +207,12 @@ mod tests {
     fn children_move_with_their_parallax_parent_and_the_nearest_wins() {
         let mut world = World::new();
         let far = spawn(&mut world, Vec2::ZERO);
-        world.insert(far, Parallax { factor: Vec2::ZERO });
+        world.insert(far, Parallax::new(Vec2::ZERO));
         let tree = spawn(&mut world, Vec2::new(1.0, 0.0));
         hierarchy::set_parent(&mut world, tree, far).expect("parents");
         let near = spawn(&mut world, Vec2::ZERO);
         hierarchy::set_parent(&mut world, near, far).expect("parents");
-        world.insert(near, Parallax { factor: Vec2::ONE });
+        world.insert(near, Parallax::new(Vec2::ONE));
 
         let camera = Vec2::new(10.0, 0.0);
         assert_eq!(drawn_at(&world, tree, camera), Vec2::new(11.0, 0.0));
@@ -157,12 +227,7 @@ mod tests {
     fn per_axis_factors_are_independent() {
         let mut world = World::new();
         let layer = spawn(&mut world, Vec2::ZERO);
-        world.insert(
-            layer,
-            Parallax {
-                factor: Vec2::new(0.5, 1.0),
-            },
-        );
+        world.insert(layer, Parallax::new(Vec2::new(0.5, 1.0)));
         assert_eq!(
             drawn_at(&world, layer, Vec2::new(8.0, 8.0)),
             Vec2::new(4.0, 0.0)
@@ -170,10 +235,56 @@ mod tests {
     }
 
     #[test]
+    fn a_repeating_layer_covers_the_view_and_no_more() {
+        let hills = Parallax::new(Vec2::splat(0.5)).repeating(Vec2::new(10.0, 0.0));
+        let view = Some((Vec2::new(-15.0, -5.0), Vec2::new(15.0, 5.0)));
+        let copies = hills.copies(Vec2::ZERO, view);
+        let xs: Vec<f32> = copies.iter().map(|o| o.x).collect();
+        assert_eq!(xs, vec![-20.0, -10.0, 0.0, 10.0, 20.0]);
+        assert!(
+            copies.iter().all(|o| o.y == 0.0),
+            "0 on y: no vertical copies"
+        );
+    }
+
+    #[test]
+    fn without_a_view_or_a_repeat_there_is_one_copy() {
+        let plain = Parallax::default();
+        assert_eq!(
+            plain.copies(Vec2::ZERO, Some((Vec2::ZERO, Vec2::ONE))),
+            vec![Vec2::ZERO]
+        );
+        let hills = plain.repeating(Vec2::splat(5.0));
+        assert_eq!(hills.copies(Vec2::ZERO, None), vec![Vec2::ZERO]);
+    }
+
+    #[test]
+    fn a_tiny_period_is_capped_rather_than_flooding_the_batch() {
+        let dust = Parallax::default().repeating(Vec2::new(0.001, 0.0));
+        let copies = dust.copies(Vec2::ZERO, Some((Vec2::splat(-100.0), Vec2::splat(100.0))));
+        assert!(copies.len() <= MAX_REPEATS as usize, "{}", copies.len());
+    }
+
+    #[test]
+    fn a_repeating_layer_is_drawn_once_per_copy_in_the_batch() {
+        use crate::sprite::sheets::Sheets;
+        use crate::{Sprite, SpriteBatch};
+
+        let mut world = World::new();
+        let hill = spawn(&mut world, Vec2::ZERO);
+        world.insert(hill, Sprite::default());
+        world.insert(
+            hill,
+            Parallax::new(Vec2::ONE).repeating(Vec2::new(10.0, 0.0)),
+        );
+        let sheets = Sheets::default().visible_in(Vec2::new(-15.0, -5.0), Vec2::new(15.0, 5.0));
+        // Copies at -20..=20 by 10; the ones at ±20 are culled, ±10 and 0 kept.
+        assert_eq!(SpriteBatch::from_world(&world, sheets).sprite_count(), 3);
+    }
+
+    #[test]
     fn a_nonsense_factor_draws_where_the_transform_says() {
-        let parallax = Parallax {
-            factor: Vec2::new(f32::NAN, 0.0),
-        };
+        let parallax = Parallax::new(Vec2::new(f32::NAN, 0.0));
         assert_eq!(parallax.offset(Vec2::ONE), Vec2::ZERO);
     }
 
@@ -186,7 +297,7 @@ mod tests {
         let mut world = World::new();
         let hill = spawn(&mut world, Vec2::ZERO);
         world.insert(hill, Sprite::default());
-        world.insert(hill, Parallax { factor: Vec2::ZERO });
+        world.insert(hill, Parallax::new(Vec2::ZERO));
         let sheets = Sheets::default().seen_from(Vec2::new(20.0, 0.0));
 
         let batch = SpriteBatch::from_world(&world, sheets);

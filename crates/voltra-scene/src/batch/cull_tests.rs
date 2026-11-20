@@ -81,7 +81,7 @@ fn a_parallax_layer_is_culled_where_it_is_drawn() {
     world.insert(sky, SceneId::new());
     world.insert(sky, Transform::default());
     world.insert(sky, Sprite::default());
-    world.insert(sky, Parallax { factor: Vec2::ZERO });
+    world.insert(sky, Parallax::new(Vec2::ZERO));
     // The camera is far right; the sky is pinned to it and so in view, though
     // its transform is far out of it.
     let far = Vec2::new(100.0, 0.0);

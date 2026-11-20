@@ -122,13 +122,26 @@ impl SpriteBatch {
             visible: sheets.visible,
             ..Self::default()
         };
+        // Asked once: a world with no repeating layer draws every entity
+        // once, without looking for one above it.
+        let repeating = world
+            .query::<crate::Parallax>()
+            .any(|(_, layer)| layer.repeat.is_some());
         for (entity, drawn) in drawn {
             let matrix = transforms.matrix(entity);
-            match drawn {
-                Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
-                Drawn::Tilemap(map) => mesh::push(&mut batch, matrix, map, sheets),
-                Drawn::Text(text) => batch.push_text(matrix, text, sheets),
-                Drawn::Particles(emitter) => particles::mesh::push(&mut batch, matrix, emitter),
+            let copies = if repeating {
+                crate::parallax::copies_of(world, entity, matrix, sheets.visible)
+            } else {
+                vec![voltra_render::glam::Vec2::ZERO]
+            };
+            for offset in copies {
+                let matrix = Mat3::from_translation(offset) * matrix;
+                match drawn {
+                    Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
+                    Drawn::Tilemap(map) => mesh::push(&mut batch, matrix, map, sheets),
+                    Drawn::Text(text) => batch.push_text(matrix, text, sheets),
+                    Drawn::Particles(emitter) => particles::mesh::push(&mut batch, matrix, emitter),
+                }
             }
         }
         batch
