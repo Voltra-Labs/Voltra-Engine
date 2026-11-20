@@ -265,6 +265,7 @@ privileged and plain `cargo build` covers everything.
 | 37 | Repeating parallax backgrounds | done |
 | 38 | Animated tiles | done |
 | 39 | Auto-tiling: 16-frame terrains, painted from the editor | done |
+| 40 | Auto-tiling: the 47-tile blob with corners | done |
 
 ## Contributing
 
