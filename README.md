@@ -44,6 +44,7 @@ needed — everything else comes from Cargo.
 cargo run -p voltra-editor      # launch the editor
 cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no editor
 cargo xtask dist                # package build.ron into dist/<name>/ to hand out
+cargo xtask dist --manifest platformer.build.ron   # a game with its own code
 cargo build --workspace         # build everything
 cargo test --workspace          # run tests
 cargo clippy --workspace --all-targets -- -D warnings
@@ -260,6 +261,7 @@ privileged and plain `cargo build` covers everything.
 | 33 | Camera culling: per quad, per tilemap chunk | done |
 | 34 | Vertex alpha, particle emitters | done |
 | 35 | UI buttons: pointer, focus navigation, `tick.ui` | done |
+| 36 | `dist` for games with their own binary; shared logging | done |
 
 ## Contributing
 

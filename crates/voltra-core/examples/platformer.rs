@@ -7,9 +7,15 @@
 //! frame rate. Unity and Godot split `Update`/`FixedUpdate` and
 //! `_process`/`_physics_process` over the same two facts.
 //!
-//! Run it with `cargo run -p voltra-core --example platformer`.
+//! Run it with `cargo run -p voltra-core --example platformer`, or package it
+//! with `cargo xtask dist --manifest platformer.build.ron`.
 //! `A`/`D` or the arrow keys walk, `Space` jumps, and walking into a coin
 //! takes it — with a sound, which is the point of the ears on the camera.
+
+// A packaged build is double-clicked: no console behind the game in
+// release, and the log in `log.txt` beside it (`logging::init` below). Debug
+// builds keep the terminal they were run from.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -70,7 +76,7 @@ const WALKER_HALF_WIDTH: f32 = 0.35;
 const GROUND_PROBE: f32 = 0.08;
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    voltra_core::logging::init(cfg!(not(debug_assertions)));
 
     let mut registry = ComponentRegistry::with_defaults();
     registry.register::<Coin>("Coin");

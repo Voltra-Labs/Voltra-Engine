@@ -31,7 +31,7 @@ fn main() -> ExitCode {
     let exe_dir = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(PathBuf::from));
-    init_log(exe_dir.as_deref());
+    voltra_core::logging::init(cfg!(feature = "windowed"));
 
     // Skipping the executable's own path, which `parse` does not want to know
     // about — it is the one argument no user typed.
@@ -91,19 +91,4 @@ fn main() -> ExitCode {
     // until `App::run` learns to return, so the exit code is the one above.
     app.run();
     ExitCode::SUCCESS
-}
-
-/// The log goes to the terminal — or, in a windowed build that has none, to
-/// `log.txt` beside the executable, so a build that fails on a double-click
-/// says why somewhere a player can find it.
-fn init_log(exe_dir: Option<&std::path::Path>) {
-    let mut builder =
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
-    if cfg!(feature = "windowed") {
-        if let Some(file) = exe_dir.and_then(|dir| std::fs::File::create(dir.join("log.txt")).ok())
-        {
-            builder.target(env_logger::Target::Pipe(Box::new(file)));
-        }
-    }
-    builder.init();
 }

@@ -2600,9 +2600,8 @@ Unity's build settings).
   on Windows, and the log goes to `log.txt` beside the executable, so a build
   that fails on a double-click says why somewhere findable. `cargo run -p
   voltra-player` is unchanged.
-- **Scene-only games.** The player runs a scene; a game with its own code
-  (the platformer example) is its own binary and does not go through `dist`
-  yet. Windows first; Linux and macOS take the same task with no suffix and
+- **Scene-only games**, until stage 36 added `game:` for a game's own
+  binary. Windows first; Linux and macOS take the same task with no suffix and
   are untested.
 
 ### A tick changes scene by asking, and the loop does it at the end of the frame
@@ -2786,6 +2785,31 @@ geometric focus neighbours, on this engine's pieces.
   it selects rather than presses.
 - Inspector section, *Scene ▸ Spawn HUD button* (button and label in one undo
   entry), and a "Save" button on the platformer's HUD.
+
+### A build can ship a game's own binary instead of the player
+
+Stage 36 — the limit stage 29 named. `build.ron` gains
+`game: Some((package, bin | example))`, and `scene` becomes optional: a game
+with code builds its own start.
+
+- **`cargo xtask dist`** builds that target in release (`--package p
+  --example e`, or `--bin b`, or the package's own binary) and ships it as
+  `<name>.exe`, from `target/release[/examples]`. A scene build still ships
+  the player with `windowed`. Cargo names in the manifest are checked as
+  `[A-Za-z0-9_-]` so a typo cannot become part of a command line; naming both
+  `bin` and `example`, or neither scene nor game, is refused before the build.
+- **The format stays compatible**: the manifest is read and written with RON's
+  `IMPLICIT_SOME`, so `scene: "a.ron"` is still how a scene is written and an
+  absent field is `None`.
+- **The player refuses a game build** (no scene, a game binary) with a message
+  saying to run the game instead.
+- **`voltra_core::logging::init(to_file)`** is the player's terminal-or-
+  `log.txt` logger, moved where every game can call it; the player and the
+  platformer both use it. A game opts out of the console itself, with
+  `#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem =
+  "windows")]` — a crate attribute, so it cannot come from the engine. The
+  platformer does, and `platformer.build.ron` packages it: verified as a GUI
+  (subsystem 2) executable, with the debug build still a console one.
 
 ### wgpu 30 API notes
 
