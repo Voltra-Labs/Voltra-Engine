@@ -204,3 +204,35 @@ fn a_file_with_no_fields_is_an_empty_one_unit_map() {
 
     assert_eq!(map, Tilemap::default());
 }
+
+#[test]
+fn a_point_falls_in_the_cell_whose_lower_left_corner_is_below_it() {
+    let map = Tilemap::new(Vec2::new(0.5, 2.0));
+
+    assert_eq!(map.cell_at(Vec2::new(0.25, 1.0)), Some(cell(0, 0)));
+    assert_eq!(map.cell_at(Vec2::new(0.5, 2.0)), Some(cell(1, 1)));
+    assert_eq!(map.cell_at(Vec2::new(-0.01, -0.01)), Some(cell(-1, -1)));
+}
+
+#[test]
+fn a_sizeless_tile_has_no_cell_under_any_point() {
+    let map = Tilemap::new(Vec2::new(0.0, 1.0));
+    assert_eq!(map.cell_at(Vec2::ZERO), None);
+}
+
+#[test]
+fn editing_a_cell_moves_the_revision_and_a_no_op_does_not() {
+    let mut map = Tilemap::default();
+    let start = map.revision().get();
+
+    map.set(cell(0, 0), Some(Tile::new(1)));
+    let painted = map.revision().get();
+    assert_ne!(painted, start);
+
+    map.set(cell(0, 0), Some(Tile::new(1)));
+    map.set(cell(9, 9), None);
+    assert_eq!(map.revision().get(), painted, "nothing changed");
+
+    map.clear();
+    assert_ne!(map.revision().get(), painted);
+}

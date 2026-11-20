@@ -89,6 +89,9 @@ impl App {
             // act during the step that follows it, which is the whole reason
             // the hook is per step rather than per frame.
             self.run_fixed_update(step);
+            // A layer the fixed tick just painted or moved is solid where it
+            // is now, not where it was a step ago.
+            voltra_scene::tilemap::sync_colliders(&mut self.world);
             self.physics_world.step_once(&mut self.world, self.gravity);
             // Every step's events, not just the last one's: the per-frame tick
             // gets one turn per frame and a frame can owe several steps.
@@ -224,5 +227,44 @@ mod tests {
         // once, the editor says nothing and starts in `Editing`.
         assert!(!App::default().is_simulating());
         assert!(App::default().with_simulation().is_simulating());
+    }
+
+    #[test]
+    fn a_ball_lands_on_a_solid_tile_layer() {
+        // End to end: the layer has no collider of its own, so the ball only
+        // stops if the app generated the boxes before stepping.
+        use voltra_render::glam::IVec2;
+        use voltra_scene::{Tile, Tilemap};
+
+        let mut app = App {
+            gravity: G,
+            ..Default::default()
+        }
+        .with_simulation();
+        let mut layer = Tilemap::new(Vec2::ONE);
+        layer.collision = true;
+        for x in -5..5 {
+            layer.set(IVec2::new(x, 0), Some(Tile::new(0)));
+        }
+        let floor = app.world.spawn();
+        app.world
+            .insert(floor, Transform::from_translation(Vec2::new(0.0, -3.0)));
+        app.world.insert(floor, layer);
+
+        let ball = app.world.spawn();
+        app.world.insert(ball, Transform::default());
+        app.world.insert(ball, Collider::Circle { radius: 0.5 });
+        app.world.insert(ball, RigidBody::new_dynamic(1.0));
+
+        for _ in 0..180 {
+            app.advance(FRAME);
+        }
+
+        // The layer's top edge is at y = -2; the ball rests half a unit above.
+        assert!(
+            (height(&app, ball) + 1.5).abs() < 0.05,
+            "ball at {}",
+            height(&app, ball)
+        );
     }
 }

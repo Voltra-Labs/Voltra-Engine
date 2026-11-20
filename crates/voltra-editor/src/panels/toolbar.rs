@@ -14,6 +14,7 @@ use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 
 use crate::editor::Editor;
+use crate::paint::PaintTool;
 use crate::play::PlayState;
 use crate::tool::Tool;
 use crate::view::ViewMode;
@@ -25,7 +26,7 @@ use crate::view::ViewMode;
 /// pass and a layout pass. Every editor draws these as equal squares anyway.
 const BUTTON: f32 = 28.0;
 
-/// How many buttons the row holds. Three, not four: the first is Play or Pause
+/// How many buttons the transport row holds. Three, not four: the first is Play or Pause
 /// depending on the state, as every transport control is.
 const BUTTONS: f32 = 3.0;
 
@@ -39,7 +40,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // tool is added.
             let panel = ui.available_width();
 
-            tools(editor, ui);
+            tools(editor, ui, frame);
 
             let row = BUTTON * BUTTONS + ui.spacing().item_spacing.x * (BUTTONS - 1.0);
             let used = panel - ui.available_width();
@@ -97,12 +98,34 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 /// Enabled in play mode as well as out of it: a gizmo drag during play is a
 /// legitimate way to nudge a body and watch what the solver does with it, and
 /// Stop puts the scene back regardless.
-fn tools(editor: &mut Editor, ui: &mut Ui) {
+fn tools(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
+    let painting = editor.paint.tool();
     for tool in Tool::ALL {
-        let button = egui::Button::selectable(editor.tool == tool, tool.glyph())
-            .min_size(egui::Vec2::splat(BUTTON));
+        let button =
+            egui::Button::selectable(painting.is_none() && editor.tool == tool, tool.glyph())
+                .min_size(egui::Vec2::splat(BUTTON));
         if ui.add(button).on_hover_text(tool.hint()).clicked() {
             editor.tool = tool;
+            editor.paint.set_tool(None);
+        }
+    }
+
+    // The paint tools, enabled only with a layer selected: they have nothing
+    // to act on otherwise, and a disabled button says so where a hidden one
+    // would leave them undiscoverable.
+    ui.separator();
+    let layer = editor
+        .selected
+        .is_some_and(|e| frame.world.get::<voltra_scene::Tilemap>(e).is_some());
+    for tool in PaintTool::ALL {
+        let button = egui::Button::selectable(painting == Some(tool), tool.glyph())
+            .min_size(egui::Vec2::splat(BUTTON));
+        let response = ui
+            .add_enabled(layer, button)
+            .on_hover_text(tool.hint())
+            .on_disabled_hover_text("Select a tilemap layer to paint it");
+        if response.clicked() {
+            editor.paint.set_tool(Some(tool));
         }
     }
 }

@@ -319,6 +319,10 @@ impl App {
         // pile up they would grow for the length of the session, and a game
         // that installed its hook later would be handed a backlog.
         self.pending_events.clear();
+        // Every frame, simulating or not: the editor draws and picks against
+        // a solid layer's colliders while authoring too, and a layer painted
+        // by the tick above must be solid in the step that follows it.
+        voltra_scene::tilemap::sync_colliders(&mut self.world);
         self.step_physics(delta);
         // The fixed tick spawns too, from inside the steps.
         self.resolve_spawned();

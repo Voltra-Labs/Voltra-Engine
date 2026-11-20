@@ -3,6 +3,10 @@
 //! 2D only, per CLAUDE.md: a point tested against a quad, not a ray against a
 //! volume. 3D picking is a different subsystem and will not reuse this.
 
+mod layer;
+
+pub use layer::layer_at;
+
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
@@ -32,7 +36,7 @@ use crate::transform::Transform;
 /// matrix with that determinant still produces finite numbers, well inside
 /// `f32`'s range — so this threshold is about intent, not about the arithmetic
 /// breaking down.
-const MIN_DETERMINANT: f32 = 1e-12;
+pub(crate) const MIN_DETERMINANT: f32 = 1e-12;
 
 /// The topmost sprite whose quad contains `point`, in world space.
 ///
@@ -53,6 +57,22 @@ pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
         })
         .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite.sort_order))
         .map(|(entity, _transform, _sprite)| entity)
+}
+
+/// The topmost sprite *or* tilemap layer under `point`, in world space.
+///
+/// One draw order decides both, because the batch interleaves them by
+/// `(sort_order, entity index)`: what is picked is what is visible there.
+pub fn entity_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entity> {
+    let sprite = sprite_at(world, point, sheets).map(|entity| {
+        let order = world.get::<Sprite>(entity).map_or(0, |s| s.sort_order);
+        (entity, draw_key(entity, order))
+    });
+    [sprite, layer_at(world, point)]
+        .into_iter()
+        .flatten()
+        .max_by_key(|(_, key)| *key)
+        .map(|(entity, _)| entity)
 }
 
 /// Whether `point`, in world space, falls inside the quad `matrix` places.
@@ -320,6 +340,25 @@ mod tests {
             last_drawn_green > 0.5,
             "the sort_order 2 sprite must be drawn last, got green {last_drawn_green}"
         );
+    }
+    #[test]
+    fn a_layer_in_front_of_a_sprite_is_picked_over_it() {
+        use crate::{Tile, Tilemap};
+        use voltra_render::glam::IVec2;
+
+        let mut world = World::new();
+        let sprite = spawn(&mut world, Transform::default(), Sprite::default());
+        let mut map = Tilemap::new(Vec2::ONE);
+        map.set(IVec2::new(-1, -1), Some(Tile::new(0)));
+        map.sort_order = 1;
+        let layer = world.spawn();
+        world.insert(layer, Transform::default());
+        world.insert(layer, map);
+
+        let at = Vec2::splat(-0.25);
+        assert_eq!(entity_at(&world, at, Sheets::default()), Some(layer));
+        world.get_mut::<Tilemap>(layer).expect("a layer").sort_order = -1;
+        assert_eq!(entity_at(&world, at, Sheets::default()), Some(sprite));
     }
 }
 

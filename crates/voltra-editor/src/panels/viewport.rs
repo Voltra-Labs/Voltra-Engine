@@ -9,6 +9,7 @@ use voltra_core::UiFrame;
 
 use crate::drag;
 use crate::editor::Editor;
+use crate::paint::PaintTool;
 use crate::play::PlayState;
 use crate::spawn;
 use crate::tool::Tool;
@@ -56,17 +57,59 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 return;
             }
 
-            // `W`, `E` and `R` pick the tool. Scoped the same way the camera
-            // scopes its own keys — hovered, and egui not wanting the keyboard
-            // — so typing a `w` into the inspector cannot switch tools.
+            // `W`, `E` and `R` pick the transform tool, `B`, `U` and `D` the
+            // paint tools. Scoped the same way the camera scopes its own keys —
+            // hovered, and egui not wanting the keyboard — so typing a `w` into
+            // the inspector cannot switch tools. Not while the right button is
+            // held either: that is the WASD fly chord, and `D` is in it.
+            let selected_layer = editor
+                .selected
+                .filter(|&e| frame.world.get::<voltra_scene::Tilemap>(e).is_some());
             if scene.hovered() && !ui.ctx().egui_wants_keyboard_input() {
                 ui.input(|i| {
+                    if i.pointer.secondary_down() {
+                        return;
+                    }
                     for tool in Tool::ALL {
                         if i.key_pressed(tool.key()) {
                             editor.tool = tool;
+                            editor.paint.set_tool(None);
+                        }
+                    }
+                    // Only with a layer to paint: arming a brush with nothing
+                    // to paint on would leave the gizmo hidden for no reason.
+                    if selected_layer.is_some() {
+                        for tool in PaintTool::ALL {
+                            if i.key_pressed(tool.key()) {
+                                editor.paint.set_tool(Some(tool));
+                            }
                         }
                     }
                 });
+            }
+            // Selecting something that is not a layer disarms painting, so the
+            // toolbar never shows a paint tool pressed over a gizmo.
+            if selected_layer.is_none() {
+                editor.paint.set_tool(None);
+            }
+
+            // While painting, the layer has the pointer: no gizmo, and a click
+            // paints rather than selects.
+            if let Some(layer) = editor.paint.target(frame.world, editor.selected) {
+                editor.gizmo.cancel_drag();
+                if let Some(label) = editor.paint.update(ui, &scene, frame, layer) {
+                    editor.history.claim(label);
+                }
+                drop_asset(editor, frame, ui, &scene);
+                editor.camera.navigate(ui, &scene, frame.camera);
+                let (world, lines) = frame.world_and_lines();
+                editor.paint.draw(world, layer, lines);
+                if editor.show_colliders {
+                    let contacts = frame.contacts();
+                    let (world, lines) = frame.world_and_lines();
+                    voltra_physics::debug::draw(world, contacts, lines);
+                }
+                return;
             }
 
             // The gizmo gets first refusal, for the same reason egui gets it

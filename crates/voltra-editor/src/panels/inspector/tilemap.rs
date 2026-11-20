@@ -1,8 +1,12 @@
 //! A tilemap layer's look, its tileset, and what it holds.
 //!
-//! No cell editing here: painting is a viewport tool (stage 25b), the way
-//! Godot's and Unity's tile palettes are. What the inspector edits is the
-//! layer as a whole.
+//! Cells are painted in the viewport, the way Godot's and Unity's tile
+//! palettes work; what this section edits is the layer as a whole, plus the
+//! palette that picks the brush.
+
+mod palette;
+
+pub(super) use palette::Palette;
 
 use voltra_assets::{AssetPath, Atlases, Textures};
 use voltra_core::egui::{self, DragValue, RichText, Ui};
@@ -24,6 +28,7 @@ pub(super) fn show(
     atlases: &mut Atlases,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
+    palette: Palette<'_>,
 ) -> Option<&'static str> {
     ui.label(RichText::new("Tilemap").strong());
 
@@ -55,6 +60,16 @@ pub(super) fn show(
         });
         ui.end_row();
 
+        ui.label("collision");
+        if ui
+            .checkbox(&mut map.collision, "solid")
+            .on_hover_text("Every tile of this layer is solid; boxes are generated from the tiles")
+            .changed()
+        {
+            claim = claim.or(Some("Set collision"));
+        }
+        ui.end_row();
+
         ui.label("tiles");
         let held = match map.bounds() {
             Some((min, max)) => format!(
@@ -73,7 +88,13 @@ pub(super) fn show(
 
     ui.separator();
     claim = claim.or(texture(ui, map, textures, device, queue));
-    claim.or(atlas(ui, map, atlases))
+    claim = claim.or(atlas(ui, map, atlases));
+
+    if let Some(set) = map.atlas_handle.and_then(|handle| atlases.try_get(handle)) {
+        ui.separator();
+        palette::show(ui, set, palette);
+    }
+    claim
 }
 
 fn texture(

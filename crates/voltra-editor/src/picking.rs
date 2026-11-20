@@ -10,14 +10,15 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::pick;
 
-/// The entity under the pointer for the interaction `response` describes.
+/// The sprite or tilemap layer under the pointer for the interaction
+/// `response` describes.
 ///
 /// Returns `None` both when the click landed on empty space and when there was
 /// no interaction at all, so callers must test `Response::clicked` first rather
 /// than clearing the selection on every frame.
 pub fn clicked_entity(response: &Response, frame: &UiFrame<'_>) -> Option<Entity> {
     let pointer = response.interact_pointer_pos()?;
-    pick::sprite_at(
+    pick::entity_at(
         frame.world,
         world_at(response, pointer, frame),
         frame.sheets(),

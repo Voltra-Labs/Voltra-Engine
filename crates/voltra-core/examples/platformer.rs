@@ -283,31 +283,19 @@ const TILE: f32 = 0.5;
 const GRASS: u32 = 0;
 const DIRT: u32 = 1;
 
-/// A static block of ground: a box the bodies stand on, drawn as tiles.
+/// A static block of ground, centred on `at`: one solid tile layer.
 ///
-/// Two entities rather than one. The body's transform is scaled to the box,
-/// and a tilemap under a scaled parent would have its tiles stretched with
-/// it; the layer sits on its own at the block's lower-left corner instead,
-/// grass along the top row and dirt below. Generating the box *from* the
-/// tiles is stage 25b; until then the two are laid out from the same numbers.
+/// The boxes the bodies stand on are generated from the tiles — one box for
+/// the whole block, since it has no gaps — so what is drawn and what is solid
+/// cannot drift apart. Grass along the top row and dirt below.
 fn ground(app: &mut App, at: Vec2, size: Vec2) {
-    let entity = app.world.spawn();
-    app.world
-        .insert(entity, Transform::from_translation(at).with_scale(size));
-    app.world.insert(entity, RigidBody::new_static());
-    app.world.insert(
-        entity,
-        Collider::Box {
-            half_extents: Vec2::splat(0.5),
-        },
-    );
-
     let columns = (size.x / TILE).round() as i32;
     let rows = (size.y / TILE).round() as i32;
     let mut layer = Tilemap::new(Vec2::splat(TILE));
     layer.texture = Some(asset("sprites/ground.png"));
     layer.atlas = Some(asset("sprites/ground.atlas.ron"));
     layer.sort_order = -1;
+    layer.collision = true;
     for x in 0..columns {
         for y in 0..rows {
             let frame = if y == rows - 1 { GRASS } else { DIRT };
