@@ -11,15 +11,16 @@ use super::map::ActionMap;
 /// pressed one after the other, are one press: the action was already held
 /// when the second went down. And a tap shorter than a frame — down and up
 /// between two frames — still reports a press and a release, never nothing.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct ActionState {
     held: bool,
     pressed: bool,
     released: bool,
+    strength: f32,
 }
 
 impl ActionState {
-    /// Whether any binding is down.
+    /// Whether any binding is past the action's dead zone.
     pub fn is_held(&self) -> bool {
         self.held
     }
@@ -34,16 +35,20 @@ impl ActionState {
         self.released
     }
 
-    /// `1.0` while held, `0.0` otherwise: the digital case of an analog
-    /// value, so code reading it keeps working when a stick is bound.
+    /// How far the action is in, `0` to `1`: `1` for a key, a stick's travel
+    /// past the dead zone rescaled to start at `0` — so a walk speed scaled
+    /// by it does not jump from nothing to a quarter.
     pub fn strength(&self) -> f32 {
-        f32::from(u8::from(self.held))
+        self.strength
     }
 }
 
 /// What the frame's raw input says about one binding.
 pub(crate) trait BindingSource {
-    fn is_down(&self, binding: Binding) -> bool;
+    /// How far `binding` is in, `0` to `1`: `0` or `1` for a key.
+    fn value(&self, binding: Binding) -> f32;
+    /// Whether `binding` was pressed this frame — the sub-frame tap a held
+    /// test alone would miss. Always `false` for a stick.
     fn went_down(&self, binding: Binding) -> bool;
 }
 
@@ -66,12 +71,23 @@ impl ActionStates {
         for name in map.names() {
             let was_held = previous.get(name).is_some_and(ActionState::is_held);
             let bindings = map.bindings(name);
-            let held = bindings.iter().any(|b| source.is_down(*b));
+            let raw = bindings
+                .iter()
+                .map(|b| source.value(*b))
+                .fold(0.0, f32::max);
+            let deadzone = map.deadzone(name);
+            let held = raw > deadzone;
+            let strength = if held {
+                ((raw - deadzone) / (1.0 - deadzone)).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
             let tapped = bindings.iter().any(|b| source.went_down(*b));
             let state = ActionState {
                 held,
                 pressed: !was_held && (held || tapped),
                 released: (was_held && !held) || (!was_held && !held && tapped),
+                strength,
             };
             self.states.insert(name.to_owned(), state);
         }
@@ -97,8 +113,8 @@ mod tests {
     }
 
     impl BindingSource for Frame {
-        fn is_down(&self, binding: Binding) -> bool {
-            self.down.contains(&binding)
+        fn value(&self, binding: Binding) -> f32 {
+            f32::from(u8::from(self.down.contains(&binding)))
         }
         fn went_down(&self, binding: Binding) -> bool {
             self.went_down.contains(&binding)
@@ -156,6 +172,61 @@ mod tests {
         let mut states = ActionStates::default();
         assert_eq!(step(&mut states, &[UP], &[UP]).strength(), 1.0);
         assert_eq!(step(&mut states, &[], &[]).strength(), 0.0);
+    }
+
+    /// A source whose only control is a stick at `value`.
+    struct Stick(f32);
+
+    impl BindingSource for Stick {
+        fn value(&self, binding: Binding) -> f32 {
+            match binding {
+                Binding::PadAxis(_, direction) => direction.amount(self.0),
+                _ => 0.0,
+            }
+        }
+        fn went_down(&self, _: Binding) -> bool {
+            false
+        }
+    }
+
+    fn stick_map(deadzone: f32) -> ActionMap {
+        use super::super::binding::{Direction, PadAxis};
+        let mut map = ActionMap::new();
+        map.bind(
+            "right",
+            Binding::PadAxis(PadAxis::LeftStickX, Direction::Positive),
+        );
+        map.set_deadzone("right", deadzone);
+        map
+    }
+
+    #[test]
+    fn a_stick_inside_the_dead_zone_is_not_held() {
+        let mut states = ActionStates::default();
+        states.update(&stick_map(0.25), &Stick(0.2));
+        assert!(!states.get("right").expect("mapped").is_held());
+    }
+
+    #[test]
+    fn strength_starts_at_zero_at_the_dead_zone_edge() {
+        let mut states = ActionStates::default();
+        states.update(&stick_map(0.25), &Stick(0.625));
+        let right = states.get("right").expect("mapped");
+        assert!(right.is_held() && right.pressed());
+        assert!(
+            (right.strength() - 0.5).abs() < 1e-6,
+            "{}",
+            right.strength()
+        );
+        states.update(&stick_map(0.25), &Stick(1.0));
+        assert_eq!(states.get("right").map(|s| s.strength()), Some(1.0));
+    }
+
+    #[test]
+    fn the_other_direction_of_a_stick_does_nothing() {
+        let mut states = ActionStates::default();
+        states.update(&stick_map(0.25), &Stick(-1.0));
+        assert!(!states.get("right").expect("mapped").is_held());
     }
 
     #[test]

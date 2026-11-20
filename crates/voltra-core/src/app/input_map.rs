@@ -183,6 +183,17 @@ mod tests {
     }
 
     #[test]
+    fn the_shipped_default_map_parses() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets")
+            .join(DEFAULT_INPUT_MAP);
+        let map = ActionMap::load(&path).expect("the shipped map parses");
+        for action in ["jump", "move_left", "move_right"] {
+            assert!(!map.bindings(action).is_empty(), "{action} is bound");
+        }
+    }
+
+    #[test]
     fn another_file_is_not_the_map() {
         let mut app = App::default();
         assert!(!app.reload_input_map(&AssetPath::new("level.ron").expect("valid")));

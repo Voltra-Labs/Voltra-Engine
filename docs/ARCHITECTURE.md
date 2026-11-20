@@ -2483,6 +2483,38 @@ Unity's rule that edges belong to the action, not the key.
   stage and can be added beside this API rather than through it.
 - Raw reads (`is_key_down`, …) stay: an editor shortcut is a key.
 
+### Gamepads are bindings, merged across pads, analog through a dead zone
+
+Stage 27b. `gilrs` 0.11 in `voltra-core` only, in one file
+(`app/gamepads.rs`) that turns its events into `Input`'s mutators —
+`on_pad_button`, `on_pad_button_value`, `on_pad_axis`,
+`on_pad_disconnected` — so everything else is tested without a pad.
+
+- **Bindings** `Pad(PadButton)` and `PadAxis(PadAxis, Direction)`, in our own
+  enums by position (`South` = A / Cross). Not `gilrs`'s: its `LeftTrigger`
+  is the bumper and `LeftTrigger2` the trigger, and the file format should not
+  follow a backend. Stick Y is positive **up**, as `gilrs` reports it and as
+  the world runs. `C`, `Z`, the `Z` axes and the D-pad axes are dropped —
+  standard pads report triggers and the D-pad as buttons.
+- **One player, any pad.** State is kept per pad (so one pad letting go of a
+  button another holds is not a release, and a disconnect drops only that
+  pad) and read merged: a button is down if any pad holds it, an axis is the
+  pad pushing furthest.
+- **Analog.** Every binding has a value `0..1` (keys 0/1, triggers their
+  travel, a stick direction how far it is pushed). An action's raw value is
+  its bindings' max; it is held above the action's `deadzone` (per action in
+  the file, default 0.25, clamped to `0..=0.95`), and `strength` is the travel
+  past the dead zone rescaled to `0..1`, so `action_axis` is analog and a walk
+  does not jump from nothing to a quarter.
+- **Rebinding** sees pads: `pressed_binding` reports pad buttons after keys
+  and mouse, then a stick direction crossing 0.5 this frame (resting drift
+  never rebinds). As a raw binding a stick direction is "down" past 0.5.
+- **Focus.** `gilrs` is not tied to the window, so pad events are ignored
+  while it is unfocused and held pad controls are released on focus loss, as
+  keys are.
+- **Polled** at the top of `App::update`, before the frame's actions are
+  derived. `Gilrs::new` failing is logged; the game runs without pads.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -2552,3 +2584,13 @@ Both differ from most training data and from every tutorial written against
 | `Metrics` | `xmin`/`ymin` are the bitmap's bottom-left from the pen on the baseline, y up |
 | Errors | `Font::from_bytes` fails with a `&'static str`, not an error type |
 | `Font` | `Clone`, not `Debug` |
+
+### `gilrs` 0.11 notes
+
+| Thing | 0.11.2 |
+| --- | --- |
+| Names | `Button::LeftTrigger` is the **bumper**; `LeftTrigger2` is the analog trigger |
+| Events | `next_event()` never blocks; `EventType::{ButtonPressed, ButtonReleased, ButtonChanged(_, value, _), AxisChanged(_, value, _), Connected, Disconnected, …}` — `#[non_exhaustive]`, so match with `_` |
+| Ids | `GamepadId` → `usize::from(id)`; stable for a pad while connected, reused by UUID on reconnect |
+| Errors | `Gilrs::new()` returns `Error::NotImplemented(dummy)` on unsupported platforms — usable, but we just skip pads |
+| Filters | default filters apply a small stick dead zone and axis-to-button thresholds before we see values |

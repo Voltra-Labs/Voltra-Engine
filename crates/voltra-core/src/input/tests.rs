@@ -217,3 +217,89 @@ mod actions {
         assert!(input.action("jump").is_held());
     }
 }
+
+mod pads {
+    use super::*;
+    use crate::input::{Direction, PadAxis, PadButton};
+
+    fn map() -> ActionMap {
+        let mut map = ActionMap::new();
+        map.bind("jump", Binding::Pad(PadButton::South));
+        map.bind("jump", Binding::Key(KeyCode::Space));
+        map.bind(
+            "left",
+            Binding::PadAxis(PadAxis::LeftStickX, Direction::Negative),
+        );
+        map.bind(
+            "right",
+            Binding::PadAxis(PadAxis::LeftStickX, Direction::Positive),
+        );
+        map
+    }
+
+    #[test]
+    fn a_pad_button_drives_the_same_action_as_a_key() {
+        let mut input = Input::new();
+        input.on_pad_button(0, PadButton::South, true);
+        input.update_actions(&map());
+        assert!(input.action("jump").pressed());
+    }
+
+    #[test]
+    fn a_stick_gives_an_analog_axis() {
+        let mut input = Input::new();
+        input.on_pad_axis(0, PadAxis::LeftStickX, -0.625);
+        input.update_actions(&map());
+        let axis = input.action_axis("left", "right");
+        assert!((axis + 0.5).abs() < 1e-6, "{axis}");
+    }
+
+    #[test]
+    fn pads_are_ignored_while_unfocused_and_count_again_after() {
+        let mut input = Input::new();
+        input.on_focus_lost();
+        input.on_pad_button(0, PadButton::South, true);
+        input.update_actions(&map());
+        assert!(!input.action("jump").is_held());
+
+        input.on_focus_gained();
+        input.on_pad_button(0, PadButton::South, true);
+        input.update_actions(&map());
+        assert!(input.action("jump").is_held());
+    }
+
+    #[test]
+    fn losing_focus_releases_a_held_pad_button() {
+        let mut input = Input::new();
+        input.on_pad_button(0, PadButton::South, true);
+        input.update_actions(&map());
+        input.end_frame();
+        input.on_focus_lost();
+        input.update_actions(&map());
+        assert!(input.action("jump").released());
+    }
+
+    #[test]
+    fn pressed_binding_sees_pad_buttons_and_pushed_sticks() {
+        let mut input = Input::new();
+        input.on_pad_button(0, PadButton::North, true);
+        assert_eq!(
+            input.pressed_binding(),
+            Some(Binding::Pad(PadButton::North))
+        );
+        input.end_frame();
+        input.on_pad_axis(0, PadAxis::RightStickY, 0.9);
+        assert_eq!(
+            input.pressed_binding(),
+            Some(Binding::PadAxis(PadAxis::RightStickY, Direction::Positive))
+        );
+    }
+
+    #[test]
+    fn a_stick_past_half_way_is_down_as_a_raw_binding() {
+        let mut input = Input::new();
+        input.on_pad_axis(0, PadAxis::LeftStickX, 0.6);
+        assert!(input.is_binding_down(Binding::PadAxis(PadAxis::LeftStickX, Direction::Positive)));
+        assert!(!input.is_binding_down(Binding::PadAxis(PadAxis::LeftStickX, Direction::Negative)));
+    }
+}

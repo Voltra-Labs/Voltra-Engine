@@ -3,8 +3,8 @@
 (
     version: 1,
     actions: {
-        "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp)]),
-        "move_left": (bindings: [Key(KeyA), Key(ArrowLeft)]),
-        "move_right": (bindings: [Key(KeyD), Key(ArrowRight)]),
+        "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp), Pad(South)]),
+        "move_left": (bindings: [Key(KeyA), Key(ArrowLeft), Pad(DPadLeft), PadAxis(LeftStickX, Negative)]),
+        "move_right": (bindings: [Key(KeyD), Key(ArrowRight), Pad(DPadRight), PadAxis(LeftStickX, Positive)]),
     },
 )

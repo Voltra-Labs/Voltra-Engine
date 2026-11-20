@@ -29,7 +29,7 @@ someone who does not have Rust installed.
 | ~~26a~~ | ~~In-game UI: fonts, glyph atlas, `Text` in the world~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~26b~~ | ~~In-game UI: screen-space pass, `UiRect`, a HUD~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | ~~27a~~ | ~~Input actions: the map, evaluation, rebinding~~ | **Landed.** Decisions in ARCHITECTURE.md. |
-| 27b | Gamepads through `gilrs`, analog bindings and dead zones | The map exists; a pad is a second kind of binding. |
+| ~~27b~~ | ~~Gamepads through `gilrs`, analog bindings and dead zones~~ | **Landed.** Decisions in ARCHITECTURE.md. |
 | 28 | Sleeping bodies and a real broad phase | `broad.rs` already names its own limit at ~200 bodies. A tilemap's generated colliders are what will cross it. |
 | 29 | Export: `xtask`, and a build manifest | Turning the tree into a folder someone else can run. Last, because it packages whatever exists. |
 
@@ -37,39 +37,6 @@ Defensible reorderings, if the goal changes: aiming at **a playable demo**
 soonest is 23 → 24 → 26 → 29 and tiles later; aiming at **content tooling** is
 25 first and audio later. What should not move is 24 before 25/26 and 28 after
 whatever generates the bodies.
-
----
-
-## 27b — Gamepads
-
-27a landed the map, its evaluation and rebinding (keys and mouse). What is
-left of the original sketch below is the pad: `gilrs` in `voltra-core`,
-`Binding::GamepadButton` / `GamepadAxis` with a direction, a per-action dead
-zone, `ActionState::strength` becoming analog, and `pressed_binding` seeing
-pad buttons. One player still: any pad drives the one map.
-
-**Why now.** `Input::was_key_pressed(KeyCode::Space)` is correct and unshippable:
-no rebinding, no gamepad, no two-player.
-
-**Prior art.** Unity's Input System: actions, action maps, bindings, control
-schemes. Godot: named actions in the InputMap, `Input.is_action_pressed`.
-Unreal Enhanced Input: input actions and mapping contexts.
-
-**Shape.**
-
-- An `InputMap` asset (`.ron`): named actions, each with a list of bindings —
-  keys, mouse buttons, gamepad buttons, axis pairs, with dead zones.
-- `Input::action("jump").pressed()` beside the raw reads, which stay: an editor
-  shortcut is a key, not an action.
-- Gamepads through `gilrs` in `voltra-core`, since gamepad input is platform
-  input and core already owns that seam.
-- Runtime rebinding — "press a key for jump" — because a map without it is
-  half the reason to have one.
-
-**Decisions to make.** Where the map lives with no project settings file:
-probably an asset the game names, with `assets/input.ron` as the convention and
-a player flag to override. Multiple devices and local multiplayer: one map,
-several *actors*, or out of scope for v1.
 
 ---
 

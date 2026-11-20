@@ -4,6 +4,7 @@ mod animation;
 mod audio;
 mod draw;
 mod framing;
+mod gamepads;
 mod input_map;
 mod simulation;
 mod spawning;
@@ -96,6 +97,8 @@ pub struct App {
     pending_events: Vec<CollisionEvent>,
     clock: Clock,
     input: Input,
+    /// Gamepads, once `resumed` has connected to the platform's API.
+    gamepads: Option<gamepads::Gamepads>,
     /// The game's named actions, re-evaluated into `input` every frame.
     actions: ActionMap,
     /// The map file named by `with_input_map`; `None` reads the convention.
@@ -301,6 +304,11 @@ impl App {
     ///
     /// [`Camera`]: voltra_scene::Camera
     fn update(&mut self) {
+        // Before the frame's actions are derived, so a pad press is seen the
+        // frame it happened, like a key's.
+        if let Some(pads) = self.gamepads.as_mut() {
+            pads.poll(&mut self.input);
+        }
         let delta = self.clock.tick();
         self.advance(delta.as_secs_f32());
         self.reload_changed_assets();
@@ -475,6 +483,7 @@ impl ApplicationHandler for App {
         self.atlases = Some(atlases);
 
         self.load_input_map(&asset_root);
+        self.gamepads = gamepads::Gamepads::connect();
 
         // And the legible part: a text in a world populated before `run`
         // has never met a `Fonts`.

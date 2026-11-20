@@ -21,11 +21,36 @@ pub struct ActionMap {
     pub actions: BTreeMap<String, Action>,
 }
 
-/// One action's bindings. Any of them drives it.
-#[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+/// How far an analog control must move before an action counts as held,
+/// when a map does not say: past the drift of a worn stick, short of where a
+/// deliberate push starts.
+pub const DEFAULT_DEADZONE: f32 = 0.25;
+
+/// The largest dead zone accepted. At `1` nothing could ever exceed it.
+pub const MAX_DEADZONE: f32 = 0.95;
+
+/// One action's bindings, any of which drives it, and its dead zone.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Action {
     #[serde(default)]
     pub bindings: Vec<Binding>,
+    /// Analog travel, `0` to `1`, below which the action is not held. Keys
+    /// are all-or-nothing and always clear it.
+    #[serde(default = "default_deadzone")]
+    pub deadzone: f32,
+}
+
+impl Default for Action {
+    fn default() -> Self {
+        Self {
+            bindings: Vec::new(),
+            deadzone: DEFAULT_DEADZONE,
+        }
+    }
+}
+
+fn default_deadzone() -> f32 {
+    DEFAULT_DEADZONE
 }
 
 /// Why a map could not be read or written.
@@ -149,6 +174,25 @@ impl ActionMap {
             .map_or(&[], |action| action.bindings.as_slice())
     }
 
+    /// `action`'s dead zone, kept within `0..=MAX_DEADZONE` whatever the
+    /// file says.
+    pub fn deadzone(&self, action: &str) -> f32 {
+        let deadzone = self
+            .actions
+            .get(action)
+            .map_or(DEFAULT_DEADZONE, |action| action.deadzone);
+        if deadzone.is_finite() {
+            deadzone.clamp(0.0, MAX_DEADZONE)
+        } else {
+            DEFAULT_DEADZONE
+        }
+    }
+
+    /// Sets `action`'s dead zone, creating the action.
+    pub fn set_deadzone(&mut self, action: &str, deadzone: f32) {
+        self.actions.entry(action.to_owned()).or_default().deadzone = deadzone;
+    }
+
     /// Whether the map names `action` at all.
     pub fn contains(&self, action: &str) -> bool {
         self.actions.contains_key(action)
@@ -236,6 +280,32 @@ mod tests {
             ActionMap::from_ron(&text, Path::new("again")).expect("reads"),
             map
         );
+    }
+
+    #[test]
+    fn pad_bindings_and_a_dead_zone_read_from_a_file() {
+        use crate::input::binding::{Direction, PadAxis, PadButton};
+        let text = r#"(version: 1, actions: {
+            "jump": (bindings: [Pad(South)]),
+            "left": (bindings: [PadAxis(LeftStickX, Negative)], deadzone: 0.4),
+        })"#;
+        let map = ActionMap::from_ron(text, Path::new("x")).expect("parses");
+        assert_eq!(map.bindings("jump"), &[Binding::Pad(PadButton::South)]);
+        assert_eq!(
+            map.bindings("left"),
+            &[Binding::PadAxis(PadAxis::LeftStickX, Direction::Negative)]
+        );
+        assert_eq!(map.deadzone("left"), 0.4);
+        assert_eq!(map.deadzone("jump"), DEFAULT_DEADZONE);
+    }
+
+    #[test]
+    fn a_dead_zone_out_of_range_is_clamped() {
+        let mut map = ActionMap::new();
+        map.set_deadzone("a", 3.0);
+        map.set_deadzone("b", f32::NAN);
+        assert_eq!(map.deadzone("a"), MAX_DEADZONE);
+        assert_eq!(map.deadzone("b"), DEFAULT_DEADZONE);
     }
 
     #[test]
