@@ -35,6 +35,49 @@ pub struct PointLight {
     /// Whether the frame's [`Occluder`]s block it, and how much. `None`
     /// passes through everything, and costs no shadow map.
     pub shadow: Option<Shadow>,
+    /// A spot light's cone; `None` shines every way.
+    pub cone: Option<Cone>,
+}
+
+/// The way a spot light shines: a cone around `direction`, Unity URP's
+/// spot `Light2D`. Outside it, nothing; inside, the light as a point light
+/// would give it; between, a fade.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Cone {
+    /// Where the cone points, in the world. Its length does not matter.
+    pub direction: Vec2,
+    /// The whole angle across the cone, in radians. A full turn or more is
+    /// a point light.
+    pub angle: f32,
+    /// How much of the cone's half-angle, from its edge inward, fades: `0`
+    /// is a hard edge, `1` fades from the middle out.
+    pub softness: f32,
+}
+
+impl Cone {
+    /// `(direction, cos of the outer half-angle, cos of the inner)` for the
+    /// shader, the inner strictly above the outer; `None` for a cone that
+    /// shines nowhere (no angle, no direction, not a number).
+    pub(super) fn sanitized(&self) -> Option<(Vec2, f32, f32)> {
+        let finite =
+            self.direction.is_finite() && self.angle.is_finite() && self.softness.is_finite();
+        let direction = self.direction.try_normalize()?;
+        if !finite || self.angle <= 0.0 {
+            return None;
+        }
+        let half = self.angle * 0.5;
+        if half >= std::f32::consts::PI {
+            // A full turn: every way, as a point light — edges below any
+            // cosine, rather than a fade behind it.
+            return Some((direction, -2.0, -1.5));
+        }
+        let inner = (half * (1.0 - self.softness.clamp(0.0, 1.0))).cos();
+        // `smoothstep` needs its edges apart; a hard edge is a very short
+        // fade, opened outward so the inner edge stays at most 1 and the
+        // middle of a narrow cone is still fully lit.
+        let outer = half.cos().min(inner - 1e-4);
+        Some((direction, outer, inner))
+    }
 }
 
 /// How a light's shadows look.
@@ -60,14 +103,20 @@ impl Shadow {
 
 impl PointLight {
     /// Whether the light gives anything: a radius, an intensity, a colour,
-    /// every value a number.
-    pub(super) fn gives_light(&self) -> bool {
+    /// a cone that shines somewhere if it has one, every value a number.
+    /// What the renderer draws, and what an editor outline should agree
+    /// with.
+    pub fn gives_light(&self) -> bool {
         let finite = self.position.is_finite()
             && self.color.iter().all(|c| c.is_finite())
             && self.intensity.is_finite()
             && self.radius.is_finite()
             && self.falloff.is_finite();
-        finite && self.radius > 0.0 && self.intensity > 0.0 && self.color.iter().any(|&c| c > 0.0)
+        finite
+            && self.radius > 0.0
+            && self.intensity > 0.0
+            && self.color.iter().any(|&c| c > 0.0)
+            && self.cone.is_none_or(|cone| cone.sanitized().is_some())
     }
 
     /// The shadow it casts, sanitised, if it gives light and casts one.
@@ -137,6 +186,7 @@ mod tests {
             radius: 3.0,
             falloff: 2.0,
             shadow: None,
+            cone: None,
         }
     }
 

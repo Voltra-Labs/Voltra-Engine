@@ -42,7 +42,7 @@ pub use collider::Collider;
 pub use filter::{CollisionLayers, Sensor};
 pub use format::{ComponentRegistry, SceneError};
 pub use hierarchy::{Parent, WorldTransforms};
-pub use light::{LightShadows, PointLight2D};
+pub use light::{LightCone, LightShadows, PointLight2D};
 pub use material::PhysicsMaterial;
 pub use name::Name;
 pub use parallax::Parallax;

@@ -26,7 +26,7 @@ pub use bloom::{BloomPass, BloomSettings};
 pub use camera::{screen_projection, Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
-pub use lights::{LightPass, Lighting, Occluder, PointLight, Shadow};
+pub use lights::{Cone, LightPass, Lighting, Occluder, PointLight, Shadow};
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
 pub use particles::{

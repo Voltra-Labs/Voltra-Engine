@@ -3136,9 +3136,9 @@ asked for lighting does not go dark when someone drops a light into it.
   is never lit.
 - Instance data is a vertex buffer, not storage: lights work on adapters
   without vertex-stage storage (WebGL2), unlike GPU particles.
-- **Not yet**: normal maps, spot/cone lights, per-layer light masks. Each
-  is its own stage; none needs this one reshaped — a normal map is a second
-  input to the accumulate pass. Shadows landed in stage 53, below.
+- **Not yet**: normal maps, per-layer light masks. Each is its own stage;
+  none needs this one reshaped — a normal map is a second input to the
+  accumulate pass. Shadows landed in stage 53 and spot lights in 56, below.
 
 Pinned by `headless_lights.rs` (ambient alone far away, lit past white at
 the lamp, fading between, nothing outside the radius; unlit makes no
@@ -3222,8 +3222,8 @@ fading over pixels a hard one does not; every quarter and the seam between
 two, hard and soft), `lights::occluder` and `lights::shadows` unit tests (which edges
 cast, culling, rows, overflow) and `shadow_caster` / `light` scene tests.
 
-`assets/scenes/lights.ron` (stage 54) shows all of it: two shadowed lamps,
-an ember that casts none, pillars shadowing by their colliders, a turned
+`assets/scenes/lights.ron` (stage 54) shows all of it: a shadowed lamp and
+a shadowed spot light (since stage 56), an ember that casts none, pillars shadowing by their colliders, a turned
 crate that shadows itself and a wire that is an open polygon with no
 collider. Generated through `save` like `demo.ron`, and drawn by
 `tests/lights_scene.rs` — with and without its casters — so a scene that
@@ -3271,6 +3271,45 @@ Pinned by `shape_edit::handle` (hit tests, insert, remove floors) and
 `shape_edit` (when the mode turns itself off) unit tests and
 `shadow_caster::starting` scene tests. The pointer interaction itself is
 egui glue with no harness here; not verified in a window.
+
+### A spot light is a point light with a cone, aimed by its entity
+
+Stage 56. `PointLight2D::cone: Option<LightCone>` (whole angle, edge
+softness), Unity URP's spot `Light2D` — a point light with inner and outer
+angles — rather than a second component: everything else (radius, falloff,
+shadows, culling) is the point light's, and a cone of a full turn is a point
+light. `None` is the default and not written.
+
+- **Aimed by the entity**: the cone points along the entity's +x as its
+  composed matrix carries it (`PointLight2D::placed`, shared by the gather
+  and the editor overlay), so the rotate gizmo aims it, a parent carries
+  it, and a mirroring scale flips it. No direction field to keep in step
+  with the transform.
+- **In the accumulate shader**: `within_cone` multiplies the point light's
+  strength by `smoothstep(cos outer, cos inner, along)`; the inner
+  half-angle is the outer × (1 − softness), kept strictly inside so the
+  edges never meet. A point light is sent edges below any cosine, so one
+  shader path serves both. Shadows need nothing: the shadow map is per
+  direction already.
+- A cone with no angle or no direction gives no light at all, as a light
+  with no radius does; the editor outline uses the same
+  `PointLight::gives_light`, so it never outlines a light that is not
+  drawn.
+- The editor draws the selected light's reach: a circle, or a spot light's
+  arc and edges (`view::light`). The inspector's spot toggle keeps the
+  tuned cone while off, as the shadows toggle does.
+- A cone of a full turn or more is sent as a point light's edges; a narrow
+  one keeps its inner edge at most 1, so its middle is fully lit.
+- **Not yet**: culling a spot light by its cone rather than its circle —
+  it is gathered, drawn as a whole quad and given a full shadow-map row
+  even when it points away from the view (the fragments outside the cone
+  are cheap; the row is not free) — and cookies (a texture shaping the
+  light, Godot's `PointLight2D` texture).
+
+Pinned by `headless_lights.rs` (lit ahead and inside the edge, ambient
+behind and beside; a soft edge fading where a hard one does not), the
+instance and cone unit tests, and the gather test (a quarter turn aims it
+up). The sample scene's cool lamp is a spot light.
 
 ### wgpu 30 API notes
 

@@ -29,7 +29,7 @@ pub mod shadows;
 
 use instance::LightInstance;
 pub use lighting::{
-    Lighting, PointLight, Shadow, DEFAULT_SHADOW_RESOLUTION, LIT_FORMAT, MAX_SHADOW_SOFTNESS,
+    Cone, Lighting, PointLight, Shadow, DEFAULT_SHADOW_RESOLUTION, LIT_FORMAT, MAX_SHADOW_SOFTNESS,
 };
 use occluder::Edges;
 pub use occluder::Occluder;
@@ -79,6 +79,7 @@ impl LightPass {
                         0 => Float32x4,
                         1 => Float32x4,
                         2 => Float32x4,
+                        3 => Float32x4,
                     ],
                 })],
             },

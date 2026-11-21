@@ -102,6 +102,7 @@ fn lamp(x: f32, shadow: Option<Shadow>) -> PointLight {
         radius: 4.0,
         falloff: 1.0,
         shadow,
+        cone: None,
     }
 }
 
