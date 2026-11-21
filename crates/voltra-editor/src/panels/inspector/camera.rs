@@ -58,6 +58,10 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
                 ("contrast", &mut post.contrast, 0.0..=4.0),
                 ("saturation", &mut post.saturation, 0.0..=4.0),
                 ("vignette", &mut post.vignette, 0.0..=1.0),
+                ("bloom", &mut post.bloom.intensity, 0.0..=4.0),
+                ("bloom threshold", &mut post.bloom.threshold, 0.0..=4.0),
+                ("bloom softness", &mut post.bloom.softness, 0.0..=1.0),
+                ("bloom radius", &mut post.bloom.radius, 0.25..=4.0),
             ] {
                 ui.label(label);
                 claim = claim.or(active(

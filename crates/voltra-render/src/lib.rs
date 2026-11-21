@@ -4,9 +4,11 @@
 //! *nothing* about windowing: callers hand it anything that converts into a
 //! [`wgpu::SurfaceTarget`], which keeps `winit` out of the render layer.
 
+pub mod bloom;
 pub mod camera;
 pub mod context;
 pub mod egui_backend;
+pub mod graph;
 pub mod lines;
 pub mod mesh;
 pub mod particles;
@@ -19,6 +21,7 @@ pub mod shader;
 pub mod target;
 pub mod texture;
 
+pub use bloom::{BloomPass, BloomSettings};
 pub use camera::{screen_projection, Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};

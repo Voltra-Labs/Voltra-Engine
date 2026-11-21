@@ -2,9 +2,13 @@
 //! window or into an editor target.
 
 use super::{aspect_of, Layer, Renderer};
+use crate::bloom::BloomPass;
 use crate::camera::screen_projection;
+use crate::context::GpuContext;
+use crate::graph::{RenderGraph, Slot, TexturePool};
 use crate::mesh::Mesh;
 use crate::pass;
+use crate::post::PostPass;
 use crate::post::PostSettings;
 use crate::scene_draw::{self, SceneDraw};
 use crate::target::RenderTarget;
@@ -50,14 +54,16 @@ impl Renderer {
         });
         let target = self.frame_target.as_ref().expect("made just above");
         self.record_scene(&mut encoder, target.view(), mesh, draws);
-        self.post.record(
-            &device,
-            self.ctx.queue(),
+        record_post(
+            &self.ctx,
+            &self.bloom,
+            &self.post,
+            &mut self.transients,
             &mut encoder,
             target.view(),
             &view,
+            (width, height),
             post,
-            aspect_of(width, height),
         );
         self.record_ui(&mut encoder, &view, width, height, ui);
 
@@ -88,14 +94,16 @@ impl Renderer {
                 });
 
         self.record_scene(&mut encoder, target.view(), mesh, draws);
-        self.post.record(
-            self.ctx.device(),
-            self.ctx.queue(),
+        record_post(
+            &self.ctx,
+            &self.bloom,
+            &self.post,
+            &mut self.transients,
             &mut encoder,
             target.view(),
             output.view(),
+            (target.width(), target.height()),
             post,
-            target.aspect(),
         );
         self.record_ui(
             &mut encoder,
@@ -154,5 +162,45 @@ impl Renderer {
             draws,
             self.clear_color,
         );
+    }
+}
+
+/// The frame's render graph: bloom over the drawn scene when it is on, then
+/// the grade into `frame`. A graph that will not validate is a bug in the
+/// passes above; it is logged and the frame is left as it was rather than
+/// recorded half-built.
+#[allow(clippy::too_many_arguments)]
+fn record_post(
+    ctx: &GpuContext,
+    bloom: &BloomPass,
+    grade: &PostPass,
+    transients: &mut TexturePool,
+    encoder: &mut wgpu::CommandEncoder,
+    scene: &wgpu::TextureView,
+    frame: &wgpu::TextureView,
+    (width, height): (u32, u32),
+    post: &PostSettings,
+) {
+    let (device, queue) = (ctx.device(), ctx.queue());
+    let mut graph = RenderGraph::new();
+    let scene = graph.import(scene);
+    let frame = graph.import_output(frame);
+    let glow = bloom.add(&mut graph, device, queue, scene, width, height, &post.bloom);
+    let reads: Vec<Slot> = std::iter::once(scene).chain(glow).collect();
+    let aspect = aspect_of(width, height);
+    graph.add_pass("grade", &reads, &[frame], move |encoder, views| {
+        grade.record(
+            device,
+            queue,
+            encoder,
+            views.get(scene),
+            glow.map(|glow| views.get(glow)),
+            views.get(frame),
+            post,
+            aspect,
+        );
+    });
+    if let Err(e) = graph.run(device, encoder, transients) {
+        log::error!("{e}; frame not post-processed");
     }
 }

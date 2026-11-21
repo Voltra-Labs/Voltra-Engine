@@ -273,6 +273,7 @@ privileged and plain `cargo build` covers everything.
 | 44 | Tilemap chunk mesh cache; the frame batch keeps its buffers | done |
 | 45 | GPU particles: compute-stepped rings, drawn in painter's order | done |
 | 46 | Job system (`voltra-jobs`); batch sort keyed once | done |
+| 47 | Render graph for the post chain; bloom | done |
 
 ## Contributing
 
