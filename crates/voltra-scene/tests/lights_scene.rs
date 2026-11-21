@@ -25,7 +25,7 @@ use voltra_render::{
 use voltra_scene::format::{load, save};
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{
-    camera, light, Camera, CasterShape, Collider, ComponentRegistry, LightShadows, Name,
+    camera, light, Camera, CasterShape, Collider, ComponentRegistry, LightCone, LightShadows, Name,
     PointLight2D, SceneId, ShadowCaster2D, Sprite, SpriteBatch, Transform,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
@@ -57,8 +57,9 @@ const UNIT_BOX: Collider = Collider::Box {
 };
 
 /// A night room: a pale wall, a floor, two pillars and a crate standing on
-/// it and a wire overhead, lit by a warm lamp at the left and a cool one at
-/// the top right, plus a small ember that casts no shadow.
+/// it and a wire overhead, lit by a warm lamp at the left and a cool spot
+/// light at the top right aimed down at the pillars, plus a small ember
+/// that casts no shadow.
 ///
 /// Every way a shadow can be cast is in it: colliders as they are (the
 /// pillars), a turned box that shadows itself (the crate), and a polygon of
@@ -136,20 +137,29 @@ fn lights_world() -> World {
             radius: 10.0,
             falloff: 1.5,
             shadows: Some(LightShadows::default()),
+            cone: None,
         },
     );
 
-    let cool = named(&mut world, "Cool lamp", Vec2::new(4.5, 3.0), Vec2::ONE);
+    // A spot light aimed down at the pillars: +x turned towards (0, -2).
+    let cool = named(&mut world, "Cool spot", Vec2::new(4.5, 3.0), Vec2::ONE);
+    if let Some(transform) = world.get_mut::<Transform>(cool) {
+        transform.rotation = (-5.0f32).atan2(-4.5);
+    }
     world.insert(
         cool,
         PointLight2D {
             color: [0.5, 0.7, 1.0],
-            intensity: 1.2,
-            radius: 8.0,
-            falloff: 2.0,
+            intensity: 1.4,
+            radius: 9.0,
+            falloff: 1.5,
             shadows: Some(LightShadows {
                 strength: 0.85,
                 softness: 0.08,
+            }),
+            cone: Some(LightCone {
+                angle: 70f32.to_radians(),
+                softness: 0.3,
             }),
         },
     );
@@ -163,6 +173,7 @@ fn lights_world() -> World {
             radius: 1.5,
             falloff: 2.0,
             shadows: None,
+            cone: None,
         },
     );
 

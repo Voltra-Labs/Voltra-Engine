@@ -9,7 +9,7 @@ use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, TexturePool};
 use voltra_render::{
-    pass, wgpu, Filter, LightPass, Lighting, PointLight, PostPass, PostSettings, RenderTarget,
+    pass, wgpu, Cone, Filter, LightPass, Lighting, PointLight, PostPass, PostSettings, RenderTarget,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
@@ -105,6 +105,7 @@ fn a_lamp_lights_its_disc_and_the_ambient_lights_the_rest() {
         radius: 0.25,
         falloff: 1.0,
         shadow: None,
+        cone: None,
     };
     let Some((pixels, pool)) = frame(&Lighting {
         lights: vec![lamp],
@@ -144,6 +145,7 @@ fn a_light_that_gives_nothing_leaves_the_ambient() {
         radius: 0.0,
         falloff: 2.0,
         shadow: None,
+        cone: None,
     };
     let Some((pixels, _)) = frame(&Lighting {
         lights: vec![dark],
@@ -152,4 +154,69 @@ fn a_light_that_gives_nothing_leaves_the_ambient() {
         return;
     };
     assert_eq!(at(&pixels, 32, 32), at(&pixels, 1, 1));
+}
+
+/// A lamp at the centre reaching past the frame's corners, pointing right
+/// through a quarter-turn cone.
+fn spot(softness: f32) -> PointLight {
+    PointLight {
+        position: Vec2::ZERO,
+        color: [1.0; 3],
+        intensity: 1.0,
+        radius: 2.0,
+        falloff: 1.0,
+        shadow: None,
+        cone: Some(Cone {
+            direction: Vec2::X,
+            angle: std::f32::consts::FRAC_PI_2,
+            softness,
+        }),
+    }
+}
+
+#[test]
+fn a_spot_light_lights_its_cone_and_leaves_the_rest_to_the_ambient() {
+    let Some((pixels, _)) = frame(&Lighting {
+        lights: vec![spot(0.0)],
+        ..dim()
+    }) else {
+        return;
+    };
+    let ambient = at(&pixels, 1, 1);
+    // Ahead of it, inside the cone.
+    assert!(
+        at(&pixels, 50, 32).r > ambient.r + 40,
+        "ahead: {:?}",
+        at(&pixels, 50, 32)
+    );
+    // Behind it, and beside it past the cone's 45° edge.
+    assert!(at(&pixels, 14, 32).r.abs_diff(ambient.r) <= 3, "behind");
+    assert!(
+        at(&pixels, 36, 10).r.abs_diff(ambient.r) <= 3,
+        "beside, outside"
+    );
+    // Just inside the edge (about 35° off the axis).
+    assert!(at(&pixels, 50, 20).r > ambient.r + 20, "inside the edge");
+}
+
+#[test]
+fn a_soft_cone_fades_towards_its_edge() {
+    let Some((hard, _)) = frame(&Lighting {
+        lights: vec![spot(0.0)],
+        ..dim()
+    }) else {
+        return;
+    };
+    let (soft, _) = frame(&Lighting {
+        lights: vec![spot(1.0)],
+        ..dim()
+    })
+    .expect("adapter, found above");
+    // About 35° off the axis, at the same distance: the soft cone has
+    // already faded most of the way, the hard one not at all.
+    let (h, s) = (at(&hard, 50, 20).r, at(&soft, 50, 20).r);
+    assert!(s < h, "{s} against {h}");
+    // On the axis both are the same, give or take the half pixel the
+    // sample sits off it.
+    assert!(at(&hard, 50, 32).r.abs_diff(at(&soft, 50, 32).r) <= 2);
 }

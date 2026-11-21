@@ -14,7 +14,13 @@ pub(super) struct LightInstance {
     color: [f32; 4],
     /// strength, softness, shadow map row (`-1` unshadowed), unused
     shadow: [f32; 4],
+    /// direction.xy, cos of the outer half-angle, cos of the inner; a point
+    /// light's are below any cosine, so every direction is inside
+    cone: [f32; 4],
 }
+
+/// A point light's cone: both edges below -1, so every direction is in.
+const EVERY_WAY: [f32; 4] = [1.0, 0.0, -2.0, -1.5];
 
 impl PointLight {
     /// What the shader draws, or `None` for a light that gives nothing.
@@ -30,6 +36,12 @@ impl PointLight {
             (Some(row), Some((strength, softness))) => [strength, softness, row as f32, 0.0],
             _ => [0.0, 0.0, -1.0, 0.0],
         };
+        let cone = self
+            .cone
+            .and_then(|cone| cone.sanitized())
+            .map_or(EVERY_WAY, |(direction, outer, inner)| {
+                [direction.x, direction.y, outer, inner]
+            });
         Some(LightInstance {
             place: [
                 self.position.x,
@@ -39,6 +51,7 @@ impl PointLight {
             ],
             color: [color[0], color[1], color[2], 0.0],
             shadow,
+            cone,
         })
     }
 }
@@ -48,7 +61,7 @@ mod tests {
     use glam::Vec2;
 
     use super::*;
-    use crate::lights::{Shadow, MAX_SHADOW_SOFTNESS};
+    use crate::lights::{Cone, Shadow, MAX_SHADOW_SOFTNESS};
 
     fn lamp() -> PointLight {
         PointLight {
@@ -58,6 +71,7 @@ mod tests {
             radius: 3.0,
             falloff: 2.0,
             shadow: None,
+            cone: None,
         }
     }
 
@@ -113,5 +127,79 @@ mod tests {
             lamp().instance(Some(0)).expect("gives light").shadow[2],
             -1.0
         );
+    }
+
+    #[test]
+    fn a_spot_light_carries_its_cone_and_a_point_light_shines_every_way() {
+        assert_eq!(lamp().instance(None).expect("gives light").cone, EVERY_WAY);
+        let spot = PointLight {
+            cone: Some(Cone {
+                direction: Vec2::new(0.0, 2.0),
+                angle: std::f32::consts::FRAC_PI_2,
+                softness: 0.5,
+            }),
+            ..lamp()
+        };
+        let cone = spot.instance(None).expect("gives light").cone;
+        assert_eq!(cone[..2], [0.0, 1.0], "normalised");
+        assert!((cone[2] - std::f32::consts::FRAC_PI_4.cos()).abs() < 1e-6);
+        assert!((cone[3] - (std::f32::consts::FRAC_PI_8).cos()).abs() < 1e-6);
+    }
+
+    #[test]
+    fn a_cone_that_shines_nowhere_is_a_light_that_gives_nothing() {
+        for nowhere in [
+            Cone {
+                direction: Vec2::ZERO,
+                angle: 1.0,
+                softness: 0.0,
+            },
+            Cone {
+                direction: Vec2::X,
+                angle: 0.0,
+                softness: 0.0,
+            },
+            Cone {
+                direction: Vec2::X,
+                angle: f32::NAN,
+                softness: 0.0,
+            },
+        ] {
+            let light = PointLight {
+                cone: Some(nowhere),
+                ..lamp()
+            };
+            assert_eq!(light.instance(None), None, "{nowhere:?}");
+        }
+        // A hard edge still has its two edges apart, and a full turn is
+        // every way.
+        let hard = Cone {
+            direction: Vec2::X,
+            angle: 1.0,
+            softness: 0.0,
+        };
+        let (_, outer, inner) = hard.sanitized().expect("shines");
+        assert!(inner > outer);
+        let round = Cone {
+            angle: 10.0,
+            softness: 0.25,
+            ..hard
+        };
+        let (_, outer, inner) = round.sanitized().expect("shines");
+        assert!(
+            outer < -1.0 && inner < -1.0,
+            "both edges behind every direction"
+        );
+    }
+
+    #[test]
+    fn a_narrow_cone_is_fully_lit_down_its_middle() {
+        let needle = Cone {
+            direction: Vec2::X,
+            angle: 1f32.to_radians(),
+            softness: 0.0,
+        };
+        let (_, outer, inner) = needle.sanitized().expect("shines");
+        assert!(inner <= 1.0 && outer < inner, "{outer} {inner}");
     }
 }

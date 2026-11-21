@@ -30,6 +30,9 @@ struct LightIn {
     @location(1) color: vec4<f32>,
     // strength, softness, shadow map row (-1 unshadowed), unused
     @location(2) shadow: vec4<f32>,
+    // direction.xy, cos of the outer half-angle, cos of the inner; a point
+    // light's edges are below -1, so every direction is in
+    @location(3) cone: vec4<f32>,
 }
 
 struct LightOut {
@@ -39,6 +42,7 @@ struct LightOut {
     @location(1) color: vec3<f32>,
     @location(2) falloff: f32,
     @location(3) @interpolate(flat) shadow: vec3<f32>,
+    @location(4) @interpolate(flat) cone: vec4<f32>,
 }
 
 @vertex
@@ -60,6 +64,7 @@ fn vs_light(@builtin(vertex_index) index: u32, light: LightIn) -> LightOut {
     out.color = light.color.rgb;
     out.falloff = light.place.w;
     out.shadow = light.shadow.xyz;
+    out.cone = light.cone;
     return out;
 }
 
@@ -68,12 +73,24 @@ fn fs_light(in: LightOut) -> @location(0) vec4<f32> {
     // Full at the centre, nothing at the radius; the falloff bends the
     // curve between: 1 is a straight ramp, 2 the default soft one.
     let edge = clamp(1.0 - length(in.local), 0.0, 1.0);
-    let strength = pow(edge, in.falloff);
+    let strength = pow(edge, in.falloff) * within_cone(in.local, in.cone);
     var lit = 1.0;
     if in.shadow.z >= 0.0 {
         lit = visible(in.local, in.shadow);
     }
     return vec4<f32>(in.color * strength * lit, 1.0);
+}
+
+// 1 inside a spot light's cone, 0 outside, fading between its edges; 1
+// everywhere for a point light, whose edges are below any cosine. The
+// light's own centre is inside every cone.
+fn within_cone(offset: vec2<f32>, cone: vec4<f32>) -> f32 {
+    let distance = length(offset);
+    if distance <= 0.0 {
+        return 1.0;
+    }
+    let along = dot(offset / distance, cone.xy);
+    return smoothstep(cone.z, cone.w, along);
 }
 
 // Slack on the stored distance so an edge does not shadow itself: a

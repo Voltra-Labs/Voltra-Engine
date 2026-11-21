@@ -12,6 +12,7 @@
 //! the viewport would take that away from anyone who had the scene view up.
 
 pub mod caster;
+pub mod light;
 pub mod overlay;
 
 use voltra_ecs::World;

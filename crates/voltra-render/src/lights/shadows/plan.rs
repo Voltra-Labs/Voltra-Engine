@@ -124,6 +124,7 @@ mod tests {
                 strength: 1.0,
                 softness: 0.0,
             }),
+            cone: None,
         }
     }
 

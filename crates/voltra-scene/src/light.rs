@@ -13,8 +13,8 @@
 //! some light in view asks for them.
 
 use voltra_ecs::World;
-use voltra_render::glam::Vec2;
-use voltra_render::{Lighting, PointLight, Shadow};
+use voltra_render::glam::{Mat3, Vec2};
+use voltra_render::{Cone, Lighting, PointLight, Shadow};
 
 use crate::camera::{self, Camera};
 use crate::hierarchy::WorldTransforms;
@@ -37,6 +37,64 @@ pub struct PointLight2D {
     /// default, and not written — shines through everything.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub shadows: Option<LightShadows>,
+    /// Makes it a spot light, shining along the entity's +x axis (turn the
+    /// entity to aim it). `None` — the default, and not written — shines
+    /// every way.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cone: Option<LightCone>,
+}
+
+/// A spot light's cone, Unity URP's spot `Light2D`.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct LightCone {
+    /// The whole angle across the cone, in radians; a full turn or more
+    /// shines every way.
+    pub angle: f32,
+    /// How much of the half-angle, from the edge inward, fades: `0` a hard
+    /// edge, `1` from the middle out.
+    pub softness: f32,
+}
+
+impl Default for LightCone {
+    /// Sixty degrees across, its outer quarter fading.
+    fn default() -> Self {
+        Self {
+            angle: std::f32::consts::FRAC_PI_3,
+            softness: 0.25,
+        }
+    }
+}
+
+impl PointLight2D {
+    /// The light as the renderer takes it, carried by `matrix` (the
+    /// entity's composed transform): placed at its origin, its radius
+    /// scaled by the larger axis, a spot light's cone along its +x as the
+    /// world sees it — turned with it and its parents, flipped by a
+    /// mirroring scale.
+    pub fn placed(&self, matrix: Mat3) -> PointLight {
+        let scale = matrix
+            .x_axis
+            .truncate()
+            .length()
+            .max(matrix.y_axis.truncate().length());
+        PointLight {
+            position: matrix.transform_point2(Vec2::ZERO),
+            color: self.color,
+            intensity: self.intensity,
+            radius: self.radius * scale,
+            falloff: self.falloff,
+            shadow: self.shadows.map(|shadows| Shadow {
+                strength: shadows.strength,
+                softness: shadows.softness,
+            }),
+            cone: self.cone.map(|cone| Cone {
+                direction: matrix.transform_vector2(Vec2::X),
+                angle: cone.angle,
+                softness: cone.softness,
+            }),
+        }
+    }
 }
 
 /// How a light's shadows look.
@@ -70,6 +128,7 @@ impl Default for PointLight2D {
             radius: 3.0,
             falloff: 2.0,
             shadows: None,
+            cone: None,
         }
     }
 }
@@ -89,30 +148,13 @@ pub fn gather(world: &World, view_min: Vec2, view_max: Vec2) -> Lighting {
     let transforms = WorldTransforms::from_world(world);
     let lights = world
         .query::<PointLight2D>()
-        .filter_map(|(entity, light)| {
-            let matrix = transforms.matrix(entity);
-            let scale = matrix
-                .x_axis
-                .truncate()
-                .length()
-                .max(matrix.y_axis.truncate().length());
-            let position = matrix.transform_point2(Vec2::ZERO);
-            let radius = light.radius * scale;
-            let seen = position.x + radius >= view_min.x
+        .map(|(entity, light)| light.placed(transforms.matrix(entity)))
+        .filter(|light| {
+            let (position, radius) = (light.position, light.radius);
+            position.x + radius >= view_min.x
                 && position.x - radius <= view_max.x
                 && position.y + radius >= view_min.y
-                && position.y - radius <= view_max.y;
-            seen.then_some(PointLight {
-                position,
-                color: light.color,
-                intensity: light.intensity,
-                radius,
-                falloff: light.falloff,
-                shadow: light.shadows.map(|shadows| Shadow {
-                    strength: shadows.strength,
-                    softness: shadows.softness,
-                }),
-            })
+                && position.y - radius <= view_max.y
         })
         .collect::<Vec<_>>();
     // An occluder out of view can still throw a shadow into it, so casters
@@ -270,5 +312,31 @@ mod tests {
             read.shadow_resolution,
             voltra_render::lights::DEFAULT_SHADOW_RESOLUTION
         );
+    }
+
+    #[test]
+    fn a_spot_light_points_along_its_entity_and_is_left_out_of_the_file_when_off() {
+        let mut world = World::new();
+        lit_camera(&mut world, Some([0.1; 3]));
+        let spot = lamp(&mut world, Vec2::ZERO);
+        if let Some(transform) = world.get_mut::<Transform>(spot) {
+            transform.rotation = std::f32::consts::FRAC_PI_2;
+        }
+        if let Some(light) = world.get_mut::<PointLight2D>(spot) {
+            light.cone = Some(LightCone::default());
+        }
+        let cone = gather(&world, VIEW.0, VIEW.1).lights[0]
+            .cone
+            .expect("a spot light");
+        assert!(
+            (cone.direction - Vec2::Y).length() < 1e-5,
+            "turned a quarter: {cone:?}"
+        );
+        assert_eq!(cone.angle, LightCone::default().angle);
+
+        let text = ron::to_string(&PointLight2D::default()).expect("writes");
+        assert!(!text.contains("cone"), "{text}");
+        let read: PointLight2D = ron::from_str("(cone: Some((angle: 1.0)))").expect("reads");
+        assert_eq!(read.cone.map(|c| c.softness), Some(0.25));
     }
 }

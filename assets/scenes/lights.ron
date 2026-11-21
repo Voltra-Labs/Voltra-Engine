@@ -2,7 +2,7 @@
     version: 1,
     entities: [
         (
-            id: "01a2000e-9974-7be2-bda9-22348ee45c23",
+            id: "01a2002c-c2a8-7901-aaa1-d6c60ad62472",
             components: {
                 "Camera": (size:4.0,priority:0,active:true,ambient:Some((0.06,0.07,0.12))),
                 "Name": "Camera",
@@ -10,7 +10,7 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-2240f48603dc",
+            id: "01a2002c-c2a8-7901-aaa1-d6d5721f8940",
             components: {
                 "Name": "Wall",
                 "Sprite": (color:(0.85,0.84,0.8,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
@@ -18,7 +18,7 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-2255e131f1a6",
+            id: "01a2002c-c2a8-7901-aaa1-d6ebfae330b7",
             components: {
                 "Collider": Box(half_extents:(0.5,0.5)),
                 "Name": "Floor",
@@ -27,7 +27,7 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-226160bc166a",
+            id: "01a2002c-c2a8-7901-aaa1-d6f0c4d9f2a5",
             components: {
                 "Collider": Box(half_extents:(0.5,0.5)),
                 "Name": "Pillar left",
@@ -37,7 +37,7 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-2272c6feb960",
+            id: "01a2002c-c2a8-7901-aaa1-d70b2e87a1b0",
             components: {
                 "Collider": Box(half_extents:(0.5,0.5)),
                 "Name": "Pillar right",
@@ -47,7 +47,7 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-228c052a2208",
+            id: "01a2002c-c2a8-7901-aaa1-d71254c2f33d",
             components: {
                 "Collider": Box(half_extents:(0.5,0.5)),
                 "Name": "Crate",
@@ -57,7 +57,7 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-2297e8a1ab55",
+            id: "01a2002c-c2a8-7901-aaa1-d7284a882b28",
             components: {
                 "Name": "Wire",
                 "ShadowCaster2D": (shape:Polygon(points:[(-0.5,0.0),(0.5,0.0)],closed:false),self_shadow:false),
@@ -66,7 +66,7 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-22afcd157d1a",
+            id: "01a2002c-c2a8-7901-aaa1-d73a9c140314",
             components: {
                 "Name": "Warm lamp",
                 "PointLight2D": (color:(1.0,0.8,0.55),intensity:1.6,radius:10.0,falloff:1.5,shadows:Some((strength:1.0,softness:0.02))),
@@ -74,15 +74,15 @@
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-22b6865827a7",
+            id: "01a2002c-c2a8-7901-aaa1-d7433488f6a4",
             components: {
-                "Name": "Cool lamp",
-                "PointLight2D": (color:(0.5,0.7,1.0),intensity:1.2,radius:8.0,falloff:2.0,shadows:Some((strength:0.85,softness:0.08))),
-                "Transform": (translation:(4.5,3.0),rotation:0.0,scale:(1.0,1.0)),
+                "Name": "Cool spot",
+                "PointLight2D": (color:(0.5,0.7,1.0),intensity:1.4,radius:9.0,falloff:1.5,shadows:Some((strength:0.85,softness:0.08)),cone:Some((angle:1.2217305,softness:0.3))),
+                "Transform": (translation:(4.5,3.0),rotation:-2.3036115,scale:(1.0,1.0)),
             },
         ),
         (
-            id: "01a2000e-9974-7be2-bda9-22cc46fb6104",
+            id: "01a2002c-c2a8-7901-aaa1-d75d7c746717",
             components: {
                 "Name": "Ember",
                 "PointLight2D": (color:(1.0,0.3,0.15),intensity:1.5,radius:1.5,falloff:2.0),
