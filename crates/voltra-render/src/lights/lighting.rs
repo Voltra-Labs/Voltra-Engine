@@ -37,6 +37,12 @@ pub struct PointLight {
     pub shadow: Option<Shadow>,
     /// A spot light's cone; `None` shines every way.
     pub cone: Option<Cone>,
+    /// How far above the scene the light sits, in world units: with one,
+    /// what it lights is shaded by the angle it reaches it at — through its
+    /// normal map, or facing the screen where there is none — lower raking
+    /// more. `None` ignores normals: the light is flat, as every light was
+    /// before them.
+    pub height: Option<f32>,
 }
 
 /// The way a spot light shines: a cone around `direction`, Unity URP's
@@ -119,6 +125,11 @@ impl PointLight {
             && self.cone.is_none_or(|cone| cone.sanitized().is_some())
     }
 
+    /// The height normal maps are shaded from, if it has a positive one.
+    pub(super) fn normal_height(&self) -> Option<f32> {
+        self.height.filter(|h| h.is_finite() && *h > 0.0)
+    }
+
     /// The shadow it casts, sanitised, if it gives light and casts one.
     pub(super) fn casts(&self) -> Option<(f32, f32)> {
         self.shadow
@@ -155,6 +166,18 @@ impl Default for Lighting {
 }
 
 impl Lighting {
+    /// Whether the frame is lit and some light in it has a height: when the
+    /// scene's normals are read at all. (Drawing them is worth it only if
+    /// some sprite also has a normal map; without one, every pixel faces the
+    /// screen and the stand-in says so.)
+    pub fn uses_normals(&self) -> bool {
+        self.ambient.is_some()
+            && self
+                .lights
+                .iter()
+                .any(|light| light.gives_light() && light.normal_height().is_some())
+    }
+
     /// The ambient colour, a non-number or negative channel as zero; `None`
     /// when unlit.
     pub(super) fn ambient(&self) -> Option<wgpu::Color> {
@@ -187,6 +210,7 @@ mod tests {
             falloff: 2.0,
             shadow: None,
             cone: None,
+            height: None,
         }
     }
 

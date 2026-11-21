@@ -252,7 +252,8 @@ pub(super) fn resolve_world_textures(
     // thread waits idle between scenes.
     let paths: Vec<_> = world
         .query::<Sprite>()
-        .filter_map(|(_, sprite)| sprite.texture.clone())
+        .flat_map(|(_, sprite)| [sprite.texture.clone(), sprite.normal_map.clone()])
+        .flatten()
         .chain(
             world
                 .query::<Tilemap>()
@@ -272,6 +273,8 @@ pub(super) fn resolve_world_textures(
     for (_, sprite) in world.query_mut::<Sprite>() {
         let path = sprite.texture.clone();
         sprite.set_texture(path, textures, device, queue);
+        let normal = sprite.normal_map.clone();
+        sprite.set_normal_map(normal, textures, device, queue);
     }
     for (_, map) in world.query_mut::<Tilemap>() {
         let path = map.texture.clone();

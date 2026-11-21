@@ -1,4 +1,4 @@
-//! The sprite's colour, draw order and texture.
+//! The sprite's colour, draw order, texture and normal map.
 
 mod atlas;
 
@@ -49,6 +49,7 @@ pub(super) fn show(
 
     ui.separator();
     claim = claim.or(texture_ui(ui, sprite, textures, device, queue));
+    claim = claim.or(normal_map_ui(ui, sprite, textures, device, queue));
     ui.separator();
     claim.or(atlas::show(ui, sprite, atlases, preview))
 }
@@ -70,6 +71,31 @@ fn texture_ui(
     };
     sprite.set_texture(path, textures, device, queue);
     Some("Set texture")
+}
+
+/// The normal map path editor: the same field as the texture's, read as
+/// data by the lights with a height.
+fn normal_map_ui(
+    ui: &mut Ui,
+    sprite: &mut Sprite,
+    textures: &mut Textures,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> Option<&'static str> {
+    ui.label("normal map")
+        .on_hover_text("shades the sprite by the angle of lights that have a height");
+    let committed = sprite
+        .normal_map
+        .as_ref()
+        .map(AssetPath::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let path = match path_field::show(ui, "normal_map_path", "path/to/normal.png", &committed)? {
+        PathEdit::Cleared => None,
+        PathEdit::Set(path) => Some(path),
+    };
+    sprite.set_normal_map(path, textures, device, queue);
+    Some("Set normal map")
 }
 
 /// The path a sprite is actually showing, as the text box spells it.

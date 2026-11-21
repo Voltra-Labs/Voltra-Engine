@@ -24,6 +24,9 @@ pub(crate) const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
 pub struct SpriteRange {
     /// `None` draws against the renderer's white bind group.
     pub texture: Option<Handle<Texture>>,
+    /// The normal map drawn over `texture`, for lights with a height; `None`
+    /// is flat. Part of what splits a run, as the texture is.
+    pub normal: Option<Handle<Texture>>,
     /// Index range into [`SpriteBatch::indices`] (and thus the uploaded mesh).
     pub indices: std::ops::Range<u32>,
 }
@@ -81,7 +84,10 @@ impl SpriteBatch {
         // about where a sprite's corners are is a click that misses the pixels
         // it lands on, and nothing reports it.
         let quad = quad(sprite, sheets);
-        self.push_quad(matrix, quad.corners(), quad.uvs, sprite.color, quad.texture);
+        if let Some(vertices) = placed(self.visible, matrix, quad.corners(), quad.uvs, sprite.color)
+        {
+            self.append_quad(vertices, quad.texture, sprite.normal_handle);
+        }
     }
 
     /// Appends one quad per glyph of `text`, all sampling its font's atlas.
@@ -115,12 +121,17 @@ impl SpriteBatch {
         texture: Option<Handle<Texture>>,
     ) {
         if let Some(vertices) = placed(self.visible, matrix, corners, uvs, color) {
-            self.append_quad(vertices, texture);
+            self.append_quad(vertices, texture, None);
         }
     }
 
     /// Appends a quad already placed and culled by [`placed`].
-    pub(crate) fn append_quad(&mut self, vertices: [Vertex; 4], texture: Option<Handle<Texture>>) {
+    pub(crate) fn append_quad(
+        &mut self,
+        vertices: [Vertex; 4],
+        texture: Option<Handle<Texture>>,
+        normal: Option<Handle<Texture>>,
+    ) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
         // batch holds every sprite in the world, not one object's geometry.
@@ -132,15 +143,16 @@ impl SpriteBatch {
             .extend(QUAD_INDICES.iter().map(|offset| base + offset));
         let end = self.indices.len() as u32;
 
-        self.extend_ranges(texture, start..end);
+        self.extend_ranges(texture, normal, start..end);
     }
 
-    /// Adds `indices` drawn with `texture` to the last range when it is the
-    /// same texture, or as a range of its own. Never across a GPU emitter,
-    /// which must draw between the two.
+    /// Adds `indices` drawn with `texture` and `normal` to the last range
+    /// when it has both the same, or as a range of its own. Never across a
+    /// GPU emitter, which must draw between the two.
     pub(crate) fn extend_ranges(
         &mut self,
         texture: Option<Handle<Texture>>,
+        normal: Option<Handle<Texture>>,
         indices: std::ops::Range<u32>,
     ) {
         let sealed = self
@@ -148,8 +160,14 @@ impl SpriteBatch {
             .last()
             .is_some_and(|emitter| emitter.before == self.ranges.len());
         match self.ranges.last_mut() {
-            Some(range) if range.texture == texture && !sealed => range.indices.end = indices.end,
-            _ => self.ranges.push(SpriteRange { texture, indices }),
+            Some(range) if range.texture == texture && range.normal == normal && !sealed => {
+                range.indices.end = indices.end;
+            }
+            _ => self.ranges.push(SpriteRange {
+                texture,
+                normal,
+                indices,
+            }),
         }
     }
 

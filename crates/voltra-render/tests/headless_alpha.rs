@@ -50,6 +50,7 @@ fn half_alpha_red_over_black_is_half_red() {
     let mesh = Mesh::indexed(&device, "alpha-quad", &vertices, &[0, 1, 2, 0, 2, 3]);
     let draws = [MeshDraw {
         texture: &white,
+        normal: None,
         indices: 0..6,
     }];
 

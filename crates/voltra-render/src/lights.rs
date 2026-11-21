@@ -24,6 +24,7 @@ use crate::shader;
 
 mod instance;
 mod lighting;
+mod normal_input;
 mod occluder;
 pub mod shadows;
 
@@ -31,6 +32,7 @@ use instance::LightInstance;
 pub use lighting::{
     Cone, Lighting, PointLight, Shadow, DEFAULT_SHADOW_RESOLUTION, LIT_FORMAT, MAX_SHADOW_SOFTNESS,
 };
+use normal_input::NormalInput;
 use occluder::Edges;
 pub use occluder::Occluder;
 use shadows::{ShadowPass, ShadowPlan, SHADOW_FORMAT};
@@ -42,6 +44,7 @@ pub struct LightPass {
     composite: wgpu::RenderPipeline,
     composite_layout: wgpu::BindGroupLayout,
     shadows: ShadowPass,
+    normals: NormalInput,
     /// Whether the shadow map running out of rows has been reported since it
     /// last had enough: said when it starts, not every frame it lasts.
     overflow_reported: AtomicBool,
@@ -51,10 +54,15 @@ impl LightPass {
     /// Pipelines drawing lights through `camera_layout`, the world camera's.
     pub fn new(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout) -> Self {
         let shadows = ShadowPass::new(device);
+        let normals = NormalInput::new(device);
         let module = shader::create_module(device, "lights", shader::LIGHTS);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("lights-pipeline-layout"),
-            bind_group_layouts: &[Some(camera_layout), Some(shadows.layout())],
+            bind_group_layouts: &[
+                Some(camera_layout),
+                Some(shadows.layout()),
+                Some(normals.layout()),
+            ],
             immediate_size: 0,
         });
         let additive = wgpu::BlendState {
@@ -150,12 +158,15 @@ impl LightPass {
             composite,
             composite_layout,
             shadows,
+            normals,
             overflow_reported: AtomicBool::new(false),
         }
     }
 
     /// Adds the light map and the composite over `scene` — the drawn frame,
     /// `width` × `height` — to `graph`, `camera` bound for the lights.
+    /// `normals` is the scene's normal buffer (the frame's size), for lights
+    /// with a height; `None` shades every light flat.
     /// Returns the lit frame's slot, or `None` when `lighting` is unlit and
     /// the caller should read `scene` itself.
     #[allow(clippy::too_many_arguments)]
@@ -168,6 +179,7 @@ impl LightPass {
         width: u32,
         height: u32,
         lighting: &Lighting,
+        normals: Option<&'a wgpu::TextureView>,
     ) -> Option<Slot> {
         let ambient = lighting.ambient()?;
         let plan = ShadowPlan::new(
@@ -226,11 +238,13 @@ impl LightPass {
         let reads: Vec<Slot> = shadow_map.into_iter().collect();
         graph.add_pass("lights", &reads, &[map], move |encoder, views| {
             let group = shadow_map.map(|slot| self.shadows.bind_map(device, views.get(slot)));
+            let surface = normals.map(|view| self.normals.bind(device, view));
             let mut pass = begin(encoder, views.get(map), wgpu::LoadOp::Clear(ambient));
             if let Some(buffer) = &buffer {
                 pass.set_pipeline(&self.accumulate);
                 pass.set_bind_group(0, camera, &[]);
                 pass.set_bind_group(1, group.as_ref().unwrap_or(self.shadows.empty()), &[]);
+                pass.set_bind_group(2, surface.as_ref().unwrap_or(self.normals.empty()), &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..6, 0..count);
             }

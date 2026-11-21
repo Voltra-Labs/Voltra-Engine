@@ -303,6 +303,7 @@ fn push_alone_merges_contiguous_same_handles_into_one_range() {
         batch.ranges,
         vec![SpriteRange {
             texture: Some(a),
+            normal: None,
             indices: 0..12,
         }]
     );
@@ -334,14 +335,17 @@ fn push_alone_splits_a_range_when_the_handle_changes() {
         vec![
             SpriteRange {
                 texture: Some(a),
+                normal: None,
                 indices: 0..6,
             },
             SpriteRange {
                 texture: Some(b),
+                normal: None,
                 indices: 6..12,
             },
             SpriteRange {
                 texture: Some(a),
+                normal: None,
                 indices: 12..18,
             },
         ]
@@ -368,10 +372,12 @@ fn push_alone_keeps_none_and_some_in_separate_ranges() {
         vec![
             SpriteRange {
                 texture: None,
+                normal: None,
                 indices: 0..6,
             },
             SpriteRange {
                 texture: Some(a),
+                normal: None,
                 indices: 6..12,
             },
         ]
@@ -418,10 +424,12 @@ fn draw_order_still_follows_sort_order() {
         vec![
             SpriteRange {
                 texture: Some(low),
+                normal: None,
                 indices: 0..6,
             },
             SpriteRange {
                 texture: Some(high),
+                normal: None,
                 indices: 6..12,
             },
         ],
@@ -443,6 +451,7 @@ fn from_world_builds_one_range_for_untextured_sprites() {
         batch.ranges,
         vec![SpriteRange {
             texture: None,
+            normal: None,
             indices: 0..12,
         }]
     );
@@ -485,4 +494,31 @@ fn a_batch_past_sixty_five_thousand_vertices_still_indexes_its_own_quads() {
         .indices
         .iter()
         .all(|&i| i < batch.vertices.len() as u32));
+}
+
+#[test]
+fn a_different_normal_map_splits_a_run_and_the_same_one_keeps_it() {
+    let texture = Handle::forge(0, 0);
+    let (bumps, other) = (Handle::forge(1, 0), Handle::forge(2, 0));
+    let with_normal = |normal| Sprite {
+        normal_handle: normal,
+        ..sprite_with_texture(Some(texture))
+    };
+    let mut batch = SpriteBatch::default();
+    for normal in [Some(bumps), Some(bumps), Some(other), None] {
+        batch.push(
+            Transform::default().matrix(),
+            &with_normal(normal),
+            Sheets::default(),
+        );
+    }
+    let runs: Vec<_> = batch
+        .ranges
+        .iter()
+        .map(|r| (r.normal, r.indices.clone()))
+        .collect();
+    assert_eq!(
+        runs,
+        vec![(Some(bumps), 0..12), (Some(other), 12..18), (None, 18..24)]
+    );
 }

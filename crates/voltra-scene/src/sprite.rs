@@ -106,6 +106,21 @@ pub struct Sprite {
     /// from stretching to a common square.
     #[serde(default)]
     pub pixels_per_unit: Option<f32>,
+    /// A normal map over the same texels as `texture` — the same frame,
+    /// region and flips — for lights with a
+    /// [`height`](crate::PointLight2D::height) to shade it by. Unity's
+    /// `_NormalMap` secondary texture, Godot's `CanvasTexture` normal.
+    ///
+    /// Tangent space in OpenGL's convention: red points along the image's
+    /// right, green along its up, blue out of it. Read as data, never
+    /// decoded from sRGB. `None` — the default, and not written — is a flat
+    /// sprite that lights shade by distance alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal_map: Option<AssetPath>,
+    /// The handle `normal_map` currently resolves to, if any. Never
+    /// serialised, as `texture_handle` is not.
+    #[serde(skip)]
+    pub normal_handle: Option<Handle<Texture>>,
 }
 
 impl Default for Sprite {
@@ -123,6 +138,8 @@ impl Default for Sprite {
             flip_x: false,
             flip_y: false,
             pixels_per_unit: None,
+            normal_map: None,
+            normal_handle: None,
         }
     }
 }
@@ -173,6 +190,31 @@ impl Sprite {
         }
     }
 
+    /// Sets or clears the normal map's path and refreshes its handle, as
+    /// [`set_texture`](Self::set_texture) does for the colour. The same
+    /// store: a normal map is a texture, bound through its linear view.
+    pub fn set_normal_map(
+        &mut self,
+        path: Option<AssetPath>,
+        textures: &mut Textures,
+        device: &voltra_render::wgpu::Device,
+        queue: &voltra_render::wgpu::Queue,
+    ) {
+        self.normal_handle = path.as_ref().map(|path| {
+            let handle = textures.load(device, queue, path);
+            if textures.is_broken(handle) {
+                // The store's own warning speaks of the colour checker; a
+                // normal map is not drawn as one.
+                log::warn!(
+                    "normal map {} did not load; the sprite is shaded flat until it does",
+                    path.as_str()
+                );
+            }
+            handle
+        });
+        self.normal_map = path;
+    }
+
     /// Sets or clears the atlas path and refreshes the runtime handle.
     ///
     /// No device, unlike [`set_texture`](Self::set_texture): a slicing is
@@ -204,128 +246,7 @@ pub fn draw_key(entity: Entity, layer_rank: i32, sort_order: i32) -> (i32, i32, 
 }
 
 #[cfg(test)]
-mod texture_tests {
-    use super::*;
-    use voltra_assets::AssetPath;
-
-    #[test]
-    fn default_sprite_has_no_texture() {
-        let sprite = Sprite::default();
-        assert!(sprite.texture.is_none());
-        assert!(sprite.texture_handle.is_none());
-    }
-
-    #[test]
-    fn texture_path_round_trips_through_ron_without_the_handle() {
-        // No handle is forged here: `Handle::new` is `pub(crate)` to
-        // `voltra-assets`, and a handle only ever comes from `Textures::load`.
-        // Setting just `texture` and checking `texture_handle` stays `None`
-        // through a round trip is the same claim without an API hole.
-        let sprite = Sprite {
-            texture: Some(AssetPath::new("sprites/hero.png").expect("valid")),
-            ..Default::default()
-        };
-
-        let text = ron::to_string(&sprite).expect("serialize");
-        assert!(
-            !text.contains("texture_handle"),
-            "handle leaked into RON: {text}"
-        );
-        let back: Sprite = ron::from_str(&text).expect("deserialize");
-        assert_eq!(
-            back.texture.as_ref().map(AssetPath::as_str),
-            Some("sprites/hero.png")
-        );
-        assert!(back.texture_handle.is_none(), "handle must not deserialize");
-    }
-
-    #[test]
-    fn old_ron_without_texture_field_still_loads() {
-        let text = "(color:(1.0,1.0,1.0,1.0),sort_order:0)";
-        let sprite: Sprite = ron::from_str(text).expect("old scene shape");
-        assert!(sprite.texture.is_none());
-        assert!(sprite.texture_handle.is_none());
-    }
-
-    #[test]
-    fn hostile_texture_path_is_rejected_on_deserialize() {
-        let hostile =
-            r#"(color:(1.0,1.0,1.0,1.0),sort_order:0,texture:Some(Path("../../etc/passwd")))"#;
-        assert!(ron::from_str::<Sprite>(hostile).is_err());
-    }
-}
+mod texture_tests;
 
 #[cfg(test)]
-mod atlas_tests {
-    use super::*;
-    use voltra_testkit::scratch_root;
-
-    #[test]
-    fn a_default_sprite_has_no_slicing_at_all() {
-        let sprite = Sprite::default();
-
-        assert!(sprite.atlas.is_none());
-        assert!(sprite.atlas_handle.is_none());
-        assert!(sprite.region.is_none());
-        assert_eq!(sprite.frame, 0);
-        assert!(!sprite.flip_x && !sprite.flip_y);
-        assert!(sprite.pixels_per_unit.is_none());
-    }
-
-    #[test]
-    fn a_scene_written_before_atlases_existed_still_loads() {
-        // The whole point of `#[serde(default)]` on every new field: a project
-        // on disk must open unchanged and draw exactly as it did.
-        let text = "(color:(1.0,1.0,1.0,1.0),sort_order:0)";
-
-        let sprite: Sprite = ron::from_str(text).expect("old scene shape");
-
-        assert_eq!(sprite, Sprite::default());
-    }
-
-    #[test]
-    fn the_slicing_round_trips_without_its_handle() {
-        let sprite = Sprite {
-            atlas: Some(AssetPath::new("sprites/coin.atlas.ron").expect("valid")),
-            frame: 3,
-            flip_x: true,
-            pixels_per_unit: Some(16.0),
-            region: Some(Frame::new(8, 0, 8, 16)),
-            ..Default::default()
-        };
-
-        let text = ron::to_string(&sprite).expect("serialize");
-        assert!(
-            !text.contains("atlas_handle"),
-            "handle leaked into RON: {text}"
-        );
-        let back: Sprite = ron::from_str(&text).expect("deserialize");
-        assert_eq!(back, sprite);
-        assert!(back.atlas_handle.is_none(), "handle must not deserialize");
-    }
-
-    #[test]
-    fn setting_an_atlas_resolves_a_handle_and_clearing_it_drops_both() {
-        let root = scratch_root();
-        std::fs::write(
-            root.join("coin.atlas.ron"),
-            "(version: 1, grid: Some((cell: (16, 16), columns: 4, rows: 1)))",
-        )
-        .expect("the fixture writes");
-        let mut atlases = Atlases::new(&root);
-        let mut sprite = Sprite::default();
-
-        sprite.set_atlas(
-            Some(AssetPath::new("coin.atlas.ron").expect("valid")),
-            &mut atlases,
-        );
-
-        let handle = sprite.atlas_handle.expect("a handle was resolved");
-        assert_eq!(atlases.get(handle).len(), 4);
-
-        sprite.set_atlas(None, &mut atlases);
-
-        assert!(sprite.atlas.is_none());
-        assert!(sprite.atlas_handle.is_none());
-    }
-}
+mod atlas_tests;

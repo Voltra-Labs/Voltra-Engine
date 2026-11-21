@@ -3,6 +3,10 @@
 use std::error::Error;
 use std::fmt;
 
+mod decode;
+
+pub use decode::{decode_png, DecodedImage};
+
 /// Why a texture could not be created.
 #[derive(Debug)]
 pub enum TextureError {
@@ -243,13 +247,35 @@ impl Texture {
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
     ) -> wgpu::BindGroup {
+        self.bind(device, layout, &self.view, "texture-bind-group")
+    }
+
+    /// Binds the [`raw_view`](Self::raw_view) and the sampler against
+    /// [`bind_group_layout`]: what a texture holding data rather than colour
+    /// — a normal map — is sampled through, so its bytes arrive as written
+    /// instead of decoded from sRGB.
+    pub fn create_raw_bind_group(
+        &self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+    ) -> wgpu::BindGroup {
+        self.bind(device, layout, &self.raw_view, "raw-texture-bind-group")
+    }
+
+    fn bind(
+        &self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        view: &wgpu::TextureView,
+        label: &str,
+    ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("texture-bind-group"),
+            label: Some(label),
             layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&self.view),
+                    resource: wgpu::BindingResource::TextureView(view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -290,57 +316,5 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
-/// A PNG's pixels, decoded and not yet uploaded: what can be made on any
-/// thread, since it needs no device.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecodedImage {
-    pub rgba: Vec<u8>,
-    pub width: u32,
-    pub height: u32,
-}
-
-/// Decodes a PNG to RGBA8. Pure CPU work — the inflate is most of a
-/// texture's load — so callers may run it off the thread that uploads.
-pub fn decode_png(bytes: &[u8]) -> Result<DecodedImage, TextureError> {
-    let image = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)
-        .map_err(TextureError::Decode)?;
-    let rgba = image.to_rgba8();
-    let (width, height) = rgba.dimensions();
-    Ok(DecodedImage {
-        rgba: rgba.into_raw(),
-        width,
-        height,
-    })
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn filter_maps_onto_wgpu() {
-        assert_eq!(
-            wgpu::FilterMode::from(Filter::Linear),
-            wgpu::FilterMode::Linear
-        );
-        assert_eq!(
-            wgpu::FilterMode::from(Filter::Nearest),
-            wgpu::FilterMode::Nearest
-        );
-        assert_eq!(Filter::default(), Filter::Linear);
-    }
-
-    #[test]
-    fn size_mismatch_message_names_both_sizes() {
-        let err = TextureError::SizeMismatch {
-            expected: 16,
-            actual: 12,
-            width: 2,
-            height: 2,
-        };
-        let text = err.to_string();
-        assert!(text.contains("12"), "{text}");
-        assert!(text.contains("16"), "{text}");
-        assert!(text.contains("2x2"), "{text}");
-    }
-}
+mod tests;

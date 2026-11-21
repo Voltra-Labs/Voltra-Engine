@@ -78,6 +78,7 @@ fn the_hud_lands_in_pixels_over_a_world_it_does_not_clear() {
             .iter()
             .map(|range| MeshDraw {
                 texture: &white,
+                normal: None,
                 indices: range.indices.clone(),
             })
             .collect()

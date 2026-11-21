@@ -35,6 +35,12 @@ pub(super) fn scene_draws<'a>(
         if let Some(range) = batch.ranges.get(index) {
             draws.push(SceneDraw::Mesh(MeshDraw {
                 texture: bind(range.texture),
+                // A normal map that would not load is drawn flat, not as
+                // the checker's colours read as normals.
+                normal: range
+                    .normal
+                    .filter(|&handle| !textures.is_broken(handle))
+                    .map(|handle| textures.raw_bind_group(handle)),
                 indices: range.indices.clone(),
             }));
         }

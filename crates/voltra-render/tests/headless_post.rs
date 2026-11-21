@@ -172,6 +172,7 @@ fn the_hud_drawn_after_the_grade_is_not_graded() {
     let hud_mesh = Mesh::indexed(&device, "hud", &hud, &[0, 1, 2, 0, 2, 3]);
     let draws = [MeshDraw {
         texture: &white,
+        normal: None,
         indices: 0..6,
     }];
 

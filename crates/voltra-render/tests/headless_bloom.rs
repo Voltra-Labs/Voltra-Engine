@@ -52,6 +52,7 @@ fn frame(post: PostSettings) -> Option<(Vec<Rgba>, usize)> {
         Some(&mesh),
         &[MeshDraw {
             texture: &white,
+            normal: None,
             indices: 0..6,
         }],
         wgpu::Color::BLACK,

@@ -9,6 +9,7 @@ use crate::graph::TexturePool;
 use crate::lights::{LightPass, Lighting};
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
+use crate::normals::NormalPass;
 use crate::particles::{GpuParticles, ParticleLook, ParticlePipelines, SimStep};
 use crate::pass::MeshDraw;
 use crate::post::PostPass;
@@ -17,6 +18,7 @@ use crate::texture::Texture;
 use crate::{pass, pipeline, texture};
 
 mod frame;
+mod normals;
 
 /// Drives one frame at a time on top of a [`GpuContext`].
 pub struct Renderer {
@@ -41,6 +43,11 @@ pub struct Renderer {
     bloom: BloomPass,
     /// Lights the drawn scene, when the frame is lit.
     lights: LightPass,
+    /// Draws the scene's normals, when a light shades normal maps.
+    normals: NormalPass,
+    /// Where the normals are drawn, sized to the scene; made the first frame
+    /// that needs it.
+    normal_target: Option<RenderTarget>,
     /// The render graph's per-frame textures, kept between frames.
     transients: TexturePool,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
@@ -83,6 +90,12 @@ impl Renderer {
         let post = PostPass::new(ctx.device(), ctx.config().format);
         let bloom = BloomPass::new(ctx.device());
         let lights = LightPass::new(ctx.device(), camera_binding.layout());
+        let normals = NormalPass::new(
+            ctx.device(),
+            ctx.queue(),
+            camera_binding.layout(),
+            &texture_layout,
+        );
         let particles = if ParticlePipelines::supported(ctx.downlevel()) {
             Some(ParticlePipelines::new(
                 ctx.device(),
@@ -112,6 +125,8 @@ impl Renderer {
             post,
             bloom,
             lights,
+            normals,
+            normal_target: None,
             transients: TexturePool::default(),
             particles,
             frame_target: None,

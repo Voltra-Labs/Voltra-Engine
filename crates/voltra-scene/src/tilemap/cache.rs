@@ -245,7 +245,7 @@ impl ChunkMesh {
         let mut start = first;
         for &(texture, quads) in &world.runs {
             let end = start + quads * crate::batch::QUAD_INDICES.len() as u32;
-            batch.extend_ranges(texture, start..end);
+            batch.extend_ranges(texture, None, start..end);
             start = end;
         }
     }

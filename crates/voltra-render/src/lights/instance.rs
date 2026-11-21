@@ -10,7 +10,7 @@ use super::PointLight;
 pub(super) struct LightInstance {
     /// centre.xy, radius, falloff
     place: [f32; 4],
-    /// colour × intensity, unused
+    /// colour × intensity, height for normal maps (`0`: ignores them)
     color: [f32; 4],
     /// strength, softness, shadow map row (`-1` unshadowed), unused
     shadow: [f32; 4],
@@ -49,7 +49,12 @@ impl PointLight {
                 self.radius,
                 self.falloff.clamp(0.05, 16.0),
             ],
-            color: [color[0], color[1], color[2], 0.0],
+            color: [
+                color[0],
+                color[1],
+                color[2],
+                self.normal_height().unwrap_or(0.0),
+            ],
             shadow,
             cone,
         })
@@ -72,6 +77,7 @@ mod tests {
             falloff: 2.0,
             shadow: None,
             cone: None,
+            height: None,
         }
     }
 
@@ -201,5 +207,22 @@ mod tests {
         };
         let (_, outer, inner) = needle.sanitized().expect("shines");
         assert!(inner <= 1.0 && outer < inner, "{outer} {inner}");
+    }
+
+    #[test]
+    fn a_light_with_a_height_carries_it_and_nonsense_is_none() {
+        assert_eq!(lamp().instance(None).expect("gives light").color[3], 0.0);
+        let raised = PointLight {
+            height: Some(1.5),
+            ..lamp()
+        };
+        assert_eq!(raised.instance(None).expect("gives light").color[3], 1.5);
+        for nonsense in [0.0, -1.0, f32::NAN] {
+            let light = PointLight {
+                height: Some(nonsense),
+                ..lamp()
+            };
+            assert_eq!(light.instance(None).expect("gives light").color[3], 0.0);
+        }
     }
 }

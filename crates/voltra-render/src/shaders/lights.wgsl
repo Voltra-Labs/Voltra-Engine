@@ -23,10 +23,16 @@ var<uniform> camera: Camera;
 @group(1) @binding(0)
 var shadow_map: texture_2d<f32>;
 
+// The scene's normals (`sprite_normals.wgsl`): `n * 0.5 + 0.5`, alpha 1
+// where something was drawn. A 1x1 zero stand-in when they were not, which
+// reads as facing the screen everywhere.
+@group(2) @binding(0)
+var scene_normals: texture_2d<f32>;
+
 struct LightIn {
     // centre.xy, radius, falloff
     @location(0) place: vec4<f32>,
-    // colour × intensity, unused
+    // colour × intensity, height for normal maps (0: ignores them)
     @location(1) color: vec4<f32>,
     // strength, softness, shadow map row (-1 unshadowed), unused
     @location(2) shadow: vec4<f32>,
@@ -43,6 +49,8 @@ struct LightOut {
     @location(2) falloff: f32,
     @location(3) @interpolate(flat) shadow: vec3<f32>,
     @location(4) @interpolate(flat) cone: vec4<f32>,
+    // radius, height for normal maps (0: ignores them)
+    @location(5) @interpolate(flat) reach: vec2<f32>,
 }
 
 @vertex
@@ -65,6 +73,7 @@ fn vs_light(@builtin(vertex_index) index: u32, light: LightIn) -> LightOut {
     out.falloff = light.place.w;
     out.shadow = light.shadow.xyz;
     out.cone = light.cone;
+    out.reach = vec2<f32>(light.place.z, light.color.w);
     return out;
 }
 
@@ -73,12 +82,32 @@ fn fs_light(in: LightOut) -> @location(0) vec4<f32> {
     // Full at the centre, nothing at the radius; the falloff bends the
     // curve between: 1 is a straight ramp, 2 the default soft one.
     let edge = clamp(1.0 - length(in.local), 0.0, 1.0);
-    let strength = pow(edge, in.falloff) * within_cone(in.local, in.cone);
+    let strength = pow(edge, in.falloff) * within_cone(in.local, in.cone)
+        * facing(in.position.xy, in.local, in.reach);
     var lit = 1.0;
     if in.shadow.z >= 0.0 {
         lit = visible(in.local, in.shadow);
     }
     return vec4<f32>(in.color * strength * lit, 1.0);
+}
+
+// How squarely the surface at a pixel faces the light: the cosine between
+// its normal and the way to a light `reach.y` above the scene, `reach.x`
+// being the radius that turns `offset` (in radii) into world units. A pixel
+// nothing was drawn to faces the screen, (0, 0, 1), as a plain sprite's
+// stand-in does — Godot's and Unity's rule — so a normal-mapped sprite and a
+// plain one beside it agree on the flat parts. 1 for a light with no height, which ignores all of this.
+fn facing(pixel: vec2<f32>, offset: vec2<f32>, reach: vec2<f32>) -> f32 {
+    if reach.y <= 0.0 {
+        return 1.0;
+    }
+    let texel = textureLoad(scene_normals, vec2<i32>(pixel), 0);
+    var normal = vec3<f32>(0.0, 0.0, 1.0);
+    if texel.a >= 0.5 {
+        normal = normalize(texel.rgb * 2.0 - 1.0);
+    }
+    let to_light = normalize(vec3<f32>(-offset * reach.x, reach.y));
+    return max(dot(normal, to_light), 0.0);
 }
 
 // 1 inside a spot light's cone, 0 outside, fading between its edges; 1

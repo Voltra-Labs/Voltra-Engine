@@ -53,8 +53,12 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("frame-encoder"),
         });
+        {
+            let target = self.frame_target.as_ref().expect("made just above");
+            self.record_scene(&mut encoder, target.view(), mesh, draws);
+        }
+        let normals = self.record_normals(&mut encoder, (width, height), mesh, draws);
         let target = self.frame_target.as_ref().expect("made just above");
-        self.record_scene(&mut encoder, target.view(), mesh, draws);
         record_post(
             &self.ctx,
             Chain {
@@ -63,6 +67,12 @@ impl Renderer {
                 grade: &self.post,
                 camera: self.camera_binding.bind_group(),
                 lighting: &self.lighting,
+                // A field, not a method: the pool below is borrowed mutably.
+                normals: self
+                    .normal_target
+                    .as_ref()
+                    .filter(|_| normals)
+                    .map(RenderTarget::view),
             },
             &mut self.transients,
             &mut encoder,
@@ -100,6 +110,8 @@ impl Renderer {
                 });
 
         self.record_scene(&mut encoder, target.view(), mesh, draws);
+        let normals =
+            self.record_normals(&mut encoder, (target.width(), target.height()), mesh, draws);
         record_post(
             &self.ctx,
             Chain {
@@ -108,6 +120,12 @@ impl Renderer {
                 grade: &self.post,
                 camera: self.camera_binding.bind_group(),
                 lighting: &self.lighting,
+                // A field, not a method: the pool below is borrowed mutably.
+                normals: self
+                    .normal_target
+                    .as_ref()
+                    .filter(|_| normals)
+                    .map(RenderTarget::view),
             },
             &mut self.transients,
             &mut encoder,
@@ -184,6 +202,8 @@ struct Chain<'a> {
     /// The world camera, which the lights are drawn through.
     camera: &'a wgpu::BindGroup,
     lighting: &'a Lighting,
+    /// The scene's normals, when they were drawn this frame.
+    normals: Option<&'a wgpu::TextureView>,
 }
 
 /// The frame's render graph: the scene lit when the frame is, bloom over
@@ -216,6 +236,7 @@ fn record_post(
             width,
             height,
             chain.lighting,
+            chain.normals,
         )
         .unwrap_or(drawn);
     let glow = chain

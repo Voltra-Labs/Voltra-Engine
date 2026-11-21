@@ -66,6 +66,10 @@ pub fn draw_mesh(
 /// caller's job.
 pub struct MeshDraw<'a> {
     pub texture: &'a wgpu::BindGroup,
+    /// The range's normal map, bound through its linear view, for the
+    /// normals pass (see [`NormalPass`](crate::normals::NormalPass)); `None`
+    /// is flat. The colour pass ignores it.
+    pub normal: Option<&'a wgpu::BindGroup>,
     pub indices: Range<u32>,
 }
 
