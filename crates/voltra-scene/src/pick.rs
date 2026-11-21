@@ -59,7 +59,13 @@ pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
             !crate::ui::is_ui(world, *entity)
                 && contains(transforms.matrix(*entity), point, sprite, sheets)
         })
-        .max_by_key(|(entity, _transform, sprite)| draw_key(*entity, sprite.sort_order))
+        .max_by_key(|(entity, _transform, sprite)| {
+            draw_key(
+                *entity,
+                sheets.rank(&sprite.sorting_layer),
+                sprite.sort_order,
+            )
+        })
         .map(|(entity, _transform, _sprite)| entity)
 }
 
@@ -70,12 +76,14 @@ pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
 /// `(sort_order, entity index)`: what is picked is what is visible there.
 pub fn entity_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entity> {
     let sprite = sprite_at(world, point, sheets).map(|entity| {
-        let order = world.get::<Sprite>(entity).map_or(0, |s| s.sort_order);
-        (entity, draw_key(entity, order))
+        let (rank, order) = world
+            .get::<Sprite>(entity)
+            .map_or((0, 0), |s| (sheets.rank(&s.sorting_layer), s.sort_order));
+        (entity, draw_key(entity, rank, order))
     });
     [
         sprite,
-        layer_at(world, point, sheets.camera),
+        layer_at(world, point, sheets),
         text_at(world, point, sheets),
     ]
     .into_iter()
@@ -412,6 +420,7 @@ mod frame_tests {
             camera: voltra_render::glam::Vec2::ZERO,
             visible: None,
             time: 0.0,
+            layers: None,
         };
 
         assert_eq!(

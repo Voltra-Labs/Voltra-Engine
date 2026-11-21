@@ -104,6 +104,8 @@ pub struct App {
     /// tiles are drawn by, so water moves in the editor too, as in Godot.
     elapsed: f64,
     input: Input,
+    /// The project's sorting layers, back to front.
+    sorting_layers: voltra_scene::SortingLayers,
     /// The game's buttons: hover, press, focus and this frame's clicks.
     ui_buttons: voltra_scene::UiButtons,
     /// The game's save slots, in its per-user folder.
@@ -204,6 +206,17 @@ impl App {
     /// the name.
     pub fn with_game_name(mut self, name: &str) -> Self {
         self.saves = crate::saves::Saves::for_game(name);
+        self
+    }
+
+    /// Sorts drawables by `names`, back to front, instead of Background,
+    /// Default, Foreground. `Default` is kept — every drawable naming no
+    /// layer is on it.
+    pub fn with_sorting_layers<S: Into<String>>(
+        mut self,
+        names: impl IntoIterator<Item = S>,
+    ) -> Self {
+        self.sorting_layers = voltra_scene::SortingLayers::new(names);
         self
     }
 

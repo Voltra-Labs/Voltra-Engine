@@ -241,6 +241,7 @@ mod tests {
                 camera: voltra_render::glam::Vec2::ZERO,
                 visible: None,
                 time: 0.0,
+                layers: None,
             },
         );
 
@@ -265,6 +266,7 @@ mod tests {
                 camera: voltra_render::glam::Vec2::ZERO,
                 visible: None,
                 time: 0.0,
+                layers: None,
             },
         );
 
@@ -283,6 +285,7 @@ mod tests {
             camera: voltra_render::glam::Vec2::ZERO,
             visible: None,
             time: 0.0,
+            layers: None,
         };
         let upright = quad(&sprite, sheets);
 
@@ -321,6 +324,7 @@ mod tests {
                 camera: voltra_render::glam::Vec2::ZERO,
                 visible: None,
                 time: 0.0,
+                layers: None,
             },
         );
 
@@ -346,6 +350,7 @@ mod tests {
                 camera: voltra_render::glam::Vec2::ZERO,
                 visible: None,
                 time: 0.0,
+                layers: None,
             },
         );
 
@@ -368,6 +373,7 @@ mod tests {
                 camera: voltra_render::glam::Vec2::ZERO,
                 visible: None,
                 time: 0.0,
+                layers: None,
             },
         );
 
@@ -397,6 +403,7 @@ mod tests {
                 camera: voltra_render::glam::Vec2::ZERO,
                 visible: None,
                 time: 0.0,
+                layers: None,
             },
         );
 

@@ -16,7 +16,11 @@ use crate::transform::Transform;
 
 /// The topmost text whose box contains `point`, in world space, and the key
 /// it draws at. Nothing without fonts in `sheets`.
-pub fn text_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<(Entity, (i32, u32))> {
+pub fn text_at(
+    world: &World,
+    point: Vec2,
+    sheets: Sheets<'_>,
+) -> Option<(Entity, (i32, i32, u32))> {
     let fonts = sheets.fonts?;
     let transforms = WorldTransforms::seen_from(world, sheets.camera);
     world
@@ -33,6 +37,9 @@ pub fn text_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<(Entity
             let local = matrix.inverse().transform_point2(point);
             shape::bounds(text, fonts).is_some_and(|bounds| bounds.contains(local))
         })
-        .map(|(entity, _, text)| (entity, draw_key(entity, text.sort_order)))
+        .map(|(entity, _, text)| {
+            let rank = sheets.rank(&text.sorting_layer);
+            (entity, draw_key(entity, rank, text.sort_order))
+        })
         .max_by_key(|(_, key)| *key)
 }

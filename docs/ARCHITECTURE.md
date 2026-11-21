@@ -2874,6 +2874,31 @@ grows up, as the layer does).
   The inspector switches a terrain to 47 tiles and labels each frame with its
   sides and corners.
 
+### Sorting layers are named bands above `sort_order`
+
+Stage 41. Unity's sorting layers: an ordered list of names, back to front
+(`Background`, `Default`, `Foreground` unless `App::with_sorting_layers`
+says otherwise), and a `sorting_layer: String` on `Sprite`, `Tilemap`,
+`Text` and `ParticleEmitter`. The draw key is `(layer rank, sort_order,
+entity index)` — `draw_key` takes the rank now — so `sort_order` orders a
+drawable only among its own layer, and moving a whole band forward is one
+edit to the list rather than to every sprite in it.
+
+- **Compatible on disk:** the field defaults to `Default` and is not written
+  when it is, so every scene already saved reads and draws as before.
+- **One answer for draw and pick:** the list rides in `Sheets::with_layers`
+  (the draw path and `UiFrame::sheets` both pass the App's), and
+  `Sheets::rank` falls back to the default list when none is given, as tests
+  and headless callers do. An unknown name sorts as `Default` and is warned
+  about once. `Default` is always in the list: everything naming no layer is
+  on it.
+- **Project-wide, in code:** there is no project settings file to keep the
+  list in (the build manifest describes a build, not the editor), so a game
+  sets it with the builder; the editor shows the default list. A file for it
+  is the obvious next step if a project's list grows.
+- The screen-space UI keeps its own order (`sort_order`, depth, index): it is
+  drawn in its own pass, above the world, whatever the world's layers.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

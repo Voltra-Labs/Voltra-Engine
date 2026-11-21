@@ -216,6 +216,7 @@ mod in_the_world {
             camera: voltra_render::glam::Vec2::ZERO,
             visible: None,
             time: 0.0,
+            layers: None,
         };
         let batch = SpriteBatch::from_world(&world, sheets);
 

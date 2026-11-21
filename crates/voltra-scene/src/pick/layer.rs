@@ -18,12 +18,19 @@ use crate::tilemap::Tilemap;
 /// point.
 ///
 /// `camera` is the view's position, for a layer under a [`Parallax`](crate::Parallax).
-pub fn layer_at(world: &World, point: Vec2, camera: Vec2) -> Option<(Entity, (i32, u32))> {
-    let transforms = WorldTransforms::seen_from(world, camera);
+pub fn layer_at(
+    world: &World,
+    point: Vec2,
+    sheets: crate::sprite::sheets::Sheets<'_>,
+) -> Option<(Entity, (i32, i32, u32))> {
+    let transforms = WorldTransforms::seen_from(world, sheets.camera);
     world
         .query::<Tilemap>()
         .filter(|(entity, map)| has_tile_at(transforms.matrix(*entity), point, map))
-        .map(|(entity, map)| (entity, draw_key(entity, map.sort_order)))
+        .map(|(entity, map)| {
+            let rank = sheets.rank(&map.sorting_layer);
+            (entity, draw_key(entity, rank, map.sort_order))
+        })
         .max_by_key(|(_, key)| *key)
 }
 
@@ -58,7 +65,7 @@ mod tests {
     }
 
     fn hit(world: &World, point: Vec2) -> Option<Entity> {
-        layer_at(world, point, Vec2::ZERO).map(|(entity, _)| entity)
+        layer_at(world, point, crate::sprite::sheets::Sheets::default()).map(|(entity, _)| entity)
     }
 
     #[test]

@@ -79,6 +79,13 @@ pub struct Tilemap {
     /// Where the layer draws among sprites and other layers. The same key a
     /// sprite sorts by, so a layer goes in front of or behind them by number.
     pub sort_order: i32,
+    /// The named layer it draws on, before `sort_order` is consulted. See
+    /// [`SortingLayers`](crate::sorting::SortingLayers).
+    #[serde(
+        default = "crate::sorting::default_layer",
+        skip_serializing_if = "crate::sorting::is_default_layer"
+    )]
+    pub sorting_layer: String,
     /// Whether every tile of this layer is solid.
     ///
     /// Per layer rather than per tile, as Unity's `TilemapCollider2D` is: a
@@ -114,6 +121,7 @@ impl Default for Tilemap {
             tile_size: Vec2::ONE,
             color: [1.0, 1.0, 1.0, 1.0],
             sort_order: 0,
+            sorting_layer: crate::sorting::default_layer(),
             collision: false,
             texture: None,
             texture_handle: None,
