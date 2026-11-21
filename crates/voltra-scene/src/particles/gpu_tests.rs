@@ -189,6 +189,7 @@ fn the_batch_draws_a_gpu_emitter_between_the_sprites_around_it() {
     sprite(&mut world, -1);
     sprite(&mut world, 1);
     let e = gpu_emitter(&mut world, ParticleEmitter::default());
+    emitter(&mut world, e).burst(4);
     advance(&mut world, FRAME, true);
 
     let batch = SpriteBatch::from_world(&world, Sheets::default());
@@ -213,4 +214,69 @@ fn a_gpu_setting_is_written_and_the_cpu_one_is_not() {
     let text = ron::to_string(&gpu).expect("writes");
     let back: ParticleEmitter = ron::from_str(&text).expect("reads");
     assert_eq!(back.simulation, Simulation::Gpu);
+}
+
+#[test]
+fn an_emitter_with_nothing_alive_or_nothing_in_view_is_not_drawn() {
+    let mut world = World::new();
+    let e = gpu_emitter(
+        &mut world,
+        ParticleEmitter {
+            emitting: false,
+            speed: (1.0, 1.0),
+            lifetime: (1.0, 1.0),
+            acceleration: Vec2::ZERO,
+            size: (0.2, 0.2),
+            ..ParticleEmitter::default()
+        },
+    );
+    advance(&mut world, FRAME, true);
+    let all = Sheets::default();
+    assert!(
+        SpriteBatch::from_world(&world, all).gpu_emitters.is_empty(),
+        "none born yet"
+    );
+
+    emitter(&mut world, e).burst(8);
+    advance(&mut world, FRAME, true);
+    assert_eq!(SpriteBatch::from_world(&world, all).gpu_emitters.len(), 1);
+
+    // Born at (3, 4), reaching 1.1 at most: a view beside it but clear of
+    // that reach does not draw it, one overlapping the reach does.
+    let clear = all.visible_in(Vec2::new(5.0, 3.0), Vec2::new(8.0, 5.0));
+    assert!(SpriteBatch::from_world(&world, clear)
+        .gpu_emitters
+        .is_empty());
+    let edge = all.visible_in(Vec2::new(4.0, 3.0), Vec2::new(8.0, 5.0));
+    assert_eq!(SpriteBatch::from_world(&world, edge).gpu_emitters.len(), 1);
+
+    // Long dead: nothing to draw anywhere.
+    for _ in 0..80 {
+        advance(&mut world, FRAME, true);
+    }
+    assert!(SpriteBatch::from_world(&world, all).gpu_emitters.is_empty());
+}
+
+#[test]
+fn world_space_bounds_stay_where_the_particles_were_born() {
+    let mut world = World::new();
+    let e = gpu_emitter(
+        &mut world,
+        ParticleEmitter {
+            emitting: false,
+            speed: (0.0, 0.0),
+            acceleration: Vec2::ZERO,
+            size: (1.0, 1.0),
+            lifetime: (5.0, 5.0),
+            ..ParticleEmitter::default()
+        },
+    );
+    emitter(&mut world, e).burst(1);
+    advance(&mut world, FRAME, true);
+    // The emitter flies off; its sparks stay behind at (3, 4).
+    world.insert(e, Transform::from_translation(Vec2::new(100.0, 0.0)));
+    advance(&mut world, FRAME, true);
+    let matrix = Transform::from_translation(Vec2::new(100.0, 0.0)).matrix();
+    let (min, max) = emitter(&mut world, e).gpu_bounds(matrix).expect("alive");
+    assert!(min.x <= 3.0 && max.x >= 3.0 && max.x < 10.0, "{min} {max}");
 }
