@@ -92,7 +92,7 @@ fn at(pixels: &[Rgba], x: u32, y: u32) -> Rgba {
 fn dim() -> Lighting {
     Lighting {
         ambient: Some([0.25; 3]),
-        lights: Vec::new(),
+        ..Lighting::default()
     }
 }
 
@@ -104,6 +104,7 @@ fn a_lamp_lights_its_disc_and_the_ambient_lights_the_rest() {
         intensity: 1.0,
         radius: 0.25,
         falloff: 1.0,
+        shadow: None,
     };
     let Some((pixels, pool)) = frame(&Lighting {
         lights: vec![lamp],
@@ -142,6 +143,7 @@ fn a_light_that_gives_nothing_leaves_the_ambient() {
         intensity: 1.0,
         radius: 0.0,
         falloff: 2.0,
+        shadow: None,
     };
     let Some((pixels, _)) = frame(&Lighting {
         lights: vec![dark],

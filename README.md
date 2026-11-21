@@ -279,6 +279,7 @@ privileged and plain `cargo build` covers everything.
 | 50 | GPU particle emitters culled by a conservative bound | done |
 | 51 | Particle collisions against the scene's colliders, CPU and GPU | done |
 | 52 | 2D lights: point lights and an ambient, a light map in the render graph | done |
+| 53 | 2D shadows: casters from colliders or polygons, a polar shadow map per light | done |
 
 ## Contributing
 

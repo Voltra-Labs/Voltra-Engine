@@ -5,6 +5,10 @@
 // cleared to the ambient colour. Group 0 must match `CameraBinding`.
 // `lights_composite.wgsl` multiplies the scene by the map.
 //
+// A shadowed light keeps its light only where the pixel is nearer than the
+// nearest occluder its way, read from its four rows of the shadow map
+// (`light_shadows.wgsl`); `quarter` must match the one there.
+//
 // Everything is linear light. Must match `lights::LightInstance`.
 
 struct Camera {
@@ -14,11 +18,18 @@ struct Camera {
 @group(0) @binding(0)
 var<uniform> camera: Camera;
 
+// Distance to the nearest occluder, over the radius, per direction: four
+// rows per shadowed light. A 1×1 stand-in when no light is shadowed.
+@group(1) @binding(0)
+var shadow_map: texture_2d<f32>;
+
 struct LightIn {
     // centre.xy, radius, falloff
     @location(0) place: vec4<f32>,
     // colour × intensity, unused
     @location(1) color: vec4<f32>,
+    // strength, softness, shadow map row (-1 unshadowed), unused
+    @location(2) shadow: vec4<f32>,
 }
 
 struct LightOut {
@@ -27,6 +38,7 @@ struct LightOut {
     @location(0) local: vec2<f32>,
     @location(1) color: vec3<f32>,
     @location(2) falloff: f32,
+    @location(3) @interpolate(flat) shadow: vec3<f32>,
 }
 
 @vertex
@@ -47,6 +59,7 @@ fn vs_light(@builtin(vertex_index) index: u32, light: LightIn) -> LightOut {
     out.local = corner;
     out.color = light.color.rgb;
     out.falloff = light.place.w;
+    out.shadow = light.shadow.xyz;
     return out;
 }
 
@@ -56,5 +69,70 @@ fn fs_light(in: LightOut) -> @location(0) vec4<f32> {
     // curve between: 1 is a straight ramp, 2 the default soft one.
     let edge = clamp(1.0 - length(in.local), 0.0, 1.0);
     let strength = pow(edge, in.falloff);
-    return vec4<f32>(in.color * strength, 1.0);
+    var lit = 1.0;
+    if in.shadow.z >= 0.0 {
+        lit = visible(in.local, in.shadow);
+    }
+    return vec4<f32>(in.color * strength * lit, 1.0);
+}
+
+// Slack on the stored distance so an edge does not shadow itself: a
+// fraction of it, since a half float's rounding is a fraction of the value
+// (two of its steps at least), plus a floor for the edges at the light.
+const BIAS_RELATIVE: f32 = 1.0 / 512.0;
+const BIAS_FLOOR: f32 = 1e-5;
+
+// Taps either side of the direction, for a soft edge. With
+// `MAX_SHADOW_SOFTNESS` (0.1 rad) they are a degree apart at most.
+const TAPS: i32 = 6;
+
+// `offset` turned so that quarter `q`'s direction is ahead: x across the
+// quarter, y ahead. Quarter 0 looks right (+x), 1 up, 2 left, 3 down.
+fn quarter(offset: vec2<f32>, q: u32) -> vec2<f32> {
+    switch q {
+        case 0u: { return vec2<f32>(offset.y, offset.x); }
+        case 1u: { return vec2<f32>(-offset.x, offset.y); }
+        case 2u: { return vec2<f32>(-offset.y, -offset.x); }
+        default: { return vec2<f32>(offset.x, -offset.y); }
+    }
+}
+
+// The quarter `direction` falls in: the one whose axis is nearest it.
+fn quarter_of(direction: vec2<f32>) -> u32 {
+    if abs(direction.x) >= abs(direction.y) {
+        return select(2u, 0u, direction.x >= 0.0);
+    }
+    return select(3u, 1u, direction.y >= 0.0);
+}
+
+// How much of the light reaches `offset` (from the light, in radii): one
+// minus the strength where an occluder is nearer the light that way,
+// averaged over taps turned up to `softness` radians either side. Each tap
+// finds its own quarter, so a soft edge crosses the seam between two rows
+// rather than stopping at it.
+fn visible(offset: vec2<f32>, shadow: vec3<f32>) -> f32 {
+    let distance = length(offset);
+    if distance <= 0.0 {
+        // The light's own centre: nothing can be in front of it.
+        return 1.0;
+    }
+    let width = f32(textureDimensions(shadow_map).x);
+    let last = i32(width) - 1;
+    let light_row = i32(shadow.z) * 4;
+    var clear = 0.0;
+    for (var i = -TAPS; i <= TAPS; i++) {
+        let turn = shadow.y * f32(i) / f32(TAPS);
+        let c = cos(turn);
+        let s = sin(turn);
+        let direction = vec2<f32>(offset.x * c - offset.y * s, offset.x * s + offset.y * c);
+        let q = quarter_of(direction);
+        let seen = quarter(direction, q);
+        let across = seen.x / seen.y;
+        let x = clamp(i32(floor((across * 0.5 + 0.5) * width)), 0, last);
+        let nearest = textureLoad(shadow_map, vec2<i32>(x, light_row + i32(q)), 0).r;
+        let slack = nearest * BIAS_RELATIVE + BIAS_FLOOR;
+        clear += select(0.0, 1.0, distance <= nearest + slack);
+    }
+    let fraction = clear / f32(2 * TAPS + 1);
+    return 1.0 - shadow.x * (1.0 - fraction);
 }
