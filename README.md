@@ -277,6 +277,7 @@ privileged and plain `cargo build` covers everything.
 | 48 | Dense `WorldTransforms`; the parallel batch pre-pass measured and removed | done |
 | 49 | Scene textures decoded across the job pool | done |
 | 50 | GPU particle emitters culled by a conservative bound | done |
+| 51 | Particle collisions against the scene's colliders, CPU and GPU | done |
 
 ## Contributing
 

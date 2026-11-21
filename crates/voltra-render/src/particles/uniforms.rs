@@ -2,6 +2,8 @@
 
 use glam::{Mat3, Vec2};
 
+use super::colliders::ParticleResponse;
+
 /// One step of one emitter: how long it lasts, which slots are born in it,
 /// and what a newborn is drawn from.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -26,6 +28,12 @@ pub struct SimStep {
     pub speed: (f32, f32),
     pub lifetime: (f32, f32),
     pub acceleration: Vec2,
+    /// Takes a particle's position and velocity into the world, where the
+    /// colliders are: the identity for a world-space emitter, the emitter's
+    /// world matrix for a local-space one.
+    pub to_world: Mat3,
+    /// What a particle does on hitting one of the ring's colliders.
+    pub response: ParticleResponse,
 }
 
 impl Default for SimStep {
@@ -43,6 +51,8 @@ impl Default for SimStep {
             speed: (0.0, 0.0),
             lifetime: (0.0, 0.0),
             acceleration: Vec2::ZERO,
+            to_world: Mat3::IDENTITY,
+            response: ParticleResponse::default(),
         }
     }
 }
@@ -79,18 +89,39 @@ pub(super) struct SimUniform {
     ranges: [f32; 4],
     accel_dir: [f32; 4],
     spawn: [u32; 4],
+    /// to_world's x axis .xy and y axis .zw, then its translation .xy; the
+    /// inverse the same way.
+    to_world: [f32; 4],
+    to_world_t: [f32; 4],
+    from_world: [f32; 4],
+    from_world_t: [f32; 4],
+    /// bounce, friction, lifetime loss, unused
+    response: [f32; 4],
+    /// colliders, unused ×3
+    colliders: [u32; 4],
 }
 
 impl SimUniform {
     /// Nonsense in, nothing out: a non-finite value is zero (a NaN speed
     /// would put a particle nowhere, forever), a negative step does not run
-    /// the clock backwards, and no more are born than the ring holds.
-    pub(super) fn new(step: &SimStep, capacity: u32) -> Self {
+    /// the clock backwards, and no more are born than the ring holds. A
+    /// `to_world` that cannot be undone — scaled to nothing — tests none of
+    /// the `colliders`: there is no way back from the world to the particle.
+    pub(super) fn new(step: &SimStep, capacity: u32, colliders: u32) -> Self {
         let f = |v: f32| if v.is_finite() { v } else { 0.0 };
         let v = |v: Vec2| if v.is_finite() { v } else { Vec2::ZERO };
         let origin = v(step.origin);
         let [x, y] = step.basis.map(v);
         let acceleration = v(step.acceleration);
+        let invertible = step.to_world.is_finite() && step.to_world.determinant().abs() > 1e-12;
+        let (to_world, from_world, colliders) = if invertible {
+            (step.to_world, step.to_world.inverse(), colliders)
+        } else {
+            (Mat3::IDENTITY, Mat3::IDENTITY, 0)
+        };
+        let axes = |m: Mat3| [m.x_axis.x, m.x_axis.y, m.y_axis.x, m.y_axis.y];
+        let translation = |m: Mat3| [m.z_axis.x, m.z_axis.y, 0.0, 0.0];
+        let response = step.response.clamped();
         Self {
             origin_dt: [origin.x, origin.y, f(step.dt).max(0.0), f(step.spread)],
             basis: [x.x, x.y, y.x, y.y],
@@ -107,6 +138,17 @@ impl SimUniform {
                 capacity,
                 step.seed,
             ],
+            to_world: axes(to_world),
+            to_world_t: translation(to_world),
+            from_world: axes(from_world),
+            from_world_t: translation(from_world),
+            response: [
+                response.bounce,
+                response.friction,
+                response.lifetime_loss,
+                0.0,
+            ],
+            colliders: [colliders, 0, 0, 0],
         }
     }
 }
@@ -157,7 +199,7 @@ mod tests {
             origin: Vec2::new(f32::INFINITY, 0.0),
             ..SimStep::default()
         };
-        let u = SimUniform::new(&step, 8);
+        let u = SimUniform::new(&step, 8, 0);
         assert_eq!(u.origin_dt[..3], [0.0, 0.0, 0.0]);
         assert_eq!(u.ranges[0], 0.0);
         assert_eq!(u.spawn[..3], [2, 8, 8], "wrapped and capped to the ring");
@@ -165,8 +207,24 @@ mod tests {
 
     #[test]
     fn an_empty_ring_does_not_divide_by_zero() {
-        let u = SimUniform::new(&SimStep::default(), 0);
+        let u = SimUniform::new(&SimStep::default(), 0, 0);
         assert_eq!(u.spawn[..3], [0, 0, 0]);
+    }
+
+    #[test]
+    fn a_space_scaled_to_nothing_tests_no_collider() {
+        let flat = SimStep {
+            to_world: Mat3::from_scale(Vec2::new(1.0, 0.0)),
+            ..SimStep::default()
+        };
+        assert_eq!(SimUniform::new(&flat, 8, 3).colliders[0], 0);
+        let moved = SimStep {
+            to_world: Mat3::from_translation(Vec2::new(2.0, 0.0)),
+            ..SimStep::default()
+        };
+        let u = SimUniform::new(&moved, 8, 3);
+        assert_eq!(u.colliders[0], 3);
+        assert_eq!(u.from_world_t[0], -2.0, "the inverse goes back");
     }
 
     #[test]

@@ -13,10 +13,12 @@
 //! particle may still be alive, so nothing visible is overwritten.
 
 mod buffer;
+mod colliders;
 mod pipelines;
 mod uniforms;
 
 pub use buffer::GpuParticles;
+pub use colliders::{ParticleCollider, ParticleResponse};
 pub use pipelines::ParticlePipelines;
 pub use uniforms::{ParticleLook, SimStep};
 

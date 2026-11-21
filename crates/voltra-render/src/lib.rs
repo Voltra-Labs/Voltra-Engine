@@ -27,7 +27,9 @@ pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
-pub use particles::{GpuParticles, ParticleLook, ParticlePipelines, SimStep};
+pub use particles::{
+    GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse, SimStep,
+};
 pub use pass::MeshDraw;
 pub use post::{PostPass, PostSettings};
 pub use renderer::{Layer, Renderer};

@@ -7,8 +7,11 @@
 //! reaches for first: a continuous rate, bursts, spread, gravity-like
 //! acceleration, and size and colour from birth to death.
 
+mod collide;
+pub mod collision;
 pub mod gpu;
 pub mod mesh;
+pub mod obstacles;
 pub mod rng;
 pub mod simulate;
 
@@ -16,6 +19,8 @@ use voltra_assets::{AssetPath, Handle, Textures};
 use voltra_render::glam::Vec2;
 use voltra_render::Texture;
 
+pub use collision::ParticleCollision;
+pub use obstacles::Obstacles;
 pub use simulate::advance;
 
 use rng::Rng;
@@ -75,6 +80,10 @@ pub struct ParticleEmitter {
     /// Where the particles are stepped. The same parameters either way.
     #[serde(default, skip_serializing_if = "Simulation::is_cpu")]
     pub simulation: Simulation,
+    /// Whether particles hit the world's colliders, and how they answer.
+    /// `None` passes through everything. The same either simulation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub collision: Option<ParticleCollision>,
     /// What is alive now. Never saved: a scene file says what an emitter
     /// is, not which sparks were in the air.
     ///
@@ -107,6 +116,7 @@ impl Default for ParticleEmitter {
             world_space: true,
             one_shot: false,
             simulation: Simulation::Cpu,
+            collision: None,
             state: Particles::default(),
         }
     }
@@ -159,6 +169,13 @@ impl ParticleEmitter {
     /// `None` when nothing was stepped, or on the CPU.
     pub fn take_gpu_step(&mut self) -> Option<voltra_render::SimStep> {
         self.state.gpu.take()
+    }
+
+    /// The world's shapes the GPU particles may reach, as of the last step:
+    /// what the renderer's ring tests them against. Empty without
+    /// [`collision`](Self::collision), or on the CPU.
+    pub fn gpu_colliders(&self) -> &[voltra_render::ParticleCollider] {
+        self.state.gpu.colliders()
     }
 
     /// How the GPU particles are drawn, placed by the emitter's world
@@ -234,6 +251,8 @@ pub struct Particles {
     pub(crate) gpu: gpu::GpuPlan,
 }
 
+#[cfg(test)]
+mod collision_tests;
 #[cfg(test)]
 mod gpu_tests;
 #[cfg(test)]

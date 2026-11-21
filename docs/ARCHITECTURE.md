@@ -3079,6 +3079,41 @@ Pinned by `headless_bloom.rs` (a white square glows past its edge, the
 corners stay dark, nothing under the threshold glows, off makes no
 texture) and the graph's own GPU tests.
 
+### Particles hit the scene's colliders, swept, the same on CPU and GPU
+
+Stage 51. `ParticleEmitter::collision: Option<ParticleCollision>` (bounce,
+friction, lifetime loss, layer mask) — Unity's particle Collision module in
+"World" mode. **What is hit** is the scene's own `Collider`s (boxes,
+circles, and the boxes generated from solid tiles), placed by their
+`Transform` as the physics places them, sensors left out, filtered by the
+emitter's mask against each collider's `CollisionLayers::layers`.
+Particles are on no layer; nothing collides with them. Godot's
+`GPUParticles2D` collides with an SDF baked from occluders instead — a
+second set of shapes to author, which would drift from the colliders.
+
+- **Swept, not overlapped.** Each step's path, in the world, is tested
+  against every shape (slab test in the box's own frame; ray–circle). The
+  earliest hit puts the particle `SKIN` (1e-3) outside, reflects the
+  velocity's normal part × bounce and cuts the tangential part by friction;
+  the rest of the step's motion is dropped. A fast spark does not tunnel a
+  thin wall. A particle that *starts* a step inside a shape dies — born in a
+  wall, or caught by a moving one — rather than being pushed an unbounded
+  distance out.
+- **One algorithm, twice.** `particles::collide` (CPU) and `collide` in
+  `particles_sim.wgsl` are line-for-line twins; the GPU tests
+  (`headless_particle_collisions.rs`) use the CPU tests' numbers.
+- **Local-space emitters** collide where they are in the world: the step
+  carries `to_world` (and the uniform its inverse); a matrix scaled to
+  nothing tests no shape.
+- **Gathered once per advance**, only when some emitter collides, then
+  picked per emitter by box: for the CPU, the box of this step's paths; for
+  the GPU, `GpuPlan::bounds` — the GPU tests every particle against every
+  shape it is handed, so it is handed only what it can reach. The ring's
+  collider buffer grows by doubling and is kept when the list shrinks.
+- **Culling stays conservative**: bounce and friction are clamped to
+  `0..=1`, so a hit never speeds a particle up and its path is no longer
+  than the free flight the reach bound measures.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -3100,6 +3135,8 @@ Verified against the crate source, not from memory:
 | Compute pass | `begin_compute_pass(&ComputePassDescriptor { label, timestamp_writes })`; `dispatch_workgroups(x, y, z)` |
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
 | Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
+| D3D12 / FXC | A WGSL loop that writes a vector component by a **runtime index** (`v[i] = …`) fails pipeline creation: FXC must unroll it and cannot (`X3511`). Write the components out. Windows CI hits this; reproduce locally with `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc cargo test` |
+| WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7

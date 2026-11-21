@@ -2,10 +2,11 @@
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_render::particles::MAX_GPU_PARTICLES;
-use voltra_scene::particles::{Simulation, MAX_PARTICLES};
+use voltra_scene::particles::{ParticleCollision, Simulation, MAX_PARTICLES};
 use voltra_scene::ParticleEmitter;
 
 use super::active;
+use super::collision::bits;
 
 pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'static str> {
     ui.label(RichText::new("Particles").strong());
@@ -98,6 +99,35 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
             claim = claim.or(Some("Edit particles"));
         }
         ui.end_row();
+
+        ui.label("collides");
+        let mut collides = emitter.collision.is_some();
+        if ui
+            .checkbox(&mut collides, "")
+            .on_hover_text("Hit the scene's colliders: boxes, circles and solid tiles")
+            .changed()
+        {
+            emitter.collision = collides.then(ParticleCollision::default);
+            claim = claim.or(Some("Edit particles"));
+        }
+        ui.end_row();
+
+        if let Some(collision) = &mut emitter.collision {
+            ui.label("bounce / friction");
+            claim = claim.or(drag(ui, &mut collision.bounce, 0.01, 0.0..=1.0));
+            claim = claim.or(drag(ui, &mut collision.friction, 0.01, 0.0..=1.0));
+            ui.end_row();
+
+            ui.label("lifetime loss");
+            claim = claim.or(drag(ui, &mut collision.lifetime_loss, 0.01, 0.0..=1.0));
+            ui.end_row();
+
+            ui.label("hits layers");
+            if bits(ui, "particle_mask", &mut collision.mask) {
+                claim = claim.or(Some("Edit particles"));
+            }
+            ui.end_row();
+        }
 
         ui.label("sort order");
         claim = claim.or(active(
