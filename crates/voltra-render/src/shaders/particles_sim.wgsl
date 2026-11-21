@@ -130,42 +130,39 @@ fn sweep(c: Collider, was: vec2<f32>, path: vec2<f32>) -> vec3<f32> {
     if (abs(o.x) < h.x && abs(o.y) < h.y) {
         return vec3<f32>(INSIDE, 0.0, 0.0);
     }
-    var enter = -1e30;
-    var leave = 1e30;
-    var normal = vec2<f32>(0.0, 0.0);
-    for (var axis = 0u; axis < 2u; axis = axis + 1u) {
-        let start = o[axis];
-        let delta = v[axis];
-        let half = h[axis];
-        if (abs(delta) < 1e-12) {
-            if (abs(start) >= half) {
-                return vec3<f32>(MISS, 0.0, 0.0);
-            }
-            continue;
-        }
-        var near = (-half - start) / delta;
-        var far = (half - start) / delta;
-        var side = -1.0;
-        if (near > far) {
-            let swap = near;
-            near = far;
-            far = swap;
-            side = 1.0;
-        }
-        if (near > enter) {
-            enter = near;
-            normal = vec2<f32>(0.0, 0.0);
-            normal[axis] = side;
-        }
-        leave = min(leave, far);
-        if (enter > leave) {
-            return vec3<f32>(MISS, 0.0, 0.0);
-        }
+    // Each axis's entry and exit times, written out rather than looped: FXC
+    // (D3D12) must unroll a loop that writes a vector by a runtime index,
+    // and fails to. A still axis inside its slab never limits the path; one
+    // outside it is a miss.
+    var near = vec2<f32>(-1e30, -1e30);
+    var far = vec2<f32>(1e30, 1e30);
+    if (abs(v.x) >= 1e-12) {
+        let a = (-h.x - o.x) / v.x;
+        let b = (h.x - o.x) / v.x;
+        near.x = min(a, b);
+        far.x = max(a, b);
+    } else if (abs(o.x) >= h.x) {
+        return vec3<f32>(MISS, 0.0, 0.0);
     }
+    if (abs(v.y) >= 1e-12) {
+        let a = (-h.y - o.y) / v.y;
+        let b = (h.y - o.y) / v.y;
+        near.y = min(a, b);
+        far.y = max(a, b);
+    } else if (abs(o.y) >= h.y) {
+        return vec3<f32>(MISS, 0.0, 0.0);
+    }
+    let enter = max(near.x, near.y);
+    let leave = min(far.x, far.y);
     // Outside, so a path that reaches the box enters it at or after its
     // start; before it is the box behind the particle.
-    if (enter < 0.0 || enter > 1.0) {
+    if (enter > leave || enter < 0.0 || enter > 1.0) {
         return vec3<f32>(MISS, 0.0, 0.0);
+    }
+    // Through the face of the axis entered last; x on a tie (a corner).
+    var normal = vec2<f32>(0.0, -sign(v.y));
+    if (near.x >= near.y) {
+        normal = vec2<f32>(-sign(v.x), 0.0);
     }
     let world_normal = vec2<f32>(normal.x * cs - normal.y * sn, normal.x * sn + normal.y * cs);
     return vec3<f32>(enter, world_normal);

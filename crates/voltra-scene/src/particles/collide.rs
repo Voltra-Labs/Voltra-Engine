@@ -138,37 +138,35 @@ fn sweep(shape: &ParticleCollider, was: Vec2, path: Vec2) -> Sweep {
             if o.x.abs() < h.x && o.y.abs() < h.y {
                 return Sweep::Inside;
             }
-            let (mut enter, mut leave) = (-1e30_f32, 1e30_f32);
-            let mut normal = Vec2::ZERO;
+            // Each axis's entry and exit times. A still axis inside its slab
+            // never limits the path; one outside it is a miss. Written per
+            // axis, as the shader must be (FXC cannot unroll the loop).
+            let mut near = Vec2::splat(-1e30);
+            let mut far = Vec2::splat(1e30);
             for axis in 0..2 {
-                let (start, delta, half) = (o[axis], v[axis], h[axis]);
-                if delta.abs() < 1e-12 {
-                    if start.abs() >= half {
-                        return Sweep::Miss;
-                    }
-                    continue;
-                }
-                let (mut near, mut far) = ((-half - start) / delta, (half - start) / delta);
-                let mut side = -1.0;
-                if near > far {
-                    (near, far) = (far, near);
-                    side = 1.0;
-                }
-                if near > enter {
-                    enter = near;
-                    normal = Vec2::ZERO;
-                    normal[axis] = side;
-                }
-                leave = leave.min(far);
-                if enter > leave {
+                if v[axis].abs() >= 1e-12 {
+                    let a = (-h[axis] - o[axis]) / v[axis];
+                    let b = (h[axis] - o[axis]) / v[axis];
+                    near[axis] = a.min(b);
+                    far[axis] = a.max(b);
+                } else if o[axis].abs() >= h[axis] {
                     return Sweep::Miss;
                 }
             }
+            let enter = near.max_element();
+            let leave = far.min_element();
             // Outside, so a path that reaches the box enters it at or after
             // its start; before it is the box behind the particle.
-            if !(0.0..=1.0).contains(&enter) {
+            if enter > leave || !(0.0..=1.0).contains(&enter) {
                 return Sweep::Miss;
             }
+            // Through the face of the axis entered last; x on a tie (a
+            // corner).
+            let normal = if near.x >= near.y {
+                Vec2::new(-v.x.signum(), 0.0)
+            } else {
+                Vec2::new(0.0, -v.y.signum())
+            };
             Sweep::Hit {
                 t: enter,
                 normal: Vec2::from_angle(rotation).rotate(normal),
