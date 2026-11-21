@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use voltra_render::texture::{decode_png, DecodedImage};
 use voltra_render::wgpu::{BindGroup, BindGroupLayout, Device, Queue};
 use voltra_render::{Filter, Texture};
 
@@ -11,6 +12,8 @@ use crate::handle::Handle;
 use crate::path::AssetPath;
 use crate::placeholder;
 use crate::store::Assets;
+
+mod preload;
 
 /// Loads textures from an asset root and hands out shared handles to them.
 ///
@@ -74,7 +77,20 @@ impl Textures {
             return *handle;
         }
 
-        let handle = match self.read(device, queue, path) {
+        let texture = self.read(device, queue, path);
+        self.admit(device, queue, path, texture)
+    }
+
+    /// Caches `texture` under `path` — or, when it failed, a private
+    /// placeholder, logged once — and returns its handle.
+    pub(crate) fn admit(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        path: &AssetPath,
+        texture: Result<Texture, AssetError>,
+    ) -> Handle<Texture> {
+        let handle = match texture {
             Ok(texture) => {
                 let bind_group = texture.create_bind_group(device, &self.layout);
                 let handle = self.store.insert(texture);
@@ -86,7 +102,6 @@ impl Textures {
                 self.insert_broken(device, queue)
             }
         };
-
         self.by_path.insert(path.clone(), handle);
         handle
     }
@@ -287,26 +302,55 @@ impl Textures {
         self.store.is_empty()
     }
 
-    /// Reads and uploads one file. The only place this type touches the disk.
+    /// Reads, decodes and uploads one file.
     fn read(
         &self,
         device: &Device,
         queue: &Queue,
         path: &AssetPath,
     ) -> Result<Texture, AssetError> {
-        // Safe to join because `AssetPath` has already refused anything that
-        // could climb out of the root. That check lives in the constructor
-        // precisely so it cannot be forgotten here.
-        let full = self.root.join(path.as_str());
-
-        let bytes = std::fs::read(&full).map_err(|source| AssetError::Read {
-            path: full.clone(),
-            source,
-        })?;
-
-        Texture::from_png(device, queue, path.as_str(), &bytes, Filter::Linear)
-            .map_err(|source| AssetError::Decode { path: full, source })
+        let image = decode_file(&self.root, path)?;
+        self.upload(device, queue, path, &image)
     }
+
+    /// Uploads pixels [`decode_file`] produced.
+    pub(crate) fn upload(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        path: &AssetPath,
+        image: &DecodedImage,
+    ) -> Result<Texture, AssetError> {
+        Texture::from_decoded(device, queue, path.as_str(), image, Filter::Linear).map_err(
+            |source| AssetError::Decode {
+                path: self.root.join(path.as_str()),
+                source,
+            },
+        )
+    }
+
+    /// Whether `path` has been asked for already.
+    pub(crate) fn is_loaded(&self, path: &AssetPath) -> bool {
+        self.by_path.contains_key(path)
+    }
+
+    pub(crate) fn root_path(&self) -> &Path {
+        &self.root
+    }
+}
+
+/// Reads and decodes `path` under `root`: the only place textures touch the
+/// disk, and needing no device, safe on any thread.
+pub(crate) fn decode_file(root: &Path, path: &AssetPath) -> Result<DecodedImage, AssetError> {
+    // Safe to join because `AssetPath` has already refused anything that
+    // could climb out of the root. That check lives in the constructor
+    // precisely so it cannot be forgotten here.
+    let full = root.join(path.as_str());
+    let bytes = std::fs::read(&full).map_err(|source| AssetError::Read {
+        path: full.clone(),
+        source,
+    })?;
+    decode_png(&bytes).map_err(|source| AssetError::Decode { path: full, source })
 }
 
 /// The magenta-and-black checker, uploaded.

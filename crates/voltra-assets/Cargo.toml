@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 voltra-audio.workspace = true
 voltra-render.workspace = true
+voltra-jobs.workspace = true
 log.workspace = true
 notify-debouncer-full.workspace = true
 fontdue.workspace = true

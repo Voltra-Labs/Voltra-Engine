@@ -179,11 +179,26 @@ impl Texture {
         bytes: &[u8],
         filter: Filter,
     ) -> Result<Self, TextureError> {
-        let image = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)
-            .map_err(TextureError::Decode)?;
-        let rgba = image.to_rgba8();
-        let (width, height) = rgba.dimensions();
-        Self::from_rgba8(device, queue, label, &rgba, width, height, filter)
+        Self::from_decoded(device, queue, label, &decode_png(bytes)?, filter)
+    }
+
+    /// Uploads pixels [`decode_png`] produced.
+    pub fn from_decoded(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        label: &str,
+        image: &DecodedImage,
+        filter: Filter,
+    ) -> Result<Self, TextureError> {
+        Self::from_rgba8(
+            device,
+            queue,
+            label,
+            &image.rgba,
+            image.width,
+            image.height,
+            filter,
+        )
     }
 
     /// A 1x1 opaque white texture.
@@ -272,6 +287,29 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
                 count: None,
             },
         ],
+    })
+}
+
+/// A PNG's pixels, decoded and not yet uploaded: what can be made on any
+/// thread, since it needs no device.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DecodedImage {
+    pub rgba: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Decodes a PNG to RGBA8. Pure CPU work — the inflate is most of a
+/// texture's load — so callers may run it off the thread that uploads.
+pub fn decode_png(bytes: &[u8]) -> Result<DecodedImage, TextureError> {
+    let image = image::load_from_memory_with_format(bytes, image::ImageFormat::Png)
+        .map_err(TextureError::Decode)?;
+    let rgba = image.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    Ok(DecodedImage {
+        rgba: rgba.into_raw(),
+        width,
+        height,
     })
 }
 
