@@ -421,6 +421,7 @@ mod frame_tests {
             visible: None,
             time: 0.0,
             layers: None,
+            jobs: None,
         };
 
         assert_eq!(

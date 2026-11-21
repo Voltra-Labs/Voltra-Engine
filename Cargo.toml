@@ -15,6 +15,7 @@ voltra-assets = { path = "crates/voltra-assets" }
 voltra-audio = { path = "crates/voltra-audio" }
 voltra-core = { path = "crates/voltra-core" }
 voltra-ecs = { path = "crates/voltra-ecs" }
+voltra-jobs = { path = "crates/voltra-jobs" }
 voltra-physics = { path = "crates/voltra-physics" }
 voltra-player = { path = "crates/voltra-player" }
 voltra-render = { path = "crates/voltra-render" }

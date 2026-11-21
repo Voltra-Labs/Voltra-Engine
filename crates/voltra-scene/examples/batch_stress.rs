@@ -96,6 +96,32 @@ fn main() {
     }
     let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
     println!("level, cached       {ms:7.3} ms");
+
+    // And with the sprites placed across a job pool, as the draw path does.
+    let pool = voltra_jobs::JobPool::with_available_parallelism();
+    let pooled = sheets.with_jobs(&pool);
+    let start = Instant::now();
+    for _ in 0..runs {
+        batch.rebuild(&world, pooled, &mut cache);
+        std::hint::black_box(&batch);
+    }
+    let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
+    println!("  on {} threads      {ms:7.3} ms", pool.threads());
+
+    // Zoomed out over every sprite: placing them is the work.
+    let wide = Sheets::default().visible_in(Vec2::new(-1100.0, -100.0), Vec2::new(1100.0, 100.0));
+    for (label, sheets) in [("alone", wide), ("pooled", wide.with_jobs(&pool))] {
+        let start = Instant::now();
+        for _ in 0..runs {
+            batch.rebuild(&world, sheets, &mut cache);
+            std::hint::black_box(&batch);
+        }
+        let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
+        println!(
+            "every sprite in view, {label:6} {ms:7.3} ms   quads {}",
+            batch.sprite_count()
+        );
+    }
 }
 
 /// The level's tilemap layer and nothing else.

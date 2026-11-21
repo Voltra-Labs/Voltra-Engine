@@ -4,6 +4,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
+use super::parallel::{self, Prepared};
 use super::SpriteBatch;
 use crate::hierarchy::WorldTransforms;
 use crate::particles::{self, ParticleEmitter};
@@ -14,7 +15,7 @@ use crate::tilemap::{mesh, TileMeshCache, Tilemap};
 use crate::transform::Transform;
 
 /// What the batch draws one of: every kind sorts by the same key.
-enum Drawn<'a> {
+pub(super) enum Drawn<'a> {
     Sprite(&'a Sprite),
     Tilemap(&'a Tilemap),
     Text(&'a Text),
@@ -82,7 +83,7 @@ impl SpriteBatch {
         // Sprites and tilemap layers in one list, because they share one draw
         // order: a layer behind the player and one in front of it are both
         // just a `sort_order` relative to the player's sprite.
-        let mut drawn: Vec<(Entity, Drawn<'_>)> = world
+        let drawn: Vec<(Entity, Drawn<'_>)> = world
             .query2::<Transform, Sprite>()
             .map(|(entity, _, sprite)| (entity, Drawn::Sprite(sprite)))
             .chain(
@@ -105,13 +106,25 @@ impl SpriteBatch {
             // second copy in the world at its stale transform.
             .filter(|(entity, _)| !crate::ui::is_ui(world, *entity))
             .collect();
-        drawn.sort_unstable_by_key(|(entity, drawn)| {
-            draw_key(
-                *entity,
-                sheets.rank(drawn.sorting_layer()),
-                drawn.sort_order(),
-            )
-        });
+        // Keyed once per entity, not once per comparison: a key names its
+        // sorting layer, and looking a name up in the project's list on each
+        // of the n·log n comparisons was most of a large scene's batch.
+        let mut keyed: Vec<_> = drawn
+            .into_iter()
+            .map(|(entity, drawn)| {
+                let key = draw_key(
+                    entity,
+                    sheets.rank(drawn.sorting_layer()),
+                    drawn.sort_order(),
+                );
+                (key, entity, drawn)
+            })
+            .collect();
+        keyed.sort_unstable_by_key(|(key, _, _)| *key);
+        let drawn: Vec<(Entity, Drawn<'_>)> = keyed
+            .into_iter()
+            .map(|(_, entity, drawn)| (entity, drawn))
+            .collect();
 
         // Composed once for the whole world rather than walked per sprite: a
         // deep tree would otherwise cost one matrix chain per descendant, every
@@ -132,7 +145,19 @@ impl SpriteBatch {
         if let Some(tiles) = tiles.as_deref_mut() {
             tiles.begin();
         }
-        for (entity, drawn) in drawn {
+        // Sprites placed on the pool first, when there are enough of them and
+        // none repeats — a repeating copy's matrix is only known below.
+        let sprites = drawn
+            .iter()
+            .filter(|(_, drawn)| matches!(drawn, Drawn::Sprite(_)))
+            .count();
+        let prepared = match sheets.jobs {
+            Some(jobs) if !repeating && sprites >= parallel::PARALLEL_SPRITES => {
+                parallel::prepare(jobs, &drawn, &transforms, sheets)
+            }
+            _ => Vec::new(),
+        };
+        for (index, &(entity, ref drawn)) in drawn.iter().enumerate() {
             let matrix = transforms.matrix(entity);
             let copies = if repeating {
                 crate::parallax::copies_of(world, entity, matrix, sheets.visible)
@@ -142,7 +167,13 @@ impl SpriteBatch {
             for (copy, offset) in copies.into_iter().enumerate() {
                 let matrix = Mat3::from_translation(offset) * matrix;
                 match drawn {
-                    Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
+                    Drawn::Sprite(sprite) => match prepared.get(index) {
+                        Some(Prepared::Quad(vertices, texture)) => {
+                            batch.append_quad(*vertices, *texture)
+                        }
+                        Some(Prepared::Culled) => {}
+                        _ => batch.push(matrix, sprite, sheets),
+                    },
                     Drawn::Tilemap(map) => match tiles.as_deref_mut() {
                         Some(tiles) => {
                             mesh::push_cached(batch, matrix, map, sheets, tiles.layer(entity, copy))

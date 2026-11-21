@@ -217,6 +217,7 @@ mod in_the_world {
             visible: None,
             time: 0.0,
             layers: None,
+            jobs: None,
         };
         let batch = SpriteBatch::from_world(&world, sheets);
 
