@@ -2959,6 +2959,40 @@ atlas again. Now 0.26 ms.
   cache in place, allocating a fresh megabyte-scale batch each frame was
   most of what was left — 2.1 ms of the 2.4.
 
+### GPU particles: the CPU counts births, the GPU does the particles
+
+Stage 45. `ParticleEmitter::simulation` is `Cpu` (default, the reference)
+or `Gpu` — Godot's `CPUParticles2D` / `GPUParticles2D` pair as one switch on
+one component, with the same parameters and look.
+
+- **Split**: the CPU keeps rate, bursts and "births wait for room" — one
+  piece of code for both — and a `GpuPlan` per emitter: a ring cursor and a
+  ledger of births not yet known dead (by the *longest* lifetime plus a
+  0.1 s margin, since the GPU ages newborns a frame late), so a live
+  particle's slot is never handed out again. The GPU (`particles_sim.wgsl`,
+  one invocation per slot) picks each newborn's angle, speed and lifetime
+  from a PCG hash of slot and step, and integrates the rest — velocity then
+  position, the CPU's order. Steps between two drawn frames merge into one
+  dispatch, because a uniform written through the queue lands once per
+  submission.
+- **Drawing**: instanced, six vertices per slot, no vertex buffer — the
+  vertex shader reads the ring as a read-only storage buffer; a dead slot
+  collapses to a point. The batch records a `GpuEmitterDraw` where the
+  emitter's sort key falls and **seals** the range before it, so
+  `SceneDraw` (`Mesh` ranges and `Particles`) keeps painter's order across
+  two pipelines. The HUD path is untouched (`MeshDraw`).
+- **Capacity** is `max_particles`, up to `MAX_GPU_PARTICLES` (2²⁰) against
+  the CPU's 10 000. `alive()` is an upper bound on the GPU.
+- **Fallback**: `ParticlePipelines::supported` needs `COMPUTE_SHADERS` and
+  `VERTEX_STORAGE`; without them (WebGL2, some GL) the renderer has no
+  particle pipelines and `advance(.., gpu: false)` runs GPU emitters on the
+  CPU. A switch either way lets the other side's particles die out.
+- **Not done**: GPU particle culling and sorting by age, collisions,
+  sub-emitters, and repeating parallax copies of a GPU emitter (drawn once).
+- **Verified** in `headless_particles.rs` on hardware: births and wrap,
+  integration, the dead staying dead, and a particle drawn between two
+  sprites in painter's order.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -2976,6 +3010,10 @@ Verified against the crate source, not from memory:
 | Pipeline | `VertexState::buffers` is `&[Option<VertexBufferLayout>]` — the entries are wrapped in `Option` |
 | Device poll | `PollType::Wait` is a struct variant; use `PollType::wait_indefinitely()` |
 | Buffer readback | `Buffer::get_mapped_range` returns `Result` |
+| Compute pipeline | `ComputePipelineDescriptor { label, layout, module, entry_point: Option<&str>, compilation_options, cache }` |
+| Compute pass | `begin_compute_pass(&ComputePassDescriptor { label, timestamp_writes })`; `dispatch_workgroups(x, y, z)` |
+| Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
+| Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7

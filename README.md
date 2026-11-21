@@ -270,6 +270,7 @@ privileged and plain `cargo build` covers everything.
 | 42 | Sorting layers from `default.layers.ron`; project files hot reload | done |
 | 43 | Post-processing: a graded pass between the world and the HUD | done |
 | 44 | Tilemap chunk mesh cache; the frame batch keeps its buffers | done |
+| 45 | GPU particles: compute-stepped rings, drawn in painter's order | done |
 
 ## Contributing
 

@@ -34,7 +34,7 @@ use voltra_render::{Texture, Vertex};
 use super::chunk::{cell_of, Chunk, ChunkKey};
 use super::mesh::{corners_of, sample};
 use super::Tilemap;
-use crate::batch::{SpriteBatch, SpriteRange};
+use crate::batch::SpriteBatch;
 use crate::sprite::sheets::Sheets;
 
 /// Every tilemap layer's cached chunks, owned by whoever builds batches
@@ -245,13 +245,7 @@ impl ChunkMesh {
         let mut start = first;
         for &(texture, quads) in &world.runs {
             let end = start + quads * crate::batch::QUAD_INDICES.len() as u32;
-            match batch.ranges.last_mut() {
-                Some(range) if range.texture == texture => range.indices.end = end,
-                _ => batch.ranges.push(SpriteRange {
-                    texture,
-                    indices: start..end,
-                }),
-            }
+            batch.extend_ranges(texture, start..end);
             start = end;
         }
     }

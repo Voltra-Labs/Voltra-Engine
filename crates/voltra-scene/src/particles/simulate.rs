@@ -4,7 +4,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
 use super::rng::Rng;
-use super::{Particle, ParticleEmitter, MAX_PARTICLES};
+use super::{Particle, ParticleEmitter, Simulation, MAX_PARTICLES};
 use crate::hierarchy::WorldTransforms;
 
 /// The longest step simulated at once. A frame that stalls for a second must
@@ -13,7 +13,12 @@ const MAX_STEP: f32 = 0.1;
 
 /// Advances every emitter by `dt` seconds. Returns the one-shot emitters
 /// that have finished, for the caller to despawn.
-pub fn advance(world: &mut World, dt: f32) -> Vec<Entity> {
+///
+/// `gpu` says whether the renderer can step particles: without it an
+/// emitter set to [`Simulation::Gpu`](super::Simulation::Gpu) runs on the
+/// CPU instead. A GPU emitter's step is planned here and dispatched by the
+/// renderer — see [`ParticleEmitter::take_gpu_step`].
+pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
     if !dt.is_finite() || dt <= 0.0 {
         return Vec::new();
     }
@@ -21,7 +26,7 @@ pub fn advance(world: &mut World, dt: f32) -> Vec<Entity> {
     let transforms = WorldTransforms::from_world(world);
     let mut finished = Vec::new();
     for (entity, emitter) in world.query_mut::<ParticleEmitter>() {
-        step(emitter, entity, transforms.matrix(entity), dt);
+        step(emitter, entity, transforms.matrix(entity), dt, gpu);
         if emitter.is_finished() {
             finished.push(entity);
         }
@@ -29,7 +34,7 @@ pub fn advance(world: &mut World, dt: f32) -> Vec<Entity> {
     finished
 }
 
-fn step(emitter: &mut ParticleEmitter, entity: Entity, matrix: Mat3, dt: f32) {
+fn step(emitter: &mut ParticleEmitter, entity: Entity, matrix: Mat3, dt: f32, gpu: bool) {
     let acceleration = finite_or_zero(emitter.acceleration);
     let state = &mut emitter.state;
     for particle in &mut state.particles {
@@ -51,6 +56,19 @@ fn step(emitter: &mut ParticleEmitter, entity: Entity, matrix: Mat3, dt: f32) {
         state.owed -= whole;
         births = births.saturating_add(whole as u32);
     }
+    if gpu && emitter.simulation == Simulation::Gpu {
+        // Whatever the CPU still holds from before the switch dies out
+        // above; every birth from here on is the GPU's.
+        let mut plan = std::mem::take(&mut emitter.state.gpu);
+        plan.step(emitter, matrix, dt, births);
+        emitter.state.gpu = plan;
+        return;
+    }
+    if emitter.state.gpu.capacity > 0 {
+        // Back on the CPU: the ring is the renderer's to drop.
+        emitter.state.gpu = Default::default();
+    }
+    let state = &mut emitter.state;
     let cap = emitter.max_particles.min(MAX_PARTICLES) as usize;
     let room = cap.saturating_sub(state.particles.len());
     let births = (births as usize).min(room);

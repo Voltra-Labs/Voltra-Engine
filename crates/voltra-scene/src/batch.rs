@@ -28,6 +28,18 @@ pub struct SpriteRange {
     pub indices: std::ops::Range<u32>,
 }
 
+/// A GPU particle emitter's place in the batch's draw order. Its particles
+/// are the renderer's; the batch only knows when to draw them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GpuEmitterDraw {
+    pub entity: voltra_ecs::Entity,
+    /// `None` draws against the renderer's white bind group.
+    pub texture: Option<Handle<Texture>>,
+    /// Drawn before `ranges[before]`, or after every range when it is
+    /// `ranges.len()`.
+    pub before: usize,
+}
+
 /// Vertex and index data for every sprite in a world.
 ///
 /// Built on the CPU each frame. Kept as plain `Vec`s rather than GPU buffers
@@ -44,6 +56,9 @@ pub struct SpriteBatch {
     /// Split only where the texture actually changes — a run never merges two
     /// sprites that draw order keeps apart, even if they share a texture.
     pub ranges: Vec<SpriteRange>,
+    /// GPU particle emitters, each drawn just before the range at its
+    /// `before` index — where its sort key put it among the quads.
+    pub gpu_emitters: Vec<GpuEmitterDraw>,
 }
 
 impl SpriteBatch {
@@ -127,13 +142,38 @@ impl SpriteBatch {
             .extend(QUAD_INDICES.iter().map(|offset| base + offset));
         let end = self.indices.len() as u32;
 
+        self.extend_ranges(texture, start..end);
+    }
+
+    /// Adds `indices` drawn with `texture` to the last range when it is the
+    /// same texture, or as a range of its own. Never across a GPU emitter,
+    /// which must draw between the two.
+    pub(crate) fn extend_ranges(
+        &mut self,
+        texture: Option<Handle<Texture>>,
+        indices: std::ops::Range<u32>,
+    ) {
+        let sealed = self
+            .gpu_emitters
+            .last()
+            .is_some_and(|emitter| emitter.before == self.ranges.len());
         match self.ranges.last_mut() {
-            Some(range) if range.texture == texture => range.indices.end = end,
-            _ => self.ranges.push(SpriteRange {
-                texture,
-                indices: start..end,
-            }),
+            Some(range) if range.texture == texture && !sealed => range.indices.end = indices.end,
+            _ => self.ranges.push(SpriteRange { texture, indices }),
         }
+    }
+
+    /// Puts a GPU emitter's draw here in painter's order.
+    pub fn push_gpu_emitter(
+        &mut self,
+        entity: voltra_ecs::Entity,
+        texture: Option<Handle<Texture>>,
+    ) {
+        self.gpu_emitters.push(GpuEmitterDraw {
+            entity,
+            texture,
+            before: self.ranges.len(),
+        });
     }
 
     pub fn sprite_count(&self) -> usize {
@@ -157,6 +197,8 @@ impl SpriteBatch {
         ))
     }
 
+    /// No quads. A batch of nothing but GPU emitters is empty and still
+    /// draws them.
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty()
     }

@@ -33,7 +33,7 @@ pub mod ui;
 pub use animation::SpriteAnimation;
 pub use audio_listener::AudioListener;
 pub use audio_source::AudioSource;
-pub use batch::{SpriteBatch, SpriteRange};
+pub use batch::{GpuEmitterDraw, SpriteBatch, SpriteRange};
 pub use body::{BodyType, RigidBody};
 pub use camera::Camera;
 pub use collider::Collider;
