@@ -70,6 +70,10 @@ pub struct MeshDraw<'a> {
     /// normals pass (see [`NormalPass`](crate::normals::NormalPass)); `None`
     /// is flat. The colour pass ignores it.
     pub normal: Option<&'a wgpu::BindGroup>,
+    /// The range's light layers, for the light-layer pass (see
+    /// [`LayerPass`](crate::light_layers::LayerPass)). The colour pass
+    /// ignores it.
+    pub light_layers: u32,
     pub indices: Range<u32>,
 }
 

@@ -41,6 +41,7 @@ pub(super) fn scene_draws<'a>(
                     .normal
                     .filter(|&handle| !textures.is_broken(handle))
                     .map(|handle| textures.raw_bind_group(handle)),
+                light_layers: range.light_layers,
                 indices: range.indices.clone(),
             }));
         }

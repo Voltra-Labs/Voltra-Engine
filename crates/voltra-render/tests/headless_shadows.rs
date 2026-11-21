@@ -62,6 +62,7 @@ fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
             SIZE,
             lighting,
             None,
+            None,
         )
         .unwrap_or(drawn);
     let (device_ref, queue_ref) = (&device, &queue);
@@ -105,6 +106,7 @@ fn lamp(x: f32, shadow: Option<Shadow>) -> PointLight {
         shadow,
         cone: None,
         height: None,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     }
 }
 

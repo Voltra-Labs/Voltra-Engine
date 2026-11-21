@@ -88,6 +88,13 @@ pub struct Tilemap {
         skip_serializing_if = "crate::sorting::is_default_layer"
     )]
     pub sorting_layer: String,
+    /// The light layers its tiles are on, as a sprite's
+    /// [`light_layers`](crate::Sprite::light_layers) are.
+    #[serde(
+        default = "crate::light::default_light_layers",
+        skip_serializing_if = "crate::light::is_default_light_layers"
+    )]
+    pub light_layers: u32,
     /// Whether every tile of this layer is solid.
     ///
     /// Per layer rather than per tile, as Unity's `TilemapCollider2D` is: a
@@ -124,6 +131,7 @@ impl Default for Tilemap {
             color: [1.0, 1.0, 1.0, 1.0],
             sort_order: 0,
             sorting_layer: crate::sorting::default_layer(),
+            light_layers: crate::light::default_light_layers(),
             collision: false,
             texture: None,
             texture_handle: None,

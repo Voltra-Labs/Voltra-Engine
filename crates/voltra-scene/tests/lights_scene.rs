@@ -22,8 +22,8 @@ use voltra_render::graph::{RenderGraph, TexturePool};
 use voltra_render::normals::{NormalPass, NORMAL_FORMAT};
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{
-    pipeline, texture, wgpu, Filter, LightPass, PostPass, PostSettings, RenderTarget, SceneDraw,
-    Texture,
+    pipeline, texture, wgpu, Filter, LayerPass, LightPass, PostPass, PostSettings, RenderTarget,
+    SceneDraw, Texture,
 };
 use voltra_scene::format::{load, save};
 use voltra_scene::sprite::sheets::Sheets;
@@ -200,6 +200,7 @@ fn lights_world() -> World {
             shadows: Some(LightShadows::default()),
             cone: None,
             height: Some(3.0),
+            layers: voltra_render::ALL_LIGHT_LAYERS,
         },
     );
 
@@ -224,6 +225,7 @@ fn lights_world() -> World {
                 softness: 0.3,
             }),
             height: Some(3.5),
+            layers: voltra_render::ALL_LIGHT_LAYERS,
         },
     );
 
@@ -238,6 +240,7 @@ fn lights_world() -> World {
             shadows: None,
             cone: None,
             height: None,
+            layers: voltra_render::ALL_LIGHT_LAYERS,
         },
     );
 
@@ -323,6 +326,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
             MeshDraw {
                 texture: &white,
                 normal: range.normal.map(|handle| textures.raw_bind_group(handle)),
+                light_layers: range.light_layers,
                 indices: range.indices.clone(),
             }
         })
@@ -333,6 +337,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
             SceneDraw::Mesh(MeshDraw {
                 texture: draw.texture,
                 normal: draw.normal,
+                light_layers: draw.light_layers,
                 indices: draw.indices.clone(),
             })
         })
@@ -361,6 +366,25 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
         height,
         Filter::Nearest,
     );
+    let layer_target = RenderTarget::new(
+        &device,
+        "layers",
+        voltra_render::light_layers::LAYER_FORMAT,
+        width,
+        height,
+        Filter::Nearest,
+    );
+    let drew_layers = lighting.uses_layers();
+    if drew_layers {
+        LayerPass::new(&device, binding.layout(), &layout).record(
+            &device,
+            &mut encoder,
+            layer_target.view(),
+            binding.bind_group(),
+            mesh.as_ref(),
+            &scene_draws,
+        );
+    }
     let drew_normals = lighting.uses_normals() && NormalPass::needed(&scene_draws);
     if drew_normals {
         NormalPass::new(&device, &queue, binding.layout(), &layout).record(
@@ -387,6 +411,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
             height,
             &lighting,
             drew_normals.then(|| normals.view()),
+            drew_layers.then(|| layer_target.view()),
         )
         .unwrap_or(drawn);
     let (device_ref, queue_ref) = (&device, &queue);

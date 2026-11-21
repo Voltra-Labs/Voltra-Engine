@@ -85,6 +85,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
     let draws = [SceneDraw::Mesh(MeshDraw {
         texture: &white,
         normal: map.as_ref(),
+        light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
         indices: 0..6,
     })];
 
@@ -94,6 +95,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
     let mesh_draws = [MeshDraw {
         texture: &white,
         normal: None,
+        light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
         indices: 0..6,
     }];
     pass::draw_mesh_batches(
@@ -135,6 +137,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
             SIZE,
             &lighting,
             Some(normals.view()),
+            None,
         )
         .unwrap_or(drawn);
     let (device_ref, queue_ref) = (&device, &queue);
@@ -168,6 +171,7 @@ fn lamp(height: Option<f32>) -> PointLight {
         shadow: None,
         cone: None,
         height,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     }
 }
 

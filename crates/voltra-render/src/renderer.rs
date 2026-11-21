@@ -6,6 +6,7 @@ use crate::bloom::BloomPass;
 use crate::camera::{Camera2D, CameraBinding};
 use crate::context::GpuContext;
 use crate::graph::TexturePool;
+use crate::light_layers::LayerPass;
 use crate::lights::{LightPass, Lighting};
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
@@ -19,6 +20,7 @@ use crate::{pipeline, texture};
 
 mod direct;
 mod frame;
+mod light_layers;
 mod normals;
 
 /// Drives one frame at a time on top of a [`GpuContext`].
@@ -49,6 +51,11 @@ pub struct Renderer {
     /// Where the normals are drawn, sized to the scene; made the first frame
     /// that needs it.
     normal_target: Option<RenderTarget>,
+    /// Draws the scene's light layers, when a light leaves some out.
+    layers: LayerPass,
+    /// Where the light layers are drawn, sized to the scene; made the first
+    /// frame that needs it.
+    layer_target: Option<RenderTarget>,
     /// The render graph's per-frame textures, kept between frames.
     transients: TexturePool,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
@@ -77,6 +84,7 @@ impl Renderer {
             camera_binding.layout(),
             &texture_layout,
         );
+        let layers = LayerPass::new(ctx.device(), camera_binding.layout(), &texture_layout);
         let white = Texture::white(ctx.device(), ctx.queue());
         let white_bind_group = white.create_bind_group(ctx.device(), &texture_layout);
 
@@ -128,6 +136,8 @@ impl Renderer {
             lights,
             normals,
             normal_target: None,
+            layers,
+            layer_target: None,
             transients: TexturePool::default(),
             particles,
             frame_target: None,

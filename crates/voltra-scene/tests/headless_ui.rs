@@ -79,6 +79,7 @@ fn the_hud_lands_in_pixels_over_a_world_it_does_not_clear() {
             .map(|range| MeshDraw {
                 texture: &white,
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: range.indices.clone(),
             })
             .collect()

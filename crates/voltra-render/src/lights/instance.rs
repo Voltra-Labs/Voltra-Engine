@@ -17,6 +17,8 @@ pub(super) struct LightInstance {
     /// direction.xy, cos of the outer half-angle, cos of the inner; a point
     /// light's are below any cosine, so every direction is inside
     cone: [f32; 4],
+    /// the light layers it lights
+    layers: u32,
 }
 
 /// A point light's cone: both edges below -1, so every direction is in.
@@ -57,6 +59,7 @@ impl PointLight {
             ],
             shadow,
             cone,
+            layers: self.layers,
         })
     }
 }
@@ -78,6 +81,7 @@ mod tests {
             shadow: None,
             cone: None,
             height: None,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         }
     }
 
@@ -224,5 +228,14 @@ mod tests {
             };
             assert_eq!(light.instance(None).expect("gives light").color[3], 0.0);
         }
+    }
+
+    #[test]
+    fn a_light_carries_its_layers() {
+        let picky = PointLight {
+            layers: 0b101,
+            ..lamp()
+        };
+        assert_eq!(picky.instance(None).expect("gives light").layers, 0b101);
     }
 }

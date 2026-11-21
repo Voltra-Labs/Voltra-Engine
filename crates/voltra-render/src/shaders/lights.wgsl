@@ -29,6 +29,11 @@ var shadow_map: texture_2d<f32>;
 @group(2) @binding(0)
 var scene_normals: texture_2d<f32>;
 
+// The light layers each pixel is NOT on (`sprite_layers.wgsl`), so the zero
+// it is cleared to — and the 1x1 zero stand-in — is "on every layer".
+@group(3) @binding(0)
+var excluded_layers: texture_2d<u32>;
+
 struct LightIn {
     // centre.xy, radius, falloff
     @location(0) place: vec4<f32>,
@@ -39,6 +44,8 @@ struct LightIn {
     // direction.xy, cos of the outer half-angle, cos of the inner; a point
     // light's edges are below -1, so every direction is in
     @location(3) cone: vec4<f32>,
+    // the light layers it lights
+    @location(4) layers: u32,
 }
 
 struct LightOut {
@@ -51,6 +58,7 @@ struct LightOut {
     @location(4) @interpolate(flat) cone: vec4<f32>,
     // radius, height for normal maps (0: ignores them)
     @location(5) @interpolate(flat) reach: vec2<f32>,
+    @location(6) @interpolate(flat) layers: u32,
 }
 
 @vertex
@@ -74,11 +82,17 @@ fn vs_light(@builtin(vertex_index) index: u32, light: LightIn) -> LightOut {
     out.shadow = light.shadow.xyz;
     out.cone = light.cone;
     out.reach = vec2<f32>(light.place.z, light.color.w);
+    out.layers = light.layers;
     return out;
 }
 
 @fragment
 fn fs_light(in: LightOut) -> @location(0) vec4<f32> {
+    // A pixel on none of the light's layers gets nothing from it.
+    let excluded = textureLoad(excluded_layers, clamped(in.position.xy, excluded_layers_size()), 0).r;
+    if (in.layers & ~excluded) == 0u {
+        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    }
     // Full at the centre, nothing at the radius; the falloff bends the
     // curve between: 1 is a straight ramp, 2 the default soft one.
     let edge = clamp(1.0 - length(in.local), 0.0, 1.0);
@@ -91,6 +105,17 @@ fn fs_light(in: LightOut) -> @location(0) vec4<f32> {
     return vec4<f32>(in.color * strength * lit, 1.0);
 }
 
+// `pixel` as a texel of a texture `size` big. The buffers are the frame's
+// size, but a frame that did not draw one binds a 1x1 stand-in, and reading
+// past its edge is only defined where wgpu enforces robust access.
+fn clamped(pixel: vec2<f32>, size: vec2<i32>) -> vec2<i32> {
+    return min(vec2<i32>(pixel), size - vec2<i32>(1));
+}
+
+fn excluded_layers_size() -> vec2<i32> {
+    return vec2<i32>(textureDimensions(excluded_layers));
+}
+
 // How squarely the surface at a pixel faces the light: the cosine between
 // its normal and the way to a light `reach.y` above the scene, `reach.x`
 // being the radius that turns `offset` (in radii) into world units. A pixel
@@ -101,7 +126,7 @@ fn facing(pixel: vec2<f32>, offset: vec2<f32>, reach: vec2<f32>) -> f32 {
     if reach.y <= 0.0 {
         return 1.0;
     }
-    let texel = textureLoad(scene_normals, vec2<i32>(pixel), 0);
+    let texel = textureLoad(scene_normals, clamped(pixel, vec2<i32>(textureDimensions(scene_normals))), 0);
     var normal = vec3<f32>(0.0, 0.0, 1.0);
     if texel.a >= 0.5 {
         normal = normalize(texel.rgb * 2.0 - 1.0);

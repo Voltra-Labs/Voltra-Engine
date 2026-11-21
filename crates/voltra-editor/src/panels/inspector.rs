@@ -9,6 +9,7 @@ mod camera;
 mod collision;
 mod delete;
 mod light;
+mod light_layers;
 mod name;
 mod parallax;
 mod particles;

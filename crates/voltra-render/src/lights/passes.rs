@@ -15,7 +15,9 @@ impl LightPass {
     /// Adds the light map and the composite over `scene` — the drawn frame,
     /// `width` × `height` — to `graph`, `camera` bound for the lights.
     /// `normals` is the scene's normal buffer (the frame's size), for lights
-    /// with a height; `None` shades every light flat.
+    /// with a height; `None` shades every light flat. `layers` is the scene's
+    /// light-layer buffer, for lights that leave a layer out; `None` puts
+    /// every pixel on every layer.
     /// Returns the lit frame's slot, or `None` when `lighting` is unlit and
     /// the caller should read `scene` itself.
     #[allow(clippy::too_many_arguments)]
@@ -29,6 +31,7 @@ impl LightPass {
         height: u32,
         lighting: &Lighting,
         normals: Option<&'a wgpu::TextureView>,
+        layers: Option<&'a wgpu::TextureView>,
     ) -> Option<Slot> {
         let ambient = lighting.ambient()?;
         let plan = ShadowPlan::new(
@@ -88,12 +91,14 @@ impl LightPass {
         graph.add_pass("lights", &reads, &[map], move |encoder, views| {
             let group = shadow_map.map(|slot| self.shadows.bind_map(device, views.get(slot)));
             let surface = normals.map(|view| self.normals.bind(device, view));
+            let excluded = layers.map(|view| self.layers.bind(device, view));
             let mut pass = begin(encoder, views.get(map), wgpu::LoadOp::Clear(ambient));
             if let Some(buffer) = &buffer {
                 pass.set_pipeline(&self.accumulate);
                 pass.set_bind_group(0, camera, &[]);
                 pass.set_bind_group(1, group.as_ref().unwrap_or(self.shadows.empty()), &[]);
                 pass.set_bind_group(2, surface.as_ref().unwrap_or(self.normals.empty()), &[]);
+                pass.set_bind_group(3, excluded.as_ref().unwrap_or(self.layers.empty()), &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..6, 0..count);
             }

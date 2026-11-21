@@ -14,7 +14,7 @@
 
 use voltra_ecs::World;
 use voltra_render::glam::{Mat3, Vec2};
-use voltra_render::{Cone, Lighting, PointLight, Shadow};
+use voltra_render::{Cone, Lighting, PointLight, Shadow, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS};
 
 use crate::camera::{self, Camera};
 use crate::hierarchy::WorldTransforms;
@@ -51,6 +51,34 @@ pub struct PointLight2D {
     /// `None` — the default, and not written — ignores normals.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub height: Option<f32>,
+    /// The light layers it lights — Godot's item cull mask: a sprite or
+    /// tilemap is lit by it only if its
+    /// [`light_layers`](crate::Sprite::light_layers) share a bit with these.
+    /// Every bit — the default, and not written — lights everything.
+    #[serde(
+        default = "all_light_layers",
+        skip_serializing_if = "is_all_light_layers"
+    )]
+    pub layers: u32,
+}
+
+/// What a light's layers are when nothing says otherwise: all of them.
+pub(crate) fn all_light_layers() -> u32 {
+    ALL_LIGHT_LAYERS
+}
+
+pub(crate) fn is_all_light_layers(layers: &u32) -> bool {
+    *layers == ALL_LIGHT_LAYERS
+}
+
+/// What a surface's light layers are when nothing says otherwise: the
+/// first, as Godot's `light_mask` starts.
+pub(crate) fn default_light_layers() -> u32 {
+    DEFAULT_LIGHT_LAYERS
+}
+
+pub(crate) fn is_default_light_layers(layers: &u32) -> bool {
+    *layers == DEFAULT_LIGHT_LAYERS
 }
 
 /// A spot light's cone, Unity URP's spot `Light2D`.
@@ -103,6 +131,7 @@ impl PointLight2D {
                 softness: cone.softness,
             }),
             height: self.height.map(|height| height * scale),
+            layers: self.layers,
         }
     }
 }
@@ -140,6 +169,7 @@ impl Default for PointLight2D {
             shadows: None,
             cone: None,
             height: None,
+            layers: ALL_LIGHT_LAYERS,
         }
     }
 }

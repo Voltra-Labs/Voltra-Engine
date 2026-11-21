@@ -9,6 +9,7 @@ pub mod camera;
 pub mod context;
 pub mod egui_backend;
 pub mod graph;
+pub mod light_layers;
 pub mod lights;
 pub mod lines;
 pub mod mesh;
@@ -27,7 +28,10 @@ pub use bloom::{BloomPass, BloomSettings};
 pub use camera::{screen_projection, Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
-pub use lights::{Cone, LightPass, Lighting, Occluder, PointLight, Shadow};
+pub use light_layers::LayerPass;
+pub use lights::{
+    Cone, LightPass, Lighting, Occluder, PointLight, Shadow, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
+};
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
 pub use normals::NormalPass;

@@ -198,10 +198,17 @@ impl LayerCache {
             entry.stamp = Some(stamp.for_chunk(entry.animated));
         }
         if inside {
-            entry.append_world(batch, matrix, map.color);
+            entry.append_world(batch, matrix, map.color, map.light_layers);
         } else {
             for quad in &entry.quads {
-                batch.push_quad(matrix, quad.corners, quad.uvs, map.color, quad.texture);
+                batch.push_quad_on(
+                    matrix,
+                    quad.corners,
+                    quad.uvs,
+                    map.color,
+                    quad.texture,
+                    map.light_layers,
+                );
             }
         }
     }
@@ -226,7 +233,13 @@ impl ChunkMesh {
 
     /// The chunk's quads through `matrix`, as [`SpriteBatch::push_quad`]
     /// would have written them, copied in.
-    fn append_world(&mut self, batch: &mut SpriteBatch, matrix: Mat3, color: [f32; 4]) {
+    fn append_world(
+        &mut self,
+        batch: &mut SpriteBatch,
+        matrix: Mat3,
+        color: [f32; 4],
+        light_layers: u32,
+    ) {
         let fresh = self
             .world
             .as_ref()
@@ -245,7 +258,7 @@ impl ChunkMesh {
         let mut start = first;
         for &(texture, quads) in &world.runs {
             let end = start + quads * crate::batch::QUAD_INDICES.len() as u32;
-            batch.extend_ranges(texture, None, start..end);
+            batch.extend_ranges(texture, None, light_layers, start..end);
             start = end;
         }
     }

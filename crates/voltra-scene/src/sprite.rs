@@ -121,6 +121,15 @@ pub struct Sprite {
     /// serialised, as `texture_handle` is not.
     #[serde(skip)]
     pub normal_handle: Option<Handle<Texture>>,
+    /// The light layers it is on — Godot's `light_mask`: a light lights it
+    /// only if the light's [`layers`](crate::PointLight2D::layers) share a
+    /// bit with these. The first layer — the default, and not written — is
+    /// what every light lights unless told otherwise.
+    #[serde(
+        default = "crate::light::default_light_layers",
+        skip_serializing_if = "crate::light::is_default_light_layers"
+    )]
+    pub light_layers: u32,
 }
 
 impl Default for Sprite {
@@ -140,6 +149,7 @@ impl Default for Sprite {
             pixels_per_unit: None,
             normal_map: None,
             normal_handle: None,
+            light_layers: crate::light::default_light_layers(),
         }
     }
 }

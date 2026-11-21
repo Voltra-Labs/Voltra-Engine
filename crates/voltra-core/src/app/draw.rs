@@ -253,6 +253,7 @@ fn mesh_draws<'a>(
                 None => white,
             },
             normal: None,
+            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: range.indices.clone(),
         })
         .collect()

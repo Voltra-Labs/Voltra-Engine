@@ -20,6 +20,7 @@ use std::sync::atomic::AtomicBool;
 use crate::shader;
 
 mod instance;
+mod layer_input;
 mod lighting;
 mod normal_input;
 mod occluder;
@@ -27,8 +28,10 @@ mod passes;
 pub mod shadows;
 
 use instance::LightInstance;
+use layer_input::LayerInput;
 pub use lighting::{
-    Cone, Lighting, PointLight, Shadow, DEFAULT_SHADOW_RESOLUTION, LIT_FORMAT, MAX_SHADOW_SOFTNESS,
+    Cone, Lighting, PointLight, Shadow, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
+    DEFAULT_SHADOW_RESOLUTION, LIT_FORMAT, MAX_SHADOW_SOFTNESS,
 };
 use normal_input::NormalInput;
 pub use occluder::Occluder;
@@ -42,6 +45,7 @@ pub struct LightPass {
     composite_layout: wgpu::BindGroupLayout,
     shadows: ShadowPass,
     normals: NormalInput,
+    layers: LayerInput,
     /// Whether the shadow map running out of rows has been reported since it
     /// last had enough: said when it starts, not every frame it lasts.
     overflow_reported: AtomicBool,
@@ -52,6 +56,7 @@ impl LightPass {
     pub fn new(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout) -> Self {
         let shadows = ShadowPass::new(device);
         let normals = NormalInput::new(device);
+        let layers = LayerInput::new(device);
         let module = shader::create_module(device, "lights", shader::LIGHTS);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("lights-pipeline-layout"),
@@ -59,6 +64,7 @@ impl LightPass {
                 Some(camera_layout),
                 Some(shadows.layout()),
                 Some(normals.layout()),
+                Some(layers.layout()),
             ],
             immediate_size: 0,
         });
@@ -85,6 +91,7 @@ impl LightPass {
                         1 => Float32x4,
                         2 => Float32x4,
                         3 => Float32x4,
+                        4 => Uint32,
                     ],
                 })],
             },
@@ -156,6 +163,7 @@ impl LightPass {
             composite_layout,
             shadows,
             normals,
+            layers,
             overflow_reported: AtomicBool::new(false),
         }
     }
