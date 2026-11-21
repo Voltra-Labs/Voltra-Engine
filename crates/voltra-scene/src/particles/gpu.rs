@@ -27,7 +27,7 @@ pub struct GpuPlan {
     /// Where the next birth goes.
     cursor: u32,
     /// Births not yet known dead: seconds since, and how many.
-    in_flight: VecDeque<(f32, u32)>,
+    in_flight: VecDeque<Birth>,
     /// What the next dispatch runs: every step since the last one, merged.
     pending: Option<SimStep>,
     /// Steps planned so far, which seed each dispatch's randomness.
@@ -37,7 +37,10 @@ pub struct GpuPlan {
 impl GpuPlan {
     /// The most of this emitter's particles that can be alive.
     pub(crate) fn alive_bound(&self) -> usize {
-        self.in_flight.iter().map(|&(_, n)| n as usize).sum()
+        self.in_flight
+            .iter()
+            .map(|birth| birth.count as usize)
+            .sum()
     }
 
     pub(crate) fn is_empty(&self) -> bool {
@@ -63,16 +66,25 @@ impl GpuPlan {
         }
 
         let longest = finite_or(emitter.lifetime.0.max(emitter.lifetime.1), 0.0).max(0.0);
-        for (age, _) in &mut self.in_flight {
-            *age += dt;
+        for birth in &mut self.in_flight {
+            birth.age += dt;
         }
-        self.in_flight.retain(|&(age, _)| age < longest + MARGIN);
+        self.in_flight.retain(|birth| birth.age < longest + MARGIN);
 
         let room = (capacity as usize).saturating_sub(self.alive_bound());
         let births = (births as usize).min(room) as u32;
         let start = self.cursor;
         if births > 0 {
-            self.in_flight.push_back((0.0, births));
+            self.in_flight.push_back(Birth {
+                age: 0.0,
+                count: births,
+                origin: if emitter.world_space {
+                    matrix.transform_point2(Vec2::ZERO)
+                } else {
+                    Vec2::ZERO
+                },
+                reach: reach(emitter, matrix, longest),
+            });
             self.cursor =
                 ((u64::from(self.cursor) + u64::from(births)) % u64::from(capacity)) as u32;
         }
@@ -121,9 +133,87 @@ impl GpuPlan {
         births
     }
 
+    /// A box every live particle is inside, in the world, for an emitter
+    /// whose world matrix is `matrix` now — or `None` when none can be alive.
+    ///
+    /// Conservative: each birth's place grown by the farthest its particles
+    /// can have gone in the longest lifetime at the fastest speed, plus the
+    /// widest size. A world-space birth stays where it was born; a
+    /// local-space one moves with the emitter, so its box is carried by
+    /// today's matrix. What lets the batch leave out an emitter off screen.
+    pub(crate) fn bounds(&self, world_space: bool, matrix: Mat3) -> Option<(Vec2, Vec2)> {
+        let mut bounds: Option<(Vec2, Vec2)> = None;
+        for birth in &self.in_flight {
+            let (min, max) = if world_space {
+                (
+                    birth.origin - Vec2::splat(birth.reach),
+                    birth.origin + Vec2::splat(birth.reach),
+                )
+            } else {
+                let r = birth.reach;
+                let corners = [
+                    Vec2::new(-r, -r),
+                    Vec2::new(r, -r),
+                    Vec2::new(r, r),
+                    Vec2::new(-r, r),
+                ]
+                .map(|corner| matrix.transform_point2(corner));
+                (
+                    corners.iter().copied().fold(Vec2::INFINITY, Vec2::min),
+                    corners.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max),
+                )
+            };
+            bounds = Some(match bounds {
+                None => (min, max),
+                Some((lo, hi)) => (lo.min(min), hi.max(max)),
+            });
+        }
+        bounds
+    }
+
     /// The dispatch owed since the last one, if any step was planned.
     pub(crate) fn take(&mut self) -> Option<SimStep> {
         self.pending.take()
+    }
+}
+
+/// Particles born in one step: how long ago, how many, where, and how far
+/// from there any of them can get.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Birth {
+    age: f32,
+    count: u32,
+    origin: Vec2,
+    reach: f32,
+}
+
+/// How far a particle of `emitter`, born through `matrix`, can be from where
+/// it was born, at most, over `lifetime` seconds — in the space it is drawn
+/// in before the draw's placement (the world for a world-space emitter).
+fn reach(emitter: &ParticleEmitter, matrix: Mat3, lifetime: f32) -> f32 {
+    let scale = if emitter.world_space {
+        matrix
+            .x_axis
+            .truncate()
+            .length()
+            .max(matrix.y_axis.truncate().length())
+    } else {
+        1.0
+    };
+    let speed = finite_or(emitter.speed.0.abs().max(emitter.speed.1.abs()), 0.0) * scale;
+    let acceleration = if emitter.acceleration.is_finite() {
+        emitter.acceleration.length()
+    } else {
+        0.0
+    };
+    let size = finite_or(emitter.size.0.max(emitter.size.1), 0.0).max(0.0);
+    let reach = speed * lifetime + 0.5 * acceleration * lifetime * lifetime + size * 0.5;
+    // Infinite rather than NaN: a box that sees everything draws, which is
+    // the safe answer for a reach that cannot be bounded.
+    if reach.is_finite() {
+        reach
+    } else {
+        f32::INFINITY
     }
 }
 

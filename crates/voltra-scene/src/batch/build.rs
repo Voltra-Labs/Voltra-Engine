@@ -168,7 +168,12 @@ impl SpriteBatch {
                         particles::mesh::push(batch, matrix, emitter);
                         // One draw however many repeats: the particles are
                         // where they are, not where a copy of the emitter is.
-                        if copy == 0 && emitter.gpu_capacity().is_some() {
+                        // Left out when nothing can be alive, or nothing
+                        // alive can be in view.
+                        let seen = emitter
+                            .gpu_bounds(matrix)
+                            .is_some_and(|(min, max)| sheets.sees(min, max));
+                        if copy == 0 && emitter.gpu_capacity().is_some() && seen {
                             batch.push_gpu_emitter(entity, emitter.texture_handle);
                         }
                     }

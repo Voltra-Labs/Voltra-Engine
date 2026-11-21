@@ -145,6 +145,16 @@ impl ParticleEmitter {
         (self.state.gpu.capacity > 0).then_some(self.state.gpu.capacity)
     }
 
+    /// A box every live GPU particle is inside, in the world, with the
+    /// emitter's world matrix at `matrix`; `None` when none can be alive.
+    /// Conservative, for culling — see [`gpu::GpuPlan`].
+    pub fn gpu_bounds(
+        &self,
+        matrix: voltra_render::glam::Mat3,
+    ) -> Option<(voltra_render::glam::Vec2, voltra_render::glam::Vec2)> {
+        self.state.gpu.bounds(self.world_space, matrix)
+    }
+
     /// The dispatch owed since the last call: every step since, merged.
     /// `None` when nothing was stepped, or on the CPU.
     pub fn take_gpu_step(&mut self) -> Option<voltra_render::SimStep> {

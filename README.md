@@ -276,6 +276,7 @@ privileged and plain `cargo build` covers everything.
 | 47 | Render graph for the post chain; bloom | done |
 | 48 | Dense `WorldTransforms`; the parallel batch pre-pass measured and removed | done |
 | 49 | Scene textures decoded across the job pool | done |
+| 50 | GPU particle emitters culled by a conservative bound | done |
 
 ## Contributing
 
