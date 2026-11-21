@@ -42,7 +42,8 @@ impl App {
             .with_fonts(fonts)
             .seen_from(renderer.camera.position)
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
-            .at_time(clock_seconds(self.elapsed));
+            .at_time(clock_seconds(self.elapsed))
+            .with_layers(&self.sorting_layers);
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(renderer.context().device());
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -117,7 +118,8 @@ impl App {
             .with_fonts(fonts)
             .seen_from(renderer.camera.position)
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
-            .at_time(clock_seconds(self.elapsed));
+            .at_time(clock_seconds(self.elapsed))
+            .with_layers(&self.sorting_layers);
         let batch = SpriteBatch::from_world(&self.world, sheets);
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
@@ -154,6 +156,7 @@ impl App {
             textures,
             atlases,
             fonts,
+            sorting_layers: &self.sorting_layers,
             clips,
             prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
             audio: &mut self.audio,

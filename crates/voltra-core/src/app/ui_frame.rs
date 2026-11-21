@@ -40,6 +40,8 @@ pub struct UiFrame<'a> {
     pub atlases: &'a mut Atlases,
     /// Faces and glyph atlases, for a panel resolving a text's font.
     pub fonts: &'a mut Fonts,
+    /// The project's sorting layers, for the inspector's choice and the pick.
+    pub sorting_layers: &'a voltra_scene::SortingLayers,
     /// Loaded sounds, shared with the loop's own playback for the same reason
     /// the two stores above are shared: a panel that names a clip must produce
     /// a handle the frame's audio can already resolve.
@@ -228,6 +230,7 @@ impl<'a> UiFrame<'a> {
         Sheets::new(self.atlases, self.textures)
             .with_fonts(self.fonts)
             .seen_from(self.camera.position)
+            .with_layers(self.sorting_layers)
     }
 }
 

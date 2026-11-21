@@ -266,6 +266,7 @@ privileged and plain `cargo build` covers everything.
 | 38 | Animated tiles | done |
 | 39 | Auto-tiling: 16-frame terrains, painted from the editor | done |
 | 40 | Auto-tiling: the 47-tile blob with corners | done |
+| 41 | Sorting layers: named bands above `sort_order` | done |
 
 ## Contributing
 

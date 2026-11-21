@@ -31,6 +31,15 @@ impl Drawn<'_> {
             Self::Particles(emitter) => emitter.sort_order,
         }
     }
+
+    fn sorting_layer(&self) -> &str {
+        match self {
+            Self::Sprite(sprite) => &sprite.sorting_layer,
+            Self::Tilemap(map) => &map.sorting_layer,
+            Self::Text(text) => &text.sorting_layer,
+            Self::Particles(emitter) => &emitter.sorting_layer,
+        }
+    }
 }
 
 /// Corners per quad. Where they land is [`quad`]'s question, not this one's.
@@ -111,7 +120,13 @@ impl SpriteBatch {
             // second copy in the world at its stale transform.
             .filter(|(entity, _)| !crate::ui::is_ui(world, *entity))
             .collect();
-        drawn.sort_unstable_by_key(|(entity, drawn)| draw_key(*entity, drawn.sort_order()));
+        drawn.sort_unstable_by_key(|(entity, drawn)| {
+            draw_key(
+                *entity,
+                sheets.rank(drawn.sorting_layer()),
+                drawn.sort_order(),
+            )
+        });
 
         // Composed once for the whole world rather than walked per sprite: a
         // deep tree would otherwise cost one matrix chain per descendant, every

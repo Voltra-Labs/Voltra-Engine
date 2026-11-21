@@ -62,6 +62,14 @@ pub struct Text {
     /// [`Sprite::sort_order`](crate::Sprite::sort_order).
     #[serde(default)]
     pub sort_order: i32,
+    /// The named layer it draws on, before `sort_order` is consulted. See
+    /// [`SortingLayers`](crate::sorting::SortingLayers).
+    #[serde(
+        default = "crate::sorting::default_layer",
+        skip_serializing_if = "crate::sorting::is_default_layer"
+    )]
+    pub sorting_layer: String,
+
     /// The handle `font` resolves to — or the default font's. Never
     /// serialised: it addresses a slot in this session's [`Fonts`].
     #[serde(skip)]
@@ -78,6 +86,7 @@ impl Default for Text {
             color: [1.0, 1.0, 1.0, 1.0],
             align: Align::Left,
             sort_order: 0,
+            sorting_layer: crate::sorting::default_layer(),
             font_handle: None,
         }
     }

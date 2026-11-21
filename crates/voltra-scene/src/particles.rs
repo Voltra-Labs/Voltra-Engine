@@ -57,6 +57,13 @@ pub struct ParticleEmitter {
     pub texture_handle: Option<Handle<Texture>>,
     #[serde(default)]
     pub sort_order: i32,
+    /// The named layer it draws on, before `sort_order` is consulted. See
+    /// [`SortingLayers`](crate::sorting::SortingLayers).
+    #[serde(
+        default = "crate::sorting::default_layer",
+        skip_serializing_if = "crate::sorting::is_default_layer"
+    )]
+    pub sorting_layer: String,
     /// Particles keep the world position they were born at — sparks left
     /// behind a moving ship — rather than travelling with the emitter.
     pub world_space: bool,
@@ -92,6 +99,7 @@ impl Default for ParticleEmitter {
             texture: None,
             texture_handle: None,
             sort_order: 0,
+            sorting_layer: crate::sorting::default_layer(),
             world_space: true,
             one_shot: false,
             state: Particles::default(),

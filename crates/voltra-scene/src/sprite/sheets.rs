@@ -35,6 +35,8 @@ pub struct Sheets<'a> {
     /// Seconds on the clock the frame is drawn at, which animated tiles
     /// pick their frame by.
     pub time: f32,
+    /// The project's sorting layers. `None` sorts by the default list.
+    pub layers: Option<&'a crate::sorting::SortingLayers>,
 }
 
 impl<'a> Sheets<'a> {
@@ -47,6 +49,7 @@ impl<'a> Sheets<'a> {
             camera: Vec2::ZERO,
             visible: None,
             time: 0.0,
+            layers: None,
         }
     }
 
@@ -73,6 +76,22 @@ impl<'a> Sheets<'a> {
             return true;
         }
         min.x <= view_max.x && max.x >= view_min.x && min.y <= view_max.y && max.y >= view_min.y
+    }
+
+    /// The same stores, sorting by `layers`.
+    pub fn with_layers(mut self, layers: &'a crate::sorting::SortingLayers) -> Self {
+        self.layers = Some(layers);
+        self
+    }
+
+    /// Where the sorting layer `name` ranks, by these stores' layers or the
+    /// default list.
+    pub fn rank(&self, name: &str) -> i32 {
+        static DEFAULT: std::sync::OnceLock<crate::sorting::SortingLayers> =
+            std::sync::OnceLock::new();
+        self.layers
+            .unwrap_or_else(|| DEFAULT.get_or_init(crate::sorting::SortingLayers::default))
+            .rank(name)
     }
 
     /// The same stores, drawn `time` seconds into the clock.

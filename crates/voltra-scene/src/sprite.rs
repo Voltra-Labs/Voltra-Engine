@@ -38,6 +38,13 @@ pub struct Sprite {
     /// is the control for when that matters; index order is only the tiebreak
     /// for when it does not.
     pub sort_order: i32,
+    /// The named layer it draws on, before `sort_order` is consulted. See
+    /// [`SortingLayers`](crate::sorting::SortingLayers).
+    #[serde(
+        default = "crate::sorting::default_layer",
+        skip_serializing_if = "crate::sorting::is_default_layer"
+    )]
+    pub sorting_layer: String,
     /// The texture this sprite names, by path relative to the asset root.
     ///
     /// `None` draws with `color` alone, against the renderer's white bind
@@ -106,6 +113,7 @@ impl Default for Sprite {
         Self {
             color: [1.0, 1.0, 1.0, 1.0],
             sort_order: 0,
+            sorting_layer: crate::sorting::default_layer(),
             texture: None,
             texture_handle: None,
             atlas: None,
@@ -191,8 +199,8 @@ impl Sprite {
 /// disagreed, a click would select something other than the sprite whose pixels
 /// are visible, and nothing would report it. Takes the order rather than a
 /// [`Sprite`] because a tilemap layer sorts among sprites by the same key.
-pub fn draw_key(entity: Entity, sort_order: i32) -> (i32, u32) {
-    (sort_order, entity.index())
+pub fn draw_key(entity: Entity, layer_rank: i32, sort_order: i32) -> (i32, i32, u32) {
+    (layer_rank, sort_order, entity.index())
 }
 
 #[cfg(test)]
