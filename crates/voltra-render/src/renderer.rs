@@ -7,6 +7,7 @@ use crate::context::GpuContext;
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
 use crate::pass::MeshDraw;
+use crate::post::{PostPass, PostSettings};
 use crate::target::RenderTarget;
 use crate::texture::Texture;
 use crate::{pass, pipeline, texture};
@@ -28,6 +29,11 @@ pub struct Renderer {
     white_bind_group: wgpu::BindGroup,
     /// Draws overlay segments over an already-rendered target.
     lines: wgpu::RenderPipeline,
+    /// Grades the drawn scene into the frame.
+    post: PostPass,
+    /// Where the world is drawn before the post pass on the window path,
+    /// sized to the surface; made on the first frame.
+    frame_target: Option<RenderTarget>,
     /// The size the line shader widens against, rewritten every frame.
     viewport_binding: ViewportBinding,
     pub camera: Camera2D,
@@ -57,6 +63,8 @@ impl Renderer {
             viewport_binding.layout(),
         );
 
+        let post = PostPass::new(ctx.device(), ctx.config().format);
+
         let camera = {
             let mut camera = Camera2D::default();
             camera.aspect = aspect_of(width, height);
@@ -71,6 +79,8 @@ impl Renderer {
             texture_layout,
             white_bind_group,
             lines,
+            post,
+            frame_target: None,
             viewport_binding,
             camera,
             clear_color: wgpu::Color {
@@ -106,11 +116,19 @@ impl Renderer {
         self.camera.aspect = aspect_of(width, height);
     }
 
-    /// Draws `mesh` straight to the window, or just clears it, then `ui`
-    /// over it in the window's pixels.
+    /// Draws `mesh` to the window through the post pass, then `ui` over it in
+    /// the window's pixels — the HUD is not graded.
     ///
-    /// The path a shipped game takes: no editor, no intermediate texture.
-    pub fn render_mesh(&mut self, mesh: Option<&Mesh>, draws: &[MeshDraw<'_>], ui: Layer<'_>) {
+    /// The path a shipped game takes: no editor. The world goes into an
+    /// offscreen target the size of the surface, and `post` grades it into
+    /// the frame.
+    pub fn render_mesh(
+        &mut self,
+        mesh: Option<&Mesh>,
+        draws: &[MeshDraw<'_>],
+        ui: Layer<'_>,
+        post: &PostSettings,
+    ) {
         let Some(frame) = self.ctx.acquire() else {
             return;
         };
@@ -118,33 +136,55 @@ impl Renderer {
         let view = frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder =
-            self.ctx
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("frame-encoder"),
-                });
-
-        self.record_scene(&mut encoder, &view, mesh, draws);
         let (width, height) = (self.ctx.config().width, self.ctx.config().height);
+        let format = self.ctx.config().format;
+        let device = self.ctx.device().clone();
+        let target = self.frame_target.get_or_insert_with(|| {
+            RenderTarget::new(
+                &device,
+                "frame-target",
+                format,
+                width,
+                height,
+                crate::texture::Filter::Linear,
+            )
+        });
+        target.resize(&device, width, height);
+
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("frame-encoder"),
+        });
+        let target = self.frame_target.as_ref().expect("made just above");
+        self.record_scene(&mut encoder, target.view(), mesh, draws);
+        self.post.record(
+            &device,
+            self.ctx.queue(),
+            &mut encoder,
+            target.view(),
+            &view,
+            post,
+            aspect_of(width, height),
+        );
         self.record_ui(&mut encoder, &view, width, height, ui);
 
         self.ctx.queue().submit(Some(encoder.finish()));
         self.ctx.present(frame);
     }
 
-    /// Draws `mesh` into an offscreen target instead of the window.
+    /// Draws `mesh` into `target`, grades it into `output` with `post`, and
+    /// draws `ui` over `output` ungraded.
     ///
-    /// The editor's path: the result becomes an image inside a viewport panel,
+    /// The editor's path: `output` becomes an image inside a viewport panel,
     /// which is why the scene needs its own size and aspect rather than the
-    /// window's.
+    /// window's. The two targets must be the same size.
     pub fn render_scene(
         &mut self,
         target: &RenderTarget,
+        output: &RenderTarget,
         mesh: Option<&Mesh>,
         draws: &[MeshDraw<'_>],
         ui: Layer<'_>,
+        post: &PostSettings,
     ) {
         let mut encoder =
             self.ctx
@@ -154,11 +194,20 @@ impl Renderer {
                 });
 
         self.record_scene(&mut encoder, target.view(), mesh, draws);
-        self.record_ui(
+        self.post.record(
+            self.ctx.device(),
+            self.ctx.queue(),
             &mut encoder,
             target.view(),
-            target.width(),
-            target.height(),
+            output.view(),
+            post,
+            target.aspect(),
+        );
+        self.record_ui(
+            &mut encoder,
+            output.view(),
+            output.width(),
+            output.height(),
             ui,
         );
         self.ctx.queue().submit(Some(encoder.finish()));

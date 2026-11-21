@@ -46,5 +46,38 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
         }
         ui.end_row();
     });
+
+    ui.label(RichText::new("Post-processing").strong())
+        .on_hover_text("how the frame through this camera is graded; the HUD is not");
+    egui::Grid::new("camera_post")
+        .num_columns(2)
+        .show(ui, |ui| {
+            let post = &mut camera.post;
+            for (label, value, range) in [
+                ("exposure", &mut post.exposure, 0.0..=8.0),
+                ("contrast", &mut post.contrast, 0.0..=4.0),
+                ("saturation", &mut post.saturation, 0.0..=4.0),
+                ("vignette", &mut post.vignette, 0.0..=1.0),
+            ] {
+                ui.label(label);
+                claim = claim.or(active(
+                    &ui.add(DragValue::new(value).speed(0.01).range(range)),
+                    "Set post-processing",
+                ));
+                ui.end_row();
+            }
+            ui.label("tint");
+            // A popup, as every colour field is: see `sprite::show`.
+            let popup = ui.auto_id_with("popup");
+            let response = ui.color_edit_button_rgb(&mut post.tint);
+            if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
+                claim = claim.or(Some("Set post-processing"));
+            }
+            ui.end_row();
+            if !post.is_neutral() && ui.small_button("Reset").clicked() {
+                *post = voltra_scene::PostProcess::default();
+                claim = claim.or(Some("Set post-processing"));
+            }
+        });
     claim
 }

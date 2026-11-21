@@ -60,7 +60,8 @@ impl App {
             mesh: hud_mesh.as_ref(),
             draws: &hud_draws,
         };
-        renderer.render_mesh(mesh.as_ref(), &draws, layer);
+        let post = voltra_scene::post::active(&self.world);
+        renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
     }
 
     /// Scene to an offscreen target, then the UI over the top of the window.
@@ -70,6 +71,7 @@ impl App {
             Some(window),
             Some(egui),
             Some(target),
+            Some(graded),
             Some(viewport),
             Some(ui),
             Some(textures),
@@ -81,6 +83,7 @@ impl App {
             self.window.as_ref(),
             self.egui.as_mut(),
             self.scene_target.as_mut(),
+            self.post_target.as_mut(),
             self.viewport,
             self.ui.as_mut(),
             self.textures.as_mut(),
@@ -99,10 +102,11 @@ impl App {
         let queue = renderer.context().queue().clone();
 
         let (width, height) = self.requested_size;
-        if target.resize(&device, width, height) {
+        let resized = target.resize(&device, width, height);
+        if graded.resize(&device, width, height) || resized {
             // The old view points at a texture that no longer exists, and the
             // scene has to be projected for the panel's shape, not the window's.
-            egui.update_view(&device, viewport, target.raw_view(), Filter::Linear);
+            egui.update_view(&device, viewport, graded.raw_view(), Filter::Linear);
             renderer.camera.aspect = target.aspect();
         }
 
@@ -136,7 +140,8 @@ impl App {
             mesh: hud_mesh.as_ref(),
             draws: &hud_draws,
         };
-        renderer.render_scene(target, mesh.as_ref(), &draws, layer);
+        let post = voltra_scene::post::active(&self.world);
+        renderer.render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
 
         let size = window.inner_size();
         let screen = ScreenDescriptor {
@@ -176,7 +181,7 @@ impl App {
         // before `present_with`, because that is when egui samples the target.
         // The overlay therefore lands in the same frame as the scene under it.
         let lines = self.lines.upload(&device);
-        renderer.render_lines(target, lines.as_ref());
+        renderer.render_lines(graded, lines.as_ref());
 
         renderer.present_with(|pass| egui.render(pass));
     }

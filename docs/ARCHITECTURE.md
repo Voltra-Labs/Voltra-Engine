@@ -2907,6 +2907,30 @@ edit to the list rather than to every sprite in it.
 - The screen-space UI keeps its own order (`sort_order`, depth, index): it is
   drawn in its own pass, above the world, whatever the world's layers.
 
+### Post-processing is one graded pass between the world and the HUD
+
+Stage 43. The smallest render graph that pays its way: the world is drawn
+into an offscreen target, `PostPass` grades it into the frame, and what
+must not be graded — the HUD, the editor overlay — is drawn after it.
+
+- **`PostSettings`** (render) / **`PostProcess`** (scene, on `Camera`):
+  exposure, contrast around linear middle grey, saturation, tint, vignette —
+  Godot's `Environment` adjustments and Unity's grading volume, cut to what a
+  2D game reaches for. Neutral is the identity, and not written to a scene.
+  The active camera's grade is used, in the game and in the editor preview.
+- **Colour space:** the pass samples the source's sRGB view, so it reads
+  linear; it grades in linear and writes an sRGB target, which encodes. One
+  conversion each way, never two — pinned by `headless_post.rs`, where a
+  neutral grade of 0.5 linear reads back 188, not the darker double-encoded
+  value.
+- **Paths:** the window path draws into a renderer-owned target the size of
+  the surface and grades into the swapchain; the editor draws into
+  `scene_target`, grades into `post_target`, and the viewport panel shows
+  `post_target` with the line overlay on it. A full-screen triangle from the
+  vertex index, no vertex buffer; nonsense settings are clamped to safe ones.
+- **Not yet:** effects that need more than one pass (bloom, blur) — the
+  point at which a real graph of passes and transient targets earns itself.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
