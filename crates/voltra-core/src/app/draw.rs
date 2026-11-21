@@ -45,10 +45,6 @@ impl App {
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
             .at_time(clock_seconds(self.elapsed))
             .with_layers(&self.sorting_layers);
-        let sheets = Sheets {
-            jobs: self.jobs.as_ref(),
-            ..sheets
-        };
         // Into last frame's buffers, taken out for the frame and put back.
         let mut batch = std::mem::take(&mut self.frame_batch);
         batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
@@ -133,10 +129,6 @@ impl App {
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
             .at_time(clock_seconds(self.elapsed))
             .with_layers(&self.sorting_layers);
-        let sheets = Sheets {
-            jobs: self.jobs.as_ref(),
-            ..sheets
-        };
         // Into last frame's buffers, taken out for the frame and put back.
         let mut batch = std::mem::take(&mut self.frame_batch);
         batch.rebuild(&self.world, sheets, &mut self.tile_meshes);

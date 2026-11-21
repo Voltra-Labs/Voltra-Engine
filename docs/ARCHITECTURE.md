@@ -3011,20 +3011,22 @@ Bevy's `ComputeTaskPool::scope` and Godot's `WorkerThreadPool` groups.
   is caught; the scope finishes the rest and resumes the first panic.
 - **No work stealing, one queue.** Frame jobs are a few dozen chunks; a
   mutex-guarded deque is not where the time goes. Revisit with a profile.
-- **First consumer — sprites placed in parallel** (`batch/parallel.rs`):
-  frame lookup, corners through the world matrix and the cull run per
-  sprite on the pool (`Sheets::jobs`, ≥ 512 sprites, none repeating);
-  appending stays one ordered pass, so the batch is identical (pinned
-  against the single-threaded build). `World` is not `Sync`, so jobs see
-  the sorted component references and `WorldTransforms`, never the world.
-  `TextureSizes` now requires `Sync`.
-- **Measured honestly** (`batch_stress`, 12 threads): the pool saves only
-  ~5–15 % of the batch — placing 5 000 sprites is ~0.3 ms. The stage's real
-  win was found by profiling first: the sort recomputed each key's
-  sorting-layer rank (a name lookup) on every comparison. Keyed once per
-  entity, the 5 000-sprite level went **4.1 ms → 1.8 ms**.
-- **Next consumers, when a profile asks:** composing `WorldTransforms` per
-  root, the physics narrow phase, decoding assets off the main thread.
+- **The batch tried it and lost** (stage 48, measured, then removed): a
+  pre-pass placing sprites on the pool was 5–20 % *slower* than one thread
+  at 5 000, 50 000 and 200 000 sprites, with the pre-pass buffer reused.
+  Placing a sprite is a few dozen nanoseconds; writing and re-reading its
+  four vertices through a side buffer costs more than the work saved, and
+  the ordered append is the bulk. The batch is single-threaded again. The
+  pool waits for a consumer whose work per item is compute, not copying —
+  the physics narrow phase, asset decoding — and is wired in only once a
+  measurement says it wins. `TextureSizes: Sync` stays; it costs nothing.
+- **What did win, both by profiling first:** the sort recomputed each
+  key's sorting-layer rank (a name lookup) on every comparison — keyed
+  once per entity, the 5 000-sprite level went 4.1 ms → 1.8 ms (stage 46);
+  and `WorldTransforms` copied locals and parents into hash maps before
+  composing — read straight from the sparse sets into a dense array
+  indexed by `Entity::index` (generation-checked), composing went
+  0.94 ms → 0.20 ms and the level 1.8 ms → **0.85 ms** (stage 48).
 
 ### The frame's post chain is a render graph; bloom is its first chain
 

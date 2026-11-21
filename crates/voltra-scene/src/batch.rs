@@ -198,9 +198,7 @@ impl SpriteBatch {
 /// outside `visible`.
 ///
 /// Culled on the corners as they will be drawn, so a rotated, scaled,
-/// parented or parallax-displaced quad is tested where it really is. Needs
-/// nothing but its arguments, which is what lets sprites be placed on the
-/// job pool's threads.
+/// parented or parallax-displaced quad is tested where it really is.
 pub(crate) fn placed(
     visible: Option<(Vec2, Vec2)>,
     matrix: Mat3,
@@ -229,8 +227,5 @@ pub(crate) fn placed(
 mod build;
 #[cfg(test)]
 mod cull_tests;
-mod parallel;
-#[cfg(test)]
-mod parallel_tests;
 #[cfg(test)]
 mod tests;

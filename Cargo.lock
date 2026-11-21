@@ -3288,7 +3288,6 @@ dependencies = [
  "voltra-assets",
  "voltra-audio",
  "voltra-ecs",
- "voltra-jobs",
  "voltra-physics",
  "voltra-render",
  "voltra-scene",
@@ -3372,7 +3371,6 @@ dependencies = [
  "voltra-assets",
  "voltra-audio",
  "voltra-ecs",
- "voltra-jobs",
  "voltra-render",
  "voltra-testkit",
 ]
