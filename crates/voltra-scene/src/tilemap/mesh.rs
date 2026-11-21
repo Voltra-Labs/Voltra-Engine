@@ -7,64 +7,85 @@
 
 use voltra_render::glam::{IVec2, Mat3, Vec2};
 
-use super::chunk::{cell_of, CHUNK};
+use super::cache::{LayerCache, LayerStamp};
+use super::chunk::{cell_of, ChunkKey, CHUNK};
 use super::{Tile, Tilemap};
 use crate::batch::SpriteBatch;
 use crate::sprite::quad::{flipped, WHOLE};
 use crate::sprite::sheets::Sheets;
 
-/// Appends every tile of `map`, placed by `matrix`, to `batch`.
-///
-/// Rebuilt every frame with the sprites, like the sprites. A layer is a few
-/// thousand quads, and the CPU walk is what the rest of the batch already
-/// costs once chunks out of view are skipped, which is what a level's size
-/// stops mattering for; caching a mesh per chunk is the step after.
+/// Appends every tile of `map`, placed by `matrix`, to `batch`, with nothing
+/// kept for the next frame — a pick, a test, a one-off batch.
 pub fn push(batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap, sheets: Sheets<'_>) {
     for (&key, chunk) in &map.chunks {
-        // A whole chunk off screen is skipped without visiting its cells:
-        // what makes a level of tens of thousands of tiles cost the screenful
-        // in view rather than all of it.
-        let first = map.cell_origin(IVec2::new(key.0 * CHUNK, key.1 * CHUNK));
-        let last = map.cell_origin(IVec2::new((key.0 + 1) * CHUNK, (key.1 + 1) * CHUNK));
-        let corners = [
-            first,
-            Vec2::new(first.x, last.y),
-            last,
-            Vec2::new(last.x, first.y),
-        ]
-        .map(|corner| matrix.transform_point2(corner));
-        let min = corners.iter().copied().fold(Vec2::INFINITY, Vec2::min);
-        let max = corners.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);
-        if !sheets.sees(min, max) {
+        if in_view(map, matrix, key, sheets).is_none() {
             continue;
         }
         for (index, tile) in chunk.tiles() {
-            push_tile(batch, matrix, map, cell_of(key, index), tile, sheets);
+            let (uvs, texture) = sample(map, tile, sheets);
+            let corners = corners_of(map, cell_of(key, index));
+            batch.push_quad(matrix, corners, uvs, map.color, texture);
         }
     }
 }
 
-/// One tile's quad.
-fn push_tile(
+/// Appends every tile of `map`, placed by `matrix`, to `batch`, through
+/// `cache`: a chunk drawn last frame from the same cells is copied rather
+/// than rebuilt. The same quads [`push`] writes. See [`cache`](super::cache).
+pub(crate) fn push_cached(
     batch: &mut SpriteBatch,
     matrix: Mat3,
     map: &Tilemap,
-    cell: IVec2,
-    tile: Tile,
     sheets: Sheets<'_>,
+    cache: &mut LayerCache,
 ) {
+    let stamp = LayerStamp::of(map, sheets);
+    for (&key, chunk) in &map.chunks {
+        if let Some(inside) = in_view(map, matrix, key, sheets) {
+            cache.push_chunk(batch, matrix, map, key, chunk, sheets, &stamp, inside);
+        }
+    }
+}
+
+/// Whether the chunk at `key` is seen at all — `None` skips it without
+/// visiting its cells, which is what makes a level of tens of thousands of
+/// tiles cost the screenful in view rather than all of it — and if it is,
+/// whether it is seen whole, so none of its quads can be culled.
+fn in_view(map: &Tilemap, matrix: Mat3, key: ChunkKey, sheets: Sheets<'_>) -> Option<bool> {
+    let first = map.cell_origin(IVec2::new(key.0 * CHUNK, key.1 * CHUNK));
+    let last = map.cell_origin(IVec2::new((key.0 + 1) * CHUNK, (key.1 + 1) * CHUNK));
+    let corners = [
+        first,
+        Vec2::new(first.x, last.y),
+        last,
+        Vec2::new(last.x, first.y),
+    ]
+    .map(|corner| matrix.transform_point2(corner));
+    let min = corners.iter().copied().fold(Vec2::INFINITY, Vec2::min);
+    let max = corners.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);
+    if !sheets.sees(min, max) {
+        return None;
+    }
+    Some(
+        min.is_finite()
+            && max.is_finite()
+            && sheets.visible.is_none_or(|(view_min, view_max)| {
+                min.cmpge(view_min).all() && max.cmple(view_max).all()
+            }),
+    )
+}
+
+/// One tile's corners in the layer's space: top-left, bottom-left,
+/// bottom-right, top-right — the order a sprite's corners and UVs are in.
+pub(super) fn corners_of(map: &Tilemap, cell: IVec2) -> [Vec2; 4] {
     let origin = map.cell_origin(cell);
     let size = map.tile_size;
-    // Top-left, bottom-left, bottom-right, top-right: the order a sprite's
-    // corners and UVs are in.
-    let corners = [
+    [
         Vec2::new(origin.x, origin.y + size.y),
         origin,
         Vec2::new(origin.x + size.x, origin.y),
         origin + size,
-    ];
-    let (uvs, texture) = sample(map, tile, sheets);
-    batch.push_quad(matrix, corners, uvs, map.color, texture);
+    ]
 }
 
 /// The UVs and texture one tile draws with.
@@ -74,7 +95,7 @@ fn push_tile(
 /// placeholder checker over the whole cell. A layer with no atlas at all
 /// draws its whole texture in every cell, which is what a sprite with no
 /// atlas does.
-fn sample(
+pub(super) fn sample(
     map: &Tilemap,
     tile: Tile,
     sheets: Sheets<'_>,

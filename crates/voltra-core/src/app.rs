@@ -157,6 +157,11 @@ pub struct App {
     pub gravity: Vec2,
     /// Overlay segments, emptied and rebuilt by the UI every frame.
     lines: LineBatch,
+    /// Tilemap chunks kept from one frame's sprite batch to the next.
+    tile_meshes: voltra_scene::TileMeshCache,
+    /// The world's sprite batch, kept so each frame refills its buffers
+    /// instead of allocating them.
+    frame_batch: voltra_scene::SpriteBatch,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a

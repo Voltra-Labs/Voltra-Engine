@@ -10,10 +10,10 @@ use crate::sprite::Sprite;
 use crate::text::{shape, Text};
 
 /// Corners per quad. Where they land is [`quad`]'s question, not this one's.
-const CORNERS_PER_QUAD: usize = 4;
+pub(crate) const CORNERS_PER_QUAD: usize = 4;
 
 /// Two triangles over those four corners.
-const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
+pub(crate) const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
 
 /// A contiguous run of one texture's sprites within [`SpriteBatch::indices`].
 ///

@@ -35,16 +35,18 @@ impl App {
             renderer.context().queue(),
             scale,
         );
-        // Rebuilt every frame. Caching it means tracking every Transform and
-        // Sprite write, which is not worth it until the batch actually shows up
-        // in a profile.
+        // Rebuilt every frame, but for tilemap chunks drawn last frame from
+        // the same cells, which are copied: a level's tiles are the bulk of
+        // its quads and change least.
         let sheets = Sheets::new(atlases, textures)
             .with_fonts(fonts)
             .seen_from(renderer.camera.position)
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
             .at_time(clock_seconds(self.elapsed))
             .with_layers(&self.sorting_layers);
-        let batch = SpriteBatch::from_world(&self.world, sheets);
+        // Into last frame's buffers, taken out for the frame and put back.
+        let mut batch = std::mem::take(&mut self.frame_batch);
+        batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
         let mesh = batch.upload(renderer.context().device());
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
@@ -62,6 +64,7 @@ impl App {
         };
         let post = voltra_scene::post::active(&self.world);
         renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
+        self.frame_batch = batch;
     }
 
     /// Scene to an offscreen target, then the UI over the top of the window.
@@ -124,7 +127,9 @@ impl App {
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
             .at_time(clock_seconds(self.elapsed))
             .with_layers(&self.sorting_layers);
-        let batch = SpriteBatch::from_world(&self.world, sheets);
+        // Into last frame's buffers, taken out for the frame and put back.
+        let mut batch = std::mem::take(&mut self.frame_batch);
+        batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
         let mesh = batch.upload(&device);
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
@@ -142,6 +147,7 @@ impl App {
         };
         let post = voltra_scene::post::active(&self.world);
         renderer.render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
+        self.frame_batch = batch;
 
         let size = window.inner_size();
         let screen = ScreenDescriptor {

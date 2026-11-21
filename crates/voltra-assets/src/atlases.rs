@@ -22,6 +22,9 @@ pub struct Atlases {
     store: Assets<Atlas>,
     by_path: HashMap<AssetPath, Handle<Atlas>>,
     empty: Handle<Atlas>,
+    /// Bumped whenever an atlas already handed out changes, so anything
+    /// built from one — a tilemap chunk's UVs — can tell it is stale.
+    generation: u64,
 }
 
 impl Atlases {
@@ -34,6 +37,7 @@ impl Atlases {
             store,
             by_path: HashMap::new(),
             empty,
+            generation: 0,
         }
     }
 
@@ -93,8 +97,15 @@ impl Atlases {
             .get_mut(handle)
             .expect("Atlases never removes, so every handle it issued resolves");
         *slot = atlas;
+        self.generation += 1;
         log::info!("reloaded {}", path.as_str());
         true
+    }
+
+    /// Which change to an already-loaded atlas this store is at. A new
+    /// atlas gets a new handle and does not count.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// The handle `path` is cached to, if it has ever been loaded.
@@ -237,10 +248,15 @@ mod tests {
             r#"(version: 1, grid: Some((cell: (8, 16), columns: 8, rows: 1)))"#,
         )
         .expect("the re-cut writes");
+        let before = atlases.generation();
         let changed = atlases.reload(&path("coin.atlas.ron"));
 
         assert!(changed);
         assert_eq!(atlases.get(handle).len(), 8);
+        assert!(
+            atlases.generation() > before,
+            "what was cut from it is stale"
+        );
     }
 
     #[test]
@@ -253,8 +269,10 @@ mod tests {
 
         std::fs::write(&file, "half-written").expect("the truncation writes");
 
+        let before = atlases.generation();
         assert!(!atlases.reload(&path("coin.atlas.ron")));
         assert_eq!(atlases.get(handle).len(), 4, "still on screen");
+        assert_eq!(atlases.generation(), before, "and still current");
     }
 
     #[test]

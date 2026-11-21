@@ -10,7 +10,7 @@ use crate::particles::{self, ParticleEmitter};
 use crate::sprite::sheets::Sheets;
 use crate::sprite::{draw_key, Sprite};
 use crate::text::Text;
-use crate::tilemap::{mesh, Tilemap};
+use crate::tilemap::{mesh, TileMeshCache, Tilemap};
 use crate::transform::Transform;
 
 /// What the batch draws one of: every kind sorts by the same key.
@@ -56,6 +56,29 @@ impl SpriteBatch {
     /// there are never any equal keys for stability to preserve, and a
     /// dropped tiebreaker fails louder without it.
     pub fn from_world(world: &World, sheets: Sheets<'_>) -> Self {
+        let mut batch = Self::default();
+        batch.fill(world, sheets, None);
+        batch
+    }
+
+    /// [`SpriteBatch::from_world`], keeping tilemap chunks in `tiles` from
+    /// one build to the next: the same batch, built for what changed.
+    pub fn from_world_cached(world: &World, sheets: Sheets<'_>, tiles: &mut TileMeshCache) -> Self {
+        let mut batch = Self::default();
+        batch.fill(world, sheets, Some(tiles));
+        batch
+    }
+
+    /// [`SpriteBatch::from_world_cached`] into this batch, keeping its
+    /// buffers. What a draw path calling it every frame wants: a frame's
+    /// batch is megabytes once a level is in view, and allocating it afresh
+    /// costs more than the cached chunks take to copy in.
+    pub fn rebuild(&mut self, world: &World, sheets: Sheets<'_>, tiles: &mut TileMeshCache) {
+        self.fill(world, sheets, Some(tiles));
+    }
+
+    /// Empties the batch and builds `sheets`' frame of `world` into it.
+    fn fill(&mut self, world: &World, sheets: Sheets<'_>, mut tiles: Option<&mut TileMeshCache>) {
         // Sprites and tilemap layers in one list, because they share one draw
         // order: a layer behind the player and one in front of it are both
         // just a `sort_order` relative to the player's sprite.
@@ -95,15 +118,19 @@ impl SpriteBatch {
         // frame.
         let transforms = WorldTransforms::seen_from(world, sheets.camera);
 
-        let mut batch = Self {
-            visible: sheets.visible,
-            ..Self::default()
-        };
+        self.visible = sheets.visible;
+        self.vertices.clear();
+        self.indices.clear();
+        self.ranges.clear();
+        let batch = self;
         // Asked once: a world with no repeating layer draws every entity
         // once, without looking for one above it.
         let repeating = world
             .query::<crate::Parallax>()
             .any(|(_, layer)| layer.repeat.is_some());
+        if let Some(tiles) = tiles.as_deref_mut() {
+            tiles.begin();
+        }
         for (entity, drawn) in drawn {
             let matrix = transforms.matrix(entity);
             let copies = if repeating {
@@ -111,16 +138,23 @@ impl SpriteBatch {
             } else {
                 vec![voltra_render::glam::Vec2::ZERO]
             };
-            for offset in copies {
+            for (copy, offset) in copies.into_iter().enumerate() {
                 let matrix = Mat3::from_translation(offset) * matrix;
                 match drawn {
                     Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
-                    Drawn::Tilemap(map) => mesh::push(&mut batch, matrix, map, sheets),
+                    Drawn::Tilemap(map) => match tiles.as_deref_mut() {
+                        Some(tiles) => {
+                            mesh::push_cached(batch, matrix, map, sheets, tiles.layer(entity, copy))
+                        }
+                        None => mesh::push(batch, matrix, map, sheets),
+                    },
                     Drawn::Text(text) => batch.push_text(matrix, text, sheets),
-                    Drawn::Particles(emitter) => particles::mesh::push(&mut batch, matrix, emitter),
+                    Drawn::Particles(emitter) => particles::mesh::push(batch, matrix, emitter),
                 }
             }
         }
-        batch
+        if let Some(tiles) = tiles {
+            tiles.finish();
+        }
     }
 }

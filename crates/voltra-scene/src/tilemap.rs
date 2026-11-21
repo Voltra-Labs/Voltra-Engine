@@ -21,6 +21,7 @@
 
 pub mod animation;
 pub mod boxes;
+mod cache;
 mod chunk;
 pub mod colliders;
 pub mod mesh;
@@ -36,6 +37,7 @@ use voltra_render::Texture;
 
 pub use animation::TileAnimation;
 pub use boxes::{solid_boxes, CellRect};
+pub use cache::TileMeshCache;
 pub use chunk::CHUNK;
 use chunk::{cell_of, locate, Chunk, ChunkKey};
 pub use colliders::{sync_colliders, TileCollider};
@@ -280,6 +282,8 @@ impl Tilemap {
     }
 }
 
+#[cfg(test)]
+mod cache_tests;
 #[cfg(test)]
 mod colliders_tests;
 #[cfg(test)]
