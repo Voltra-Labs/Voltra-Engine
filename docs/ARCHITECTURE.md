@@ -2988,8 +2988,15 @@ one component, with the same parameters and look.
   `VERTEX_STORAGE`; without them (WebGL2, some GL) the renderer has no
   particle pipelines and `advance(.., gpu: false)` runs GPU emitters on the
   CPU. A switch either way lets the other side's particles die out.
-- **Not done**: GPU particle culling and sorting by age, collisions,
-  sub-emitters, and repeating parallax copies of a GPU emitter (drawn once).
+- **Culled** (stage 50): each ledger entry also keeps where its births
+  were and their *reach* — fastest speed × longest life + ½|a|·life² + half
+  the widest size, scaled by the emitter for world space. The union of
+  those boxes (carried by today's matrix for local space) is
+  `gpu_bounds`; an emitter whose box misses the view, or whose ledger is
+  empty — nothing alive — gets no draw. World-space sparks left behind a
+  moving emitter keep it drawn while they could be on screen.
+- **Not done**: sorting by age, collisions, sub-emitters, and repeating
+  parallax copies of a GPU emitter (drawn once).
 - **Verified** in `headless_particles.rs` on hardware: births and wrap,
   integration, the dead staying dead, and a particle drawn between two
   sprites in painter's order.
