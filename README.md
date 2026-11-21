@@ -43,6 +43,7 @@ needed — everything else comes from Cargo.
 ```sh
 cargo run -p voltra-editor      # launch the editor
 cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no editor
+cargo run -p voltra-player -- assets/scenes/lights.ron    # 2D lights and shadows
 cargo xtask dist                # package build.ron into dist/<name>/ to hand out
 cargo xtask dist --manifest platformer.build.ron   # a game with its own code
 cargo build --workspace         # build everything
@@ -280,6 +281,7 @@ privileged and plain `cargo build` covers everything.
 | 51 | Particle collisions against the scene's colliders, CPU and GPU | done |
 | 52 | 2D lights: point lights and an ambient, a light map in the render graph | done |
 | 53 | 2D shadows: casters from colliders or polygons, a polar shadow map per light | done |
+| 54 | A lit sample scene, drawn by a test that checks its shadows | done |
 
 ## Contributing
 

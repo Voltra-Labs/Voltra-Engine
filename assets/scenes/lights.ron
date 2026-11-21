@@ -1,0 +1,93 @@
+(
+    version: 1,
+    entities: [
+        (
+            id: "01a2000e-9974-7be2-bda9-22348ee45c23",
+            components: {
+                "Camera": (size:4.0,priority:0,active:true,ambient:Some((0.06,0.07,0.12))),
+                "Name": "Camera",
+                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-2240f48603dc",
+            components: {
+                "Name": "Wall",
+                "Sprite": (color:(0.85,0.84,0.8,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(16.0,9.0)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-2255e131f1a6",
+            components: {
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "Name": "Floor",
+                "Sprite": (color:(0.35,0.32,0.3,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform": (translation:(0.0,-3.5),rotation:0.0,scale:(16.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-226160bc166a",
+            components: {
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "Name": "Pillar left",
+                "ShadowCaster2D": (shape:Collider,self_shadow:false),
+                "Sprite": (color:(0.55,0.5,0.45,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform": (translation:(-2.0,-1.75),rotation:0.0,scale:(0.6,2.5)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-2272c6feb960",
+            components: {
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "Name": "Pillar right",
+                "ShadowCaster2D": (shape:Collider,self_shadow:false),
+                "Sprite": (color:(0.55,0.5,0.45,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform": (translation:(1.0,-1.75),rotation:0.0,scale:(0.6,2.5)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-228c052a2208",
+            components: {
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "Name": "Crate",
+                "ShadowCaster2D": (shape:Collider,self_shadow:true),
+                "Sprite": (color:(0.6,0.42,0.25,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform": (translation:(3.5,-2.4),rotation:0.35,scale:(1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-2297e8a1ab55",
+            components: {
+                "Name": "Wire",
+                "ShadowCaster2D": (shape:Polygon(points:[(-0.5,0.0),(0.5,0.0)],closed:false),self_shadow:false),
+                "Sprite": (color:(0.2,0.2,0.22,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform": (translation:(-0.5,2.4),rotation:0.0,scale:(3.0,0.08)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-22afcd157d1a",
+            components: {
+                "Name": "Warm lamp",
+                "PointLight2D": (color:(1.0,0.8,0.55),intensity:1.6,radius:10.0,falloff:1.5,shadows:Some((strength:1.0,softness:0.02))),
+                "Transform": (translation:(-4.5,1.0),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-22b6865827a7",
+            components: {
+                "Name": "Cool lamp",
+                "PointLight2D": (color:(0.5,0.7,1.0),intensity:1.2,radius:8.0,falloff:2.0,shadows:Some((strength:0.85,softness:0.08))),
+                "Transform": (translation:(4.5,3.0),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2000e-9974-7be2-bda9-22cc46fb6104",
+            components: {
+                "Name": "Ember",
+                "PointLight2D": (color:(1.0,0.3,0.15),intensity:1.5,radius:1.5,falloff:2.0),
+                "Transform": (translation:(-0.5,-2.6),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+    ],
+)
