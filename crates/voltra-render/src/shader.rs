@@ -17,6 +17,9 @@ pub const EGUI: &str = include_str!("shaders/egui.wgsl");
 /// Source of the shader that widens line segments in screen space.
 pub const LINES: &str = include_str!("shaders/lines.wgsl");
 
+/// The full-screen post-processing pass: grading and vignette.
+pub const POST: &str = include_str!("shaders/post.wgsl");
+
 /// Compiles WGSL into a shader module.
 ///
 /// `wgpu` validates and reports compilation errors through the device error

@@ -82,6 +82,9 @@ pub struct App {
     watcher: Option<AssetWatcher>,
     egui: Option<EguiLayer>,
     scene_target: Option<RenderTarget>,
+    /// The scene after the post pass, which is what the viewport panel
+    /// shows; the editor overlay is drawn over it, ungraded.
+    post_target: Option<RenderTarget>,
     viewport: Option<TextureId>,
     /// The egui id of every loaded texture, so a panel can draw one.
     ///
@@ -596,10 +599,19 @@ impl ApplicationHandler for App {
                 size.height,
                 Filter::Linear,
             );
+            let post = RenderTarget::new(
+                &device,
+                "scene-viewport-graded",
+                format,
+                size.width,
+                size.height,
+                Filter::Linear,
+            );
             let mut egui = EguiLayer::new(&window, &device, format);
-            self.viewport = Some(egui.register_view(&device, target.raw_view(), Filter::Linear));
+            self.viewport = Some(egui.register_view(&device, post.raw_view(), Filter::Linear));
             self.requested_size = (target.width(), target.height());
             self.scene_target = Some(target);
+            self.post_target = Some(post);
             self.egui = Some(egui);
         }
 

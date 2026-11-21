@@ -268,6 +268,7 @@ privileged and plain `cargo build` covers everything.
 | 40 | Auto-tiling: the 47-tile blob with corners | done |
 | 41 | Sorting layers: named bands above `sort_order` | done |
 | 42 | Sorting layers from `default.layers.ron`; project files hot reload | done |
+| 43 | Post-processing: a graded pass between the world and the HUD | done |
 
 ## Contributing
 

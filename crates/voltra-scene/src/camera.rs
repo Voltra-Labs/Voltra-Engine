@@ -44,6 +44,10 @@ pub struct Camera {
     /// framings and renders through one; deleting the others to choose is not
     /// a choice anyone should have to make.
     pub active: bool,
+    /// How the frame seen through this camera is graded. Neutral, and not
+    /// written, unless set.
+    #[serde(default, skip_serializing_if = "crate::post::PostProcess::is_neutral")]
+    pub post: crate::post::PostProcess,
 }
 
 impl Default for Camera {
@@ -55,6 +59,7 @@ impl Default for Camera {
             size: 1.0,
             priority: 0,
             active: true,
+            post: crate::post::PostProcess::default(),
         }
     }
 }
