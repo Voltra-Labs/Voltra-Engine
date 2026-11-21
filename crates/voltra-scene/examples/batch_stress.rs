@@ -5,7 +5,8 @@
 //! A 512 × 64 tilemap layer (32 768 tiles) and 5 000 sprites spread over
 //! 2 000 units, seen through a camera about 21 × 12 units across — a real
 //! level, where almost everything is off screen. Reports the mean time to
-//! build the batch and how many quads it holds. Not a test: the counts are
+//! build the batch and how many quads it holds — and then the same for the
+//! whole layer in view, from nothing and through a [`TileMeshCache`]. Not a test: the counts are
 //! what the tests pin.
 
 use std::time::Instant;
@@ -13,7 +14,7 @@ use std::time::Instant;
 use voltra_ecs::World;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{Sprite, SpriteBatch, Tile, Tilemap, Transform};
+use voltra_scene::{Sprite, SpriteBatch, Tile, TileMeshCache, Tilemap, Transform};
 
 fn level() -> World {
     let mut world = World::new();
@@ -60,6 +61,51 @@ fn main() {
     }
     let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
     println!("  of which composing transforms {ms:7.3} ms");
+
+    // Zoomed out over the whole tilemap layer: every tile in view, which is
+    // where rebuilding the layer's quads each frame is the cost.
+    let map_only = tilemap_only();
+    let everything =
+        Sheets::default().visible_in(Vec2::new(-300.0, -100.0), Vec2::new(300.0, 100.0));
+    let start = Instant::now();
+    for _ in 0..runs {
+        let batch = SpriteBatch::from_world(&map_only, everything);
+        quads = batch.sprite_count();
+        std::hint::black_box(batch);
+    }
+    let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
+    println!("whole layer in view {ms:7.3} ms   quads {quads}");
+
+    // The same, as the draw path builds it: chunks kept between frames,
+    // and the batch's buffers too.
+    let mut cache = TileMeshCache::default();
+    let mut batch = SpriteBatch::default();
+    let start = Instant::now();
+    for _ in 0..runs {
+        batch.rebuild(&map_only, everything, &mut cache);
+        std::hint::black_box(&batch);
+    }
+    let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
+    println!("  cached            {ms:7.3} ms");
+
+    let mut cache = TileMeshCache::default();
+    let start = Instant::now();
+    for _ in 0..runs {
+        batch.rebuild(&world, sheets, &mut cache);
+        std::hint::black_box(&batch);
+    }
+    let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
+    println!("level, cached       {ms:7.3} ms");
+}
+
+/// The level's tilemap layer and nothing else.
+fn tilemap_only() -> World {
+    let mut world = level();
+    let sprites: Vec<_> = world.query::<Sprite>().map(|(e, _)| e).collect();
+    for e in sprites {
+        world.despawn(e);
+    }
+    world
 }
 
 /// The view a 16:9 camera about 21 units wide sees from the origin.

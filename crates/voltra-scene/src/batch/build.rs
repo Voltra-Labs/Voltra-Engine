@@ -1,0 +1,160 @@
+//! Collecting a world's drawables in draw order and pushing each into the
+//! batch.
+
+use voltra_ecs::{Entity, World};
+use voltra_render::glam::Mat3;
+
+use super::SpriteBatch;
+use crate::hierarchy::WorldTransforms;
+use crate::particles::{self, ParticleEmitter};
+use crate::sprite::sheets::Sheets;
+use crate::sprite::{draw_key, Sprite};
+use crate::text::Text;
+use crate::tilemap::{mesh, TileMeshCache, Tilemap};
+use crate::transform::Transform;
+
+/// What the batch draws one of: every kind sorts by the same key.
+enum Drawn<'a> {
+    Sprite(&'a Sprite),
+    Tilemap(&'a Tilemap),
+    Text(&'a Text),
+    Particles(&'a ParticleEmitter),
+}
+
+impl Drawn<'_> {
+    fn sort_order(&self) -> i32 {
+        match self {
+            Self::Sprite(sprite) => sprite.sort_order,
+            Self::Tilemap(map) => map.sort_order,
+            Self::Text(text) => text.sort_order,
+            Self::Particles(emitter) => emitter.sort_order,
+        }
+    }
+
+    fn sorting_layer(&self) -> &str {
+        match self {
+            Self::Sprite(sprite) => &sprite.sorting_layer,
+            Self::Tilemap(map) => &map.sorting_layer,
+            Self::Text(text) => &text.sorting_layer,
+            Self::Particles(emitter) => &emitter.sorting_layer,
+        }
+    }
+}
+
+impl SpriteBatch {
+    /// Walks every entity holding a [`Transform`] and a [`Sprite`] or a
+    /// [`Tilemap`].
+    ///
+    /// Collected and sorted rather than pushed as we go. With no depth buffer,
+    /// the order geometry is written in is the order it is drawn in — and
+    /// `query2` yields sparse-set storage order, which shifts when an unrelated
+    /// entity is despawned. `Entity::index` breaks ties so sprites sharing a
+    /// `sort_order` keep a stable order too; without it the common case, where
+    /// everything sits on 0, would be exactly as unstable as before.
+    ///
+    /// Sorted with the unstable variant: `draw_key` is unique per entity, so
+    /// there are never any equal keys for stability to preserve, and a
+    /// dropped tiebreaker fails louder without it.
+    pub fn from_world(world: &World, sheets: Sheets<'_>) -> Self {
+        let mut batch = Self::default();
+        batch.fill(world, sheets, None);
+        batch
+    }
+
+    /// [`SpriteBatch::from_world`], keeping tilemap chunks in `tiles` from
+    /// one build to the next: the same batch, built for what changed.
+    pub fn from_world_cached(world: &World, sheets: Sheets<'_>, tiles: &mut TileMeshCache) -> Self {
+        let mut batch = Self::default();
+        batch.fill(world, sheets, Some(tiles));
+        batch
+    }
+
+    /// [`SpriteBatch::from_world_cached`] into this batch, keeping its
+    /// buffers. What a draw path calling it every frame wants: a frame's
+    /// batch is megabytes once a level is in view, and allocating it afresh
+    /// costs more than the cached chunks take to copy in.
+    pub fn rebuild(&mut self, world: &World, sheets: Sheets<'_>, tiles: &mut TileMeshCache) {
+        self.fill(world, sheets, Some(tiles));
+    }
+
+    /// Empties the batch and builds `sheets`' frame of `world` into it.
+    fn fill(&mut self, world: &World, sheets: Sheets<'_>, mut tiles: Option<&mut TileMeshCache>) {
+        // Sprites and tilemap layers in one list, because they share one draw
+        // order: a layer behind the player and one in front of it are both
+        // just a `sort_order` relative to the player's sprite.
+        let mut drawn: Vec<(Entity, Drawn<'_>)> = world
+            .query2::<Transform, Sprite>()
+            .map(|(entity, _, sprite)| (entity, Drawn::Sprite(sprite)))
+            .chain(
+                world
+                    .query2::<Transform, Tilemap>()
+                    .map(|(entity, _, map)| (entity, Drawn::Tilemap(map))),
+            )
+            .chain(
+                world
+                    .query2::<Transform, Text>()
+                    .map(|(entity, _, text)| (entity, Drawn::Text(text))),
+            )
+            .chain(
+                world
+                    .query2::<Transform, ParticleEmitter>()
+                    .map(|(entity, _, emitter)| (entity, Drawn::Particles(emitter))),
+            )
+            // A `UiRect` puts an entity on the screen instead: the
+            // screen-space pass draws it, and drawing it here too would put a
+            // second copy in the world at its stale transform.
+            .filter(|(entity, _)| !crate::ui::is_ui(world, *entity))
+            .collect();
+        drawn.sort_unstable_by_key(|(entity, drawn)| {
+            draw_key(
+                *entity,
+                sheets.rank(drawn.sorting_layer()),
+                drawn.sort_order(),
+            )
+        });
+
+        // Composed once for the whole world rather than walked per sprite: a
+        // deep tree would otherwise cost one matrix chain per descendant, every
+        // frame.
+        let transforms = WorldTransforms::seen_from(world, sheets.camera);
+
+        self.visible = sheets.visible;
+        self.vertices.clear();
+        self.indices.clear();
+        self.ranges.clear();
+        let batch = self;
+        // Asked once: a world with no repeating layer draws every entity
+        // once, without looking for one above it.
+        let repeating = world
+            .query::<crate::Parallax>()
+            .any(|(_, layer)| layer.repeat.is_some());
+        if let Some(tiles) = tiles.as_deref_mut() {
+            tiles.begin();
+        }
+        for (entity, drawn) in drawn {
+            let matrix = transforms.matrix(entity);
+            let copies = if repeating {
+                crate::parallax::copies_of(world, entity, matrix, sheets.visible)
+            } else {
+                vec![voltra_render::glam::Vec2::ZERO]
+            };
+            for (copy, offset) in copies.into_iter().enumerate() {
+                let matrix = Mat3::from_translation(offset) * matrix;
+                match drawn {
+                    Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
+                    Drawn::Tilemap(map) => match tiles.as_deref_mut() {
+                        Some(tiles) => {
+                            mesh::push_cached(batch, matrix, map, sheets, tiles.layer(entity, copy))
+                        }
+                        None => mesh::push(batch, matrix, map, sheets),
+                    },
+                    Drawn::Text(text) => batch.push_text(matrix, text, sheets),
+                    Drawn::Particles(emitter) => particles::mesh::push(batch, matrix, emitter),
+                }
+            }
+        }
+        if let Some(tiles) = tiles {
+            tiles.finish();
+        }
+    }
+}

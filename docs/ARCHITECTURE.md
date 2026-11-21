@@ -2372,7 +2372,8 @@ nothing is armed. The brush is editor state, not a scene edit.
 
 Not done, on purpose: a per-chunk mesh cache and camera culling (no level
 makes the per-frame rebuild show yet), auto-tiling, animated tiles,
-isometric/hex grids, per-tile solidity.
+isometric/hex grids, per-tile solidity. (Culling landed in 33, animated
+tiles in 38, auto-tiling in 39–40, the mesh cache in 44.)
 
 ### Text is quads in the sprite batch, from one glyph atlas per font
 
@@ -2725,8 +2726,8 @@ batch_stress` (a 512 × 64 tilemap and 5 000 sprites, a ~21 × 12 view):
   to the ECS so the scene can use it — now keys `WorldTransforms`. SipHash
   over every entity's matrix was most of what was left.
 - **Next, if a profile asks:** the 5 000 sprites are still sorted and their
-  quads computed before the cull; a per-chunk mesh cache for tilemaps; a
-  spatial index for sprites.
+  quads computed before the cull; a spatial index for sprites. (The
+  per-chunk tilemap mesh cache landed in 44.)
 
 ### Colour alpha reaches the blend, and particles are quads in the batch
 
@@ -2930,6 +2931,33 @@ must not be graded — the HUD, the editor overlay — is drawn after it.
   vertex index, no vertex buffer; nonsense settings are clamped to safe ones.
 - **Not yet:** effects that need more than one pass (bloom, blur) — the
   point at which a real graph of passes and transient targets earns itself.
+
+### Tilemap chunks are cached between frames, and so is the batch
+
+Stage 44, measured first with `batch_stress`: a 32 768-tile layer wholly in
+view cost 3.6 ms a frame to rebuild, every tile's frame resolved through its
+atlas again. Now 0.26 ms.
+
+- **`TileMeshCache`** (scene, owned by the app's draw path), keyed by layer
+  entity, parallax copy and chunk — Godot's per-quadrant canvas items at our
+  storage and culling grain. Two levels: **local quads** (corners, UVs,
+  texture) and **world vertices** for the last matrix and colour, so a layer
+  that moves re-transforms but never re-resolves a frame.
+- **Stale by stamp, not by flag**: the layer's cell `Revision`, tile size,
+  sheet and atlas handles, `Atlases::generation()` (bumped by a reload under
+  the same handle), the placeholder, the animation definitions, and — only
+  for a chunk holding an animated tile — the frame each animation is on.
+  Two consumers could not share a dirty flag; a stamp each remembers can.
+- **Same batch, always**: a chunk wholly in view is copied; one straddling
+  the view's edge is pushed quad by quad from its local quads, so each is
+  culled as before. The tests build every frame both ways and compare — an
+  edit, a move, a recolour, a resize, the clock, a new animation, an atlas
+  reload, parallax copies. `SpriteBatch::from_world` stays uncached.
+- **Entries a build did not draw are dropped** at its end: despawned
+  layers, erased chunks, chunks scrolled away. Memory follows the screen.
+- **The batch's buffers are kept too** (`SpriteBatch::rebuild`): with the
+  cache in place, allocating a fresh megabyte-scale batch each frame was
+  most of what was left — 2.1 ms of the 2.4.
 
 ### wgpu 30 API notes
 

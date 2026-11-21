@@ -1,4 +1,6 @@
 use super::*;
+use crate::transform::Transform;
+use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 
 /// The geometry a world produces with no sheets loaded, which is what a
