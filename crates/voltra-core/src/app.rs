@@ -166,6 +166,9 @@ pub struct App {
     frame_batch: voltra_scene::SpriteBatch,
     /// The renderer's half of every emitter simulated on the GPU.
     gpu_rings: gpu_particles::GpuParticleRings,
+    /// Threads the frame's batch is built across. Made with the window, so
+    /// an `App` that never opens one — every test — starts no threads.
+    jobs: Option<voltra_jobs::JobPool>,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a
@@ -625,6 +628,10 @@ impl ApplicationHandler for App {
         }
 
         self.renderer = Some(renderer);
+        let jobs = self
+            .jobs
+            .get_or_insert_with(voltra_jobs::JobPool::with_available_parallelism);
+        log::info!("job pool: {} threads", jobs.threads());
         self.textures = Some(textures);
         self.window = Some(window);
 

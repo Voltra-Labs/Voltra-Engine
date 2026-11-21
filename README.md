@@ -200,6 +200,7 @@ Voltra-Engine/
 ├── assets/               # runtime assets (shaders, textures, scenes)
 ├── crates/
 │   ├── voltra-ecs/       # entities and components — zero dependencies
+│   ├── voltra-jobs/      # worker pool, scoped jobs that borrow — std only
 │   ├── voltra-assets/    # handles, paths, the texture cache, hot reload
 │   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
@@ -271,6 +272,7 @@ privileged and plain `cargo build` covers everything.
 | 43 | Post-processing: a graded pass between the world and the HUD | done |
 | 44 | Tilemap chunk mesh cache; the frame batch keeps its buffers | done |
 | 45 | GPU particles: compute-stepped rings, drawn in painter's order | done |
+| 46 | Job system (`voltra-jobs`); batch sort keyed once | done |
 
 ## Contributing
 

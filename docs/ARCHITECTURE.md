@@ -78,6 +78,7 @@ version bump is a one-line change.
 | Crate | Owns | Key types |
 | --- | --- | --- |
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
+| `voltra-jobs` | The worker pool and scoped jobs that borrow from their caller. Standard library only | `JobPool`, `Scope` |
 | `voltra-assets` | Asset identity, the texture, atlas and clip caches, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures`, `Atlases`, `Clips` |
 | `voltra-audio` | The mixer, decoding, and the output device | `Audio`, `Mixer`, `Voice`, `Clip`, `PlayParams`, `VoiceId`, `decode`, `spatial` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
@@ -86,7 +87,7 @@ version bump is a one-line change.
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
-| `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `scratch_root`, `write_png` |
+| `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
 ### Planned crates
 
@@ -2992,6 +2993,38 @@ one component, with the same parameters and look.
 - **Verified** in `headless_particles.rs` on hardware: births and wrap,
   integration, the dead staying dead, and a particle drawn between two
   sprites in painter's order.
+
+### A job pool of our own, and the batch's first use of it
+
+Stage 46. `voltra-jobs`: a fixed set of workers made with the window, and
+`JobPool::scope` — `std::thread::scope`'s borrowing rule (a job may borrow
+anything that outlives the call) without a thread per job. The shape of
+Bevy's `ComputeTaskPool::scope` and Godot's `WorkerThreadPool` groups.
+
+- **Safety argument**, in `scope.rs`: a job's lifetime is erased to sit in
+  the queue (`Job::erase`, the crate's one `unsafe` transmute), and `scope`
+  does not return — normally or unwinding, via a drop guard — until every
+  job it spawned has run. A job cannot borrow a scope-local: a
+  `compile_fail` doctest pins it.
+- **The caller works while it waits**, so `n` workers run `n + 1` jobs and
+  a job that opens its own scope cannot deadlock the pool. A panicking job
+  is caught; the scope finishes the rest and resumes the first panic.
+- **No work stealing, one queue.** Frame jobs are a few dozen chunks; a
+  mutex-guarded deque is not where the time goes. Revisit with a profile.
+- **First consumer — sprites placed in parallel** (`batch/parallel.rs`):
+  frame lookup, corners through the world matrix and the cull run per
+  sprite on the pool (`Sheets::jobs`, ≥ 512 sprites, none repeating);
+  appending stays one ordered pass, so the batch is identical (pinned
+  against the single-threaded build). `World` is not `Sync`, so jobs see
+  the sorted component references and `WorldTransforms`, never the world.
+  `TextureSizes` now requires `Sync`.
+- **Measured honestly** (`batch_stress`, 12 threads): the pool saves only
+  ~5–15 % of the batch — placing 5 000 sprites is ~0.3 ms. The stage's real
+  win was found by profiling first: the sort recomputed each key's
+  sorting-layer rank (a name lookup) on every comparison. Keyed once per
+  entity, the 5 000-sprite level went **4.1 ms → 1.8 ms**.
+- **Next consumers, when a profile asks:** composing `WorldTransforms` per
+  root, the physics narrow phase, decoding assets off the main thread.
 
 ### wgpu 30 API notes
 

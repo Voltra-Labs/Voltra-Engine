@@ -114,28 +114,18 @@ impl SpriteBatch {
         color: [f32; 4],
         texture: Option<Handle<Texture>>,
     ) {
-        let world = corners.map(|corner| matrix.transform_point2(corner));
-        // Culled on the corners as they will be drawn, so a rotated, scaled,
-        // parented or parallax-displaced quad is tested where it really is.
-        let view = Sheets {
-            visible: self.visible,
-            ..Sheets::default()
-        };
-        let min = world.iter().copied().fold(Vec2::INFINITY, Vec2::min);
-        let max = world.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);
-        if !view.sees(min, max) {
-            return;
+        if let Some(vertices) = placed(self.visible, matrix, corners, uvs, color) {
+            self.append_quad(vertices, texture);
         }
+    }
 
+    /// Appends a quad already placed and culled by [`placed`].
+    pub(crate) fn append_quad(&mut self, vertices: [Vertex; 4], texture: Option<Handle<Texture>>) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
         // batch holds every sprite in the world, not one object's geometry.
         let base = self.vertices.len() as u32;
-
-        for (world, uv) in world.into_iter().zip(uvs) {
-            self.vertices
-                .push(Vertex::new([world.x, world.y], color, uv));
-        }
+        self.vertices.extend_from_slice(&vertices);
 
         let start = self.indices.len() as u32;
         self.indices
@@ -204,8 +194,43 @@ impl SpriteBatch {
     }
 }
 
+/// A quad's four vertices through `matrix`, or `None` when it lies wholly
+/// outside `visible`.
+///
+/// Culled on the corners as they will be drawn, so a rotated, scaled,
+/// parented or parallax-displaced quad is tested where it really is. Needs
+/// nothing but its arguments, which is what lets sprites be placed on the
+/// job pool's threads.
+pub(crate) fn placed(
+    visible: Option<(Vec2, Vec2)>,
+    matrix: Mat3,
+    corners: [Vec2; 4],
+    uvs: [[f32; 2]; 4],
+    color: [f32; 4],
+) -> Option<[Vertex; 4]> {
+    let world = corners.map(|corner| matrix.transform_point2(corner));
+    let view = Sheets {
+        visible,
+        ..Sheets::default()
+    };
+    let min = world.iter().copied().fold(Vec2::INFINITY, Vec2::min);
+    let max = world.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);
+    if !view.sees(min, max) {
+        return None;
+    }
+    let mut corner = 0;
+    Some(world.map(|at| {
+        let vertex = Vertex::new([at.x, at.y], color, uvs[corner]);
+        corner += 1;
+        vertex
+    }))
+}
+
 mod build;
 #[cfg(test)]
 mod cull_tests;
+mod parallel;
+#[cfg(test)]
+mod parallel_tests;
 #[cfg(test)]
 mod tests;

@@ -1,0 +1,12 @@
+[package]
+name = "voltra-jobs"
+description = "In-house job pool for the Voltra engine: scoped, borrowing parallel work."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Standard library only. The pool, the scope and the lifetime erasure that
+# lets a job borrow from its caller are the point of the crate.
+[dependencies]
+log.workspace = true

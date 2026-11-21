@@ -13,7 +13,9 @@ use crate::textures::Textures;
 /// GPU device, and the geometry it feeds — the quad a sprite covers and the
 /// UVs it samples — is exactly what has to stay testable headless. The editor
 /// and the draw path pass `Textures`; a test passes a map.
-pub trait TextureSizes {
+///
+/// `Sync` so a batch can be built across the job pool's threads.
+pub trait TextureSizes: Sync {
     /// The size of `texture` in texels, or `None` for a handle this store
     /// never issued.
     fn size(&self, texture: Handle<Texture>) -> Option<UVec2>;
