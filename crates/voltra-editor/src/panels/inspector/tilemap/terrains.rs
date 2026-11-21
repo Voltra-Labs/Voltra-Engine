@@ -1,7 +1,10 @@
 //! A layer's terrains: which frames join up, and which one the brush paints.
 
 use voltra_core::egui::{self, DragValue, RichText, TextEdit, Ui};
-use voltra_scene::tilemap::terrain::{EAST, NORTH, SOUTH, WEST};
+use voltra_scene::tilemap::terrain::{
+    blob_masks, BLOB_FRAMES, EAST, NORTH, NORTH_EAST, NORTH_WEST, SOUTH, SOUTH_EAST, SOUTH_WEST,
+    WEST,
+};
 use voltra_scene::tilemap::Terrain;
 use voltra_scene::Tilemap;
 
@@ -31,6 +34,37 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &mut Paint) -> Option<
                     remove = Some(index);
                 }
             });
+            let mut blob = terrain.is_blob();
+            if ui
+                .checkbox(&mut blob, "47-tile (corners too)")
+                .on_hover_text("the blob set: inner corners join as well as sides")
+                .changed()
+            {
+                terrain.blob = if blob {
+                    vec![terrain.frames[0]; BLOB_FRAMES]
+                } else {
+                    Vec::new()
+                };
+                claim = Some("Edit terrain");
+            }
+            if terrain.is_blob() {
+                egui::Grid::new("terrain_blob")
+                    .num_columns(8)
+                    .show(ui, |ui| {
+                        for (i, (frame, mask)) in
+                            terrain.blob.iter_mut().zip(blob_masks()).enumerate()
+                        {
+                            claim = claim.or(active(
+                                &ui.add(DragValue::new(frame)).on_hover_text(sides(*mask)),
+                                "Edit terrain",
+                            ));
+                            if i % 8 == 7 {
+                                ui.end_row();
+                            }
+                        }
+                    });
+                return;
+            }
             // The sixteen frames, by which sides touch the same terrain.
             egui::Grid::new("terrain_frames")
                 .num_columns(4)
@@ -64,11 +98,20 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &mut Paint) -> Option<
 
 /// The sides a mask has neighbours on, for a frame's tooltip.
 fn sides(mask: usize) -> String {
-    let named: Vec<&str> = [(NORTH, "N"), (EAST, "E"), (SOUTH, "S"), (WEST, "W")]
-        .into_iter()
-        .filter(|(bit, _)| mask & bit != 0)
-        .map(|(_, name)| name)
-        .collect();
+    let named: Vec<&str> = [
+        (NORTH, "N"),
+        (EAST, "E"),
+        (SOUTH, "S"),
+        (WEST, "W"),
+        (NORTH_EAST, "NE"),
+        (SOUTH_EAST, "SE"),
+        (SOUTH_WEST, "SW"),
+        (NORTH_WEST, "NW"),
+    ]
+    .into_iter()
+    .filter(|(bit, _)| mask & bit != 0)
+    .map(|(_, name)| name)
+    .collect();
     if named.is_empty() {
         "alone".to_owned()
     } else {
@@ -85,5 +128,6 @@ mod tests {
         assert_eq!(sides(0), "alone");
         assert_eq!(sides(1 | 4), "touching N S");
         assert_eq!(sides(15), "touching N E S W");
+        assert_eq!(sides(255), "touching N E S W NE SE SW NW");
     }
 }

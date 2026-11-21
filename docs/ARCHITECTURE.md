@@ -2863,8 +2863,16 @@ grows up, as the layer does).
   it the brush — and the brush, rectangle and eraser then paint by terrain
   (`stroke::line_terrain`, `fill_terrain`, under the same fill limit). The
   choice is editor state, ignored on a layer that lacks that index.
-- **Not yet:** the 47-tile "corners and sides" blob, which needs the
-  diagonals; it is the same shape with an 8-bit mask and a lookup.
+- **The 47-tile blob** (stage 40): `Terrain::blob`, exactly 47 frames, makes
+  a terrain read the diagonals too (NE = 16, SE = 32, SW = 64, NW = 128). A
+  corner counts only when both sides that form it join — the standard
+  reduction, which leaves 47 of the 256 masks; the frames are in ascending
+  order of the reduced mask (`blob_masks`, computed once), and a test pins
+  the count. Painting re-picks the 3 × 3 around a cell, since a diagonal
+  neighbour's shape can change. An empty or wrong-length `blob` keeps the
+  sixteen-frame sides mode, so stage 39 terrains read and behave as before.
+  The inspector switches a terrain to 47 tiles and labels each frame with its
+  sides and corners.
 
 ### wgpu 30 API notes
 
