@@ -3222,6 +3222,15 @@ fading over pixels a hard one does not; every quarter and the seam between
 two, hard and soft), `lights::occluder` and `lights::shadows` unit tests (which edges
 cast, culling, rows, overflow) and `shadow_caster` / `light` scene tests.
 
+`assets/scenes/lights.ron` (stage 54) shows all of it: two shadowed lamps,
+an ember that casts none, pillars shadowing by their colliders, a turned
+crate that shadows itself and a wire that is an open polygon with no
+collider. Generated through `save` like `demo.ron`, and drawn by
+`tests/lights_scene.rs` — with and without its casters — so a scene that
+loads but no longer casts is caught. `cargo test -p voltra-scene --test
+lights_scene -- --ignored write_the_lights_preview` renders it to
+`target/lights-preview.png`, for a look without a window.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
