@@ -37,8 +37,6 @@ pub struct Sheets<'a> {
     pub time: f32,
     /// The project's sorting layers. `None` sorts by the default list.
     pub layers: Option<&'a crate::sorting::SortingLayers>,
-    /// Threads to build the batch on. `None` builds it on the caller alone.
-    pub jobs: Option<&'a voltra_jobs::JobPool>,
 }
 
 impl<'a> Sheets<'a> {
@@ -52,7 +50,6 @@ impl<'a> Sheets<'a> {
             visible: None,
             time: 0.0,
             layers: None,
-            jobs: None,
         }
     }
 
@@ -82,12 +79,6 @@ impl<'a> Sheets<'a> {
     }
 
     /// The same stores, sorting by `layers`.
-    /// The same stores, building on `jobs`' threads.
-    pub fn with_jobs(mut self, jobs: &'a voltra_jobs::JobPool) -> Self {
-        self.jobs = Some(jobs);
-        self
-    }
-
     pub fn with_layers(mut self, layers: &'a crate::sorting::SortingLayers) -> Self {
         self.layers = Some(layers);
         self

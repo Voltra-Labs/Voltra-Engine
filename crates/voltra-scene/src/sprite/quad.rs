@@ -242,7 +242,6 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
-                jobs: None,
             },
         );
 
@@ -268,7 +267,6 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
-                jobs: None,
             },
         );
 
@@ -288,7 +286,6 @@ mod tests {
             visible: None,
             time: 0.0,
             layers: None,
-            jobs: None,
         };
         let upright = quad(&sprite, sheets);
 
@@ -328,7 +325,6 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
-                jobs: None,
             },
         );
 
@@ -355,7 +351,6 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
-                jobs: None,
             },
         );
 
@@ -379,7 +374,6 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
-                jobs: None,
             },
         );
 
@@ -410,7 +404,6 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
-                jobs: None,
             },
         );
 

@@ -274,6 +274,7 @@ privileged and plain `cargo build` covers everything.
 | 45 | GPU particles: compute-stepped rings, drawn in painter's order | done |
 | 46 | Job system (`voltra-jobs`); batch sort keyed once | done |
 | 47 | Render graph for the post chain; bloom | done |
+| 48 | Dense `WorldTransforms`; the parallel batch pre-pass measured and removed | done |
 
 ## Contributing
 
