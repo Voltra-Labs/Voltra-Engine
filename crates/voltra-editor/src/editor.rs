@@ -11,6 +11,7 @@ use crate::paint::Paint;
 use crate::panels;
 use crate::panels::assets::AssetBrowser;
 use crate::play::{Play, PlayContext, PlayState};
+use crate::shape_edit::ShapeEdit;
 use crate::tool::Tool;
 use crate::undo::{selected_id, shortcut, History, SceneView, UndoContext};
 use crate::view::View;
@@ -29,6 +30,9 @@ pub struct Editor {
     /// The armed paint tool and its brush. While armed with a layer selected,
     /// it has the viewport instead of the gizmo.
     pub(crate) paint: Paint,
+    /// The shadow caster whose polygon the viewport is editing, if any.
+    /// While on, it has the viewport instead of the gizmo, as painting does.
+    pub(crate) shape: ShapeEdit,
     /// Whether to outline every collider and draw every contact.
     ///
     /// Off by default: a scene full of green outlines is noise while sprites
@@ -133,6 +137,9 @@ impl Editor {
         if !self.history.undo(ctx, frame) {
             log::info!("nothing to undo");
         }
+        // A shape drag held through the undo would write the pointer
+        // straight back over what it restored.
+        self.shape.cancel_drag();
     }
 
     /// Replays the last undone edit. A no-op outside [`PlayState::Editing`].
@@ -148,6 +155,9 @@ impl Editor {
         if !self.history.redo(ctx, frame) {
             log::info!("nothing to redo");
         }
+        // A shape drag held through the redo would write the pointer
+        // straight back over what it restored.
+        self.shape.cancel_drag();
     }
 
     /// Enters play, snapshotting the scene the first time.

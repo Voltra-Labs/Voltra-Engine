@@ -3159,8 +3159,8 @@ Stage 53. `ShadowCaster2D` (scene) blocks every `PointLight2D` whose
   — the reason stage 51 rejected a second shape set for particles. A
   `Polygon { points, closed }` in the entity's space, carried by its
   composed matrix like a sprite, is there for the shape that should shadow
-  differently; it is authored in the scene file for now (the inspector
-  shows and keeps it, the viewport draws the selected caster's outline).
+  differently; it is edited in the viewport (stage 55, below), and the
+  viewport draws the selected caster's outline.
 - **Which edges cast** (`lights::occluder`): an open line, every edge,
   both sides; a closed outline, only the edges facing *away* from the light
   unless `self_shadow`, so the shadow starts at its far side and its lit
@@ -3212,7 +3212,7 @@ run on WebGL2).
   softness that grows with distance from the occluder), merging a solid
   layer's boxes into one outline (each box casts on its own; its inner
   edges shadow the tiles behind the first row, as Godot's per-tile
-  occluders do), editing a polygon caster's points in the viewport.
+  occluders do). Editing a polygon's points landed in stage 55, below.
 
 Pinned by `headless_shadows.rs` (dark behind a box and lit beside it, the
 shadow widening along the near corners' lines; the box lit unless it
@@ -3229,7 +3229,48 @@ collider. Generated through `save` like `demo.ron`, and drawn by
 `tests/lights_scene.rs` — with and without its casters — so a scene that
 loads but no longer casts is caught. `cargo test -p voltra-scene --test
 lights_scene -- --ignored write_the_lights_preview` renders it to
-`target/lights-preview.png`, for a look without a window.
+`target/tmp/lights-preview.png` (Cargo's `CARGO_TARGET_TMPDIR`), for a
+look without a window.
+
+### A shadow shape is edited as a viewport mode, in the entity's space
+
+Stage 55. Unity's "Edit Shape" on `ShadowCaster2D` and Godot's polygon
+editor for `OccluderPolygon2D`, in the shape the tilemap paint mode already
+has (`crate::shape_edit`): the inspector's **Edit shape** turns it on for
+the selected caster's polygon, and while it is on the viewport's pointer
+belongs to the handles — no gizmo, no click-to-select. A drag on a point
+moves it; a press on an edge's midpoint inserts a point there, and a drag
+goes on to move it; a right click on a point removes it, down to two for a
+line and three for an outline. `Esc` (wherever the pointer is, unless a
+text field has the keyboard), the button again, a transform or paint tool
+from the keys or the toolbar, or a selection that is not that caster with
+a polygon turns it off. An undo or redo ends a drag in progress, so the
+pointer does not write over what it restored. Dropped assets and the
+collider overlay keep working meanwhile.
+
+- **Points stay in the entity's space**: the pointer goes in through the
+  inverse of the composed matrix, so a scaled, turned or parented caster
+  is edited where it is drawn and stored as authored. Only a matrix with
+  no inverse (scaled to nothing) is refused; a tiny caster is fine.
+- **Hit-tested in screen pixels** (`shape_edit::handle`), as the gizmo is,
+  points before midpoints, so the targets keep their size at any zoom.
+- **One drag, one undo entry**, claimed every frame it is live, as a gizmo
+  drag and a paint stroke are.
+- **Where a polygon starts**: `shadow_caster::starting_polygon` — the
+  entity's collider outline as it casts now (a circle as 16 points), taken
+  back through the inverse of the composed matrix so the shadow does not
+  move (a circle stays round on a non-uniform scale, as the physics keeps
+  it), else its sprite's quad. "Casts shadows" on an entity with a sprite and no collider
+  adds a polygon caster from the quad; "Use own polygon" switches a
+  collider-shaped caster to that start and opens the editor; "Use collider"
+  goes back.
+- **Not yet**: moving several points at once, snapping, numeric entry,
+  editing a solid layer's caster (its boxes are generated).
+
+Pinned by `shape_edit::handle` (hit tests, insert, remove floors) and
+`shape_edit` (when the mode turns itself off) unit tests and
+`shadow_caster::starting` scene tests. The pointer interaction itself is
+egui glue with no harness here; not verified in a window.
 
 ### wgpu 30 API notes
 

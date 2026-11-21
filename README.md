@@ -282,6 +282,7 @@ privileged and plain `cargo build` covers everything.
 | 52 | 2D lights: point lights and an ambient, a light map in the render graph | done |
 | 53 | 2D shadows: casters from colliders or polygons, a polar shadow map per light | done |
 | 54 | A lit sample scene, drawn by a test that checks its shadows | done |
+| 55 | Shadow caster polygons edited in the viewport | done |
 
 ## Contributing
 

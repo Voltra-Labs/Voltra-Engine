@@ -7,6 +7,7 @@ mod animation;
 mod audio_source;
 mod camera;
 mod collision;
+mod delete;
 mod light;
 mod name;
 mod parallax;
@@ -21,16 +22,15 @@ mod transform;
 mod ui_button;
 mod ui_rect;
 
-use voltra_core::egui::{self, Color32, RichText, Ui};
+use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, ui, AudioSource, Camera, Collider, Parallax, ParticleEmitter, SceneId, Sprite, Text,
-    Tilemap, Transform, UiButton, UiLayout, UiRect,
+    hierarchy, ui, AudioSource, Camera, Collider, Parallax, ParticleEmitter, Sprite, Text, Tilemap,
+    Transform, UiButton, UiLayout, UiRect,
 };
 
 use crate::editor::Editor;
-use crate::undo::SceneView;
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::right("inspector")
@@ -178,17 +178,32 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.separator();
                     claim = claim.or(collision::show(ui, frame.world, entity));
                 }
-                // Keyed off the shape it would take, as the filter is, or
-                // off the caster for one with a polygon of its own.
-                if has_collider
-                    || solid_layer
-                    || frame
-                        .world
-                        .get::<voltra_scene::ShadowCaster2D>(entity)
-                        .is_some()
-                {
+                // Keyed off the shape it would take — a collider, a solid
+                // layer's boxes, a sprite's quad — or off the caster itself.
+                let has_sprite = frame.world.get::<Sprite>(entity).is_some();
+                let casts = frame
+                    .world
+                    .get::<voltra_scene::ShadowCaster2D>(entity)
+                    .is_some();
+                if has_collider || solid_layer || has_sprite || casts {
+                    // Read before the world is borrowed mutably below: the
+                    // sprite's quad is resolved against the frame's sheets.
+                    let starting = voltra_scene::shadow_caster::starting_polygon(
+                        frame.world,
+                        entity,
+                        frame.sheets(),
+                    );
                     ui.separator();
-                    claim = claim.or(shadow_caster::show(ui, frame.world, entity));
+                    claim = claim.or(shadow_caster::show(
+                        ui,
+                        frame.world,
+                        entity,
+                        shadow_caster::Context {
+                            has_collider: has_collider || solid_layer,
+                            starting,
+                            shape: &mut editor.shape,
+                        },
+                    ));
                 }
                 // Every drawable's named layer, under its own section's
                 // fields: one rule, one widget, wherever the component is.
@@ -234,43 +249,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
 
                 ui.separator();
-                if ui
-                    .button(RichText::new("Delete").color(Color32::LIGHT_RED))
-                    .clicked()
-                {
-                    // Explicit rather than watched: the watcher's `after` is
-                    // read at the end of the frame from an entity that no longer
-                    // exists, which is right, but the selection has to be
-                    // recorded as it was *before* the despawn cleared it.
-                    let id = frame.world.get::<SceneId>(entity).copied();
-                    // Everything under it goes too, so everything under it has
-                    // to be in the entry — an undo that revived the parent
-                    // alone would leave its children deleted for good.
-                    let going: Vec<SceneId> = id
-                        .into_iter()
-                        .chain(
-                            hierarchy::descendants(frame.world, entity)
-                                .into_iter()
-                                .filter_map(|e| frame.world.get::<SceneId>(e).copied()),
-                        )
-                        .collect();
-                    let view = SceneView {
-                        world: frame.world,
-                        registry: &editor.registry,
-                        selected: id,
-                    };
-                    editor.history.begin("Delete", view, going);
-
-                    hierarchy::despawn_recursive(frame.world, entity);
-                    editor.selected = None;
-
-                    let view = SceneView {
-                        world: frame.world,
-                        registry: &editor.registry,
-                        selected: None,
-                    };
-                    editor.history.commit(view);
-                }
+                delete::show(editor, ui, frame, entity);
             });
         });
 }

@@ -7,6 +7,7 @@ mod panels;
 mod picking;
 mod play;
 mod prefab;
+mod shape_edit;
 mod spawn;
 mod tool;
 mod undo;
