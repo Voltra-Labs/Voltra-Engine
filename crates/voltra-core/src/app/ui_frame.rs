@@ -246,6 +246,29 @@ pub(super) fn resolve_world_textures(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) {
+    // Decoded across the cores first, then resolved below from the cache:
+    // a scene opening with dozens of sheets decodes them at once rather than
+    // one after another. A pool for the occasion — Open, undo, start — so no
+    // thread waits idle between scenes.
+    let paths: Vec<_> = world
+        .query::<Sprite>()
+        .filter_map(|(_, sprite)| sprite.texture.clone())
+        .chain(
+            world
+                .query::<Tilemap>()
+                .filter_map(|(_, map)| map.texture.clone()),
+        )
+        .chain(
+            world
+                .query::<voltra_scene::ParticleEmitter>()
+                .filter_map(|(_, emitter)| emitter.texture.clone()),
+        )
+        .filter(|path| textures.by_path_handle(path).is_none())
+        .collect();
+    if paths.len() > 1 {
+        let jobs = voltra_jobs::JobPool::with_available_parallelism();
+        textures.preload(device, queue, paths, &jobs);
+    }
     for (_, sprite) in world.query_mut::<Sprite>() {
         let path = sprite.texture.clone();
         sprite.set_texture(path, textures, device, queue);
