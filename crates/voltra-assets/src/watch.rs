@@ -80,13 +80,21 @@ pub fn is_input_map(name: &str) -> bool {
     name.to_ascii_lowercase().ends_with(".input.ron")
 }
 
+/// Whether a file name is a project's sorting layers: `*.layers.ron`.
+pub fn is_sorting_layers(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".layers.ron")
+}
+
 /// Whether a file name is a scene, which is also what a prefab is.
 ///
 /// Any `.ron` that is not a slicing or an input map. The atomic save's
 /// `demo.ron.tmp` does not match, so a save is seen once, as the rename
 /// lands.
 pub fn is_scene(name: &str) -> bool {
-    has_extension(name, &["ron"]) && !is_atlas(name) && !is_input_map(name)
+    has_extension(name, &["ron"])
+        && !is_atlas(name)
+        && !is_input_map(name)
+        && !is_sorting_layers(name)
 }
 
 fn has_extension(name: &str, extensions: &[&str]) -> bool {
@@ -225,6 +233,8 @@ impl AssetWatcher {
             && !is_clip(name)
             && !is_scene(name)
             && !is_font(name)
+            && !is_input_map(name)
+            && !is_sorting_layers(name)
         {
             return None;
         }

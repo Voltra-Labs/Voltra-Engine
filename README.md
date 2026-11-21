@@ -267,6 +267,7 @@ privileged and plain `cargo build` covers everything.
 | 39 | Auto-tiling: 16-frame terrains, painted from the editor | done |
 | 40 | Auto-tiling: the 47-tile blob with corners | done |
 | 41 | Sorting layers: named bands above `sort_order` | done |
+| 42 | Sorting layers from `default.layers.ron`; project files hot reload | done |
 
 ## Contributing
 

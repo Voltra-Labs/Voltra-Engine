@@ -2892,10 +2892,18 @@ edit to the list rather than to every sprite in it.
   and headless callers do. An unknown name sorts as `Default` and is warned
   about once. `Default` is always in the list: everything naming no layer is
   on it.
-- **Project-wide, in code:** there is no project settings file to keep the
-  list in (the build manifest describes a build, not the editor), so a game
-  sets it with the builder; the editor shows the default list. A file for it
-  is the obvious next step if a project's list grows.
+- **Project-wide, in a file** (stage 42): `assets/default.layers.ron`
+  (`(version: 1, layers: [...])`), by convention as the input map is, read at
+  startup by the editor and the game alike so the inspector offers the layers
+  the game sorts by; hot reloaded. `App::with_sorting_layers` in code wins
+  over it, as `with_actions` does. A broken file keeps the layers in use.
+  `*.layers.ron` is its own asset kind — out of the scene list, shown as
+  "LAYERS" in the browser.
+- **The watcher now passes project files** (`*.input.ron`, `*.layers.ron`).
+  It filtered by asset kind, and since `is_scene` excludes input maps, a
+  running game never saw `default.input.ron` change — 27a's hot reload worked
+  at the `App` level but no event ever reached it. Pinned by
+  `tests/watch.rs::project_files_arrive_too`.
 - The screen-space UI keeps its own order (`sort_order`, depth, index): it is
   drawn in its own pass, above the world, whatever the world's layers.
 

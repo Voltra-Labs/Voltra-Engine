@@ -14,7 +14,7 @@ use std::path::Path;
 use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
-use crate::watch::{is_clip, is_font, is_input_map, is_scene, is_texture};
+use crate::watch::{is_clip, is_font, is_input_map, is_scene, is_sorting_layers, is_texture};
 
 /// What one row of a listing is.
 ///
@@ -39,6 +39,9 @@ pub enum EntryKind {
     /// A file [`is_input_map`](crate::watch::is_input_map) accepts: a game's
     /// action bindings. Listed, not placed — there is nothing to drop.
     InputMap,
+    /// A file [`is_sorting_layers`](crate::watch::is_sorting_layers)
+    /// accepts: the project's draw-order bands. Listed, not placed.
+    SortingLayers,
     /// A file [`is_scene`](crate::watch::is_scene) accepts: a scene, which is
     /// also what a prefab is, so every one of them can be dropped in.
     Scene,
@@ -143,6 +146,8 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::Font
         } else if is_input_map(&name) {
             EntryKind::InputMap
+        } else if is_sorting_layers(&name) {
+            EntryKind::SortingLayers
         } else if is_scene(&name) {
             // After `Atlas`, which is a `.ron` too; `is_scene` refuses one
             // anyway, and the order says so without having to read it.
@@ -262,6 +267,7 @@ mod atlas_tests {
         std::fs::write(root.join("demo.ron"), "(version: 1)").expect("the fixture writes");
         std::fs::write(root.join("label.ttf"), "").expect("the fixture writes");
         std::fs::write(root.join("default.input.ron"), "").expect("the fixture writes");
+        std::fs::write(root.join("default.layers.ron"), "").expect("the fixture writes");
 
         let entries = list(&root, None).expect("the root lists");
 
@@ -274,6 +280,7 @@ mod atlas_tests {
         assert_eq!(kind("coin.atlas.ron"), Some(EntryKind::Atlas));
         assert_eq!(kind("label.ttf"), Some(EntryKind::Font));
         assert_eq!(kind("default.input.ron"), Some(EntryKind::InputMap));
+        assert_eq!(kind("default.layers.ron"), Some(EntryKind::SortingLayers));
         assert_eq!(
             kind("demo.ron"),
             Some(EntryKind::Scene),
