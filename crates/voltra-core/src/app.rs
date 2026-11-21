@@ -5,8 +5,10 @@ mod audio;
 mod draw;
 mod framing;
 mod gamepads;
+mod gpu_particles;
 mod input_map;
 mod particles;
+mod scene_draws;
 mod scenes;
 mod simulation;
 mod sorting_layers;
@@ -162,6 +164,8 @@ pub struct App {
     /// The world's sprite batch, kept so each frame refills its buffers
     /// instead of allocating them.
     frame_batch: voltra_scene::SpriteBatch,
+    /// The renderer's half of every emitter simulated on the GPU.
+    gpu_rings: gpu_particles::GpuParticleRings,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a

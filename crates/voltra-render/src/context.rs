@@ -8,6 +8,9 @@ pub struct GpuContext {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    /// What the adapter can do below full WebGPU: whether compute and
+    /// vertex-stage storage, which GPU particles need, are there.
+    downlevel: wgpu::DownlevelFlags,
 }
 
 impl GpuContext {
@@ -42,17 +45,23 @@ impl GpuContext {
             .get_default_config(&adapter, width.max(1), height.max(1))
             .expect("surface not supported by adapter");
         surface.configure(&device, &config);
+        let downlevel = adapter.get_downlevel_capabilities().flags;
 
         Self {
             surface,
             device,
             queue,
             config,
+            downlevel,
         }
     }
 
     pub fn device(&self) -> &wgpu::Device {
         &self.device
+    }
+
+    pub fn downlevel(&self) -> wgpu::DownlevelFlags {
+        self.downlevel
     }
 
     pub fn queue(&self) -> &wgpu::Queue {

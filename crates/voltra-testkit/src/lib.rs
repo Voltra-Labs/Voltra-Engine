@@ -135,6 +135,42 @@ pub fn read_texture(
     pixels
 }
 
+/// Copies the first `size` bytes of a GPU buffer back to the CPU.
+///
+/// The buffer must carry [`wgpu::BufferUsages::COPY_SRC`]; `size` must be a
+/// multiple of four, as every copy between buffers is.
+pub fn read_buffer(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    buffer: &wgpu::Buffer,
+    size: u64,
+) -> Vec<u8> {
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("headless-buffer-readback"),
+        size,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("buffer-readback-encoder"),
+    });
+    encoder.copy_buffer_to_buffer(buffer, 0, &readback, 0, size);
+    queue.submit(Some(encoder.finish()));
+
+    readback.map_async(wgpu::MapMode::Read, .., |result| {
+        result.expect("readback buffer failed to map");
+    });
+    device
+        .poll(wgpu::PollType::wait_indefinitely())
+        .expect("device poll failed");
+    let bytes = readback
+        .get_mapped_range(..)
+        .expect("readback buffer range not mapped")
+        .to_vec();
+    readback.unmap();
+    bytes
+}
+
 /// A fresh directory under the system temp dir, unique per call.
 pub fn scratch_root() -> PathBuf {
     // Unique per call so tests running in parallel cannot see each other's

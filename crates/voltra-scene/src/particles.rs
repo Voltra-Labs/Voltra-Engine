@@ -7,6 +7,7 @@
 //! reaches for first: a continuous rate, bursts, spread, gravity-like
 //! acceleration, and size and colour from birth to death.
 
+pub mod gpu;
 pub mod mesh;
 pub mod rng;
 pub mod simulate;
@@ -71,6 +72,9 @@ pub struct ParticleEmitter {
     /// particle left: a one-off explosion that cleans up after itself.
     #[serde(default)]
     pub one_shot: bool,
+    /// Where the particles are stepped. The same parameters either way.
+    #[serde(default, skip_serializing_if = "Simulation::is_cpu")]
+    pub simulation: Simulation,
     /// What is alive now. Never saved: a scene file says what an emitter
     /// is, not which sparks were in the air.
     ///
@@ -102,6 +106,7 @@ impl Default for ParticleEmitter {
             sorting_layer: crate::sorting::default_layer(),
             world_space: true,
             one_shot: false,
+            simulation: Simulation::Cpu,
             state: Particles::default(),
         }
     }
@@ -114,9 +119,10 @@ impl ParticleEmitter {
         self.state.burst = self.state.burst.saturating_add(count);
     }
 
-    /// How many particles are alive.
+    /// How many particles are alive — for a GPU emitter, the most that can
+    /// be: the CPU counts births and lifetimes, not the buffer.
     pub fn alive(&self) -> usize {
-        self.state.particles.len()
+        self.state.particles.len() + self.state.gpu.alive_bound()
     }
 
     /// Every particle alive, for a caller that draws or tests them.
@@ -126,7 +132,29 @@ impl ParticleEmitter {
 
     /// Whether a one-shot emitter has nothing left to do.
     pub fn is_finished(&self) -> bool {
-        self.one_shot && !self.emitting && self.state.burst == 0 && self.state.particles.is_empty()
+        self.one_shot
+            && !self.emitting
+            && self.state.burst == 0
+            && self.state.particles.is_empty()
+            && self.state.gpu.is_empty()
+    }
+
+    /// The ring a GPU emitter's renderer buffer must hold, or `None` while
+    /// it runs on the CPU.
+    pub fn gpu_capacity(&self) -> Option<u32> {
+        (self.state.gpu.capacity > 0).then_some(self.state.gpu.capacity)
+    }
+
+    /// The dispatch owed since the last call: every step since, merged.
+    /// `None` when nothing was stepped, or on the CPU.
+    pub fn take_gpu_step(&mut self) -> Option<voltra_render::SimStep> {
+        self.state.gpu.take()
+    }
+
+    /// How the GPU particles are drawn, placed by the emitter's world
+    /// `matrix`.
+    pub fn gpu_look(&self, matrix: voltra_render::glam::Mat3) -> voltra_render::ParticleLook {
+        gpu::look(self, matrix)
     }
 
     /// Sets or clears the texture path and refreshes its handle, as
@@ -140,6 +168,26 @@ impl ParticleEmitter {
     ) {
         self.texture_handle = path.as_ref().map(|path| textures.load(device, queue, path));
         self.texture = path;
+    }
+}
+
+/// Where an emitter's particles are stepped and drawn from.
+///
+/// The CPU is the default and the reference: exact counts, no device
+/// needed, every particle readable. The GPU takes the per-particle work —
+/// tens of thousands cost what a handful do — with the same parameters and
+/// look; the CPU still decides how many are born and when. An adapter
+/// without compute shaders runs a GPU emitter on the CPU instead.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum Simulation {
+    #[default]
+    Cpu,
+    Gpu,
+}
+
+impl Simulation {
+    pub fn is_cpu(&self) -> bool {
+        *self == Self::Cpu
     }
 }
 
@@ -173,7 +221,10 @@ pub struct Particles {
     pub(crate) owed: f32,
     pub(crate) burst: u32,
     pub(crate) rng: Option<Rng>,
+    pub(crate) gpu: gpu::GpuPlan,
 }
 
+#[cfg(test)]
+mod gpu_tests;
 #[cfg(test)]
 mod tests;

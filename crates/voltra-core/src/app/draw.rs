@@ -14,6 +14,7 @@ use super::{App, UiFrame};
 impl App {
     /// Draws the world straight to the window. No UI, no intermediate texture.
     pub(super) fn redraw_without_ui(&mut self) {
+        self.step_gpu_particles();
         let (Some(renderer), Some(textures), Some(atlases), Some(fonts)) = (
             self.renderer.as_mut(),
             self.textures.as_mut(),
@@ -52,7 +53,7 @@ impl App {
         // rather than borrowed, so the borrow on `renderer` ends here instead
         // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
-        let draws = mesh_draws(&batch, textures, &white);
+        let draws = super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings);
 
         let config = renderer.context().config();
         let hud = ui_batch(&self.world, sheets, config.width, config.height, scale);
@@ -69,6 +70,7 @@ impl App {
 
     /// Scene to an offscreen target, then the UI over the top of the window.
     pub(super) fn redraw_with_ui(&mut self) {
+        self.step_gpu_particles();
         let (
             Some(renderer),
             Some(window),
@@ -135,7 +137,7 @@ impl App {
         // rather than borrowed, so the borrow on `renderer` ends here instead
         // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
-        let draws = mesh_draws(&batch, textures, &white);
+        let draws = super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings);
         // The game's HUD over the scene, in the viewport's pixels: what the
         // window will show in a build, so the editor shows it too.
         let hud = ui_batch(&self.world, sheets, target.width(), target.height(), scale);

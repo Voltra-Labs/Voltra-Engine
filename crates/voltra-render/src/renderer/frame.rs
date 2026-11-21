@@ -4,8 +4,9 @@
 use super::{aspect_of, Layer, Renderer};
 use crate::camera::screen_projection;
 use crate::mesh::Mesh;
-use crate::pass::{self, MeshDraw};
+use crate::pass;
 use crate::post::PostSettings;
+use crate::scene_draw::{self, SceneDraw};
 use crate::target::RenderTarget;
 
 impl Renderer {
@@ -18,7 +19,7 @@ impl Renderer {
     pub fn render_mesh(
         &mut self,
         mesh: Option<&Mesh>,
-        draws: &[MeshDraw<'_>],
+        draws: &[SceneDraw<'_>],
         ui: Layer<'_>,
         post: &PostSettings,
     ) {
@@ -75,7 +76,7 @@ impl Renderer {
         target: &RenderTarget,
         output: &RenderTarget,
         mesh: Option<&Mesh>,
-        draws: &[MeshDraw<'_>],
+        draws: &[SceneDraw<'_>],
         ui: Layer<'_>,
         post: &PostSettings,
     ) {
@@ -137,16 +138,17 @@ impl Renderer {
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::TextureView,
         mesh: Option<&Mesh>,
-        draws: &[MeshDraw<'_>],
+        draws: &[SceneDraw<'_>],
     ) {
         // Uploaded every frame rather than on change: one 64-byte write is
         // cheaper than tracking whether the camera moved.
         self.camera_binding.upload(self.ctx.queue(), &self.camera);
 
-        pass::draw_mesh_batches(
+        scene_draw::draw_scene(
             encoder,
             view,
             &self.flat_color,
+            self.particles.as_ref(),
             self.camera_binding.bind_group(),
             mesh,
             draws,

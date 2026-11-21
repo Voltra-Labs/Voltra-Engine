@@ -15,7 +15,8 @@ impl App {
         if !self.simulation.is_running() {
             return;
         }
-        for entity in particles::advance(&mut self.world, delta) {
+        let gpu = self.gpu_particles_available();
+        for entity in particles::advance(&mut self.world, delta, gpu) {
             if self.world.is_alive(entity) {
                 hierarchy::despawn_recursive(&mut self.world, entity);
             }

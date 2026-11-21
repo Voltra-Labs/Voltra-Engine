@@ -1,7 +1,8 @@
 //! An emitter's rate, life, motion and look.
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
-use voltra_scene::particles::MAX_PARTICLES;
+use voltra_render::particles::MAX_GPU_PARTICLES;
+use voltra_scene::particles::{Simulation, MAX_PARTICLES};
 use voltra_scene::ParticleEmitter;
 
 use super::active;
@@ -22,7 +23,10 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
 
         ui.label("max");
         claim = claim.or(active(
-            &ui.add(DragValue::new(&mut emitter.max_particles).range(0..=MAX_PARTICLES)),
+            &ui.add(DragValue::new(&mut emitter.max_particles).range(0..=match emitter.simulation {
+                Simulation::Cpu => MAX_PARTICLES,
+                Simulation::Gpu => MAX_GPU_PARTICLES,
+            })),
             "Edit particles",
         ));
         ui.end_row();
@@ -73,6 +77,22 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
         }
         ui.end_row();
 
+        ui.label("simulation");
+        let before = emitter.simulation;
+        egui::ComboBox::from_id_salt("particle_simulation")
+            .selected_text(name(before))
+            .show_ui(ui, |ui| {
+                for option in [Simulation::Cpu, Simulation::Gpu] {
+                    ui.selectable_value(&mut emitter.simulation, option, name(option));
+                }
+            })
+            .response
+            .on_hover_text("GPU: tens of thousands for the cost of a few; falls back to the CPU on an adapter without compute shaders");
+        if emitter.simulation != before {
+            claim = claim.or(Some("Edit particles"));
+        }
+        ui.end_row();
+
         ui.label("world space");
         if ui.checkbox(&mut emitter.world_space, "").changed() {
             claim = claim.or(Some("Edit particles"));
@@ -99,4 +119,11 @@ fn drag(
         &ui.add(DragValue::new(value).speed(speed).range(range)),
         "Edit particles",
     )
+}
+
+fn name(simulation: Simulation) -> &'static str {
+    match simulation {
+        Simulation::Cpu => "CPU",
+        Simulation::Gpu => "GPU",
+    }
 }

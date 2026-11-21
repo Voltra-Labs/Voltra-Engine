@@ -6,6 +6,7 @@ use crate::camera::{Camera2D, CameraBinding};
 use crate::context::GpuContext;
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
+use crate::particles::{GpuParticles, ParticleLook, ParticlePipelines, SimStep};
 use crate::pass::MeshDraw;
 use crate::post::PostPass;
 use crate::target::RenderTarget;
@@ -33,6 +34,8 @@ pub struct Renderer {
     lines: wgpu::RenderPipeline,
     /// Grades the drawn scene into the frame.
     post: PostPass,
+    /// Steps and draws GPU particles; `None` on an adapter that cannot.
+    particles: Option<ParticlePipelines>,
     /// Where the world is drawn before the post pass on the window path,
     /// sized to the surface; made on the first frame.
     frame_target: Option<RenderTarget>,
@@ -66,6 +69,17 @@ impl Renderer {
         );
 
         let post = PostPass::new(ctx.device(), ctx.config().format);
+        let particles = if ParticlePipelines::supported(ctx.downlevel()) {
+            Some(ParticlePipelines::new(
+                ctx.device(),
+                ctx.config().format,
+                camera_binding.layout(),
+                &texture_layout,
+            ))
+        } else {
+            log::warn!("this adapter has no compute shaders; GPU particles run on the CPU");
+            None
+        };
 
         let camera = {
             let mut camera = Camera2D::default();
@@ -82,6 +96,7 @@ impl Renderer {
             white_bind_group,
             lines,
             post,
+            particles,
             frame_target: None,
             viewport_binding,
             camera,
@@ -108,6 +123,38 @@ impl Renderer {
     }
 
     /// The bind group drawn against when geometry has no texture of its own.
+    /// The GPU particle pipelines, or `None` where the adapter cannot run
+    /// them — the caller's cue to simulate on the CPU.
+    pub fn particle_pipelines(&self) -> Option<&ParticlePipelines> {
+        self.particles.as_ref()
+    }
+
+    /// Steps every emitter in `steps` and sets how each is drawn, in one
+    /// submission ahead of the frame's. Nothing without particle pipelines.
+    pub fn step_particles<'a>(
+        &self,
+        steps: impl IntoIterator<Item = (&'a GpuParticles, &'a SimStep, &'a ParticleLook)>,
+    ) {
+        let Some(pipelines) = &self.particles else {
+            return;
+        };
+        let mut encoder =
+            self.ctx
+                .device()
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("particles-encoder"),
+                });
+        let mut any = false;
+        for (particles, step, look) in steps {
+            particles.simulate(self.ctx.queue(), &mut encoder, pipelines, step);
+            particles.set_look(self.ctx.queue(), look);
+            any = true;
+        }
+        if any {
+            self.ctx.queue().submit(Some(encoder.finish()));
+        }
+    }
+
     pub fn white_bind_group(&self) -> &wgpu::BindGroup {
         &self.white_bind_group
     }

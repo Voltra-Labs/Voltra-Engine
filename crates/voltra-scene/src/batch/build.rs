@@ -122,6 +122,7 @@ impl SpriteBatch {
         self.vertices.clear();
         self.indices.clear();
         self.ranges.clear();
+        self.gpu_emitters.clear();
         let batch = self;
         // Asked once: a world with no repeating layer draws every entity
         // once, without looking for one above it.
@@ -149,7 +150,16 @@ impl SpriteBatch {
                         None => mesh::push(batch, matrix, map, sheets),
                     },
                     Drawn::Text(text) => batch.push_text(matrix, text, sheets),
-                    Drawn::Particles(emitter) => particles::mesh::push(batch, matrix, emitter),
+                    Drawn::Particles(emitter) => {
+                        // What the CPU still holds — all of it, on the CPU;
+                        // what is left from before a switch, on the GPU.
+                        particles::mesh::push(batch, matrix, emitter);
+                        // One draw however many repeats: the particles are
+                        // where they are, not where a copy of the emitter is.
+                        if copy == 0 && emitter.gpu_capacity().is_some() {
+                            batch.push_gpu_emitter(entity, emitter.texture_handle);
+                        }
+                    }
                 }
             }
         }

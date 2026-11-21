@@ -21,7 +21,7 @@ fn get(world: &World, entity: Entity) -> &ParticleEmitter {
 fn run(world: &mut World, seconds: f32) -> Vec<Entity> {
     let mut finished = Vec::new();
     for _ in 0..(seconds / FRAME).round() as usize {
-        finished.extend(advance(world, FRAME));
+        finished.extend(advance(world, FRAME, false));
     }
     finished
 }
@@ -101,12 +101,12 @@ fn world_space_particles_stay_behind_a_moving_emitter() {
         .get_mut::<ParticleEmitter>(e)
         .expect("emitter")
         .burst(1);
-    advance(&mut world, FRAME);
+    advance(&mut world, FRAME, false);
     world
         .get_mut::<Transform>(e)
         .expect("transform")
         .translation = Vec2::new(10.0, 0.0);
-    advance(&mut world, FRAME);
+    advance(&mut world, FRAME, false);
     assert_eq!(get(&world, e).particles()[0].position, Vec2::new(3.0, 0.0));
 }
 
@@ -129,7 +129,7 @@ fn particles_leave_in_the_direction_within_the_spread() {
         .get_mut::<ParticleEmitter>(e)
         .expect("emitter")
         .burst(100);
-    advance(&mut world, FRAME);
+    advance(&mut world, FRAME, false);
     for particle in get(&world, e).particles() {
         let angle = particle.velocity.to_angle();
         assert!(angle.abs() <= 0.1 + 1e-5, "{angle}");
@@ -175,7 +175,7 @@ fn a_one_shot_is_reported_finished_once_its_burst_is_gone() {
         .get_mut::<ParticleEmitter>(e)
         .expect("emitter")
         .burst(5);
-    let early = advance(&mut world, FRAME);
+    let early = advance(&mut world, FRAME, false);
     assert!(early.is_empty(), "still sparkling");
     let finished = run(&mut world, 0.5);
     assert_eq!(finished.first(), Some(&e));
@@ -193,7 +193,7 @@ fn a_stalled_frame_does_not_dump_a_second_of_particles() {
             ..ParticleEmitter::default()
         },
     );
-    advance(&mut world, 5.0);
+    advance(&mut world, 5.0, false);
     assert!(get(&world, e).alive() <= 10, "{}", get(&world, e).alive());
 }
 
@@ -215,7 +215,7 @@ fn nonsense_numbers_emit_nothing_rather_than_panic() {
         .burst(3);
     run(&mut world, 0.2);
     assert_eq!(get(&world, e).alive(), 0);
-    assert!(advance(&mut world, f32::NAN).is_empty());
+    assert!(advance(&mut world, f32::NAN, false).is_empty());
 }
 
 #[test]
