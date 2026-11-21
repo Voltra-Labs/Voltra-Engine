@@ -14,13 +14,16 @@
 
 use std::path::{Path, PathBuf};
 
+use voltra_assets::{AssetPath, Textures};
 use voltra_ecs::World;
 use voltra_render::camera::CameraBinding;
 use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, TexturePool};
+use voltra_render::normals::{NormalPass, NORMAL_FORMAT};
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{
-    pipeline, texture, wgpu, Filter, LightPass, PostPass, PostSettings, RenderTarget, Texture,
+    pipeline, texture, wgpu, Filter, LightPass, PostPass, PostSettings, RenderTarget, SceneDraw,
+    Texture,
 };
 use voltra_scene::format::{load, save};
 use voltra_scene::sprite::sheets::Sheets;
@@ -30,8 +33,49 @@ use voltra_scene::{
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
+fn assets_dir() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+}
+
 fn lights_scene() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/scenes/lights.ron")
+    assets_dir().join("scenes/lights.ron")
+}
+
+/// The plaque's normal map: a grid of studs.
+const STUDS: &str = "sprites/studs_normal.png";
+
+/// Where the plaque is (x, y) and how big (side).
+const PLAQUE: (f32, f32, f32) = (-3.0, -1.5, 1.2);
+
+/// Writes a 64x64 normal map of 4x4 studs — a dome in each 16-texel cell,
+/// flat between — in OpenGL's convention (green up), as linear bytes.
+fn write_studs(path: &Path) {
+    use image::ImageEncoder;
+
+    const SIZE: u32 = 64;
+    const CELL: f32 = 16.0;
+    const RADIUS: f32 = 6.0;
+    let mut pixels = Vec::with_capacity((SIZE * SIZE * 4) as usize);
+    for y in 0..SIZE {
+        for x in 0..SIZE {
+            let dx = (x as f32 + 0.5) % CELL - CELL * 0.5;
+            let dy = (y as f32 + 0.5) % CELL - CELL * 0.5;
+            let (nx, ny) = (dx / RADIUS, -dy / RADIUS);
+            let flat = nx * nx + ny * ny;
+            let (nx, ny, nz) = if flat < 1.0 {
+                (nx, ny, (1.0 - flat).sqrt())
+            } else {
+                (0.0, 0.0, 1.0)
+            };
+            let byte = |n: f32| ((n * 0.5 + 0.5) * 255.0).round() as u8;
+            pixels.extend_from_slice(&[byte(nx), byte(ny), byte(nz), 255]);
+        }
+    }
+    std::fs::create_dir_all(path.parent().expect("the PNG has a parent")).expect("sprites dir");
+    let file = std::fs::File::create(path).expect("creating the studs PNG");
+    image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
+        .write_image(&pixels, SIZE, SIZE, image::ExtendedColorType::Rgba8)
+        .expect("encoding the studs PNG");
 }
 
 /// Spawns a named entity at `at` with `scale`, as the editor would.
@@ -56,14 +100,15 @@ const UNIT_BOX: Collider = Collider::Box {
     half_extents: Vec2::splat(0.5),
 };
 
-/// A night room: a pale wall, a floor, two pillars and a crate standing on
-/// it and a wire overhead, lit by a warm lamp at the left and a cool spot
+/// A night room: a pale wall with a studded plaque on it, a floor, two
+/// pillars and a crate standing on it and a wire overhead, lit by a warm lamp at the left and a cool spot
 /// light at the top right aimed down at the pillars, plus a small ember
 /// that casts no shadow.
 ///
 /// Every way a shadow can be cast is in it: colliders as they are (the
 /// pillars), a turned box that shadows itself (the crate), and a polygon of
-/// its own with no collider at all (the wire, an open line).
+/// its own with no collider at all (the wire, an open line). The two lamps
+/// have a height, so the plaque's normal map catches them.
 fn lights_world() -> World {
     let mut world = World::new();
 
@@ -110,6 +155,22 @@ fn lights_world() -> World {
         },
     );
 
+    // A studded plaque on the wall, facing the warm lamp: what a normal map
+    // is for. No caster; the wall behind it is lit as before.
+    let plaque = named(
+        &mut world,
+        "Plaque",
+        Vec2::new(PLAQUE.0, PLAQUE.1),
+        Vec2::splat(PLAQUE.2),
+    );
+    world.insert(
+        plaque,
+        Sprite {
+            normal_map: Some(AssetPath::new(STUDS).expect("a valid asset path")),
+            ..quad([0.75, 0.72, 0.68], 0)
+        },
+    );
+
     let wire = named(
         &mut world,
         "Wire",
@@ -138,6 +199,7 @@ fn lights_world() -> World {
             falloff: 1.5,
             shadows: Some(LightShadows::default()),
             cone: None,
+            height: Some(3.0),
         },
     );
 
@@ -161,6 +223,7 @@ fn lights_world() -> World {
                 angle: 70f32.to_radians(),
                 softness: 0.3,
             }),
+            height: Some(3.5),
         },
     );
 
@@ -174,6 +237,7 @@ fn lights_world() -> World {
             falloff: 2.0,
             shadows: None,
             cone: None,
+            height: None,
         },
     );
 
@@ -190,6 +254,7 @@ fn committed() -> World {
 #[test]
 #[ignore = "writes into the working tree; run with --ignored to regenerate"]
 fn regenerate_the_lights_scene() {
+    write_studs(&assets_dir().join(STUDS));
     let registry = ComponentRegistry::with_defaults();
     save(&lights_world(), &registry, &lights_scene()).expect("writing the lights scene");
 }
@@ -225,12 +290,12 @@ fn the_committed_lights_scene_is_lit_and_casts_every_kind_of_shadow() {
 /// The scene's frame, `width` × `height`, as the game would draw it: the
 /// sprite batch through the active camera, lit, graded neutral. `None`
 /// without an adapter.
-fn render(world: &World, width: u32, height: u32) -> Option<Vec<Rgba>> {
+fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
     const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
     let (device, queue) = headless_device()?;
     let aspect = width as f32 / height as f32;
-    let eye = camera::active(world).expect("the scene has an active camera");
-    let view = camera::view(world, eye, aspect).expect("the active camera has a view");
+    let eye = camera::active(&world).expect("the scene has an active camera");
+    let view = camera::view(&world, eye, aspect).expect("the active camera has a view");
 
     let scene = RenderTarget::new(&device, "scene", FORMAT, width, height, Filter::Linear);
     let output = RenderTarget::new(&device, "output", FORMAT, width, height, Filter::Linear);
@@ -240,6 +305,14 @@ fn render(world: &World, width: u32, height: u32) -> Option<Vec<Rgba>> {
     let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);
     let sprites = pipeline::create_flat_color(&device, FORMAT, binding.layout(), &layout);
 
+    // Normal maps resolved through the real store, as the engine does: the
+    // linear bind group is the path a colour-space mistake would be on.
+    let mut textures = Textures::new(&device, &queue, &layout, assets_dir());
+    for (_, sprite) in world.query_mut::<Sprite>() {
+        let normal = sprite.normal_map.clone();
+        sprite.set_normal_map(normal, &mut textures, &device, &queue);
+    }
+    let world = &world;
     let batch = SpriteBatch::from_world(world, Sheets::default());
     let mesh = batch.upload(&device);
     let draws: Vec<MeshDraw> = batch
@@ -249,8 +322,19 @@ fn render(world: &World, width: u32, height: u32) -> Option<Vec<Rgba>> {
             assert!(range.texture.is_none(), "the scene is untextured");
             MeshDraw {
                 texture: &white,
+                normal: range.normal.map(|handle| textures.raw_bind_group(handle)),
                 indices: range.indices.clone(),
             }
+        })
+        .collect();
+    let scene_draws: Vec<SceneDraw> = draws
+        .iter()
+        .map(|draw| {
+            SceneDraw::Mesh(MeshDraw {
+                texture: draw.texture,
+                normal: draw.normal,
+                indices: draw.indices.clone(),
+            })
         })
         .collect();
 
@@ -269,6 +353,24 @@ fn render(world: &World, width: u32, height: u32) -> Option<Vec<Rgba>> {
 
     let half = view.half_extents();
     let lighting = light::gather(world, view.position - half, view.position + half);
+    let normals = RenderTarget::new(
+        &device,
+        "normals",
+        NORMAL_FORMAT,
+        width,
+        height,
+        Filter::Nearest,
+    );
+    let drew_normals = lighting.uses_normals() && NormalPass::needed(&scene_draws);
+    if drew_normals {
+        NormalPass::new(&device, &queue, binding.layout(), &layout).record(
+            &mut encoder,
+            normals.view(),
+            binding.bind_group(),
+            mesh.as_ref(),
+            &scene_draws,
+        );
+    }
     let lights = LightPass::new(&device, binding.layout());
     let grade = PostPass::new(&device, FORMAT);
     let mut pool = TexturePool::default();
@@ -284,6 +386,7 @@ fn render(world: &World, width: u32, height: u32) -> Option<Vec<Rgba>> {
             width,
             height,
             &lighting,
+            drew_normals.then(|| normals.view()),
         )
         .unwrap_or(drawn);
     let (device_ref, queue_ref) = (&device, &queue);
@@ -330,7 +433,7 @@ fn the_lights_scene_draws_its_shadows() {
     const W: u32 = 160;
     const H: u32 = 90;
     let world = committed();
-    let Some(lit) = render(&world, W, H) else {
+    let Some(lit) = render(world, W, H) else {
         eprintln!("no GPU adapter; skipping");
         return;
     };
@@ -339,14 +442,16 @@ fn the_lights_scene_draws_its_shadows() {
     for entity in casters {
         open.remove::<ShadowCaster2D>(entity);
     }
-    let unblocked = render(&open, W, H).expect("an adapter, found above");
+    let unblocked = render(open, W, H).expect("an adapter, found above");
 
     // On the wall behind the left pillar, seen from the warm lamp, and out
     // of the ember's reach (which would light it either way).
     let behind = Vec2::new(-1.5, -1.0);
     let (shadowed, clear) = (at(&lit, W, H, behind), at(&unblocked, W, H, behind));
     assert!(
-        brightness(shadowed) * 2 < brightness(clear),
+        // Most of the warm lamp gone; what is left is the ambient and the
+        // spot light's edge, which the pillar does not block from there.
+        brightness(shadowed) + 150 < brightness(clear),
         "the pillar's shadow: {shadowed:?} against {clear:?}"
     );
     // Above the wire, nothing is in the way of the warm lamp.
@@ -369,13 +474,48 @@ fn the_lights_scene_draws_its_shadows() {
 }
 
 #[test]
+fn the_plaque_s_studs_catch_the_warm_lamp() {
+    // Fine enough that one stud (0.3 units across, its dome 0.11 in radius)
+    // spans several pixels.
+    const W: u32 = 640;
+    const H: u32 = 360;
+    let Some(bumpy) = render(committed(), W, H) else {
+        return;
+    };
+    let mut flat = committed();
+    for (_, sprite) in flat.query_mut::<Sprite>() {
+        sprite.normal_map = None;
+    }
+    let flat = render(flat, W, H).expect("an adapter, found above");
+
+    // The stud second from the plaque's top-left: its dome's side towards
+    // the lamp (up and left) against its side away from it.
+    let (x, y, side) = PLAQUE;
+    let stud = Vec2::new(x - side * 0.5 + side * 0.375, y + side * 0.5 - side * 0.375);
+    let (towards, away) = (stud + Vec2::new(-0.06, 0.06), stud + Vec2::new(0.06, -0.06));
+    let lit = |pixels: &[Rgba], at_: Vec2| brightness(at(pixels, W, H, at_));
+    assert!(
+        lit(&bumpy, towards) > lit(&bumpy, away) + 30,
+        "the dome's lit side: {} against {}",
+        lit(&bumpy, towards),
+        lit(&bumpy, away)
+    );
+    assert!(
+        lit(&flat, towards).abs_diff(lit(&flat, away)) < 15,
+        "flat, both sides alike: {} {}",
+        lit(&flat, towards),
+        lit(&flat, away)
+    );
+}
+
+#[test]
 #[ignore = "writes target/tmp/lights-preview.png; run with --ignored to look at the scene"]
 fn write_the_lights_preview() {
     use image::ImageEncoder;
 
     const W: u32 = 960;
     const H: u32 = 540;
-    let pixels = render(&committed(), W, H).expect("an adapter to render with");
+    let pixels = render(committed(), W, H).expect("an adapter to render with");
     let bytes: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b, p.a]).collect();
     // Cargo's scratch directory for integration tests: it exists, and it
     // follows CARGO_TARGET_DIR.

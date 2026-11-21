@@ -3136,9 +3136,8 @@ asked for lighting does not go dark when someone drops a light into it.
   is never lit.
 - Instance data is a vertex buffer, not storage: lights work on adapters
   without vertex-stage storage (WebGL2), unlike GPU particles.
-- **Not yet**: normal maps, per-layer light masks. Each is its own stage;
-  none needs this one reshaped — a normal map is a second input to the
-  accumulate pass. Shadows landed in stage 53 and spot lights in 56, below.
+- **Not yet**: per-layer light masks. Shadows landed in stage 53, spot
+  lights in 56 and normal maps in 57, below.
 
 Pinned by `headless_lights.rs` (ambient alone far away, lit past white at
 the lamp, fading between, nothing outside the radius; unlit makes no
@@ -3223,7 +3222,8 @@ two, hard and soft), `lights::occluder` and `lights::shadows` unit tests (which 
 cast, culling, rows, overflow) and `shadow_caster` / `light` scene tests.
 
 `assets/scenes/lights.ron` (stage 54) shows all of it: a shadowed lamp and
-a shadowed spot light (since stage 56), an ember that casts none, pillars shadowing by their colliders, a turned
+a shadowed spot light (since stage 56), both with a height for the studded
+plaque's normal map (stage 57), an ember that casts none, pillars shadowing by their colliders, a turned
 crate that shadows itself and a wire that is an open polygon with no
 collider. Generated through `save` like `demo.ron`, and drawn by
 `tests/lights_scene.rs` — with and without its casters — so a scene that
@@ -3311,6 +3311,69 @@ behind and beside; a soft edge fading where a hard one does not), the
 instance and cone unit tests, and the gather test (a quarter turn aims it
 up). The sample scene's cool lamp is a spot light.
 
+### Normal maps are a second pass over the batch, read by lights with a height
+
+Stage 57. `Sprite::normal_map: Option<AssetPath>` (Unity's `_NormalMap`
+secondary texture, Godot's `CanvasTexture` normal) and
+`PointLight2D::height: Option<f32>` (Godot's `Light2D` height). Both off
+by default and not written.
+
+- **One store, a linear view.** A normal map is an ordinary texture in
+  `Textures`, bound through its non-sRGB view: `Texture::raw_view` already
+  existed for egui, and `Textures::raw_bind_group` keeps a second bind
+  group beside every colour one (made, swapped and reloaded together).
+  Sampling a normal map through the sRGB view would decode data as colour
+  and bend every normal — the double-conversion trap in its other form.
+- **A second pass, not a second attachment** (`normals::NormalPass`): the
+  batch's mesh ranges are drawn again, in painter's order, into an
+  `Rgba8Unorm` normal buffer (`n · 0.5 + 0.5`, alpha 1 where drawn).
+  Ranges without a map bind a stand-in facing the screen, so they still
+  cover what is under them. Coverage is an alpha test at 0.5, not a blend:
+  a sprite more than half transparent leaves the normals under it, and a
+  fade crosses over at once. The normal map's own alpha is ignored (height
+  packed there does not flatten it). GPU particles are not drawn, so the
+  pixels they cover keep the normals of what is under them. The scene pass is
+  untouched, and the pass is recorded only when the frame's lighting has a
+  light with a height **and** some range has a map.
+- **The tangent frame comes from screen-space derivatives** of the world
+  position and UV (`dpdx`/`dpdy`), so a turned, scaled or flipped sprite
+  needs nothing in its vertices — `Vertex` stays as it is for every other
+  pipeline. Red follows the image's +u, green its up (−v), OpenGL's
+  convention. A mirrored sprite mirrors its normals.
+- **The light reads it** in the accumulate pass (group 2): a light with a
+  height multiplies by `max(N · L, 0)`, `L` towards a point `height` above
+  it. **A pixel no normal map covers faces the screen**, `(0, 0, 1)` —
+  Godot's and Unity's rule — so a mapped sprite's flat parts match a plain
+  sprite beside it; a light with a height dims what is far from it, which
+  is the price of the model and why the height is per light and opt-in. No
+  height, no change from before.
+- `SpriteRange::normal` is part of what splits a batch run; tilemaps, text
+  and particles carry none.
+- **A normal map that will not load is drawn flat**, not as the checker's
+  colours read as normals: `Textures::is_broken` marks a handle holding the
+  checker (until a reload repairs it), the draw list leaves its normal map
+  out, and `Sprite::set_normal_map` says so by the normal map's name. A
+  height of zero or less is no height; the inspector says "ignored".
+- The height is in the light's entity units, scaled with it like the
+  radius.
+
+Rejected: **a second colour attachment on the scene pass** (MRT) — every
+frame would pay for it, and the GPU particle pipeline would need the
+attachment too; **a tangent per vertex** — a wider `Vertex` for every
+pipeline to serve one; **a separate linear texture store** — two caches
+for one file, and a hot reload that must know which to refresh.
+
+- **Not yet**: normal maps on tilemaps (per sheet) and text, a per-light
+  normal strength, specular, blending normals by coverage, particles
+  writing their own (flat) normals.
+
+Pinned by `headless_normals.rs` (normals towards the lamp lit and away
+dark; a mirrored quad mirrors them; flat faces the screen; no height
+ignores them), `lights_scene.rs` (the sample scene's studded plaque: the
+lit side of a stud brighter than its far side, both alike with the map
+stripped — resolved through the real `Textures`, so the linear bind group
+is on the path), and batch, sprite and light unit tests.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -3333,6 +3396,7 @@ Verified against the crate source, not from memory:
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
 | Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
 | D3D12 / FXC | A WGSL loop that writes a vector component by a **runtime index** (`v[i] = …`) fails pipeline creation: FXC must unroll it and cannot (`X3511`). Write the components out. Windows CI hits this; reproduce locally with `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc cargo test` |
+| Data textures | A normal map must be sampled through a non-sRGB view (`Texture::raw_view`, `Textures::raw_bind_group`); the sRGB view decodes it as colour. The view format must be listed in `view_formats` at creation, which `Texture::from_rgba8` does |
 | `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
 | Headless tests | `headless_device()` needs an adapter; in a Linux container without a GPU, `apt-get install mesa-vulkan-drivers` (lavapipe) makes the GPU tests run instead of skipping |
 | WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |

@@ -1,6 +1,6 @@
 //! Textures, keyed by the path a scene file names them with.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use voltra_render::texture::{decode_png, DecodedImage};
@@ -36,6 +36,15 @@ pub struct Textures {
     /// load time rather than the render-time validation panic it would
     /// otherwise surface as.
     bind_groups: HashMap<Handle<Texture>, BindGroup>,
+    /// The same textures bound through their linear view, for those used as
+    /// data — a normal map — rather than colour. Kept beside `bind_groups`,
+    /// entry for entry: one PNG can be both, and decoding it from sRGB as a
+    /// normal map would bend every normal.
+    raw_bind_groups: HashMap<Handle<Texture>, BindGroup>,
+    /// Handles holding the checker because their file would not load, until
+    /// a reload repairs them. Asked by a caller that uses a texture as data
+    /// (a normal map), for which the checker's pixels would be nonsense.
+    broken: HashSet<Handle<Texture>>,
 }
 
 impl Textures {
@@ -52,10 +61,13 @@ impl Textures {
         let mut store = Assets::new();
         let texture = placeholder_texture(device, queue);
         let bind_group = texture.create_bind_group(device, layout);
+        let raw_bind_group = texture.create_raw_bind_group(device, layout);
         let placeholder = store.insert(texture);
 
         let mut bind_groups = HashMap::new();
         bind_groups.insert(placeholder, bind_group);
+        let mut raw_bind_groups = HashMap::new();
+        raw_bind_groups.insert(placeholder, raw_bind_group);
 
         Self {
             root: root.into(),
@@ -64,6 +76,8 @@ impl Textures {
             placeholder,
             layout: layout.clone(),
             bind_groups,
+            raw_bind_groups,
+            broken: HashSet::new(),
         }
     }
 
@@ -92,12 +106,7 @@ impl Textures {
         texture: Result<Texture, AssetError>,
     ) -> Handle<Texture> {
         let handle = match texture {
-            Ok(texture) => {
-                let bind_group = texture.create_bind_group(device, &self.layout);
-                let handle = self.store.insert(texture);
-                self.bind_groups.insert(handle, bind_group);
-                handle
-            }
+            Ok(texture) => self.insert(device, texture),
             Err(e) => {
                 log::warn!("{e}; drawing the missing-texture checker instead");
                 self.insert_broken(device, queue)
@@ -117,10 +126,42 @@ impl Textures {
     /// own slot costs 256 bytes of pixels.
     fn insert_broken(&mut self, device: &Device, queue: &Queue) -> Handle<Texture> {
         let texture = placeholder_texture(device, queue);
+        let handle = self.insert(device, texture);
+        self.broken.insert(handle);
+        handle
+    }
+
+    /// Whether `handle` holds the checker in place of a file that would not
+    /// load. A reload that succeeds repairs it.
+    pub fn is_broken(&self, handle: Handle<Texture>) -> bool {
+        self.broken.contains(&handle)
+    }
+
+    /// Stores `texture` under a new handle, with both its bind groups.
+    fn insert(&mut self, device: &Device, texture: Texture) -> Handle<Texture> {
         let bind_group = texture.create_bind_group(device, &self.layout);
+        let raw_bind_group = texture.create_raw_bind_group(device, &self.layout);
         let handle = self.store.insert(texture);
         self.bind_groups.insert(handle, bind_group);
+        self.raw_bind_groups.insert(handle, raw_bind_group);
         handle
+    }
+
+    /// Puts `texture` under `handle` in place of what was there, with fresh
+    /// bind groups: the old ones still name the old texture's views, so
+    /// swapping the texture alone would change nothing the GPU can see.
+    fn swap(&mut self, device: &Device, handle: Handle<Texture>, texture: Texture) {
+        let bind_group = texture.create_bind_group(device, &self.layout);
+        let raw_bind_group = texture.create_raw_bind_group(device, &self.layout);
+        let slot = self
+            .store
+            .get_mut(handle)
+            .expect("Textures never removes, so every handle it issued resolves");
+        *slot = texture;
+        self.bind_groups.insert(handle, bind_group);
+        self.raw_bind_groups.insert(handle, raw_bind_group);
+        // Real pixels now, whatever was there before.
+        self.broken.remove(&handle);
     }
 
     /// Re-reads `path` and swaps the new pixels in under the handle it already
@@ -152,15 +193,7 @@ impl Textures {
             }
         };
 
-        let bind_group = texture.create_bind_group(device, &self.layout);
-        let slot = self
-            .store
-            .get_mut(handle)
-            .expect("Textures never removes, so every handle it issued resolves");
-        *slot = texture;
-        // The old bind group still names the old texture view, so replacing the
-        // texture without replacing this swaps nothing the GPU can see.
-        self.bind_groups.insert(handle, bind_group);
+        self.swap(device, handle, texture);
 
         log::info!("reloaded {}", path.as_str());
         true
@@ -184,6 +217,16 @@ impl Textures {
         self.bind_groups
             .get(&handle)
             .expect("Textures inserts a bind group with every texture")
+    }
+
+    /// The bind group of `handle`'s texture seen through its linear view:
+    /// for a texture used as data (a normal map), whose bytes must arrive as
+    /// written. Every handle that has a [`bind_group`](Self::bind_group) has
+    /// one of these too.
+    pub fn raw_bind_group(&self, handle: Handle<Texture>) -> &BindGroup {
+        self.raw_bind_groups
+            .get(&handle)
+            .expect("Textures inserts a raw bind group with every texture")
     }
 
     /// The texture `handle` names.

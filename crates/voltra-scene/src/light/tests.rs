@@ -163,3 +163,15 @@ fn a_spot_light_points_along_its_entity_and_is_left_out_of_the_file_when_off() {
     let read: PointLight2D = ron::from_str("(cone: Some((angle: 1.0)))").expect("reads");
     assert_eq!(read.cone.map(|c| c.softness), Some(0.25));
 }
+
+#[test]
+fn a_light_s_height_scales_with_its_entity_and_is_left_out_when_absent() {
+    let light = PointLight2D {
+        height: Some(0.5),
+        ..PointLight2D::default()
+    };
+    let placed = light.placed(Mat3::from_scale(Vec2::splat(4.0)));
+    assert_eq!(placed.height, Some(2.0));
+    let text = ron::to_string(&PointLight2D::default()).expect("writes");
+    assert!(!text.contains("height"), "{text}");
+}

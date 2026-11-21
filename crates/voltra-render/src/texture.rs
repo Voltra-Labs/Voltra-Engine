@@ -247,13 +247,35 @@ impl Texture {
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
     ) -> wgpu::BindGroup {
+        self.bind(device, layout, &self.view, "texture-bind-group")
+    }
+
+    /// Binds the [`raw_view`](Self::raw_view) and the sampler against
+    /// [`bind_group_layout`]: what a texture holding data rather than colour
+    /// — a normal map — is sampled through, so its bytes arrive as written
+    /// instead of decoded from sRGB.
+    pub fn create_raw_bind_group(
+        &self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+    ) -> wgpu::BindGroup {
+        self.bind(device, layout, &self.raw_view, "raw-texture-bind-group")
+    }
+
+    fn bind(
+        &self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        view: &wgpu::TextureView,
+        label: &str,
+    ) -> wgpu::BindGroup {
         device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("texture-bind-group"),
+            label: Some(label),
             layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&self.view),
+                    resource: wgpu::BindingResource::TextureView(view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,

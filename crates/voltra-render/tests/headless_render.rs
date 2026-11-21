@@ -377,10 +377,12 @@ fn draw_mesh_batches_binds_a_different_texture_per_range() {
     let draws = [
         MeshDraw {
             texture: &white,
+            normal: None,
             indices: 0..6,
         },
         MeshDraw {
             texture: &red,
+            normal: None,
             indices: 6..12,
         },
     ];

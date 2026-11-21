@@ -12,6 +12,7 @@ pub mod graph;
 pub mod lights;
 pub mod lines;
 pub mod mesh;
+pub mod normals;
 pub mod particles;
 pub mod pass;
 pub mod pipeline;
@@ -29,6 +30,7 @@ pub use egui_backend::{EguiBackend, ScreenDescriptor};
 pub use lights::{Cone, LightPass, Lighting, Occluder, PointLight, Shadow};
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
+pub use normals::NormalPass;
 pub use particles::{
     GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse, SimStep,
 };

@@ -284,6 +284,7 @@ privileged and plain `cargo build` covers everything.
 | 54 | A lit sample scene, drawn by a test that checks its shadows | done |
 | 55 | Shadow caster polygons edited in the viewport | done |
 | 56 | Spot lights: a cone on a point light, aimed by its entity | done |
+| 57 | Normal maps on sprites, shaded by lights with a height | done |
 
 ## Contributing
 

@@ -42,6 +42,15 @@ pub struct PointLight2D {
     /// every way.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cone: Option<LightCone>,
+    /// How far above the scene it sits, in its entity's units (scaled with
+    /// it, as the radius is) — Godot's `Light2D` height. With one, what it
+    /// lights is shaded by the angle it reaches it at: through a sprite's
+    /// [`normal_map`](crate::Sprite::normal_map), or facing the screen where
+    /// there is none, so mapped and plain sprites agree. Lower rakes across
+    /// the bumps and dims what is far from it; higher lights from the front.
+    /// `None` — the default, and not written — ignores normals.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<f32>,
 }
 
 /// A spot light's cone, Unity URP's spot `Light2D`.
@@ -93,6 +102,7 @@ impl PointLight2D {
                 angle: cone.angle,
                 softness: cone.softness,
             }),
+            height: self.height.map(|height| height * scale),
         }
     }
 }
@@ -129,6 +139,7 @@ impl Default for PointLight2D {
             falloff: 2.0,
             shadows: None,
             cone: None,
+            height: None,
         }
     }
 }

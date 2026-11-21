@@ -59,6 +59,7 @@ fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
             SIZE,
             SIZE,
             lighting,
+            None,
         )
         .unwrap_or(drawn);
     let (device_ref, queue_ref) = (&device, &queue);
@@ -106,6 +107,7 @@ fn a_lamp_lights_its_disc_and_the_ambient_lights_the_rest() {
         falloff: 1.0,
         shadow: None,
         cone: None,
+        height: None,
     };
     let Some((pixels, pool)) = frame(&Lighting {
         lights: vec![lamp],
@@ -146,6 +148,7 @@ fn a_light_that_gives_nothing_leaves_the_ambient() {
         falloff: 2.0,
         shadow: None,
         cone: None,
+        height: None,
     };
     let Some((pixels, _)) = frame(&Lighting {
         lights: vec![dark],
@@ -171,6 +174,7 @@ fn spot(softness: f32) -> PointLight {
             angle: std::f32::consts::FRAC_PI_2,
             softness,
         }),
+        height: None,
     }
 }
 

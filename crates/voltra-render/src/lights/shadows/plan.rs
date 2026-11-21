@@ -125,6 +125,7 @@ mod tests {
                 softness: 0.0,
             }),
             cone: None,
+            height: None,
         }
     }
 

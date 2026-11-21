@@ -25,12 +25,7 @@ impl Textures {
         height: u32,
     ) -> Handle<Texture> {
         match Texture::from_rgba8(device, queue, label, rgba, width, height, Filter::Linear) {
-            Ok(texture) => {
-                let bind_group = texture.create_bind_group(device, &self.layout);
-                let handle = self.store.insert(texture);
-                self.bind_groups.insert(handle, bind_group);
-                handle
-            }
+            Ok(texture) => self.insert(device, texture),
             Err(e) => {
                 log::warn!("{label}: {e}; drawing the missing-texture checker instead");
                 self.insert_broken(device, queue)
@@ -67,11 +62,7 @@ impl Textures {
                     return false;
                 }
             };
-        let bind_group = texture.create_bind_group(device, &self.layout);
-        if let Some(slot) = self.store.get_mut(handle) {
-            *slot = texture;
-        }
-        self.bind_groups.insert(handle, bind_group);
+        self.swap(device, handle, texture);
         true
     }
 }

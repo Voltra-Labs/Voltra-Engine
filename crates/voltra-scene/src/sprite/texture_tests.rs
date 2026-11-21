@@ -46,3 +46,17 @@ fn hostile_texture_path_is_rejected_on_deserialize() {
         r#"(color:(1.0,1.0,1.0,1.0),sort_order:0,texture:Some(Path("../../etc/passwd")))"#;
     assert!(ron::from_str::<Sprite>(hostile).is_err());
 }
+
+#[test]
+fn a_normal_map_round_trips_without_its_handle_and_is_left_out_when_absent() {
+    let text = ron::to_string(&Sprite::default()).expect("writes");
+    assert!(!text.contains("normal_map"), "{text}");
+    let sprite = Sprite {
+        normal_map: Some(AssetPath::new("sprites/brick_n.png").expect("a valid path")),
+        ..Sprite::default()
+    };
+    let text = ron::to_string(&sprite).expect("writes");
+    let read: Sprite = ron::from_str(&text).expect("reads");
+    assert_eq!(read.normal_map, sprite.normal_map);
+    assert_eq!(read.normal_handle, None, "a handle never comes off disk");
+}

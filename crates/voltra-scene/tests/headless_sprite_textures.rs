@@ -98,6 +98,7 @@ fn render_batch(
                 Some(handle) => textures.bind_group(handle),
                 None => &white,
             },
+            normal: None,
             indices: range.indices.clone(),
         })
         .collect();

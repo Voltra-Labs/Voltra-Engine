@@ -183,3 +183,26 @@ fn every_texture_has_a_bind_group() {
     let hero = textures.load(&device, &queue, &AssetPath::new("hero.png").expect("valid"));
     textures.bind_group(hero);
 }
+
+#[test]
+fn a_broken_texture_is_known_as_one_until_a_reload_repairs_it() {
+    let (device, queue) = device_or_skip!();
+    let layout = voltra_render::texture::bind_group_layout(&device);
+    let root = scratch_root();
+    let mut textures = Textures::new(&device, &queue, &layout, &root);
+    let path = AssetPath::new("sprites/later.png").expect("valid");
+
+    let handle = textures.load(&device, &queue, &path);
+    assert!(textures.is_broken(handle), "missing, so the checker");
+    // A data texture (a normal map) is bound through this: it must exist
+    // for a broken handle too, even though nothing should draw with it.
+    textures.raw_bind_group(handle);
+
+    write_png(&root, "sprites/later.png", 4, 4);
+    assert!(textures.reload(&device, &queue, &path));
+    assert!(
+        !textures.is_broken(handle),
+        "repaired under the same handle"
+    );
+    assert!(!textures.is_broken(textures.placeholder()));
+}

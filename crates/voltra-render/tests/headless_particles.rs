@@ -215,6 +215,7 @@ fn particles_draw_between_the_sprites_around_them() {
     let draws = [
         SceneDraw::Mesh(MeshDraw {
             texture: &white,
+            normal: None,
             indices: 0..6,
         }),
         SceneDraw::Particles {
@@ -223,6 +224,7 @@ fn particles_draw_between_the_sprites_around_them() {
         },
         SceneDraw::Mesh(MeshDraw {
             texture: &white,
+            normal: None,
             indices: 6..12,
         }),
     ];

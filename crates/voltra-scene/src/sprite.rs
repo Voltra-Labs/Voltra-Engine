@@ -106,6 +106,21 @@ pub struct Sprite {
     /// from stretching to a common square.
     #[serde(default)]
     pub pixels_per_unit: Option<f32>,
+    /// A normal map over the same texels as `texture` — the same frame,
+    /// region and flips — for lights with a
+    /// [`height`](crate::PointLight2D::height) to shade it by. Unity's
+    /// `_NormalMap` secondary texture, Godot's `CanvasTexture` normal.
+    ///
+    /// Tangent space in OpenGL's convention: red points along the image's
+    /// right, green along its up, blue out of it. Read as data, never
+    /// decoded from sRGB. `None` — the default, and not written — is a flat
+    /// sprite that lights shade by distance alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal_map: Option<AssetPath>,
+    /// The handle `normal_map` currently resolves to, if any. Never
+    /// serialised, as `texture_handle` is not.
+    #[serde(skip)]
+    pub normal_handle: Option<Handle<Texture>>,
 }
 
 impl Default for Sprite {
@@ -123,6 +138,8 @@ impl Default for Sprite {
             flip_x: false,
             flip_y: false,
             pixels_per_unit: None,
+            normal_map: None,
+            normal_handle: None,
         }
     }
 }
@@ -171,6 +188,31 @@ impl Sprite {
                 self.texture_handle = Some(handle);
             }
         }
+    }
+
+    /// Sets or clears the normal map's path and refreshes its handle, as
+    /// [`set_texture`](Self::set_texture) does for the colour. The same
+    /// store: a normal map is a texture, bound through its linear view.
+    pub fn set_normal_map(
+        &mut self,
+        path: Option<AssetPath>,
+        textures: &mut Textures,
+        device: &voltra_render::wgpu::Device,
+        queue: &voltra_render::wgpu::Queue,
+    ) {
+        self.normal_handle = path.as_ref().map(|path| {
+            let handle = textures.load(device, queue, path);
+            if textures.is_broken(handle) {
+                // The store's own warning speaks of the colour checker; a
+                // normal map is not drawn as one.
+                log::warn!(
+                    "normal map {} did not load; the sprite is shaded flat until it does",
+                    path.as_str()
+                );
+            }
+            handle
+        });
+        self.normal_map = path;
     }
 
     /// Sets or clears the atlas path and refreshes the runtime handle.

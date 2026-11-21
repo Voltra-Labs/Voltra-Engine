@@ -73,6 +73,34 @@ pub(super) fn show(ui: &mut Ui, light: &mut PointLight2D) -> Option<&'static str
                 ui.end_row();
             }
 
+            ui.label("height").on_hover_text(
+                "how far above the scene it sits, for normal maps; off ignores them",
+            );
+            if optional_height(ui, &mut light.height) {
+                claim = claim.or(Some("Toggle light height"));
+            }
+            ui.end_row();
+            if let Some(height) = &mut light.height {
+                // A height written as zero or less by hand is no height: say
+                // so rather than show a ticked box that does nothing.
+                if !(height.is_finite() && *height > 0.0) {
+                    ui.label(RichText::new("ignored").weak())
+                        .on_hover_text("a height of zero or less is no height");
+                } else {
+                    ui.label("");
+                }
+                claim = claim.or(active(
+                    &ui.add(
+                        DragValue::new(height)
+                            .speed(0.01)
+                            .range(0.01..=100.0)
+                            .clamp_existing_to_range(false),
+                    ),
+                    "Edit light",
+                ));
+                ui.end_row();
+            }
+
             ui.label("spot")
                 .on_hover_text("shines through a cone along the entity's +x; turn it to aim");
             if optional(ui, "light_cone", &mut light.cone) {
@@ -112,6 +140,26 @@ pub(super) fn show(ui: &mut Ui, light: &mut PointLight2D) -> Option<&'static str
             }
         });
     claim
+}
+
+/// The height checkbox: [`optional`] for a plain number, which has no
+/// useful default of zero — a light at the scene's own level rakes so
+/// low that every bump is black on one side.
+fn optional_height(ui: &mut Ui, height: &mut Option<f32>) -> bool {
+    let mut wrapped = height.map(Height);
+    let toggled = optional(ui, "light_height", &mut wrapped);
+    *height = wrapped.map(|h| h.0);
+    toggled
+}
+
+/// A light height with a default worth starting from: one unit up.
+#[derive(Clone, Copy)]
+struct Height(f32);
+
+impl Default for Height {
+    fn default() -> Self {
+        Self(1.0)
+    }
 }
 
 /// A checkbox for an optional part of the light. Returns whether it was

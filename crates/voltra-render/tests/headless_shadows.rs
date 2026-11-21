@@ -61,6 +61,7 @@ fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
             SIZE,
             SIZE,
             lighting,
+            None,
         )
         .unwrap_or(drawn);
     let (device_ref, queue_ref) = (&device, &queue);
@@ -103,6 +104,7 @@ fn lamp(x: f32, shadow: Option<Shadow>) -> PointLight {
         falloff: 1.0,
         shadow,
         cone: None,
+        height: None,
     }
 }
 
