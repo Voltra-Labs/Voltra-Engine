@@ -8,7 +8,6 @@
 //! whole world once, so a deep tree costs one multiply per entity rather than
 //! one per entity per level.
 
-use voltra_ecs::hash::FastMap;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
@@ -87,49 +86,49 @@ pub fn set_world_transform(world: &mut World, entity: Entity, target: &Transform
 /// does not hold, which is the same answer a root with no transform gets.
 #[derive(Debug, Default, Clone)]
 pub struct WorldTransforms {
-    matrices: FastMap<Entity, Mat3>,
+    /// Indexed by [`Entity::index`]: the entity it was composed for (so a
+    /// recycled index with a new generation misses) and its matrix. Dense,
+    /// because the ECS hands out indices densely; a lookup is an index and
+    /// a compare, not a hash.
+    matrices: Vec<Option<(Entity, Mat3)>>,
+    len: usize,
 }
 
 impl WorldTransforms {
-    /// Composes every entity that has a [`Transform`].
+    /// Composes every entity with a [`Transform`] in one pass.
+    ///
+    /// Each chain is walked up only until it meets an ancestor already
+    /// composed, so every matrix is multiplied once however deep the tree.
+    /// Locals and parents are read straight from the world's sparse sets —
+    /// an index each — rather than copied into maps first, which was most
+    /// of what this cost with thousands of entities.
+    ///
+    /// A [`Parent`] naming a despawned entity, or one in a cycle, makes its
+    /// child a root: drawn where its own transform says, and warned about.
     pub fn from_world(world: &World) -> Self {
-        let locals: FastMap<Entity, Mat3> = world
-            .query::<Transform>()
-            .map(|(entity, transform)| (entity, transform.matrix()))
-            .collect();
-        let parents: FastMap<Entity, Entity> = world
-            .query::<Parent>()
-            .filter_map(|(entity, link)| link.entity.map(|parent| (entity, parent)))
-            .filter(|(_, parent)| world.is_alive(*parent))
-            .collect();
-
-        let mut matrices: FastMap<Entity, Mat3> =
-            FastMap::with_capacity_and_hasher(locals.len(), Default::default());
-        // Reused across entities: one allocation for the whole pass, not one
-        // per chain walked.
+        let mut this = Self::default();
         let mut chain: Vec<Entity> = Vec::new();
-
-        for entity in locals.keys().copied() {
-            if matrices.contains_key(&entity) {
+        for (entity, _) in world.query::<Transform>() {
+            if this.get(entity).is_some() {
                 continue;
             }
 
-            // Up to the first ancestor already composed, or to the root.
             chain.clear();
             let mut cursor = entity;
             let mut above = Mat3::IDENTITY;
             loop {
                 chain.push(cursor);
-                let Some(&parent) = parents.get(&cursor) else {
+                let Some(parent) = world
+                    .get::<Parent>(cursor)
+                    .and_then(|link| link.entity)
+                    .filter(|parent| world.is_alive(*parent))
+                else {
                     break;
                 };
-                if let Some(known) = matrices.get(&parent) {
-                    above = *known;
+                if let Some(known) = this.get(parent) {
+                    above = known;
                     break;
                 }
-                // A cycle, which only a hand-edited file can produce. The
-                // entity at the top of the walk is treated as a root: the
-                // alternative is looping forever on a file the editor opened.
                 if chain.contains(&parent) {
                     log::warn!("{parent:?} is in a parent cycle; composing it as a root");
                     break;
@@ -137,14 +136,23 @@ impl WorldTransforms {
                 cursor = parent;
             }
 
-            // Top-down, so each entity multiplies the frame already composed.
             for entity in chain.iter().rev().copied() {
-                above *= locals.get(&entity).copied().unwrap_or(Mat3::IDENTITY);
-                matrices.insert(entity, above);
+                above *= local_matrix(world, entity);
+                this.insert(entity, above);
             }
         }
+        this
+    }
 
-        Self { matrices }
+    fn insert(&mut self, entity: Entity, matrix: Mat3) {
+        let index = entity.index() as usize;
+        if index >= self.matrices.len() {
+            self.matrices.resize(index + 1, None);
+        }
+        if self.matrices[index].is_none() {
+            self.len += 1;
+        }
+        self.matrices[index] = Some((entity, matrix));
     }
 
     /// [`from_world`](Self::from_world), with every [`Parallax`] layer
@@ -159,13 +167,15 @@ impl WorldTransforms {
 
     /// Every entity composed.
     pub(crate) fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
-        self.matrices.keys().copied()
+        self.matrices.iter().flatten().map(|(entity, _)| *entity)
     }
 
     /// Moves `entity`'s composed matrix by `offset` in world space.
     pub(crate) fn translate(&mut self, entity: Entity, offset: voltra_render::glam::Vec2) {
-        if let Some(matrix) = self.matrices.get_mut(&entity) {
-            *matrix = Mat3::from_translation(offset) * *matrix;
+        if let Some(Some((owner, matrix))) = self.matrices.get_mut(entity.index() as usize) {
+            if *owner == entity {
+                *matrix = Mat3::from_translation(offset) * *matrix;
+            }
         }
     }
 
@@ -176,15 +186,18 @@ impl WorldTransforms {
 
     /// `entity`'s world matrix, or `None` if it was not composed.
     pub fn get(&self, entity: Entity) -> Option<Mat3> {
-        self.matrices.get(&entity).copied()
+        match self.matrices.get(entity.index() as usize) {
+            Some(Some((owner, matrix))) if *owner == entity => Some(*matrix),
+            _ => None,
+        }
     }
 
     pub fn len(&self) -> usize {
-        self.matrices.len()
+        self.len
     }
 
     pub fn is_empty(&self) -> bool {
-        self.matrices.is_empty()
+        self.len == 0
     }
 }
 

@@ -4,7 +4,6 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
-use super::parallel::{self, Prepared};
 use super::SpriteBatch;
 use crate::hierarchy::WorldTransforms;
 use crate::particles::{self, ParticleEmitter};
@@ -15,7 +14,7 @@ use crate::tilemap::{mesh, TileMeshCache, Tilemap};
 use crate::transform::Transform;
 
 /// What the batch draws one of: every kind sorts by the same key.
-pub(super) enum Drawn<'a> {
+enum Drawn<'a> {
     Sprite(&'a Sprite),
     Tilemap(&'a Tilemap),
     Text(&'a Text),
@@ -145,19 +144,7 @@ impl SpriteBatch {
         if let Some(tiles) = tiles.as_deref_mut() {
             tiles.begin();
         }
-        // Sprites placed on the pool first, when there are enough of them and
-        // none repeats — a repeating copy's matrix is only known below.
-        let sprites = drawn
-            .iter()
-            .filter(|(_, drawn)| matches!(drawn, Drawn::Sprite(_)))
-            .count();
-        let prepared = match sheets.jobs {
-            Some(jobs) if !repeating && sprites >= parallel::PARALLEL_SPRITES => {
-                parallel::prepare(jobs, &drawn, &transforms, sheets)
-            }
-            _ => Vec::new(),
-        };
-        for (index, &(entity, ref drawn)) in drawn.iter().enumerate() {
+        for &(entity, ref drawn) in &drawn {
             let matrix = transforms.matrix(entity);
             let copies = if repeating {
                 crate::parallax::copies_of(world, entity, matrix, sheets.visible)
@@ -167,13 +154,7 @@ impl SpriteBatch {
             for (copy, offset) in copies.into_iter().enumerate() {
                 let matrix = Mat3::from_translation(offset) * matrix;
                 match drawn {
-                    Drawn::Sprite(sprite) => match prepared.get(index) {
-                        Some(Prepared::Quad(vertices, texture)) => {
-                            batch.append_quad(*vertices, *texture)
-                        }
-                        Some(Prepared::Culled) => {}
-                        _ => batch.push(matrix, sprite, sheets),
-                    },
+                    Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
                     Drawn::Tilemap(map) => match tiles.as_deref_mut() {
                         Some(tiles) => {
                             mesh::push_cached(batch, matrix, map, sheets, tiles.layer(entity, copy))
