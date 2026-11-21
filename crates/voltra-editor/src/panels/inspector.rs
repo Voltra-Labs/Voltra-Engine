@@ -178,17 +178,32 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.separator();
                     claim = claim.or(collision::show(ui, frame.world, entity));
                 }
-                // Keyed off the shape it would take, as the filter is, or
-                // off the caster for one with a polygon of its own.
-                if has_collider
-                    || solid_layer
-                    || frame
-                        .world
-                        .get::<voltra_scene::ShadowCaster2D>(entity)
-                        .is_some()
-                {
+                // Keyed off the shape it would take — a collider, a solid
+                // layer's boxes, a sprite's quad — or off the caster itself.
+                let has_sprite = frame.world.get::<Sprite>(entity).is_some();
+                let casts = frame
+                    .world
+                    .get::<voltra_scene::ShadowCaster2D>(entity)
+                    .is_some();
+                if has_collider || solid_layer || has_sprite || casts {
+                    // Read before the world is borrowed mutably below: the
+                    // sprite's quad is resolved against the frame's sheets.
+                    let starting = voltra_scene::shadow_caster::starting_polygon(
+                        frame.world,
+                        entity,
+                        frame.sheets(),
+                    );
                     ui.separator();
-                    claim = claim.or(shadow_caster::show(ui, frame.world, entity));
+                    claim = claim.or(shadow_caster::show(
+                        ui,
+                        frame.world,
+                        entity,
+                        shadow_caster::Context {
+                            has_collider: has_collider || solid_layer,
+                            starting,
+                            shape: &mut editor.shape,
+                        },
+                    ));
                 }
                 // Every drawable's named layer, under its own section's
                 // fields: one rule, one widget, wherever the component is.

@@ -6,14 +6,17 @@
 //! where it blocks and the two cannot drift apart; a polygon of its own is
 //! there for a shape that should shadow differently from how it collides.
 //!
-//! Its outlines in the world are built in `shadow_caster/outline.rs`.
+//! Its outlines in the world are built in `shadow_caster/outline.rs`, and
+//! the polygon it starts from when given one in `shadow_caster/starting.rs`.
 
 use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
 mod outline;
+mod starting;
 
 pub use outline::{occluders, outlines_of, CIRCLE_SIDES};
+pub use starting::{starting_polygon, EDIT_CIRCLE_SIDES};
 
 /// Blocks the light of every [`PointLight2D`](crate::PointLight2D) that casts
 /// shadows.

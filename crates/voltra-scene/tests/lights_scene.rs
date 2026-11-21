@@ -8,7 +8,7 @@
 //! still loads but no longer casts a shadow is caught too.
 //!
 //! `write_the_lights_preview` (also ignored) renders it to
-//! `target/lights-preview.png`, for looking at without a window.
+//! `target/tmp/lights-preview.png`, for looking at without a window.
 //!
 //! The GPU tests skip themselves when no adapter is available.
 
@@ -358,7 +358,7 @@ fn the_lights_scene_draws_its_shadows() {
 }
 
 #[test]
-#[ignore = "writes target/lights-preview.png; run with --ignored to look at the scene"]
+#[ignore = "writes target/tmp/lights-preview.png; run with --ignored to look at the scene"]
 fn write_the_lights_preview() {
     use image::ImageEncoder;
 
@@ -366,7 +366,9 @@ fn write_the_lights_preview() {
     const H: u32 = 540;
     let pixels = render(&committed(), W, H).expect("an adapter to render with");
     let bytes: Vec<u8> = pixels.iter().flat_map(|p| [p.r, p.g, p.b, p.a]).collect();
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/lights-preview.png");
+    // Cargo's scratch directory for integration tests: it exists, and it
+    // follows CARGO_TARGET_DIR.
+    let path = Path::new(env!("CARGO_TARGET_TMPDIR")).join("lights-preview.png");
     let file = std::fs::File::create(&path).expect("creating the preview");
     image::codecs::png::PngEncoder::new(std::io::BufWriter::new(file))
         .write_image(&bytes, W, H, image::ExtendedColorType::Rgba8)

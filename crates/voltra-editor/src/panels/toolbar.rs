@@ -107,6 +107,7 @@ fn tools(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
         if ui.add(button).on_hover_text(tool.hint()).clicked() {
             editor.tool = tool;
             editor.paint.set_tool(None);
+            editor.shape.set_editing(None);
         }
     }
 
@@ -126,6 +127,7 @@ fn tools(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
             .on_disabled_hover_text("Select a tilemap layer to paint it");
         if response.clicked() {
             editor.paint.set_tool(Some(tool));
+            editor.shape.set_editing(None);
         }
     }
 }

@@ -74,6 +74,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         if i.key_pressed(tool.key()) {
                             editor.tool = tool;
                             editor.paint.set_tool(None);
+                            editor.shape.set_editing(None);
                         }
                     }
                     // Only with a layer to paint: arming a brush with nothing
@@ -82,6 +83,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         for tool in PaintTool::ALL {
                             if i.key_pressed(tool.key()) {
                                 editor.paint.set_tool(Some(tool));
+                                editor.shape.set_editing(None);
                             }
                         }
                     }
@@ -91,6 +93,26 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // toolbar never shows a paint tool pressed over a gizmo.
             if selected_layer.is_none() {
                 editor.paint.set_tool(None);
+            }
+
+            // While a caster's shape is edited, its handles have the pointer,
+            // as a painted layer does below.
+            if let Some(caster) = editor.shape.target(frame.world, editor.selected) {
+                editor.gizmo.cancel_drag();
+                if let Some(label) = editor.shape.update(ui, &scene, frame, caster) {
+                    editor.history.claim(label);
+                }
+                drop_asset(editor, frame, ui, &scene);
+                editor.camera.navigate(ui, &scene, frame.camera);
+                let (world, lines) = frame.world_and_lines();
+                view::caster::draw(world, caster, lines);
+                editor.shape.draw(&scene, frame, caster);
+                if editor.show_colliders {
+                    let contacts = frame.contacts();
+                    let (world, lines) = frame.world_and_lines();
+                    voltra_physics::debug::draw(world, contacts, lines);
+                }
+                return;
             }
 
             // While painting, the layer has the pointer: no gizmo, and a click
