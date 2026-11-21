@@ -27,6 +27,8 @@ pub struct SpriteRange {
     /// The normal map drawn over `texture`, for lights with a height; `None`
     /// is flat. Part of what splits a run, as the texture is.
     pub normal: Option<Handle<Texture>>,
+    /// The light layers of what the run draws. Part of what splits a run.
+    pub light_layers: u32,
     /// Index range into [`SpriteBatch::indices`] (and thus the uploaded mesh).
     pub indices: std::ops::Range<u32>,
 }
@@ -86,7 +88,12 @@ impl SpriteBatch {
         let quad = quad(sprite, sheets);
         if let Some(vertices) = placed(self.visible, matrix, quad.corners(), quad.uvs, sprite.color)
         {
-            self.append_quad(vertices, quad.texture, sprite.normal_handle);
+            self.append_quad(
+                vertices,
+                quad.texture,
+                sprite.normal_handle,
+                sprite.light_layers,
+            );
         }
     }
 
@@ -120,8 +127,29 @@ impl SpriteBatch {
         color: [f32; 4],
         texture: Option<Handle<Texture>>,
     ) {
+        self.push_quad_on(
+            matrix,
+            corners,
+            uvs,
+            color,
+            texture,
+            voltra_render::DEFAULT_LIGHT_LAYERS,
+        );
+    }
+
+    /// [`push_quad`](Self::push_quad) for a quad on `light_layers` rather
+    /// than the default: a tilemap's tiles, which carry the layer's.
+    pub fn push_quad_on(
+        &mut self,
+        matrix: Mat3,
+        corners: [Vec2; 4],
+        uvs: [[f32; 2]; 4],
+        color: [f32; 4],
+        texture: Option<Handle<Texture>>,
+        light_layers: u32,
+    ) {
         if let Some(vertices) = placed(self.visible, matrix, corners, uvs, color) {
-            self.append_quad(vertices, texture, None);
+            self.append_quad(vertices, texture, None, light_layers);
         }
     }
 
@@ -131,6 +159,7 @@ impl SpriteBatch {
         vertices: [Vertex; 4],
         texture: Option<Handle<Texture>>,
         normal: Option<Handle<Texture>>,
+        light_layers: u32,
     ) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
@@ -143,16 +172,18 @@ impl SpriteBatch {
             .extend(QUAD_INDICES.iter().map(|offset| base + offset));
         let end = self.indices.len() as u32;
 
-        self.extend_ranges(texture, normal, start..end);
+        self.extend_ranges(texture, normal, light_layers, start..end);
     }
 
-    /// Adds `indices` drawn with `texture` and `normal` to the last range
-    /// when it has both the same, or as a range of its own. Never across a
+    /// Adds `indices` drawn with `texture`, `normal` and `light_layers` to
+    /// the last range when it has all three the same, or as a range of its
+    /// own. Never across a
     /// GPU emitter, which must draw between the two.
     pub(crate) fn extend_ranges(
         &mut self,
         texture: Option<Handle<Texture>>,
         normal: Option<Handle<Texture>>,
+        light_layers: u32,
         indices: std::ops::Range<u32>,
     ) {
         let sealed = self
@@ -160,12 +191,18 @@ impl SpriteBatch {
             .last()
             .is_some_and(|emitter| emitter.before == self.ranges.len());
         match self.ranges.last_mut() {
-            Some(range) if range.texture == texture && range.normal == normal && !sealed => {
+            Some(range)
+                if range.texture == texture
+                    && range.normal == normal
+                    && range.light_layers == light_layers
+                    && !sealed =>
+            {
                 range.indices.end = indices.end;
             }
             _ => self.ranges.push(SpriteRange {
                 texture,
                 normal,
+                light_layers,
                 indices,
             }),
         }

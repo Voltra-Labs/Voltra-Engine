@@ -186,3 +186,29 @@ fn a_rebuilt_batch_holds_only_this_frame() {
     batch.rebuild(&World::new(), all, &mut cache);
     assert!(batch.is_empty() && batch.indices.is_empty() && batch.ranges.is_empty());
 }
+
+#[test]
+fn a_layer_s_light_layers_reach_every_range_on_every_path() {
+    let (mut atlases, path, _root) = atlases();
+    let (mut world, layer) = level(&mut atlases, &path);
+    if let Some(map) = world.get_mut::<Tilemap>(layer) {
+        map.light_layers = 0b100;
+    }
+    let all = Sheets::new(&atlases, &Sizes);
+    // Part of the level: chunks wholly inside, and chunks across the edge,
+    // which go quad by quad.
+    let part = all.visible_in(Vec2::new(-3.5, -20.0), Vec2::new(20.0, 2.5));
+    let mut cache = TileMeshCache::default();
+    for sheets in [all, part] {
+        let cached = SpriteBatch::from_world_cached(&world, sheets, &mut cache);
+        let fresh = SpriteBatch::from_world(&world, sheets);
+        for batch in [&cached, &fresh] {
+            assert!(!batch.ranges.is_empty());
+            assert!(
+                batch.ranges.iter().all(|r| r.light_layers == 0b100),
+                "{:?}",
+                batch.ranges
+            );
+        }
+    }
+}

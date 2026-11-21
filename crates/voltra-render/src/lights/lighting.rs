@@ -19,6 +19,14 @@ pub const DEFAULT_SHADOW_RESOLUTION: u32 = 1024;
 /// they would sit far enough apart for the fade to show as steps.
 pub const MAX_SHADOW_SOFTNESS: f32 = 0.1;
 
+/// Every light layer: a light that lights everything, a surface every
+/// light reaches.
+pub const ALL_LIGHT_LAYERS: u32 = u32::MAX;
+
+/// The light layer a surface is on unless told otherwise: the first, as
+/// Godot's `light_mask` starts.
+pub const DEFAULT_LIGHT_LAYERS: u32 = 1;
+
 /// A light shining from a point, fading to nothing at its radius.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PointLight {
@@ -43,6 +51,10 @@ pub struct PointLight {
     /// more. `None` ignores normals: the light is flat, as every light was
     /// before them.
     pub height: Option<f32>,
+    /// The light layers it lights: a surface is lit by it only if they share
+    /// a bit. [`ALL_LIGHT_LAYERS`] lights everything, as every light did
+    /// before layers.
+    pub layers: u32,
 }
 
 /// The way a spot light shines: a cone around `direction`, Unity URP's
@@ -178,6 +190,16 @@ impl Lighting {
                 .any(|light| light.gives_light() && light.normal_height().is_some())
     }
 
+    /// Whether the frame is lit and some light in it leaves a light layer
+    /// out: when the scene's light layers are read at all.
+    pub fn uses_layers(&self) -> bool {
+        self.ambient.is_some()
+            && self
+                .lights
+                .iter()
+                .any(|light| light.gives_light() && light.layers != ALL_LIGHT_LAYERS)
+    }
+
     /// The ambient colour, a non-number or negative channel as zero; `None`
     /// when unlit.
     pub(super) fn ambient(&self) -> Option<wgpu::Color> {
@@ -211,6 +233,7 @@ mod tests {
             shadow: None,
             cone: None,
             height: None,
+            layers: ALL_LIGHT_LAYERS,
         }
     }
 

@@ -108,6 +108,13 @@ pub(super) fn show(
     claim = claim.or(terrains::show(ui, map, paint));
     ui.separator();
     claim = claim.or(animations::show(ui, map));
+    claim = claim.or(super::light_layers::show(
+        ui,
+        "tilemap_light_layers",
+        "light layers",
+        "its tiles are lit only by lights sharing one of these",
+        &mut map.light_layers,
+    ));
     claim
 }
 

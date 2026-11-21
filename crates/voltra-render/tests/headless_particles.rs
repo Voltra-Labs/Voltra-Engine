@@ -216,6 +216,7 @@ fn particles_draw_between_the_sprites_around_them() {
         SceneDraw::Mesh(MeshDraw {
             texture: &white,
             normal: None,
+            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 0..6,
         }),
         SceneDraw::Particles {
@@ -225,6 +226,7 @@ fn particles_draw_between_the_sprites_around_them() {
         SceneDraw::Mesh(MeshDraw {
             texture: &white,
             normal: None,
+            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 6..12,
         }),
     ];

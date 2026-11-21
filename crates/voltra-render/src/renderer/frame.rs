@@ -58,6 +58,7 @@ impl Renderer {
             self.record_scene(&mut encoder, target.view(), mesh, draws);
         }
         let normals = self.record_normals(&mut encoder, (width, height), mesh, draws);
+        let layers = self.record_layers(&mut encoder, (width, height), mesh, draws);
         let target = self.frame_target.as_ref().expect("made just above");
         record_post(
             &self.ctx,
@@ -72,6 +73,11 @@ impl Renderer {
                     .normal_target
                     .as_ref()
                     .filter(|_| normals)
+                    .map(RenderTarget::view),
+                layers: self
+                    .layer_target
+                    .as_ref()
+                    .filter(|_| layers)
                     .map(RenderTarget::view),
             },
             &mut self.transients,
@@ -110,8 +116,9 @@ impl Renderer {
                 });
 
         self.record_scene(&mut encoder, target.view(), mesh, draws);
-        let normals =
-            self.record_normals(&mut encoder, (target.width(), target.height()), mesh, draws);
+        let size = (target.width(), target.height());
+        let normals = self.record_normals(&mut encoder, size, mesh, draws);
+        let layers = self.record_layers(&mut encoder, size, mesh, draws);
         record_post(
             &self.ctx,
             Chain {
@@ -125,6 +132,11 @@ impl Renderer {
                     .normal_target
                     .as_ref()
                     .filter(|_| normals)
+                    .map(RenderTarget::view),
+                layers: self
+                    .layer_target
+                    .as_ref()
+                    .filter(|_| layers)
                     .map(RenderTarget::view),
             },
             &mut self.transients,
@@ -204,6 +216,8 @@ struct Chain<'a> {
     lighting: &'a Lighting,
     /// The scene's normals, when they were drawn this frame.
     normals: Option<&'a wgpu::TextureView>,
+    /// The scene's light layers, when they were drawn this frame.
+    layers: Option<&'a wgpu::TextureView>,
 }
 
 /// The frame's render graph: the scene lit when the frame is, bloom over
@@ -237,6 +251,7 @@ fn record_post(
             height,
             chain.lighting,
             chain.normals,
+            chain.layers,
         )
         .unwrap_or(drawn);
     let glow = chain

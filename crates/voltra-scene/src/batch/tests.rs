@@ -304,6 +304,7 @@ fn push_alone_merges_contiguous_same_handles_into_one_range() {
         vec![SpriteRange {
             texture: Some(a),
             normal: None,
+            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 0..12,
         }]
     );
@@ -336,16 +337,19 @@ fn push_alone_splits_a_range_when_the_handle_changes() {
             SpriteRange {
                 texture: Some(a),
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 0..6,
             },
             SpriteRange {
                 texture: Some(b),
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 6..12,
             },
             SpriteRange {
                 texture: Some(a),
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 12..18,
             },
         ]
@@ -373,11 +377,13 @@ fn push_alone_keeps_none_and_some_in_separate_ranges() {
             SpriteRange {
                 texture: None,
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 0..6,
             },
             SpriteRange {
                 texture: Some(a),
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 6..12,
             },
         ]
@@ -425,11 +431,13 @@ fn draw_order_still_follows_sort_order() {
             SpriteRange {
                 texture: Some(low),
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 0..6,
             },
             SpriteRange {
                 texture: Some(high),
                 normal: None,
+                light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 6..12,
             },
         ],
@@ -452,6 +460,7 @@ fn from_world_builds_one_range_for_untextured_sprites() {
         vec![SpriteRange {
             texture: None,
             normal: None,
+            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 0..12,
         }]
     );
@@ -521,4 +530,23 @@ fn a_different_normal_map_splits_a_run_and_the_same_one_keeps_it() {
         runs,
         vec![(Some(bumps), 0..12), (Some(other), 12..18), (None, 18..24)]
     );
+}
+
+#[test]
+fn different_light_layers_split_a_run() {
+    let texture = Handle::forge(0, 0);
+    let on = |light_layers| Sprite {
+        light_layers,
+        ..sprite_with_texture(Some(texture))
+    };
+    let mut batch = SpriteBatch::default();
+    for layers in [1, 1, 2] {
+        batch.push(
+            Transform::default().matrix(),
+            &on(layers),
+            Sheets::default(),
+        );
+    }
+    let runs: Vec<_> = batch.ranges.iter().map(|r| r.light_layers).collect();
+    assert_eq!(runs, vec![1, 2]);
 }

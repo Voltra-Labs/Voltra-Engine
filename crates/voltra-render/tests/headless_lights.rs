@@ -60,6 +60,7 @@ fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
             SIZE,
             lighting,
             None,
+            None,
         )
         .unwrap_or(drawn);
     let (device_ref, queue_ref) = (&device, &queue);
@@ -108,6 +109,7 @@ fn a_lamp_lights_its_disc_and_the_ambient_lights_the_rest() {
         shadow: None,
         cone: None,
         height: None,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     };
     let Some((pixels, pool)) = frame(&Lighting {
         lights: vec![lamp],
@@ -149,6 +151,7 @@ fn a_light_that_gives_nothing_leaves_the_ambient() {
         shadow: None,
         cone: None,
         height: None,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     };
     let Some((pixels, _)) = frame(&Lighting {
         lights: vec![dark],
@@ -175,6 +178,7 @@ fn spot(softness: f32) -> PointLight {
             softness,
         }),
         height: None,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     }
 }
 

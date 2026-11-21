@@ -3136,8 +3136,8 @@ asked for lighting does not go dark when someone drops a light into it.
   is never lit.
 - Instance data is a vertex buffer, not storage: lights work on adapters
   without vertex-stage storage (WebGL2), unlike GPU particles.
-- **Not yet**: per-layer light masks. Shadows landed in stage 53, spot
-  lights in 56 and normal maps in 57, below.
+- Shadows landed in stage 53, spot lights in 56, normal maps in 57 and
+  light layers in 58, below.
 
 Pinned by `headless_lights.rs` (ambient alone far away, lit past white at
 the lamp, fading between, nothing outside the radius; unlit makes no
@@ -3373,6 +3373,48 @@ ignores them), `lights_scene.rs` (the sample scene's studded plaque: the
 lit side of a stud brighter than its far side, both alike with the map
 stripped — resolved through the real `Textures`, so the linear bind group
 is on the path), and batch, sprite and light unit tests.
+
+### Light layers are bits, drawn into an inverted buffer the lights test
+
+Stage 58. `Sprite::light_layers` / `Tilemap::light_layers` (default the
+first bit) and `PointLight2D::layers` (default every bit): a light lights a
+surface only if they share a bit — Godot's `light_mask` and item cull mask.
+Bits rather than Unity's "target sorting layers": the sorting layers order
+drawing, and coupling who is lit to draw order would make moving a sprite
+in front of another change its light. Defaults are not written, and a scene
+that never touches them lights exactly as before.
+
+- **A third pass over the batch** (`light_layers::LayerPass`), shaped like
+  the normals pass: the mesh ranges into an `R32Uint` buffer, a small
+  uniform per distinct mask this frame, coverage alpha-tested at 0.5,
+  GPU particles not drawn (their pixels keep the layers under them).
+  Recorded only when a lit frame has a light that leaves a layer out.
+- **Stored inverted** — the layers a texel is *not* on — so the zero a
+  buffer is cleared to, and the zeroed 1×1 stand-in bound when the pass did
+  not run, put the background and everything on every layer. No upload is
+  needed for the stand-in.
+- **The light tests it first**: `(light.layers & ~excluded) == 0` returns
+  nothing before any falloff, shadow or normal work. The mask is an
+  instance attribute (`Uint32`), group 3 the buffer — the fourth and last
+  bind group WebGPU guarantees.
+- `SpriteRange::light_layers` splits batch runs; a tilemap's tiles carry
+  the layer's on every path (cached chunks, chunks on the view's edge, the
+  uncached mesh); text and CPU particles are on the default layer. GPU
+  particles are not drawn into the buffer, so they take the layers of what
+  is under them.
+- A surface on **no** layer (mask 0) is lit by nothing, even a light of
+  every layer: the pass also runs when such a range is drawn.
+- The buffers' 1×1 stand-ins are read with the pixel clamped to their size,
+  so a frame that did not draw one reads defined texels on every backend.
+- The inspector folds the 32 toggles away (`light_layers` widget) on
+  sprites, tilemaps and lights.
+- **Not yet**: light layers on text and particle emitters, the ambient
+  per layer, shadow casters per layer (a caster blocks every shadowed light
+  today).
+
+Pinned by `headless_light_layers.rs` (a layer-2 lamp lights the layer-2
+quad and the background, not the layer-1 quad; every layer lights both; no
+layer lights nothing), instance, batch and light unit tests.
 
 ### wgpu 30 API notes
 

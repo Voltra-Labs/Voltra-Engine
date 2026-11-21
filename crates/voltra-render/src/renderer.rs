@@ -6,6 +6,7 @@ use crate::bloom::BloomPass;
 use crate::camera::{Camera2D, CameraBinding};
 use crate::context::GpuContext;
 use crate::graph::TexturePool;
+use crate::light_layers::LayerPass;
 use crate::lights::{LightPass, Lighting};
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
@@ -15,9 +16,11 @@ use crate::pass::MeshDraw;
 use crate::post::PostPass;
 use crate::target::RenderTarget;
 use crate::texture::Texture;
-use crate::{pass, pipeline, texture};
+use crate::{pipeline, texture};
 
+mod direct;
 mod frame;
+mod light_layers;
 mod normals;
 
 /// Drives one frame at a time on top of a [`GpuContext`].
@@ -48,6 +51,11 @@ pub struct Renderer {
     /// Where the normals are drawn, sized to the scene; made the first frame
     /// that needs it.
     normal_target: Option<RenderTarget>,
+    /// Draws the scene's light layers, when a light leaves some out.
+    layers: LayerPass,
+    /// Where the light layers are drawn, sized to the scene; made the first
+    /// frame that needs it.
+    layer_target: Option<RenderTarget>,
     /// The render graph's per-frame textures, kept between frames.
     transients: TexturePool,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
@@ -76,6 +84,7 @@ impl Renderer {
             camera_binding.layout(),
             &texture_layout,
         );
+        let layers = LayerPass::new(ctx.device(), camera_binding.layout(), &texture_layout);
         let white = Texture::white(ctx.device(), ctx.queue());
         let white_bind_group = white.create_bind_group(ctx.device(), &texture_layout);
 
@@ -127,6 +136,8 @@ impl Renderer {
             lights,
             normals,
             normal_target: None,
+            layers,
+            layer_target: None,
             transients: TexturePool::default(),
             particles,
             frame_target: None,
@@ -196,87 +207,6 @@ impl Renderer {
         self.ctx.resize(width, height);
         // Without this the image stretches when the window is not square.
         self.camera.aspect = aspect_of(width, height);
-    }
-
-    /// Draws overlay segments over a target the scene is already in.
-    ///
-    /// A separate submission from [`Self::render_scene`], and deliberately
-    /// after it: the pass loads rather than clears, so the scene has to be
-    /// there first. It still lands before `present_with` samples the target,
-    /// which is what keeps the overlay in the same frame as the scene it
-    /// annotates rather than one behind it.
-    ///
-    /// The widths in `mesh` are in pixels, so the size uploaded here is the
-    /// target's, not the window's.
-    pub fn render_lines(&self, target: &RenderTarget, mesh: Option<&Mesh>) {
-        if mesh.is_none() {
-            return;
-        }
-
-        self.viewport_binding
-            .upload(self.ctx.queue(), target.width(), target.height());
-
-        let mut encoder =
-            self.ctx
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("lines-encoder"),
-                });
-
-        pass::draw_lines(
-            &mut encoder,
-            target.view(),
-            &self.lines,
-            self.camera_binding.bind_group(),
-            self.viewport_binding.bind_group(),
-            mesh,
-        );
-
-        self.ctx.queue().submit(Some(encoder.finish()));
-    }
-
-    /// Acquires the window's frame, clears it, and hands the pass to `record`.
-    ///
-    /// Everything drawn over the top of the scene — the editor UI today —
-    /// arrives through here rather than through a method per overlay.
-    pub fn present_with(&mut self, record: impl FnOnce(&mut wgpu::RenderPass<'_>)) {
-        let Some(frame) = self.ctx.acquire() else {
-            return;
-        };
-
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
-
-        let mut encoder =
-            self.ctx
-                .device()
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("present-encoder"),
-                });
-
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("present-pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(self.clear_color),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            });
-            record(&mut pass);
-        }
-
-        self.ctx.queue().submit(Some(encoder.finish()));
-        self.ctx.present(frame);
     }
 }
 

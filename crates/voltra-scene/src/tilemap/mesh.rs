@@ -24,7 +24,7 @@ pub fn push(batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap, sheets: Sheets
         for (index, tile) in chunk.tiles() {
             let (uvs, texture) = sample(map, tile, sheets);
             let corners = corners_of(map, cell_of(key, index));
-            batch.push_quad(matrix, corners, uvs, map.color, texture);
+            batch.push_quad_on(matrix, corners, uvs, map.color, texture, map.light_layers);
         }
     }
 }

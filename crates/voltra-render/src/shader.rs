@@ -29,6 +29,9 @@ pub const LIGHTS: &str = include_str!("shaders/lights.wgsl");
 /// Multiplies the scene by the light map. See [`LightPass`](crate::lights::LightPass).
 pub const LIGHTS_COMPOSITE: &str = include_str!("shaders/lights_composite.wgsl");
 
+/// Draws the sprite batch's light layers. See [`LayerPass`](crate::light_layers::LayerPass).
+pub const SPRITE_LAYERS: &str = include_str!("shaders/sprite_layers.wgsl");
+
 /// Draws the sprite batch's normals. See [`NormalPass`](crate::normals::NormalPass).
 pub const SPRITE_NORMALS: &str = include_str!("shaders/sprite_normals.wgsl");
 

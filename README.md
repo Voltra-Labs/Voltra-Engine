@@ -285,6 +285,7 @@ privileged and plain `cargo build` covers everything.
 | 55 | Shadow caster polygons edited in the viewport | done |
 | 56 | Spot lights: a cone on a point light, aimed by its entity | done |
 | 57 | Normal maps on sprites, shaded by lights with a height | done |
+| 58 | Light layers: a light lights only what shares one of its bits | done |
 
 ## Contributing
 

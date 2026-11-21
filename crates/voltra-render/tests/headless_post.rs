@@ -173,6 +173,7 @@ fn the_hud_drawn_after_the_grade_is_not_graded() {
     let draws = [MeshDraw {
         texture: &white,
         normal: None,
+        light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
         indices: 0..6,
     }];
 

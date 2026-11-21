@@ -139,6 +139,13 @@ pub(super) fn show(ui: &mut Ui, light: &mut PointLight2D) -> Option<&'static str
                 ui.end_row();
             }
         });
+    claim = claim.or(super::light_layers::show(
+        ui,
+        "light_layers",
+        "lights these layers",
+        "lights only what is on one of these",
+        &mut light.layers,
+    ));
     claim
 }
 

@@ -175,3 +175,16 @@ fn a_light_s_height_scales_with_its_entity_and_is_left_out_when_absent() {
     let text = ron::to_string(&PointLight2D::default()).expect("writes");
     assert!(!text.contains("height"), "{text}");
 }
+
+#[test]
+fn a_light_s_layers_reach_the_renderer_and_all_of_them_are_left_out_of_the_file() {
+    let light = PointLight2D {
+        layers: 0b10,
+        ..PointLight2D::default()
+    };
+    assert_eq!(light.placed(Mat3::IDENTITY).layers, 0b10);
+    let text = ron::to_string(&PointLight2D::default()).expect("writes");
+    assert!(!text.contains("layers"), "{text}");
+    let read: PointLight2D = ron::from_str("(layers: 4)").expect("reads");
+    assert_eq!(read.layers, 4);
+}

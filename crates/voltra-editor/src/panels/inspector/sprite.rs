@@ -50,6 +50,13 @@ pub(super) fn show(
     ui.separator();
     claim = claim.or(texture_ui(ui, sprite, textures, device, queue));
     claim = claim.or(normal_map_ui(ui, sprite, textures, device, queue));
+    claim = claim.or(super::light_layers::show(
+        ui,
+        "sprite_light_layers",
+        "light layers",
+        "lit only by lights sharing one of these",
+        &mut sprite.light_layers,
+    ));
     ui.separator();
     claim.or(atlas::show(ui, sprite, atlases, preview))
 }
