@@ -105,6 +105,23 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
                     claim = claim.or(Some("Set lighting"));
                 }
                 ui.end_row();
+
+                ui.label("shadow texels").on_hover_text(
+                    "shadow map texels per quarter turn around a light: sharper for more memory",
+                );
+                claim = claim.or(active(
+                    &ui.add(
+                        DragValue::new(&mut camera.shadow_resolution)
+                            .speed(8.0)
+                            .range(64..=4096)
+                            // A value written outside the range by hand is
+                            // the renderer's to clamp, not the inspector's to
+                            // rewrite on sight.
+                            .clamp_existing_to_range(false),
+                    ),
+                    "Set lighting",
+                ));
+                ui.end_row();
             }
         });
     claim

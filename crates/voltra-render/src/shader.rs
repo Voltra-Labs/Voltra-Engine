@@ -29,6 +29,9 @@ pub const LIGHTS: &str = include_str!("shaders/lights.wgsl");
 /// Multiplies the scene by the light map. See [`LightPass`](crate::lights::LightPass).
 pub const LIGHTS_COMPOSITE: &str = include_str!("shaders/lights_composite.wgsl");
 
+/// Draws occluding edges into the 2D shadow map. See [`LightPass`](crate::lights::LightPass).
+pub const LIGHT_SHADOWS: &str = include_str!("shaders/light_shadows.wgsl");
+
 /// Steps GPU particles. See [`ParticlePipelines`](crate::particles::ParticlePipelines).
 pub const PARTICLES_SIM: &str = include_str!("shaders/particles_sim.wgsl");
 

@@ -11,6 +11,7 @@
 //! deliberately allowed (see [`crate::panels::toolbar`]), and a Play that seized
 //! the viewport would take that away from anyone who had the scene view up.
 
+pub mod caster;
 pub mod overlay;
 
 use voltra_ecs::World;

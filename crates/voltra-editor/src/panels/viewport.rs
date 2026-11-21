@@ -159,6 +159,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 let aspect = frame.camera.aspect;
                 let (world, lines) = frame.world_and_lines();
                 view::overlay::draw(world, entity, aspect, lines);
+                view::caster::draw(world, entity, lines);
             }
 
             // Last of all: the overlay is drawn in the order it is pushed, and

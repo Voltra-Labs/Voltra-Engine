@@ -7,112 +7,54 @@
 //! can push a sprite into the bloom. Unlit — no ambient — the graph gets
 //! none of it and the frame is the scene as drawn.
 //!
-//! Unity URP's 2D renderer and Godot's `CanvasModulate` + `PointLight2D`,
-//! cut to what is built: point lights with a radius and a falloff, an
-//! ambient colour, no shadows or normal maps yet.
+//! A light that casts shadows reads them from a shadow map drawn just
+//! before the light map, from the frame's [`Occluder`]s — see [`shadows`].
+//!
+//! Unity URP's 2D renderer and Godot's `CanvasModulate` + `PointLight2D` +
+//! `LightOccluder2D`, cut to what is built: point lights with a radius and a
+//! falloff, an ambient colour, shadows from outlines and lines, no normal
+//! maps yet.
 
-use bytemuck::{Pod, Zeroable};
-use glam::Vec2;
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use wgpu::util::DeviceExt;
 
 use crate::graph::{RenderGraph, Slot, TextureDesc};
 use crate::shader;
 
-/// The light map's and the lit frame's format: linear, with room past one.
-pub const LIT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+mod instance;
+mod lighting;
+mod occluder;
+pub mod shadows;
 
-/// A light shining from a point, fading to nothing at its radius.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct PointLight {
-    /// Where, in the world.
-    pub position: Vec2,
-    /// Linear colour, multiplied by `intensity`.
-    pub color: [f32; 3],
-    pub intensity: f32,
-    /// World units from the centre to where it gives nothing.
-    pub radius: f32,
-    /// How the light fades with distance: `1` is a straight ramp, `2` the
-    /// soft default; higher keeps the light near the centre.
-    pub falloff: f32,
-}
+use instance::LightInstance;
+pub use lighting::{
+    Lighting, PointLight, Shadow, DEFAULT_SHADOW_RESOLUTION, LIT_FORMAT, MAX_SHADOW_SOFTNESS,
+};
+use occluder::Edges;
+pub use occluder::Occluder;
+use shadows::{ShadowPass, ShadowPlan, SHADOW_FORMAT};
 
-impl PointLight {
-    /// What the shader draws, or `None` for a light that gives nothing — no
-    /// radius, no intensity, black, or a value that is not a number.
-    fn instance(&self) -> Option<LightInstance> {
-        let finite = self.position.is_finite()
-            && self.color.iter().all(|c| c.is_finite())
-            && self.intensity.is_finite()
-            && self.radius.is_finite()
-            && self.falloff.is_finite();
-        let color = self.color.map(|c| c.max(0.0) * self.intensity);
-        (finite && self.radius > 0.0 && self.intensity > 0.0 && color.iter().any(|&c| c > 0.0))
-            .then(|| LightInstance {
-                place: [
-                    self.position.x,
-                    self.position.y,
-                    self.radius,
-                    self.falloff.clamp(0.05, 16.0),
-                ],
-                color: [color[0], color[1], color[2], 0.0],
-            })
-    }
-}
-
-/// A frame's lighting: unlit without an ambient colour, lit by it and the
-/// lights with one.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Lighting {
-    /// The light everything gets, linear. `None` is unlit: the frame is the
-    /// scene as drawn and no lighting pass runs.
-    pub ambient: Option<[f32; 3]>,
-    pub lights: Vec<PointLight>,
-}
-
-impl Lighting {
-    /// The ambient colour, a non-number or negative channel as zero; `None`
-    /// when unlit.
-    fn ambient(&self) -> Option<wgpu::Color> {
-        let channel = |c: f32| {
-            if c.is_finite() {
-                f64::from(c.max(0.0))
-            } else {
-                0.0
-            }
-        };
-        self.ambient.map(|[r, g, b]| wgpu::Color {
-            r: channel(r),
-            g: channel(g),
-            b: channel(b),
-            a: 1.0,
-        })
-    }
-}
-
-/// One light as the vertex stage reads it. Must match `lights.wgsl`.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
-struct LightInstance {
-    /// centre.xy, radius, falloff
-    place: [f32; 4],
-    /// colour × intensity, unused
-    color: [f32; 4],
-}
-
-/// The two pipelines and the composite's layout. One per renderer.
+/// The pipelines, the composite's layout and the shadow map's pass. One per
+/// renderer.
 pub struct LightPass {
     accumulate: wgpu::RenderPipeline,
     composite: wgpu::RenderPipeline,
     composite_layout: wgpu::BindGroupLayout,
+    shadows: ShadowPass,
+    /// Whether the shadow map running out of rows has been reported since it
+    /// last had enough: said when it starts, not every frame it lasts.
+    overflow_reported: AtomicBool,
 }
 
 impl LightPass {
     /// Pipelines drawing lights through `camera_layout`, the world camera's.
     pub fn new(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout) -> Self {
+        let shadows = ShadowPass::new(device);
         let module = shader::create_module(device, "lights", shader::LIGHTS);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("lights-pipeline-layout"),
-            bind_group_layouts: &[Some(camera_layout)],
+            bind_group_layouts: &[Some(camera_layout), Some(shadows.layout())],
             immediate_size: 0,
         });
         let additive = wgpu::BlendState {
@@ -133,7 +75,11 @@ impl LightPass {
                 buffers: &[Some(wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<LightInstance>() as u64,
                     step_mode: wgpu::VertexStepMode::Instance,
-                    attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4],
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x4,
+                        1 => Float32x4,
+                        2 => Float32x4,
+                    ],
                 })],
             },
             primitive: wgpu::PrimitiveState::default(),
@@ -202,6 +148,8 @@ impl LightPass {
             accumulate,
             composite,
             composite_layout,
+            shadows,
+            overflow_reported: AtomicBool::new(false),
         }
     }
 
@@ -221,10 +169,27 @@ impl LightPass {
         lighting: &Lighting,
     ) -> Option<Slot> {
         let ambient = lighting.ambient()?;
+        let plan = ShadowPlan::new(
+            &lighting.lights,
+            &Edges::new(&lighting.occluders),
+            lighting.shadow_resolution,
+            device.limits().max_texture_dimension_2d,
+        );
+        // Said when it starts, not every frame it lasts; once it clears, the
+        // next time is said again.
+        if plan.overflow == 0 {
+            self.overflow_reported.store(false, Ordering::Relaxed);
+        } else if !self.overflow_reported.swap(true, Ordering::Relaxed) {
+            log::warn!(
+                "{} shadowed light(s) drawn without shadows: the shadow map has no rows left",
+                plan.overflow
+            );
+        }
         let instances: Vec<LightInstance> = lighting
             .lights
             .iter()
-            .filter_map(PointLight::instance)
+            .zip(&plan.rows)
+            .filter_map(|(light, row)| light.instance(*row))
             .collect();
         let count = u32::try_from(instances.len()).unwrap_or(u32::MAX);
         let buffer = (!instances.is_empty()).then(|| {
@@ -243,11 +208,28 @@ impl LightPass {
         let map = graph.create(desc("light-map"));
         let lit = graph.create(desc("lit-frame"));
 
-        graph.add_pass("lights", &[], &[map], move |encoder, views| {
+        let edges = self.shadows.upload(device, &plan);
+        let shadow_map = edges.map(|edges| {
+            let slot = graph.create(TextureDesc {
+                label: "light-shadows",
+                width: plan.width,
+                height: plan.height,
+                format: SHADOW_FORMAT,
+            });
+            let count = shadows::instance_count(&plan);
+            graph.add_pass("light-shadows", &[], &[slot], move |encoder, views| {
+                self.shadows.record(encoder, views.get(slot), &edges, count);
+            });
+            slot
+        });
+        let reads: Vec<Slot> = shadow_map.into_iter().collect();
+        graph.add_pass("lights", &reads, &[map], move |encoder, views| {
+            let group = shadow_map.map(|slot| self.shadows.bind_map(device, views.get(slot)));
             let mut pass = begin(encoder, views.get(map), wgpu::LoadOp::Clear(ambient));
             if let Some(buffer) = &buffer {
                 pass.set_pipeline(&self.accumulate);
                 pass.set_bind_group(0, camera, &[]);
+                pass.set_bind_group(1, group.as_ref().unwrap_or(self.shadows.empty()), &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..6, 0..count);
             }
@@ -306,61 +288,4 @@ fn begin<'e>(
         occlusion_query_set: None,
         multiview_mask: None,
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn lamp() -> PointLight {
-        PointLight {
-            position: Vec2::ZERO,
-            color: [1.0, 0.5, 0.0],
-            intensity: 2.0,
-            radius: 3.0,
-            falloff: 2.0,
-        }
-    }
-
-    #[test]
-    fn a_light_is_its_colour_times_its_intensity() {
-        let i = lamp().instance().expect("gives light");
-        assert_eq!(i.color[..3], [2.0, 1.0, 0.0]);
-        assert_eq!(i.place, [0.0, 0.0, 3.0, 2.0]);
-    }
-
-    #[test]
-    fn a_light_that_gives_nothing_is_not_drawn() {
-        for dark in [
-            PointLight {
-                radius: 0.0,
-                ..lamp()
-            },
-            PointLight {
-                intensity: 0.0,
-                ..lamp()
-            },
-            PointLight {
-                color: [0.0; 3],
-                ..lamp()
-            },
-            PointLight {
-                position: Vec2::NAN,
-                ..lamp()
-            },
-        ] {
-            assert_eq!(dark.instance(), None, "{dark:?}");
-        }
-    }
-
-    #[test]
-    fn unlit_is_no_ambient_and_nonsense_ambient_is_black() {
-        assert_eq!(Lighting::default().ambient(), None);
-        let odd = Lighting {
-            ambient: Some([f32::NAN, -1.0, 0.5]),
-            lights: Vec::new(),
-        };
-        let c = odd.ambient().expect("lit");
-        assert_eq!((c.r, c.g, c.b), (0.0, 0.0, 0.5));
-    }
 }

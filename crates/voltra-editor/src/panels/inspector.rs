@@ -12,6 +12,7 @@ mod name;
 mod parallax;
 mod particles;
 mod path_field;
+mod shadow_caster;
 mod sorting_layer;
 mod sprite;
 mod text;
@@ -172,9 +173,22 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     .world
                     .get::<Tilemap>(entity)
                     .is_some_and(|map| map.collision);
-                if frame.world.get::<Collider>(entity).is_some() || solid_layer {
+                let has_collider = frame.world.get::<Collider>(entity).is_some();
+                if has_collider || solid_layer {
                     ui.separator();
                     claim = claim.or(collision::show(ui, frame.world, entity));
+                }
+                // Keyed off the shape it would take, as the filter is, or
+                // off the caster for one with a polygon of its own.
+                if has_collider
+                    || solid_layer
+                    || frame
+                        .world
+                        .get::<voltra_scene::ShadowCaster2D>(entity)
+                        .is_some()
+                {
+                    ui.separator();
+                    claim = claim.or(shadow_caster::show(ui, frame.world, entity));
                 }
                 // Every drawable's named layer, under its own section's
                 // fields: one rule, one widget, wherever the component is.

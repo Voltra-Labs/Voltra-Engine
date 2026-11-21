@@ -53,6 +53,23 @@ pub struct Camera {
     /// adds to it. `None` — the default, and not written — is unlit.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ambient: Option<[f32; 3]>,
+    /// Shadow map texels across each quarter turn around a light that casts
+    /// shadows, when the frame is lit: sharper edges for more memory and
+    /// fill. The default is not written; the renderer clamps it to the
+    /// device.
+    #[serde(
+        default = "default_shadow_resolution",
+        skip_serializing_if = "is_default_shadow_resolution"
+    )]
+    pub shadow_resolution: u32,
+}
+
+fn default_shadow_resolution() -> u32 {
+    voltra_render::lights::DEFAULT_SHADOW_RESOLUTION
+}
+
+fn is_default_shadow_resolution(texels: &u32) -> bool {
+    *texels == default_shadow_resolution()
 }
 
 impl Default for Camera {
@@ -66,6 +83,7 @@ impl Default for Camera {
             active: true,
             post: crate::post::PostProcess::default(),
             ambient: None,
+            shadow_resolution: default_shadow_resolution(),
         }
     }
 }

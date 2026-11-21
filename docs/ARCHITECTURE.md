@@ -3136,15 +3136,91 @@ asked for lighting does not go dark when someone drops a light into it.
   is never lit.
 - Instance data is a vertex buffer, not storage: lights work on adapters
   without vertex-stage storage (WebGL2), unlike GPU particles.
-- **Not yet**: shadows (occluders), normal maps, spot/cone lights, per-layer
-  light masks. Each is its own stage; none needs this one reshaped — a
-  shadow is a mask on a light's quad, a normal map a second input to the
-  accumulate pass.
+- **Not yet**: normal maps, spot/cone lights, per-layer light masks. Each
+  is its own stage; none needs this one reshaped — a normal map is a second
+  input to the accumulate pass. Shadows landed in stage 53, below.
 
 Pinned by `headless_lights.rs` (ambient alone far away, lit past white at
 the lamp, fading between, nothing outside the radius; unlit makes no
 texture) and `light::tests` (unlit without ambient, view culling, parent
 and scale).
+
+### 2D shadows are a polar distance map per light, nearest edge by `Min`
+
+Stage 53. `ShadowCaster2D` (scene) blocks every `PointLight2D` whose
+`shadows: Option<LightShadows>` (strength, softness) is set — Unity's
+`ShadowCaster2D` + per-light shadow strength, Godot's `LightOccluder2D` +
+`shadow_enabled`. Off by default on both sides, and not written.
+
+- **The shape is the collider by default** (`CasterShape::Collider`): the
+  entity's `Collider`, placed by its own `Transform` as the physics places
+  it (a circle cut into 32 sides), or on a solid tilemap layer its
+  generated boxes. A wall shadows where it blocks and the two cannot drift
+  — the reason stage 51 rejected a second shape set for particles. A
+  `Polygon { points, closed }` in the entity's space, carried by its
+  composed matrix like a sprite, is there for the shape that should shadow
+  differently; it is authored in the scene file for now (the inspector
+  shows and keeps it, the viewport draws the selected caster's outline).
+- **Which edges cast** (`lights::occluder`): an open line, every edge,
+  both sides; a closed outline, only the edges facing *away* from the light
+  unless `self_shadow`, so the shadow starts at its far side and its lit
+  face stays lit — Unity's "Self Shadows" and Godot's cull mode as one
+  switch. Winding is read from the signed area, so a mirrored transform
+  does not flip it; a flat or two-point outline casts as a line.
+- **The map** (`lights::shadows`) is Godot's 2D shadow atlas: one
+  `R16Float` texture, four rows per shadowed light (right, up, left, down),
+  a texel a direction through a 90° perspective projection centred on the
+  light, holding the nearest occluder's distance over the radius. Each
+  casting edge is an instance drawn as a quad filling the light's row in
+  each quarter; the clipper keeps it to the quarter (`|x| ≤ w`) and in
+  front of the light (`z ≤ w`, a near plane at 1e-4 radii), perspective
+  interpolation finds where each direction hits the edge, and a `Min` blend
+  keeps the nearest — **no depth buffer**, which the engine does not have.
+  Half floats, because `Min` on `R32Float` needs `FLOAT32_BLENDABLE`.
+- **The lookup** is in the accumulate pass: the pixel's quarter and
+  direction pick a texel in its light's rows, taps across `softness`
+  radians either side — each tap turned by its angle and looked up in its
+  own quarter, so a penumbra crosses the seam between two rows — average a
+  soft edge (thirteen taps, softness at most 0.1 rad so they stay a degree
+  apart), and the light is kept by `1 − strength × shadowed`. The bias is
+  1/512 of the stored distance (two half-float steps at least) plus 1e-5
+  radii: relative, as the format's rounding is. Near the radius that is
+  1/2048 of it, so a very large light resolves thin walls coarsely.
+- **Culled per light on the CPU**: an edge casts for a light only if it
+  comes within its radius; a shadowed light nothing reaches gets no row
+  and is drawn unshadowed. Rows round up to a power of two so lights coming
+  and going do not reallocate the texture every frame; past the device's
+  texture height (a 2048-tall map holds 512 lights) the rest are drawn
+  unshadowed and it is logged when it starts. Width is
+  `Camera::shadow_resolution` (1024 a quarter by default, not written when
+  default), clamped to the device.
+- **Casters are gathered only when** a light in view casts shadows, and
+  not culled by the view: an occluder outside it can throw a shadow in.
+  They reuse the light gather's `WorldTransforms`.
+
+Rejected: **shadow volumes into a stencil** (extrude each edge away from
+the light, then mask the light's quad) — needs a stencil attachment per
+light and one light per pass; **an SDF** of the occluders, ray-marched per
+pixel (Godot 4's `GPUParticles2D` collisions, some 2D GI) — a second
+representation to keep current for every edit, and soft edges are its
+point, not ours yet; **a fragment loop over every edge** — needs storage
+buffers in the fragment stage, which the lights deliberately avoid (they
+run on WebGL2).
+
+- **Not yet**: shadows from sprite alpha (Unity's "use renderer
+  silhouette"), per-layer caster masks, contact-hardening penumbrae (a
+  softness that grows with distance from the occluder), merging a solid
+  layer's boxes into one outline (each box casts on its own; its inner
+  edges shadow the tiles behind the first row, as Godot's per-tile
+  occluders do), editing a polygon caster's points in the viewport.
+
+Pinned by `headless_shadows.rs` (dark behind a box and lit beside it, the
+shadow widening along the near corners' lines; the box lit unless it
+shadows itself; two lamps keeping their own rows; a light without shadows
+ignoring the box; a weak shadow taking part of the light; a soft edge
+fading over pixels a hard one does not; every quarter and the seam between
+two, hard and soft), `lights::occluder` and `lights::shadows` unit tests (which edges
+cast, culling, rows, overflow) and `shadow_caster` / `light` scene tests.
 
 ### wgpu 30 API notes
 
@@ -3168,6 +3244,8 @@ Verified against the crate source, not from memory:
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
 | Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
 | D3D12 / FXC | A WGSL loop that writes a vector component by a **runtime index** (`v[i] = …`) fails pipeline creation: FXC must unroll it and cannot (`X3511`). Write the components out. Windows CI hits this; reproduce locally with `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc cargo test` |
+| `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
+| Headless tests | `headless_device()` needs an adapter; in a Linux container without a GPU, `apt-get install mesa-vulkan-drivers` (lavapipe) makes the GPU tests run instead of skipping |
 | WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |
 
 When touching wgpu, read the vendored source under
