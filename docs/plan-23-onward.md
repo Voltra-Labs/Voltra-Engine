@@ -43,7 +43,7 @@ whatever generates the bodies.
 ## Cross-cutting, unscheduled
 
 Things that will want a stage of their own eventually, listed so they are not
-mistaken for oversights: multi-pass effects (bloom, blur) on a real render graph, and
+mistaken for oversights: GPU particle culling and collisions, and
 3D — which per CLAUDE.md
 is a new subsystem with its own design, not a parameter added to any of the
 above.

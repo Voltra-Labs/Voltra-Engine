@@ -20,6 +20,9 @@ pub const LINES: &str = include_str!("shaders/lines.wgsl");
 /// The full-screen post-processing pass: grading and vignette.
 pub const POST: &str = include_str!("shaders/post.wgsl");
 
+/// Bloom's prefilter, downsample and upsample. See [`BloomPass`](crate::bloom::BloomPass).
+pub const BLOOM: &str = include_str!("shaders/bloom.wgsl");
+
 /// Steps GPU particles. See [`ParticlePipelines`](crate::particles::ParticlePipelines).
 pub const PARTICLES_SIM: &str = include_str!("shaders/particles_sim.wgsl");
 

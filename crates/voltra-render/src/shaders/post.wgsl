@@ -15,6 +15,8 @@ struct Params {
     tint_exposure: vec4<f32>,
     // x: contrast, y: saturation, z: vignette, w: aspect (width / height)
     grade: vec4<f32>,
+    // x: bloom intensity
+    bloom: vec4<f32>,
 }
 
 @group(0) @binding(0)
@@ -23,6 +25,9 @@ var source: texture_2d<f32>;
 var source_sampler: sampler;
 @group(0) @binding(2)
 var<uniform> params: Params;
+// The glow at half size, linear; black when bloom is off.
+@group(0) @binding(3)
+var glow: texture_2d<f32>;
 
 struct VertexOutput {
     @builtin(position) position: vec4<f32>,
@@ -46,7 +51,8 @@ const MID_GREY: f32 = 0.18;
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let sampled = textureSample(source, source_sampler, in.uv);
-    var c = sampled.rgb * params.tint_exposure.rgb * params.tint_exposure.a;
+    let bloomed = sampled.rgb + textureSample(glow, source_sampler, in.uv).rgb * params.bloom.x;
+    var c = bloomed * params.tint_exposure.rgb * params.tint_exposure.a;
     c = max(vec3<f32>(MID_GREY) + (c - vec3<f32>(MID_GREY)) * params.grade.x, vec3<f32>(0.0));
     let luma = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
     c = max(mix(vec3<f32>(luma), c, params.grade.y), vec3<f32>(0.0));

@@ -3026,6 +3026,41 @@ Bevy's `ComputeTaskPool::scope` and Godot's `WorkerThreadPool` groups.
 - **Next consumers, when a profile asks:** composing `WorldTransforms` per
   root, the physics narrow phase, decoding assets off the main thread.
 
+### The frame's post chain is a render graph; bloom is its first chain
+
+Stage 47. `graph::RenderGraph` — Bevy's render graph and Unreal's RDG cut
+to a 2D frame: passes run in the order added, each naming the slots it
+reads and writes; a slot is **imported** (scene target, swapchain view) or
+**created** for the frame.
+
+- **Validated** before anything is recorded: reading a slot nothing
+  imported or wrote is a `GraphError`, logged, and the frame is not
+  post-processed — never a half-recorded frame.
+- **Culled** backwards from the imported outputs, so an effect switched off
+  costs nothing however it was wired. Bloom at intensity 0 makes no level.
+- **Allocated** from a `TexturePool` kept on the renderer: a created slot's
+  texture returns to the pool after its last reader, so a later slot of the
+  same size and format reuses it in the same frame; textures unused for
+  three frames are dropped (a resize leaves old sizes behind).
+- **Not yet**: automatic ordering from dependencies (insertion order is the
+  order), async compute, multiple queues. A 2D frame has neither the passes
+  nor the hardware queues that make those pay.
+
+**Bloom** (`bloom::BloomPass`, `bloom.wgsl`) is Jimenez's Call of Duty
+scheme, as Bevy and Unity URP use: a prefilter with Karis's quadratic soft
+threshold halves the scene, 13-tap downsamples halve it level by level
+(down to 8 texels, at most seven levels, `Rgba16Float`), and 3×3 tent
+upsamples walk back up, each added onto the level above by an additive
+blend. The post pass adds the half-size glow × intensity to the scene in
+linear light before exposure and the grade. With bloom off it binds a 1×1
+black texture, so the shader has one path.
+
+`PostSettings::bloom` / `PostProcess::bloom` (scene, on the camera):
+intensity (0 = off, and not written), threshold, softness, radius.
+Pinned by `headless_bloom.rs` (a white square glows past its edge, the
+corners stay dark, nothing under the threshold glows, off makes no
+texture) and the graph's own GPU tests.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
