@@ -3,8 +3,11 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
+use voltra_render::ParticleCollider;
+
+use super::collide::{collide, Space};
 use super::rng::Rng;
-use super::{Particle, ParticleEmitter, Simulation, MAX_PARTICLES};
+use super::{Obstacles, Particle, ParticleEmitter, Simulation, MAX_PARTICLES};
 use crate::hierarchy::WorldTransforms;
 
 /// The longest step simulated at once. A frame that stalls for a second must
@@ -24,9 +27,21 @@ pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
     }
     let dt = dt.min(MAX_STEP);
     let transforms = WorldTransforms::from_world(world);
+    // Gathered only when some emitter collides: a scene of plain fountains
+    // pays nothing for the tiles it never looks at.
+    let obstacles = if world
+        .query::<ParticleEmitter>()
+        .any(|(_, emitter)| emitter.collision.is_some())
+    {
+        Obstacles::gather(world)
+    } else {
+        Obstacles::default()
+    };
+    let mut scratch = Scratch::default();
     let mut finished = Vec::new();
     for (entity, emitter) in world.query_mut::<ParticleEmitter>() {
-        step(emitter, entity, transforms.matrix(entity), dt, gpu);
+        let matrix = transforms.matrix(entity);
+        step(emitter, entity, matrix, dt, gpu, &obstacles, &mut scratch);
         if emitter.is_finished() {
             finished.push(entity);
         }
@@ -34,13 +49,54 @@ pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
     finished
 }
 
-fn step(emitter: &mut ParticleEmitter, entity: Entity, matrix: Mat3, dt: f32, gpu: bool) {
+/// Buffers kept across emitters within one advance, so a colliding emitter
+/// does not allocate per step.
+#[derive(Default)]
+struct Scratch {
+    before: Vec<Vec2>,
+    shapes: Vec<ParticleCollider>,
+}
+
+fn step(
+    emitter: &mut ParticleEmitter,
+    entity: Entity,
+    matrix: Mat3,
+    dt: f32,
+    gpu: bool,
+    obstacles: &Obstacles,
+    scratch: &mut Scratch,
+) {
     let acceleration = finite_or_zero(emitter.acceleration);
     let state = &mut emitter.state;
+    scratch.before.clear();
     for particle in &mut state.particles {
+        scratch.before.push(particle.position);
         particle.age += dt;
         particle.velocity += acceleration * dt;
         particle.position += particle.velocity * dt;
+    }
+    let space = Space::new(if emitter.world_space {
+        Mat3::IDENTITY
+    } else {
+        matrix
+    });
+    if let (Some(collision), Some(space), false) = (emitter.collision, space, obstacles.is_empty())
+    {
+        // Only the shapes this step's paths can touch.
+        let (min, max) = state
+            .particles
+            .iter()
+            .zip(&scratch.before)
+            .flat_map(|(p, &before)| [before, p.position])
+            .map(|at| space.to_world(at))
+            .fold((Vec2::INFINITY, Vec2::NEG_INFINITY), |(lo, hi), at| {
+                (lo.min(at), hi.max(at))
+            });
+        obstacles.near(collision.mask, min, max, &mut scratch.shapes);
+        let response = collision.response();
+        for (particle, &before) in state.particles.iter_mut().zip(&scratch.before) {
+            collide(particle, before, &scratch.shapes, &response, &space);
+        }
     }
     state.particles.retain(|p| p.age < p.lifetime);
 
@@ -60,7 +116,7 @@ fn step(emitter: &mut ParticleEmitter, entity: Entity, matrix: Mat3, dt: f32, gp
         // Whatever the CPU still holds from before the switch dies out
         // above; every birth from here on is the GPU's.
         let mut plan = std::mem::take(&mut emitter.state.gpu);
-        plan.step(emitter, matrix, dt, births);
+        plan.step(emitter, matrix, dt, births, obstacles);
         emitter.state.gpu = plan;
         return;
     }

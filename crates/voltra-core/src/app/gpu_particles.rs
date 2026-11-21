@@ -59,6 +59,12 @@ impl App {
             if ring.capacity() != capacity {
                 *ring = GpuParticles::new(device, pipelines, capacity);
             }
+            ring.set_colliders(
+                device,
+                renderer.context().queue(),
+                pipelines,
+                emitter.gpu_colliders(),
+            );
         }
         // A despawned emitter, or one switched back to the CPU.
         self.gpu_rings

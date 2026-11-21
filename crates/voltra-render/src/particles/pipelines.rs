@@ -29,6 +29,7 @@ impl ParticlePipelines {
             entries: &[
                 storage(0, wgpu::ShaderStages::COMPUTE, false),
                 uniform(1, wgpu::ShaderStages::COMPUTE),
+                storage(2, wgpu::ShaderStages::COMPUTE, true),
             ],
         });
         let draw_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

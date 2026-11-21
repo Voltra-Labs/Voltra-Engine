@@ -58,7 +58,7 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
 /// Every layer, not the first eight: the mask is thirty-two bits wide and a
 /// widget that shows fewer would make the rest unreachable from the editor
 /// while still loading from a scene file.
-fn bits(ui: &mut Ui, id: &str, mask: &mut u32) -> bool {
+pub(super) fn bits(ui: &mut Ui, id: &str, mask: &mut u32) -> bool {
     let mut changed = false;
     // Salted, or the two rows of toggles collide on ids and dragging across
     // one row would light up the other.

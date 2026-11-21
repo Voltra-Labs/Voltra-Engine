@@ -7,9 +7,9 @@ use std::collections::VecDeque;
 
 use voltra_render::glam::{Mat3, Vec2};
 use voltra_render::particles::MAX_GPU_PARTICLES;
-use voltra_render::{ParticleLook, SimStep};
+use voltra_render::{ParticleCollider, ParticleLook, ParticleResponse, SimStep};
 
-use super::ParticleEmitter;
+use super::{Obstacles, ParticleEmitter};
 
 /// How long past its longest lifetime a birth is still counted alive.
 ///
@@ -32,6 +32,8 @@ pub struct GpuPlan {
     pending: Option<SimStep>,
     /// Steps planned so far, which seed each dispatch's randomness.
     steps: u32,
+    /// The shapes inside the live particles' bounds, as of the last step.
+    colliders: Vec<ParticleCollider>,
 }
 
 impl GpuPlan {
@@ -48,13 +50,15 @@ impl GpuPlan {
     }
 
     /// Plans one step of `dt` with `births` asked for, the emitter at
-    /// `matrix`. Returns how many were actually born.
+    /// `matrix`, the world's colliders `obstacles`. Returns how many were
+    /// actually born.
     pub(crate) fn step(
         &mut self,
         emitter: &ParticleEmitter,
         matrix: Mat3,
         dt: f32,
         births: u32,
+        obstacles: &Obstacles,
     ) -> u32 {
         let capacity = emitter.max_particles.clamp(1, MAX_GPU_PARTICLES);
         if capacity != self.capacity {
@@ -112,7 +116,23 @@ impl GpuPlan {
             speed: emitter.speed,
             lifetime: emitter.lifetime,
             acceleration: emitter.acceleration,
+            to_world: if emitter.world_space {
+                Mat3::IDENTITY
+            } else {
+                matrix
+            },
+            response: emitter
+                .collision
+                .map_or(ParticleResponse::default(), |c| c.response()),
         };
+        // Only the shapes a live particle can reach: the GPU tests every
+        // particle against every shape it is handed.
+        match (emitter.collision, self.bounds(emitter.world_space, matrix)) {
+            (Some(collision), Some((min, max))) => {
+                obstacles.near(collision.mask, min, max, &mut self.colliders);
+            }
+            _ => self.colliders.clear(),
+        }
         self.steps = self.steps.wrapping_add(1);
         self.pending = Some(match self.pending.take() {
             None => latest,
@@ -141,6 +161,10 @@ impl GpuPlan {
     /// widest size. A world-space birth stays where it was born; a
     /// local-space one moves with the emitter, so its box is carried by
     /// today's matrix. What lets the batch leave out an emitter off screen.
+    ///
+    /// Collisions keep it conservative: a hit only turns a particle and
+    /// never speeds it up — the bounce is clamped to at most one — so its
+    /// path is no longer than the free flight the reach is measured by.
     pub(crate) fn bounds(&self, world_space: bool, matrix: Mat3) -> Option<(Vec2, Vec2)> {
         let mut bounds: Option<(Vec2, Vec2)> = None;
         for birth in &self.in_flight {
@@ -174,6 +198,10 @@ impl GpuPlan {
     /// The dispatch owed since the last one, if any step was planned.
     pub(crate) fn take(&mut self) -> Option<SimStep> {
         self.pending.take()
+    }
+
+    pub(crate) fn colliders(&self) -> &[ParticleCollider] {
+        &self.colliders
     }
 }
 
