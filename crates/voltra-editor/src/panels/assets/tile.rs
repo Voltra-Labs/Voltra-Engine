@@ -32,7 +32,8 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
         EntryKind::Clip => clip_tile(ui, entry, &response),
         EntryKind::Font => font_tile(ui, entry, &response),
         // Loadable, so not dimmed; nothing to place, so no drag.
-        EntryKind::InputMap => input_map_tile(ui, rect),
+        EntryKind::InputMap => settings_tile(ui, rect, "INPUT"),
+        EntryKind::SortingLayers => settings_tile(ui, rect, "LAYERS"),
         EntryKind::Scene => scene_tile(ui, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
@@ -149,14 +150,14 @@ fn font_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
     );
 }
 
-/// An input map tile: a block saying "INPUT" with no drag, since a map is
-/// read by the game rather than placed in a scene.
-fn input_map_tile(ui: &mut Ui, rect: Rect) {
+/// A project file's tile — the input map, the sorting layers: a block with
+/// its kind on it and no drag, since the game reads it rather than placing it.
+fn settings_tile(ui: &mut Ui, rect: Rect, kind: &str) {
     paint_block(ui, rect, ui.visuals().widgets.noninteractive.bg_fill);
     ui.painter().text(
         picture(rect).center(),
         egui::Align2::CENTER_CENTER,
-        "INPUT",
+        kind,
         egui::TextStyle::Body.resolve(ui.style()),
         ui.visuals().text_color(),
     );

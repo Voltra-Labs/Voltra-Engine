@@ -141,3 +141,40 @@ fn a_rewritten_atlas_arrives_too() {
         "no event for the rewritten atlas within {DEADLINE:?}"
     );
 }
+
+#[test]
+fn project_files_arrive_too() {
+    // The input map and the sorting layers are hot reloaded by the loop, so
+    // the watch must report them; a filter that let only assets through kept
+    // input-map edits from ever reaching a running game.
+    let root = scratch_root();
+    std::fs::write(root.join("default.input.ron"), "(version: 1)").expect("writes");
+    std::fs::write(root.join("default.layers.ron"), "(version: 1, layers: [])").expect("writes");
+
+    let mut watcher = AssetWatcher::new(&root).expect("watching a scratch dir");
+    std::fs::write(root.join("default.input.ron"), "(version: 1, actions: {})").expect("writes");
+    std::fs::write(
+        root.join("default.layers.ron"),
+        "(version: 1, layers: [\"A\"])",
+    )
+    .expect("writes");
+
+    // Both, from one stream: they may well arrive in the same batch.
+    let wanted: Vec<AssetPath> = ["default.input.ron", "default.layers.ron"]
+        .into_iter()
+        .map(|name| AssetPath::new(name).expect("valid"))
+        .collect();
+    let start = Instant::now();
+    let mut seen = Vec::new();
+    while start.elapsed() < DEADLINE && !wanted.iter().all(|w| seen.contains(w)) {
+        seen.extend(watcher.drain());
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    for path in &wanted {
+        assert!(
+            seen.contains(path),
+            "no event for {} within {DEADLINE:?}",
+            path.as_str()
+        );
+    }
+}

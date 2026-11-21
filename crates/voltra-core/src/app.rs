@@ -9,6 +9,7 @@ mod input_map;
 mod particles;
 mod scenes;
 mod simulation;
+mod sorting_layers;
 mod spawning;
 mod thumbnails;
 mod tick;
@@ -42,6 +43,7 @@ use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 pub use input_map::DEFAULT_INPUT_MAP;
 pub use scenes::SceneLoad;
+pub use sorting_layers::DEFAULT_SORTING_LAYERS;
 pub use tick::Tick;
 pub use tick_audio::TickAudio;
 pub use ui_frame::UiFrame;
@@ -106,6 +108,9 @@ pub struct App {
     input: Input,
     /// The project's sorting layers, back to front.
     sorting_layers: voltra_scene::SortingLayers,
+    /// Whether `sorting_layers` came from `with_sorting_layers`, which the
+    /// conventional file must not then overwrite.
+    sorting_layers_from_code: bool,
     /// The game's buttons: hover, press, focus and this frame's clicks.
     ui_buttons: voltra_scene::UiButtons,
     /// The game's save slots, in its per-user folder.
@@ -217,6 +222,7 @@ impl App {
         names: impl IntoIterator<Item = S>,
     ) -> Self {
         self.sorting_layers = voltra_scene::SortingLayers::new(names);
+        self.sorting_layers_from_code = true;
         self
     }
 
@@ -453,6 +459,9 @@ impl App {
             if self.reload_input_map(&path) {
                 continue;
             }
+            if self.reload_sorting_layers(&path) {
+                continue;
+            }
             // A face needs no device either: its atlas starts over and is
             // re-rasterized and uploaded by the next draw.
             if self.fonts.as_mut().is_some_and(|fonts| fonts.reload(&path)) {
@@ -543,6 +552,7 @@ impl ApplicationHandler for App {
         self.atlases = Some(atlases);
 
         self.load_input_map(&asset_root);
+        self.load_sorting_layers(&asset_root);
         self.gamepads = gamepads::Gamepads::connect();
 
         // And the legible part: a text in a world populated before `run`
