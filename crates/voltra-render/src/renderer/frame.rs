@@ -6,6 +6,7 @@ use crate::bloom::BloomPass;
 use crate::camera::screen_projection;
 use crate::context::GpuContext;
 use crate::graph::{RenderGraph, Slot, TexturePool};
+use crate::lights::{LightPass, Lighting};
 use crate::mesh::Mesh;
 use crate::pass;
 use crate::post::PostPass;
@@ -56,8 +57,13 @@ impl Renderer {
         self.record_scene(&mut encoder, target.view(), mesh, draws);
         record_post(
             &self.ctx,
-            &self.bloom,
-            &self.post,
+            Chain {
+                lights: &self.lights,
+                bloom: &self.bloom,
+                grade: &self.post,
+                camera: self.camera_binding.bind_group(),
+                lighting: &self.lighting,
+            },
             &mut self.transients,
             &mut encoder,
             target.view(),
@@ -96,8 +102,13 @@ impl Renderer {
         self.record_scene(&mut encoder, target.view(), mesh, draws);
         record_post(
             &self.ctx,
-            &self.bloom,
-            &self.post,
+            Chain {
+                lights: &self.lights,
+                bloom: &self.bloom,
+                grade: &self.post,
+                camera: self.camera_binding.bind_group(),
+                lighting: &self.lighting,
+            },
             &mut self.transients,
             &mut encoder,
             target.view(),
@@ -165,15 +176,24 @@ impl Renderer {
     }
 }
 
-/// The frame's render graph: bloom over the drawn scene when it is on, then
-/// the grade into `frame`. A graph that will not validate is a bug in the
-/// passes above; it is logged and the frame is left as it was rather than
-/// recorded half-built.
+/// The passes the frame's graph is built from, and what lights it.
+struct Chain<'a> {
+    lights: &'a LightPass,
+    bloom: &'a BloomPass,
+    grade: &'a PostPass,
+    /// The world camera, which the lights are drawn through.
+    camera: &'a wgpu::BindGroup,
+    lighting: &'a Lighting,
+}
+
+/// The frame's render graph: the scene lit when the frame is, bloom over
+/// that when it is on, then the grade into `frame`. A graph that will not
+/// validate is a bug in the passes above; it is logged and the frame is
+/// left as it was rather than recorded half-built.
 #[allow(clippy::too_many_arguments)]
 fn record_post(
     ctx: &GpuContext,
-    bloom: &BloomPass,
-    grade: &PostPass,
+    chain: Chain<'_>,
     transients: &mut TexturePool,
     encoder: &mut wgpu::CommandEncoder,
     scene: &wgpu::TextureView,
@@ -182,10 +202,25 @@ fn record_post(
     post: &PostSettings,
 ) {
     let (device, queue) = (ctx.device(), ctx.queue());
+    let grade = chain.grade;
     let mut graph = RenderGraph::new();
-    let scene = graph.import(scene);
+    let drawn = graph.import(scene);
     let frame = graph.import_output(frame);
-    let glow = bloom.add(&mut graph, device, queue, scene, width, height, &post.bloom);
+    let scene = chain
+        .lights
+        .add(
+            &mut graph,
+            device,
+            chain.camera,
+            drawn,
+            width,
+            height,
+            chain.lighting,
+        )
+        .unwrap_or(drawn);
+    let glow = chain
+        .bloom
+        .add(&mut graph, device, queue, scene, width, height, &post.bloom);
     let reads: Vec<Slot> = std::iter::once(scene).chain(glow).collect();
     let aspect = aspect_of(width, height);
     graph.add_pass("grade", &reads, &[frame], move |encoder, views| {

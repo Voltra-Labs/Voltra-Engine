@@ -64,6 +64,7 @@ impl App {
             draws: &hud_draws,
         };
         let post = voltra_scene::post::active(&self.world);
+        renderer.lighting = lighting(&self.world, &renderer.camera);
         renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
         self.frame_batch = batch;
     }
@@ -148,6 +149,7 @@ impl App {
             draws: &hud_draws,
         };
         let post = voltra_scene::post::active(&self.world);
+        renderer.lighting = lighting(&self.world, &renderer.camera);
         renderer.render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
         self.frame_batch = batch;
 
@@ -253,6 +255,12 @@ fn mesh_draws<'a>(
             indices: range.indices.clone(),
         })
         .collect()
+}
+
+/// The frame's lighting, with the lights `camera` can see lit. The editor
+/// previews it too, as it previews the grade.
+fn lighting(world: &World, camera: &voltra_render::Camera2D) -> voltra_render::Lighting {
+    voltra_scene::light::gather(world, view_min(camera), view_max(camera))
 }
 
 /// The lower-left corner of what `camera` sees, in world units.

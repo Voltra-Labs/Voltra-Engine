@@ -6,6 +6,7 @@ use crate::bloom::BloomPass;
 use crate::camera::{Camera2D, CameraBinding};
 use crate::context::GpuContext;
 use crate::graph::TexturePool;
+use crate::lights::{LightPass, Lighting};
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
 use crate::particles::{GpuParticles, ParticleLook, ParticlePipelines, SimStep};
@@ -38,6 +39,8 @@ pub struct Renderer {
     post: PostPass,
     /// Spreads bright light into a glow, when the grade asks for one.
     bloom: BloomPass,
+    /// Lights the drawn scene, when the frame is lit.
+    lights: LightPass,
     /// The render graph's per-frame textures, kept between frames.
     transients: TexturePool,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
@@ -48,6 +51,9 @@ pub struct Renderer {
     /// The size the line shader widens against, rewritten every frame.
     viewport_binding: ViewportBinding,
     pub camera: Camera2D,
+    /// What the next frame is lit by; unlit by default. Set before each
+    /// frame, as [`camera`](Self::camera) is.
+    pub lighting: Lighting,
     pub clear_color: wgpu::Color,
 }
 
@@ -76,6 +82,7 @@ impl Renderer {
 
         let post = PostPass::new(ctx.device(), ctx.config().format);
         let bloom = BloomPass::new(ctx.device());
+        let lights = LightPass::new(ctx.device(), camera_binding.layout());
         let particles = if ParticlePipelines::supported(ctx.downlevel()) {
             Some(ParticlePipelines::new(
                 ctx.device(),
@@ -104,11 +111,13 @@ impl Renderer {
             lines,
             post,
             bloom,
+            lights,
             transients: TexturePool::default(),
             particles,
             frame_target: None,
             viewport_binding,
             camera,
+            lighting: Lighting::default(),
             clear_color: wgpu::Color {
                 r: 0.1,
                 g: 0.1,

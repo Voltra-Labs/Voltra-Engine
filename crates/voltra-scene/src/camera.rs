@@ -48,6 +48,11 @@ pub struct Camera {
     /// written, unless set.
     #[serde(default, skip_serializing_if = "crate::post::PostProcess::is_neutral")]
     pub post: crate::post::PostProcess,
+    /// The light everything seen through this camera gets, linear; with it
+    /// the frame is lit and every [`PointLight2D`](crate::PointLight2D)
+    /// adds to it. `None` — the default, and not written — is unlit.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ambient: Option<[f32; 3]>,
 }
 
 impl Default for Camera {
@@ -60,6 +65,7 @@ impl Default for Camera {
             priority: 0,
             active: true,
             post: crate::post::PostProcess::default(),
+            ambient: None,
         }
     }
 }

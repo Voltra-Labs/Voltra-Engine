@@ -278,6 +278,7 @@ privileged and plain `cargo build` covers everything.
 | 49 | Scene textures decoded across the job pool | done |
 | 50 | GPU particle emitters culled by a conservative bound | done |
 | 51 | Particle collisions against the scene's colliders, CPU and GPU | done |
+| 52 | 2D lights: point lights and an ambient, a light map in the render graph | done |
 
 ## Contributing
 

@@ -7,6 +7,7 @@ mod animation;
 mod audio_source;
 mod camera;
 mod collision;
+mod light;
 mod name;
 mod parallax;
 mod particles;
@@ -142,6 +143,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(layer) = frame.world.get_mut::<Parallax>(entity) {
                     ui.separator();
                     claim = claim.or(parallax::show(ui, layer));
+                }
+                if let Some(lamp) = frame.world.get_mut::<voltra_scene::PointLight2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(light::show(ui, lamp));
                 }
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();

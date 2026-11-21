@@ -3114,6 +3114,38 @@ second set of shapes to author, which would drift from the colliders.
   `0..=1`, so a hit never speeds a particle up and its path is no longer
   than the free flight the reach bound measures.
 
+### 2D lights are a light map in the render graph, multiplied into the scene
+
+Stage 52. `PointLight2D` (colour, intensity, radius, falloff; scaled with
+its entity) and `Camera::ambient: Option<[f32; 3]>`. Godot's
+`CanvasModulate` + `PointLight2D` and Unity URP's global + point
+`Light2D`. **Lit is opt-in per camera**: with no ambient the frame is
+unlit and no lighting pass is added to the graph, so a scene that never
+asked for lighting does not go dark when someone drops a light into it.
+
+- `light::gather` (scene) reads the active camera's ambient and the lights
+  whose radius reaches the view; core sets `Renderer::lighting` before each
+  frame, editor and game alike (the editor previews it, as it previews the
+  grade).
+- `lights::LightPass` (render) adds two graph passes: a frame-sized
+  `Rgba16Float` light map cleared to the ambient, each light an instanced
+  quad through the world camera, added (`pow(1 − d/r, falloff)`); then
+  `scene × light`, pixel for pixel by `textureLoad`, into a lit
+  `Rgba16Float` frame. Bloom and the grade read the lit frame, so a light
+  past one pushes what it lights into the bloom. The HUD is drawn after and
+  is never lit.
+- Instance data is a vertex buffer, not storage: lights work on adapters
+  without vertex-stage storage (WebGL2), unlike GPU particles.
+- **Not yet**: shadows (occluders), normal maps, spot/cone lights, per-layer
+  light masks. Each is its own stage; none needs this one reshaped — a
+  shadow is a mask on a light's quad, a normal map a second input to the
+  accumulate pass.
+
+Pinned by `headless_lights.rs` (ambient alone far away, lit past white at
+the lamp, fading between, nothing outside the radius; unlit makes no
+texture) and `light::tests` (unlit without ambient, view culling, parent
+and scale).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
