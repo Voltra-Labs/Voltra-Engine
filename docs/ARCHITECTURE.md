@@ -3018,8 +3018,17 @@ Bevy's `ComputeTaskPool::scope` and Godot's `WorkerThreadPool` groups.
   four vertices through a side buffer costs more than the work saved, and
   the ordered append is the bulk. The batch is single-threaded again. The
   pool waits for a consumer whose work per item is compute, not copying —
-  the physics narrow phase, asset decoding — and is wired in only once a
-  measurement says it wins. `TextureSizes: Sync` stays; it costs nothing.
+  asset decoding — and is wired in only once a measurement says it wins.
+  `TextureSizes: Sync` stays; it costs nothing. (The physics step was
+  measured too: 0.2–0.8 ms for 270–500 contacts, too little to split.)
+- **Its consumer: decoding textures** (stage 49). `Textures::preload` reads
+  and inflates PNGs across the pool (`decode_png` needs no device) and
+  uploads them on the caller in the paths' order, so handles are the ones
+  loading in a loop would give — pinned, with broken and duplicate paths.
+  `resolve_world_textures` (Open, undo, start) preloads every texture the
+  scene names first, on a pool made for the occasion and joined after, so
+  no thread idles between scenes. `decode_stress`: 48 noisy 512² sheets,
+  58 ms → 32 ms on 12 threads — the uploads, serial, are the rest.
 - **What did win, both by profiling first:** the sort recomputed each
   key's sorting-layer rank (a name lookup) on every comparison — keyed
   once per entity, the 5 000-sprite level went 4.1 ms → 1.8 ms (stage 46);
