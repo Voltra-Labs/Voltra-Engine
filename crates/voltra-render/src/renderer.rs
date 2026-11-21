@@ -2,8 +2,10 @@
 
 use wgpu::SurfaceTarget;
 
+use crate::bloom::BloomPass;
 use crate::camera::{Camera2D, CameraBinding};
 use crate::context::GpuContext;
+use crate::graph::TexturePool;
 use crate::lines::ViewportBinding;
 use crate::mesh::Mesh;
 use crate::particles::{GpuParticles, ParticleLook, ParticlePipelines, SimStep};
@@ -34,6 +36,10 @@ pub struct Renderer {
     lines: wgpu::RenderPipeline,
     /// Grades the drawn scene into the frame.
     post: PostPass,
+    /// Spreads bright light into a glow, when the grade asks for one.
+    bloom: BloomPass,
+    /// The render graph's per-frame textures, kept between frames.
+    transients: TexturePool,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
     particles: Option<ParticlePipelines>,
     /// Where the world is drawn before the post pass on the window path,
@@ -69,6 +75,7 @@ impl Renderer {
         );
 
         let post = PostPass::new(ctx.device(), ctx.config().format);
+        let bloom = BloomPass::new(ctx.device());
         let particles = if ParticlePipelines::supported(ctx.downlevel()) {
             Some(ParticlePipelines::new(
                 ctx.device(),
@@ -96,6 +103,8 @@ impl Renderer {
             white_bind_group,
             lines,
             post,
+            bloom,
+            transients: TexturePool::default(),
             particles,
             frame_target: None,
             viewport_binding,

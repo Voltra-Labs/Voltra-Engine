@@ -1,7 +1,7 @@
 //! A camera's look: the grading its frame is drawn with.
 
 use voltra_ecs::World;
-use voltra_render::PostSettings;
+use voltra_render::{BloomSettings, PostSettings};
 
 use crate::camera::{self, Camera};
 
@@ -18,6 +18,47 @@ pub struct PostProcess {
     pub saturation: f32,
     pub tint: [f32; 3],
     pub vignette: f32,
+    /// Glow around what is bright. Off by default.
+    pub bloom: Bloom,
+}
+
+/// How much a camera's frame glows, and from what: see
+/// [`BloomSettings`](voltra_render::BloomSettings).
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct Bloom {
+    pub intensity: f32,
+    pub threshold: f32,
+    pub softness: f32,
+    pub radius: f32,
+}
+
+impl Default for Bloom {
+    fn default() -> Self {
+        Self::from(BloomSettings::OFF)
+    }
+}
+
+impl From<BloomSettings> for Bloom {
+    fn from(s: BloomSettings) -> Self {
+        Self {
+            intensity: s.intensity,
+            threshold: s.threshold,
+            softness: s.softness,
+            radius: s.radius,
+        }
+    }
+}
+
+impl Bloom {
+    pub fn settings(&self) -> BloomSettings {
+        BloomSettings {
+            intensity: self.intensity,
+            threshold: self.threshold,
+            softness: self.softness,
+            radius: self.radius,
+        }
+    }
 }
 
 impl Default for PostProcess {
@@ -34,6 +75,7 @@ impl From<PostSettings> for PostProcess {
             saturation: s.saturation,
             tint: s.tint,
             vignette: s.vignette,
+            bloom: Bloom::from(s.bloom),
         }
     }
 }
@@ -52,6 +94,7 @@ impl PostProcess {
             saturation: self.saturation,
             tint: self.tint,
             vignette: self.vignette,
+            bloom: self.bloom.settings(),
         }
     }
 }
@@ -82,6 +125,15 @@ mod tests {
         let post: PostProcess = ron::from_str("(vignette: 0.6)").expect("reads");
         assert_eq!(post.vignette, 0.6);
         assert_eq!(post.exposure, 1.0);
+    }
+
+    #[test]
+    fn bloom_reads_on_its_own_and_reaches_the_renderer() {
+        let post: PostProcess = ron::from_str("(bloom: (intensity: 0.7))").expect("reads");
+        assert!(!post.is_neutral());
+        let settings = post.settings();
+        assert_eq!(settings.bloom.intensity, 0.7);
+        assert_eq!(settings.bloom.threshold, BloomSettings::OFF.threshold);
     }
 
     #[test]
