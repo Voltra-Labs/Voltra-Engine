@@ -23,6 +23,12 @@ pub const POST: &str = include_str!("shaders/post.wgsl");
 /// Bloom's prefilter, downsample and upsample. See [`BloomPass`](crate::bloom::BloomPass).
 pub const BLOOM: &str = include_str!("shaders/bloom.wgsl");
 
+/// Adds 2D point lights onto the light map. See [`LightPass`](crate::lights::LightPass).
+pub const LIGHTS: &str = include_str!("shaders/lights.wgsl");
+
+/// Multiplies the scene by the light map. See [`LightPass`](crate::lights::LightPass).
+pub const LIGHTS_COMPOSITE: &str = include_str!("shaders/lights_composite.wgsl");
+
 /// Steps GPU particles. See [`ParticlePipelines`](crate::particles::ParticlePipelines).
 pub const PARTICLES_SIM: &str = include_str!("shaders/particles_sim.wgsl");
 

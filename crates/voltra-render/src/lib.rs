@@ -9,6 +9,7 @@ pub mod camera;
 pub mod context;
 pub mod egui_backend;
 pub mod graph;
+pub mod lights;
 pub mod lines;
 pub mod mesh;
 pub mod particles;
@@ -25,6 +26,7 @@ pub use bloom::{BloomPass, BloomSettings};
 pub use camera::{screen_projection, Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
+pub use lights::{LightPass, Lighting, PointLight};
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
 pub use particles::{

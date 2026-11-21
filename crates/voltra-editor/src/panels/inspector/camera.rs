@@ -83,5 +83,29 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
                 claim = claim.or(Some("Set post-processing"));
             }
         });
+
+    ui.label(RichText::new("Lighting").strong())
+        .on_hover_text("lit: the ambient everything gets, and every point light adds to it");
+    egui::Grid::new("camera_lighting")
+        .num_columns(2)
+        .show(ui, |ui| {
+            ui.label("lit");
+            let mut lit = camera.ambient.is_some();
+            if ui.checkbox(&mut lit, "").changed() {
+                // A dim blue night, so turning it on shows the lights at once.
+                camera.ambient = lit.then_some([0.2, 0.22, 0.3]);
+                claim = claim.or(Some("Set lighting"));
+            }
+            ui.end_row();
+            if let Some(ambient) = &mut camera.ambient {
+                ui.label("ambient");
+                let popup = ui.auto_id_with("popup");
+                let response = ui.color_edit_button_rgb(ambient);
+                if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
+                    claim = claim.or(Some("Set lighting"));
+                }
+                ui.end_row();
+            }
+        });
     claim
 }
