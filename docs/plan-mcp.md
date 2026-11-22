@@ -152,6 +152,11 @@ back the log — with no window.
 
 ## M2 — `voltra-mcp`, file and headless mode
 
+Progress: **M2a–b landed** — the crate, stdio, discovery (`components_list`,
+`assets_list`, `scenes_list`, `scene_read`) and scene editing (`scene_create`,
+`entity_spawn/delete/reparent/rename`, `component_set/remove`). Next: M2c
+(`run_scene`, `asset_read/write`), M2d (project tools, prefabs, docs).
+
 A new crate, `crates/voltra-mcp`, a binary speaking MCP over stdio. No
 editor needed: it works on the project's files and a `Session` from M1.
 This is what CI and "edit the project while the editor is closed" use.

@@ -85,6 +85,7 @@ version bump is a one-line change.
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
+| `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
@@ -4320,6 +4321,43 @@ for a tool to hand back.
 Pinned by `logging/capture.rs` (a line read once, the next one read after
 it, a flood past the ring counted as missed) and `app/headless/tests.rs` (a
 missing camera target's warning handed back by a session, once).
+
+### The MCP server works on files, through the engine's own formats
+
+MCP M2a–b (`docs/plan-mcp.md`). `voltra-mcp` is a binary crate — `voltra-mcp
+--project <dir> [--assets <dir>]` — serving MCP over stdio with `rmcp` 3.11
+(the official Rust SDK; `#[tool_router(router = …, vis = …)]` per group of
+tools, added together, and `#[tool_handler(router = self.tool_router)]`,
+checked in the vendored source). The log goes to stderr: stdout is the
+protocol's.
+
+- **Tools are plain functions** in `tools::*` over a `Project`, answering
+  JSON or a `ToolError`; `server::*` only wraps them. An error is a tool
+  error the client reads (`is_error`), never a protocol error or a crash.
+- **Paths are asset paths**, checked by `AssetPath` (no `..`, no absolute
+  path) and then canonicalised against the asset root, so a link out of it
+  is refused too.
+- **Entities are named** by id (the UUID `scene_read` gives) or by a path of
+  names from a root (`"Player/Arm"`); a path two roots answer is refused,
+  naming both ids.
+- **Edits go through the engine**: load the scene into a `World` through the
+  registry, edit, save atomically — or, on any failure, write nothing. A
+  component is set from RON through `ComponentRegistry::load_one`, so a bad
+  value is refused with the format's own message (a missing field, a span).
+  Structure (`Parent`, the prefab links) is refused by name: reparenting has
+  its own tool.
+- Tools now: `components_list` (names, references, templates), `assets_list`,
+  `scenes_list`, `scene_read`, `scene_create`, `entity_spawn`,
+  `entity_delete`, `entity_reparent`, `entity_rename`, `component_set`,
+  `component_remove`.
+
+Pinned by `voltra-mcp/tests/{discovery,scenes}.rs` — a real `rmcp` client
+over an in-process pipe: the tool list, templates naming their fields,
+assets and scenes listed, a scene read as entities, a path out of the
+project refused; a scene made, filled from a template, renamed through a
+name path, read back; five failing edits leaving the file byte-identical;
+a subtree deleted and an entity freed to a root — and `project.rs` (a link
+out of the asset root refused).
 
 ### wgpu 30 API notes
 
