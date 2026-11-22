@@ -46,6 +46,8 @@ cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no edit
 cargo run -p voltra-player -- assets/scenes/lights.ron    # 2D lights and shadows
 cargo xtask dist                # package build.ron into dist/<name>/ to hand out
 cargo xtask dist --manifest platformer.build.ron   # a game with its own code
+cargo run -p voltra-mcp -- --project .             # MCP server for an AI client (docs/MCP.md)
+cargo run -p voltra-editor -- --bridge             # editor an MCP client can drive live
 cargo build --workspace         # build everything
 cargo test --workspace          # run tests
 cargo clippy --workspace --all-targets -- -D warnings
@@ -325,6 +327,9 @@ privileged and plain `cargo build` covers everything.
 | 69 | Camera rig: follow (smoothing, dead zone, look-ahead, bounds) and trauma shake | done |
 | 70 | Animation state machines: `.animator.ron` parameters, states, transitions | done |
 | 71 | Navigation (`voltra-nav`): grids baked from colliders, A* paths, a top-down chaser | done |
+| M1 | Engine prep for an MCP server: components by name with templates, headless sessions, screenshots, captured logs | done |
+| M2 | `voltra-mcp`: scenes, assets, headless runs with screenshots, build and test — over stdio | done |
+| M3 | The live editor bridge: an AI edits, plays and screenshots a running editor, each edit one undo entry | done |
 
 ## Contributing
 
