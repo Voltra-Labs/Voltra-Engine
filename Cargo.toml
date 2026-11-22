@@ -31,6 +31,12 @@ glam = { version = "0.33.3", features = ["bytemuck", "serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 # Scene files are authoring artefacts: read in a pull request, merged in git.
 ron = "0.12.2"
+# The MCP server (`voltra-mcp`): the official Rust SDK over stdio, its async
+# runtime, and what tool arguments and answers are made of.
+rmcp = { version = "3.11.0", default-features = false, features = ["server", "macros", "transport-io"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "io-std"] }
+schemars = "1.2.3"
+serde_json = "1.0.154"
 # v7 rather than v4: the timestamp in the high bits means sorting by id sorts by
 # creation, so a scene file is deterministic *and* appends new entities at the end.
 uuid = { version = "1.24.0", features = ["v7", "serde"] }

@@ -1,0 +1,24 @@
+[package]
+name = "voltra-mcp"
+description = "An MCP server: a Voltra project's scenes, assets and runs, for an AI client."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-assets.workspace = true
+voltra-core.workspace = true
+voltra-ecs.workspace = true
+voltra-scene.workspace = true
+rmcp.workspace = true
+tokio.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ron.workspace = true
+log.workspace = true
+
+[dev-dependencies]
+rmcp = { workspace = true, features = ["client"] }
+voltra-testkit.workspace = true
