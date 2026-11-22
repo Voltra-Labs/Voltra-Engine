@@ -20,6 +20,9 @@ gilrs.workspace = true
 egui.workspace = true
 egui-winit.workspace = true
 log.workspace = true
+# PNG encoding for headless screenshots; the same crate `voltra-assets`
+# decodes with.
+image.workspace = true
 # The logger games start through `logging::init`, terminal or file.
 env_logger.workspace = true
 # An input map is a RON file, read in a pull request like a scene.

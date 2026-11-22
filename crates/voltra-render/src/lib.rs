@@ -18,6 +18,7 @@ pub mod particles;
 pub mod pass;
 pub mod pipeline;
 pub mod post;
+pub mod readback;
 pub mod renderer;
 pub mod scene_draw;
 pub mod shader;
@@ -41,6 +42,7 @@ pub use particles::{
 };
 pub use pass::MeshDraw;
 pub use post::{PostPass, PostSettings};
+pub use readback::read_rgba8;
 pub use renderer::{Layer, Renderer};
 pub use scene_draw::SceneDraw;
 pub use target::RenderTarget;

@@ -3283,6 +3283,7 @@ dependencies = [
  "egui-winit",
  "env_logger",
  "gilrs",
+ "image",
  "log",
  "ron",
  "serde",

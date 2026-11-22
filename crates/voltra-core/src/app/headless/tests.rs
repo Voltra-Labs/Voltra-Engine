@@ -124,3 +124,46 @@ fn a_scene_that_is_not_there_is_an_error() {
     let app = App::new(crate::WindowConfig::default()).with_asset_root(assets());
     assert!(Headless::open(app, &AssetPath::new("scenes/missing.ron").expect("valid")).is_err());
 }
+
+#[test]
+fn a_screenshot_draws_the_scene_through_its_camera() {
+    use voltra_scene::{Camera, Sprite};
+    let app = App::new(crate::WindowConfig::default()).with_asset_root(assets());
+    let mut session = Headless::new(app);
+    let world = session.world_mut();
+    let camera = world.spawn();
+    world.insert(camera, Transform::default());
+    world.insert(camera, Camera::new(1.0));
+    let square = world.spawn();
+    world.insert(
+        square,
+        Transform::default().with_scale(voltra_render::glam::Vec2::splat(1.0)),
+    );
+    world.insert(square, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+
+    let shot = match session.screenshot(64, 64) {
+        Ok(shot) => shot,
+        Err(ScreenshotError::NoDevice) => {
+            eprintln!("no adapter: skipping");
+            return;
+        }
+        Err(e) => panic!("{e}"),
+    };
+    assert_eq!((shot.width, shot.height), (64, 64));
+    let centre = shot.pixel(32, 32).expect("on the image");
+    assert!(
+        centre[0] > 200 && centre[1] < 40 && centre[2] < 40,
+        "red in the middle: {centre:?}"
+    );
+    let corner = shot.pixel(1, 1).expect("on the image");
+    assert!(
+        corner[0] < 100,
+        "the clear colour at the corner: {corner:?}"
+    );
+    let png = shot.png_bytes().expect("encodes");
+    assert_eq!(&png[..4], b"\x89PNG");
+
+    // Again, at another size, reusing the device.
+    let wide = session.screenshot(96, 48).expect("a second shot");
+    assert_eq!(wide.rgba.len(), 96 * 48 * 4);
+}

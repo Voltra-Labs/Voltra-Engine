@@ -74,7 +74,21 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(target: impl Into<SurfaceTarget<'static>>, width: u32, height: u32) -> Self {
-        let ctx = GpuContext::new(target, width, height);
+        Self::with_context(GpuContext::new(target, width, height), width, height)
+    }
+
+    /// A renderer with no window, drawing only into offscreen targets —
+    /// [`render_scene`](Self::render_scene) and its kin. `None` without a
+    /// usable adapter.
+    pub fn headless(width: u32, height: u32) -> Option<Self> {
+        Some(Self::with_context(
+            GpuContext::headless(width, height)?,
+            width,
+            height,
+        ))
+    }
+
+    fn with_context(ctx: GpuContext, width: u32, height: u32) -> Self {
         let camera_binding = CameraBinding::new(ctx.device());
         let ui_camera_binding = camera_binding.sharing_layout(ctx.device());
         let texture_layout = texture::bind_group_layout(ctx.device());

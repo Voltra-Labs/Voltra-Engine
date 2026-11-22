@@ -2,14 +2,18 @@
 //! screen — straight to the window with no UI, or into an offscreen target
 //! with the UI composited over the top.
 
-use voltra_assets::{Fonts, Textures};
-use voltra_ecs::World;
 use voltra_render::egui_backend::ScreenDescriptor;
-use voltra_render::{wgpu, Filter, Layer, MeshDraw};
+use voltra_render::{Filter, Layer};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{ui, SpriteBatch, UiLayout};
 
 use super::{App, UiFrame};
+
+mod parts;
+pub(super) mod world;
+
+use parts::{
+    clock_seconds, lighting, mesh_draws, prepare_text, ui_batch, ui_scale, view_max, view_min,
+};
 
 impl App {
     /// Draws the world straight to the window. No UI, no intermediate texture.
@@ -127,43 +131,21 @@ impl App {
         self.thumbnails.sync(egui, &device, textures);
 
         let scale = window.scale_factor() as f32;
-        prepare_text(&self.world, fonts, textures, &device, &queue, scale);
-        // The immutable reborrow ends with the batch, well before the UI takes
-        // both stores mutably below.
-        let sheets = Sheets::new(atlases, textures)
-            .with_fonts(fonts)
-            .seen_from(renderer.camera.position)
-            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
-            .at_time(clock_seconds(self.elapsed))
-            .with_layers(&self.sorting_layers);
-        // Into last frame's buffers, taken out for the frame and put back.
-        let mut batch = std::mem::take(&mut self.frame_batch);
-        batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
-        let mesh = batch.upload(&device);
-        // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
-        // rather than borrowed, so the borrow on `renderer` ends here instead
-        // of surviving into the `&mut self` call below.
-        let white = renderer.white_bind_group().clone();
-        let draws = super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings);
-        // The game's HUD over the scene, in the viewport's pixels: what the
-        // window will show in a build, so the editor shows it too.
-        let hud = ui_batch(&self.world, sheets, target.width(), target.height(), scale);
-        let hud_mesh = hud.upload(&device);
-        let hud_draws = mesh_draws(&hud, textures, &white);
-        let layer = Layer {
-            mesh: hud_mesh.as_ref(),
-            draws: &hud_draws,
-        };
-        let post = voltra_scene::post::active(&self.world);
-        renderer.lighting = lighting(
-            &self.world,
-            &renderer.camera,
-            sheets,
-            self.silhouettes.as_mut(),
+        world::WorldDraw {
+            world: &self.world,
+            renderer,
             textures,
-        );
-        renderer.render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
-        self.frame_batch = batch;
+            atlases,
+            fonts,
+            silhouettes: self.silhouettes.as_mut(),
+            sorting_layers: &self.sorting_layers,
+            batch: &mut self.frame_batch,
+            tile_meshes: &mut self.tile_meshes,
+            gpu_rings: &self.gpu_rings,
+            elapsed: self.elapsed,
+            scale,
+        }
+        .into_targets(target, graded);
 
         let size = window.inner_size();
         let screen = ScreenDescriptor {
@@ -216,109 +198,4 @@ impl App {
 
         renderer.present_with(|pass| egui.render(pass));
     }
-}
-
-/// Rasterizes the glyphs the world's texts draw and uploads the atlases
-/// that changed — before the batch, so its UVs are taken against the atlas
-/// as it will be sampled.
-fn prepare_text(
-    world: &World,
-    fonts: &mut Fonts,
-    textures: &mut Textures,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    ui_scale: f32,
-) {
-    voltra_scene::text::prepare(world, fonts, ui_scale);
-    fonts.upload(textures, device, queue);
-}
-
-/// Physical pixels per point: the window's scale factor, or 1 before there
-/// is a window to ask.
-fn ui_scale(window: Option<&winit::window::Window>) -> f32 {
-    window.map_or(1.0, |window| window.scale_factor() as f32)
-}
-
-/// The screen-space batch for a target `width` × `height` physical pixels.
-///
-/// Laid out in points — the size divided by `scale` — so a HUD authored at
-/// 16 points in from the corner is 16 points in on any display.
-fn ui_batch(world: &World, sheets: Sheets<'_>, width: u32, height: u32, scale: f32) -> SpriteBatch {
-    let scale = if scale.is_finite() && scale > 0.0 {
-        scale
-    } else {
-        1.0
-    };
-    let screen = voltra_render::glam::Vec2::new(width as f32, height as f32) / scale;
-    let layout = UiLayout::from_world(world, screen);
-    ui::mesh::batch(world, sheets, &layout, scale)
-}
-
-/// Turns a batch's texture-run ranges into the renderer's draw list.
-///
-/// `white` stands in for `None`: an untextured range still needs a bind
-/// group, and the renderer's own white one is what every flat-coloured
-/// sprite drew against before textures existed. Both `textures` and `white`
-/// share `'a` so the returned draws can borrow either.
-fn mesh_draws<'a>(
-    batch: &SpriteBatch,
-    textures: &'a Textures,
-    white: &'a wgpu::BindGroup,
-) -> Vec<MeshDraw<'a>> {
-    batch
-        .ranges
-        .iter()
-        .map(|range| MeshDraw {
-            texture: match range.texture {
-                Some(handle) => textures.bind_group(handle),
-                None => white,
-            },
-            normal: None,
-            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: range.indices.clone(),
-        })
-        .collect()
-}
-
-/// The frame's lighting, with the lights `camera` can see lit. The editor
-/// previews it too, as it previews the grade. Sprite-shaped casters' frames
-/// are traced first, through `silhouettes`, when there are any.
-fn lighting(
-    world: &World,
-    camera: &voltra_render::Camera2D,
-    sheets: Sheets<'_>,
-    silhouettes: Option<&mut voltra_assets::Silhouettes>,
-    textures: &voltra_assets::Textures,
-) -> voltra_render::Lighting {
-    let silhouettes = silhouettes.map(|silhouettes| {
-        voltra_scene::shadow_caster::prepare(world, sheets, silhouettes);
-        &*silhouettes
-    });
-    let sprites = silhouettes.map(|silhouettes| voltra_scene::shadow_caster::SpriteShapes {
-        sheets,
-        silhouettes,
-    });
-    voltra_scene::light::gather(
-        world,
-        view_min(camera),
-        view_max(camera),
-        sprites,
-        Some(textures),
-    )
-}
-
-/// The lower-left corner of what `camera` sees, in world units.
-fn view_min(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
-    camera.position - camera.half_extents()
-}
-
-/// The upper-right corner of what `camera` sees, in world units.
-fn view_max(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
-    camera.position + camera.half_extents()
-}
-
-/// The elapsed clock as the batch takes it. Wrapped at a day, so an `f32`
-/// keeps millisecond precision however long the game has been open.
-fn clock_seconds(elapsed: f64) -> f32 {
-    (elapsed % 86_400.0) as f32
 }
