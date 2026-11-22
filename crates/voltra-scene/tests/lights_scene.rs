@@ -376,7 +376,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
     );
     let drew_layers = lighting.uses_layers();
     if drew_layers {
-        LayerPass::new(&device, binding.layout(), &layout).record(
+        LayerPass::new(&device, binding.layout(), &layout, None).record(
             &device,
             &mut encoder,
             layer_target.view(),

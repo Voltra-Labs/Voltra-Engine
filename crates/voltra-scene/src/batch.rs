@@ -42,6 +42,8 @@ pub struct GpuEmitterDraw {
     pub entity: voltra_ecs::Entity,
     /// `None` draws against the renderer's white bind group.
     pub texture: Option<Handle<Texture>>,
+    /// The light layers its particles are on.
+    pub light_layers: u32,
     /// Drawn before `ranges[before]`, or after every range when it is
     /// `ranges.len()`.
     pub before: usize,
@@ -112,8 +114,9 @@ impl SpriteBatch {
         let (quads, Some(texture)) = shape::glyphs(text, fonts) else {
             return;
         };
+        let surface = Surface::textured(Some(texture)).on(text.light_layers);
         for quad in quads {
-            self.push_quad(matrix, quad.corners, quad.uvs, text.color, Some(texture));
+            self.push_quad_on(matrix, quad.corners, quad.uvs, text.color, surface);
         }
     }
 
@@ -202,10 +205,12 @@ impl SpriteBatch {
         &mut self,
         entity: voltra_ecs::Entity,
         texture: Option<Handle<Texture>>,
+        light_layers: u32,
     ) {
         self.gpu_emitters.push(GpuEmitterDraw {
             entity,
             texture,
+            light_layers,
             before: self.ranges.len(),
         });
     }

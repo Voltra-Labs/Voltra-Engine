@@ -229,6 +229,29 @@ mod in_the_world {
     }
 
     #[test]
+    fn a_text_s_light_layers_reach_its_glyphs_and_the_default_is_not_written() {
+        let mut fonts = fonts();
+        let mut world = World::new();
+        let mut label = Text::new("Hi");
+        label.light_layers = 0b110;
+        spawn(&mut world, label, Vec2::ZERO);
+        ready(&mut world, &mut fonts);
+        let sheets = Sheets {
+            fonts: Some(&fonts),
+            ..Sheets::default()
+        };
+        let batch = SpriteBatch::from_world(&world, sheets);
+        assert!(!batch.ranges.is_empty());
+        assert!(batch.ranges.iter().all(|r| r.light_layers == 0b110));
+
+        let plain = ron::to_string(&Text::new("x")).expect("writes");
+        assert!(!plain.contains("light_layers"), "{plain}");
+        let back: Text = ron::from_str("(content: \"x\", size: 1.0, pixels_per_em: 32, color: (1.0, 1.0, 1.0, 1.0), light_layers: 4)")
+            .expect("reads");
+        assert_eq!(back.light_layers, 4);
+    }
+
+    #[test]
     fn without_fonts_nothing_is_drawn() {
         let mut fonts = fonts();
         let mut world = World::new();

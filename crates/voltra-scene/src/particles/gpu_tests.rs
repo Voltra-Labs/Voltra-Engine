@@ -201,6 +201,27 @@ fn the_batch_draws_a_gpu_emitter_between_the_sprites_around_it() {
     assert_eq!(batch.gpu_emitters.len(), 1);
     assert_eq!(batch.gpu_emitters[0].entity, e);
     assert_eq!(batch.gpu_emitters[0].before, 1);
+    assert_eq!(
+        batch.gpu_emitters[0].light_layers,
+        voltra_render::DEFAULT_LIGHT_LAYERS
+    );
+}
+
+#[test]
+fn a_gpu_emitter_s_draw_carries_its_light_layers() {
+    let mut world = World::new();
+    let e = gpu_emitter(
+        &mut world,
+        ParticleEmitter {
+            light_layers: 0b10,
+            ..ParticleEmitter::default()
+        },
+    );
+    emitter(&mut world, e).burst(4);
+    advance(&mut world, FRAME, true);
+    let batch = SpriteBatch::from_world(&world, Sheets::default());
+    assert_eq!(batch.gpu_emitters.len(), 1);
+    assert_eq!(batch.gpu_emitters[0].light_layers, 0b10);
 }
 
 #[test]

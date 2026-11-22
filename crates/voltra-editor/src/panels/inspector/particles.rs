@@ -136,7 +136,13 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
         ));
         ui.end_row();
     });
-    claim
+    claim.or(super::light_layers::show(
+        ui,
+        "particle_light_layers",
+        "light layers",
+        "its particles are lit only by lights sharing one of these",
+        &mut emitter.light_layers,
+    ))
 }
 
 fn drag(

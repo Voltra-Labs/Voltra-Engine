@@ -262,3 +262,28 @@ fn an_emitter_round_trips_through_ron_without_its_particles() {
     assert_eq!(back.alive(), 0);
     assert!(!text.contains("state"));
 }
+
+#[test]
+fn particles_are_drawn_on_their_emitter_s_light_layers() {
+    let mut world = World::new();
+    let e = emitter_at(
+        &mut world,
+        Vec2::ZERO,
+        ParticleEmitter {
+            emitting: false,
+            light_layers: 0b1000,
+            ..ParticleEmitter::default()
+        },
+    );
+    world
+        .get_mut::<ParticleEmitter>(e)
+        .expect("emitter")
+        .burst(3);
+    run(&mut world, 0.1);
+    let batch = SpriteBatch::from_world(&world, Sheets::default());
+    assert!(!batch.ranges.is_empty());
+    assert!(batch.ranges.iter().all(|r| r.light_layers == 0b1000));
+
+    let plain = ron::to_string(&ParticleEmitter::default()).expect("writes");
+    assert!(!plain.contains("light_layers"), "{plain}");
+}

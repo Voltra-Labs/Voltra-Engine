@@ -103,5 +103,11 @@ pub(super) fn show(
         text.set_font(path, fonts);
         claim = claim.or(Some("Set font"));
     }
-    claim
+    claim.or(super::light_layers::show(
+        ui,
+        "text_light_layers",
+        "light layers",
+        "its glyphs are lit only by lights sharing one of these",
+        &mut text.light_layers,
+    ))
 }

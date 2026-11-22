@@ -289,6 +289,7 @@ privileged and plain `cargo build` covers everything.
 | 59 | Shadows from a sprite's silhouette, traced from its alpha | done |
 | 60a | Spot lights culled, drawn and shadowed by their cone's reach | done |
 | 60b | Normal maps on tilemap layers, laid out as the sheet | done |
+| 60c | Light layers on text and particle emitters, GPU ones included | done |
 
 ## Contributing
 

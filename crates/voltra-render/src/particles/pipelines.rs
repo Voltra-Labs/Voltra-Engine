@@ -8,7 +8,7 @@ pub struct ParticlePipelines {
     pub(super) simulate: wgpu::ComputePipeline,
     pub(super) simulate_layout: wgpu::BindGroupLayout,
     pub(crate) draw: wgpu::RenderPipeline,
-    pub(super) draw_layout: wgpu::BindGroupLayout,
+    pub(crate) draw_layout: wgpu::BindGroupLayout,
 }
 
 impl ParticlePipelines {

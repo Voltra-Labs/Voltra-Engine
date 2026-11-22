@@ -69,6 +69,15 @@ pub struct Text {
         skip_serializing_if = "crate::sorting::is_default_layer"
     )]
     pub sorting_layer: String,
+    /// The light layers its glyphs are on, as a sprite's
+    /// [`light_layers`](crate::Sprite::light_layers) are. The first — the
+    /// default, and not written — is what every light lights unless told
+    /// otherwise.
+    #[serde(
+        default = "crate::light::default_light_layers",
+        skip_serializing_if = "crate::light::is_default_light_layers"
+    )]
+    pub light_layers: u32,
 
     /// The handle `font` resolves to — or the default font's. Never
     /// serialised: it addresses a slot in this session's [`Fonts`].
@@ -87,6 +96,7 @@ impl Default for Text {
             align: Align::Left,
             sort_order: 0,
             sorting_layer: crate::sorting::default_layer(),
+            light_layers: crate::light::default_light_layers(),
             font_handle: None,
         }
     }

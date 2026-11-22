@@ -44,6 +44,10 @@ pub const PARTICLES_SIM: &str = include_str!("shaders/particles_sim.wgsl");
 /// Draws GPU particles. See [`ParticlePipelines`](crate::particles::ParticlePipelines).
 pub const PARTICLES_DRAW: &str = include_str!("shaders/particles_draw.wgsl");
 
+/// A GPU emitter's light layers: a fragment stage appended to
+/// [`PARTICLES_DRAW`]. See [`LayerPass`](crate::light_layers::LayerPass).
+pub const PARTICLE_LAYERS: &str = include_str!("shaders/particle_layers.wgsl");
+
 /// Compiles WGSL into a shader module.
 ///
 /// `wgpu` validates and reports compilation errors through the device error

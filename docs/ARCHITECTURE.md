@@ -3397,9 +3397,9 @@ that never touches them lights exactly as before.
 
 - **A third pass over the batch** (`light_layers::LayerPass`), shaped like
   the normals pass: the mesh ranges into an `R32Uint` buffer, a small
-  uniform per distinct mask this frame, coverage alpha-tested at 0.5,
-  GPU particles not drawn (their pixels keep the layers under them).
-  Recorded only when a lit frame has a light that leaves a layer out.
+  uniform per distinct mask this frame, coverage alpha-tested at 0.5.
+  GPU emitters too since stage 60c, below. Recorded only when a lit frame
+  has a light that leaves a layer out.
 - **Stored inverted** — the layers a texel is *not* on — so the zero a
   buffer is cleared to, and the zeroed 1×1 stand-in bound when the pass did
   not run, put the background and everything on every layer. No upload is
@@ -3410,22 +3410,35 @@ that never touches them lights exactly as before.
   bind group WebGPU guarantees.
 - `SpriteRange::light_layers` splits batch runs; a tilemap's tiles carry
   the layer's on every path (cached chunks, chunks on the view's edge, the
-  uncached mesh); text and CPU particles are on the default layer. GPU
-  particles are not drawn into the buffer, so they take the layers of what
-  is under them.
+  uncached mesh).
+- **Text and particle emitters (stage 60c)**: `Text::light_layers` and
+  `ParticleEmitter::light_layers`, default the first bit and not written,
+  as a sprite's. Glyphs and CPU particles are batch quads and carry it
+  through `batch::Surface`. A GPU emitter carries it on its
+  `GpuEmitterDraw` / `SceneDraw::Particles`, and the layer pass draws it
+  through a second pipeline: `particles_draw.wgsl`'s own vertex stage with
+  a layers fragment appended to the module (`particle_layers.wgsl`), so a
+  particle lands on the same texels in both passes without a copy of the
+  vertex code. Built only with the GPU particle pipelines, whose draw
+  layout it binds as group 2 (the mask is group 3); without them every
+  emitter is on the CPU and in the batch anyway. Coverage is the same
+  alpha test, so the faint edge of a soft particle keeps the layers under
+  it — the rule every surface follows. A screen-space HUD's text is never
+  lit and has none.
 - A surface on **no** layer (mask 0) is lit by nothing, even a light of
   every layer: the pass also runs when such a range is drawn.
 - The buffers' 1×1 stand-ins are read with the pixel clamped to their size,
   so a frame that did not draw one reads defined texels on every backend.
 - The inspector folds the 32 toggles away (`light_layers` widget) on
   sprites, tilemaps and lights.
-- **Not yet**: light layers on text and particle emitters, the ambient
-  per layer, shadow casters per layer (a caster blocks every shadowed light
-  today).
+- **Not yet**: the ambient per layer, shadow casters per layer (a caster
+  blocks every shadowed light today).
 
 Pinned by `headless_light_layers.rs` (a layer-2 lamp lights the layer-2
 quad and the background, not the layer-1 quad; every layer lights both; no
-layer lights nothing), instance, batch and light unit tests.
+layer lights nothing), `headless_particles.rs` (a GPU emitter writes its
+own layers over the sprite under it, the sprite's elsewhere), instance,
+batch, text and particle unit tests.
 
 ### A sprite's silhouette is traced on the CPU into ordinary occluders
 

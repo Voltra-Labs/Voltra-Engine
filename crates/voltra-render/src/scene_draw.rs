@@ -16,6 +16,8 @@ pub enum SceneDraw<'a> {
     Particles {
         particles: &'a GpuParticles,
         texture: &'a wgpu::BindGroup,
+        /// The light layers its particles are on, as a mesh range's are.
+        light_layers: u32,
     },
 }
 
@@ -80,6 +82,7 @@ pub fn draw_scene(
             SceneDraw::Particles {
                 particles: emitter,
                 texture,
+                ..
             } => {
                 let Some(pipelines) = particles else {
                     continue;

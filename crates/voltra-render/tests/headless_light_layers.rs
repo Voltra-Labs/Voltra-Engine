@@ -77,7 +77,7 @@ fn frame_with(layers: u32, left: u32) -> Option<Vec<Rgba>> {
         &mesh_draws,
         wgpu::Color::WHITE,
     );
-    LayerPass::new(&device, camera.layout(), &layout).record(
+    LayerPass::new(&device, camera.layout(), &layout, None).record(
         &device,
         &mut encoder,
         layer_target.view(),

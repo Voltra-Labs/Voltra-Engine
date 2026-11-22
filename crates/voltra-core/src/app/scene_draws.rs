@@ -29,6 +29,7 @@ pub(super) fn scene_draws<'a>(
                 draws.push(SceneDraw::Particles {
                     particles,
                     texture: bind(emitter.texture),
+                    light_layers: emitter.light_layers,
                 });
             }
         }
