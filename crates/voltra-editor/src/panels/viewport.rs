@@ -104,8 +104,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
                 drop_asset(editor, frame, ui, &scene);
                 editor.camera.navigate(ui, &scene, frame.camera);
-                let (world, lines) = frame.world_and_lines();
-                view::caster::draw(world, caster, lines);
+                let outlines = voltra_scene::shadow_caster::outlines_of(
+                    frame.world,
+                    caster,
+                    frame.sprite_shapes(),
+                );
+                view::caster::draw(&outlines, frame.lines());
                 editor.shape.draw(&scene, frame, caster);
                 if editor.show_colliders {
                     let contacts = frame.contacts();
@@ -179,9 +183,14 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 // Read before the split borrow below, which takes the frame
                 // mutably and would rule out reaching the camera.
                 let aspect = frame.camera.aspect;
+                let outlines = voltra_scene::shadow_caster::outlines_of(
+                    frame.world,
+                    entity,
+                    frame.sprite_shapes(),
+                );
                 let (world, lines) = frame.world_and_lines();
                 view::overlay::draw(world, entity, aspect, lines);
-                view::caster::draw(world, entity, lines);
+                view::caster::draw(&outlines, lines);
                 view::light::draw(world, entity, lines);
             }
 

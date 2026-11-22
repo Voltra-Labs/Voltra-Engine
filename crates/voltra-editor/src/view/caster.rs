@@ -5,8 +5,10 @@
 //! otherwise. Drawn for the selected entity only, as the camera's rectangle
 //! is.
 
+#[cfg(test)]
 use voltra_ecs::{Entity, World};
-use voltra_render::LineBatch;
+use voltra_render::{LineBatch, Occluder};
+#[cfg(test)]
 use voltra_scene::shadow_caster;
 
 /// Cool violet: not a gizmo axis, the camera's amber or the physics
@@ -16,9 +18,10 @@ const COLOR: [f32; 4] = [0.6, 0.45, 1.0, 0.9];
 /// Outline thickness, in pixels. Matches the other overlays.
 const WIDTH: f32 = 1.5;
 
-/// Pushes `entity`'s caster outlines into `lines`, if it casts.
-pub fn draw(world: &World, entity: Entity, lines: &mut LineBatch) {
-    for outline in shadow_caster::outlines_of(world, entity) {
+/// Pushes `outlines` — a caster's, from
+/// [`outlines_of`](shadow_caster::outlines_of) — into `lines`.
+pub fn draw(outlines: &[Occluder], lines: &mut LineBatch) {
+    for outline in outlines {
         let points = &outline.points;
         let edges = if outline.closed {
             points.len()
@@ -59,10 +62,13 @@ mod tests {
         let mut world = World::new();
         let (outline, line) = (caster(&mut world, true), caster(&mut world, false));
         let mut lines = LineBatch::default();
-        draw(&world, outline, &mut lines);
+        draw(
+            &shadow_caster::outlines_of(&world, outline, None),
+            &mut lines,
+        );
         let closed = lines.len();
         lines.clear();
-        draw(&world, line, &mut lines);
+        draw(&shadow_caster::outlines_of(&world, line, None), &mut lines);
         assert_eq!(closed, 3 * (lines.len() / 2), "three edges against two");
     }
 
@@ -72,7 +78,7 @@ mod tests {
         let plain = world.spawn();
         world.insert(plain, Transform::default());
         let mut lines = LineBatch::default();
-        draw(&world, plain, &mut lines);
+        draw(&shadow_caster::outlines_of(&world, plain, None), &mut lines);
         assert!(lines.is_empty());
     }
 }

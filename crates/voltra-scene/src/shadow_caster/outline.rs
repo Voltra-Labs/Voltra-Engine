@@ -7,6 +7,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 use voltra_render::Occluder;
 
+use super::silhouette::{sprite_outlines, SpriteShapes};
 use super::{CasterShape, ShadowCaster2D};
 use crate::hierarchy::{world_matrix, WorldTransforms};
 use crate::tilemap::TileCollider;
@@ -18,8 +19,13 @@ use crate::{Collider, Tilemap, Transform};
 pub const CIRCLE_SIDES: usize = 32;
 
 /// Every caster's outline in the world, for the frame's lights; polygons
-/// carried by `transforms`, the world's composed matrices.
-pub fn occluders(world: &World, transforms: &WorldTransforms) -> Vec<Occluder> {
+/// carried by `transforms`, the world's composed matrices, and sprite
+/// silhouettes read through `sprites` (none without it).
+pub fn occluders(
+    world: &World,
+    transforms: &WorldTransforms,
+    sprites: Option<SpriteShapes<'_>>,
+) -> Vec<Occluder> {
     let casters: Vec<(Entity, &ShadowCaster2D)> = world.query::<ShadowCaster2D>().collect();
     if casters.is_empty() {
         return Vec::new();
@@ -38,14 +44,18 @@ pub fn occluders(world: &World, transforms: &WorldTransforms) -> Vec<Occluder> {
     for (entity, caster) in casters {
         let matrix = || transforms.matrix(entity);
         let boxes = tile_boxes.get(&entity).map_or(&[][..], Vec::as_slice);
-        outlines(world, entity, caster, matrix, boxes, &mut out);
+        outlines(world, entity, caster, matrix, boxes, sprites, &mut out);
     }
     out
 }
 
 /// `entity`'s outlines, for drawing the one selected; nothing when it casts
-/// no shadow.
-pub fn outlines_of(world: &World, entity: Entity) -> Vec<Occluder> {
+/// no shadow. A sprite silhouette needs `sprites`.
+pub fn outlines_of(
+    world: &World,
+    entity: Entity,
+    sprites: Option<SpriteShapes<'_>>,
+) -> Vec<Occluder> {
     let Some(caster) = world.get::<ShadowCaster2D>(entity) else {
         return Vec::new();
     };
@@ -60,7 +70,7 @@ pub fn outlines_of(world: &World, entity: Entity) -> Vec<Occluder> {
     };
     let mut out = Vec::new();
     let matrix = || world_matrix(world, entity);
-    outlines(world, entity, caster, matrix, &boxes, &mut out);
+    outlines(world, entity, caster, matrix, &boxes, sprites, &mut out);
     out
 }
 
@@ -70,14 +80,16 @@ fn is_solid_layer(world: &World, entity: Entity) -> bool {
         .is_some_and(|map| map.collision)
 }
 
-/// `caster`'s outlines into `out`: its polygon carried by `matrix`, or its
-/// collider and the layer's generated `tile_boxes`.
+/// `caster`'s outlines into `out`: its polygon or its sprite's silhouette
+/// carried by `matrix`, or its collider and the layer's generated
+/// `tile_boxes`.
 fn outlines(
     world: &World,
     entity: Entity,
     caster: &ShadowCaster2D,
     matrix: impl FnOnce() -> Mat3,
     tile_boxes: &[Entity],
+    sprites: Option<SpriteShapes<'_>>,
     out: &mut Vec<Occluder>,
 ) {
     let outline = |points: Vec<Vec2>, closed: bool| Occluder {
@@ -90,6 +102,15 @@ fn outlines(
             let matrix = matrix();
             let placed = points.iter().map(|p| matrix.transform_point2(*p)).collect();
             out.push(outline(placed, *closed));
+        }
+        CasterShape::Sprite { alpha } => {
+            if let Some(sprites) = sprites {
+                out.extend(
+                    sprite_outlines(world, entity, matrix(), *alpha, sprites)
+                        .into_iter()
+                        .map(|points| outline(points, true)),
+                );
+            }
         }
         CasterShape::Collider => {
             out.extend(
@@ -151,7 +172,7 @@ mod tests {
                 half_extents: Vec2::new(0.5, 1.0),
             },
         );
-        let found = occluders(&world, &WorldTransforms::from_world(&world));
+        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
         assert_eq!(found.len(), 1);
         assert!(found[0].closed && !found[0].self_shadow);
         assert!(found[0].points.contains(&Vec2::new(2.5, 1.0)));
@@ -170,7 +191,7 @@ mod tests {
             },
         );
         world.insert(ball, Collider::Circle { radius: 2.0 });
-        let found = occluders(&world, &WorldTransforms::from_world(&world));
+        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
         assert_eq!(found[0].points.len(), CIRCLE_SIDES);
         assert!(found[0].self_shadow);
         assert!(found[0]
@@ -190,7 +211,7 @@ mod tests {
                 half_extents: Vec2::new(0.0, 1.0),
             },
         );
-        assert!(occluders(&world, &WorldTransforms::from_world(&world)).is_empty());
+        assert!(occluders(&world, &WorldTransforms::from_world(&world), None).is_empty());
     }
 
     #[test]
@@ -214,7 +235,7 @@ mod tests {
             },
         );
         hierarchy::set_parent(&mut world, line, parent).expect("no cycle");
-        let found = occluders(&world, &WorldTransforms::from_world(&world));
+        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
         assert!(!found[0].closed);
         assert_eq!(
             found[0].points,
@@ -250,7 +271,7 @@ mod tests {
         world.insert(other, other_map);
         crate::tilemap::sync_colliders(&mut world);
 
-        let found = occluders(&world, &WorldTransforms::from_world(&world));
+        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
         assert_eq!(found.len(), 2, "two separate tiles, two boxes: {found:?}");
         assert!(found.iter().all(|o| o.closed && o.points.len() == 4));
     }
@@ -265,13 +286,13 @@ mod tests {
         let plain = world.spawn();
         world.insert(plain, Transform::default());
         world.insert(plain, Collider::Circle { radius: 1.0 });
-        assert_eq!(outlines_of(&world, mine).len(), 1);
+        assert_eq!(outlines_of(&world, mine, None).len(), 1);
         assert!(
-            outlines_of(&world, plain).is_empty(),
+            outlines_of(&world, plain, None).is_empty(),
             "no caster, no shadow"
         );
         assert_eq!(
-            occluders(&world, &WorldTransforms::from_world(&world)).len(),
+            occluders(&world, &WorldTransforms::from_world(&world), None).len(),
             2
         );
     }

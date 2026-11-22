@@ -64,7 +64,12 @@ impl App {
             draws: &hud_draws,
         };
         let post = voltra_scene::post::active(&self.world);
-        renderer.lighting = lighting(&self.world, &renderer.camera);
+        renderer.lighting = lighting(
+            &self.world,
+            &renderer.camera,
+            sheets,
+            self.silhouettes.as_mut(),
+        );
         renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
         self.frame_batch = batch;
     }
@@ -149,7 +154,12 @@ impl App {
             draws: &hud_draws,
         };
         let post = voltra_scene::post::active(&self.world);
-        renderer.lighting = lighting(&self.world, &renderer.camera);
+        renderer.lighting = lighting(
+            &self.world,
+            &renderer.camera,
+            sheets,
+            self.silhouettes.as_mut(),
+        );
         renderer.render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
         self.frame_batch = batch;
 
@@ -170,6 +180,7 @@ impl App {
             camera: &mut renderer.camera,
             textures,
             atlases,
+            silhouettes: self.silhouettes.as_ref(),
             fonts,
             sorting_layers: &self.sorting_layers,
             clips,
@@ -260,9 +271,23 @@ fn mesh_draws<'a>(
 }
 
 /// The frame's lighting, with the lights `camera` can see lit. The editor
-/// previews it too, as it previews the grade.
-fn lighting(world: &World, camera: &voltra_render::Camera2D) -> voltra_render::Lighting {
-    voltra_scene::light::gather(world, view_min(camera), view_max(camera))
+/// previews it too, as it previews the grade. Sprite-shaped casters' frames
+/// are traced first, through `silhouettes`, when there are any.
+fn lighting(
+    world: &World,
+    camera: &voltra_render::Camera2D,
+    sheets: Sheets<'_>,
+    silhouettes: Option<&mut voltra_assets::Silhouettes>,
+) -> voltra_render::Lighting {
+    let silhouettes = silhouettes.map(|silhouettes| {
+        voltra_scene::shadow_caster::prepare(world, sheets, silhouettes);
+        &*silhouettes
+    });
+    let sprites = silhouettes.map(|silhouettes| voltra_scene::shadow_caster::SpriteShapes {
+        sheets,
+        silhouettes,
+    });
+    voltra_scene::light::gather(world, view_min(camera), view_max(camera), sprites)
 }
 
 /// The lower-left corner of what `camera` sees, in world units.

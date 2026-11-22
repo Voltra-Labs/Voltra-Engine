@@ -202,6 +202,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         shadow_caster::Context {
                             has_collider: has_collider || solid_layer,
                             starting,
+                            textured_sprite: frame
+                                .world
+                                .get::<Sprite>(entity)
+                                .is_some_and(|sprite| sprite.texture.is_some()),
                             shape: &mut editor.shape,
                         },
                     ));

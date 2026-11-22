@@ -178,7 +178,12 @@ impl Default for PointLight2D {
 /// lights whose reach touches `view_min..view_max` and, when one of them
 /// casts shadows, every caster's outline — unlit when that camera has no
 /// ambient colour, or there is no active camera.
-pub fn gather(world: &World, view_min: Vec2, view_max: Vec2) -> Lighting {
+pub fn gather(
+    world: &World,
+    view_min: Vec2,
+    view_max: Vec2,
+    sprites: Option<crate::shadow_caster::SpriteShapes<'_>>,
+) -> Lighting {
     let Some(camera) = camera::active(world).and_then(|entity| world.get::<Camera>(entity)) else {
         return Lighting::default();
     };
@@ -201,7 +206,7 @@ pub fn gather(world: &World, view_min: Vec2, view_max: Vec2) -> Lighting {
     // An occluder out of view can still throw a shadow into it, so casters
     // are not culled by the view; the renderer culls them per light.
     let occluders = if lights.iter().any(|light| light.shadow.is_some()) {
-        crate::shadow_caster::occluders(world, &transforms)
+        crate::shadow_caster::occluders(world, &transforms, sprites)
     } else {
         Vec::new()
     };
