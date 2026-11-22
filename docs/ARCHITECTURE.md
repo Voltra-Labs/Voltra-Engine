@@ -4126,6 +4126,51 @@ a parented follower, a shake fading back to rest, a copied target remapped)
 and `app::camera_rig` (following only while the game runs). The
 `character` example follows with all of it and shakes on a hard landing.
 
+### A state machine chooses the clip; the player plays it
+
+Stage 70. A `StateMachine` (a `*.animator.ron` file) holds parameters
+(`Float`, `Bool`, `Trigger`, each with a starting value), states (a name, an
+`.anim.ron` clip, a speed) and transitions (`from` a state or any, `to`,
+conditions `If`/`IfNot`/`Greater`/`Less`, an optional `exit_time` as a
+fraction of the clip). An `Animator` component runs one: a game calls
+`set_float`, `set_bool` and `trigger`, and `animator::evaluate` — once per
+frame, before the players advance — moves it and has the entity's
+`AnimationPlayer` play the new state's clip (adding a player if it has
+none). Unity's `Animator` over an `AnimatorController`; Godot's
+`AnimationTree` state machine.
+
+- **Logic and playback stay apart**: the animator only picks; playing,
+  looping and keys are the player's (stage 66). A flipbook is a clip with a
+  `SpriteFrame` track, so states need no second kind of motion.
+- **One transition per frame**, the first in file order whose conditions
+  and exit time hold; an any-state transition never goes to the state it is
+  in. A trigger stays set until a transition it lets through spends it, as
+  Unity's do.
+- **State by name**, not index, so a hot reload that reorders states keeps
+  the entity where it was; a state that is gone restarts it at the start.
+- **Loaded leniently**: a transition naming a missing state or parameter,
+  or testing one as the wrong kind, is dropped with a warning; a duplicate
+  state keeps the first; a file that will not read runs nothing.
+- `AnimationClips` and `StateMachines` are one generic `RonStore<T:
+  RonAsset>` (load, hot reload, atomic save); prefabs keep their own, being
+  versioned and spawned.
+- The browser lists `*.animator.ron` as `Animator`; the inspector edits an
+  animator's machine and, while playing, its parameters.
+
+Rejected: **blending and crossfades now** — two clips writing one property
+need weights per track, a subsystem of its own; **sub-state machines and
+layers**; **a graph editor now** — the file is short and hot reloads.
+
+- **Not yet**: crossfades, blend trees, layers, a visual graph editor,
+  exit time counting loops of a looping clip.
+
+Pinned by `animator/tests.rs` (starting in the start state with a player
+added, a float moving between states at a state's speed, a trigger spent
+and an any-state transition not re-entering itself, exit times waiting for
+a clip, a reload keeping a state or restarting without it, bad transitions
+dropped, a broken file running nothing, the shipped machine reading whole).
+The `character` example's idle, run, jump and fall are a machine.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

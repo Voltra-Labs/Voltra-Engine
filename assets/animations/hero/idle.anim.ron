@@ -1,0 +1,12 @@
+// The character example's idle: a slow breath.
+(
+    looping: true,
+    tracks: [
+        (property: Scale, keys: [
+            (time: 0.0, value: Vec2((0.4, 0.6)), ease: EaseInOut),
+            (time: 0.6, value: Vec2((0.42, 0.58)), ease: EaseInOut),
+            (time: 1.2, value: Vec2((0.4, 0.6))),
+        ]),
+        (property: SpriteColor, keys: [(time: 0.0, value: Color((1.0, 0.8, 0.3, 1.0)))]),
+    ],
+)

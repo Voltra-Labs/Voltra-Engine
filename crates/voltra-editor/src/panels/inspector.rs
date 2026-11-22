@@ -5,6 +5,7 @@
 
 mod animation;
 mod animation_player;
+mod animator;
 mod audio_source;
 mod camera;
 mod camera_rig;
@@ -177,6 +178,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     }
                 }
                 claim = claim.or(animation_player::show(ui, frame.world, entity));
+                claim = claim.or(animator::show(
+                    ui,
+                    frame.world,
+                    frame.state_machines,
+                    entity,
+                ));
                 if let Some(glow) = frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity) {
                     ui.separator();
                     claim = claim.or(global_light::show(ui, glow));
