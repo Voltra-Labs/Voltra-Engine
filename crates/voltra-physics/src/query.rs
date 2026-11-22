@@ -13,9 +13,11 @@
 
 mod filter;
 mod ray;
+mod shape;
 
 pub use filter::QueryFilter;
 pub use ray::{ray, RayHit};
+pub use shape::{cast, ShapeHit};
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
