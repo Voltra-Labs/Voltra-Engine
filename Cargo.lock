@@ -3290,6 +3290,7 @@ dependencies = [
  "voltra-audio",
  "voltra-ecs",
  "voltra-jobs",
+ "voltra-nav",
  "voltra-physics",
  "voltra-render",
  "voltra-scene",
@@ -3322,6 +3323,17 @@ name = "voltra-jobs"
 version = "0.1.0"
 dependencies = [
  "log",
+]
+
+[[package]]
+name = "voltra-nav"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "voltra-ecs",
+ "voltra-physics",
+ "voltra-render",
+ "voltra-scene",
 ]
 
 [[package]]

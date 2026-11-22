@@ -6,6 +6,9 @@
         "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp), Pad(South)]),
         "move_left": (bindings: [Key(KeyA), Key(ArrowLeft), Pad(DPadLeft), PadAxis(LeftStickX, Negative)]),
         "move_right": (bindings: [Key(KeyD), Key(ArrowRight), Pad(DPadRight), PadAxis(LeftStickX, Positive)]),
+        // Up and down, for a game seen from above.
+        "move_up": (bindings: [Key(KeyW), Key(ArrowUp), Pad(DPadUp), PadAxis(LeftStickY, Positive)]),
+        "move_down": (bindings: [Key(KeyS), Key(ArrowDown), Pad(DPadDown), PadAxis(LeftStickY, Negative)]),
         // Menu navigation: what `UiButton`s focus and press with. Accept is
         // not Space, which a game is likely to want for itself.
         "ui_up": (bindings: [Key(ArrowUp), Pad(DPadUp)]),

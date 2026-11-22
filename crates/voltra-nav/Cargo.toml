@@ -1,0 +1,14 @@
+[package]
+name = "voltra-nav"
+description = "2D navigation: grids baked from the scene's colliders, and paths through them."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-ecs.workspace = true
+voltra-scene.workspace = true
+voltra-physics.workspace = true
+voltra-render.workspace = true
+log.workspace = true

@@ -28,6 +28,9 @@ pub use winit::keyboard::KeyCode;
 // with `query`, and has to be able to name what comes back. The types belong to
 // `voltra-physics`; re-exporting them here means a game that only asks "am I
 // standing on something" needs one dependency, not two.
+// Navigation, the same way: a game asks for a path and needs no second
+// dependency to hold the answer.
+pub use voltra_nav as nav;
 pub use voltra_physics::{
     character, move_and_slide, query, CollisionEvent, Contact, QueryFilter, RayHit, ShapeHit,
     Slide, Touch,
