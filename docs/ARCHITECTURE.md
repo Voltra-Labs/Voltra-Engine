@@ -4220,6 +4220,31 @@ round everything, a start pressed into a wall, waypoints handed out in turn)
 and `tests/tilemap.rs` (a solid layer's tiles blocking a grid a path goes
 round). The `topdown` example's chaser finds its way through a room.
 
+### Components are reachable by name, with templates
+
+MCP M1a (`docs/plan-mcp.md`). `ComponentRegistry::save_one`, `load_one`,
+`remove_one` and `normalize` are public: any tool reads or writes any
+component by its registered name, as RON, without a function per type.
+`register` now answers a `Registration` that takes `.with_template()` —
+the type's `Default`, written as saved, answered by `template(name)` — and
+`.with_refs()` (what `register_with_refs` is now shorthand for).
+`describe()` lists every type with whether it names entities and whether it
+has a template.
+
+- **A template is opt-in per registration**, so a game type with no
+  `Default` still registers. Every built-in has one but the structure
+  components (`Parent`, `PrefabInstance`, `PrefabPart`), which a tool must
+  not make up: a parent link is a reparent, a part is a prefab's.
+- `Collider` gained a `Default` — a box the size of a default sprite, what
+  the editor gives a spawned body.
+- Templates stand in for reflection: an AI client learns a component's
+  fields from its default value, in the same text it will hand back.
+
+Pinned by `format/registry/tests.rs` (every built-in but structure has a
+template that loads into an entity and saves back identical; `describe`
+reports references; unknown names and structure answer no template; a game
+type without a default registers).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

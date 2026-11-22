@@ -12,5 +12,5 @@ pub use error::SceneError;
 pub use load::{from_scene_file, load};
 pub use record::{apply_record, entity_with_id, record_entity, record_scene_id};
 pub use refs::SceneRefs;
-pub use registry::ComponentRegistry;
+pub use registry::{ComponentInfo, ComponentRegistry, Registration};
 pub use save::{save, to_scene_file, write, EntityRecord, SceneFile, VERSION};

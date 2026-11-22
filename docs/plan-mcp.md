@@ -75,7 +75,11 @@ What is missing, and is M1:
 Each piece earns its place without MCP: CI can run scenes headless, tests
 can screenshot, games can show their log. Four PRs, roughly in this order.
 
-### M1a — components by name, with templates
+### M1a — components by name, with templates — done
+
+Landed: public `save_one`/`load_one`/`remove_one`/`normalize`, `register` →
+`Registration::{with_template, with_refs}`, `template(name)`, `describe()`;
+`Collider: Default`. Kept the existing method names.
 
 - Make `ComponentRegistry::save_one`, `load_one`, `remove_one` public
   (rename if the public names read better: `get_ron`, `set_ron`, `remove`).

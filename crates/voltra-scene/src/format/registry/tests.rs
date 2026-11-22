@@ -147,3 +147,58 @@ fn the_component_error_names_the_registered_name_not_the_rust_path() {
         other => panic!("expected a Component error, got {other:?}"),
     }
 }
+
+#[test]
+fn every_built_in_but_structure_has_a_template_that_loads_back() {
+    let registry = ComponentRegistry::with_defaults();
+    for info in registry.describe() {
+        let structure = ["Parent", "PrefabInstance", "PrefabPart"].contains(&info.name);
+        assert_eq!(info.has_template, !structure, "{}", info.name);
+        let Some(template) = registry.template(info.name) else {
+            continue;
+        };
+        let template = template.expect("a default writes");
+        let mut world = World::new();
+        let entity = world.spawn();
+        registry
+            .load_one(&mut world, entity, info.name, &template)
+            .expect("registered")
+            .unwrap_or_else(|e| panic!("{} reads its own template: {e}", info.name));
+        let back = registry
+            .save_one(&world, entity, info.name)
+            .expect("registered")
+            .expect("saves");
+        assert_eq!(
+            back.get_ron(),
+            template.get_ron(),
+            "{} round trips",
+            info.name
+        );
+    }
+}
+
+#[test]
+fn describe_says_which_name_entities_and_template_asks_only_for_known_names() {
+    let registry = ComponentRegistry::with_defaults();
+    let info = |name: &str| {
+        registry
+            .describe()
+            .into_iter()
+            .find(|i| i.name == name)
+            .unwrap_or_else(|| panic!("{name} is registered"))
+    };
+    assert!(info("Joint2D").has_refs && info("CameraFollow2D").has_refs);
+    assert!(!info("Sprite").has_refs);
+    assert!(registry.template("Physics").is_none());
+    assert!(registry.template("Parent").is_none());
+}
+
+#[test]
+fn a_game_type_without_a_default_still_registers() {
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct Coin(u32);
+    let mut registry = ComponentRegistry::new();
+    registry.register::<Coin>("Coin");
+    assert!(registry.names().any(|n| n == "Coin"));
+    assert!(registry.template("Coin").is_none());
+}
