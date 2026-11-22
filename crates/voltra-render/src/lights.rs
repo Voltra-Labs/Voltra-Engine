@@ -21,25 +21,23 @@ use crate::shader;
 
 mod global;
 mod instance;
-mod layer_input;
 mod lighting;
-mod normal_input;
 mod occluder;
 mod passes;
 mod reach;
+mod scene_input;
 pub mod shadows;
 
 use global::GlobalInstance;
 pub use global::GlobalLight;
 use instance::LightInstance;
-use layer_input::LayerInput;
 pub use lighting::{
     Cone, Lighting, PointLight, Shadow, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
     DEFAULT_SHADOW_RESOLUTION, LIT_FORMAT, MAX_SHADOW_SOFTNESS,
 };
-use normal_input::NormalInput;
 pub use occluder::Occluder;
 pub use reach::Reach;
+use scene_input::SceneInput;
 use shadows::ShadowPass;
 
 /// The pipelines, the composite's layout and the shadow map's pass. One per
@@ -51,8 +49,8 @@ pub struct LightPass {
     composite: wgpu::RenderPipeline,
     composite_layout: wgpu::BindGroupLayout,
     shadows: ShadowPass,
-    normals: NormalInput,
-    layers: LayerInput,
+    /// The scene's normals and light layers, as one group.
+    scene: SceneInput,
     /// Whether the shadow map running out of rows has been reported since it
     /// last had enough: said when it starts, not every frame it lasts.
     overflow_reported: AtomicBool,
@@ -62,16 +60,14 @@ impl LightPass {
     /// Pipelines drawing lights through `camera_layout`, the world camera's.
     pub fn new(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout) -> Self {
         let shadows = ShadowPass::new(device);
-        let normals = NormalInput::new(device);
-        let layers = LayerInput::new(device);
+        let scene = SceneInput::new(device);
         let module = shader::create_module(device, "lights", shader::LIGHTS);
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("lights-pipeline-layout"),
             bind_group_layouts: &[
                 Some(camera_layout),
                 Some(shadows.layout()),
-                Some(normals.layout()),
-                Some(layers.layout()),
+                Some(scene.layout()),
             ],
             immediate_size: 0,
         });
@@ -120,7 +116,7 @@ impl LightPass {
             cache: None,
         });
 
-        let global = global_pipeline(device, layers.layout(), additive);
+        let global = global_pipeline(device, scene.layout(), additive);
 
         let texture = |binding| wgpu::BindGroupLayoutEntry {
             binding,
@@ -173,24 +169,23 @@ impl LightPass {
             composite,
             composite_layout,
             shadows,
-            normals,
-            layers,
+            scene,
             overflow_reported: AtomicBool::new(false),
         }
     }
 }
 
 /// The global lights' pipeline: `lights_global.wgsl`, added onto the light
-/// map with `blend`, reading the scene's light layers through `layers`.
+/// map with `blend`, reading the scene's light layers through `scene`.
 fn global_pipeline(
     device: &wgpu::Device,
-    layers: &wgpu::BindGroupLayout,
+    scene: &wgpu::BindGroupLayout,
     blend: wgpu::BlendState,
 ) -> wgpu::RenderPipeline {
     let module = shader::create_module(device, "lights-global", shader::LIGHTS_GLOBAL);
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("lights-global-layout"),
-        bind_group_layouts: &[Some(layers)],
+        bind_group_layouts: &[Some(scene)],
         immediate_size: 0,
     });
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

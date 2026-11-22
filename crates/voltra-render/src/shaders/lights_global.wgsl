@@ -4,11 +4,11 @@
 // the light map after its clear to the ambient. A pixel gets the light's
 // colour when its light layers share one with the light's, read from the
 // scene's light-layer buffer as `lights.wgsl` does; group 0 must match
-// `LayerInput`. Must match `lights::global::GlobalInstance`.
+// `SceneInput` (binding 0, the normals, is not read). Must match `lights::global::GlobalInstance`.
 
 // The light layers each pixel is NOT on (`sprite_layers.wgsl`); a 1x1 zero
 // stand-in, "on every layer", when the frame did not draw them.
-@group(0) @binding(0)
+@group(0) @binding(1)
 var excluded_layers: texture_2d<u32>;
 
 struct GlobalIn {

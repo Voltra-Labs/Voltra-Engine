@@ -104,13 +104,11 @@ impl LightPass {
         let reads: Vec<Slot> = shadow_map.into_iter().collect();
         graph.add_pass("lights", &reads, &[map], move |encoder, views| {
             let group = shadow_map.map(|slot| self.shadows.bind_map(device, views.get(slot)));
-            let surface = normals.map(|view| self.normals.bind(device, view));
-            let excluded = layers.map(|view| self.layers.bind(device, view));
+            let surface = self.scene.bind(device, normals, layers);
             let mut pass = begin(encoder, views.get(map), wgpu::LoadOp::Clear(ambient));
-            let excluded = excluded.as_ref().unwrap_or(self.layers.empty());
             if let Some(buffer) = &global_buffer {
                 pass.set_pipeline(&self.global);
-                pass.set_bind_group(0, excluded, &[]);
+                pass.set_bind_group(0, &surface, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..3, 0..global_count);
             }
@@ -118,8 +116,7 @@ impl LightPass {
                 pass.set_pipeline(&self.accumulate);
                 pass.set_bind_group(0, camera, &[]);
                 pass.set_bind_group(1, group.as_ref().unwrap_or(self.shadows.empty()), &[]);
-                pass.set_bind_group(2, surface.as_ref().unwrap_or(self.normals.empty()), &[]);
-                pass.set_bind_group(3, excluded, &[]);
+                pass.set_bind_group(2, &surface, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..6, 0..count);
             }

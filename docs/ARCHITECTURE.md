@@ -3407,8 +3407,9 @@ that never touches them lights exactly as before.
   needed for the stand-in.
 - **The light tests it first**: `(light.layers & ~excluded) == 0` returns
   nothing before any falloff, shadow or normal work. The mask is an
-  instance attribute (`Uint32`), group 3 the buffer — the fourth and last
-  bind group WebGPU guarantees.
+  instance attribute (`Uint32`); the buffer shares group 2 with the
+  normals (`lights::scene_input`, binding 1) since stage 62, which freed
+  group 3 — the fourth and last WebGPU guarantees — for a light's cookie.
 - `SpriteRange::light_layers` splits batch runs; a tilemap's tiles carry
   the layer's on every path (cached chunks, chunks on the view's edge, the
   uncached mesh).

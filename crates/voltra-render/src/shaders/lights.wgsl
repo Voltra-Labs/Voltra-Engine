@@ -23,15 +23,16 @@ var<uniform> camera: Camera;
 @group(1) @binding(0)
 var shadow_map: texture_2d<f32>;
 
-// The scene's normals (`sprite_normals.wgsl`): `n * 0.5 + 0.5`, alpha 1
-// where something was drawn. A 1x1 zero stand-in when they were not, which
-// reads as facing the screen everywhere.
+// The scene's buffers, one group (`lights::scene_input`). Its normals
+// (`sprite_normals.wgsl`): `n * 0.5 + 0.5`, alpha 1 where something was
+// drawn; a 1x1 zero stand-in when they were not, which reads as facing the
+// screen everywhere.
 @group(2) @binding(0)
 var scene_normals: texture_2d<f32>;
 
 // The light layers each pixel is NOT on (`sprite_layers.wgsl`), so the zero
 // it is cleared to — and the 1x1 zero stand-in — is "on every layer".
-@group(3) @binding(0)
+@group(2) @binding(1)
 var excluded_layers: texture_2d<u32>;
 
 struct LightIn {
