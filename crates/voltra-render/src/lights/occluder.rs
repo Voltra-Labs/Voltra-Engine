@@ -30,6 +30,10 @@ pub struct Occluder {
     /// inside and the shadow starts behind it. Meaningless for an open line,
     /// which has no inside.
     pub self_shadow: bool,
+    /// The light layers whose lights it blocks: a light's shadow is cast by
+    /// it only if they share a bit. [`ALL_LIGHT_LAYERS`](super::ALL_LIGHT_LAYERS)
+    /// blocks every light, as every occluder did before layers.
+    pub layers: u32,
 }
 
 /// One edge, and the side of it that is out of the shape.
@@ -42,11 +46,12 @@ struct Edge {
     culled_front: Option<Vec2>,
 }
 
-/// One occluder's box and where its edges are.
+/// One occluder's box, its light layers and where its edges are.
 #[derive(Debug, Clone, PartialEq)]
 struct Shape {
     min: Vec2,
     max: Vec2,
+    layers: u32,
     edges: Range<usize>,
 }
 
@@ -115,6 +120,7 @@ impl Edges {
             shapes.push(Shape {
                 min,
                 max,
+                layers: occluder.layers,
                 edges: start..edges.len(),
             });
         }
@@ -126,18 +132,19 @@ impl Edges {
     }
 
     /// The edges that cast a shadow of a light at `centre` reaching
-    /// `radius`: those that come within its reach and are not a culled
-    /// front, as `(a, b)`.
+    /// `radius` on `layers`: those of occluders sharing one of its layers
+    /// that come within its reach and are not a culled front, as `(a, b)`.
     pub(super) fn casting(
         &self,
         centre: Vec2,
         radius: f32,
+        layers: u32,
     ) -> impl Iterator<Item = (Vec2, Vec2)> + '_ {
         self.shapes
             .iter()
             .filter(move |shape| {
                 let nearest = centre.clamp(shape.min, shape.max);
-                nearest.distance_squared(centre) < radius * radius
+                shape.layers & layers != 0 && nearest.distance_squared(centre) < radius * radius
             })
             .flat_map(move |shape| self.edges[shape.edges.clone()].iter())
             .filter(move |edge| {
@@ -181,11 +188,14 @@ mod tests {
             points,
             closed: true,
             self_shadow,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         }
     }
 
     fn casting(occluders: &[Occluder], centre: Vec2, radius: f32) -> Vec<(Vec2, Vec2)> {
-        Edges::new(occluders).casting(centre, radius).collect()
+        Edges::new(occluders)
+            .casting(centre, radius, crate::lights::ALL_LIGHT_LAYERS)
+            .collect()
     }
 
     #[test]
@@ -218,6 +228,7 @@ mod tests {
             points: vec![Vec2::new(1.0, -1.0), Vec2::new(1.0, 1.0)],
             closed: false,
             self_shadow: false,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         };
         assert_eq!(
             casting(std::slice::from_ref(&wall), Vec2::ZERO, 5.0).len(),
@@ -250,16 +261,19 @@ mod tests {
                 points: vec![Vec2::new(1.0, 0.0), Vec2::new(f32::NAN, 1.0)],
                 closed: false,
                 self_shadow: false,
+                layers: crate::lights::ALL_LIGHT_LAYERS,
             },
             Occluder {
                 points: vec![Vec2::ONE, Vec2::ONE, Vec2::ONE],
                 closed: true,
                 self_shadow: false,
+                layers: crate::lights::ALL_LIGHT_LAYERS,
             },
             Occluder {
                 points: Vec::new(),
                 closed: true,
                 self_shadow: false,
+                layers: crate::lights::ALL_LIGHT_LAYERS,
             },
         ];
         assert!(Edges::new(&occluders).is_empty());
@@ -275,6 +289,7 @@ mod tests {
             ],
             closed: true,
             self_shadow: false,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         };
         // No inside to cull against: all three edges (two along the line and
         // the one back) cast.
@@ -283,6 +298,7 @@ mod tests {
             points: vec![Vec2::new(1.0, -1.0), Vec2::new(1.0, 1.0)],
             closed: true,
             self_shadow: false,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         };
         assert_eq!(casting(&[pair], Vec2::ZERO, 5.0).len(), 1);
     }
@@ -292,5 +308,23 @@ mod tests {
         let mut closed = box_at_three(true, true);
         closed.points.push(closed.points[0]);
         assert_eq!(casting(&[closed], Vec2::ZERO, 10.0).len(), 4);
+    }
+
+    #[test]
+    fn an_occluder_blocks_only_the_lights_sharing_one_of_its_layers() {
+        let on = |layers| Occluder {
+            layers,
+            ..box_at_three(true, false)
+        };
+        let edges = Edges::new(&[on(0b10)]);
+        assert_eq!(edges.casting(Vec2::ZERO, 10.0, 0b01).count(), 0);
+        assert!(edges.casting(Vec2::ZERO, 10.0, 0b11).count() > 0);
+        let none = Edges::new(&[on(0)]);
+        assert_eq!(
+            none.casting(Vec2::ZERO, 10.0, crate::lights::ALL_LIGHT_LAYERS)
+                .count(),
+            0,
+            "on no layer, it blocks nothing"
+        );
     }
 }

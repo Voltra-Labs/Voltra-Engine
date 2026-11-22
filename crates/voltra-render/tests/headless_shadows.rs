@@ -126,6 +126,7 @@ fn block(self_shadow: bool) -> Occluder {
         ],
         closed: true,
         self_shadow,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     }
 }
 
@@ -261,6 +262,7 @@ fn every_quarter_turn_casts_and_so_does_the_seam_between_two() {
         ],
         closed: true,
         self_shadow: false,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     };
     let boxes = vec![
         small(0.5, 0.0),
@@ -292,6 +294,7 @@ fn a_soft_edge_on_the_seam_between_two_quarters_fades_both_ways() {
         points: vec![Vec2::new(0.3, 0.3), Vec2::new(0.6, -0.3)],
         closed: false,
         self_shadow: false,
+        layers: voltra_render::ALL_LIGHT_LAYERS,
     };
     let soft = PointLight {
         position: Vec2::ZERO,
@@ -321,4 +324,22 @@ fn a_soft_edge_on_the_seam_between_two_quarters_fades_both_ways() {
     assert!(above >= 3, "the fade reaches above the seam: {above}");
     assert!(below >= 2, "and below it: {below}");
     assert!(at(&pixels, 0.99, 0.5).r < 8, "deep in the shadow");
+}
+
+#[test]
+fn a_box_shadows_only_the_lamps_sharing_one_of_its_layers() {
+    let on = |layers| PointLight {
+        layers,
+        ..lamp(-0.75, HARD)
+    };
+    let picky = Occluder {
+        layers: 0b10,
+        ..block(false)
+    };
+    let Some((other, _)) = frame(&dark(vec![on(0b01)], vec![picky.clone()])) else {
+        return;
+    };
+    let (shared, _) = frame(&dark(vec![on(0b11)], vec![picky])).expect("adapter, found above");
+    assert!(at(&other, 0.6, 0.0).r > 240, "not on its layers: lit");
+    assert!(at(&shared, 0.6, 0.0).r < 8, "sharing one: in the shadow");
 }

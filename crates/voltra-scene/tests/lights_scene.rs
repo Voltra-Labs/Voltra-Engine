@@ -186,6 +186,7 @@ fn lights_world() -> World {
                 closed: false,
             },
             self_shadow: false,
+            ..ShadowCaster2D::default()
         },
     );
 

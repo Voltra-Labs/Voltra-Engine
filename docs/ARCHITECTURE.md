@@ -3207,11 +3207,12 @@ buffers in the fragment stage, which the lights deliberately avoid (they
 run on WebGL2).
 
 - Shadows from sprite alpha landed in stage 59, below.
-- **Not yet**: per-layer caster masks, contact-hardening penumbrae (a
+- **Not yet**: contact-hardening penumbrae (a
   softness that grows with distance from the occluder), merging a solid
   layer's boxes into one outline (each box casts on its own; its inner
   edges shadow the tiles behind the first row, as Godot's per-tile
-  occluders do). Editing a polygon's points landed in stage 55, below.
+  occluders do). Editing a polygon's points landed in stage 55, and
+  per-layer caster masks in 61a, below.
 
 Pinned by `headless_shadows.rs` (dark behind a box and lit beside it, the
 shadow widening along the near corners' lines; the box lit unless it
@@ -3431,12 +3432,20 @@ that never touches them lights exactly as before.
   so a frame that did not draw one reads defined texels on every backend.
 - The inspector folds the 32 toggles away (`light_layers` widget) on
   sprites, tilemaps and lights.
-- **Not yet**: the ambient per layer, shadow casters per layer (a caster
-  blocks every shadowed light today).
+- **Shadow casters (stage 61a)**: `ShadowCaster2D::layers` — Godot's
+  occluder light mask — default every bit and not written, so an untouched
+  scene shadows as before. `Occluder::layers` carries it; `Edges` keeps it
+  per shape and `casting` skips a shape sharing no bit with the light
+  before any geometry, so a light no caster of its layers reaches gets no
+  shadow-map rows at all. A caster on no layer blocks nothing. Inspector:
+  a folded "blocks light layers" toggle under the caster's shape.
+- **Not yet**: the ambient per layer.
 
 Pinned by `headless_light_layers.rs` (a layer-2 lamp lights the layer-2
 quad and the background, not the layer-1 quad; every layer lights both; no
-layer lights nothing), `headless_particles.rs` (a GPU emitter writes its
+layer lights nothing), `headless_shadows.rs` (a box on layer 2 shadows a
+lamp sharing it and not one that does not), the occluder and shadow-plan
+tests (no shared bit, no edge and no row), `headless_particles.rs` (a GPU emitter writes its
 own layers over the sprite under it, the sprite's elsewhere), instance,
 batch, text and particle unit tests.
 

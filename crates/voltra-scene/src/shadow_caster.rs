@@ -21,14 +21,34 @@ pub use silhouette::{prepare, silhouette_key, SpriteShapes};
 pub use starting::{starting_polygon, EDIT_CIRCLE_SIDES};
 
 /// Blocks the light of every [`PointLight2D`](crate::PointLight2D) that casts
-/// shadows.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+/// shadows and shares one of its light layers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShadowCaster2D {
     pub shape: CasterShape,
     /// Shadowed by its own near side. Off — the default — light reaches it
     /// and its shadow starts behind it: a wall's lit face stays lit.
     pub self_shadow: bool,
+    /// The light layers whose lights it blocks — Godot's occluder light
+    /// mask: a light's [`layers`](crate::PointLight2D::layers) must share a
+    /// bit with these for this to shadow it. Every bit — the default, and
+    /// not written — blocks every light.
+    #[serde(
+        default = "crate::light::all_light_layers",
+        skip_serializing_if = "crate::light::is_all_light_layers"
+    )]
+    pub layers: u32,
+}
+
+impl Default for ShadowCaster2D {
+    /// Its collider's shape, not self-shadowed, blocking every light.
+    fn default() -> Self {
+        Self {
+            shape: CasterShape::default(),
+            self_shadow: false,
+            layers: crate::light::all_light_layers(),
+        }
+    }
 }
 
 /// What a caster's outline is.
@@ -76,11 +96,14 @@ mod tests {
                 closed: true,
             },
             self_shadow: true,
+            layers: 0b100,
         };
         let text = ron::to_string(&polygon).expect("writes");
         assert_eq!(
             ron::from_str::<ShadowCaster2D>(&text).expect("reads"),
             polygon
         );
+        let plain = ron::to_string(&ShadowCaster2D::default()).expect("writes");
+        assert!(!plain.contains("layers"), "{plain}");
     }
 }
