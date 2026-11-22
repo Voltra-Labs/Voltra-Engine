@@ -7,6 +7,7 @@ mod animation;
 mod animation_player;
 mod audio_source;
 mod camera;
+mod character;
 mod collision;
 mod delete;
 mod global_light;
@@ -208,6 +209,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.separator();
                     claim = claim.or(collision::show(ui, frame.world, entity));
                 }
+                claim = claim.or(character::show(ui, frame.world, entity));
                 // Keyed off the shape it would take — a collider, a solid
                 // layer's boxes, a sprite's quad — or off the caster itself.
                 let has_sprite = frame.world.get::<Sprite>(entity).is_some();

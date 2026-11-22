@@ -15,6 +15,9 @@
 //!
 //! Bodies at rest sleep, by island, and wake when disturbed — [`sleep`].
 //!
+//! [`query`] asks the world without stepping it — rays, points, boxes and
+//! shape casts — and [`character`] moves a game's character with them.
+//!
 //! What is not simulated yet, so that its absence is not mistaken for a bug:
 //! **continuous collision** (a fast enough body tunnels)
 //! and **rolling resistance** (a circle on a floor rolls forever). Mass ratios
@@ -22,6 +25,7 @@
 //! than holding it, which is the ordinary limit of an impulse solver.
 
 pub mod broad;
+pub mod character;
 pub mod clock;
 pub mod debug;
 pub mod events;
@@ -37,11 +41,12 @@ pub mod step;
 pub mod world;
 
 pub use broad::{candidate_pairs, sweep, Sweep};
+pub use character::{move_and_slide, Slide};
 pub use clock::PhysicsClock;
 pub use events::{CollisionEvent, Touch, Touching};
 pub use integrate::{integrate_positions, integrate_velocities};
 pub use narrow::{Contact, Manifold, ManifoldPoint};
-pub use query::{QueryFilter, RayHit};
+pub use query::{QueryFilter, RayHit, ShapeHit};
 pub use sleep::{Sleep, SleepParams};
 pub use solver::{ImpulseCache, Softness, SolverBodies, SolverParams};
 pub use step::{step, step_sleeping, Overlaps};
