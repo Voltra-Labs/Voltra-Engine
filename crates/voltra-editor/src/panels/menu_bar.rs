@@ -138,6 +138,13 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             for entity in previous {
                                 frame.world.despawn(entity);
                             }
+                            // Instances saved with an older copy of their
+                            // prefab open in step with it.
+                            voltra_scene::prefab::sync_all(
+                                frame.world,
+                                &editor.registry,
+                                frame.prefabs,
+                            );
                             // The world just changed under every handle in
                             // it: entities from the old scene are gone and
                             // the new ones carry paths nothing has resolved

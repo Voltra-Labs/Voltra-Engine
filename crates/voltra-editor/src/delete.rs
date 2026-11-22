@@ -3,7 +3,7 @@
 
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
-use voltra_scene::{hierarchy, ComponentRegistry, SceneId};
+use voltra_scene::{hierarchy, prefab, ComponentRegistry, SceneId};
 
 use crate::editor::Editor;
 use crate::selection::Selection;
@@ -36,11 +36,19 @@ fn delete(
     // the entry — an undo that revived a parent alone would leave its
     // children deleted for good. A child selected with its parent is named
     // twice; the history keys by id, so once is what it records.
-    let going: Vec<SceneId> = roots
+    let mut going: Vec<SceneId> = roots
         .iter()
         .flat_map(|&root| std::iter::once(root).chain(hierarchy::descendants(world, root)))
         .filter_map(|e| world.get::<SceneId>(e).copied())
         .collect();
+    // A part deleted from its instance is remembered on the instance's root,
+    // so the next sync does not spawn it back: that root is in the entry too.
+    going.extend(
+        roots
+            .iter()
+            .filter_map(|&root| prefab::instance_root(world, root).filter(|&r| r != root))
+            .filter_map(|r| world.get::<SceneId>(r).copied()),
+    );
     // Explicit rather than watched: the watcher's `after` is read at the end
     // of the frame from entities that no longer exist, which is right, but
     // the selection has to be recorded as it was *before* the despawn
@@ -55,6 +63,7 @@ fn delete(
     for root in roots {
         // A child selected with its parent went with it already.
         if world.is_alive(root) {
+            prefab::note_removed(world, root);
             hierarchy::despawn_recursive(world, root);
         }
     }
@@ -147,5 +156,43 @@ mod tests {
             &mut Selection::default(),
         );
         assert!(history.is_empty());
+    }
+
+    #[test]
+    fn a_part_deleted_from_its_instance_is_remembered_in_the_same_entry() {
+        use voltra_assets::AssetPath;
+        use voltra_scene::{PrefabInstance, PrefabPart};
+        let registry = ComponentRegistry::with_defaults();
+        let mut history = History::default();
+        let mut host = Host(World::new());
+        let root = spawn(&mut host.0, 0.0);
+        let part = spawn(&mut host.0, 1.0);
+        hierarchy::set_parent(&mut host.0, part, root).expect("no cycle");
+        host.0.insert(
+            root,
+            PrefabInstance::new(AssetPath::new("coin.ron").expect("valid")),
+        );
+        let record = SceneId::new();
+        host.0.insert(part, PrefabPart::new(record));
+        let root_id = *host.0.get::<SceneId>(root).expect("an id");
+
+        let mut selection = Selection::default();
+        selection.add(part);
+        delete(&mut host.0, &registry, &mut history, &mut selection);
+        let removed = |world: &World| {
+            entity_with_id(world, root_id)
+                .and_then(|r| world.get::<PrefabInstance>(r).map(|l| l.removed.clone()))
+                .expect("the root stays")
+        };
+        assert_eq!(removed(&host.0), [record]);
+
+        let mut gizmo = Gizmo::default();
+        let ctx = UndoContext {
+            registry: &registry,
+            selected: &mut selection,
+            gizmo: &mut gizmo,
+        };
+        assert!(history.undo(ctx, &mut host));
+        assert!(removed(&host.0).is_empty(), "undone with the delete");
     }
 }

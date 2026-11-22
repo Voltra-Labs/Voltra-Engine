@@ -15,11 +15,13 @@
 //! despawns what it lost. See `sync.rs`.
 
 mod adopt;
+mod apply;
 mod compare;
 mod cycle;
 mod fragment;
 mod instances;
 mod link;
+mod overrides;
 mod store;
 mod sync;
 mod write;
@@ -34,10 +36,12 @@ use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 use crate::transform::Transform;
 
+pub use apply::{apply, link};
 pub use cycle::reaches;
 pub use fragment::fragment;
 pub use instances::{sync_all, sync_source};
 pub use link::{PrefabInstance, PrefabPart};
+pub use overrides::{instance_root, note_removed, refresh_overrides, revert, revert_instance};
 pub use store::Prefabs;
 pub use sync::{sync, SyncReport};
 pub use write::{write, WriteError};

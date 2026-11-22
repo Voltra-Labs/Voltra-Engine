@@ -2186,8 +2186,9 @@ Version is checked once at read, not per spawn.
 - *Roots are placed by `at`*, composed in front of their own transform; a
   translation-only `at` is an addition, so an authored rotation and scale are
   not put through a matrix decomposition for nothing. Children stay local.
-- *Instantiate and forget.* An instance is plain entities. Since 24b each
-  root carries an inert `PrefabInstance { source }` (below); nothing reads it.
+- *Instantiate and forget* — until stage 64, which keeps instances in step
+  with their file (below). Since 24b each root carries a
+  `PrefabInstance { source }`, and since 64 every entity a `PrefabPart`.
 
 **The tick spawns, the loop resolves.** `Tick::spawn` cannot resolve a sprite's
 texture — that needs the GPU, which a tick is deliberately not handed — so it
@@ -2199,18 +2200,17 @@ prefab store is lazy and needs no window, so headless runs spawn too;
 own components (the platformer's `Coin`) ride in a prefab.
 
 **Hot reload** reaches prefabs through the watcher, which now treats any `.ron`
-that is not `*.atlas.ron` as an asset event. Existing instances are untouched —
-they have forgotten the file — and the next spawn gets the edit.
+that is not `*.atlas.ron` as an asset event. Since stage 64 existing instances
+take the edit too, but for what they override; the next spawn gets it whole.
 
 ### The instance link, and authoring prefabs in the editor
 
 Stage 24b.
 
-**`PrefabInstance { source: AssetPath }` on every instance root, recorded and
-inert.** Unity's `m_SourcePrefab`, Godot's `instance=ExtResource(...)`. Nothing
-reads it back — overrides, "apply to prefab" and propagation are their own
-stage — but that stage must find every scene saved before it already saying
-what each instance came from; added later, the link would have to be guessed.
+**`PrefabInstance { source: AssetPath }` on every instance root.** Unity's
+`m_SourcePrefab`, Godot's `instance=ExtResource(...)`. Recorded and inert until
+stage 64 read it back (below) — and that stage found every scene saved before
+it already saying what each instance came from.
 `Prefabs::load` stamps the read path on the `Prefab` (`with_source`), and
 `spawn` writes the link on each root, *replacing* any link the root's record
 carried: a root is an instance of what it was just spawned from. A child's own
@@ -3727,6 +3727,91 @@ trip), `pick::region` tests (wholly inside, origins, HUD never, a layer
 by its tiles, topmost last, outlines), `delete::tests` (one entry for the
 set and its children, undone back selected in order; nothing selected
 records nothing), and the undo and play tests, now over sets.
+
+### An instance follows its file, but for what it overrides
+
+Stage 64. Unity's prefab propagation, by component rather than by field.
+
+**Which record is which.** Every entity a prefab spawn makes carries
+`PrefabPart { record, overridden }`: the id of its record in the file (its own
+`SceneId` is fresh per instance) and the components, by registered name, the
+instance has made its own. Unity's corresponding source object, by id; Godot
+matches nodes by path instead, which a rename breaks. The root's
+`PrefabInstance` gains `removed`: records the instance deleted from itself.
+
+**`prefab::sync(world, registry, prefab, root)`** puts every tracked component
+a part does not override back to the file's value — set where it differs,
+taken off where the file no longer has one — spawns the records the file
+gained (under their parent record's part), and despawns the parts whose record
+it lost, with what was added under them. Untouched: the instance root's
+`Transform` (its placement), the structure (`Parent`, the link, the part), an
+entity with no part (added to the instance), a component this build does not
+know, and a record the instance deleted. Values are compared **as their types
+write them** — `ComponentRegistry::normalize` reads a value as its type and
+writes it back — because a file is pretty-printed and a world's record is not.
+
+**When.** Once when the world first meets the prefab store (a game's start,
+`App::resumed`), after every scene change or additive load, on Scene ▸ Open,
+and for one prefab's instances when it hot reloads. A prefab that will not
+read leaves its instances as they are rather than despawning every part.
+
+**Overrides are recorded when made, as differences.** The editor calls
+`prefab::refresh_overrides` on the selection each frame, just before the
+history takes the frame's after side, so an edit and the override it makes are
+one entry and undo together. The set becomes exactly what differs from the
+record *now*: an edit typed back to the prefab's value stops being one.
+Recorded rather than worked out at sync time, because by then the file has
+changed and every component the edit did not touch would look overridden.
+
+**Instances saved before parts are adopted** on their first sync: the root is
+matched to the file's root of the same name (or its first), each child to a
+child record of the same name under the matched parent, and everything that
+differs from the file now becomes an override — so nothing they were given
+changes, and every later edit to the file reaches them. A record nothing
+matched is taken as deleted from the instance.
+
+**Editor.**
+- The inspector's Prefab section names the file, lists what the entity
+  overrides with a Revert each, and on the root offers **Apply to prefab**
+  and **Revert instance**.
+- Apply (`prefab::apply`) writes the instance over its file: each entity under
+  its record id (an added one becomes a record of its own), parents by
+  record, no links or parts, and the file's own root transform kept (Unity
+  leaves the root's position out). It is refused if the file would contain
+  itself; otherwise every instance of the file is synced. The scene's side
+  of it is one undo entry; the file stays written, as a created prefab does.
+- Delete on a part records it in `removed`, in the same entry.
+- Create prefab from selection links every entity as a part
+  (`prefab::link`).
+
+Rejected:
+- **Field-level overrides.** Comparing fields needs a value tree that keeps
+  enums, which `ron::Value` does not; components are what the inspector
+  shows, so they are what an author overrides.
+- **Storing a copy of the prefab in each instance as the base of a
+  three-way merge.** It doubles every scene, and an edit made while the
+  editor was closed needs no base when the overrides are already recorded.
+
+**Not yet.**
+- Nested instances are parts of the outer prefab; an edit to the inner file
+  reaches them only once the outer one is saved again.
+- Moving a part out of its instance is not recorded: a sync spawns its record
+  back.
+- Overrides on entities edited by something other than the selection — a
+  tick, a script — are not recorded until they are selected.
+
+Pinned by:
+- `prefab::sync` tests: a fresh instance already in step through pretty text;
+  an edit reaching it but not its placement; overrides and own components
+  kept; parts lost and deleted; adoption without a change; a broken file left
+  alone; `sync_source` reaching only its prefab.
+- `prefab::overrides` tests: an edit is an override until taken back; one
+  component and all reverted; a deleted part remembered and brought back by a
+  whole revert; apply writing over the file with the others following and
+  the root's place kept; a linked selection already in step.
+- `delete::tests`: a deleted part noted in the same entry.
+- `app::scenes::tests`: a scene saved with an older copy of a prefab arriving
+  in step.
 
 ### wgpu 30 API notes
 

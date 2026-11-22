@@ -15,6 +15,7 @@ mod name;
 mod parallax;
 mod particles;
 mod path_field;
+mod prefab;
 mod shadow_caster;
 mod sorting_layer;
 mod sprite;
@@ -77,6 +78,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     );
                 }
                 ui.separator();
+                prefab::show(editor, ui, frame, entity);
                 if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
                     claim = transform::show(ui, transform);
                 }

@@ -119,6 +119,9 @@ impl Editor {
 
         // Last, so it sees everything every panel did.
         if editing {
+            // Before the history captures the frame's after side, so an edit
+            // and the override it makes are one entry, undone together.
+            crate::instance::refresh_overrides(self, frame);
             let view = SceneView {
                 world: frame.world,
                 registry: &self.registry,

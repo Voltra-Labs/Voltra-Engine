@@ -8,7 +8,7 @@
 
 use voltra_assets::AssetPath;
 use voltra_core::UiFrame;
-use voltra_scene::{prefab, Name, PrefabInstance, SceneId};
+use voltra_scene::{prefab, Name, SceneId};
 
 use crate::editor::Editor;
 use crate::play::PlayState;
@@ -66,13 +66,18 @@ pub(crate) fn create_from_selection(editor: &mut Editor, frame: &mut UiFrame<'_>
     log::info!("created prefab {}", target.as_str());
     editor.assets.refresh();
 
+    // The root and everything under it become parts of the new instance.
+    let linked: Vec<SceneId> = std::iter::once(root)
+        .chain(voltra_scene::hierarchy::descendants(frame.world, root))
+        .filter_map(|e| frame.world.get::<SceneId>(e).copied())
+        .collect();
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
         selected: vec![id],
     };
-    editor.history.begin("Create prefab", view, [id]);
-    frame.world.insert(root, PrefabInstance::new(target));
+    editor.history.begin("Create prefab", view, linked);
+    prefab::link(frame.world, root, target);
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
