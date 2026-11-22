@@ -16,6 +16,8 @@ use std::ops::Range;
 
 use glam::Vec2;
 
+use super::reach::distance_to_segment;
+
 /// A shape that blocks light, in the world.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Occluder {
@@ -158,17 +160,6 @@ fn twice_signed_area(points: &[Vec2]) -> f32 {
         .zip(points.iter().cycle().skip(1))
         .map(|(a, b)| a.perp_dot(*b))
         .sum()
-}
-
-fn distance_to_segment(p: Vec2, a: Vec2, b: Vec2) -> f32 {
-    let along = b - a;
-    let length_squared = along.length_squared();
-    let t = if length_squared > 0.0 {
-        ((p - a).dot(along) / length_squared).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    p.distance(a + along * t)
 }
 
 #[cfg(test)]

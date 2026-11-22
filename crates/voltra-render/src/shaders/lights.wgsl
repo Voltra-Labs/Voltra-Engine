@@ -1,7 +1,7 @@
 // Built-in shader: 2D point lights, added onto the frame's light map.
 //
-// `vs_light` / `fs_light` draw each point light as a quad around it, one
-// instance per light, through the world camera, added onto a light map
+// `vs_light` / `fs_light` draw each point light as a quad over the box it
+// reaches (its square, or a spot light's cone's), one instance per light, through the world camera, added onto a light map
 // cleared to the ambient colour. Group 0 must match `CameraBinding`.
 // `lights_composite.wgsl` multiplies the scene by the map.
 //
@@ -44,8 +44,11 @@ struct LightIn {
     // direction.xy, cos of the outer half-angle, cos of the inner; a point
     // light's edges are below -1, so every direction is in
     @location(3) cone: vec4<f32>,
+    // the box it reaches, in radii around its centre: min.xy, max.xy — the
+    // square for a point light, a spot light's cone's box
+    @location(4) extent: vec4<f32>,
     // the light layers it lights
-    @location(4) layers: u32,
+    @location(5) layers: u32,
 }
 
 struct LightOut {
@@ -63,16 +66,16 @@ struct LightOut {
 
 @vertex
 fn vs_light(@builtin(vertex_index) index: u32, light: LightIn) -> LightOut {
-    // Two triangles: corners 0 1 2, 2 1 3 of the unit square.
+    // Two triangles: corners 0 1 2, 2 1 3 of the box it reaches.
     var corners = array<vec2<f32>, 6>(
-        vec2<f32>(-1.0, -1.0),
-        vec2<f32>(1.0, -1.0),
-        vec2<f32>(-1.0, 1.0),
-        vec2<f32>(-1.0, 1.0),
-        vec2<f32>(1.0, -1.0),
+        vec2<f32>(0.0, 0.0),
+        vec2<f32>(1.0, 0.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(0.0, 1.0),
+        vec2<f32>(1.0, 0.0),
         vec2<f32>(1.0, 1.0),
     );
-    let corner = corners[index];
+    let corner = mix(light.extent.xy, light.extent.zw, corners[index]);
     let world = light.place.xy + corner * light.place.z;
     var out: LightOut;
     out.position = camera.view_proj * vec4<f32>(world, 0.0, 1.0);

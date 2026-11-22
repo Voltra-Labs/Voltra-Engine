@@ -228,3 +228,40 @@ fn a_soft_cone_fades_towards_its_edge() {
     // sample sits off it.
     assert!(at(&hard, 50, 32).r.abs_diff(at(&soft, 50, 32).r) <= 2);
 }
+
+#[test]
+fn a_wide_spot_light_draws_round_behind_its_centre() {
+    // Three quarters of a turn pointing up: its quad is the box the cone
+    // reaches, which runs below the centre on both sides. Straight down is
+    // the quarter it leaves out.
+    let wide = PointLight {
+        cone: Some(Cone {
+            direction: Vec2::Y,
+            angle: 1.5 * std::f32::consts::PI,
+            softness: 0.0,
+        }),
+        ..spot(0.0)
+    };
+    let Some((pixels, _)) = frame(&Lighting {
+        lights: vec![wide],
+        ..dim()
+    }) else {
+        return;
+    };
+    let (unlit, _) = frame(&dim()).expect("adapter, found above");
+    // The corners above are inside this cone; the ambient is a frame with no
+    // light in it.
+    let ambient = at(&unlit, 1, 1).r;
+    // Either side, about 17° below the horizontal: inside its edges, which
+    // are 45° below it.
+    assert!(
+        at(&pixels, 12, 38).r > ambient + 20,
+        "left, behind the centre"
+    );
+    assert!(
+        at(&pixels, 52, 38).r > ambient + 20,
+        "right, behind the centre"
+    );
+    // Straight below: outside.
+    assert!(at(&pixels, 32, 52).r.abs_diff(ambient) <= 3, "below");
+}

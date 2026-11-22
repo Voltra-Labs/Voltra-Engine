@@ -3136,8 +3136,8 @@ asked for lighting does not go dark when someone drops a light into it.
   is never lit.
 - Instance data is a vertex buffer, not storage: lights work on adapters
   without vertex-stage storage (WebGL2), unlike GPU particles.
-- Shadows landed in stage 53, spot lights in 56, normal maps in 57 and
-  light layers in 58, below.
+- Shadows landed in stage 53, spot lights in 56, normal maps in 57,
+  light layers in 58 and culling by the cone in 60a, below.
 
 Pinned by `headless_lights.rs` (ambient alone far away, lit past white at
 the lamp, fading between, nothing outside the radius; unlit makes no
@@ -3300,11 +3300,9 @@ light. `None` is the default and not written.
   tuned cone while off, as the shadows toggle does.
 - A cone of a full turn or more is sent as a point light's edges; a narrow
   one keeps its inner edge at most 1, so its middle is fully lit.
-- **Not yet**: culling a spot light by its cone rather than its circle —
-  it is gathered, drawn as a whole quad and given a full shadow-map row
-  even when it points away from the view (the fragments outside the cone
-  are cheap; the row is not free) — and cookies (a texture shaping the
-  light, Godot's `PointLight2D` texture).
+- Culled by its cone since stage 60a, below.
+- **Not yet**: cookies (a texture shaping the light, Godot's
+  `PointLight2D` texture).
 
 Pinned by `headless_lights.rs` (lit ahead and inside the edge, ambient
 behind and beside; a soft edge fading where a hard one does not), the
@@ -3464,6 +3462,49 @@ traced from nothing), the store's (traced on demand, forgotten on
 reload, a missing file traces nothing) and the scene's (the outline lands
 on the drawn quad, mirrored when flipped; nothing without silhouettes, a
 texture or the frame it asks for). The shadow from an occluder is pinned by `headless_shadows.rs`.
+
+### A light is culled by what it reaches, a spot light by its sector
+
+Stage 60a. Until it, a spot light was its disc everywhere outside the
+fragment shader: gathered when the disc touched the view, drawn as the
+disc's square, and given four shadow-map rows when any edge came within its
+radius — even aimed away from all of it. `voltra_render::Reach` (from
+`PointLight::reach`, `None` for a light that gives nothing) is the disc, or
+the sector between the cone's outer edges, and every one of those three
+asks it:
+
+- **The view**: `light::gather` keeps a light whose `Reach::bounds` meets
+  the view. A sector's box is its centre, its two edges' ends and the
+  disc's extreme along each axis the cone faces — so a cone wider than a
+  half turn still reaches round behind its centre.
+- **The quad**: the light instance carries that box as fractions of its
+  radius and `vs_light` draws over it instead of the square; the fragment
+  shader is unchanged (`local` is still in radii from the centre).
+- **The shadow map**: an edge is drawn into a light's rows only if it comes
+  into the reach (`Reach::touches_segment`: an end inside, or crossing an
+  edge or the arc); a light with no such edge gets no rows. The cone is
+  opened by the shadow's softness first, because the soft edge's taps look
+  that far past where the light shines — without it a shadow near the
+  cone's edge would lose its penumbra on the outer side. A blocking edge
+  must cross the segment from the light to the pixel, which lies inside the
+  cone whatever its width, so nothing that can shadow a lit pixel is left
+  out.
+- The cone used is the one the shader lights to (the sanitised outer
+  edge), opened by 0.001 rad so a direction on the edge rounds in.
+
+Rejected: fewer rows for a narrow cone (it would need a per-light row count
+and a shader that knows which quarters a light owns — worth it when a
+profile shows the map's height mattering, not before); culling by a
+bounding circle around the sector (a narrow cone's circle is barely smaller
+than its disc).
+
+Pinned by `reach::tests` (boxes of narrow, quarter, wide, turned and
+full-turn cones; segments ahead, behind, beside, across an edge, across the
+arc only, through the light; widening), the shadow plan's (aimed away from
+the only wall, no row; the softness bringing in an edge just past the
+cone), the gather's (a spot light whose disc reaches the view but whose cone
+does not is left out) and `headless_lights.rs` (a three-quarter cone lights
+both sides behind its centre and not below it).
 
 ### wgpu 30 API notes
 

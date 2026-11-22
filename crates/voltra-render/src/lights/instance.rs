@@ -17,6 +17,9 @@ pub(super) struct LightInstance {
     /// direction.xy, cos of the outer half-angle, cos of the inner; a point
     /// light's are below any cosine, so every direction is inside
     cone: [f32; 4],
+    /// the box it reaches, as fractions of its radius around its centre:
+    /// min.xy, max.xy — the quad drawn, the square for a point light
+    extent: [f32; 4],
     /// the light layers it lights
     layers: u32,
 }
@@ -28,9 +31,8 @@ impl PointLight {
     /// What the shader draws, or `None` for a light that gives nothing.
     /// `row` is the light's row in the shadow map; `None` draws it unshadowed.
     pub(super) fn instance(&self, row: Option<u32>) -> Option<LightInstance> {
-        if !self.gives_light() {
-            return None;
-        }
+        let reach = self.reach()?;
+        let (min, max) = reach.local_bounds();
         let color = self.color.map(|c| c.max(0.0) * self.intensity);
         let shadow = match (row, self.casts()) {
             // Rows are counted in the thousands at most (the texture's height
@@ -59,6 +61,7 @@ impl PointLight {
             ],
             shadow,
             cone,
+            extent: [min.x, min.y, max.x, max.y],
             layers: self.layers,
         })
     }
@@ -90,6 +93,23 @@ mod tests {
         let i = lamp().instance(None).expect("gives light");
         assert_eq!(i.color[..3], [2.0, 1.0, 0.0]);
         assert_eq!(i.place, [0.0, 0.0, 3.0, 2.0]);
+        assert_eq!(i.extent, [-1.0, -1.0, 1.0, 1.0], "a point light's square");
+    }
+
+    #[test]
+    fn a_spot_light_draws_only_the_box_its_cone_reaches() {
+        let spot = PointLight {
+            cone: Some(Cone {
+                direction: Vec2::NEG_X,
+                angle: 0.5,
+                softness: 0.0,
+            }),
+            ..lamp()
+        };
+        let [x0, y0, x1, y1] = spot.instance(None).expect("gives light").extent;
+        assert_eq!(x0, -1.0, "out to the radius ahead");
+        assert!(x1.abs() < 1e-6, "back to the centre, not behind it: {x1}");
+        assert!(y0 > -0.3 && y1 < 0.3, "narrow across: {y0} {y1}");
     }
 
     #[test]

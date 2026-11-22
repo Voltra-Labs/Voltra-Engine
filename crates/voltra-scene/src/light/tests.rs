@@ -48,6 +48,39 @@ fn lights_in_reach_of_the_view_are_gathered_and_the_rest_left_out() {
 }
 
 #[test]
+fn a_spot_light_aimed_away_from_the_view_is_left_out() {
+    let mut world = World::new();
+    lit_camera(&mut world, Some([0.1; 3]));
+    // Just off the view's right edge, its disc reaching back in.
+    let toward = lamp(&mut world, Vec2::new(12.0, 0.0));
+    let away = lamp(&mut world, Vec2::new(12.0, 5.0));
+    let dark = lamp(&mut world, Vec2::ZERO);
+    for entity in [toward, away] {
+        let light = world.get_mut::<PointLight2D>(entity).expect("a light");
+        light.cone = Some(LightCone::default());
+    }
+    // Turned half a turn: shining left, back into the view.
+    world.insert(
+        toward,
+        Transform {
+            rotation: std::f32::consts::PI,
+            ..Transform::from_translation(Vec2::new(12.0, 0.0))
+        },
+    );
+    world
+        .get_mut::<PointLight2D>(dark)
+        .expect("a light")
+        .intensity = 0.0;
+    let at: Vec<Vec2> = gather(&world, VIEW.0, VIEW.1, None)
+        .lights
+        .iter()
+        .map(|l| l.position)
+        .collect();
+    assert_eq!(at.len(), 1, "{at:?}");
+    assert!((at[0] - Vec2::new(12.0, 0.0)).length() < 1e-4, "{at:?}");
+}
+
+#[test]
 fn a_light_follows_its_parent_and_scales_with_it() {
     let mut world = World::new();
     lit_camera(&mut world, Some([0.1; 3]));

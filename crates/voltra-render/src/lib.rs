@@ -30,7 +30,8 @@ pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
 pub use light_layers::LayerPass;
 pub use lights::{
-    Cone, LightPass, Lighting, Occluder, PointLight, Shadow, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
+    Cone, LightPass, Lighting, Occluder, PointLight, Reach, Shadow, ALL_LIGHT_LAYERS,
+    DEFAULT_LIGHT_LAYERS,
 };
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
