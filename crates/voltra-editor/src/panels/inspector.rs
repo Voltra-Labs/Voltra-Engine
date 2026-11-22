@@ -229,38 +229,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
                 // Every drawable's named layer, under its own section's
                 // fields: one rule, one widget, wherever the component is.
-                if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
-                    claim = claim.or(sorting_layer::show(
-                        ui,
-                        "sprite",
-                        &mut sprite.sorting_layer,
-                        frame.sorting_layers,
-                    ));
-                }
-                if let Some(map) = frame.world.get_mut::<Tilemap>(entity) {
-                    claim = claim.or(sorting_layer::show(
-                        ui,
-                        "tilemap",
-                        &mut map.sorting_layer,
-                        frame.sorting_layers,
-                    ));
-                }
-                if let Some(text) = frame.world.get_mut::<Text>(entity) {
-                    claim = claim.or(sorting_layer::show(
-                        ui,
-                        "text",
-                        &mut text.sorting_layer,
-                        frame.sorting_layers,
-                    ));
-                }
-                if let Some(emitter) = frame.world.get_mut::<ParticleEmitter>(entity) {
-                    claim = claim.or(sorting_layer::show(
-                        ui,
-                        "particles",
-                        &mut emitter.sorting_layer,
-                        frame.sorting_layers,
-                    ));
-                }
+                claim = claim.or(sorting_layer::show_for(
+                    ui,
+                    frame.world,
+                    entity,
+                    frame.sorting_layers,
+                ));
                 // A field held down or focused keeps one entry open for the
                 // whole edit, the way a gizmo drag does. Collected and applied
                 // here rather than pushed from inside the widget helpers: they
