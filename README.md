@@ -319,6 +319,7 @@ privileged and plain `cargo build` covers everything.
 | 66b | Timeline: tracks, keys on a time strip, eases, preview pose, Save/Revert | done |
 | 67 | Shape casts; `CharacterBody2D` and `move_and_slide`: slopes, steps, snap | done |
 | 68 | One-way platforms for bodies and characters; characters ride moving floors | done |
+| 69 | Camera rig: follow (smoothing, dead zone, look-ahead, bounds) and trauma shake | done |
 
 ## Contributing
 

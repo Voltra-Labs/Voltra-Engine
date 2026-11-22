@@ -243,11 +243,10 @@ fn spawn_copy(
         }
     }
 
-    // A joint between two bodies of the copy joins the copy's two.
+    // A reference between two entities of the copy — a joint, a camera's
+    // target — names the copy's two.
     for &entity in &entities {
-        if let Some(joint) = world.get_mut::<crate::Joint2D>(entity) {
-            joint.remap(|id| renamed.get(&id).copied());
-        }
+        registry.remap_refs(world, entity, &|id| renamed.get(&id).copied());
     }
 
     if let Some(at) = at {

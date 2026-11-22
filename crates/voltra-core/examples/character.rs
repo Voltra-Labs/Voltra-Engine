@@ -1,7 +1,9 @@
 //! A character moved by `move_and_slide`: walls stop it, slopes are walked
 //! up or slid down by their angle, a floor of tiles has no seams, a low step
 //! is stepped onto, a jump ends on a ceiling, a one-way platform is jumped
-//! up through, and a lift — an animation clip — carries it.
+//! up through, a lift — an animation clip — carries it, and the camera
+//! follows with slack, a lead and the level's bounds, and shakes on a hard
+//! landing.
 //!
 //! Run it with `cargo run -p voltra-core --example character`. `A`/`D` or
 //! the arrow keys walk, `Space` jumps.
@@ -10,10 +12,13 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use voltra_assets::AssetPath;
-use voltra_core::{move_and_slide, App, Tick, WindowConfig};
+use voltra_core::{move_and_slide, App, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{AnimationPlayer, Camera, CharacterBody2D, Collider, OneWay, Sprite, Transform};
+use voltra_scene::{
+    AnimationPlayer, Camera, CameraFollow2D, CameraShake, CharacterBody2D, Collider, FollowBounds,
+    OneWay, SceneId, Sprite, Transform,
+};
 
 /// World units per second at full tilt.
 const WALK_SPEED: f32 = 3.5;
@@ -21,8 +26,8 @@ const WALK_SPEED: f32 = 3.5;
 const JUMP_SPEED: f32 = 6.5;
 /// World units per second squared, down.
 const GRAVITY: f32 = 18.0;
-/// How much of the way to the character the camera closes per second.
-const CAMERA_FOLLOW: f32 = 5.0;
+/// A landing faster than this, downwards, shakes the camera.
+const HARD_LANDING: f32 = 9.0;
 
 fn main() {
     voltra_core::logging::init(false);
@@ -31,10 +36,7 @@ fn main() {
         ..Default::default()
     });
     let me = spawn_level(&mut app);
-    let camera = app.world.spawn();
-    app.world
-        .insert(camera, Transform::from_translation(Vec2::new(0.0, 1.0)));
-    app.world.insert(camera, Camera::new(4.0));
+    let camera = spawn_camera(&mut app, me);
 
     // A jump pressed this frame, spent by the next step that can.
     let jump = Rc::new(Cell::new(false));
@@ -47,7 +49,6 @@ fn main() {
             if tick.input.action("jump").pressed() {
                 asked.set(true);
             }
-            follow(tick, camera, me);
         })
         .with_fixed_update(move |tick| {
             let grounded = tick
@@ -68,8 +69,18 @@ fn main() {
                     velocity += body.contact.platform_velocity;
                 }
             }
+            let falling = velocity.y;
             match move_and_slide(tick.world, me, velocity, tick.delta) {
-                Some(slide) => velocity = slide.velocity,
+                Some(slide) => {
+                    // A hard landing knocks the camera, by how hard.
+                    let landed = slide.contact.on_floor && !grounded;
+                    if landed && falling < -HARD_LANDING {
+                        if let Some(shake) = tick.world.get_mut::<CameraShake>(camera) {
+                            shake.add_trauma((-falling - HARD_LANDING) * 0.1 + 0.3);
+                        }
+                    }
+                    velocity = slide.velocity;
+                }
                 None => log::error!("the character lost its body or collider"),
             }
         })
@@ -182,14 +193,27 @@ fn spawn_level(app: &mut App) -> Entity {
     me
 }
 
-/// Eases the camera towards the character, per frame.
-fn follow(tick: &mut Tick<'_>, camera: Entity, target: Entity) {
-    let Some(&Transform { translation, .. }) = tick.world.get::<Transform>(target) else {
-        return;
-    };
-    let Some(transform) = tick.world.get_mut::<Transform>(camera) else {
-        return;
-    };
-    let t = 1.0 - (-CAMERA_FOLLOW * tick.delta).exp();
-    transform.translation += (translation + Vec2::new(0.0, 0.8) - transform.translation) * t;
+/// The camera: following the character with a little slack and a lead,
+/// kept inside the level, and shaken by hard landings.
+fn spawn_camera(app: &mut App, target: Entity) -> Entity {
+    let id = SceneId::new();
+    app.world.insert(target, id);
+    let camera = app.world.spawn();
+    app.world.insert(camera, Transform::default());
+    app.world.insert(camera, Camera::new(4.0));
+    app.world.insert(
+        camera,
+        CameraFollow2D {
+            offset: Vec2::new(0.0, 0.8),
+            dead_zone: Vec2::new(0.6, 0.4),
+            look_ahead: 0.25,
+            bounds: Some(FollowBounds {
+                min: Vec2::new(-6.5, -2.0),
+                max: Vec2::new(21.0, 8.0),
+            }),
+            ..CameraFollow2D::new(id)
+        },
+    );
+    app.world.insert(camera, CameraShake::default());
+    camera
 }
