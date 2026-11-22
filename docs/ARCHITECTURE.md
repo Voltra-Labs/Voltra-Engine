@@ -85,7 +85,8 @@ version bump is a one-line change.
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
-| `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
+| `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
+| `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs — and a running editor, through the bridge — for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
@@ -4223,7 +4224,7 @@ round). The `topdown` example's chaser finds its way through a room.
 
 ### Components are reachable by name, with templates
 
-MCP M1a (`docs/plan-mcp.md`). `ComponentRegistry::save_one`, `load_one`,
+MCP M1a. `ComponentRegistry::save_one`, `load_one`,
 `remove_one` and `normalize` are public: any tool reads or writes any
 component by its registered name, as RON, without a function per type.
 `register` now answers a `Registration` that takes `.with_template()` —
@@ -4324,7 +4325,7 @@ missing camera target's warning handed back by a session, once).
 
 ### The MCP server works on files, through the engine's own formats
 
-MCP M2a–b (`docs/plan-mcp.md`). `voltra-mcp` is a binary crate — `voltra-mcp
+MCP M2a–b. `voltra-mcp` is a binary crate — `voltra-mcp
 --project <dir> [--assets <dir>]` — serving MCP over stdio with `rmcp` 3.11
 (the official Rust SDK; `#[tool_router(router = …, vis = …)]` per group of
 tools, added together, and `#[tool_handler(router = self.tool_router)]`,
@@ -4365,6 +4366,9 @@ protocol's.
 - **Project tools** (M2d) run cargo with arguments built from checked
   pieces — package names, a test filter that is not an option, a manifest
   inside the project — never a client's command line.
+- **Engine components only.** The server knows the engine's registry; a
+  game's own components are reached through a running editor built with
+  them (M3), not by building the server against the game.
 
 Pinned by `voltra-mcp/tests/{discovery,scenes,run}.rs` — a real `rmcp` client
 over an in-process pipe: the tool list, templates naming their fields,
@@ -4377,6 +4381,60 @@ reporting an entity in full and naming an unbound action; an asset written
 only when it reads, never over a file or as a binary — and `project.rs` (a
 link out of the asset root refused) and `tools/project.rs` (cargo arguments
 from checked pieces).
+
+### A running editor is driven through a bridge, not by speaking MCP
+
+MCP M3. The editor, started with `--bridge [port]`, listens on
+`127.0.0.1` (port 47810 unless given) for `voltra-bridge` commands — one
+JSON object per line, a `Request { id, command }` in and a
+`Response { id, ok, error }` out. `voltra-mcp`'s `editor_*` tools are its
+client. Without the flag nothing is opened.
+
+- **Split as the established bridges split.** The Unity and Godot MCP
+  bridges put a small listener inside the editor (a package, an editor
+  plugin) and the MCP server in a separate process that connects to it;
+  the editor never links the protocol. Ours is the same shape, for the same
+  reason and one more: the editor stays free of `rmcp` and `tokio`, and the
+  bridge protocol is ours to keep small — a closed `Command` enum, not a
+  general RPC — so it changes only when a tool needs it.
+- **Applied in the frame, not on the socket's thread.** Each connection
+  gets a thread that reads a line, queues it as a `Pending` and waits for
+  its answer; `Editor::ui` polls the queue once a frame — after the history
+  has watched, before any panel draws — and answers each request with what
+  it did. A client's requests land one at a time, in order.
+- **An AI edit is a person's edit.** Spawn, delete, reparent, rename and
+  component set/remove go through `voltra_scene::edit` — the same
+  operations the file tools use — wrapped in `History::begin` /
+  `commit_including`, one entry per call, labelled `AI: spawn`, `AI: set
+  component`…: Ctrl+Z takes it back, and the Edit menu says what it would
+  undo. A refused edit records nothing. Edits are refused while playing, as
+  the inspector's are; reads answer the live world.
+- **Play through the toolbar's paths.** `play`, `pause`, `step` (pauses
+  first; 1–600 fixed steps) and `stop` (the authored scene back) call what
+  the toolbar calls. Input while playing holds an action for N frames
+  (`voltra_core::input::HeldActions`, ticked in `App::update` and shared
+  with `Headless` through `drive_action`), as a player would press it.
+- **Seeing is the viewport as drawn.** `UiFrame::capture_viewport` reads
+  back the graded viewport target — the scene lit and post-processed, no
+  overlay — as a PNG, base64 in the answer and an image block in MCP.
+- **Explicit, not a silent fallback.** The file tools and the `editor_*`
+  tools are separate names rather than one set that falls back to files
+  when no editor answers: a file written under an editor holding the same
+  scene open would be overwritten by its next save. No editor is an
+  answer naming the `--bridge` flag.
+- **Local only.** Bound to loopback, and each peer is checked to be
+  loopback all the same.
+
+Pinned by `voltra-bridge`'s `client.rs` and `protocol.rs` tests (a request
+queued for the frame and its answer carried back, no editor listening an
+error, every command reading back from its line),
+`voltra-core/src/input/drive.rs` (an action held its frames then let go,
+held again restarting the count) and
+`voltra-editor/src/bridge/edits/tests.rs` (a spawn and a component set by
+name path each one entry that undo restores; a refused edit records
+nothing) and `voltra-mcp/tests/editor.rs` (tools reach a stand-in editor
+and carry its answers, the screenshot as an image block; no editor is an
+answer naming the flag).
 
 ### wgpu 30 API notes
 

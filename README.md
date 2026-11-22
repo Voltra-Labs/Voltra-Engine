@@ -224,6 +224,7 @@ Voltra-Engine/
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
 │   ├── voltra-physics/   # rigid bodies, integration, contact detection
 │   ├── voltra-nav/       # navigation grids baked from colliders, A* paths
+│   ├── voltra-bridge/    # commands to a running editor over a loopback socket
 │   ├── voltra-mcp/       # binary: the MCP server, a project's tools for an AI
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
 │   ├── voltra-editor/    # binary: the editor and its panels

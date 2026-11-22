@@ -83,6 +83,7 @@ can in the editor — and a little more, since it can read what it did:
 No crate, no stubs until then (CLAUDE.md: new crates only when there is
 code for them).
 
-**Now planned**: after stage 71, in three stages — engine prep (M1),
-`voltra-mcp` in file and headless mode (M2), the live editor bridge (M3) —
-in [plan-mcp.md](plan-mcp.md).
+**Done** after stage 71, in three stages — engine prep (M1), `voltra-mcp`
+in file and headless mode (M2), the live editor bridge (M3). Usage:
+[MCP.md](MCP.md); decisions: ARCHITECTURE.md, "The MCP server works on
+files" and "A running editor is driven through a bridge".

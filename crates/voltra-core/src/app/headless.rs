@@ -6,7 +6,7 @@
 //! animations, cameras, prefab sync, scene changes — in the same order the
 //! window does. What needs a device is left out: textures are not uploaded,
 //! nothing is drawn and the audio is the silent one. For CI, for tests of a
-//! whole scene, and for the MCP server (`docs/plan-mcp.md`, M1b).
+//! whole scene, and for the MCP server (`voltra-mcp`).
 
 use std::fmt;
 
@@ -18,7 +18,6 @@ use voltra_scene::{ComponentRegistry, SceneError, SceneId};
 
 use super::ui_frame::{resolve_world_atlases, resolve_world_clips};
 use super::App;
-use crate::input::{Binding, Direction};
 
 /// An [`App`] stepped by hand, with no window.
 pub struct Headless {
@@ -147,24 +146,12 @@ impl Headless {
     }
 
     fn drive(&mut self, action: &str, down: bool) -> bool {
-        let Some(&binding) = self.app.actions.bindings(action).first() else {
+        let driven =
+            crate::input::drive_action(&mut self.app.input, &self.app.actions, action, down);
+        if !driven {
             log::warn!("no binding for the action {action:?} to press");
-            return false;
-        };
-        let input = &mut self.app.input;
-        match binding {
-            Binding::Key(code) => input.on_key(code, down, false),
-            Binding::Mouse(button) => input.on_mouse_button(button, down),
-            Binding::Pad(button) => input.on_pad_button(0, button, down),
-            Binding::PadAxis(axis, direction) => {
-                let full = match direction {
-                    Direction::Positive => 1.0,
-                    Direction::Negative => -1.0,
-                };
-                input.on_pad_axis(0, axis, if down { full } else { 0.0 });
-            }
         }
-        true
+        driven
     }
 
     pub fn world(&self) -> &World {

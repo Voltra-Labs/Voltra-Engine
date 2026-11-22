@@ -17,6 +17,7 @@
 
 pub mod action;
 pub mod binding;
+pub mod drive;
 pub mod map;
 pub mod pads;
 mod query;
@@ -26,6 +27,7 @@ use std::collections::HashSet;
 
 pub use action::ActionState;
 pub use binding::{Binding, Direction, PadAxis, PadButton};
+pub use drive::{drive_action, HeldActions};
 pub use map::{Action, ActionMap, MapError};
 
 use action::ActionStates;

@@ -1,0 +1,143 @@
+//! The editor's end of the bridge: requests from `voltra-mcp`, applied in
+//! the frame.
+//!
+//! Off unless the editor was started with `--bridge`. Each frame, after the
+//! history has watched and before any panel draws, every request that
+//! arrived is applied and answered: an edit only while editing, as one undo
+//! entry under an "AI: …" label, so a person's Ctrl+Z takes it back like
+//! their own; play, step and stop through the toolbar's own paths; a
+//! screenshot from the viewport as this frame drew it.
+
+mod edits;
+mod read;
+
+use base64::Engine;
+use serde_json::{json, Value};
+use voltra_bridge::{Command, Pending};
+use voltra_core::UiFrame;
+
+use crate::editor::Editor;
+use crate::play::PlayState;
+use crate::selection::Selection;
+
+/// Applies and answers whatever arrived since last frame.
+pub(crate) fn serve(editor: &mut Editor, frame: &mut UiFrame<'_>) {
+    let Some(server) = editor.bridge.as_ref() else {
+        return;
+    };
+    let pending: Vec<Pending> = server.poll();
+    for request in pending {
+        let result = apply(editor, frame, &request.command);
+        request.answer(result);
+    }
+}
+
+fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Result<Value, String> {
+    let editing = editor.play.state() == PlayState::Editing;
+    match command {
+        Command::Status => Ok(json!({
+            "scene": crate::scene_file::default_path().display().to_string(),
+            "play": format!("{:?}", editor.play.state()),
+            "selection": editor.selection.ids(frame.world).iter().map(|id| id.0.to_string()).collect::<Vec<_>>(),
+            "entities": frame.world.query::<voltra_scene::SceneId>().count(),
+            "undo": editor.history.undo_label(),
+            "redo": editor.history.redo_label(),
+        })),
+        Command::Read => read::entities(frame.world, &editor.registry),
+        Command::Spawn { .. }
+        | Command::Delete { .. }
+        | Command::Reparent { .. }
+        | Command::Rename { .. }
+        | Command::ComponentSet { .. }
+        | Command::ComponentRemove { .. } => {
+            if !editing {
+                return Err(
+                    "the editor is playing: stop first, edits land in the authored scene".into(),
+                );
+            }
+            edits::apply(editor, frame.world, command)
+        }
+        Command::Select { entities } => {
+            let mut ids = Vec::new();
+            for reference in entities {
+                let entity =
+                    voltra_scene::edit::find(frame.world, reference).map_err(|e| e.to_string())?;
+                if let Some(&id) = frame.world.get::<voltra_scene::SceneId>(entity) {
+                    ids.push(id);
+                }
+            }
+            editor.selection = Selection::from_ids(frame.world, &ids);
+            Ok(json!({ "selected": ids.len() }))
+        }
+        Command::Undo => {
+            let label = editor.history.undo_label();
+            if label.is_none() {
+                return Err("nothing to undo".into());
+            }
+            editor.undo(frame);
+            Ok(json!({ "undone": label }))
+        }
+        Command::Redo => {
+            let label = editor.history.redo_label();
+            if label.is_none() {
+                return Err("nothing to redo".into());
+            }
+            editor.redo(frame);
+            Ok(json!({ "redone": label }))
+        }
+        Command::Save => {
+            if !editing {
+                return Err(
+                    "the editor is playing: stop first, so the authored scene is saved".into(),
+                );
+            }
+            let path = crate::scene_file::save(frame.world, &editor.registry)?;
+            Ok(json!({ "saved": path.display().to_string() }))
+        }
+        Command::Play => {
+            editor.start_play(frame);
+            Ok(json!({ "play": format!("{:?}", editor.play.state()) }))
+        }
+        Command::Pause => {
+            if editing {
+                return Err("the editor is not playing".into());
+            }
+            editor.pause_play(frame);
+            Ok(json!({ "play": format!("{:?}", editor.play.state()) }))
+        }
+        Command::Step { frames } => {
+            if editing {
+                return Err("play first: a step runs the paused game".into());
+            }
+            if editor.play.state() == PlayState::Playing {
+                editor.pause_play(frame);
+            }
+            for _ in 0..(*frames).clamp(1, 600) {
+                editor.step_play(frame);
+            }
+            Ok(json!({ "stepped": (*frames).clamp(1, 600) }))
+        }
+        Command::Stop => {
+            let stopped = editor.stop_play(frame);
+            Ok(json!({ "stopped": stopped }))
+        }
+        Command::Input { action, frames } => {
+            if editing {
+                return Err("input reaches a running game: play first".into());
+            }
+            if !frame.hold_action(action, (*frames).clamp(1, 6000)) {
+                return Err(format!("the input map has no binding for {action:?}"));
+            }
+            Ok(json!({ "holding": action, "frames": frames }))
+        }
+        Command::Screenshot => {
+            let shot = frame.capture_viewport();
+            let png = shot.png_bytes().map_err(|e| e.to_string())?;
+            Ok(json!({
+                "width": shot.width,
+                "height": shot.height,
+                "png_base64": base64::engine::general_purpose::STANDARD.encode(png),
+            }))
+        }
+    }
+}
