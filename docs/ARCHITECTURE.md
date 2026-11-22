@@ -3884,7 +3884,7 @@ component's format test.
 
 ### Property animation is clips of eased keys, bound by name from a player
 
-Stage 66a. An `AnimationClip` (`voltra_scene::keyframes`, a `*.anim.ron`
+Stage 66. An `AnimationClip` (`voltra_scene::keyframes`, a `*.anim.ron`
 file) is a `length`, `looping` and tracks; a `Track` is one `Property` of
 one entity — `target`, the path of `Name`s from the player down (`""` is the
 player, `"arm/hand"` a grandchild) — and `Key { time, value, ease }`s. An
@@ -3924,6 +3924,33 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   `*.anim.ron` as `Animation`, dragged onto the inspector's clip field, never
   into the scene.
 
+- **Editor (66b): a Timeline panel** over the asset browser, for a primary
+  selection whose player names a clip: one row per track (its target and
+  property, **key** — the value it has now, at the playhead — and **del**),
+  keys as diamonds on a strip of time (click selects and moves the
+  playhead, drag retimes — sorted on release, since sorting under the
+  pointer would change the id egui tracks the drag by — right click
+  deletes), the selected key's time, value and ease, and an "add track" row
+  offering the named entities under the player (`target::paths`) and the
+  properties each has that the clip does not yet animate. Times snap to
+  hundredths.
+- **The clip is an asset, not the scene**: its edits are held in the store
+  (`AnimationClips::get_mut`, played at once by every player of it) and
+  marked unsaved until **Save** (`AnimationClips::save`, pretty RON through a
+  temporary file) or **Revert** (a reload); they are not in the undo
+  history.
+- **Preview poses between frames.** The scene is drawn before the editor's
+  UI, so `Timeline::pose` writes the clip at the playhead as the editor's
+  last act in a frame (after the history's after side) and `Timeline::lift`
+  puts the authored values back as its first act in the next. The viewport
+  shows the pose; panels, the history and a save see only what was
+  authored, so scrubbing is never an edit — Unity's preview mode keeps
+  authored values aside for the same reason; Godot, which writes the pose
+  into the scene, needs a RESET track. The cost: the gizmo and the
+  inspector show the authored values while the preview is on.
+- **Not yet**: record mode (an edit in the viewport keying itself), curve
+  editing, copying keys, a clip's undo, playing the preview in time.
+
 Rejected: **a state machine or blending now** — Unity's `Animator`, Godot's
 `AnimationTree` — a subsystem of its own, when a game needs one; **curves
 on arbitrary fields by reflection**; **ids as targets**.
@@ -3932,8 +3959,10 @@ Pinned by `keyframes/tests.rs` (a clip moving its player and a named child
 with an ease, looping; a paused player leaving its entity alone; a missing
 child costing one track; bad keys dropped and the rest played; a broken file
 repaired by a reload; a save read back; a sprite frame flipbook), the unit
-tests of eases, values, properties, tracks and the player's clock, and
-`app::animation` (playing only while simulating, taking a reload).
+tests of eases, values, properties, tracks, target paths and the player's
+clock, `app::animation` (playing only while simulating, taking a reload),
+and the editor's `timeline` (a pose lifted back to the authored values), its
+ruler's scale and its key re-sort.
 
 ### wgpu 30 API notes
 

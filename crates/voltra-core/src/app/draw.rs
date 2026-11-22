@@ -187,6 +187,10 @@ impl App {
             sorting_layers: &self.sorting_layers,
             clips,
             prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
+            animation_clips: super::animation::clip_store(
+                &mut self.animation_clips,
+                &self.asset_root,
+            ),
             audio: &mut self.audio,
             device: &device,
             queue: &queue,

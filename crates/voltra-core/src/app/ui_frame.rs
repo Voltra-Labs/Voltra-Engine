@@ -53,6 +53,9 @@ pub struct UiFrame<'a> {
     /// drops one into the scene and a hot reload of its file must agree on
     /// what the file currently holds.
     pub prefabs: &'a mut Prefabs,
+    /// Loaded animation clips, the store the players read: a timeline's
+    /// edit is played by every player of the clip the next frame.
+    pub animation_clips: &'a mut voltra_scene::AnimationClips,
     /// The game's own output, for a panel that auditions a sound.
     ///
     /// The same `Audio` the scene plays through rather than a second device:

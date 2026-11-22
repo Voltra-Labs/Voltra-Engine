@@ -4,5 +4,6 @@ pub mod assets;
 pub mod hierarchy;
 pub mod inspector;
 pub mod menu_bar;
+pub mod timeline;
 pub mod toolbar;
 pub mod viewport;

@@ -49,7 +49,7 @@ impl App {
 
 /// The clip store, made on first use: a clip is a file and nothing else, so
 /// a headless run plays one. The root is the one the prefabs use.
-fn clip_store<'a>(
+pub(super) fn clip_store<'a>(
     clips: &'a mut Option<AnimationClips>,
     asset_root: &Option<PathBuf>,
 ) -> &'a mut AnimationClips {
