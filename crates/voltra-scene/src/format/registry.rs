@@ -12,6 +12,13 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use voltra_ecs::{Entity, World};
 
+mod entry;
+mod registration;
+
+pub use registration::{ComponentInfo, Registration};
+
+use entry::Entry;
+
 use super::error::SceneError;
 use super::refs::SceneRefs;
 use crate::scene_id::SceneId;
@@ -20,119 +27,6 @@ use crate::{
     Parent, ParticleEmitter, Persistent, PhysicsMaterial, PointLight2D, PrefabInstance, RigidBody,
     Sensor, ShadowCaster2D, Sprite, SpriteAnimation, Text, Tilemap, Transform, UiButton, UiRect,
 };
-
-/// A registered type's save conversion: entity to stored value, or `None` when
-/// the entity has no such component.
-type SaveFn = fn(&World, Entity) -> Option<Result<Box<RawValue>, SceneError>>;
-
-/// A registered type's load conversion: stored value to entity.
-///
-/// Returns the bare `ron` error rather than a [`SceneError`]: this function
-/// only knows `T`, not the registered name the [`Entry`] was stored under, and
-/// `SceneError::Component` needs that name to point at anything a user can act
-/// on. `load_one` has the `Entry` in hand, so it wraps this into a `SceneError`
-/// with the real name instead of `T`'s Rust path.
-type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::error::SpannedError>;
-
-/// A registered type's removal.
-///
-/// Needed because a record describes an entity *exactly*: putting one back has
-/// to take off the components it does not carry, not only put on the ones it
-/// does. Without this, undoing the addition of a component leaves it behind and
-/// reports success.
-type RemoveFn = fn(&mut World, Entity);
-
-/// A registered type's round trip: a stored value read as the type and
-/// written back, for comparing values whatever text they were stored as.
-type NormalizeFn = fn(&RawValue) -> Result<Box<RawValue>, SceneError>;
-
-/// A registered type's references rewritten on an entity, for a type that
-/// names other entities — see [`super::refs`].
-type RemapFn = fn(&mut World, Entity, &dyn Fn(SceneId) -> Option<SceneId>);
-
-/// The same, for a stored value.
-type RewriteFn =
-    fn(&RawValue, &dyn Fn(SceneId) -> Option<SceneId>) -> Result<Box<RawValue>, SceneError>;
-
-/// A registered type's default value, written as it would be saved: what
-/// a tool fills in to make one.
-type TemplateFn = fn() -> Result<Box<RawValue>, SceneError>;
-
-/// One component type's name and the conversions that go with it.
-///
-/// `save`/`load`/`remove` are read by `save_one`/`load_one`/`remove_one` below.
-struct Entry {
-    name: &'static str,
-    save: SaveFn,
-    load: LoadFn,
-    remove: RemoveFn,
-    normalize: NormalizeFn,
-    /// For a type naming other entities by id; `None` for every other.
-    refs: Option<(RemapFn, RewriteFn)>,
-    /// For a type with a meaningful default; `None` for one without, or
-    /// for structure (a parent link, a prefab part) a tool must not make
-    /// up.
-    template: Option<TemplateFn>,
-}
-
-/// What the registry says about one component type, for a tool listing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ComponentInfo {
-    /// The name a scene file stores it under.
-    pub name: &'static str,
-    /// Whether it names other entities by id.
-    pub has_refs: bool,
-    /// Whether [`ComponentRegistry::template`] answers for it.
-    pub has_template: bool,
-}
-
-/// A type just registered: what else the registry should know of it.
-///
-/// Returned by [`ComponentRegistry::register`]; a caller that has nothing
-/// to add ignores it.
-pub struct Registration<'r, T> {
-    entry: &'r mut Entry,
-    _type: std::marker::PhantomData<fn() -> T>,
-}
-
-impl<T> Registration<'_, T>
-where
-    T: Serialize + DeserializeOwned + 'static,
-{
-    /// Its `Default` is a sensible starting value: [`template`] answers it.
-    ///
-    /// [`template`]: ComponentRegistry::template
-    pub fn with_template(self) -> Self
-    where
-        T: Default,
-    {
-        self.entry.template =
-            Some(|| RawValue::from_rust(&T::default()).map_err(SceneError::Serialize));
-        self
-    }
-
-    /// It names other entities by id: every copy and prefab compare
-    /// rewrites them ([`ComponentRegistry::remap_refs`],
-    /// [`ComponentRegistry::rewrite_refs`]).
-    pub fn with_refs(self) -> Self
-    where
-        T: SceneRefs,
-    {
-        self.entry.refs = Some((
-            |world, entity, map| {
-                if let Some(component) = world.get_mut::<T>(entity) {
-                    component.remap(map);
-                }
-            },
-            |value, map| {
-                let mut component: T = value.into_rust().map_err(SceneError::Parse)?;
-                component.remap(map);
-                RawValue::from_rust(&component).map_err(SceneError::Serialize)
-            },
-        ));
-        self
-    }
-}
 
 /// The component types a scene file may contain.
 ///
@@ -257,13 +151,11 @@ impl ComponentRegistry {
             refs: None,
             template: None,
         });
-        Registration {
-            entry: self
-                .entries
+        Registration::new(
+            self.entries
                 .last_mut()
                 .expect("register just pushed the entry"),
-            _type: std::marker::PhantomData,
-        }
+        )
     }
 
     /// [`register`](Self::register) with [`Registration::with_refs`], for
