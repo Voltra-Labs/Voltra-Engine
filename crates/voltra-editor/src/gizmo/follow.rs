@@ -13,6 +13,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{hierarchy, Transform};
 
+use crate::selection::Selection;
 use crate::tool::Tool;
 
 /// Below this, a scale on an axis is taken as collapsed and the factor on
@@ -55,36 +56,18 @@ pub fn follow(tool: Tool, start: &Transform, now: &Transform, follower: &Transfo
 }
 
 /// The selected entities a drag on `primary` carries, with their world
-/// transforms now: every one of `selected` but the primary and those under
-/// another selected entity — a child already moves with its parent, and
-/// moving it too would move it twice. Entities without a transform stay.
+/// transforms now: the selection's [`tops`](Selection::tops) but the primary
+/// — what is under a selected entity already moves with it, and moving it
+/// too would move it twice. Entities without a transform stay.
 pub fn followers(
     world: &World,
     primary: Entity,
-    selected: impl IntoIterator<Item = Entity>,
+    selection: &Selection,
 ) -> Vec<(Entity, Transform)> {
-    let selected: Vec<Entity> = selected.into_iter().collect();
-    let carried = |entity: Entity| {
-        let mut up = hierarchy::parent_of(world, entity);
-        // Bounded by the scene's size: a cycle in a hand-edited file stops.
-        let mut steps = 0;
-        while let Some(parent) = up {
-            if parent == primary || selected.contains(&parent) {
-                return true;
-            }
-            steps += 1;
-            if steps > selected.len() + 1024 {
-                break;
-            }
-            up = hierarchy::parent_of(world, parent);
-        }
-        false
-    };
-    selected
-        .iter()
-        .copied()
-        .filter(|&entity| entity != primary && world.is_alive(entity))
-        .filter(|&entity| world.get::<Transform>(entity).is_some() && !carried(entity))
+    selection
+        .tops(world)
+        .into_iter()
+        .filter(|&entity| entity != primary && world.get::<Transform>(entity).is_some())
         .map(|entity| (entity, hierarchy::world_transform(world, entity)))
         .collect()
 }
@@ -173,14 +156,14 @@ mod tests {
         let bare = world.spawn();
         hierarchy::set_parent(&mut world, child, parent).expect("no cycle");
         hierarchy::set_parent(&mut world, under_primary, primary).expect("no cycle");
-        let carried: Vec<Entity> = followers(
-            &world,
-            primary,
-            [parent, child, under_primary, bare, primary],
-        )
-        .into_iter()
-        .map(|(e, _)| e)
-        .collect();
+        let mut selection = Selection::default();
+        for entity in [parent, child, under_primary, bare, primary] {
+            selection.add(entity);
+        }
+        let carried: Vec<Entity> = followers(&world, primary, &selection)
+            .into_iter()
+            .map(|(e, _)| e)
+            .collect();
         assert_eq!(carried, [parent]);
     }
 }

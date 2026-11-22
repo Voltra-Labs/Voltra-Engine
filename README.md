@@ -60,7 +60,9 @@ selection. Ctrl-click adds or removes one, Shift-click in the hierarchy takes
 the rows between, and a left drag on empty ground draws a box that selects
 what it encloses; the gizmo, on the last one picked, moves, turns and scales
 them all about it, the inspector edits that one, and `Delete` (the button or
-the key) removes them all as one undo entry. `Scene ▸ Save` and
+the key) removes them all as one undo entry. `Ctrl+D` duplicates the selection
+in place, and `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste it — through
+the system clipboard, so a copy pastes into another scene or editor window. `Scene ▸ Save` and
 `Scene ▸ Open` write and read `assets/scenes/scene.ron`.
 
 The hierarchy lists the scene as a tree. An entity's `Name` is what a row says —
@@ -299,6 +301,7 @@ privileged and plain `cargo build` covers everything.
 | 62 | Light cookies: an image over a light that tints and shapes it | done |
 | 63a | Multi-selection: Ctrl/Shift clicks, box select, outlines, Delete | done |
 | 63b | The gizmo moves, turns and scales the whole selection | done |
+| 63c | Duplicate, copy and paste, through the system clipboard as text | done |
 
 ## Contributing
 

@@ -166,7 +166,7 @@ impl Gizmo {
         };
 
         self.drag = Some(Drag::begin(entity, tool, handle, cursor_world, start));
-        self.followers = follow::followers(frame.world, entity, selection.iter());
+        self.followers = follow::followers(frame.world, entity, selection);
         GizmoOutcome {
             consumed: true,
             dragging: Some(entity),

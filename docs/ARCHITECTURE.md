@@ -3692,10 +3692,35 @@ could put back a different one; **"touches" for the box** — see above.
   the drag is one entry. Rejected: Unity's "Center" handle, a pivot at the
   selection's middle — a second mode to explain, and the primary is where
   the handles are drawn.
-- **Not yet**: duplicate and copy/paste (63c), editing a component across
-  the selection.
+- **Duplicate, copy and paste (stage 63c, `editor::clipboard`).** A copy
+  is the selection's tops (`Selection::tops`: no selected entity above
+  them — a child copied with its parent is copied once, under it) and
+  everything under each, recorded as a save records them, with each top's
+  parent by id and its place in the world. A paste spawns them as a
+  prefab's copies are spawned (`prefab::spawn_scene`: fresh ids, links
+  inside remapped, links out cut), then puts each top back under its old
+  parent if the scene still holds it — a duplicate lands on its original,
+  as in Unity and Godot — or where it stood in the world if not, as a
+  paste into another scene does. One undo entry each, selecting what it
+  made. Ctrl+D, Ctrl+C, Ctrl+X (a copy, then a Delete) and Ctrl+V, and
+  Duplicate / Copy / Delete in the Edit menu.
+- **The clipboard is the system's, as text**: a header line
+  (`voltra-entities 1`) then the copy as RON. egui hands over a paste only
+  as `Event::Paste` with the clipboard's text, and only when it has some
+  (egui-winit 0.35 `lib.rs`: Ctrl+C/X/V become `Copy`/`Cut`/`Paste`, never
+  key events), so a clipboard of the editor's own would never hear Ctrl+V.
+  As text it also pastes into a second editor window. Text without the
+  header is ignored; with it, it is parsed as a scene file is, through the
+  same registry (a component the build does not know survives as
+  unknown), capped at 16 MiB.
+- **Not yet**: editing a component across the selection; numbering the
+  names of duplicates.
 
-Pinned by `gizmo::follow` tests (each tool's rule, a collapsed axis,
+Pinned by `clipboard::tests` (a parent and child selected together copied
+once with fresh ids, the copy's child under the copy's parent; a duplicated
+child under its old parent where it was; a paste into an empty world where
+the copy was taken; the text round trips, other text is not a clip, broken
+text is an error), `gizmo::follow` tests (each tool's rule, a collapsed axis,
 which followers ride on a selected parent), `selection::tests` (primary order, toggle, Shift ranges both
 ways and without an order, the box replacing or extending, ids round
 trip), `pick::region` tests (wholly inside, origins, HUD never, a layer

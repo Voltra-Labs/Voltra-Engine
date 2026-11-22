@@ -201,6 +201,24 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     editor.redo(frame);
                     ui.close();
                 }
+
+                // What acts on the selection. Paste is the key alone: the
+                // clipboard's text reaches the editor only with the key.
+                ui.separator();
+                let some = editing && !editor.selection.is_empty();
+                let item = |text: &str, keys: &str| egui::Button::new(text).shortcut_text(keys);
+                if ui.add_enabled(some, item("Duplicate", "Ctrl+D")).clicked() {
+                    crate::clipboard::duplicate(editor, frame);
+                    ui.close();
+                }
+                if ui.add_enabled(some, item("Copy", "Ctrl+C")).clicked() {
+                    crate::clipboard::copy_selection(editor, ui.ctx(), frame);
+                    ui.close();
+                }
+                if ui.add_enabled(some, item("Delete", "Del")).clicked() {
+                    crate::delete::selection(editor, frame);
+                    ui.close();
+                }
             });
 
             ui.menu_button("Physics", |ui| {

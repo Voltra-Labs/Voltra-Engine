@@ -145,6 +145,32 @@ impl Selection {
         entities.iter().for_each(|&e| self.add(e));
     }
 
+    /// The selected entities `world` holds that no other selected entity is
+    /// above, in selection order: what an action on the set acts on, since
+    /// what is under them comes along — a child moved, copied or deleted
+    /// with its parent would be moved, copied or deleted twice.
+    pub(crate) fn tops(&self, world: &World) -> Vec<Entity> {
+        let above_another = |entity: Entity| {
+            let mut up = voltra_scene::hierarchy::parent_of(world, entity);
+            // Bounded: a parent cycle in a hand-edited file stops.
+            for _ in 0..=self.entities.len() + 1024 {
+                let Some(parent) = up else {
+                    return false;
+                };
+                if self.contains(parent) {
+                    return true;
+                }
+                up = voltra_scene::hierarchy::parent_of(world, parent);
+            }
+            false
+        };
+        self.entities
+            .iter()
+            .copied()
+            .filter(|&entity| world.is_alive(entity) && !above_another(entity))
+            .collect()
+    }
+
     /// Forgets what `world` no longer holds.
     pub(crate) fn retain_alive(&mut self, world: &World) {
         self.entities.retain(|&entity| world.is_alive(entity));
@@ -287,5 +313,18 @@ mod tests {
             Click::from_modifiers(Modifiers::COMMAND | Modifiers::SHIFT),
             Click::Toggle
         );
+    }
+
+    #[test]
+    fn tops_leave_out_what_is_under_another_selected_entity() {
+        let (mut world, e) = world_of(4);
+        voltra_scene::hierarchy::set_parent(&mut world, e[1], e[0]).expect("no cycle");
+        voltra_scene::hierarchy::set_parent(&mut world, e[2], e[1]).expect("no cycle");
+        let mut selection = Selection::default();
+        for &entity in &[e[2], e[3], e[0]] {
+            selection.add(entity);
+        }
+        // e[2] is under e[0] by way of e[1], which is not selected.
+        assert_eq!(selection.tops(&world), [e[3], e[0]]);
     }
 }

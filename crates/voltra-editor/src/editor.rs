@@ -1,6 +1,6 @@
 //! The editor's shared state and its frame layout.
 
-use voltra_core::egui::{self, Ui};
+use voltra_core::egui::Ui;
 use voltra_core::{UiFrame, VoiceId};
 use voltra_scene::ComponentRegistry;
 
@@ -96,13 +96,9 @@ impl Editor {
                 Some(shortcut::UndoAction::Redo) => self.redo(frame),
                 None => {}
             }
-            // Delete removes the selection, scoped as the undo keys are: not
-            // while a text field has the keyboard, where it deletes a letter.
-            let delete = !ui.ctx().egui_wants_keyboard_input()
-                && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
-            if delete {
-                crate::delete::selection(self, frame);
-            }
+            // Delete, duplicate and the clipboard, after the undo keys and
+            // before any panel, which then draws what they made.
+            crate::edit_keys::poll(self, ui.ctx(), frame);
         }
 
         panels::menu_bar::show(self, ui, frame);

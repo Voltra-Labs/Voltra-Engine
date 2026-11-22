@@ -1,6 +1,8 @@
 mod camera;
+mod clipboard;
 mod delete;
 mod drag;
+mod edit_keys;
 mod editor;
 mod gizmo;
 mod marquee;
