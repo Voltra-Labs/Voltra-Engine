@@ -25,6 +25,7 @@ fn cancelling_ends_the_drag() {
             Vec2::ZERO,
             transform(),
         )),
+        followers: Vec::new(),
     };
 
     gizmo.cancel_drag();
@@ -84,6 +85,7 @@ fn a_live_drag_reports_its_own_tool() {
             Vec2::new(1.0, 0.0),
             transform(),
         )),
+        followers: Vec::new(),
     };
 
     assert_eq!(gizmo.active_tool(), Some(Tool::Rotate));

@@ -58,8 +58,9 @@ hierarchy lets the inspector edit its transform and colour. An entity can also
 be selected by clicking it in the viewport; clicking empty space clears the
 selection. Ctrl-click adds or removes one, Shift-click in the hierarchy takes
 the rows between, and a left drag on empty ground draws a box that selects
-what it encloses; the inspector edits the last one picked, and `Delete` (the
-button or the key) removes them all as one undo entry. `Scene ▸ Save` and
+what it encloses; the gizmo, on the last one picked, moves, turns and scales
+them all about it, the inspector edits that one, and `Delete` (the button or
+the key) removes them all as one undo entry. `Scene ▸ Save` and
 `Scene ▸ Open` write and read `assets/scenes/scene.ron`.
 
 The hierarchy lists the scene as a tree. An entity's `Name` is what a row says —
@@ -297,6 +298,7 @@ privileged and plain `cargo build` covers everything.
 | 61b | Global lights: the ambient lifted for the pixels of their layers | done |
 | 62 | Light cookies: an image over a light that tints and shapes it | done |
 | 63a | Multi-selection: Ctrl/Shift clicks, box select, outlines, Delete | done |
+| 63b | The gizmo moves, turns and scales the whole selection | done |
 
 ## Contributing
 

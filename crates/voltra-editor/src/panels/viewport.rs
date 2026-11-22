@@ -146,10 +146,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // The gizmo gets first refusal, for the same reason egui gets it
             // before the scene does: a handle drawn over a sprite has to be
             // grabbable, and a drag on one must not also re-select.
-            let outcome =
-                editor
-                    .gizmo
-                    .update(&scene, frame, editor.selection.primary(), editor.tool);
+            let outcome = editor
+                .gizmo
+                .update(&scene, frame, &editor.selection, editor.tool);
 
             // Every frame the drag holds an entity, so the history keeps one
             // entry open for the whole drag instead of one per frame. The entry

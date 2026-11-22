@@ -3677,10 +3677,26 @@ and what an undo or Stop puts back.
 Rejected: **a hashed set** — the primary would be arbitrary and an undo
 could put back a different one; **"touches" for the box** — see above.
 
-- **Not yet**: the gizmo moving the whole set (63b), duplicate and
-  copy/paste (63c), editing a component across the selection.
+- **The gizmo carries the set (stage 63b).** It sits on the primary and
+  the drag works out where the primary goes, as before; every other
+  selected entity takes the same change about the primary's pivot
+  (`gizmo::follow`) — Godot's rule, and Unity's "Pivot" handle with its
+  active object. A move moves each by the same amount; a turn swings each
+  round the primary and turns it by the same angle; a scale stretches each
+  one's offset along the primary's axes and multiplies its scale by the
+  same factors (a collapsed axis on the primary scales nothing rather
+  than dividing by zero). World transforms, captured when the grab
+  begins, turned back into local ones as the primary's are; an entity
+  under another selected one is left to ride on its parent, which would
+  otherwise move it twice. The history already watched the whole set, so
+  the drag is one entry. Rejected: Unity's "Center" handle, a pivot at the
+  selection's middle — a second mode to explain, and the primary is where
+  the handles are drawn.
+- **Not yet**: duplicate and copy/paste (63c), editing a component across
+  the selection.
 
-Pinned by `selection::tests` (primary order, toggle, Shift ranges both
+Pinned by `gizmo::follow` tests (each tool's rule, a collapsed axis,
+which followers ride on a selected parent), `selection::tests` (primary order, toggle, Shift ranges both
 ways and without an order, the box replacing or extending, ids round
 trip), `pick::region` tests (wholly inside, origins, HUD never, a layer
 by its tiles, topmost last, outlines), `delete::tests` (one entry for the

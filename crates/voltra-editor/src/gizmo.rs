@@ -15,6 +15,7 @@
 //! despawned-mid-drag handling below.
 
 pub mod drag;
+pub mod follow;
 pub mod handle;
 pub mod shape;
 
@@ -24,6 +25,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{hierarchy, Transform};
 
+use crate::selection::Selection;
 use crate::tool::Tool;
 use drag::Drag;
 use handle::{Axes, Handle, LINE_WIDTH};
@@ -33,6 +35,9 @@ use handle::{Axes, Handle, LINE_WIDTH};
 pub struct Gizmo {
     /// `Some` only between a press on a handle and the release that ends it.
     drag: Option<Drag>,
+    /// The rest of the selection, carried by the drag, with their world
+    /// transforms when it began. See [`follow`].
+    followers: Vec<(Entity, Transform)>,
 }
 
 /// What one frame of gizmo interaction did.
@@ -57,6 +62,7 @@ impl Gizmo {
     /// `Entity` and the anchors a [`Drag`] holds are all stale.
     pub fn cancel_drag(&mut self) {
         self.drag = None;
+        self.followers.clear();
     }
 
     /// What a live drag is doing, if one is live.
@@ -77,13 +83,13 @@ impl Gizmo {
         &mut self,
         response: &Response,
         frame: &mut UiFrame<'_>,
-        selected: Option<Entity>,
+        selection: &Selection,
         tool: Tool,
     ) -> GizmoOutcome {
         let viewport = viewport_size(response);
         if viewport.x <= 0.0 || viewport.y <= 0.0 {
             // A minimised window. Every conversion below divides by this.
-            self.drag = None;
+            self.cancel_drag();
             return GizmoOutcome::default();
         }
 
@@ -91,7 +97,7 @@ impl Gizmo {
         // viewport: the drag belongs to the gizmo, not to the cursor still
         // being over a handle.
         if self.drag.is_some() && !response.is_pointer_button_down_on() {
-            self.drag = None;
+            self.cancel_drag();
             return GizmoOutcome {
                 consumed: true,
                 dragging: None,
@@ -123,11 +129,17 @@ impl Gizmo {
                 // Despawned mid-drag, its Transform removed, or its parent
                 // collapsed to a point. Ending the drag is the whole response:
                 // there is nothing left to transform.
-                self.drag = None;
+                self.cancel_drag();
                 return GizmoOutcome {
                     consumed: true,
                     dragging: None,
                 };
+            }
+            let (tool, start) = (active.tool, active.start);
+            for &(follower, from) in &self.followers {
+                // One that went away mid-drag is simply left behind.
+                let to = follow::follow(tool, &start, &updated, &from);
+                hierarchy::set_world_transform(frame.world, follower, &to);
             }
             return GizmoOutcome {
                 consumed: true,
@@ -139,7 +151,7 @@ impl Gizmo {
             return GizmoOutcome::default();
         }
 
-        let Some(entity) = selected else {
+        let Some(entity) = selection.live_primary(frame.world) else {
             return GizmoOutcome::default();
         };
         if frame.world.get::<Transform>(entity).is_none() {
@@ -154,6 +166,7 @@ impl Gizmo {
         };
 
         self.drag = Some(Drag::begin(entity, tool, handle, cursor_world, start));
+        self.followers = follow::followers(frame.world, entity, selection.iter());
         GizmoOutcome {
             consumed: true,
             dragging: Some(entity),
