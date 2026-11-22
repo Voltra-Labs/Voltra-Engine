@@ -4,6 +4,7 @@
 
 pub mod assets;
 pub mod discovery;
+pub mod editor;
 pub mod prefab;
 pub mod project;
 pub mod run;

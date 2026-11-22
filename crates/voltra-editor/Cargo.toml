@@ -18,3 +18,8 @@ log.workspace = true
 # The clipboard holds copied entities as RON text.
 ron.workspace = true
 serde.workspace = true
+# The editor bridge (`--bridge`): requests from `voltra-mcp`, answered as
+# JSON, screenshots as base64 PNG.
+voltra-bridge.workspace = true
+serde_json.workspace = true
+base64.workspace = true

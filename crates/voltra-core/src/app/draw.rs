@@ -187,6 +187,9 @@ impl App {
             viewport_size: (target.width(), target.height()),
             requested_size: &mut self.requested_size,
             thumbnails: self.thumbnails.ids(),
+            graded,
+            actions: &self.actions,
+            held_actions: &mut self.held_actions,
         };
         egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
 

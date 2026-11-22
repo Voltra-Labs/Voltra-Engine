@@ -1,7 +1,5 @@
 //! Top menu bar: scene commands and the frame's counters.
 
-use std::path::Path;
-
 use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
@@ -15,13 +13,7 @@ use crate::spawn;
 mod spawn_items;
 use crate::undo::SceneView;
 
-/// Where the editor saves when no path has been chosen.
-///
-/// A parameter with a default rather than a value baked into `save` and `load` —
-/// the second caller is a file dialog, and it is already foreseeable.
-fn default_path() -> &'static Path {
-    Path::new("assets/scenes/scene.ron")
-}
+use crate::scene_file::default_path;
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::top("menu").show(ui, |ui| {
@@ -90,15 +82,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     if editor.stop_play(frame) {
                         log::info!("stopped play so the saved scene is the authored one");
                     }
-                    if let Some(parent) = default_path().parent() {
-                        if let Err(e) = std::fs::create_dir_all(parent) {
-                            log::error!("could not create {}: {e}", parent.display());
-                        }
-                    }
-                    match voltra_scene::format::save(frame.world, &editor.registry, default_path())
-                    {
-                        Ok(()) => log::info!("scene saved"),
-                        Err(e) => log::error!("could not save the scene: {e}"),
+                    match crate::scene_file::save(frame.world, &editor.registry) {
+                        Ok(path) => log::info!("scene saved to {}", path.display()),
+                        Err(e) => log::error!("{e}"),
                     }
                     ui.close();
                 }

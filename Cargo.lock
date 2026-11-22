@@ -3720,6 +3720,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-bridge"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "voltra-core"
 version = "0.1.0"
 dependencies = [
@@ -3751,11 +3760,14 @@ version = "0.1.0"
 name = "voltra-editor"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "env_logger",
  "log",
  "ron",
  "serde",
+ "serde_json",
  "voltra-assets",
+ "voltra-bridge",
  "voltra-core",
  "voltra-ecs",
  "voltra-physics",
@@ -3783,6 +3795,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "voltra-assets",
+ "voltra-bridge",
  "voltra-core",
  "voltra-ecs",
  "voltra-render",

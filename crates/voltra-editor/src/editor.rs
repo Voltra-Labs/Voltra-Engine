@@ -69,6 +69,9 @@ pub struct Editor {
     pub(crate) audition: Option<VoiceId>,
     /// The timeline's playhead, selected key and preview pose.
     pub(crate) timeline: Timeline,
+    /// The bridge a tool drives the editor through, when started with
+    /// `--bridge`; see [`crate::bridge`].
+    pub(crate) bridge: Option<voltra_bridge::BridgeServer>,
 }
 
 impl Editor {
@@ -107,6 +110,10 @@ impl Editor {
             // before any panel, which then draws what they made.
             crate::edit_keys::poll(self, ui.ctx(), frame);
         }
+
+        // After the watch and the keys, before any panel: what a tool asked
+        // for is in place before the frame draws.
+        crate::bridge::serve(self, frame);
 
         panels::menu_bar::show(self, ui, frame);
         // Between the menu bar and everything else, which is where Unity and

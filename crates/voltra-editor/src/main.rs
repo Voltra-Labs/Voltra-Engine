@@ -1,3 +1,4 @@
+mod bridge;
 mod camera;
 mod clipboard;
 mod delete;
@@ -13,6 +14,7 @@ mod panels;
 mod picking;
 mod play;
 mod prefab;
+mod scene_file;
 mod selection;
 mod shape_edit;
 mod spawn;
@@ -44,12 +46,35 @@ fn main() {
     spawn_demo_scene(&mut app);
 
     let mut editor = Editor::default();
+    // `--bridge [port]`: let `voltra-mcp` drive this editor, on this
+    // machine only. Off unless asked for.
+    if let Some(port) = bridge_port(std::env::args().skip(1)) {
+        match voltra_bridge::BridgeServer::start(port) {
+            Ok(server) => editor.bridge = Some(server),
+            Err(e) => log::error!("could not start the editor bridge on port {port}: {e}"),
+        }
+    }
     app.with_ui(move |ui, frame| editor.ui(ui, frame))
         .with_hot_reload()
         // No `with_simulation`: the editor starts in `Editing`, which is the
         // correct default for an authoring tool, and the toolbar's Play is what
         // turns the switch on.
         .run();
+}
+
+/// The port `--bridge` asks for — its argument, or the default — or `None`
+/// without the flag.
+fn bridge_port(mut args: impl Iterator<Item = String>) -> Option<u16> {
+    while let Some(arg) = args.next() {
+        if arg == "--bridge" {
+            return Some(
+                args.next()
+                    .and_then(|port| port.parse().ok())
+                    .unwrap_or(voltra_bridge::DEFAULT_PORT),
+            );
+        }
+    }
+    None
 }
 
 fn spawn_demo_scene(app: &mut App) {

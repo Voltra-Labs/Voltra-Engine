@@ -95,9 +95,44 @@ pub struct UiFrame<'a> {
     pub(super) requested_size: &'a mut (u32, u32),
     /// Loaded textures as egui knows them, for a panel that draws one.
     pub(super) thumbnails: &'a HashMap<Handle<Texture>, TextureId>,
+    /// The scene as this frame drew it, graded: what `capture_viewport`
+    /// reads back.
+    pub(super) graded: &'a voltra_render::RenderTarget,
+    /// The game's input map, and the actions a tool holds through it.
+    pub(super) actions: &'a crate::input::ActionMap,
+    pub(super) held_actions: &'a mut crate::input::HeldActions,
 }
 
 impl<'a> UiFrame<'a> {
+    /// The scene as this frame drew it — lit and graded, before the editor's
+    /// overlay — read back to the CPU.
+    pub fn capture_viewport(&self) -> crate::Screenshot {
+        let (width, height) = (self.graded.width(), self.graded.height());
+        let rgba = voltra_render::read_rgba8(
+            self.device,
+            self.queue,
+            self.graded.texture(),
+            width,
+            height,
+        );
+        crate::Screenshot {
+            width,
+            height,
+            rgba,
+        }
+    }
+
+    /// Holds the game's `action` for the next `frames` frames, through its
+    /// first binding, as a player would. `false` for an action the input map
+    /// does not bind.
+    pub fn hold_action(&mut self, action: &str, frames: u32) -> bool {
+        if self.actions.bindings(action).is_empty() {
+            return false;
+        }
+        self.held_actions.hold(action, frames);
+        true
+    }
+
     /// Handle for the scene image.
     pub fn viewport(&self) -> TextureId {
         self.viewport

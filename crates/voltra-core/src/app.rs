@@ -186,6 +186,8 @@ pub struct App {
     /// Entities a tick spawned whose asset handles the loop has not resolved
     /// yet. Emptied right after every tick.
     spawned: Vec<Entity>,
+    /// Actions a tool holds down for some frames — the editor bridge's input.
+    held_actions: crate::input::HeldActions,
 }
 
 /// Earth-ish gravity, in world units per second squared.
@@ -389,6 +391,8 @@ impl App {
         if let Some(pads) = self.gamepads.as_mut() {
             pads.poll(&mut self.input);
         }
+        // With the devices: a held action reads as a key held this frame.
+        self.held_actions.tick(&mut self.input, &self.actions);
         let delta = self.clock.tick();
         self.elapsed += delta.as_secs_f64();
         self.advance(delta.as_secs_f32());
