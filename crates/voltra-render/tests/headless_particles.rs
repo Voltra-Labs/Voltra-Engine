@@ -9,8 +9,8 @@ use voltra_render::glam::Vec2;
 use voltra_render::particles::PARTICLE_SIZE;
 use voltra_render::scene_draw::{draw_scene, SceneDraw};
 use voltra_render::{
-    pipeline, texture, wgpu, Filter, GpuParticles, Mesh, MeshDraw, ParticleLook, ParticlePipelines,
-    RenderTarget, SimStep, Texture, Vertex,
+    pipeline, texture, wgpu, Filter, GpuParticles, LayerPass, Mesh, MeshDraw, ParticleLook,
+    ParticlePipelines, RenderTarget, SimStep, Texture, Vertex,
 };
 use voltra_testkit::{headless_device, read_buffer, read_texture};
 
@@ -222,6 +222,7 @@ fn particles_draw_between_the_sprites_around_them() {
         SceneDraw::Particles {
             particles: &particles,
             texture: &white,
+            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
         },
         SceneDraw::Mesh(MeshDraw {
             texture: &white,
@@ -262,4 +263,89 @@ fn particles_draw_between_the_sprites_around_them() {
         far_left.b > 200 && far_left.r < 50,
         "blue where no particle is: {far_left:?}"
     );
+}
+
+/// A GPU emitter is drawn into the light-layer buffer with its own layers,
+/// over the sprite under it, where its particles cover the texel.
+#[test]
+fn particles_are_drawn_into_the_light_layers_on_their_emitter_s() {
+    let Some((device, queue)) = headless_device() else {
+        eprintln!("no GPU adapter; skipping");
+        return;
+    };
+    let size = 32;
+    let target = RenderTarget::new(
+        &device,
+        "layers-target",
+        voltra_render::light_layers::LAYER_FORMAT,
+        size,
+        size,
+        Filter::Nearest,
+    );
+    let (pipelines, camera, layout) = pipelines(&device);
+    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);
+    let opaque = [1.0; 4];
+    let vertices = [
+        Vertex::new([-1.0, 1.0], opaque, [0.0, 0.0]),
+        Vertex::new([-1.0, -1.0], opaque, [0.0, 1.0]),
+        Vertex::new([1.0, -1.0], opaque, [1.0, 1.0]),
+        Vertex::new([1.0, 1.0], opaque, [1.0, 0.0]),
+    ];
+    let mesh = Mesh::indexed(&device, "backdrop", &vertices, &[0, 1, 2, 0, 2, 3]);
+
+    // One particle a unit across, over the middle.
+    let particles = GpuParticles::new(&device, &pipelines, 4);
+    step(
+        &device,
+        &queue,
+        &pipelines,
+        &particles,
+        &SimStep {
+            spawn_count: 1,
+            origin: Vec2::ZERO,
+            lifetime: (10.0, 10.0),
+            ..SimStep::default()
+        },
+    );
+    particles.set_look(
+        &queue,
+        &ParticleLook {
+            size: (1.0, 1.0),
+            ..ParticleLook::default()
+        },
+    );
+    let draws = [
+        SceneDraw::Mesh(MeshDraw {
+            texture: &white,
+            normal: None,
+            light_layers: 0b1,
+            indices: 0..6,
+        }),
+        SceneDraw::Particles {
+            particles: &particles,
+            texture: &white,
+            light_layers: 0b100,
+        },
+    ];
+    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("particle-layers"),
+    });
+    LayerPass::new(&device, camera.layout(), &layout, Some(&pipelines)).record(
+        &device,
+        &mut encoder,
+        target.view(),
+        camera.bind_group(),
+        Some(&mesh),
+        &draws,
+    );
+    queue.submit(Some(encoder.finish()));
+    // Four bytes a texel either way: the excluded layers, little-endian.
+    let pixels = read_texture(&device, &queue, target.texture(), size, size);
+    let excluded = |x: u32, y: u32| {
+        let p = pixels[(y * size + x) as usize];
+        u32::from_le_bytes([p.r, p.g, p.b, p.a])
+    };
+    assert_eq!(excluded(16, 16), !0b100, "the particle's layers");
+    assert_eq!(excluded(2, 2), !0b1, "the sprite's, where no particle is");
 }

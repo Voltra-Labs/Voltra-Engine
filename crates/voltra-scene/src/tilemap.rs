@@ -20,6 +20,7 @@
 //! is: frames cut from one sheet. A cell stores a frame index into it.
 
 pub mod animation;
+mod assets;
 pub mod boxes;
 mod cache;
 mod chunk;
@@ -31,7 +32,7 @@ pub mod terrain;
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use voltra_assets::{AssetPath, Atlas, Atlases, Handle, Textures};
+use voltra_assets::{AssetPath, Atlas, Handle};
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_render::Texture;
 
@@ -106,6 +107,16 @@ pub struct Tilemap {
     pub texture: Option<AssetPath>,
     #[serde(skip)]
     pub texture_handle: Option<Handle<Texture>>,
+    /// A normal map laid out as the sheet is — the same frames at the same
+    /// texels — for lights with a [`height`](crate::PointLight2D::height),
+    /// as a sprite's [`normal_map`](crate::Sprite::normal_map) is. Every tile
+    /// samples it where it samples the sheet; a tile drawing the placeholder
+    /// is flat. `None` — the default, and not written — is a flat layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal_map: Option<AssetPath>,
+    /// The handle `normal_map` resolves to. Never saved.
+    #[serde(skip)]
+    pub normal_handle: Option<Handle<Texture>>,
     /// The slicing whose frames the cells name.
     pub atlas: Option<AssetPath>,
     #[serde(skip)]
@@ -135,6 +146,8 @@ impl Default for Tilemap {
             collision: false,
             texture: None,
             texture_handle: None,
+            normal_map: None,
+            normal_handle: None,
             atlas: None,
             atlas_handle: None,
             animations: BTreeMap::new(),
@@ -267,26 +280,6 @@ impl Tilemap {
     /// The lower-left corner of `cell`, in the entity's own space.
     pub fn cell_origin(&self, cell: IVec2) -> Vec2 {
         cell.as_vec2() * self.tile_size
-    }
-
-    /// Sets or clears the sheet path and refreshes its handle, as
-    /// [`Sprite::set_texture`](crate::Sprite::set_texture) does.
-    pub fn set_texture(
-        &mut self,
-        path: Option<AssetPath>,
-        textures: &mut Textures,
-        device: &voltra_render::wgpu::Device,
-        queue: &voltra_render::wgpu::Queue,
-    ) {
-        self.texture_handle = path.as_ref().map(|path| textures.load(device, queue, path));
-        self.texture = path;
-    }
-
-    /// Sets or clears the atlas path and refreshes its handle, as
-    /// [`Sprite::set_atlas`](crate::Sprite::set_atlas) does.
-    pub fn set_atlas(&mut self, path: Option<AssetPath>, atlases: &mut Atlases) {
-        self.atlas_handle = path.as_ref().map(|path| atlases.load(path));
-        self.atlas = path;
     }
 }
 

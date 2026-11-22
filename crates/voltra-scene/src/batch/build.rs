@@ -174,7 +174,11 @@ impl SpriteBatch {
                             .gpu_bounds(matrix)
                             .is_some_and(|(min, max)| sheets.sees(min, max));
                         if copy == 0 && emitter.gpu_capacity().is_some() && seen {
-                            batch.push_gpu_emitter(entity, emitter.texture_handle);
+                            batch.push_gpu_emitter(
+                                entity,
+                                emitter.texture_handle,
+                                emitter.light_layers,
+                            );
                         }
                     }
                 }

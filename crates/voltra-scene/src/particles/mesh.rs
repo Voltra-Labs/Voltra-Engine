@@ -3,7 +3,7 @@
 use voltra_render::glam::{Mat3, Vec2};
 
 use super::ParticleEmitter;
-use crate::batch::SpriteBatch;
+use crate::batch::{SpriteBatch, Surface};
 use crate::sprite::quad::WHOLE;
 
 /// Appends one quad per live particle, sized and tinted by how far through
@@ -19,6 +19,7 @@ pub fn push(batch: &mut SpriteBatch, matrix: Mat3, emitter: &ParticleEmitter) {
     let (u0, v0) = (WHOLE.0[0], WHOLE.0[1]);
     let (u1, v1) = (WHOLE.1[0], WHOLE.1[1]);
     let uvs = [[u0, v0], [u0, v1], [u1, v1], [u1, v0]];
+    let surface = Surface::textured(emitter.texture_handle).on(emitter.light_layers);
     for particle in emitter.particles() {
         let t = particle.progress();
         let half = lerp(emitter.size.0, emitter.size.1, t).max(0.0) * 0.5;
@@ -33,7 +34,7 @@ pub fn push(batch: &mut SpriteBatch, matrix: Mat3, emitter: &ParticleEmitter) {
             p + Vec2::new(half, -half),
             p + Vec2::new(half, half),
         ];
-        batch.push_quad(place, corners, uvs, color, emitter.texture_handle);
+        batch.push_quad_on(place, corners, uvs, color, surface);
     }
 }
 

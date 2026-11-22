@@ -270,7 +270,8 @@ pub(super) fn resolve_world_textures(
         .chain(
             world
                 .query::<Tilemap>()
-                .filter_map(|(_, map)| map.texture.clone()),
+                .flat_map(|(_, map)| [map.texture.clone(), map.normal_map.clone()])
+                .flatten(),
         )
         .chain(
             world
@@ -292,6 +293,8 @@ pub(super) fn resolve_world_textures(
     for (_, map) in world.query_mut::<Tilemap>() {
         let path = map.texture.clone();
         map.set_texture(path, textures, device, queue);
+        let normal = map.normal_map.clone();
+        map.set_normal_map(normal, textures, device, queue);
     }
     for (_, emitter) in world.query_mut::<voltra_scene::ParticleEmitter>() {
         let path = emitter.texture.clone();

@@ -107,6 +107,8 @@ pub(super) fn resolve_entity(
         if let Some((textures, device, queue)) = gpu.as_mut() {
             let path = map.texture.clone();
             map.set_texture(path, textures, device, queue);
+            let normal = map.normal_map.clone();
+            map.set_normal_map(normal, textures, device, queue);
         }
     }
     if let (Some(emitter), Some((textures, device, queue))) = (

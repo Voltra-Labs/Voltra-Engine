@@ -3136,8 +3136,8 @@ asked for lighting does not go dark when someone drops a light into it.
   is never lit.
 - Instance data is a vertex buffer, not storage: lights work on adapters
   without vertex-stage storage (WebGL2), unlike GPU particles.
-- Shadows landed in stage 53, spot lights in 56, normal maps in 57 and
-  light layers in 58, below.
+- Shadows landed in stage 53, spot lights in 56, normal maps in 57,
+  light layers in 58 and culling by the cone in 60a, below.
 
 Pinned by `headless_lights.rs` (ambient alone far away, lit past white at
 the lamp, fading between, nothing outside the radius; unlit makes no
@@ -3300,11 +3300,9 @@ light. `None` is the default and not written.
   tuned cone while off, as the shadows toggle does.
 - A cone of a full turn or more is sent as a point light's edges; a narrow
   one keeps its inner edge at most 1, so its middle is fully lit.
-- **Not yet**: culling a spot light by its cone rather than its circle —
-  it is gathered, drawn as a whole quad and given a full shadow-map row
-  even when it points away from the view (the fragments outside the cone
-  are cheap; the row is not free) — and cookies (a texture shaping the
-  light, Godot's `PointLight2D` texture).
+- Culled by its cone since stage 60a, below.
+- **Not yet**: cookies (a texture shaping the light, Godot's
+  `PointLight2D` texture).
 
 Pinned by `headless_lights.rs` (lit ahead and inside the edge, ambient
 behind and beside; a soft edge fading where a hard one does not), the
@@ -3347,8 +3345,8 @@ by default and not written.
   sprite beside it; a light with a height dims what is far from it, which
   is the price of the model and why the height is per light and opt-in. No
   height, no change from before.
-- `SpriteRange::normal` is part of what splits a batch run; tilemaps, text
-  and particles carry none.
+- `SpriteRange::normal` is part of what splits a batch run. Tilemaps carry
+  their layer's since stage 60b (below); text and particles carry none.
 - **A normal map that will not load is drawn flat**, not as the checker's
   colours read as normals: `Textures::is_broken` marks a handle holding the
   checker (until a reload repairs it), the draw list leaves its normal map
@@ -3363,16 +3361,29 @@ attachment too; **a tangent per vertex** — a wider `Vertex` for every
 pipeline to serve one; **a separate linear texture store** — two caches
 for one file, and a hot reload that must know which to refresh.
 
-- **Not yet**: normal maps on tilemaps (per sheet) and text, a per-light
-  normal strength, specular, blending normals by coverage, particles
-  writing their own (flat) normals.
+- **Tilemaps (stage 60b)**: `Tilemap::normal_map`, one per layer, laid out
+  as its sheet is — every tile samples it at the UVs it samples the sheet,
+  so frames, flips and animated tiles need nothing of their own. A tile
+  drawing the placeholder (a frame the atlas lacks) is flat rather than
+  shaded by the wrong texels. The quads go through `batch::Surface`
+  (texture, normal map, light layers), which is what a quad joins a run by;
+  the chunk cache keeps only geometry and UVs, and the surface is applied
+  as the chunk is copied in, so giving a layer a normal map or changing
+  its light layers rebuilds no chunk. Resolved, preloaded and hot-reloaded
+  with the sheet; the inspector has the path field under the sheet's.
+- **Not yet**: normal maps on text (a glyph atlas has no sensible one), a
+  per-light normal strength, specular, blending normals by coverage,
+  particles writing their own (flat) normals.
 
 Pinned by `headless_normals.rs` (normals towards the lamp lit and away
 dark; a mirrored quad mirrors them; flat faces the screen; no height
 ignores them), `lights_scene.rs` (the sample scene's studded plaque: the
 lit side of a stud brighter than its far side, both alike with the map
 stripped — resolved through the real `Textures`, so the linear bind group
-is on the path), and batch, sprite and light unit tests.
+is on the path), and batch, sprite and light unit tests; a layer's normal
+map by `tilemap::cache_tests` (on every range, cached, view-edge and
+uncached, also given after its chunks were cached; the placeholder flat)
+and the format test (saved by path, left out when absent).
 
 ### Light layers are bits, drawn into an inverted buffer the lights test
 
@@ -3386,9 +3397,9 @@ that never touches them lights exactly as before.
 
 - **A third pass over the batch** (`light_layers::LayerPass`), shaped like
   the normals pass: the mesh ranges into an `R32Uint` buffer, a small
-  uniform per distinct mask this frame, coverage alpha-tested at 0.5,
-  GPU particles not drawn (their pixels keep the layers under them).
-  Recorded only when a lit frame has a light that leaves a layer out.
+  uniform per distinct mask this frame, coverage alpha-tested at 0.5.
+  GPU emitters too since stage 60c, below. Recorded only when a lit frame
+  has a light that leaves a layer out.
 - **Stored inverted** — the layers a texel is *not* on — so the zero a
   buffer is cleared to, and the zeroed 1×1 stand-in bound when the pass did
   not run, put the background and everything on every layer. No upload is
@@ -3399,22 +3410,35 @@ that never touches them lights exactly as before.
   bind group WebGPU guarantees.
 - `SpriteRange::light_layers` splits batch runs; a tilemap's tiles carry
   the layer's on every path (cached chunks, chunks on the view's edge, the
-  uncached mesh); text and CPU particles are on the default layer. GPU
-  particles are not drawn into the buffer, so they take the layers of what
-  is under them.
+  uncached mesh).
+- **Text and particle emitters (stage 60c)**: `Text::light_layers` and
+  `ParticleEmitter::light_layers`, default the first bit and not written,
+  as a sprite's. Glyphs and CPU particles are batch quads and carry it
+  through `batch::Surface`. A GPU emitter carries it on its
+  `GpuEmitterDraw` / `SceneDraw::Particles`, and the layer pass draws it
+  through a second pipeline: `particles_draw.wgsl`'s own vertex stage with
+  a layers fragment appended to the module (`particle_layers.wgsl`), so a
+  particle lands on the same texels in both passes without a copy of the
+  vertex code. Built only with the GPU particle pipelines, whose draw
+  layout it binds as group 2 (the mask is group 3); without them every
+  emitter is on the CPU and in the batch anyway. Coverage is the same
+  alpha test, so the faint edge of a soft particle keeps the layers under
+  it — the rule every surface follows. A screen-space HUD's text is never
+  lit and has none.
 - A surface on **no** layer (mask 0) is lit by nothing, even a light of
   every layer: the pass also runs when such a range is drawn.
 - The buffers' 1×1 stand-ins are read with the pixel clamped to their size,
   so a frame that did not draw one reads defined texels on every backend.
 - The inspector folds the 32 toggles away (`light_layers` widget) on
   sprites, tilemaps and lights.
-- **Not yet**: light layers on text and particle emitters, the ambient
-  per layer, shadow casters per layer (a caster blocks every shadowed light
-  today).
+- **Not yet**: the ambient per layer, shadow casters per layer (a caster
+  blocks every shadowed light today).
 
 Pinned by `headless_light_layers.rs` (a layer-2 lamp lights the layer-2
 quad and the background, not the layer-1 quad; every layer lights both; no
-layer lights nothing), instance, batch and light unit tests.
+layer lights nothing), `headless_particles.rs` (a GPU emitter writes its
+own layers over the sprite under it, the sprite's elsewhere), instance,
+batch, text and particle unit tests.
 
 ### A sprite's silhouette is traced on the CPU into ordinary occluders
 
@@ -3464,6 +3488,49 @@ traced from nothing), the store's (traced on demand, forgotten on
 reload, a missing file traces nothing) and the scene's (the outline lands
 on the drawn quad, mirrored when flipped; nothing without silhouettes, a
 texture or the frame it asks for). The shadow from an occluder is pinned by `headless_shadows.rs`.
+
+### A light is culled by what it reaches, a spot light by its sector
+
+Stage 60a. Until it, a spot light was its disc everywhere outside the
+fragment shader: gathered when the disc touched the view, drawn as the
+disc's square, and given four shadow-map rows when any edge came within its
+radius — even aimed away from all of it. `voltra_render::Reach` (from
+`PointLight::reach`, `None` for a light that gives nothing) is the disc, or
+the sector between the cone's outer edges, and every one of those three
+asks it:
+
+- **The view**: `light::gather` keeps a light whose `Reach::bounds` meets
+  the view. A sector's box is its centre, its two edges' ends and the
+  disc's extreme along each axis the cone faces — so a cone wider than a
+  half turn still reaches round behind its centre.
+- **The quad**: the light instance carries that box as fractions of its
+  radius and `vs_light` draws over it instead of the square; the fragment
+  shader is unchanged (`local` is still in radii from the centre).
+- **The shadow map**: an edge is drawn into a light's rows only if it comes
+  into the reach (`Reach::touches_segment`: an end inside, or crossing an
+  edge or the arc); a light with no such edge gets no rows. The cone is
+  opened by the shadow's softness first, because the soft edge's taps look
+  that far past where the light shines — without it a shadow near the
+  cone's edge would lose its penumbra on the outer side. A blocking edge
+  must cross the segment from the light to the pixel, which lies inside the
+  cone whatever its width, so nothing that can shadow a lit pixel is left
+  out.
+- The cone used is the one the shader lights to (the sanitised outer
+  edge), opened by 0.001 rad so a direction on the edge rounds in.
+
+Rejected: fewer rows for a narrow cone (it would need a per-light row count
+and a shader that knows which quarters a light owns — worth it when a
+profile shows the map's height mattering, not before); culling by a
+bounding circle around the sector (a narrow cone's circle is barely smaller
+than its disc).
+
+Pinned by `reach::tests` (boxes of narrow, quarter, wide, turned and
+full-turn cones; segments ahead, behind, beside, across an edge, across the
+arc only, through the light; widening), the shadow plan's (aimed away from
+the only wall, no row; the softness bringing in an edge just past the
+cone), the gather's (a spot light whose disc reaches the view but whose cone
+does not is left out) and `headless_lights.rs` (a three-quarter cone lights
+both sides behind its centre and not below it).
 
 ### wgpu 30 API notes
 

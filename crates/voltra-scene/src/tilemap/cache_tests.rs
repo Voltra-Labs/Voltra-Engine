@@ -212,3 +212,59 @@ fn a_layer_s_light_layers_reach_every_range_on_every_path() {
         }
     }
 }
+
+#[test]
+fn a_layer_s_normal_map_reaches_every_range_on_every_path() {
+    let (mut atlases, path, _root) = atlases();
+    let (mut world, layer) = level(&mut atlases, &path);
+    let normal = Handle::forge(9, 0);
+    let all = Sheets::new(&atlases, &Sizes);
+    let part = all.visible_in(Vec2::new(-3.5, -20.0), Vec2::new(20.0, 2.5));
+    let mut cache = TileMeshCache::default();
+    // Built once flat, so the cached chunks exist before the map is given:
+    // adding a normal map must reach them without a rebuild.
+    same(&world, all, &mut cache);
+    if let Some(map) = world.get_mut::<Tilemap>(layer) {
+        map.normal_handle = Some(normal);
+    }
+    for sheets in [all, part] {
+        let cached = SpriteBatch::from_world_cached(&world, sheets, &mut cache);
+        let fresh = SpriteBatch::from_world(&world, sheets);
+        for batch in [&cached, &fresh] {
+            assert!(!batch.ranges.is_empty());
+            assert!(
+                batch.ranges.iter().all(|r| r.normal == Some(normal)),
+                "{:?}",
+                batch.ranges
+            );
+        }
+        assert_eq!(cached.ranges, fresh.ranges);
+    }
+}
+
+#[test]
+fn a_tile_drawing_the_placeholder_is_flat() {
+    let (mut atlases, path, _root) = atlases();
+    let (mut world, layer) = level(&mut atlases, &path);
+    let normal = Handle::forge(9, 0);
+    if let Some(map) = world.get_mut::<Tilemap>(layer) {
+        map.normal_handle = Some(normal);
+        // A frame the four-frame atlas does not have.
+        map.set(IVec2::new(0, 0), Some(Tile::new(40)));
+    }
+    let mut cache = TileMeshCache::default();
+    let batch = same(&world, Sheets::new(&atlases, &Sizes), &mut cache);
+    let placeholder = Some(Sizes.placeholder());
+    let flat: Vec<_> = batch
+        .ranges
+        .iter()
+        .filter(|r| r.texture == placeholder)
+        .collect();
+    assert!(!flat.is_empty(), "the missing frame draws the placeholder");
+    assert!(flat.iter().all(|r| r.normal.is_none()), "{flat:?}");
+    assert!(batch
+        .ranges
+        .iter()
+        .filter(|r| r.texture != placeholder)
+        .all(|r| r.normal == Some(normal)));
+}

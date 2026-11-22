@@ -11,9 +11,9 @@
 //! before the light map, from the frame's [`Occluder`]s — see [`shadows`].
 //!
 //! Unity URP's 2D renderer and Godot's `CanvasModulate` + `PointLight2D` +
-//! `LightOccluder2D`, cut to what is built: point lights with a radius and a
-//! falloff, an ambient colour, shadows from outlines and lines, no normal
-//! maps yet.
+//! `LightOccluder2D`: point and spot lights with a radius and a falloff, an
+//! ambient colour, shadows from outlines and lines, normal maps and light
+//! layers.
 
 use std::sync::atomic::AtomicBool;
 
@@ -25,6 +25,7 @@ mod lighting;
 mod normal_input;
 mod occluder;
 mod passes;
+mod reach;
 pub mod shadows;
 
 use instance::LightInstance;
@@ -35,6 +36,7 @@ pub use lighting::{
 };
 use normal_input::NormalInput;
 pub use occluder::Occluder;
+pub use reach::Reach;
 use shadows::ShadowPass;
 
 /// The pipelines, the composite's layout and the shadow map's pass. One per
@@ -91,7 +93,8 @@ impl LightPass {
                         1 => Float32x4,
                         2 => Float32x4,
                         3 => Float32x4,
-                        4 => Uint32,
+                        4 => Float32x4,
+                        5 => Uint32,
                     ],
                 })],
             },

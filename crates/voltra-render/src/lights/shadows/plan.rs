@@ -21,8 +21,8 @@ pub(in crate::lights) struct ShadowInstance {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub(in crate::lights) struct ShadowPlan {
     /// Per light of the frame, in order: its row, or `None` for a light
-    /// that is drawn unshadowed — it casts none, nothing it reaches
-    /// occludes, or the map ran out of rows.
+    /// that is drawn unshadowed — it casts none, nothing it reaches (inside
+    /// its cone, for a spot light) occludes, or the map ran out of rows.
     pub(in crate::lights) rows: Vec<Option<u32>>,
     pub(in crate::lights) instances: Vec<ShadowInstance>,
     /// Texels across a row.
@@ -59,11 +59,17 @@ impl ShadowPlan {
         let mut used = 0u32;
         let mut rows_of = Vec::new();
         for (index, light) in lights.iter().enumerate() {
-            if light.casts().is_none() {
+            let (Some((_, softness)), Some(reach)) = (light.casts(), light.reach()) else {
                 continue;
-            }
+            };
+            // Only what comes into a spot light's cone shadows it — opened by
+            // the soft edge, whose taps look that far past it.
+            let reach = reach.widened(softness);
             let first = plan.instances.len();
-            for (a, b) in edges.casting(light.position, light.radius) {
+            for (a, b) in edges
+                .casting(light.position, light.radius)
+                .filter(|(a, b)| reach.touches_segment(*a, *b))
+            {
                 plan.instances.push(ShadowInstance {
                     ends: [a.x, a.y, b.x, b.y],
                     light: [light.position.x, light.position.y, light.radius, 0.0],
@@ -111,7 +117,7 @@ mod tests {
     use glam::Vec2;
 
     use super::*;
-    use crate::lights::{Occluder, Shadow};
+    use crate::lights::{Cone, Occluder, Shadow};
 
     fn lamp(at: Vec2, shadow: bool) -> PointLight {
         PointLight {
@@ -160,6 +166,50 @@ mod tests {
         assert_eq!(plan.instances[1].light[3], top_of(&plan, 1));
         assert_eq!(plan.instances[0].light[3], 1.0, "row 0 starts at the top");
         assert_eq!(plan.overflow, 0);
+    }
+
+    #[test]
+    fn a_spot_light_aimed_away_from_every_edge_gets_no_row() {
+        let edges = Edges::new(&[wall_at(2.0)]);
+        let aimed = |direction: Vec2, softness: f32| PointLight {
+            cone: Some(Cone {
+                direction,
+                angle: 1.0,
+                softness: 0.0,
+            }),
+            shadow: Some(Shadow {
+                strength: 1.0,
+                softness,
+            }),
+            ..lamp(Vec2::ZERO, true)
+        };
+        let lights = [aimed(Vec2::NEG_X, 0.0), aimed(Vec2::X, 0.0)];
+        let plan = ShadowPlan::new(&lights, &edges, 64, 8192);
+        assert_eq!(
+            plan.rows,
+            [None, Some(0)],
+            "behind it, the wall is no shadow"
+        );
+        assert_eq!(plan.instances.len(), 1);
+
+        // Aimed up, the cone's edge is about 28.6° from +y: a wall whose end
+        // is at 26.6° is in it, one starting at 33° is not — until a soft
+        // edge's taps reach it.
+        let up = [aimed(Vec2::Y, 0.0)];
+        let edges = Edges::new(&[Occluder {
+            points: vec![Vec2::new(1.0, 2.0), Vec2::new(3.0, 2.0)],
+            closed: false,
+            self_shadow: false,
+        }]);
+        assert_eq!(ShadowPlan::new(&up, &edges, 64, 8192).rows, [Some(0)]);
+        let wall = Edges::new(&[Occluder {
+            points: vec![Vec2::new(1.3, 2.0), Vec2::new(3.0, 2.0)],
+            closed: false,
+            self_shadow: false,
+        }]);
+        assert_eq!(ShadowPlan::new(&up, &wall, 64, 8192).rows, [None]);
+        let soft = [aimed(Vec2::Y, 0.1)];
+        assert_eq!(ShadowPlan::new(&soft, &wall, 64, 8192).rows, [Some(0)]);
     }
 
     #[test]

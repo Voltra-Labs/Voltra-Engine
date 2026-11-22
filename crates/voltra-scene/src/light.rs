@@ -175,7 +175,8 @@ impl Default for PointLight2D {
 }
 
 /// The lighting of the frame seen through the active camera, with the
-/// lights whose reach touches `view_min..view_max` and, when one of them
+/// lights whose reach — a spot light's cone — touches `view_min..view_max`
+/// and, when one of them
 /// casts shadows, every caster's outline — unlit when that camera has no
 /// ambient colour, or there is no active camera.
 pub fn gather(
@@ -195,12 +196,17 @@ pub fn gather(
     let lights = world
         .query::<PointLight2D>()
         .map(|(entity, light)| light.placed(transforms.matrix(entity)))
+        // By the box it reaches: a spot light aimed away from the view is
+        // left out even when its disc would touch it. One that gives
+        // nothing reaches nowhere and is left out too.
         .filter(|light| {
-            let (position, radius) = (light.position, light.radius);
-            position.x + radius >= view_min.x
-                && position.x - radius <= view_max.x
-                && position.y + radius >= view_min.y
-                && position.y - radius <= view_max.y
+            light.reach().is_some_and(|reach| {
+                let (min, max) = reach.bounds();
+                max.x >= view_min.x
+                    && min.x <= view_max.x
+                    && max.y >= view_min.y
+                    && min.y <= view_max.y
+            })
         })
         .collect::<Vec<_>>();
     // An occluder out of view can still throw a shadow into it, so casters

@@ -90,6 +90,7 @@ pub(super) fn show(
 
     ui.separator();
     claim = claim.or(texture(ui, map, textures, device, queue));
+    claim = claim.or(normal_map(ui, map, textures, device, queue));
     claim = claim.or(atlas(ui, map, atlases));
 
     let Palette { sheet, paint } = palette;
@@ -133,6 +134,31 @@ fn texture(
     };
     map.set_texture(path, textures, device, queue);
     Some("Set texture")
+}
+
+/// The sheet's normal map, laid out as the sheet is.
+fn normal_map(
+    ui: &mut Ui,
+    map: &mut Tilemap,
+    textures: &mut Textures,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> Option<&'static str> {
+    ui.label("normal map").on_hover_text(
+        "laid out as the sheet is; shades the tiles by the angle of lights that have a height",
+    );
+    let committed = shown(map.normal_map.as_ref());
+    let path = match path_field::show(
+        ui,
+        "tilemap_normal_map",
+        "path/to/tiles_normal.png",
+        &committed,
+    )? {
+        PathEdit::Cleared => None,
+        PathEdit::Set(path) => Some(path),
+    };
+    map.set_normal_map(path, textures, device, queue);
+    Some("Set normal map")
 }
 
 /// The tileset: which slicing the cells' frame numbers index, and how many

@@ -1,5 +1,6 @@
-//! The scene's light layers: the sprite batch drawn again into a buffer the
-//! light pass reads, for lights that leave some layers out.
+//! The scene's light layers: the sprite batch and the GPU emitters drawn
+//! again into a buffer the light pass reads, for lights that leave some
+//! layers out.
 //!
 //! Godot's `light_mask` and a light's item cull mask, as bits: a surface is
 //! lit by a light only where the two share one. Stored inverted — the
@@ -13,6 +14,7 @@ use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 
 use crate::mesh::{Mesh, Vertex};
+use crate::particles::ParticlePipelines;
 use crate::scene_draw::SceneDraw;
 use crate::shader;
 
@@ -22,16 +24,21 @@ pub const LAYER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Uint;
 /// Draws the batch's light layers. One per renderer.
 pub struct LayerPass {
     pipeline: wgpu::RenderPipeline,
+    /// GPU emitters' particles, through their own vertex stage; `None`
+    /// without GPU particles, where every emitter is in the batch.
+    particles: Option<wgpu::RenderPipeline>,
     layout: wgpu::BindGroupLayout,
 }
 
 impl LayerPass {
     /// A pass drawing through `camera_layout`, reading each range's colour
-    /// through `texture_layout` for its coverage.
+    /// through `texture_layout` for its coverage, and GPU emitters through
+    /// `particles`' draw layout when there are any.
     pub fn new(
         device: &wgpu::Device,
         camera_layout: &wgpu::BindGroupLayout,
         texture_layout: &wgpu::BindGroupLayout,
+        particles: Option<&ParticlePipelines>,
     ) -> Self {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("sprite-layers-range"),
@@ -78,20 +85,33 @@ impl LayerPass {
             multiview_mask: None,
             cache: None,
         });
-        Self { pipeline, layout }
+        let particles = particles.map(|particles| {
+            particle_pipeline(
+                device,
+                [
+                    camera_layout,
+                    texture_layout,
+                    &particles.draw_layout,
+                    &layout,
+                ],
+            )
+        });
+        Self {
+            pipeline,
+            particles,
+            layout,
+        }
     }
 
     /// Whether `draws` hold a surface on no light layer at all: lit by no
     /// light, even one of every layer — which only the buffer can say.
     pub fn any_on_no_layer(draws: &[SceneDraw<'_>]) -> bool {
-        draws
-            .iter()
-            .any(|draw| matches!(draw, SceneDraw::Mesh(range) if range.light_layers == 0))
+        draws.iter().any(|draw| layers_of(draw) == 0)
     }
 
-    /// Clears `target` to "on every layer" and draws every mesh range of
-    /// `draws` into it, in order. GPU emitters are not drawn: the pixels
-    /// they cover keep the layers of what is under them.
+    /// Clears `target` to "on every layer" and draws every mesh range and
+    /// GPU emitter of `draws` into it, in order — emitters only when the
+    /// pass was made with particle pipelines, as the scene pass draws them.
     pub fn record(
         &self,
         device: &wgpu::Device,
@@ -104,23 +124,22 @@ impl LayerPass {
         // One small uniform per distinct mask this frame; a scene has few.
         let mut groups: HashMap<u32, wgpu::BindGroup> = HashMap::new();
         for draw in draws {
-            if let SceneDraw::Mesh(range) = draw {
-                groups.entry(range.light_layers).or_insert_with(|| {
-                    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                        label: Some("sprite-layers-range"),
-                        contents: bytemuck::cast_slice(&[range.light_layers, 0, 0, 0]),
-                        usage: wgpu::BufferUsages::UNIFORM,
-                    });
-                    device.create_bind_group(&wgpu::BindGroupDescriptor {
-                        label: Some("sprite-layers-range"),
-                        layout: &self.layout,
-                        entries: &[wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: buffer.as_entire_binding(),
-                        }],
-                    })
+            let layers = layers_of(draw);
+            groups.entry(layers).or_insert_with(|| {
+                let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("sprite-layers-range"),
+                    contents: bytemuck::cast_slice(&[layers, 0, 0, 0]),
+                    usage: wgpu::BufferUsages::UNIFORM,
                 });
-            }
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("sprite-layers-range"),
+                    layout: &self.layout,
+                    entries: &[wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: buffer.as_entire_binding(),
+                    }],
+                })
+            });
         }
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("sprite-layers-pass"),
@@ -138,17 +157,95 @@ impl LayerPass {
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        let Some(mesh) = mesh else {
-            return;
-        };
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, camera, &[]);
+        // Which pipeline is bound, so a run of ranges binds it once.
+        #[derive(PartialEq)]
+        enum Bound {
+            Nothing,
+            Sprites,
+            Particles,
+        }
+        let mut bound = Bound::Nothing;
         for draw in draws {
-            if let SceneDraw::Mesh(range) = draw {
-                pass.set_bind_group(1, range.texture, &[]);
-                pass.set_bind_group(2, &groups[&range.light_layers], &[]);
-                mesh.draw_range(&mut pass, range.indices.clone());
+            let group = &groups[&layers_of(draw)];
+            match draw {
+                SceneDraw::Mesh(range) => {
+                    let Some(mesh) = mesh else {
+                        continue;
+                    };
+                    if bound != Bound::Sprites {
+                        pass.set_pipeline(&self.pipeline);
+                        pass.set_bind_group(0, camera, &[]);
+                        bound = Bound::Sprites;
+                    }
+                    pass.set_bind_group(1, range.texture, &[]);
+                    pass.set_bind_group(2, group, &[]);
+                    mesh.draw_range(&mut pass, range.indices.clone());
+                }
+                SceneDraw::Particles {
+                    particles, texture, ..
+                } => {
+                    let Some(pipeline) = &self.particles else {
+                        continue;
+                    };
+                    if bound != Bound::Particles {
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, camera, &[]);
+                        bound = Bound::Particles;
+                    }
+                    pass.set_bind_group(1, *texture, &[]);
+                    pass.set_bind_group(3, group, &[]);
+                    particles.draw(&mut pass);
+                }
             }
         }
     }
+}
+
+/// The light layers a draw's surface is on.
+fn layers_of(draw: &SceneDraw<'_>) -> u32 {
+    match draw {
+        SceneDraw::Mesh(range) => range.light_layers,
+        SceneDraw::Particles { light_layers, .. } => *light_layers,
+    }
+}
+
+/// The GPU emitters' pipeline: `particles_draw.wgsl`'s vertex stage, the
+/// layers fragment appended to it, through `layouts` (camera, texture,
+/// particles, layers).
+fn particle_pipeline(
+    device: &wgpu::Device,
+    layouts: [&wgpu::BindGroupLayout; 4],
+) -> wgpu::RenderPipeline {
+    let source = format!("{}\n{}", shader::PARTICLES_DRAW, shader::PARTICLE_LAYERS);
+    let module = shader::create_module(device, "particle-layers", &source);
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("particle-layers-layout"),
+        bind_group_layouts: &layouts.map(Some),
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("particle-layers"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("vs_main"),
+            compilation_options: Default::default(),
+            buffers: &[],
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &module,
+            entry_point: Some("fs_layers"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: LAYER_FORMAT,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
 }

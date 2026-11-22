@@ -84,7 +84,6 @@ impl Renderer {
             camera_binding.layout(),
             &texture_layout,
         );
-        let layers = LayerPass::new(ctx.device(), camera_binding.layout(), &texture_layout);
         let white = Texture::white(ctx.device(), ctx.queue());
         let white_bind_group = white.create_bind_group(ctx.device(), &texture_layout);
 
@@ -116,6 +115,12 @@ impl Renderer {
             log::warn!("this adapter has no compute shaders; GPU particles run on the CPU");
             None
         };
+        let layers = LayerPass::new(
+            ctx.device(),
+            camera_binding.layout(),
+            &texture_layout,
+            particles.as_ref(),
+        );
 
         let camera = {
             let mut camera = Camera2D::default();

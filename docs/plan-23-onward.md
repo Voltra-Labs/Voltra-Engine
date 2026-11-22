@@ -45,4 +45,40 @@ whatever generates the bodies.
 Things that will want a stage of their own eventually, listed so they are not
 mistaken for oversights: 3D — which per CLAUDE.md
 is a new subsystem with its own design, not a parameter added to any of the
-above.
+above — and an MCP server, below.
+
+### An MCP server: the editor driven by an AI
+
+**When:** once 2D is finished or close to it. Not before: every subsystem
+added after it would need its tools written twice, and a tool surface that
+moves under its users is worse than none.
+
+**What:** an MCP server through which an AI client can do anything a person
+can in the editor — and a little more, since it can read what it did:
+
+- Scenes: open, save, new; list, spawn, delete, reparent and rename
+  entities; read and write any component by its registered name (the
+  `ComponentRegistry` already knows every one and how it serialises).
+- Assets: list the asset root, import, author atlases, prefabs, tilemaps
+  (paint cells, terrains), input maps, sorting layers, audio buses.
+- Play mode: start, step, stop; read the world mid-play; send input actions.
+- Seeing the result: a screenshot of the viewport or the game view, the log,
+  the profiler numbers — so the AI checks its own work instead of guessing.
+- Project: build, run the tests, `cargo xtask dist`.
+
+**Shape to decide then, not now:**
+
+- Every edit goes through the same command path the inspector uses, so it
+  lands in undo history as one entry per tool call and an AI edit can be
+  undone like a person's.
+- Where the server lives: most likely a crate of its own (`voltra-mcp`)
+  talking to a running editor over a local socket, so the editor binary
+  stays free of the protocol and a headless mode (no window, the same
+  world) can serve CI. Look at how Godot's and Unity's MCP bridges split
+  editor plugin from server before choosing.
+- Scope and safety: local only by default; file writes confined to the
+  project; destructive tools (delete, overwrite, dist) say so in their
+  descriptions.
+
+No crate, no stubs until then (CLAUDE.md: new crates only when there is
+code for them).

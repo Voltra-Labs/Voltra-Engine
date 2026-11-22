@@ -70,6 +70,15 @@ pub struct ParticleEmitter {
         skip_serializing_if = "crate::sorting::is_default_layer"
     )]
     pub sorting_layer: String,
+    /// The light layers its particles are on, as a sprite's
+    /// [`light_layers`](crate::Sprite::light_layers) are. The first — the
+    /// default, and not written — is what every light lights unless told
+    /// otherwise.
+    #[serde(
+        default = "crate::light::default_light_layers",
+        skip_serializing_if = "crate::light::is_default_light_layers"
+    )]
+    pub light_layers: u32,
     /// Particles keep the world position they were born at — sparks left
     /// behind a moving ship — rather than travelling with the emitter.
     pub world_space: bool,
@@ -113,6 +122,7 @@ impl Default for ParticleEmitter {
             texture_handle: None,
             sort_order: 0,
             sorting_layer: crate::sorting::default_layer(),
+            light_layers: crate::light::default_light_layers(),
             world_space: true,
             one_shot: false,
             simulation: Simulation::Cpu,

@@ -9,6 +9,8 @@ use crate::sprite::sheets::Sheets;
 use crate::sprite::Sprite;
 use crate::text::{shape, Text};
 
+pub use surface::Surface;
+
 /// Corners per quad. Where they land is [`quad`]'s question, not this one's.
 pub(crate) const CORNERS_PER_QUAD: usize = 4;
 
@@ -40,6 +42,8 @@ pub struct GpuEmitterDraw {
     pub entity: voltra_ecs::Entity,
     /// `None` draws against the renderer's white bind group.
     pub texture: Option<Handle<Texture>>,
+    /// The light layers its particles are on.
+    pub light_layers: u32,
     /// Drawn before `ranges[before]`, or after every range when it is
     /// `ranges.len()`.
     pub before: usize,
@@ -90,9 +94,11 @@ impl SpriteBatch {
         {
             self.append_quad(
                 vertices,
-                quad.texture,
-                sprite.normal_handle,
-                sprite.light_layers,
+                Surface {
+                    texture: quad.texture,
+                    normal: sprite.normal_handle,
+                    light_layers: sprite.light_layers,
+                },
             );
         }
     }
@@ -108,8 +114,9 @@ impl SpriteBatch {
         let (quads, Some(texture)) = shape::glyphs(text, fonts) else {
             return;
         };
+        let surface = Surface::textured(Some(texture)).on(text.light_layers);
         for quad in quads {
-            self.push_quad(matrix, quad.corners, quad.uvs, text.color, Some(texture));
+            self.push_quad_on(matrix, quad.corners, quad.uvs, text.color, surface);
         }
     }
 
@@ -127,40 +134,27 @@ impl SpriteBatch {
         color: [f32; 4],
         texture: Option<Handle<Texture>>,
     ) {
-        self.push_quad_on(
-            matrix,
-            corners,
-            uvs,
-            color,
-            texture,
-            voltra_render::DEFAULT_LIGHT_LAYERS,
-        );
+        self.push_quad_on(matrix, corners, uvs, color, Surface::textured(texture));
     }
 
-    /// [`push_quad`](Self::push_quad) for a quad on `light_layers` rather
-    /// than the default: a tilemap's tiles, which carry the layer's.
+    /// [`push_quad`](Self::push_quad) drawn with a whole `surface` rather
+    /// than a texture alone: a tilemap's tiles, which carry the layer's
+    /// normal map and light layers.
     pub fn push_quad_on(
         &mut self,
         matrix: Mat3,
         corners: [Vec2; 4],
         uvs: [[f32; 2]; 4],
         color: [f32; 4],
-        texture: Option<Handle<Texture>>,
-        light_layers: u32,
+        surface: Surface,
     ) {
         if let Some(vertices) = placed(self.visible, matrix, corners, uvs, color) {
-            self.append_quad(vertices, texture, None, light_layers);
+            self.append_quad(vertices, surface);
         }
     }
 
     /// Appends a quad already placed and culled by [`placed`].
-    pub(crate) fn append_quad(
-        &mut self,
-        vertices: [Vertex; 4],
-        texture: Option<Handle<Texture>>,
-        normal: Option<Handle<Texture>>,
-        light_layers: u32,
-    ) {
+    pub(crate) fn append_quad(&mut self, vertices: [Vertex; 4], surface: Surface) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each sprite would redraw the first one. `u32` because a
         // batch holds every sprite in the world, not one object's geometry.
@@ -172,20 +166,18 @@ impl SpriteBatch {
             .extend(QUAD_INDICES.iter().map(|offset| base + offset));
         let end = self.indices.len() as u32;
 
-        self.extend_ranges(texture, normal, light_layers, start..end);
+        self.extend_ranges(surface, start..end);
     }
 
-    /// Adds `indices` drawn with `texture`, `normal` and `light_layers` to
-    /// the last range when it has all three the same, or as a range of its
-    /// own. Never across a
-    /// GPU emitter, which must draw between the two.
-    pub(crate) fn extend_ranges(
-        &mut self,
-        texture: Option<Handle<Texture>>,
-        normal: Option<Handle<Texture>>,
-        light_layers: u32,
-        indices: std::ops::Range<u32>,
-    ) {
+    /// Adds `indices` drawn with `surface` to the last range when it has the
+    /// same one, or as a range of its own. Never across a GPU emitter, which
+    /// must draw between the two.
+    pub(crate) fn extend_ranges(&mut self, surface: Surface, indices: std::ops::Range<u32>) {
+        let Surface {
+            texture,
+            normal,
+            light_layers,
+        } = surface;
         let sealed = self
             .gpu_emitters
             .last()
@@ -213,10 +205,12 @@ impl SpriteBatch {
         &mut self,
         entity: voltra_ecs::Entity,
         texture: Option<Handle<Texture>>,
+        light_layers: u32,
     ) {
         self.gpu_emitters.push(GpuEmitterDraw {
             entity,
             texture,
+            light_layers,
             before: self.ranges.len(),
         });
     }
@@ -282,5 +276,6 @@ pub(crate) fn placed(
 mod build;
 #[cfg(test)]
 mod cull_tests;
+mod surface;
 #[cfg(test)]
 mod tests;
