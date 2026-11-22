@@ -15,6 +15,7 @@
 //! despawned-mid-drag handling below.
 
 pub mod drag;
+pub mod follow;
 pub mod handle;
 pub mod shape;
 
@@ -24,6 +25,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{hierarchy, Transform};
 
+use crate::selection::Selection;
 use crate::tool::Tool;
 use drag::Drag;
 use handle::{Axes, Handle, LINE_WIDTH};
@@ -33,6 +35,9 @@ use handle::{Axes, Handle, LINE_WIDTH};
 pub struct Gizmo {
     /// `Some` only between a press on a handle and the release that ends it.
     drag: Option<Drag>,
+    /// The rest of the selection, carried by the drag, with their world
+    /// transforms when it began. See [`follow`].
+    followers: Vec<(Entity, Transform)>,
 }
 
 /// What one frame of gizmo interaction did.
@@ -57,6 +62,7 @@ impl Gizmo {
     /// `Entity` and the anchors a [`Drag`] holds are all stale.
     pub fn cancel_drag(&mut self) {
         self.drag = None;
+        self.followers.clear();
     }
 
     /// What a live drag is doing, if one is live.
@@ -77,13 +83,13 @@ impl Gizmo {
         &mut self,
         response: &Response,
         frame: &mut UiFrame<'_>,
-        selected: Option<Entity>,
+        selection: &Selection,
         tool: Tool,
     ) -> GizmoOutcome {
         let viewport = viewport_size(response);
         if viewport.x <= 0.0 || viewport.y <= 0.0 {
             // A minimised window. Every conversion below divides by this.
-            self.drag = None;
+            self.cancel_drag();
             return GizmoOutcome::default();
         }
 
@@ -91,7 +97,7 @@ impl Gizmo {
         // viewport: the drag belongs to the gizmo, not to the cursor still
         // being over a handle.
         if self.drag.is_some() && !response.is_pointer_button_down_on() {
-            self.drag = None;
+            self.cancel_drag();
             return GizmoOutcome {
                 consumed: true,
                 dragging: None,
@@ -123,11 +129,17 @@ impl Gizmo {
                 // Despawned mid-drag, its Transform removed, or its parent
                 // collapsed to a point. Ending the drag is the whole response:
                 // there is nothing left to transform.
-                self.drag = None;
+                self.cancel_drag();
                 return GizmoOutcome {
                     consumed: true,
                     dragging: None,
                 };
+            }
+            let (tool, start) = (active.tool, active.start);
+            for &(follower, from) in &self.followers {
+                // One that went away mid-drag is simply left behind.
+                let to = follow::follow(tool, &start, &updated, &from);
+                hierarchy::set_world_transform(frame.world, follower, &to);
             }
             return GizmoOutcome {
                 consumed: true,
@@ -139,7 +151,7 @@ impl Gizmo {
             return GizmoOutcome::default();
         }
 
-        let Some(entity) = selected else {
+        let Some(entity) = selection.live_primary(frame.world) else {
             return GizmoOutcome::default();
         };
         if frame.world.get::<Transform>(entity).is_none() {
@@ -154,6 +166,7 @@ impl Gizmo {
         };
 
         self.drag = Some(Drag::begin(entity, tool, handle, cursor_world, start));
+        self.followers = follow::followers(frame.world, entity, selection);
         GizmoOutcome {
             consumed: true,
             dragging: Some(entity),
@@ -209,93 +222,4 @@ fn viewport_size(response: &Response) -> Vec2 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use handle::{AXIS_LENGTH, RING_RADIUS};
-    use std::f32::consts::FRAC_PI_2;
-
-    /// The gizmo's origin in these tests, in screen pixels.
-    const O: Vec2 = Vec2::new(100.0, 100.0);
-
-    fn transform() -> Transform {
-        Transform::from_translation(Vec2::ZERO)
-    }
-
-    #[test]
-    fn cancelling_ends_the_drag() {
-        // What Stop needs: `Drag` holds an `Entity` and world-space anchors, and
-        // both address a world that a restore is about to despawn and respawn.
-        let mut world = voltra_ecs::World::new();
-        let entity = world.spawn();
-        let mut gizmo = Gizmo {
-            drag: Some(Drag::begin(
-                entity,
-                Tool::Translate,
-                Handle::Both,
-                Vec2::ZERO,
-                transform(),
-            )),
-        };
-
-        gizmo.cancel_drag();
-
-        assert!(gizmo.drag.is_none());
-        assert_eq!(gizmo.active_tool(), None);
-    }
-
-    #[test]
-    fn each_tool_grabs_its_own_handles() {
-        let on_arm = O + Vec2::new(AXIS_LENGTH * 0.5, 0.0);
-        let on_ring = O + Vec2::new(RING_RADIUS, 0.0);
-        let t = transform();
-
-        assert_eq!(grab_handle(Tool::Translate, on_arm, O, &t), Some(Handle::X));
-        assert_eq!(grab_handle(Tool::Scale, on_arm, O, &t), Some(Handle::X));
-        assert_eq!(
-            grab_handle(Tool::Rotate, on_ring, O, &t),
-            Some(Handle::Ring)
-        );
-    }
-
-    #[test]
-    fn a_tool_does_not_grab_another_tools_handle() {
-        // The ring passes through empty space for the arm gizmos, and the arms
-        // sit inside the ring's middle, which the rotate tool leaves clickable.
-        let on_ring = O + Vec2::new(0.0, RING_RADIUS);
-        let on_arm = O + Vec2::new(AXIS_LENGTH * 0.5, 0.0);
-        let t = transform();
-
-        assert_eq!(grab_handle(Tool::Translate, on_ring, O, &t), None);
-        assert_eq!(grab_handle(Tool::Rotate, on_arm, O, &t), None);
-    }
-
-    #[test]
-    fn the_scale_tool_grabs_the_arms_where_the_rotation_puts_them() {
-        // The translate tool's arms stay on the world axes; the scale tool's
-        // follow the entity. A quarter turn is where the two disagree.
-        let turned = transform().with_rotation(FRAC_PI_2);
-        let up = O + Vec2::new(0.0, -AXIS_LENGTH * 0.5);
-
-        assert_eq!(grab_handle(Tool::Scale, up, O, &turned), Some(Handle::X));
-        assert_eq!(
-            grab_handle(Tool::Translate, up, O, &turned),
-            Some(Handle::Y)
-        );
-    }
-
-    #[test]
-    fn a_live_drag_reports_its_own_tool() {
-        let mut world = voltra_ecs::World::new();
-        let gizmo = Gizmo {
-            drag: Some(Drag::begin(
-                world.spawn(),
-                Tool::Rotate,
-                Handle::Ring,
-                Vec2::new(1.0, 0.0),
-                transform(),
-            )),
-        };
-
-        assert_eq!(gizmo.active_tool(), Some(Tool::Rotate));
-    }
-}
+mod tests;

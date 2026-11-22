@@ -24,7 +24,7 @@ use voltra_scene::{
 };
 
 use crate::editor::Editor;
-use crate::undo::{selected_id, SceneView};
+use crate::undo::SceneView;
 
 /// How big a freshly spawned sprite is, in world units.
 ///
@@ -63,13 +63,13 @@ pub(crate) fn record_all(
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
-        selected: selected_id(frame.world, editor.selected),
+        selected: editor.selection.ids(frame.world),
     };
     editor.history.begin(label, view, []);
 
     let (entities, selected) = spawn(frame, &editor.registry);
     if selected.is_some() {
-        editor.selected = selected;
+        editor.selection.set(selected);
     }
 
     let ids: Vec<SceneId> = entities
@@ -79,7 +79,7 @@ pub(crate) fn record_all(
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
-        selected: selected_id(frame.world, editor.selected),
+        selected: editor.selection.ids(frame.world),
     };
     editor.history.commit_including(view, ids);
 }

@@ -116,7 +116,8 @@ fn tools(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
     // would leave them undiscoverable.
     ui.separator();
     let layer = editor
-        .selected
+        .selection
+        .primary()
         .is_some_and(|e| frame.world.get::<voltra_scene::Tilemap>(e).is_some());
     for tool in PaintTool::ALL {
         let button = egui::Button::selectable(painting == Some(tool), tool.glyph())

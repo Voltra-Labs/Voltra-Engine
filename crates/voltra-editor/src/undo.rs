@@ -5,10 +5,11 @@ pub mod history;
 pub mod shortcut;
 
 use voltra_core::UiFrame;
-use voltra_ecs::{Entity, World};
+use voltra_ecs::World;
 use voltra_scene::{ComponentRegistry, SceneId};
 
 use crate::gizmo::Gizmo;
+use crate::selection::Selection;
 
 pub use history::History;
 
@@ -57,21 +58,16 @@ pub struct SceneView<'a> {
     /// owns one registry and passes it here rather than building one per call,
     /// so that is guaranteed rather than remembered.
     pub registry: &'a ComponentRegistry,
-    /// The selection by identity: the `Entity` will not survive an undo that
-    /// respawns it.
-    pub selected: Option<SceneId>,
+    /// The selection by identity, the primary last: the `Entity` will not
+    /// survive an undo that respawns it.
+    pub selected: Vec<SceneId>,
 }
 
 /// The editor state an undo or a redo writes besides the world.
 pub struct UndoContext<'a> {
     pub registry: &'a ComponentRegistry,
-    pub selected: &'a mut Option<Entity>,
+    pub selected: &'a mut Selection,
     /// Cancelled by every apply: a `Drag` holds an `Entity` and a grab offset,
     /// and an undo that respawns the entity leaves both stale.
     pub gizmo: &'a mut Gizmo,
-}
-
-/// The scene identity of `entity`, if it has one.
-pub fn selected_id(world: &World, entity: Option<Entity>) -> Option<SceneId> {
-    entity.and_then(|e| world.get::<SceneId>(e).copied())
 }

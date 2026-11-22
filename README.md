@@ -56,8 +56,14 @@ The editor opens with a hierarchy on the left, an inspector on the right and the
 scene in the middle. `Scene ▸ Spawn sprite` adds an entity; selecting one in the
 hierarchy lets the inspector edit its transform and colour. An entity can also
 be selected by clicking it in the viewport; clicking empty space clears the
-selection. `Scene ▸ Save` and `Scene ▸ Open` write and read
-`assets/scenes/scene.ron`.
+selection. Ctrl-click adds or removes one, Shift-click in the hierarchy takes
+the rows between, and a left drag on empty ground draws a box that selects
+what it encloses; the gizmo, on the last one picked, moves, turns and scales
+them all about it, the inspector edits that one, and `Delete` (the button or
+the key) removes them all as one undo entry. `Ctrl+D` duplicates the selection
+in place, and `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste it — through
+the system clipboard, so a copy pastes into another scene or editor window. `Scene ▸ Save` and
+`Scene ▸ Open` write and read `assets/scenes/scene.ron`.
 
 The hierarchy lists the scene as a tree. An entity's `Name` is what a row says —
 the inspector renames it, and an unnamed one falls back to its index. Dragging a
@@ -293,6 +299,9 @@ privileged and plain `cargo build` covers everything.
 | 61a | Shadow casters block only the lights of their light layers | done |
 | 61b | Global lights: the ambient lifted for the pixels of their layers | done |
 | 62 | Light cookies: an image over a light that tints and shapes it | done |
+| 63a | Multi-selection: Ctrl/Shift clicks, box select, outlines, Delete | done |
+| 63b | The gizmo moves, turns and scales the whole selection | done |
+| 63c | Duplicate, copy and paste, through the system clipboard as text | done |
 
 ## Contributing
 

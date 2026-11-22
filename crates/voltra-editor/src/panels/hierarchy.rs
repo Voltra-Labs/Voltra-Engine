@@ -1,4 +1,6 @@
-//! Left panel: the scene as a tree, and which entity is selected.
+//! Left panel: the scene as a tree, and which entities are selected — a
+//! click selects one, Ctrl-click toggles one, Shift-click takes the rows
+//! between.
 //!
 //! Rows are drag sources and drop targets both, which is how every engine's
 //! hierarchy reparents: drop onto a row to become its child, drop below the
@@ -17,6 +19,7 @@ use voltra_scene::{Name, SceneId};
 
 use crate::drag;
 use crate::editor::Editor;
+use crate::selection::Click;
 use crate::undo::SceneView;
 
 /// How far one level of nesting is indented, in points.
@@ -30,6 +33,19 @@ struct Reparent {
     child: Entity,
     /// `None` drops the entity at the top level.
     parent: Option<Entity>,
+}
+
+/// What a walk over the tree collects, acted on once it is over: a drop
+/// would change the links being walked, and a Shift-click's range needs the
+/// rows below the clicked one too.
+#[derive(Default)]
+struct Walk {
+    /// Every row drawn, so a parent cycle stops rather than recursing.
+    drawn: HashSet<Entity>,
+    /// The rows in the order they are shown, top to bottom.
+    order: Vec<Entity>,
+    request: Option<Reparent>,
+    click: Option<(Entity, Click)>,
 }
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
@@ -52,8 +68,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 return;
             }
 
-            let mut request = None;
-            let mut drawn = HashSet::new();
+            let mut walk = Walk::default();
 
             // The whole tree is one drop zone, so releasing over the empty
             // space below the last row unparents. A row that took the payload
@@ -64,15 +79,15 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 .show(ui, |ui| {
                     ui.dnd_drop_zone::<Entity, _>(Frame::default(), |ui| {
                         for root in roots {
-                            row(editor, ui, frame, root, &mut drawn, &mut request);
+                            row(editor, ui, frame, root, &mut walk);
                         }
                         // A parent cycle in a hand-edited file leaves entities
                         // that are neither roots nor reachable from one. They
                         // are in the scene and they save, so they are drawn —
                         // at the top level, which is the only honest place for
                         // an entity whose parent is itself.
-                        for orphan in unreachable(frame.world, &drawn) {
-                            row(editor, ui, frame, orphan, &mut drawn, &mut request);
+                        for orphan in unreachable(frame.world, &walk.drawn) {
+                            row(editor, ui, frame, orphan, &mut walk);
                         }
                         // Fills the panel, so the drop zone covers the empty
                         // space below the tree rather than only the rows — and
@@ -96,34 +111,31 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 .inner;
 
             if let Some(child) = dropped {
-                request = Some(Reparent {
+                walk.request = Some(Reparent {
                     child: *child,
                     parent: None,
                 });
             }
 
-            if let Some(reparent) = request {
+            if let Some((entity, click)) = walk.click {
+                editor.selection.click(entity, click, &walk.order);
+            }
+            if let Some(reparent) = walk.request {
                 apply(editor, frame, reparent);
             }
         });
 }
 
 /// One entity's row, then its children indented under it.
-fn row(
-    editor: &mut Editor,
-    ui: &mut Ui,
-    frame: &mut UiFrame<'_>,
-    entity: Entity,
-    drawn: &mut HashSet<Entity>,
-    request: &mut Option<Reparent>,
-) {
+fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity, walk: &mut Walk) {
     // The guard against a cycle: an entity is drawn once, and a link that
     // points back up the tree stops here instead of recursing forever.
-    if !drawn.insert(entity) {
+    if !walk.drawn.insert(entity) {
         return;
     }
+    walk.order.push(entity);
 
-    let selected = editor.selected == Some(entity);
+    let selected = editor.selection.contains(entity);
     // A row is a click target first and a drag source second, which is the
     // order Unity's hierarchy works in: a click selects, and only a press that
     // moves past egui's drag threshold picks the row up. `dnd_drag_source`
@@ -163,10 +175,11 @@ fn row(
     }
 
     if response.clicked() {
-        editor.selected = Some(entity);
+        let click = Click::from_modifiers(ui.input(|i| i.modifiers));
+        walk.click = Some((entity, click));
     }
     if let Some(dragged) = response.dnd_release_payload::<Entity>() {
-        *request = Some(Reparent {
+        walk.request = Some(Reparent {
             child: *dragged,
             parent: Some(entity),
         });
@@ -182,7 +195,7 @@ fn row(
     ui.spacing_mut().indent = INDENT;
     ui.indent(Id::new(("hierarchy-children", entity)), |ui| {
         for child in children {
-            row(editor, ui, frame, child, drawn, request);
+            row(editor, ui, frame, child, walk);
         }
     });
 }
@@ -207,7 +220,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Reparent) {
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
-        selected: Some(id),
+        selected: vec![id],
     };
     editor.history.begin("Reparent", view, [id]);
 
@@ -225,7 +238,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Reparent) {
             hierarchy::set_world_transform(frame.world, child, &placement);
             // The dragged row, not whatever was selected before: the drag says
             // which entity the user is thinking about.
-            editor.selected = Some(child);
+            editor.selection.set(Some(child));
         }
         // Refused, and every reason is a rule rather than a failure — a cycle,
         // an entity without an identity, a physics body. A drop that silently
@@ -237,7 +250,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Reparent) {
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
-        selected: Some(id),
+        selected: vec![id],
     };
     editor.history.commit(view);
 }

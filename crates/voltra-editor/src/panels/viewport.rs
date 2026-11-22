@@ -15,6 +15,8 @@ use crate::spawn;
 use crate::tool::Tool;
 use crate::view;
 
+mod select;
+
 /// What the viewport image is multiplied by while the editor is not editing.
 ///
 /// Unity's play-mode tint, and for Unity's reason: the oldest complaint about
@@ -63,7 +65,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // the inspector cannot switch tools. Not while the right button is
             // held either: that is the WASD fly chord, and `D` is in it.
             let selected_layer = editor
-                .selected
+                .selection
+                .primary()
                 .filter(|&e| frame.world.get::<voltra_scene::Tilemap>(e).is_some());
             if scene.hovered() && !ui.ctx().egui_wants_keyboard_input() {
                 ui.input(|i| {
@@ -97,8 +100,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             // While a caster's shape is edited, its handles have the pointer,
             // as a painted layer does below.
-            if let Some(caster) = editor.shape.target(frame.world, editor.selected) {
+            if let Some(caster) = editor.shape.target(frame.world, editor.selection.primary()) {
                 editor.gizmo.cancel_drag();
+                editor.marquee.cancel();
                 if let Some(label) = editor.shape.update(ui, &scene, frame, caster) {
                     editor.history.claim(label);
                 }
@@ -121,8 +125,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             // While painting, the layer has the pointer: no gizmo, and a click
             // paints rather than selects.
-            if let Some(layer) = editor.paint.target(frame.world, editor.selected) {
+            if let Some(layer) = editor.paint.target(frame.world, editor.selection.primary()) {
                 editor.gizmo.cancel_drag();
+                editor.marquee.cancel();
                 if let Some(label) = editor.paint.update(ui, &scene, frame, layer) {
                     editor.history.claim(label);
                 }
@@ -143,7 +148,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // grabbable, and a drag on one must not also re-select.
             let outcome = editor
                 .gizmo
-                .update(&scene, frame, editor.selected, editor.tool);
+                .update(&scene, frame, &editor.selection, editor.tool);
 
             // Every frame the drag holds an entity, so the history keeps one
             // entry open for the whole drag instead of one per frame. The entry
@@ -164,9 +169,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             // Before navigation: a click and a drag are mutually exclusive in
             // egui, so this cannot swallow a pan.
-            if !outcome.consumed && scene.clicked() {
-                editor.selected = crate::picking::clicked_entity(&scene, frame);
-            }
+            select::update(editor, &scene, frame, outcome.consumed);
 
             editor.camera.navigate(ui, &scene, frame.camera);
 
@@ -174,12 +177,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // this frame ends with rather than the one it started with.
             editor
                 .gizmo
-                .draw(&scene, frame, editor.selected, editor.tool);
+                .draw(&scene, frame, editor.selection.primary(), editor.tool);
 
             // What the selected camera would show, if it is one. After the
             // gizmo, whose handles are what the pointer is aiming at, and
             // before the colliders, which are the noisiest layer of the three.
-            if let Some(entity) = editor.selected.filter(|e| frame.world.is_alive(*e)) {
+            if let Some(entity) = editor.selection.live_primary(frame.world) {
                 // Read before the split borrow below, which takes the frame
                 // mutably and would rule out reaching the camera.
                 let aspect = frame.camera.aspect;
@@ -193,6 +196,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 view::caster::draw(&outlines, lines);
                 view::light::draw(world, entity, lines);
             }
+            select::draw(editor, frame);
 
             // Last of all: the overlay is drawn in the order it is pushed, and
             // a collider outline must not cover the handle being dragged over

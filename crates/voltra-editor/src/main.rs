@@ -1,12 +1,17 @@
 mod camera;
+mod clipboard;
+mod delete;
 mod drag;
+mod edit_keys;
 mod editor;
 mod gizmo;
+mod marquee;
 mod paint;
 mod panels;
 mod picking;
 mod play;
 mod prefab;
+mod selection;
 mod shape_edit;
 mod spawn;
 mod tool;
