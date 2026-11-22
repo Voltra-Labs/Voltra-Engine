@@ -60,11 +60,12 @@ impl Default for Joint2D {
 impl Joint2D {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "Joint2D";
+}
 
-    /// Rewrites the bodies it names through `map`, leaving an id `map` does
-    /// not know as it is — a copy's joint to a body inside the copy follows
+impl crate::format::SceneRefs for Joint2D {
+    /// The bodies it names: a copy's joint to a body inside the copy follows
     /// the copy, one to a body outside it keeps that body.
-    pub fn remap(&mut self, map: impl Fn(SceneId) -> Option<SceneId>) {
+    fn remap(&mut self, map: &dyn Fn(SceneId) -> Option<SceneId>) {
         for end in [&mut self.a, &mut self.b] {
             if let Some(id) = *end {
                 *end = Some(map(id).unwrap_or(id));

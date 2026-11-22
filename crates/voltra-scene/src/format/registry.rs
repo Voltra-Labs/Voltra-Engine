@@ -13,6 +13,8 @@ use serde::Serialize;
 use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
+use super::refs::SceneRefs;
+use crate::scene_id::SceneId;
 use crate::{
     AudioListener, AudioSource, Camera, Collider, CollisionLayers, GlobalLight2D, Name, Parallax,
     Parent, ParticleEmitter, Persistent, PhysicsMaterial, PointLight2D, PrefabInstance, RigidBody,
@@ -44,7 +46,15 @@ type RemoveFn = fn(&mut World, Entity);
 /// written back, for comparing values whatever text they were stored as.
 type NormalizeFn = fn(&RawValue) -> Result<Box<RawValue>, SceneError>;
 
-/// One component type's name and the three conversions that go with it.
+/// A registered type's references rewritten on an entity, for a type that
+/// names other entities — see [`super::refs`].
+type RemapFn = fn(&mut World, Entity, &dyn Fn(SceneId) -> Option<SceneId>);
+
+/// The same, for a stored value.
+type RewriteFn =
+    fn(&RawValue, &dyn Fn(SceneId) -> Option<SceneId>) -> Result<Box<RawValue>, SceneError>;
+
+/// One component type's name and the conversions that go with it.
 ///
 /// `save`/`load`/`remove` are read by `save_one`/`load_one`/`remove_one` below.
 struct Entry {
@@ -53,6 +63,8 @@ struct Entry {
     load: LoadFn,
     remove: RemoveFn,
     normalize: NormalizeFn,
+    /// For a type naming other entities by id; `None` for every other.
+    refs: Option<(RemapFn, RewriteFn)>,
 }
 
 /// The component types a scene file may contain.
@@ -107,7 +119,7 @@ impl ComponentRegistry {
         registry.register::<ParticleEmitter>("ParticleEmitter");
         registry.register::<PointLight2D>("PointLight2D");
         registry.register::<GlobalLight2D>("GlobalLight2D");
-        registry.register::<crate::Joint2D>(crate::Joint2D::NAME);
+        registry.register_with_refs::<crate::Joint2D>(crate::Joint2D::NAME);
         registry.register::<ShadowCaster2D>("ShadowCaster2D");
         registry
     }
@@ -138,7 +150,69 @@ impl ComponentRegistry {
                 let component: T = value.into_rust().map_err(SceneError::Parse)?;
                 RawValue::from_rust(&component).map_err(SceneError::Serialize)
             },
+            refs: None,
         });
+    }
+
+    /// [`register`](Self::register), for a type that names other entities
+    /// by id: every copy and every prefab compare rewrites its references
+    /// ([`remap_refs`](Self::remap_refs), [`rewrite_refs`](Self::rewrite_refs)).
+    pub fn register_with_refs<T>(&mut self, name: &'static str)
+    where
+        T: Serialize + DeserializeOwned + SceneRefs + 'static,
+    {
+        self.register::<T>(name);
+        let entry = self
+            .entries
+            .last_mut()
+            .expect("register just pushed the entry");
+        entry.refs = Some((
+            |world, entity, map| {
+                if let Some(component) = world.get_mut::<T>(entity) {
+                    component.remap(map);
+                }
+            },
+            |value, map| {
+                let mut component: T = value.into_rust().map_err(SceneError::Parse)?;
+                component.remap(map);
+                RawValue::from_rust(&component).map_err(SceneError::Serialize)
+            },
+        ));
+    }
+
+    /// Rewrites, through `map`, every id the components on `entity` name.
+    pub fn remap_refs(
+        &self,
+        world: &mut World,
+        entity: Entity,
+        map: &dyn Fn(SceneId) -> Option<SceneId>,
+    ) {
+        for (remap, _) in self.entries.iter().filter_map(|e| e.refs) {
+            remap(world, entity, map);
+        }
+    }
+
+    /// `value`, stored as `name`, with the ids it names taken through `map`
+    /// — `None` for a type that names none, or one not registered.
+    pub(crate) fn rewrite_refs(
+        &self,
+        name: &str,
+        value: &RawValue,
+        map: &dyn Fn(SceneId) -> Option<SceneId>,
+    ) -> Result<Option<Box<RawValue>>, SceneError> {
+        let Some(entry) = self.entries.iter().find(|e| e.name == name) else {
+            return Ok(None);
+        };
+        let Some((_, rewrite)) = entry.refs else {
+            return Ok(None);
+        };
+        rewrite(value, map).map(Some).map_err(|error| match error {
+            SceneError::Parse(source) => SceneError::Component {
+                name: entry.name.to_owned(),
+                source: source.into(),
+            },
+            other => other,
+        })
     }
 
     pub fn names(&self) -> impl Iterator<Item = &'static str> + '_ {

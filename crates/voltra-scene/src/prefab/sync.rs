@@ -39,9 +39,7 @@ use ron::value::RawValue;
 use voltra_ecs::{Entity, World};
 
 use super::adopt::adopt;
-use super::compare::{
-    canonical, differences, ids_to_records, parent_record, rewrite_refs, subtree, STRUCTURE,
-};
+use super::compare::{canonical, differences, ids_to_records, parent_record, subtree, STRUCTURE};
 use super::{Prefab, PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::{self, Parent};
@@ -159,8 +157,9 @@ pub fn sync(
         for name in differ.difference(&overridden) {
             match want.get(name) {
                 Some(value) => {
-                    let value =
-                        rewrite_refs(name, value, &to_instance)?.unwrap_or_else(|| value.clone());
+                    let value = registry
+                        .rewrite_refs(name, value, &|id| to_instance.get(&id).copied())?
+                        .unwrap_or_else(|| value.clone());
                     if let Some(result) = registry.load_one(world, entity, name, &value) {
                         result?;
                     }
@@ -211,17 +210,15 @@ pub fn sync(
         }
     }
     report.spawned = spawned.len();
-    // A spawned joint names records; now that every record has its entity,
-    // it names those.
+    // A spawned reference names records; now that every record has its
+    // entity, it names those.
     if !spawned.is_empty() {
         let to_instance: HashMap<SceneId, SceneId> = parts
             .iter()
             .filter_map(|(record, &e)| Some((*record, *world.get::<SceneId>(e)?)))
             .collect();
         for (entity, _) in &spawned {
-            if let Some(joint) = world.get_mut::<crate::Joint2D>(*entity) {
-                joint.remap(|id| to_instance.get(&id).copied());
-            }
+            registry.remap_refs(world, *entity, &|id| to_instance.get(&id).copied());
         }
     }
 

@@ -75,8 +75,8 @@ pub fn apply(
             .and_then(|r| r.components.get("Transform").cloned())
     };
 
-    // A joint between the instance's entities names their records in the
-    // file.
+    // A reference between the instance's entities — a joint, a camera's
+    // target — names their records in the file.
     let to_record: std::collections::HashMap<SceneId, SceneId> = entities
         .iter()
         .filter_map(|&e| Some((*world.get::<SceneId>(e)?, record_of(world, e)?)))
@@ -92,13 +92,11 @@ pub fn apply(
         };
         record.id = id;
         record.components.remove(PrefabPart::NAME);
-        if let Some(raw) = record.components.get(crate::Joint2D::NAME) {
+        for (name, raw) in record.components.iter_mut() {
             if let Some(mapped) =
-                super::compare::rewrite_refs(crate::Joint2D::NAME, raw, &to_record)?
+                registry.rewrite_refs(name, raw, &|id| to_record.get(&id).copied())?
             {
-                record
-                    .components
-                    .insert(crate::Joint2D::NAME.to_owned(), mapped);
+                *raw = mapped;
             }
         }
         if entity == root {
