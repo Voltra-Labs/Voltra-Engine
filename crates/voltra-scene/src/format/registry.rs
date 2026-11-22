@@ -99,6 +99,8 @@ impl ComponentRegistry {
         registry.register::<SpriteAnimation>("SpriteAnimation");
         registry.register::<crate::AnimationPlayer>(crate::AnimationPlayer::NAME);
         registry.register::<Camera>("Camera");
+        registry.register_with_refs::<crate::CameraFollow2D>(crate::CameraFollow2D::NAME);
+        registry.register::<crate::CameraShake>(crate::CameraShake::NAME);
         registry.register::<AudioSource>("AudioSource");
         registry.register::<AudioListener>("AudioListener");
         registry.register::<RigidBody>("RigidBody");

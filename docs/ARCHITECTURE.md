@@ -4078,6 +4078,54 @@ platform moving, rising and turning, and nothing once it is gone), the
 cast's one-way test, and the component's format test. The `character`
 example has a one-way ledge and a lift moved by `animations/lift.anim.ron`.
 
+### A camera rig is two components, and references go through the registry
+
+Stage 69. `CameraFollow2D` keeps an entity — usually a camera — on a
+`target` (`SceneId`): `offset`, exponential `smoothing` (a rate, so the
+frame rate does not change where it lands; zero snaps), a `dead_zone` the
+target moves in freely, `look_ahead` seconds of the target's velocity, and
+`bounds` its view (a `Camera`'s size and the frame's aspect) stays inside —
+centred when the view is wider than them. `CameraShake` is Squirrel
+Eiserloh's trauma model: `add_trauma`, linear `decay`, offset = trauma² ×
+smooth noise (three incommensurate sines) × `max_offset`. Godot's `Camera2D`
+smoothing, drag margins and limits; Cinemachine's dead zone and lookahead.
+
+- **Components, not `Camera` fields**: a still camera is the common
+  authored case, and any entity may follow (a light trailing the player).
+- **Per frame, gated on the simulation** (`camera_rig::update`, after the
+  tick and animations, before the audio whose listener rides the camera).
+- **A shake never drifts the camera**: last frame's offset is taken off
+  before following and the new one added after (`ShakeState::applied`), so
+  following works from the rest position. The first frame — and after
+  `snap()` — lands on the target instead of travelling.
+- A parented follower is placed in world space through its parent's matrix.
+  A missing target holds it still and warns once.
+- Runtime memory lives in a `pub state` field of a type with private fields
+  (`FollowState`, `ShakeState`), as `Joint2D::impulses`: private fields on
+  the component itself would forbid `..Default::default()` in a game.
+
+**References between entities are registered, not special-cased.** A
+component naming entities by `SceneId` implements `SceneRefs` and registers
+with `ComponentRegistry::register_with_refs`; a prefab spawn, paste,
+duplicate, prefab sync and Apply rewrite its ids through
+`registry.remap_refs` / `rewrite_refs`. Before this, each of those named
+`Joint2D`; the camera's target was the second caller, and a third
+component would have been a fourth copy everywhere.
+
+Rejected: **follow and shake on `Camera`** (above); **random-jump shake** —
+a flicker, not a motion; **a dead zone in screen fractions** — Godot's
+margins; world units are independent of the window and testable headless.
+
+- **Not yet**: rotation shake (the `Camera2D` has no rotation), several
+  targets framed at once, an editor overlay of the dead zone and bounds.
+
+Pinned by `camera_rig/tests.rs` (landing on the target and easing the same
+at any frame rate, a dead zone held then left, bounds clamping a view and
+centring one too big, a lead at half a second, a missing target holding,
+a parented follower, a shake fading back to rest, a copied target remapped)
+and `app::camera_rig` (following only while the game runs). The
+`character` example follows with all of it and shakes on a hard landing.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

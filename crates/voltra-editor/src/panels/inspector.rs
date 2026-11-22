@@ -7,6 +7,7 @@ mod animation;
 mod animation_player;
 mod audio_source;
 mod camera;
+mod camera_rig;
 mod character;
 mod collision;
 mod delete;
@@ -184,6 +185,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.separator();
                     claim = claim.or(camera::show(ui, camera));
                 }
+                claim = claim.or(camera_rig::show(ui, frame.world, entity));
                 if let Some(source) = frame.world.get_mut::<AudioSource>(entity) {
                     ui.separator();
                     claim = claim.or(audio_source::show(
