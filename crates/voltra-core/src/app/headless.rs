@@ -204,5 +204,9 @@ impl Headless {
     }
 }
 
+mod screenshot;
+
+pub use screenshot::{Screenshot, ScreenshotError};
+
 #[cfg(test)]
 mod tests;

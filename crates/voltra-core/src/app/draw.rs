@@ -9,6 +9,7 @@ use voltra_scene::sprite::sheets::Sheets;
 use super::{App, UiFrame};
 
 mod parts;
+pub(super) mod world;
 
 use parts::{
     clock_seconds, lighting, mesh_draws, prepare_text, ui_batch, ui_scale, view_max, view_min,
@@ -130,43 +131,21 @@ impl App {
         self.thumbnails.sync(egui, &device, textures);
 
         let scale = window.scale_factor() as f32;
-        prepare_text(&self.world, fonts, textures, &device, &queue, scale);
-        // The immutable reborrow ends with the batch, well before the UI takes
-        // both stores mutably below.
-        let sheets = Sheets::new(atlases, textures)
-            .with_fonts(fonts)
-            .seen_from(renderer.camera.position)
-            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
-            .at_time(clock_seconds(self.elapsed))
-            .with_layers(&self.sorting_layers);
-        // Into last frame's buffers, taken out for the frame and put back.
-        let mut batch = std::mem::take(&mut self.frame_batch);
-        batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
-        let mesh = batch.upload(&device);
-        // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
-        // rather than borrowed, so the borrow on `renderer` ends here instead
-        // of surviving into the `&mut self` call below.
-        let white = renderer.white_bind_group().clone();
-        let draws = super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings);
-        // The game's HUD over the scene, in the viewport's pixels: what the
-        // window will show in a build, so the editor shows it too.
-        let hud = ui_batch(&self.world, sheets, target.width(), target.height(), scale);
-        let hud_mesh = hud.upload(&device);
-        let hud_draws = mesh_draws(&hud, textures, &white);
-        let layer = Layer {
-            mesh: hud_mesh.as_ref(),
-            draws: &hud_draws,
-        };
-        let post = voltra_scene::post::active(&self.world);
-        renderer.lighting = lighting(
-            &self.world,
-            &renderer.camera,
-            sheets,
-            self.silhouettes.as_mut(),
+        world::WorldDraw {
+            world: &self.world,
+            renderer,
             textures,
-        );
-        renderer.render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
-        self.frame_batch = batch;
+            atlases,
+            fonts,
+            silhouettes: self.silhouettes.as_mut(),
+            sorting_layers: &self.sorting_layers,
+            batch: &mut self.frame_batch,
+            tile_meshes: &mut self.tile_meshes,
+            gpu_rings: &self.gpu_rings,
+            elapsed: self.elapsed,
+            scale,
+        }
+        .into_targets(target, graded);
 
         let size = window.inner_size();
         let screen = ScreenDescriptor {

@@ -116,7 +116,11 @@ without a window or a device:
   state from a fed action; a scene that will not read is an error, not a
   panic.
 
-### M1c — screenshots to PNG
+### M1c — screenshots to PNG — done
+
+Landed: `GpuContext::headless`, `Renderer::headless`, `voltra_render::read_rgba8`,
+the shared `WorldDraw`, `Headless::screenshot` → `Screenshot`
+(`pixel`, `save_png`, `png_bytes`). The editor's viewport readback is M3's.
 
 - `voltra-render`: render a frame into an offscreen `RenderTarget` and read
   it back (the path `headless_render.rs` already proves), as a public API,

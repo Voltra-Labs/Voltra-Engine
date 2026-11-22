@@ -4272,6 +4272,34 @@ falling; a component set from text, read back, and refused for bad text,
 an unknown name or entity; a fed action moving an entity in a game's fixed
 tick and stopping when let go; a missing scene an error).
 
+### A screenshot is the editor's viewport draw, offscreen and read back
+
+MCP M1c. `Headless::screenshot(width, height)` draws the world through the
+scene's active camera — lit, graded, the HUD over it — into an offscreen
+target and reads it back as RGBA (`Screenshot`, with `pixel`, `save_png`,
+`png_bytes`).
+
+- **One draw**: the world-to-target draw the editor's viewport did inline is
+  `app::draw::world::WorldDraw`, used by the viewport and the screenshot
+  alike, so the two cannot drift. (`draw.rs`'s helpers moved to
+  `draw/parts.rs` first, move-only.)
+- **A device without a window**: `GpuContext::headless` / `Renderer::headless`
+  — no surface; the configuration still carries the format and size a
+  window's would (`Bgra8UnormSrgb`, the common sRGB one), so every pipeline
+  is built the same. `acquire` answers `None` without a surface. `None` on a
+  machine with no adapter: `ScreenshotError::NoDevice`, and a run without
+  pictures carries on.
+- **`voltra_render::read_rgba8`** is the readback, out of the tests:
+  padded rows stepped over, BGRA swapped to RGBA, sRGB bytes as a screen
+  shows them; a map that fails logs and answers black rather than panicking.
+- The device and the texture store are made on the first shot and reused;
+  the targets resize to each shot's size.
+
+Pinned by `app/headless/tests.rs` (a red square in the middle of a 64×64
+shot through a camera, the clear colour at the corner, PNG bytes, a second
+shot at another size) and `voltra-render/tests/headless_renderer.rs` (a
+headless renderer with no surface clearing a target that reads back red).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
