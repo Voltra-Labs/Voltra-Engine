@@ -52,6 +52,7 @@ mod tests {
                     closed,
                 },
                 self_shadow: false,
+                ..ShadowCaster2D::default()
             },
         );
         entity

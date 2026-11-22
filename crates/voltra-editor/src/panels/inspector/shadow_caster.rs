@@ -55,6 +55,7 @@ pub(super) fn show(
                         closed: true,
                     },
                     self_shadow: false,
+                    ..ShadowCaster2D::default()
                 },
                 _ => ShadowCaster2D::default(),
             };
@@ -185,7 +186,13 @@ pub(super) fn show(
     if let Some(new) = replace {
         caster.shape = new;
     }
-    claim
+    claim.or(super::light_layers::show(
+        ui,
+        "caster_light_layers",
+        "blocks light layers",
+        "it shadows only lights sharing one of these",
+        &mut caster.layers,
+    ))
 }
 
 /// The button that shapes a caster by its sprite's silhouette.

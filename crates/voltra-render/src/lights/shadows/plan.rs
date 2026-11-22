@@ -67,7 +67,7 @@ impl ShadowPlan {
             let reach = reach.widened(softness);
             let first = plan.instances.len();
             for (a, b) in edges
-                .casting(light.position, light.radius)
+                .casting(light.position, light.radius, light.layers)
                 .filter(|(a, b)| reach.touches_segment(*a, *b))
             {
                 plan.instances.push(ShadowInstance {
@@ -146,6 +146,7 @@ mod tests {
             points: vec![Vec2::new(x, -1.0), Vec2::new(x, 1.0)],
             closed: false,
             self_shadow: false,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         }
     }
 
@@ -200,16 +201,33 @@ mod tests {
             points: vec![Vec2::new(1.0, 2.0), Vec2::new(3.0, 2.0)],
             closed: false,
             self_shadow: false,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         }]);
         assert_eq!(ShadowPlan::new(&up, &edges, 64, 8192).rows, [Some(0)]);
         let wall = Edges::new(&[Occluder {
             points: vec![Vec2::new(1.3, 2.0), Vec2::new(3.0, 2.0)],
             closed: false,
             self_shadow: false,
+            layers: crate::lights::ALL_LIGHT_LAYERS,
         }]);
         assert_eq!(ShadowPlan::new(&up, &wall, 64, 8192).rows, [None]);
         let soft = [aimed(Vec2::Y, 0.1)];
         assert_eq!(ShadowPlan::new(&soft, &wall, 64, 8192).rows, [Some(0)]);
+    }
+
+    #[test]
+    fn a_light_gets_no_row_when_no_occluder_shares_its_layers() {
+        let wall = Occluder {
+            layers: 0b10,
+            ..wall_at(2.0)
+        };
+        let edges = Edges::new(&[wall]);
+        let on = |layers| PointLight {
+            layers,
+            ..lamp(Vec2::ZERO, true)
+        };
+        let plan = ShadowPlan::new(&[on(0b01), on(0b10)], &edges, 64, 8192);
+        assert_eq!(plan.rows, [None, Some(0)]);
     }
 
     #[test]

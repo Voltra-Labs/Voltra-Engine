@@ -10,8 +10,9 @@ use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, TexturePool};
 use voltra_render::light_layers::LAYER_FORMAT;
 use voltra_render::{
-    pass, pipeline, texture, wgpu, Filter, LayerPass, LightPass, Lighting, Mesh, MeshDraw,
-    PointLight, PostPass, PostSettings, RenderTarget, SceneDraw, Texture, Vertex, ALL_LIGHT_LAYERS,
+    pass, pipeline, texture, wgpu, Filter, GlobalLight, LayerPass, LightPass, Lighting, Mesh,
+    MeshDraw, PointLight, PostPass, PostSettings, RenderTarget, SceneDraw, Texture, Vertex,
+    ALL_LIGHT_LAYERS,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
@@ -42,6 +43,12 @@ fn quads(device: &wgpu::Device) -> Mesh {
 /// The frame lit by one lamp of `layers`, the scene's layers drawn, the
 /// left quad on `left` (the right always on layer 2).
 fn frame_with(layers: u32, left: u32) -> Option<Vec<Rgba>> {
+    lit_by(Some(layers), Vec::new(), left)
+}
+
+/// The frame lit by the ambient, a lamp of `lamp` layers if any, and
+/// `globals`, the left quad on `left` (the right always on layer 2).
+fn lit_by(lamp: Option<u32>, globals: Vec<GlobalLight>, left: u32) -> Option<Vec<Rgba>> {
     let (device, queue) = headless_device()?;
     let scene = RenderTarget::new(&device, "scene", FORMAT, SIZE, SIZE, Filter::Linear);
     let output = RenderTarget::new(&device, "output", FORMAT, SIZE, SIZE, Filter::Linear);
@@ -88,20 +95,23 @@ fn frame_with(layers: u32, left: u32) -> Option<Vec<Rgba>> {
 
     let lighting = Lighting {
         ambient: Some([0.25; 3]),
-        lights: vec![PointLight {
-            position: Vec2::ZERO,
-            color: [1.0; 3],
-            intensity: 2.0,
-            radius: 4.0,
-            falloff: 1.0,
-            shadow: None,
-            cone: None,
-            height: None,
-            layers,
-        }],
+        lights: lamp
+            .into_iter()
+            .map(|layers| PointLight {
+                position: Vec2::ZERO,
+                color: [1.0; 3],
+                intensity: 2.0,
+                radius: 4.0,
+                falloff: 1.0,
+                shadow: None,
+                cone: None,
+                height: None,
+                layers,
+            })
+            .collect(),
+        globals,
         ..Lighting::default()
     };
-    assert_eq!(lighting.uses_layers(), layers != ALL_LIGHT_LAYERS);
     let lights = LightPass::new(&device, camera.layout());
     let grade = PostPass::new(&device, FORMAT);
     let mut pool = TexturePool::default();
@@ -191,4 +201,73 @@ fn a_surface_on_no_layer_is_lit_by_nothing_even_a_lamp_of_every_layer() {
     };
     assert!(at(&pixels, 16, 40).abs_diff(AMBIENT) <= 3, "on no layer");
     assert!(at(&pixels, 48, 40) > 200, "on layer 2");
+}
+
+#[test]
+fn the_uses_layers_flag_follows_what_the_lights_leave_out() {
+    let lit = |lights: Vec<u32>, globals: Vec<u32>| Lighting {
+        ambient: Some([0.25; 3]),
+        lights: lights
+            .into_iter()
+            .map(|layers| PointLight {
+                position: Vec2::ZERO,
+                color: [1.0; 3],
+                intensity: 1.0,
+                radius: 1.0,
+                falloff: 1.0,
+                shadow: None,
+                cone: None,
+                height: None,
+                layers,
+            })
+            .collect(),
+        globals: globals
+            .into_iter()
+            .map(|layers| GlobalLight {
+                color: [1.0; 3],
+                intensity: 1.0,
+                layers,
+            })
+            .collect(),
+        ..Lighting::default()
+    };
+    assert!(!lit(vec![ALL_LIGHT_LAYERS], vec![ALL_LIGHT_LAYERS]).uses_layers());
+    assert!(lit(vec![0b10], vec![]).uses_layers());
+    assert!(lit(vec![], vec![0b10]).uses_layers());
+}
+
+#[test]
+fn a_global_light_brightens_only_the_pixels_of_its_layers() {
+    let glow = GlobalLight {
+        color: [1.0; 3],
+        intensity: 0.5,
+        layers: 0b10,
+    };
+    let Some(pixels) = lit_by(None, vec![glow], 1) else {
+        return;
+    };
+    let (left, right, background) = (at(&pixels, 16, 40), at(&pixels, 48, 40), at(&pixels, 32, 4));
+    assert!(
+        left.abs_diff(AMBIENT) <= 3,
+        "layer 1: the ambient alone, {left}"
+    );
+    // 0.25 + 0.5 linear: 225 in sRGB.
+    assert!(
+        right.abs_diff(225) <= 3,
+        "layer 2: ambient and glow, {right}"
+    );
+    // Nothing drawn there: on every layer, so it gets the glow too.
+    assert!(
+        background.abs_diff(225) <= 3,
+        "the background, {background}"
+    );
+    let everywhere = GlobalLight {
+        layers: ALL_LIGHT_LAYERS,
+        ..glow
+    };
+    let all = lit_by(None, vec![everywhere], 1).expect("adapter, found above");
+    assert!(
+        at(&all, 16, 40).abs_diff(225) <= 3,
+        "every layer: more ambient"
+    );
 }

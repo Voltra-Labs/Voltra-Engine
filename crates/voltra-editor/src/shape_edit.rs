@@ -202,6 +202,7 @@ mod tests {
             ShadowCaster2D {
                 shape,
                 self_shadow: false,
+                ..ShadowCaster2D::default()
             },
         );
         entity

@@ -26,6 +26,9 @@ pub const BLOOM: &str = include_str!("shaders/bloom.wgsl");
 /// Adds 2D point lights onto the light map. See [`LightPass`](crate::lights::LightPass).
 pub const LIGHTS: &str = include_str!("shaders/lights.wgsl");
 
+/// Adds global 2D lights onto the light map. See [`LightPass`](crate::lights::LightPass).
+pub const LIGHTS_GLOBAL: &str = include_str!("shaders/lights_global.wgsl");
+
 /// Multiplies the scene by the light map. See [`LightPass`](crate::lights::LightPass).
 pub const LIGHTS_COMPOSITE: &str = include_str!("shaders/lights_composite.wgsl");
 

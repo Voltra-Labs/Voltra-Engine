@@ -221,3 +221,19 @@ fn a_light_s_layers_reach_the_renderer_and_all_of_them_are_left_out_of_the_file(
     let read: PointLight2D = ron::from_str("(layers: 4)").expect("reads");
     assert_eq!(read.layers, 4);
 }
+
+#[test]
+fn global_lights_are_gathered_only_into_a_lit_frame() {
+    let mut world = World::new();
+    lit_camera(&mut world, None);
+    let glow = world.spawn();
+    world.insert(glow, crate::GlobalLight2D::default());
+    assert!(gather(&world, VIEW.0, VIEW.1, None).globals.is_empty());
+
+    let mut world = World::new();
+    lit_camera(&mut world, Some([0.1; 3]));
+    let glow = world.spawn();
+    world.insert(glow, crate::GlobalLight2D::default());
+    let globals = gather(&world, VIEW.0, VIEW.1, None).globals;
+    assert_eq!(globals, [crate::GlobalLight2D::default().light()]);
+}

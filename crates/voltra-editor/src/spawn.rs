@@ -7,9 +7,11 @@
 //! would drift.
 
 mod hud;
+mod light;
 mod text;
 
 pub(crate) use hud::{hud_button, hud_panel, hud_text, particles};
+pub(crate) use light::{global_light, light};
 pub(crate) use text::text;
 
 use voltra_assets::AssetPath;
@@ -155,18 +157,6 @@ pub(crate) fn tilemap(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
 /// batch. `Camera::default` is active, so the first one added to a scene is
 /// immediately the one the game view shows — an added camera that changes
 /// nothing until a checkbox is found is the worse default.
-/// Drops the default point light at `at`; it shows once a camera is lit.
-pub(crate) fn light(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
-    let entity = frame.world.spawn();
-    frame.world.insert(entity, SceneId::new());
-    frame.world.insert(entity, Name::new(name));
-    frame.world.insert(entity, Transform::from_translation(at));
-    frame
-        .world
-        .insert(entity, voltra_scene::PointLight2D::default());
-    entity
-}
-
 pub(crate) fn camera(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());

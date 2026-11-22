@@ -96,6 +96,7 @@ fn outlines(
         points,
         closed,
         self_shadow: caster.self_shadow,
+        layers: caster.layers,
     };
     match &caster.shape {
         CasterShape::Polygon { points, closed } => {
@@ -232,6 +233,7 @@ mod tests {
                     closed: false,
                 },
                 self_shadow: false,
+                ..ShadowCaster2D::default()
             },
         );
         hierarchy::set_parent(&mut world, line, parent).expect("no cycle");

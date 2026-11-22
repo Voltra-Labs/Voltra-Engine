@@ -58,6 +58,7 @@ fn half_sprite(flip_x: bool) -> (World, Silhouettes, Atlases) {
                 alpha: voltra_assets::silhouette::ALPHA_THRESHOLD,
             },
             self_shadow: false,
+            ..ShadowCaster2D::default()
         },
     );
     (world, Silhouettes::new(root), Atlases::new(scratch_root()))
