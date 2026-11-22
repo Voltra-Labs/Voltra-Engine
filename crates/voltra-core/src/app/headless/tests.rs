@@ -167,3 +167,32 @@ fn a_screenshot_draws_the_scene_through_its_camera() {
     let wide = session.screenshot(96, 48).expect("a second shot");
     assert_eq!(wide.rgba.len(), 96 * 48 * 4);
 }
+
+#[test]
+fn a_session_hands_back_what_the_engine_logged_while_it_ran() {
+    crate::logging::init(false);
+    let app = App::new(crate::WindowConfig::default()).with_asset_root(assets());
+    let mut session = Headless::new(app);
+    let _ = session.take_logs();
+    // A follower naming a target that is not there warns, once.
+    let follower = session.world_mut().spawn();
+    session.world_mut().insert(follower, Transform::default());
+    session
+        .world_mut()
+        .insert(follower, voltra_scene::CameraFollow2D::new(SceneId::new()));
+    session.step(3, 1.0 / 60.0);
+    let lines = session.take_logs();
+    let warned = lines
+        .iter()
+        .filter(|l| l.message.contains("a follower's target"))
+        .count();
+    assert!(warned >= 1, "the warning is handed back: {lines:?}");
+    session.step(3, 1.0 / 60.0);
+    assert!(
+        !session
+            .take_logs()
+            .iter()
+            .any(|l| l.message.contains("a follower's target") && l.target.contains("camera_rig")),
+        "warned once, and read once"
+    );
+}

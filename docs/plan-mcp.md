@@ -134,7 +134,10 @@ the shared `WorldDraw`, `Headless::screenshot` → `Screenshot`
 - Tests: a lit sample scene screenshot has the light where it is
   (`lights_scene.rs` checks become reusable).
 
-### M1d — capturable logs
+### M1d — capturable logs — done
+
+Landed: `logging::Tee` over `env_logger`, `logging::capture()` →
+`LogCapture::{drain, missed}`, `Headless::take_logs`. **M1 is done.**
 
 - `voltra_core::logging`: a ring buffer sink alongside stderr/file —
   `logging::capture()` returns a guard; `drain()` gives the lines since. A

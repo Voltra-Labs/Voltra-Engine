@@ -4300,6 +4300,27 @@ shot through a camera, the clear colour at the corner, PNG bytes, a second
 shot at another size) and `voltra-render/tests/headless_renderer.rs` (a
 headless renderer with no surface clearing a target that reads back red).
 
+### Logs are kept in a ring a run can read back
+
+MCP M1d. `logging::init` installs a `Tee`: `env_logger` as before — the
+terminal or `log.txt` — with every line it lets through also copied into a
+ring of the last 4096 (`logging::capture`). A `LogCapture` is a cursor:
+`drain()` answers the lines since it last read, oldest first, and `missed()`
+how many fell out of the ring before it got to them. `Headless::take_logs`
+is one, made when the session starts: what the engine said while it ran,
+for a tool to hand back.
+
+- One ring for the process, every thread's lines: a run's log is the
+  engine's, not one thread's. Captures are cursors into it, so any number
+  read without taking from each other.
+- What reaches the ring is exactly what the logger prints — the same
+  filter — so a warn-once latch still warns once.
+- A game that installs its own logger captures nothing; said in the docs.
+
+Pinned by `logging/capture.rs` (a line read once, the next one read after
+it, a flood past the ring counted as missed) and `app/headless/tests.rs` (a
+missing camera target's warning handed back by a session, once).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
