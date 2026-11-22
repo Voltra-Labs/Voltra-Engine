@@ -94,6 +94,29 @@ pub struct EditorPlayArgs {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EditorSaveArgs {
+    /// Where to save instead of the scene's own file; it becomes its file.
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EditorOpenArgs {
+    /// The scene's asset path ("scenes/level.ron").
+    pub path: String,
+    /// Throw away the open scene's unsaved changes.
+    #[serde(default)]
+    pub discard_changes: bool,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EditorNewArgs {
+    /// Throw away the open scene's unsaved changes.
+    #[serde(default)]
+    pub discard_changes: bool,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct EditorInputArgs {
     /// The input map's action.
     pub action: String,
@@ -253,9 +276,45 @@ impl VoltraMcp {
         answer(self.bridge(command).await)
     }
 
-    #[tool(description = "Save the running editor's scene to its file. Only while editing.")]
-    async fn editor_save(&self) -> Result<CallToolResult, ErrorData> {
-        answer(self.bridge(Command::Save).await)
+    #[tool(
+        description = "Save the running editor's scene to its file, or to `path` (an asset path ending in .ron), which becomes its file — overwriting what is there. Only while editing."
+    )]
+    async fn editor_save(
+        &self,
+        Parameters(args): Parameters<EditorSaveArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        answer(self.bridge(Command::Save { path: args.path }).await)
+    }
+
+    #[tool(
+        description = "Open the scene at `path` in the running editor, in place of its open scene; its undo history starts over. Refused over unsaved changes unless discard_changes — which throws them away."
+    )]
+    async fn editor_open(
+        &self,
+        Parameters(args): Parameters<EditorOpenArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        answer(
+            self.bridge(Command::Open {
+                path: args.path,
+                discard_changes: args.discard_changes,
+            })
+            .await,
+        )
+    }
+
+    #[tool(
+        description = "Replace the running editor's scene with an empty, untitled one. Refused over unsaved changes unless discard_changes — which throws them away."
+    )]
+    async fn editor_new(
+        &self,
+        Parameters(args): Parameters<EditorNewArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        answer(
+            self.bridge(Command::New {
+                discard_changes: args.discard_changes,
+            })
+            .await,
+        )
     }
 
     #[tool(

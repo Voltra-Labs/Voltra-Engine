@@ -57,8 +57,25 @@ pub enum Command {
     },
     Undo,
     Redo,
-    /// Writes the open scene to its file.
-    Save,
+    /// Writes the open scene to its file, or to `path` (an asset path),
+    /// which becomes its file.
+    Save {
+        #[serde(default)]
+        path: Option<String>,
+    },
+    /// Opens the scene at `path` in place of the open one. Refused over
+    /// unsaved changes unless `discard_changes`.
+    Open {
+        path: String,
+        #[serde(default)]
+        discard_changes: bool,
+    },
+    /// Replaces the open scene with an empty, untitled one, on the same
+    /// terms as `Open`.
+    New {
+        #[serde(default)]
+        discard_changes: bool,
+    },
     Play,
     Pause,
     /// Runs this many fixed steps while paused.

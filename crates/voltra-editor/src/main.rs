@@ -2,6 +2,7 @@ mod bridge;
 mod camera;
 mod clipboard;
 mod delete;
+mod document;
 mod drag;
 mod edit_keys;
 mod editor;
@@ -14,6 +15,7 @@ mod panels;
 mod picking;
 mod play;
 mod prefab;
+mod scene_dialogs;
 mod scene_file;
 mod selection;
 mod shape_edit;
@@ -35,20 +37,28 @@ const CHECKER: &str = "sprites/checker.png";
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    let Some(args) = Args::parse(std::env::args().skip(1)) else {
+        log::error!("usage: voltra-editor [scene.ron] [--bridge [port]]");
+        std::process::exit(2);
+    };
+
     let mut app = App::new(WindowConfig {
         title: "Voltra Editor".into(),
         ..Default::default()
     });
 
-    // Something to look at on the first run, before anything has been opened
-    // from the menu. It names the checker this repository ships, so the texture
-    // path — and hot reload over it — is visible without opening a scene first.
-    spawn_demo_scene(&mut app);
-
     let mut editor = Editor::default();
+    match args.scene {
+        // Opened on the first frame: opening needs the frame's stores.
+        Some(scene) => editor.dialogs.open_at_start(scene),
+        // Something to look at on the first run, before anything has been
+        // opened. It names the checker this repository ships, so the texture
+        // path — and hot reload over it — is visible without opening a scene.
+        None => spawn_demo_scene(&mut app),
+    }
     // `--bridge [port]`: let `voltra-mcp` drive this editor, on this
     // machine only. Off unless asked for.
-    if let Some(port) = bridge_port(std::env::args().skip(1)) {
+    if let Some(port) = args.bridge {
         match voltra_bridge::BridgeServer::start(port) {
             Ok(server) => editor.bridge = Some(server),
             Err(e) => log::error!("could not start the editor bridge on port {port}: {e}"),
@@ -56,25 +66,49 @@ fn main() {
     }
     app.with_ui(move |ui, frame| editor.ui(ui, frame))
         .with_hot_reload()
+        // The close button asks "save changes?" when there are some.
+        .with_close_guard()
         // No `with_simulation`: the editor starts in `Editing`, which is the
         // correct default for an authoring tool, and the toolbar's Play is what
         // turns the switch on.
         .run();
 }
 
-/// The port `--bridge` asks for — its argument, or the default — or `None`
-/// without the flag.
-fn bridge_port(mut args: impl Iterator<Item = String>) -> Option<u16> {
-    while let Some(arg) = args.next() {
-        if arg == "--bridge" {
-            return Some(
-                args.next()
-                    .and_then(|port| port.parse().ok())
-                    .unwrap_or(voltra_bridge::DEFAULT_PORT),
-            );
+/// What the command line asked for.
+#[derive(Debug, Default, PartialEq)]
+struct Args {
+    /// A scene to open, as an asset path.
+    scene: Option<AssetPath>,
+    /// The port `--bridge` asks for — its argument, or the default.
+    bridge: Option<u16>,
+}
+
+impl Args {
+    /// `None` for something it does not understand: an unknown flag, a
+    /// second scene, a scene that is not a scene path.
+    fn parse(args: impl Iterator<Item = String>) -> Option<Self> {
+        let mut parsed = Self::default();
+        let mut args = args.peekable();
+        while let Some(arg) = args.next() {
+            if arg == "--bridge" {
+                let port = args
+                    .next_if(|next| next.parse::<u16>().is_ok())
+                    .and_then(|port| port.parse().ok());
+                parsed.bridge = Some(port.unwrap_or(voltra_bridge::DEFAULT_PORT));
+            } else if arg.starts_with("--") || parsed.scene.is_some() {
+                return None;
+            } else {
+                match scene_file::scene_path(&arg) {
+                    Ok(path) => parsed.scene = Some(path),
+                    Err(e) => {
+                        log::error!("{e}");
+                        return None;
+                    }
+                }
+            }
         }
+        Some(parsed)
     }
-    None
 }
 
 fn spawn_demo_scene(app: &mut App) {
@@ -98,5 +132,31 @@ fn spawn_demo_scene(app: &mut App) {
         // because there is no device to upload with until a window exists.
         sprite.texture = Some(AssetPath::new(CHECKER).expect("a valid asset path"));
         app.world.insert(entity, sprite);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(line: &str) -> Option<Args> {
+        Args::parse(line.split_whitespace().map(str::to_owned))
+    }
+
+    #[test]
+    fn a_scene_and_the_bridge_come_in_either_order() {
+        let both = parse("scenes/a.ron --bridge 47900").expect("parses");
+        assert_eq!(
+            both.scene.as_ref().map(AssetPath::as_str),
+            Some("scenes/a.ron")
+        );
+        assert_eq!(both.bridge, Some(47900));
+        let flag_first = parse("--bridge scenes/a.ron").expect("parses");
+        assert_eq!(flag_first.bridge, Some(voltra_bridge::DEFAULT_PORT));
+        assert!(flag_first.scene.is_some());
+        assert_eq!(parse(""), Some(Args::default()));
+        assert_eq!(parse("--nope"), None);
+        assert_eq!(parse("a.ron b.ron"), None);
+        assert_eq!(parse("a.png"), None);
     }
 }

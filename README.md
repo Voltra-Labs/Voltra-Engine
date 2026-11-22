@@ -64,8 +64,14 @@ what it encloses; the gizmo, on the last one picked, moves, turns and scales
 them all about it, the inspector edits that one, and `Delete` (the button or
 the key) removes them all as one undo entry. `Ctrl+D` duplicates the selection
 in place, and `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste it — through
-the system clipboard, so a copy pastes into another scene or editor window. `Scene ▸ Save` and
-`Scene ▸ Open` write and read `assets/scenes/scene.ron`.
+the system clipboard, so a copy pastes into another scene or editor window.
+
+`Scene ▸ New`, `Open…`, `Save` and `Save As…` (`Ctrl+N`, `Ctrl+O`, `Ctrl+S`,
+`Ctrl+Shift+S`) work on any scene under the asset root; double-clicking a
+scene in the asset browser opens it, and `voltra-editor scenes/level.ron`
+starts with one open. The window title names the scene, with a `*` while it
+has unsaved changes — undoing back to the last save clears it — and New,
+Open and closing the window ask "save changes?" first.
 
 A prefab dropped from the asset browser stays linked to its file: editing the
 file (on disk or with the inspector's **Apply to prefab** on an edited instance)
@@ -129,8 +135,8 @@ not editing, so the mode is never in doubt.
 | ⏹ | Stop: put the scene back as it was when play began |
 
 Stop discards every change made while playing — it is a restore, not an undo.
-While editing, `Ctrl+Z` / `Ctrl+Y` undo and redo scene edits. `Scene ▸ Open`,
-`Scene ▸ Clear` and `Scene ▸ Save` stop play first, so none of them acts on a
+While editing, `Ctrl+Z` / `Ctrl+Y` undo and redo scene edits. `Scene ▸ New`,
+`Open`, `Clear` and `Save` stop play first, so none of them acts on a
 mid-flight scene.
 
 Camera controls. These belong to the editor, not the engine, and a game built
@@ -330,6 +336,7 @@ privileged and plain `cargo build` covers everything.
 | M1 | Engine prep for an MCP server: components by name with templates, headless sessions, screenshots, captured logs | done |
 | M2 | `voltra-mcp`: scenes, assets, headless runs with screenshots, build and test — over stdio | done |
 | M3 | The live editor bridge: an AI edits, plays and screenshots a running editor, each edit one undo entry | done |
+| 72 | Scenes in the editor: New, Open, Save As, unsaved-changes prompt, title, CLI scene | done |
 
 ## Contributing
 

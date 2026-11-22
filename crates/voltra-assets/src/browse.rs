@@ -11,6 +11,9 @@
 
 use std::path::Path;
 
+mod find;
+pub use find::find;
+
 use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;

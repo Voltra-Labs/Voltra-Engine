@@ -190,8 +190,12 @@ impl App {
             graded,
             actions: &self.actions,
             held_actions: &mut self.held_actions,
+            window: &mut self.window_requests,
         };
         egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
+        if let Some(title) = self.window_requests.take_title() {
+            window.set_title(&title);
+        }
 
         // After the UI, because the UI is what produced the segments, and
         // before `present_with`, because that is when egui samples the target.
