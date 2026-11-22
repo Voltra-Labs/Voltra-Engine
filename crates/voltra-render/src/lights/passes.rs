@@ -51,13 +51,25 @@ impl LightPass {
                 plan.overflow
             );
         }
-        let instances: Vec<LightInstance> = lighting
+        // Grouped by the cookie each light wears, so a run of them shares one
+        // binding; the order lights are added in does not matter.
+        let cookies = lighting.cookies.len();
+        let mut worn: Vec<(Option<u32>, LightInstance)> = lighting
             .lights
             .iter()
             .zip(&plan.rows)
-            .filter_map(|(light, row)| light.instance(*row))
+            .filter_map(|(light, row)| {
+                light
+                    .instance(*row, cookies)
+                    .map(|instance| (light.cookie_index(cookies), instance))
+            })
             .collect();
-        let count = u32::try_from(instances.len()).unwrap_or(u32::MAX);
+        worn.sort_by_key(|(cookie, _)| *cookie);
+        let runs = cookie_runs(&worn);
+        let instances: Vec<LightInstance> = worn.into_iter().map(|(_, i)| i).collect();
+        // Cloned into the pass, which outlives the borrow of `lighting`: a
+        // bind group is reference-counted.
+        let lighting_cookies = lighting.cookies.clone();
         let buffer = (!instances.is_empty()).then(|| {
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("lights"),
@@ -104,13 +116,11 @@ impl LightPass {
         let reads: Vec<Slot> = shadow_map.into_iter().collect();
         graph.add_pass("lights", &reads, &[map], move |encoder, views| {
             let group = shadow_map.map(|slot| self.shadows.bind_map(device, views.get(slot)));
-            let surface = normals.map(|view| self.normals.bind(device, view));
-            let excluded = layers.map(|view| self.layers.bind(device, view));
+            let surface = self.scene.bind(device, normals, layers);
             let mut pass = begin(encoder, views.get(map), wgpu::LoadOp::Clear(ambient));
-            let excluded = excluded.as_ref().unwrap_or(self.layers.empty());
             if let Some(buffer) = &global_buffer {
                 pass.set_pipeline(&self.global);
-                pass.set_bind_group(0, excluded, &[]);
+                pass.set_bind_group(0, &surface, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..3, 0..global_count);
             }
@@ -118,10 +128,15 @@ impl LightPass {
                 pass.set_pipeline(&self.accumulate);
                 pass.set_bind_group(0, camera, &[]);
                 pass.set_bind_group(1, group.as_ref().unwrap_or(self.shadows.empty()), &[]);
-                pass.set_bind_group(2, surface.as_ref().unwrap_or(self.normals.empty()), &[]);
-                pass.set_bind_group(3, excluded, &[]);
+                pass.set_bind_group(2, &surface, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
-                pass.draw(0..6, 0..count);
+                for (cookie, range) in &runs {
+                    let image = cookie
+                        .and_then(|index| lighting_cookies.get(index as usize))
+                        .unwrap_or(&self.no_cookie);
+                    pass.set_bind_group(3, image, &[]);
+                    pass.draw(0..6, range.clone());
+                }
             }
         });
         graph.add_pass(
@@ -178,4 +193,18 @@ fn begin<'e>(
         occlusion_query_set: None,
         multiview_mask: None,
     })
+}
+
+/// The instance ranges of `worn`, sorted by cookie, that share one.
+fn cookie_runs(worn: &[(Option<u32>, LightInstance)]) -> Vec<(Option<u32>, std::ops::Range<u32>)> {
+    let mut runs: Vec<(Option<u32>, std::ops::Range<u32>)> = Vec::new();
+    for (index, (cookie, _)) in worn.iter().enumerate() {
+        // Instances are counted in the thousands at most.
+        let index = u32::try_from(index).unwrap_or(u32::MAX);
+        match runs.last_mut() {
+            Some((last, range)) if last == cookie => range.end = index + 1,
+            _ => runs.push((*cookie, index..index + 1)),
+        }
+    }
+    runs
 }

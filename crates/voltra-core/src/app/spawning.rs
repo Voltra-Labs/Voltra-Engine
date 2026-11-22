@@ -118,6 +118,13 @@ pub(super) fn resolve_entity(
         let path = emitter.texture.clone();
         emitter.set_texture(path, textures, device, queue);
     }
+    if let (Some(light), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::PointLight2D>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = light.cookie.clone();
+        light.set_cookie(path, textures, device, queue);
+    }
     if let (Some(text), Some(fonts)) = (world.get_mut::<Text>(entity), fonts) {
         let path = text.font.clone();
         text.set_font(path, fonts);

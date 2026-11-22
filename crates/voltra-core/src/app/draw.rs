@@ -69,6 +69,7 @@ impl App {
             &renderer.camera,
             sheets,
             self.silhouettes.as_mut(),
+            textures,
         );
         renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
         self.frame_batch = batch;
@@ -159,6 +160,7 @@ impl App {
             &renderer.camera,
             sheets,
             self.silhouettes.as_mut(),
+            textures,
         );
         renderer.render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
         self.frame_batch = batch;
@@ -278,6 +280,7 @@ fn lighting(
     camera: &voltra_render::Camera2D,
     sheets: Sheets<'_>,
     silhouettes: Option<&mut voltra_assets::Silhouettes>,
+    textures: &voltra_assets::Textures,
 ) -> voltra_render::Lighting {
     let silhouettes = silhouettes.map(|silhouettes| {
         voltra_scene::shadow_caster::prepare(world, sheets, silhouettes);
@@ -287,7 +290,13 @@ fn lighting(
         sheets,
         silhouettes,
     });
-    voltra_scene::light::gather(world, view_min(camera), view_max(camera), sprites)
+    voltra_scene::light::gather(
+        world,
+        view_min(camera),
+        view_max(camera),
+        sprites,
+        Some(textures),
+    )
 }
 
 /// The lower-left corner of what `camera` sees, in world units.

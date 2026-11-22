@@ -278,6 +278,11 @@ pub(super) fn resolve_world_textures(
                 .query::<voltra_scene::ParticleEmitter>()
                 .filter_map(|(_, emitter)| emitter.texture.clone()),
         )
+        .chain(
+            world
+                .query::<voltra_scene::PointLight2D>()
+                .filter_map(|(_, light)| light.cookie.clone()),
+        )
         .filter(|path| textures.by_path_handle(path).is_none())
         .collect();
     if paths.len() > 1 {
@@ -299,6 +304,10 @@ pub(super) fn resolve_world_textures(
     for (_, emitter) in world.query_mut::<voltra_scene::ParticleEmitter>() {
         let path = emitter.texture.clone();
         emitter.set_texture(path, textures, device, queue);
+    }
+    for (_, light) in world.query_mut::<voltra_scene::PointLight2D>() {
+        let path = light.cookie.clone();
+        light.set_cookie(path, textures, device, queue);
     }
 }
 

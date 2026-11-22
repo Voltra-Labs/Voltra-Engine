@@ -107,12 +107,13 @@ fn lit_by(lamp: Option<u32>, globals: Vec<GlobalLight>, left: u32) -> Option<Vec
                 cone: None,
                 height: None,
                 layers,
+                cookie: None,
             })
             .collect(),
         globals,
         ..Lighting::default()
     };
-    let lights = LightPass::new(&device, camera.layout());
+    let lights = LightPass::new(&device, camera.layout(), &layout);
     let grade = PostPass::new(&device, FORMAT);
     let mut pool = TexturePool::default();
     let mut graph = RenderGraph::new();
@@ -219,6 +220,7 @@ fn the_uses_layers_flag_follows_what_the_lights_leave_out() {
                 cone: None,
                 height: None,
                 layers,
+                cookie: None,
             })
             .collect(),
         globals: globals

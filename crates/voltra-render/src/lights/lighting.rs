@@ -3,7 +3,7 @@
 
 use glam::Vec2;
 
-use super::{GlobalLight, Occluder};
+use super::{Cookie, GlobalLight, Occluder};
 
 /// The light map's and the lit frame's format: linear, with room past one.
 pub const LIT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -55,6 +55,9 @@ pub struct PointLight {
     /// a bit. [`ALL_LIGHT_LAYERS`] lights everything, as every light did
     /// before layers.
     pub layers: u32,
+    /// An image laid over its disc that tints and shapes it; `None` shines
+    /// plain.
+    pub cookie: Option<Cookie>,
 }
 
 /// The way a spot light shines: a cone around `direction`, Unity URP's
@@ -161,6 +164,10 @@ pub struct Lighting {
     /// Lights with no place, added onto the ambient for the pixels of
     /// their layers.
     pub globals: Vec<GlobalLight>,
+    /// The images lights wear as cookies, by [`Cookie::index`]: each a
+    /// texture bound through `texture::bind_group_layout` (a colour
+    /// texture's sRGB view and its sampler).
+    pub cookies: Vec<wgpu::BindGroup>,
     /// What blocks the lights that cast shadows, in the world.
     pub occluders: Vec<Occluder>,
     /// Shadow map texels across each quarter turn around a light; clamped to
@@ -175,6 +182,7 @@ impl Default for Lighting {
             ambient: None,
             lights: Vec::new(),
             globals: Vec::new(),
+            cookies: Vec::new(),
             occluders: Vec::new(),
             shadow_resolution: DEFAULT_SHADOW_RESOLUTION,
         }
@@ -240,6 +248,7 @@ mod tests {
             cone: None,
             height: None,
             layers: ALL_LIGHT_LAYERS,
+            cookie: None,
         }
     }
 

@@ -149,7 +149,13 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
                 if let Some(lamp) = frame.world.get_mut::<voltra_scene::PointLight2D>(entity) {
                     ui.separator();
-                    claim = claim.or(light::show(ui, lamp));
+                    claim = claim.or(light::show(
+                        ui,
+                        lamp,
+                        frame.textures,
+                        frame.device,
+                        frame.queue,
+                    ));
                 }
                 if let Some(glow) = frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity) {
                     ui.separator();

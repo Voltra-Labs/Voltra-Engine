@@ -29,7 +29,10 @@ fn without_an_ambient_the_frame_is_unlit_whatever_lights_there_are() {
     let mut world = World::new();
     lit_camera(&mut world, None);
     lamp(&mut world, Vec2::ZERO);
-    assert_eq!(gather(&world, VIEW.0, VIEW.1, None), Lighting::default());
+    assert_eq!(
+        gather(&world, VIEW.0, VIEW.1, None, None),
+        Lighting::default()
+    );
 }
 
 #[test]
@@ -40,7 +43,7 @@ fn lights_in_reach_of_the_view_are_gathered_and_the_rest_left_out() {
     // Off the view's right edge, but its radius of 3 reaches back in.
     lamp(&mut world, Vec2::new(12.0, 0.0));
     lamp(&mut world, Vec2::new(100.0, 0.0));
-    let lighting = gather(&world, VIEW.0, VIEW.1, None);
+    let lighting = gather(&world, VIEW.0, VIEW.1, None, None);
     assert_eq!(lighting.ambient, Some([0.1; 3]));
     let at: Vec<Vec2> = lighting.lights.iter().map(|l| l.position).collect();
     assert_eq!(at.len(), 2, "{at:?}");
@@ -71,7 +74,7 @@ fn a_spot_light_aimed_away_from_the_view_is_left_out() {
         .get_mut::<PointLight2D>(dark)
         .expect("a light")
         .intensity = 0.0;
-    let at: Vec<Vec2> = gather(&world, VIEW.0, VIEW.1, None)
+    let at: Vec<Vec2> = gather(&world, VIEW.0, VIEW.1, None, None)
         .lights
         .iter()
         .map(|l| l.position)
@@ -92,7 +95,7 @@ fn a_light_follows_its_parent_and_scales_with_it() {
     world.insert(parent, crate::SceneId::new());
     let child = lamp(&mut world, Vec2::new(1.0, 0.0));
     hierarchy::set_parent(&mut world, child, parent).expect("no cycle");
-    let light = gather(&world, VIEW.0, VIEW.1, None).lights[0];
+    let light = gather(&world, VIEW.0, VIEW.1, None, None).lights[0];
     assert!(
         (light.position - Vec2::new(6.0, 0.0)).length() < 1e-5,
         "{light:?}"
@@ -123,13 +126,15 @@ fn casters_are_gathered_only_for_a_light_that_casts_shadows() {
         },
     );
     world.insert(wall, crate::ShadowCaster2D::default());
-    assert!(gather(&world, VIEW.0, VIEW.1, None).occluders.is_empty());
+    assert!(gather(&world, VIEW.0, VIEW.1, None, None)
+        .occluders
+        .is_empty());
 
     world
         .get_mut::<PointLight2D>(lamp)
         .expect("spawned with one")
         .shadows = Some(LightShadows::default());
-    let lighting = gather(&world, VIEW.0, VIEW.1, None);
+    let lighting = gather(&world, VIEW.0, VIEW.1, None, None);
     assert_eq!(lighting.occluders.len(), 1);
     let shadow = lighting.lights[0].shadow.expect("casts");
     assert_eq!(shadow.strength, 1.0);
@@ -161,7 +166,10 @@ fn the_shadow_map_s_resolution_is_the_camera_s_and_left_out_when_default() {
             ..Camera::default()
         },
     );
-    assert_eq!(gather(&world, VIEW.0, VIEW.1, None).shadow_resolution, 256);
+    assert_eq!(
+        gather(&world, VIEW.0, VIEW.1, None, None).shadow_resolution,
+        256
+    );
     let text = ron::to_string(&Camera::default()).expect("writes");
     assert!(!text.contains("shadow_resolution"), "{text}");
     let read: Camera = ron::from_str(&text).expect("reads");
@@ -182,7 +190,7 @@ fn a_spot_light_points_along_its_entity_and_is_left_out_of_the_file_when_off() {
     if let Some(light) = world.get_mut::<PointLight2D>(spot) {
         light.cone = Some(LightCone::default());
     }
-    let cone = gather(&world, VIEW.0, VIEW.1, None).lights[0]
+    let cone = gather(&world, VIEW.0, VIEW.1, None, None).lights[0]
         .cone
         .expect("a spot light");
     assert!(
@@ -228,12 +236,14 @@ fn global_lights_are_gathered_only_into_a_lit_frame() {
     lit_camera(&mut world, None);
     let glow = world.spawn();
     world.insert(glow, crate::GlobalLight2D::default());
-    assert!(gather(&world, VIEW.0, VIEW.1, None).globals.is_empty());
+    assert!(gather(&world, VIEW.0, VIEW.1, None, None)
+        .globals
+        .is_empty());
 
     let mut world = World::new();
     lit_camera(&mut world, Some([0.1; 3]));
     let glow = world.spawn();
     world.insert(glow, crate::GlobalLight2D::default());
-    let globals = gather(&world, VIEW.0, VIEW.1, None).globals;
+    let globals = gather(&world, VIEW.0, VIEW.1, None, None).globals;
     assert_eq!(globals, [crate::GlobalLight2D::default().light()]);
 }

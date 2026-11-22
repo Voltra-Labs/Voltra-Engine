@@ -23,23 +23,32 @@ var<uniform> camera: Camera;
 @group(1) @binding(0)
 var shadow_map: texture_2d<f32>;
 
-// The scene's normals (`sprite_normals.wgsl`): `n * 0.5 + 0.5`, alpha 1
-// where something was drawn. A 1x1 zero stand-in when they were not, which
-// reads as facing the screen everywhere.
+// The scene's buffers, one group (`lights::scene_input`). Its normals
+// (`sprite_normals.wgsl`): `n * 0.5 + 0.5`, alpha 1 where something was
+// drawn; a 1x1 zero stand-in when they were not, which reads as facing the
+// screen everywhere.
 @group(2) @binding(0)
 var scene_normals: texture_2d<f32>;
 
 // The light layers each pixel is NOT on (`sprite_layers.wgsl`), so the zero
 // it is cleared to — and the 1x1 zero stand-in — is "on every layer".
-@group(3) @binding(0)
+@group(2) @binding(1)
 var excluded_layers: texture_2d<u32>;
+
+// The cookie the lights of this draw wear (`lights::cookie`): a colour
+// texture through its sRGB view, so what is read is linear. A zeroed
+// stand-in, never sampled, for lights that wear none.
+@group(3) @binding(0)
+var cookie: texture_2d<f32>;
+@group(3) @binding(1)
+var cookie_sampler: sampler;
 
 struct LightIn {
     // centre.xy, radius, falloff
     @location(0) place: vec4<f32>,
     // colour × intensity, height for normal maps (0: ignores them)
     @location(1) color: vec4<f32>,
-    // strength, softness, shadow map row (-1 unshadowed), unused
+    // strength, softness, shadow map row (-1 unshadowed), 1 with a cookie
     @location(2) shadow: vec4<f32>,
     // direction.xy, cos of the outer half-angle, cos of the inner; a point
     // light's edges are below -1, so every direction is in
@@ -47,8 +56,10 @@ struct LightIn {
     // the box it reaches, in radii around its centre: min.xy, max.xy — the
     // square for a point light, a spot light's cone's box
     @location(4) extent: vec4<f32>,
+    // from an offset in radii to where on the cookie it falls, two rows
+    @location(5) cookie: vec4<f32>,
     // the light layers it lights
-    @location(5) layers: u32,
+    @location(6) layers: u32,
 }
 
 struct LightOut {
@@ -57,11 +68,12 @@ struct LightOut {
     @location(0) local: vec2<f32>,
     @location(1) color: vec3<f32>,
     @location(2) falloff: f32,
-    @location(3) @interpolate(flat) shadow: vec3<f32>,
+    @location(3) @interpolate(flat) shadow: vec4<f32>,
     @location(4) @interpolate(flat) cone: vec4<f32>,
     // radius, height for normal maps (0: ignores them)
     @location(5) @interpolate(flat) reach: vec2<f32>,
     @location(6) @interpolate(flat) layers: u32,
+    @location(7) @interpolate(flat) cookie: vec4<f32>,
 }
 
 @vertex
@@ -82,7 +94,8 @@ fn vs_light(@builtin(vertex_index) index: u32, light: LightIn) -> LightOut {
     out.local = corner;
     out.color = light.color.rgb;
     out.falloff = light.place.w;
-    out.shadow = light.shadow.xyz;
+    out.shadow = light.shadow;
+    out.cookie = light.cookie;
     out.cone = light.cone;
     out.reach = vec2<f32>(light.place.z, light.color.w);
     out.layers = light.layers;
@@ -103,9 +116,25 @@ fn fs_light(in: LightOut) -> @location(0) vec4<f32> {
         * facing(in.position.xy, in.local, in.reach);
     var lit = 1.0;
     if in.shadow.z >= 0.0 {
-        lit = visible(in.local, in.shadow);
+        lit = visible(in.local, in.shadow.xyz);
     }
-    return vec4<f32>(in.color * strength * lit, 1.0);
+    var tint = vec3<f32>(1.0);
+    if in.shadow.w > 0.5 {
+        tint = worn(in.local, in.cookie);
+    }
+    return vec4<f32>(in.color * tint * strength * lit, 1.0);
+}
+
+// What the cookie lets through at `offset` (in radii from the light): its
+// colour times its alpha, the image spanning -1..1 of the light's own axes
+// (`to_image` turns the offset into them), up on the image being up. Sampled
+// at its top level: the branches above make derivatives undefined here, and
+// a cookie spans a light's whole disc, so its texels are large on screen.
+fn worn(offset: vec2<f32>, to_image: vec4<f32>) -> vec3<f32> {
+    let p = vec2<f32>(dot(to_image.xy, offset), dot(to_image.zw, offset));
+    let uv = vec2<f32>(p.x * 0.5 + 0.5, 0.5 - p.y * 0.5);
+    let texel = textureSampleLevel(cookie, cookie_sampler, uv, 0.0);
+    return texel.rgb * texel.a;
 }
 
 // `pixel` as a texel of a texture `size` big. The buffers are the frame's

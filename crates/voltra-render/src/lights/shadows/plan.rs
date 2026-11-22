@@ -133,6 +133,7 @@ mod tests {
             cone: None,
             height: None,
             layers: crate::lights::ALL_LIGHT_LAYERS,
+            cookie: None,
         }
     }
 
