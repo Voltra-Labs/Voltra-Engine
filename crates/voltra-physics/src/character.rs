@@ -18,6 +18,10 @@
 //! a seam between two colliders level with each other, or onto a ledge low
 //! enough — see [`step`].
 //!
+//! Before it, the character is carried by the floor it stood on — however
+//! far that has moved and turned since (`CharacterContact::floor_pose`): a
+//! moving platform, whatever moves it.
+//!
 //! After the move, a character that stood on a floor and is not moving up
 //! reaches down by `snap` for one, so walking down a slope or off a small
 //! step stays on the ground. Standing on a slope under gravity alone does
@@ -31,7 +35,10 @@ use voltra_scene::{CharacterBody2D, CharacterContact, Collider, CollisionLayers,
 
 use crate::query::{self, QueryFilter, ShapeHit};
 
+mod carry;
 mod step;
+
+use carry::carry;
 
 /// Below this a motion is no motion.
 const STILL: f32 = 1e-7;
@@ -89,6 +96,11 @@ pub fn move_and_slide(
         Vec2::ZERO
     };
 
+    // Carried first, by the floor it stood on: a platform that moved under
+    // it, or into it, takes it along. Put there outright — a wall it was
+    // carried into is pushed out of by the move that follows.
+    let carried = carry(world, &body.contact, at.translation);
+    at.translation += carried;
     let mut slide = mover.slide(&body, &mut at, velocity, delta);
     if body.contact.on_floor
         && !slide.contact.on_floor
@@ -97,6 +109,17 @@ pub fn move_and_slide(
     {
         mover.snap(&mut at, &mut slide, body.snap);
     }
+
+    slide.contact.floor_pose = slide
+        .contact
+        .floor
+        .and_then(|floor| world.get::<Transform>(floor))
+        .map(|floor| (floor.translation, floor.rotation));
+    slide.contact.platform_velocity = if delta > 0.0 {
+        carried / delta
+    } else {
+        Vec2::ZERO
+    };
 
     if let Some(transform) = world.get_mut::<Transform>(entity) {
         transform.translation = at.translation;

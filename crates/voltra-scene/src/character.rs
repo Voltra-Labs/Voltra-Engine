@@ -53,6 +53,15 @@ pub struct CharacterContact {
     pub wall_normal: Vec2,
     /// What it stands on.
     pub floor: Option<Entity>,
+    /// Where the floor was, and how it was turned, when it was last stood
+    /// on: the next move carries the character by however far it has moved
+    /// and turned since — a moving platform, kinematic, animated or moved
+    /// by the game.
+    pub floor_pose: Option<(Vec2, f32)>,
+    /// How fast the floor carried it on the last move, in world units per
+    /// second: what a game adds to a jump off a moving platform, if it
+    /// wants the platform's speed kept.
+    pub platform_velocity: Vec2,
 }
 
 impl Default for CharacterBody2D {
