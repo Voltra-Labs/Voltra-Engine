@@ -29,6 +29,7 @@ pub mod persistent;
 pub mod pick;
 pub mod post;
 pub mod prefab;
+pub mod ron_store;
 pub mod scene_id;
 pub mod shadow_caster;
 pub mod sorting;
