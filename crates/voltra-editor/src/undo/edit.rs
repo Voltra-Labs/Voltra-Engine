@@ -14,9 +14,11 @@
 //! delete has to revive the entity the rest of the stack still refers to, and
 //! the allocator recycles both the index and the generation.
 
-use voltra_ecs::{Entity, World};
+use voltra_ecs::World;
 use voltra_scene::format::{apply_record, entity_with_id, EntityRecord};
 use voltra_scene::{ComponentRegistry, SceneError, SceneId};
+
+use crate::selection::Selection;
 
 /// Which side of an edit to put back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,8 +56,9 @@ pub struct Edit {
     /// heap allocations.
     pub label: &'static str,
     pub entities: Vec<EntityChange>,
-    pub selected_before: Option<SceneId>,
-    pub selected_after: Option<SceneId>,
+    /// The selection by identity on each side, the primary last.
+    pub selected_before: Vec<SceneId>,
+    pub selected_after: Vec<SceneId>,
 }
 
 impl Edit {
@@ -69,20 +72,20 @@ impl Edit {
             .all(|change| change.before == change.after)
     }
 
-    /// What was selected on `side`.
-    pub fn selection(&self, side: Side) -> Option<SceneId> {
+    /// What was selected on `side`, the primary last.
+    pub fn selection(&self, side: Side) -> &[SceneId] {
         match side {
-            Side::Before => self.selected_before,
-            Side::After => self.selected_after,
+            Side::Before => &self.selected_before,
+            Side::After => &self.selected_after,
         }
     }
 
-    /// The entity `side`'s selection names, if the world holds it.
+    /// The entities `side`'s selection names that the world holds.
     ///
     /// Resolved after the apply, never before: the entity that carries the id
     /// may be one the apply has just respawned.
-    pub fn selected_entity(&self, side: Side, world: &World) -> Option<Entity> {
-        entity_with_id(world, self.selection(side)?)
+    pub fn selected_entities(&self, side: Side, world: &World) -> Selection {
+        Selection::from_ids(world, self.selection(side))
     }
 
     /// Puts `side` back.
@@ -127,6 +130,7 @@ impl Edit {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use voltra_ecs::Entity;
     use voltra_render::glam::Vec2;
     use voltra_scene::format::record_entity;
     use voltra_scene::{Sprite, Transform};
@@ -170,8 +174,8 @@ mod tests {
                 before: Some(before),
                 after: Some(after),
             }],
-            selected_before: Some(id),
-            selected_after: Some(id),
+            selected_before: vec![id],
+            selected_after: vec![id],
         };
 
         edit.apply(Side::Before, &mut world, &registry)
@@ -194,8 +198,8 @@ mod tests {
                 before: None,
                 after: Some(after),
             }],
-            selected_before: None,
-            selected_after: Some(id),
+            selected_before: Vec::new(),
+            selected_after: vec![id],
         };
 
         edit.apply(Side::Before, &mut world, &registry)
@@ -223,8 +227,8 @@ mod tests {
                 before: Some(before),
                 after: None,
             }],
-            selected_before: Some(id),
-            selected_after: None,
+            selected_before: vec![id],
+            selected_after: Vec::new(),
         };
 
         edit.apply(Side::Before, &mut world, &registry)
@@ -249,8 +253,8 @@ mod tests {
                 before: Some(before),
                 after: None,
             }],
-            selected_before: Some(id),
-            selected_after: None,
+            selected_before: vec![id],
+            selected_after: Vec::new(),
         };
 
         edit.apply(Side::Before, &mut world, &registry)
@@ -271,8 +275,8 @@ mod tests {
                 before: Some(record.clone()),
                 after: Some(record),
             }],
-            selected_before: Some(id),
-            selected_after: Some(id),
+            selected_before: vec![id],
+            selected_after: vec![id],
         };
         assert!(
             edit.is_noop(),
@@ -299,8 +303,8 @@ mod tests {
                 before: Some(before),
                 after: Some(after),
             }],
-            selected_before: Some(id),
-            selected_after: Some(id),
+            selected_before: vec![id],
+            selected_after: vec![id],
         };
         assert!(!edit.is_noop());
     }
@@ -315,11 +319,11 @@ mod tests {
                 before: Some(record),
                 after: None,
             }],
-            selected_before: Some(id),
-            selected_after: None,
+            selected_before: vec![id],
+            selected_after: Vec::new(),
         };
-        assert_eq!(edit.selection(Side::Before), Some(id));
-        assert_eq!(edit.selection(Side::After), None);
+        assert_eq!(edit.selection(Side::Before), [id]);
+        assert!(edit.selection(Side::After).is_empty());
     }
 
     #[test]
@@ -338,13 +342,13 @@ mod tests {
                 before: Some(before),
                 after: None,
             }],
-            selected_before: Some(id),
-            selected_after: None,
+            selected_before: vec![id],
+            selected_after: Vec::new(),
         };
         edit.apply(Side::Before, &mut world, &registry)
             .expect("apply");
 
-        let revived = edit.selected_entity(Side::Before, &world);
+        let revived = edit.selected_entities(Side::Before, &world).primary();
         assert_eq!(revived, entity_with_id(&world, id));
         assert_ne!(revived, Some(entity), "the old handle is not reused");
     }

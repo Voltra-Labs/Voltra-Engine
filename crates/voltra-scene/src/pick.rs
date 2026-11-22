@@ -4,9 +4,11 @@
 //! volume. 3D picking is a different subsystem and will not reuse this.
 
 mod layer;
+mod region;
 mod text;
 
 pub use layer::layer_at;
+pub use region::{entities_within, outline};
 pub use text::text_at;
 
 use voltra_ecs::{Entity, World};

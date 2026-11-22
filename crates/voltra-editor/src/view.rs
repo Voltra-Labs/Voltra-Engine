@@ -14,6 +14,7 @@
 pub mod caster;
 pub mod light;
 pub mod overlay;
+pub mod selection;
 
 use voltra_ecs::World;
 use voltra_render::Camera2D;

@@ -15,6 +15,7 @@ use voltra_scene::format::{from_scene_file, to_scene_file, SceneFile};
 use voltra_scene::{ComponentRegistry, SceneId};
 
 use crate::gizmo::Gizmo;
+use crate::selection::Selection;
 
 /// Whether the editor is authoring the scene or simulating it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -29,9 +30,9 @@ pub enum PlayState {
 #[derive(Debug)]
 pub struct PlaySnapshot {
     scene: SceneFile,
-    /// Which entity was selected, by scene identity rather than by `Entity` —
-    /// the restore despawns and respawns, so every handle is stale after it.
-    selected: Option<SceneId>,
+    /// What was selected, by scene identity rather than by `Entity` — the
+    /// restore despawns and respawns, so every handle is stale after it.
+    selected: Vec<SceneId>,
 }
 
 /// What a play transition needs from the running application.
@@ -86,7 +87,7 @@ pub struct PlayContext<'a> {
     /// editor owns one and passes it here rather than building one per call,
     /// so that is guaranteed rather than remembered.
     pub registry: &'a ComponentRegistry,
-    pub selected: &'a mut Option<Entity>,
+    pub selected: &'a mut Selection,
     pub gizmo: &'a mut Gizmo,
 }
 
@@ -131,7 +132,7 @@ impl Play {
                         return;
                     }
                 };
-                let selected = selected_id(host.world(), *ctx.selected);
+                let selected = ctx.selected.ids(host.world());
                 self.snapshot = Some(PlaySnapshot { scene, selected });
             }
         }
@@ -198,7 +199,7 @@ impl Play {
             // because the alternative is panicking an editor over a scene that
             // is still perfectly usable where it stands.
             log::error!("stopped play with no snapshot; the scene is left as it is");
-            *ctx.selected = None;
+            ctx.selected.clear();
             return;
         };
 
@@ -222,23 +223,8 @@ impl Play {
 
         // An entity selected during play that did not exist at snapshot time
         // leaves the selection empty. There is nothing left for it to name.
-        *ctx.selected = snapshot
-            .selected
-            .and_then(|id| entity_with_id(host.world(), id));
+        *ctx.selected = Selection::from_ids(host.world(), &snapshot.selected);
     }
-}
-
-/// The scene identity of `entity`, if it has one.
-fn selected_id(world: &World, entity: Option<Entity>) -> Option<SceneId> {
-    entity.and_then(|e| world.get::<SceneId>(e).copied())
-}
-
-/// The entity carrying `id`, if the world holds one.
-fn entity_with_id(world: &World, id: SceneId) -> Option<Entity> {
-    world
-        .query::<SceneId>()
-        .find(|(_, other)| **other == id)
-        .map(|(entity, _)| entity)
 }
 
 #[cfg(test)]
@@ -246,6 +232,7 @@ mod tests {
     use super::*;
     use ron::value::RawValue;
     use voltra_render::glam::Vec2;
+    use voltra_scene::format::entity_with_id;
     use voltra_scene::{Sprite, Transform, UnknownComponents};
 
     /// A [`PlayHost`] with no `App` and no GPU behind it.
@@ -295,7 +282,7 @@ mod tests {
     /// body reads as the transition it exercises.
     struct Fixture {
         registry: ComponentRegistry,
-        selected: Option<Entity>,
+        selected: Selection,
         gizmo: Gizmo,
     }
 
@@ -303,7 +290,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 registry: ComponentRegistry::with_defaults(),
-                selected: None,
+                selected: Selection::default(),
                 gizmo: Gizmo::default(),
             }
         }
@@ -564,13 +551,16 @@ mod tests {
         let entity = spawn_scene_entity(&mut host.world, Vec2::ZERO);
         let id = *host.world.get::<SceneId>(entity).expect("it has one");
         let mut fixture = Fixture::new();
-        fixture.selected = Some(entity);
+        fixture.selected = Selection::single(entity);
         let mut play = Play::default();
 
         play.play(fixture.ctx(), &mut host);
         play.stop(fixture.ctx(), &mut host);
 
-        let selected = fixture.selected.expect("the selection must survive");
+        let selected = fixture
+            .selected
+            .primary()
+            .expect("the selection must survive");
         assert_eq!(host.world.get::<SceneId>(selected), Some(&id));
     }
 
@@ -581,12 +571,14 @@ mod tests {
         let mut fixture = Fixture::new();
         let mut play = Play::default();
         play.play(fixture.ctx(), &mut host);
-        fixture.selected = Some(spawn_scene_entity(&mut host.world, Vec2::new(2.0, 0.0)));
+        fixture.selected =
+            Selection::single(spawn_scene_entity(&mut host.world, Vec2::new(2.0, 0.0)));
 
         play.stop(fixture.ctx(), &mut host);
 
         assert_eq!(
-            fixture.selected, None,
+            fixture.selected.primary(),
+            None,
             "it named an entity the snapshot never held"
         );
     }

@@ -1,19 +1,20 @@
 //! The editor's shared state and its frame layout.
 
-use voltra_core::egui::Ui;
+use voltra_core::egui::{self, Ui};
 use voltra_core::{UiFrame, VoiceId};
-use voltra_ecs::Entity;
 use voltra_scene::ComponentRegistry;
 
 use crate::camera::ViewportCamera;
 use crate::gizmo::Gizmo;
+use crate::marquee::Marquee;
 use crate::paint::Paint;
 use crate::panels;
 use crate::panels::assets::AssetBrowser;
 use crate::play::{Play, PlayContext, PlayState};
+use crate::selection::Selection;
 use crate::shape_edit::ShapeEdit;
 use crate::tool::Tool;
-use crate::undo::{selected_id, shortcut, History, SceneView, UndoContext};
+use crate::undo::{shortcut, History, SceneView, UndoContext};
 use crate::view::View;
 
 /// Editor state that outlives a frame.
@@ -22,11 +23,14 @@ use crate::view::View;
 /// editor still needs next frame — the selection — has to be kept here.
 #[derive(Default)]
 pub struct Editor {
-    pub(crate) selected: Option<Entity>,
+    /// What is selected, the primary last. See [`Selection`].
+    pub(crate) selection: Selection,
     pub(crate) camera: ViewportCamera,
     /// Which transform a viewport drag performs. Persistent, Unity-style.
     pub(crate) tool: Tool,
     pub(crate) gizmo: Gizmo,
+    /// The box being drawn over the viewport to select, if any.
+    pub(crate) marquee: Marquee,
     /// The armed paint tool and its brush. While armed with a layer selected,
     /// it has the viewport instead of the gizmo.
     pub(crate) paint: Paint,
@@ -73,14 +77,15 @@ impl Editor {
 
         if editing {
             // The scene as this frame found it, before any panel can write to
-            // it. The watched set is the selection, which is the only entity
-            // the gizmo or the inspector can reach; everything else — spawn,
-            // delete, clear — records itself explicitly.
-            let watched = selected_id(frame.world, self.selected);
+            // it. The watched set is the selection, which is all the gizmo or
+            // the inspector can reach; everything else — spawn, delete,
+            // clear — records itself explicitly.
+            self.selection.retain_alive(frame.world);
+            let watched = self.selection.ids(frame.world);
             let view = SceneView {
                 world: frame.world,
                 registry: &self.registry,
-                selected: watched,
+                selected: watched.clone(),
             };
             self.history.watch(view, watched);
 
@@ -90,6 +95,13 @@ impl Editor {
                 Some(shortcut::UndoAction::Undo) => self.undo(frame),
                 Some(shortcut::UndoAction::Redo) => self.redo(frame),
                 None => {}
+            }
+            // Delete removes the selection, scoped as the undo keys are: not
+            // while a text field has the keyboard, where it deletes a letter.
+            let delete = !ui.ctx().egui_wants_keyboard_input()
+                && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Delete));
+            if delete {
+                crate::delete::selection(self, frame);
             }
         }
 
@@ -114,7 +126,7 @@ impl Editor {
             let view = SceneView {
                 world: frame.world,
                 registry: &self.registry,
-                selected: selected_id(frame.world, self.selected),
+                selected: self.selection.ids(frame.world),
             };
             self.history.end_frame(view);
         }
@@ -131,7 +143,7 @@ impl Editor {
         }
         let ctx = UndoContext {
             registry: &self.registry,
-            selected: &mut self.selected,
+            selected: &mut self.selection,
             gizmo: &mut self.gizmo,
         };
         if !self.history.undo(ctx, frame) {
@@ -149,7 +161,7 @@ impl Editor {
         }
         let ctx = UndoContext {
             registry: &self.registry,
-            selected: &mut self.selected,
+            selected: &mut self.selection,
             gizmo: &mut self.gizmo,
         };
         if !self.history.redo(ctx, frame) {
@@ -165,7 +177,7 @@ impl Editor {
         self.play.play(
             PlayContext {
                 registry: &self.registry,
-                selected: &mut self.selected,
+                selected: &mut self.selection,
                 gizmo: &mut self.gizmo,
             },
             frame,
@@ -196,7 +208,7 @@ impl Editor {
         self.play.stop(
             PlayContext {
                 registry: &self.registry,
-                selected: &mut self.selected,
+                selected: &mut self.selection,
                 gizmo: &mut self.gizmo,
             },
             frame,

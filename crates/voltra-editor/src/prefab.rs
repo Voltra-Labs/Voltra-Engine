@@ -40,7 +40,7 @@ pub(crate) fn create_from_selection(editor: &mut Editor, frame: &mut UiFrame<'_>
     if editor.play.state() != PlayState::Editing {
         return;
     }
-    let Some(root) = editor.selected.filter(|&e| frame.world.is_alive(e)) else {
+    let Some(root) = editor.selection.live_primary(frame.world) else {
         return;
     };
     let Some(&id) = frame.world.get::<SceneId>(root) else {
@@ -69,14 +69,14 @@ pub(crate) fn create_from_selection(editor: &mut Editor, frame: &mut UiFrame<'_>
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
-        selected: Some(id),
+        selected: vec![id],
     };
     editor.history.begin("Create prefab", view, [id]);
     frame.world.insert(root, PrefabInstance::new(target));
     let view = SceneView {
         world: frame.world,
         registry: &editor.registry,
-        selected: Some(id),
+        selected: vec![id],
     };
     editor.history.commit(view);
 }

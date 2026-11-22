@@ -13,7 +13,7 @@ use crate::play::PlayState;
 use crate::spawn;
 
 mod spawn_items;
-use crate::undo::{selected_id, SceneView};
+use crate::undo::SceneView;
 
 /// Where the editor saves when no path has been chosen.
 ///
@@ -28,7 +28,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("Scene", |ui| {
                 spawn_items::show(editor, ui, frame);
-                let selected = editor.selected.is_some();
+                let selected = !editor.selection.is_empty();
                 if ui
                     .add_enabled(selected, egui::Button::new("Create prefab from selection"))
                     .on_disabled_hover_text("select an entity first")
@@ -62,19 +62,19 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     let view = SceneView {
                         world: frame.world,
                         registry: &editor.registry,
-                        selected: selected_id(frame.world, editor.selected),
+                        selected: editor.selection.ids(frame.world),
                     };
                     editor.history.begin("Clear scene", view, ids);
 
                     for entity in all {
                         frame.world.despawn(entity);
                     }
-                    editor.selected = None;
+                    editor.selection.clear();
 
                     let view = SceneView {
                         world: frame.world,
                         registry: &editor.registry,
-                        selected: None,
+                        selected: Vec::new(),
                     };
                     editor.history.commit(view);
                     ui.close();
@@ -150,7 +150,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             // `Entities::is_alive` checks the generation and a
                             // despawn always bumps it. Cleared here only for
                             // consistency with `Clear`, which already does.
-                            editor.selected = None;
+                            editor.selection.clear();
                             // Every id in the stack belongs to the scene that
                             // was just closed. Unity's answer, and the only
                             // coherent one. Inside the `Ok` arm and only there:

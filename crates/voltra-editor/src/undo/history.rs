@@ -26,7 +26,7 @@ type Records = BTreeMap<SceneId, Option<EntityRecord>>;
 struct Open {
     label: &'static str,
     before: Records,
-    selected_before: Option<SceneId>,
+    selected_before: Vec<SceneId>,
     /// Set by an explicit [`History::begin`]. An explicit edit closes when its
     /// caller says so, not when the watcher stops seeing changes.
     explicit: bool,
@@ -40,7 +40,7 @@ pub struct History {
     open: Option<Open>,
     /// What the ids being watched looked like when this frame started.
     watched: Records,
-    watched_selected: Option<SceneId>,
+    watched_selected: Vec<SceneId>,
     /// What a claim this frame called the interaction.
     claim: Option<&'static str>,
     /// Set by an explicit edit or by an apply, so [`History::end_frame`] does
@@ -155,7 +155,7 @@ impl History {
             self.open = Some(Open {
                 label: claim.unwrap_or("Edit"),
                 before: std::mem::take(&mut self.watched),
-                selected_before: self.watched_selected,
+                selected_before: self.watched_selected.clone(),
                 explicit: false,
             });
         } else if changed {
@@ -318,15 +318,14 @@ fn apply(edit: &Edit, side: Side, ctx: UndoContext<'_>, host: &mut dyn UndoHost)
     host.reset_physics();
     host.resolve_scene_assets();
 
-    *ctx.selected = edit.selected_entity(side, host.world());
+    *ctx.selected = edit.selected_entities(side, host.world());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::gizmo::Gizmo;
-    use crate::undo::selected_id;
-    use voltra_ecs::Entity;
+    use crate::selection::Selection;
     use voltra_render::glam::Vec2;
     use voltra_scene::{Sprite, Transform};
 
@@ -362,7 +361,7 @@ mod tests {
     /// The editor fields an undo touches, kept together.
     struct Fixture {
         registry: ComponentRegistry,
-        selected: Option<Entity>,
+        selected: Selection,
         gizmo: Gizmo,
     }
 
@@ -370,7 +369,7 @@ mod tests {
         fn new() -> Self {
             Self {
                 registry: ComponentRegistry::with_defaults(),
-                selected: None,
+                selected: Selection::default(),
                 gizmo: Gizmo::default(),
             }
         }
@@ -388,7 +387,7 @@ mod tests {
         SceneView {
             world: &host.world,
             registry: &fixture.registry,
-            selected: selected_id(&host.world, fixture.selected),
+            selected: fixture.selected.ids(&host.world),
         }
     }
 
@@ -574,19 +573,21 @@ mod tests {
         let mut fixture = Fixture::new();
         let mut history = History::default();
         let id = spawn(&mut host.world, 6.0);
-        fixture.selected = voltra_scene::format::entity_with_id(&host.world, id);
+        fixture
+            .selected
+            .set(voltra_scene::format::entity_with_id(&host.world, id));
 
         history.begin("Delete", view(&host, &fixture), [id]);
         let entity = voltra_scene::format::entity_with_id(&host.world, id).expect("there");
         host.world.despawn(entity);
-        fixture.selected = None;
+        fixture.selected.clear();
         history.commit(view(&host, &fixture));
 
         history.undo(fixture.ctx(), &mut host);
 
         assert_eq!(x_of(&host.world, id), Some(6.0));
         assert_eq!(
-            fixture.selected,
+            fixture.selected.primary(),
             voltra_scene::format::entity_with_id(&host.world, id),
             "undoing a delete selects what it brought back"
         );

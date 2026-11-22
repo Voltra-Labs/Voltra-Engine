@@ -43,7 +43,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             // A stale handle is normal, not a bug: the entity may have been
             // despawned since it was selected.
-            let Some(entity) = editor.selected.filter(|e| frame.world.is_alive(*e)) else {
+            let Some(entity) = editor.selection.live_primary(frame.world) else {
                 ui.label(RichText::new("nothing selected").italics().weak());
                 return;
             };
@@ -56,8 +56,14 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // body by `entity` makes every id here a function of the entity too, so
             // a selection change is a real id change and egui starts clean.
             ui.push_id(entity, |ui| {
+                // One entity is edited at a time; with more selected, say so,
+                // so an edit here is not taken for an edit to all of them.
+                let more = match editor.selection.len() {
+                    0 | 1 => String::new(),
+                    n => format!(" — the last picked of {n}"),
+                };
                 ui.label(format!(
-                    "Entity {} (gen {})",
+                    "Entity {} (gen {}){more}",
                     entity.index(),
                     entity.generation()
                 ));
@@ -265,7 +271,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
 
                 ui.separator();
-                delete::show(editor, ui, frame, entity);
+                delete::show(editor, ui, frame);
             });
         });
 }

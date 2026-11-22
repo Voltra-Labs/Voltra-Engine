@@ -3637,6 +3637,56 @@ through; an index the frame does not hold is plain), `light_cookies.rs`
 the axes turn with the entity, a missing image and no store are plain;
 saved by path), and the cookie and instance unit tests.
 
+### The selection is an ordered set, the last picked its primary
+
+Stage 63a. `editor::Selection` replaces `Option<Entity>`: each selected
+entity once, in the order picked, the last the **primary** — Unity's
+`Selection.objects` and `activeObject`, Godot's last-selected node. The
+primary is what the inspector edits and what every one-entity action acts
+on (painting a layer, editing a caster's shape, making a prefab, the
+gizmo until 63b); the set is what Delete removes, what the history watches
+and what an undo or Stop puts back.
+
+- **Picking**: a click selects one; Ctrl (Cmd) toggles one; Shift in the
+  hierarchy takes the rows between the primary and the clicked one, in
+  the order they are shown (applied after the tree's walk, which is the
+  only time that order is known), and in the viewport adds one. A click on
+  empty ground clears unless a key is held.
+- **The box** (`editor::marquee`): a left drag that starts on nothing the
+  gizmo takes draws a box, followed in world units, and on release takes
+  in `voltra_scene::pick::entities_within` — an entity whose drawn shape
+  (quad, text box, a layer's tiles) lies **wholly** inside, or, with
+  nothing drawn (a light, a camera, an empty parent), whose origin does.
+  Figma's and Inkscape's rule rather than Unity's "touches": a box across
+  a level must not take the ground layer every time. Bottom of the draw
+  order first, so the topmost is the primary. Shift or Ctrl at release
+  adds.
+- **Outlines** (`view::selection`): with more than one selected, each
+  selected entity's drawn shape is outlined, the primary brighter; a lone
+  selection is left to the gizmo, as before.
+- **Undo** keeps the selection by identity on both sides of an edit, as a
+  list (`Edit::selected_before/after: Vec<SceneId>`), and puts the same
+  set and the same primary back. The play snapshot does the same.
+- **Delete** (`editor::delete`, the inspector's button and the Delete
+  key, not while a text field has the keyboard): every selected entity and
+  everything under each, one entry; a child selected with its parent is
+  recorded once.
+- The inspector says "the last picked of N" when more than one is
+  selected; editing several at once is not built.
+
+Rejected: **a hashed set** — the primary would be arbitrary and an undo
+could put back a different one; **"touches" for the box** — see above.
+
+- **Not yet**: the gizmo moving the whole set (63b), duplicate and
+  copy/paste (63c), editing a component across the selection.
+
+Pinned by `selection::tests` (primary order, toggle, Shift ranges both
+ways and without an order, the box replacing or extending, ids round
+trip), `pick::region` tests (wholly inside, origins, HUD never, a layer
+by its tiles, topmost last, outlines), `delete::tests` (one entry for the
+set and its children, undone back selected in order; nothing selected
+records nothing), and the undo and play tests, now over sets.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
