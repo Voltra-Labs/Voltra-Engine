@@ -223,6 +223,7 @@ Voltra-Engine/
 │   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
 │   ├── voltra-physics/   # rigid bodies, integration, contact detection
+│   ├── voltra-nav/       # navigation grids baked from colliders, A* paths
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
 │   ├── voltra-editor/    # binary: the editor and its panels
 │   ├── voltra-player/    # binary: runs a scene, or the build beside it
@@ -321,6 +322,7 @@ privileged and plain `cargo build` covers everything.
 | 68 | One-way platforms for bodies and characters; characters ride moving floors | done |
 | 69 | Camera rig: follow (smoothing, dead zone, look-ahead, bounds) and trauma shake | done |
 | 70 | Animation state machines: `.animator.ron` parameters, states, transitions | done |
+| 71 | Navigation (`voltra-nav`): grids baked from colliders, A* paths, a top-down chaser | done |
 
 ## Contributing
 

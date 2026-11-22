@@ -84,6 +84,7 @@ version bump is a one-line change.
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
+| `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
@@ -4170,6 +4171,54 @@ and an any-state transition not re-entering itself, exit times waiting for
 a clip, a reload keeping a state or restarting without it, bad transitions
 dropped, a broken file running nothing, the shipped machine reading whole).
 The `character` example's idle, run, jump and fall are a machine.
+
+### Navigation is a grid baked from colliders, in a crate of its own
+
+Stage 71. `voltra-nav` (above physics and scene, below core, re-exported as
+`voltra_core::nav`) bakes a `NavGrid` — cells over a rectangle, free or
+blocked — from the scene's static colliders, and finds paths through it.
+Godot's `AStarGrid2D`, Unity's 2D grid pathfinding packages.
+
+- **A grid, not a navigation mesh**: a 2D level is mostly a grid already
+  (tiles), and a grid bakes from colliders with nothing but overlap tests. A
+  mesh is a stage of its own when open levels need one.
+- **Baked from colliders, so from tilemaps too**: a solid layer's generated
+  boxes are colliders like any other. An obstacle is solid, on a layer the
+  settings look at, and not moving — no rigid body or a static one, not a
+  `CharacterBody2D`, not a sensor, not a one-way platform.
+- **Grown by the agent** (`clearance`, its half size): a cell is blocked
+  when an agent-sized box anywhere in it would overlap an obstacle, so a path
+  through free cells is one the agent fits along. Each obstacle is tested
+  only against the cells under its bounds, exactly, by the step's narrow
+  phase: a turned box blocks what it covers, and touching is not blocking.
+- **A\*** over 8 neighbours (or 4), never cutting a blocked corner, with the
+  octile heuristic, so the path is a shortest one. A start or goal a little
+  inside a blocked cell uses the nearest free cell within four.
+  `find_path_closest` goes as near as it can when the goal is walled off.
+- **Straightened by line of sight**: a waypoint the one before can see past
+  is dropped, by Amanatides–Woo traversal that checks both cells beside a
+  corner it crosses and ends at the segment's end even when rounding puts
+  an end on an edge in the neighbouring cell (the tests caught that).
+- **The game owns the grid** and rebakes it when its walls change
+  (`set_blocked` for a door): navigation is a question asked, not a cost
+  every frame pays. A `Path` hands out waypoints as the agent reaches them.
+- In its own crate: physics answers what collides; how to get somewhere is
+  AI, and a crate with code in it.
+
+Rejected: **a navigation mesh now** (above); **baking every frame**;
+**hierarchical or jump-point search** — a grid this size is fast with plain
+A*, and they can come when a level is not.
+
+- **Not yet**: per-cell costs (mud, water), a debug overlay of the grid in
+  the editor, agents avoiding each other, links for jumps or doors.
+
+Pinned by `grid/tests.rs` (cells a wall covers and not those it touches,
+clearance growing it, a path round a wall straightened with every leg clear,
+an unreachable goal with no path and a closest one, diagonals never cutting
+a corner, moving bodies, characters and one-way platforms left out, baking
+round everything, a start pressed into a wall, waypoints handed out in turn)
+and `tests/tilemap.rs` (a solid layer's tiles blocking a grid a path goes
+round). The `topdown` example's chaser finds its way through a room.
 
 ### wgpu 30 API notes
 

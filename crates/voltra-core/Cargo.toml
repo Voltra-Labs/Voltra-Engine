@@ -11,6 +11,7 @@ voltra-assets.workspace = true
 voltra-audio.workspace = true
 voltra-ecs.workspace = true
 voltra-jobs.workspace = true
+voltra-nav.workspace = true
 voltra-physics.workspace = true
 voltra-render.workspace = true
 voltra-scene.workspace = true
