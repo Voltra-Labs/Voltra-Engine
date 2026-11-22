@@ -32,7 +32,7 @@ use voltra_render::glam::{IVec2, Mat3, Vec2};
 use voltra_render::{Texture, Vertex};
 
 use super::chunk::{cell_of, Chunk, ChunkKey};
-use super::mesh::{corners_of, sample};
+use super::mesh::{corners_of, sample, surface};
 use super::Tilemap;
 use crate::batch::SpriteBatch;
 use crate::sprite::sheets::Sheets;
@@ -198,7 +198,7 @@ impl LayerCache {
             entry.stamp = Some(stamp.for_chunk(entry.animated));
         }
         if inside {
-            entry.append_world(batch, matrix, map.color, map.light_layers);
+            entry.append_world(batch, matrix, map);
         } else {
             for quad in &entry.quads {
                 batch.push_quad_on(
@@ -206,8 +206,7 @@ impl LayerCache {
                     quad.corners,
                     quad.uvs,
                     map.color,
-                    quad.texture,
-                    map.light_layers,
+                    surface(map, quad.texture),
                 );
             }
         }
@@ -231,15 +230,12 @@ impl ChunkMesh {
         }
     }
 
-    /// The chunk's quads through `matrix`, as [`SpriteBatch::push_quad`]
-    /// would have written them, copied in.
-    fn append_world(
-        &mut self,
-        batch: &mut SpriteBatch,
-        matrix: Mat3,
-        color: [f32; 4],
-        light_layers: u32,
-    ) {
+    /// The chunk's quads through `matrix`, as [`SpriteBatch::push_quad_on`]
+    /// would have written them, copied in. The surfaces are `map`'s now —
+    /// its normal map and light layers are not part of the mesh, so editing
+    /// them rebuilds nothing.
+    fn append_world(&mut self, batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap) {
+        let color = map.color;
         let fresh = self
             .world
             .as_ref()
@@ -258,7 +254,7 @@ impl ChunkMesh {
         let mut start = first;
         for &(texture, quads) in &world.runs {
             let end = start + quads * crate::batch::QUAD_INDICES.len() as u32;
-            batch.extend_ranges(texture, None, light_layers, start..end);
+            batch.extend_ranges(surface(map, texture), start..end);
             start = end;
         }
     }

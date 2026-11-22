@@ -236,3 +236,20 @@ fn editing_a_cell_moves_the_revision_and_a_no_op_does_not() {
     map.clear();
     assert_ne!(map.revision().get(), painted);
 }
+
+#[test]
+fn a_normal_map_is_saved_by_path_and_left_out_when_absent() {
+    let flat = ron::to_string(&Tilemap::default()).expect("serialises");
+    assert!(!flat.contains("normal"), "{flat}");
+    let map = Tilemap {
+        normal_map: Some(voltra_assets::AssetPath::new("tiles_normal.png").expect("valid")),
+        normal_handle: Some(voltra_assets::Handle::forge(3, 0)),
+        ..Tilemap::default()
+    };
+    let read = round_trip(&map);
+    assert_eq!(read.normal_map, map.normal_map);
+    assert_eq!(
+        read.normal_handle, None,
+        "a handle is resolved, never saved"
+    );
+}

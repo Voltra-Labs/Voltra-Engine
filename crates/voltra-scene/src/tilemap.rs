@@ -107,6 +107,16 @@ pub struct Tilemap {
     pub texture: Option<AssetPath>,
     #[serde(skip)]
     pub texture_handle: Option<Handle<Texture>>,
+    /// A normal map laid out as the sheet is — the same frames at the same
+    /// texels — for lights with a [`height`](crate::PointLight2D::height),
+    /// as a sprite's [`normal_map`](crate::Sprite::normal_map) is. Every tile
+    /// samples it where it samples the sheet; a tile drawing the placeholder
+    /// is flat. `None` — the default, and not written — is a flat layer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub normal_map: Option<AssetPath>,
+    /// The handle `normal_map` resolves to. Never saved.
+    #[serde(skip)]
+    pub normal_handle: Option<Handle<Texture>>,
     /// The slicing whose frames the cells name.
     pub atlas: Option<AssetPath>,
     #[serde(skip)]
@@ -136,6 +146,8 @@ impl Default for Tilemap {
             collision: false,
             texture: None,
             texture_handle: None,
+            normal_map: None,
+            normal_handle: None,
             atlas: None,
             atlas_handle: None,
             animations: BTreeMap::new(),

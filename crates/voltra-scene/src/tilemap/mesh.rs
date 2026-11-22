@@ -2,15 +2,15 @@
 //!
 //! The same vertices, the same ranges and the same draw call a sprite makes —
 //! nothing new reaches the renderer. Every tile of a layer binds the one
-//! sheet, so a layer is one range however many tiles it holds, unless a
-//! missing frame drops a placeholder into the middle of it.
+//! sheet (and its normal map), so a layer is one range however many tiles it
+//! holds, unless a missing frame drops a placeholder into the middle of it.
 
 use voltra_render::glam::{IVec2, Mat3, Vec2};
 
 use super::cache::{LayerCache, LayerStamp};
 use super::chunk::{cell_of, ChunkKey, CHUNK};
 use super::{Tile, Tilemap};
-use crate::batch::SpriteBatch;
+use crate::batch::{SpriteBatch, Surface};
 use crate::sprite::quad::{flipped, WHOLE};
 use crate::sprite::sheets::Sheets;
 
@@ -24,7 +24,7 @@ pub fn push(batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap, sheets: Sheets
         for (index, tile) in chunk.tiles() {
             let (uvs, texture) = sample(map, tile, sheets);
             let corners = corners_of(map, cell_of(key, index));
-            batch.push_quad_on(matrix, corners, uvs, map.color, texture, map.light_layers);
+            batch.push_quad_on(matrix, corners, uvs, map.color, surface(map, texture));
         }
     }
 }
@@ -86,6 +86,20 @@ pub(super) fn corners_of(map: &Tilemap, cell: IVec2) -> [Vec2; 4] {
         Vec2::new(origin.x + size.x, origin.y),
         origin + size,
     ]
+}
+
+/// What a tile drawing `texture` is drawn with: the layer's normal map over
+/// its sheet — not over the placeholder a missing frame draws, which is flat
+/// — and the layer's light layers.
+pub(super) fn surface(
+    map: &Tilemap,
+    texture: Option<voltra_assets::Handle<voltra_render::Texture>>,
+) -> Surface {
+    Surface {
+        texture,
+        normal: map.normal_handle.filter(|_| texture == map.texture_handle),
+        light_layers: map.light_layers,
+    }
 }
 
 /// The UVs and texture one tile draws with.

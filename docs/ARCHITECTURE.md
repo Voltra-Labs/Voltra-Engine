@@ -3345,8 +3345,8 @@ by default and not written.
   sprite beside it; a light with a height dims what is far from it, which
   is the price of the model and why the height is per light and opt-in. No
   height, no change from before.
-- `SpriteRange::normal` is part of what splits a batch run; tilemaps, text
-  and particles carry none.
+- `SpriteRange::normal` is part of what splits a batch run. Tilemaps carry
+  their layer's since stage 60b (below); text and particles carry none.
 - **A normal map that will not load is drawn flat**, not as the checker's
   colours read as normals: `Textures::is_broken` marks a handle holding the
   checker (until a reload repairs it), the draw list leaves its normal map
@@ -3361,16 +3361,29 @@ attachment too; **a tangent per vertex** — a wider `Vertex` for every
 pipeline to serve one; **a separate linear texture store** — two caches
 for one file, and a hot reload that must know which to refresh.
 
-- **Not yet**: normal maps on tilemaps (per sheet) and text, a per-light
-  normal strength, specular, blending normals by coverage, particles
-  writing their own (flat) normals.
+- **Tilemaps (stage 60b)**: `Tilemap::normal_map`, one per layer, laid out
+  as its sheet is — every tile samples it at the UVs it samples the sheet,
+  so frames, flips and animated tiles need nothing of their own. A tile
+  drawing the placeholder (a frame the atlas lacks) is flat rather than
+  shaded by the wrong texels. The quads go through `batch::Surface`
+  (texture, normal map, light layers), which is what a quad joins a run by;
+  the chunk cache keeps only geometry and UVs, and the surface is applied
+  as the chunk is copied in, so giving a layer a normal map or changing
+  its light layers rebuilds no chunk. Resolved, preloaded and hot-reloaded
+  with the sheet; the inspector has the path field under the sheet's.
+- **Not yet**: normal maps on text (a glyph atlas has no sensible one), a
+  per-light normal strength, specular, blending normals by coverage,
+  particles writing their own (flat) normals.
 
 Pinned by `headless_normals.rs` (normals towards the lamp lit and away
 dark; a mirrored quad mirrors them; flat faces the screen; no height
 ignores them), `lights_scene.rs` (the sample scene's studded plaque: the
 lit side of a stud brighter than its far side, both alike with the map
 stripped — resolved through the real `Textures`, so the linear bind group
-is on the path), and batch, sprite and light unit tests.
+is on the path), and batch, sprite and light unit tests; a layer's normal
+map by `tilemap::cache_tests` (on every range, cached, view-edge and
+uncached, also given after its chunks were cached; the placeholder flat)
+and the format test (saved by path, left out when absent).
 
 ### Light layers are bits, drawn into an inverted buffer the lights test
 
