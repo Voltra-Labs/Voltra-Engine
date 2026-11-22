@@ -196,3 +196,34 @@ fn a_session_hands_back_what_the_engine_logged_while_it_ran() {
         "warned once, and read once"
     );
 }
+
+#[test]
+fn a_profiled_session_says_where_its_frames_went() {
+    let mut session = sandbox();
+    voltra_profile::clear();
+    voltra_profile::set_enabled(true);
+    session.step(30, 1.0 / 60.0);
+    // The 30th frame closes with the next one.
+    session.step(1, 1.0 / 60.0);
+    let summary = voltra_profile::summary(30);
+    voltra_profile::set_enabled(false);
+    voltra_profile::clear();
+
+    assert_eq!(summary.frames, 30);
+    let paths: Vec<&str> = summary.scopes.iter().map(|s| s.path.as_str()).collect();
+    for path in [
+        "update",
+        "update/tick",
+        "update/physics",
+        "update/physics/step/solve",
+    ] {
+        assert!(paths.contains(&path), "{path} missing from {paths:?}");
+    }
+    let entities = summary
+        .counters
+        .iter()
+        .find(|c| c.name == "entities")
+        .expect("counted");
+    assert!(entities.last > 0.0);
+    assert!(summary.counters.iter().any(|c| c.name == "contacts"));
+}

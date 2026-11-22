@@ -2,18 +2,20 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Sensor, Transform};
 
-use crate::broad::candidate_pairs;
 use crate::integrate::{integrate_positions, integrate_velocities};
-use crate::narrow::{manifold, Contact};
+use crate::narrow::Contact;
 use crate::one_way::OneWayPasses;
 use crate::sleep::Sleep;
 use crate::solver::{
     apply_restitution, joint_ends, prepare, prepare_joints, solve, solve_joints, store_joints,
-    warm_start, warm_start_joints, CachedImpulse, ImpulseCache, JointEnds, SolverBodies,
-    SolverParams,
+    warm_start, warm_start_joints, CachedImpulse, ImpulseCache, SolverBodies, SolverParams,
 };
+
+mod collide;
+#[cfg(test)]
+pub(crate) use collide::collide;
+use collide::{collide_with, ordered, unjoined, Reuse};
 
 /// What a collide found: the contacts to solve, and the sensor pairs to
 /// report and nothing else.
@@ -112,6 +114,7 @@ pub fn step_sleeping(
         return Overlaps::default();
     }
 
+    let collide = voltra_profile::scope("collide");
     sleep.wake_disturbed(world);
     let joints = joint_ends(world);
     let apart = unjoined(&joints);
@@ -128,6 +131,8 @@ pub fn step_sleeping(
         },
         passes,
     );
+    drop(collide);
+    let islands = voltra_profile::scope("islands");
     // A joint links its two bodies as a contact does: one waking wakes the
     // other, and they rest together or not at all.
     let joined: Vec<(Entity, Entity)> = joints
@@ -158,6 +163,10 @@ pub fn step_sleeping(
     }
     sleep.keep_resting(&resting_pairs);
     let contacts = &solved;
+    voltra_profile::count("contacts", overlaps.contacts.len() as f64);
+    voltra_profile::count("contacts solved", solved.len() as f64);
+    drop(islands);
+    let solve_scope = voltra_profile::scope("solve");
 
     let mut bodies = SolverBodies::gather(world);
     for entity in sleep.asleep() {
@@ -237,6 +246,8 @@ pub fn step_sleeping(
     cache.keep(|a, b| resting_pairs.contains(&(a, b)));
     cache.commit();
 
+    drop(solve_scope);
+    let _settle = voltra_profile::scope("settle");
     bodies.scatter(world);
     store_joints(&joint_constraints, world);
     let mut settled: Vec<(Entity, Entity)> = contacts
@@ -252,86 +263,4 @@ pub fn step_sleeping(
     sleep.settle(world, &settled, &driven, &params.sleep, dt);
 
     overlaps
-}
-
-/// Every overlap in the world right now, sensors kept apart from the rest.
-#[cfg(test)]
-pub(crate) fn collide(world: &World) -> Overlaps {
-    collide_with(world, |_, _| Reuse::Test, &mut OneWayPasses::default())
-}
-
-/// What [`collide_with`] does with a candidate pair.
-enum Reuse {
-    /// Run the narrow phase.
-    Test,
-    /// Take this contact instead — a sleeping pair's.
-    Contact(Contact),
-    /// Leave it out — two bodies a joint joins.
-    Skip,
-}
-
-/// A pair in one order, whichever it arrives in.
-fn ordered(a: Entity, b: Entity) -> (Entity, Entity) {
-    if a.index() <= b.index() {
-        (a, b)
-    } else {
-        (b, a)
-    }
-}
-
-/// The pairs joints keep from colliding: every joint between two bodies
-/// that does not ask to collide.
-fn unjoined(joints: &[JointEnds]) -> crate::hash::FastSet<(Entity, Entity)> {
-    joints
-        .iter()
-        .filter(|joint| !joint.collide_connected)
-        .filter_map(|joint| joint.b.map(|b| ordered(joint.a, b)))
-        .collect()
-}
-
-/// [`collide`], asking `reuse` first about each pair — how sleeping pairs
-/// skip the narrow phase, and jointed ones are left out.
-fn collide_with(
-    world: &World,
-    reuse: impl Fn(Entity, Entity) -> Reuse,
-    passes: &mut OneWayPasses,
-) -> Overlaps {
-    let mut overlaps = Overlaps::default();
-    for (a, b) in candidate_pairs(world) {
-        match reuse(a, b) {
-            Reuse::Test => {}
-            Reuse::Contact(contact) => {
-                overlaps.contacts.push(contact);
-                continue;
-            }
-            Reuse::Skip => continue,
-        }
-        let Some(a_shape) = shape(world, a) else {
-            continue;
-        };
-        let Some(b_shape) = shape(world, b) else {
-            continue;
-        };
-        let Some(manifold) = manifold(a_shape, b_shape) else {
-            continue;
-        };
-
-        // Either side being a sensor makes the pair one: a trigger volume must
-        // not push the player out, and a player must not be stopped by it.
-        if world.get::<Sensor>(a).is_some() || world.get::<Sensor>(b).is_some() {
-            overlaps.sensors.push((a, b));
-        } else if passes.admits(world, a, b, &manifold) {
-            overlaps.contacts.push(Contact::new(a, b, manifold));
-        }
-    }
-    passes.end_step();
-    overlaps
-}
-
-/// The shape `entity` collides with, if it has one and sits somewhere.
-fn shape(world: &World, entity: Entity) -> Option<(&Collider, &Transform)> {
-    Some((
-        world.get::<Collider>(entity)?,
-        world.get::<Transform>(entity)?,
-    ))
 }

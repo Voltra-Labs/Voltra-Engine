@@ -88,11 +88,17 @@ impl App {
             // Before the step, not after: a force the tick applies is meant to
             // act during the step that follows it, which is the whole reason
             // the hook is per step rather than per frame.
-            self.run_fixed_update(step);
+            {
+                let _fixed = voltra_profile::scope("fixed tick");
+                self.run_fixed_update(step);
+            }
             // A layer the fixed tick just painted or moved is solid where it
             // is now, not where it was a step ago.
             voltra_scene::tilemap::sync_colliders(&mut self.world);
-            self.physics_world.step_once(&mut self.world, self.gravity);
+            {
+                let _step = voltra_profile::scope("step");
+                self.physics_world.step_once(&mut self.world, self.gravity);
+            }
             // Every step's events, not just the last one's: the per-frame tick
             // gets one turn per frame and a frame can owe several steps.
             self.pending_events

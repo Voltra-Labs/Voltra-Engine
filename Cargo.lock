@@ -3726,6 +3726,7 @@ dependencies = [
  "log",
  "serde",
  "serde_json",
+ "voltra-profile",
 ]
 
 [[package]]
@@ -3746,6 +3747,7 @@ dependencies = [
  "voltra-jobs",
  "voltra-nav",
  "voltra-physics",
+ "voltra-profile",
  "voltra-render",
  "voltra-scene",
  "voltra-testkit",
@@ -3771,6 +3773,7 @@ dependencies = [
  "voltra-core",
  "voltra-ecs",
  "voltra-physics",
+ "voltra-profile",
  "voltra-render",
  "voltra-scene",
 ]
@@ -3798,6 +3801,7 @@ dependencies = [
  "voltra-bridge",
  "voltra-core",
  "voltra-ecs",
+ "voltra-profile",
  "voltra-render",
  "voltra-scene",
  "voltra-testkit",
@@ -3820,6 +3824,7 @@ version = "0.1.0"
 dependencies = [
  "log",
  "voltra-ecs",
+ "voltra-profile",
  "voltra-render",
  "voltra-scene",
 ]
@@ -3836,6 +3841,10 @@ dependencies = [
  "voltra-ecs",
  "voltra-scene",
 ]
+
+[[package]]
+name = "voltra-profile"
+version = "0.1.0"
 
 [[package]]
 name = "voltra-render"

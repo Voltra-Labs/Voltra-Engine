@@ -1,0 +1,11 @@
+[package]
+name = "voltra-profile"
+description = "Where a Voltra frame's time goes: scoped timers and counters, recorded per thread."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Standard library only: every crate that times itself depends on this one,
+# so it must not pull anything in.
+[dependencies]

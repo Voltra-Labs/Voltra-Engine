@@ -117,6 +117,18 @@ pub struct EditorNewArgs {
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct EditorProfileArgs {
+    /// How many recent frames to summarise; 120 (two seconds) by default,
+    /// at most 600.
+    #[serde(default = "two_seconds")]
+    pub frames: u32,
+}
+
+fn two_seconds() -> u32 {
+    120
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
 pub struct EditorInputArgs {
     /// The input map's action.
     pub action: String,
@@ -348,6 +360,24 @@ impl VoltraMcp {
                 frames: args.frames,
             })
             .await,
+        )
+    }
+
+    #[tool(
+        description = "Where the running editor's frames go: frame time and fps, each scope (update, tick, physics/step/solve, draw, ui, present…) with calls, average, worst and own milliseconds and its share of the frame, and counters such as entities and contacts. Records for as long as it needs when recording is off. Play first to profile the game rather than the editor at rest."
+    )]
+    async fn editor_profile(
+        &self,
+        Parameters(args): Parameters<EditorProfileArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        let port = self.editor_port;
+        let frames = args.frames;
+        answer(
+            tokio::task::spawn_blocking(move || editor::profile(port, frames))
+                .await
+                .unwrap_or_else(|e| {
+                    Err(crate::tools::ToolError(format!("the profile stopped: {e}")))
+                }),
         )
     }
 

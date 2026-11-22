@@ -8,6 +8,7 @@
 //! editor binary stays free of the protocol and its async runtime.
 
 pub mod client;
+pub mod profile;
 pub mod protocol;
 pub mod server;
 

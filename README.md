@@ -73,6 +73,12 @@ starts with one open. The window title names the scene, with a `*` while it
 has unsaved changes — undoing back to the last save clears it — and New,
 Open and closing the window ask "save changes?" first.
 
+`Window ▸ Profiler` shows what each frame costs: a graph of frame times
+against the 60 and 30 fps lines, and a tree of the engine's scopes (update,
+tick, physics and its steps, draw, ui, present) with calls, average, worst
+and own milliseconds, then counters such as entities and contacts. Press
+Play to profile the game rather than the editor at rest.
+
 A prefab dropped from the asset browser stays linked to its file: editing the
 file (on disk or with the inspector's **Apply to prefab** on an edited instance)
 updates every instance, except for the components an instance has changed — the
@@ -227,6 +233,7 @@ Voltra-Engine/
 ├── crates/
 │   ├── voltra-ecs/       # entities and components — zero dependencies
 │   ├── voltra-jobs/      # worker pool, scoped jobs that borrow — std only
+│   ├── voltra-profile/   # where a frame's time goes: scopes, counters — std only
 │   ├── voltra-assets/    # handles, paths, the texture cache, hot reload
 │   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
@@ -337,6 +344,7 @@ privileged and plain `cargo build` covers everything.
 | M2 | `voltra-mcp`: scenes, assets, headless runs with screenshots, build and test — over stdio | done |
 | M3 | The live editor bridge: an AI edits, plays and screenshots a running editor, each edit one undo entry | done |
 | 72 | Scenes in the editor: New, Open, Save As, unsaved-changes prompt, title, CLI scene | done |
+| 73 | Profiler (`voltra-profile`): frame scopes and counters, the editor's Profiler window, MCP profiles | done |
 
 ## Contributing
 

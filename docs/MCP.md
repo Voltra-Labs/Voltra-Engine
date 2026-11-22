@@ -48,7 +48,7 @@ not a compile):
 | `component_set` / `component_remove` | One component, by registered name |
 | `prefab_instantiate` | A prefab placed in a scene, linked to its file |
 | `asset_read` / `asset_write` | A RON asset's text; written only once it reads as what its name says (scene, `.anim.ron`, `.animator.ron`, `.input.ron`, `.atlas.ron`, `.layers.ron`) |
-| `run_scene` | The scene run headless for some frames, actions held on the frames given; answers where things ended up (or chosen entities in full), the engine's log, and a screenshot |
+| `run_scene` | The scene run headless for some frames, actions held on the frames given; answers where things ended up (or chosen entities in full), the engine's log, a screenshot, and with `profile` where each frame's time went |
 | `project_build` / `project_test` / `project_dist` | cargo, with arguments the tool builds |
 
 **Entities** are named by id (the UUID `scene_read` gives) or by a path of
@@ -86,6 +86,7 @@ sees each change appear:
 | `editor_open` / `editor_new` | Another scene, or an empty one; refused over unsaved changes unless `discard_changes` |
 | `editor_play` | `play`, `pause`, `step` (with `frames`), `stop` (the authored scene back) |
 | `editor_input` | Hold an input action for some frames while playing |
+| `editor_profile` | Where the frames go: frame time and fps, each scope's calls and milliseconds as a tree, counters; records as long as it needs |
 | `editor_screenshot` | The viewport as last drawn — scene, lights, grade — as an image |
 
 **Every edit is one undo entry**, labelled `AI: spawn`, `AI: set component`

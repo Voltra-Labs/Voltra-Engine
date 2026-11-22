@@ -114,6 +114,10 @@ impl Headless {
             0.0
         };
         for _ in 0..frames {
+            // A frame is a step here: what a profile of a headless run reads.
+            voltra_profile::end_frame();
+            voltra_profile::count("entities", self.app.world.entity_count() as f64);
+            let _frame = voltra_profile::scope("update");
             self.app.advance(delta);
             self.app.input.end_frame();
             self.frames += 1;
