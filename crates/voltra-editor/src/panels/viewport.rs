@@ -3,18 +3,16 @@
 //! Layout only. What the pointer and keyboard do with it is
 //! [`crate::camera::ViewportCamera`]'s job.
 
-use voltra_assets::AssetPath;
 use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 
-use crate::drag;
 use crate::editor::Editor;
 use crate::paint::PaintTool;
 use crate::play::PlayState;
-use crate::spawn;
 use crate::tool::Tool;
 use crate::view;
 
+mod drop;
 mod select;
 
 /// What the viewport image is multiplied by while the editor is not editing.
@@ -106,7 +104,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(label) = editor.shape.update(ui, &scene, frame, caster) {
                     editor.history.claim(label);
                 }
-                drop_asset(editor, frame, ui, &scene);
+                drop::drop_asset(editor, frame, ui, &scene);
                 editor.camera.navigate(ui, &scene, frame.camera);
                 let outlines = voltra_scene::shadow_caster::outlines_of(
                     frame.world,
@@ -131,7 +129,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(label) = editor.paint.update(ui, &scene, frame, layer) {
                     editor.history.claim(label);
                 }
-                drop_asset(editor, frame, ui, &scene);
+                drop::drop_asset(editor, frame, ui, &scene);
                 editor.camera.navigate(ui, &scene, frame.camera);
                 let (world, lines) = frame.world_and_lines();
                 editor.paint.draw(world, layer, lines);
@@ -165,7 +163,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             // Before the click and the camera: a release that carries an asset
             // is a drop, not a selection and not the end of a pan.
-            drop_asset(editor, frame, ui, &scene);
+            drop::drop_asset(editor, frame, ui, &scene);
 
             // Before navigation: a click and a drag are mutually exclusive in
             // egui, so this cannot swallow a pan.
@@ -226,73 +224,4 @@ fn no_camera(ui: &mut Ui, scene: &egui::Response) {
         )
         .selectable(false),
     );
-}
-
-/// Adds what an asset makes — a sprite, a sound, a prefab's instance — where
-/// it was dropped, as one undo entry.
-///
-/// Unity, Unreal and Godot all instantiate on drop rather than opening a
-/// dialogue, and all three put the new object where the pointer released rather
-/// than at the origin — the drop *is* the placement, and a sprite that appears
-/// somewhere else has to be moved for no reason.
-///
-/// Refused while playing, like every other edit: the scene the history is
-/// addressed against is the authored one, and Stop would throw the sprite away
-/// without saying so.
-fn drop_asset(editor: &mut Editor, frame: &mut UiFrame<'_>, ui: &Ui, scene: &egui::Response) {
-    if editor.play.state() != PlayState::Editing {
-        return;
-    }
-
-    // What the drop would do, before the release. A viewport that accepts a
-    // drag silently and only reacts once it is too late to change your mind is
-    // the complaint every content browser gets.
-    if scene.dnd_hover_payload::<AssetPath>().is_some() {
-        drag::outline(ui, scene.rect, ui.visuals().selection.bg_fill);
-    }
-
-    let Some(path) = scene.dnd_release_payload::<AssetPath>() else {
-        return;
-    };
-    // `Response::interact_pointer_pos` is `None` on the release frame of a drag
-    // that started in another widget, which is every drop this handles.
-    let Some(pointer) = ui.ctx().pointer_interact_pos() else {
-        return;
-    };
-    let at = crate::picking::world_at(scene, pointer, frame);
-
-    // A scene is a prefab: the drop spawns a copy of everything in it.
-    if voltra_assets::watch::is_scene(path.as_str()) {
-        spawn::record_all(editor, frame, "Add prefab", |frame, registry| {
-            spawn::prefab(frame, registry, at, &path)
-        });
-        return;
-    }
-
-    // A sound is not a sprite at all: it becomes something that plays it.
-    if voltra_assets::watch::is_clip(path.as_str()) {
-        spawn::record(editor, frame, "Add audio source", |frame| {
-            spawn::audio_source(frame, at, &path)
-        });
-        return;
-    }
-
-    // A face becomes a label written in it.
-    if voltra_assets::watch::is_font(path.as_str()) {
-        spawn::record(editor, frame, "Add text", |frame| {
-            spawn::text(frame, "Text", at, Some(&path))
-        });
-        return;
-    }
-
-    // Which of the two the drop means is the file it names: a slicing brings
-    // its own sheet with it, a bare image is the sheet.
-    let sliced = voltra_assets::atlas::is_atlas(path.as_str());
-    spawn::record(editor, frame, "Add sprite", |frame| {
-        if sliced {
-            spawn::atlas_sprite(frame, at, &path)
-        } else {
-            spawn::textured_sprite(frame, at, &path)
-        }
-    });
 }
