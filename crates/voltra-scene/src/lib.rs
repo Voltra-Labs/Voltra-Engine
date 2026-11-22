@@ -14,6 +14,7 @@ pub mod camera;
 pub mod camera_rig;
 pub mod character;
 pub mod collider;
+pub mod edit;
 pub mod filter;
 pub mod format;
 pub mod global_light;

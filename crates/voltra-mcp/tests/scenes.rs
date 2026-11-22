@@ -206,3 +206,48 @@ async fn deleting_takes_the_subtree_and_reparenting_to_nothing_makes_a_root() {
         .collect();
     assert_eq!(names, ["C"]);
 }
+
+#[tokio::test]
+async fn a_prefab_is_placed_in_a_scene_linked_to_its_file() {
+    let (project, _root) = scratch_project();
+    let client = client_for(project).await;
+    call(
+        &client,
+        "scene_create",
+        json!({ "path": "scenes/level.ron" }),
+    )
+    .await;
+    let placed = call(
+        &client,
+        "prefab_instantiate",
+        json!({ "scene": "scenes/level.ron", "prefab": "prefabs/coin.ron", "x": 3.0, "y": 1.0 }),
+    )
+    .await;
+    assert_ne!(placed.is_error, Some(true), "{}", text_of(&placed));
+    let placed = parsed(&text_of(&placed));
+    let root = placed["root"].as_str().expect("a root").to_owned();
+    let scene = parsed(&text_of(
+        &call(&client, "scene_read", json!({ "path": "scenes/level.ron" })).await,
+    ));
+    let entity = scene["entities"]
+        .as_array()
+        .expect("entities")
+        .iter()
+        .find(|e| e["id"] == root)
+        .expect("the root is saved");
+    assert!(entity["components"]["PrefabInstance"]
+        .as_str()
+        .expect("linked")
+        .contains("coin.ron"));
+    assert!(entity["components"]["Transform"]
+        .as_str()
+        .expect("placed")
+        .contains("3.0"));
+    let itself = call(
+        &client,
+        "prefab_instantiate",
+        json!({ "scene": "scenes/level.ron", "prefab": "scenes/level.ron" }),
+    )
+    .await;
+    assert_eq!(itself.is_error, Some(true));
+}

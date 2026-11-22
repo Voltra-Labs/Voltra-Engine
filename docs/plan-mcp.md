@@ -152,10 +152,12 @@ back the log — with no window.
 
 ## M2 — `voltra-mcp`, file and headless mode
 
-Progress: **M2a–b landed** — the crate, stdio, discovery (`components_list`,
-`assets_list`, `scenes_list`, `scene_read`) and scene editing (`scene_create`,
-`entity_spawn/delete/reparent/rename`, `component_set/remove`). Next: M2c
-(`run_scene`, `asset_read/write`), M2d (project tools, prefabs, docs).
+Progress: **M2 done.** M2a–b: the crate, stdio, discovery and scene editing.
+M2c: `run_scene` (frames, held actions, report, log, screenshot as an image
+block), `asset_read`/`asset_write`. M2d: `project_build/test/dist`,
+`prefab_instantiate`, `docs/MCP.md` with the `.mcp.json` example. Left out:
+`tilemap_paint` and `atlas_slice` (an atlas is written whole with
+`asset_write`); editing other scenes than files is M3's.
 
 A new crate, `crates/voltra-mcp`, a binary speaking MCP over stdio. No
 editor needed: it works on the project's files and a `Session` from M1.

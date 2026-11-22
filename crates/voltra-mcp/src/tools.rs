@@ -2,8 +2,11 @@
 //! [`Project`](crate::Project), answering JSON or an error a client can
 //! read and act on.
 
+pub mod assets;
 pub mod discovery;
-pub mod entity_ref;
+pub mod prefab;
+pub mod project;
+pub mod run;
 pub mod scene_edit;
 pub mod scene_read;
 
