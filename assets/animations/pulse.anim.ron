@@ -1,0 +1,18 @@
+// A light breathing: its intensity and radius swell and settle once a second
+// and a half. Put an AnimationPlayer on an entity with a PointLight2D and drop
+// this file on its clip field.
+(
+    looping: true,
+    tracks: [
+        (property: LightIntensity, keys: [
+            (time: 0.0, value: Float(0.6), ease: EaseInOut),
+            (time: 0.75, value: Float(1.4), ease: EaseInOut),
+            (time: 1.5, value: Float(0.6)),
+        ]),
+        (property: LightRadius, keys: [
+            (time: 0.0, value: Float(3.0), ease: EaseInOut),
+            (time: 0.75, value: Float(3.6), ease: EaseInOut),
+            (time: 1.5, value: Float(3.0)),
+        ]),
+    ],
+)

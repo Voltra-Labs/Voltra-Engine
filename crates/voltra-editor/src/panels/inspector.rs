@@ -4,6 +4,7 @@
 //! them and the rule that turns an edit into an undo entry.
 
 mod animation;
+mod animation_player;
 mod audio_source;
 mod camera;
 mod collision;
@@ -173,6 +174,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         claim = claim.or(joint::show(ui, j, &ends));
                     }
                 }
+                claim = claim.or(animation_player::show(ui, frame.world, entity));
                 if let Some(glow) = frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity) {
                     ui.separator();
                     claim = claim.or(global_light::show(ui, glow));

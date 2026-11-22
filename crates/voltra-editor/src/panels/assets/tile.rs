@@ -34,6 +34,14 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
         // Loadable, so not dimmed; nothing to place, so no drag.
         EntryKind::InputMap => settings_tile(ui, rect, "INPUT"),
         EntryKind::SortingLayers => settings_tile(ui, rect, "LAYERS"),
+        // Dragged onto an animation player's clip field.
+        EntryKind::Animation => badge_tile(
+            ui,
+            entry,
+            &response,
+            "ANIM",
+            ui.visuals().widgets.active.bg_fill,
+        ),
         EntryKind::Scene => scene_tile(ui, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.

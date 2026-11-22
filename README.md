@@ -315,6 +315,7 @@ privileged and plain `cargo build` covers everything.
 | 63c | Duplicate, copy and paste, through the system clipboard as text | done |
 | 64 | Prefab instances follow their file: overrides, Apply, Revert | done |
 | 65 | Joints: revolute (limit, motor), distance (rod, spring, rope), weld | done |
+| 66a | Property animation: `.anim.ron` clips of eased keys, `AnimationPlayer` | done |
 
 ## Contributing
 

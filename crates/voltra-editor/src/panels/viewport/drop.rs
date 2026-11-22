@@ -47,6 +47,15 @@ pub(super) fn drop_asset(
     };
     let at = crate::picking::world_at(scene, pointer, frame);
 
+    // A clip is not a thing in the scene: it goes on a player's field.
+    if voltra_assets::watch::is_animation(path.as_str()) {
+        log::info!(
+            "{} is an animation: drop it on an animation player's clip field",
+            path.as_str()
+        );
+        return;
+    }
+
     // A scene is a prefab: the drop spawns a copy of everything in it.
     if voltra_assets::watch::is_scene(path.as_str()) {
         spawn::record_all(editor, frame, "Add prefab", |frame, registry| {

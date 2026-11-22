@@ -3882,6 +3882,59 @@ while a motor's wheel does not), `prefab::sync` (a joint inside a prefab
 joining the instance's own bodies, and following an edit) and the scene
 component's format test.
 
+### Property animation is clips of eased keys, bound by name from a player
+
+Stage 66a. An `AnimationClip` (`voltra_scene::keyframes`, a `*.anim.ron`
+file) is a `length`, `looping` and tracks; a `Track` is one `Property` of
+one entity — `target`, the path of `Name`s from the player down (`""` is the
+player, `"arm/hand"` a grandchild) — and `Key { time, value, ease }`s. An
+`AnimationPlayer` (`clip`, `playing`, `speed`; the clock never saved) plays
+one clip onto its entity and the ones it names. Unity's `AnimationClip` and
+Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
+
+- **Bound by name, not by `SceneId`**: a clip is shared by every entity that
+  plays it, and only names are the same in every copy of a prefab — Unity's
+  and Godot's reason. Two children of one name: the first. Resolved once per
+  distinct path per sample.
+- **A closed `Property` list** (position, rotation, scale; sprite, text and
+  tilemap colour; sprite frame; point and global light colour and intensity;
+  light radius), each with a `ValueKind` and its read/write arms — not a
+  reflected `"Sprite.color"` string: there is no reflection, and a typed list
+  is checked at load instead of every sample. Rotation is not wrapped (keys
+  at `0` and `2π` are a turn).
+- **An ease per key, for the segment that leaves it** (`Step`, `Linear`,
+  `EaseIn`, `EaseOut`, `EaseInOut`) — Godot's per-key transition, every tween
+  library's vocabulary; no Bézier tangents until there is a curve editor.
+  None overshoots, so a sample stays between its keys. Integers (a frame)
+  count through the ones between, truncated towards the earlier key: `0` to
+  `7` over a second is a flipbook.
+- **Loaded leniently**: keys sorted (stably — two at one time cut), and a
+  key that is not finite or not the property's kind dropped with a warning;
+  `length` zero means the last key's time. A file that will not read is an
+  empty clip, and a player of an empty clip neither runs nor ends, so the
+  fixed file plays from the start.
+- **Applied only while playing**: a paused or ended player writes nothing,
+  so other code may move the entity. A clip that does not loop applies its
+  end and stops. A missing target or component costs its own track and
+  warns once per clip.
+- **Per frame, gated on simulation**, after the `SpriteAnimation`s (a clip
+  keying a frame wins). A dynamic body's transform is the step's: animate a
+  kinematic body, or a child. The store (`AnimationClips`, the shape of the
+  others) is lazy in `App`, hot reloaded before prefabs; the browser lists
+  `*.anim.ron` as `Animation`, dragged onto the inspector's clip field, never
+  into the scene.
+
+Rejected: **a state machine or blending now** — Unity's `Animator`, Godot's
+`AnimationTree` — a subsystem of its own, when a game needs one; **curves
+on arbitrary fields by reflection**; **ids as targets**.
+
+Pinned by `keyframes/tests.rs` (a clip moving its player and a named child
+with an ease, looping; a paused player leaving its entity alone; a missing
+child costing one track; bad keys dropped and the rest played; a broken file
+repaired by a reload; a save read back; a sprite frame flipbook), the unit
+tests of eases, values, properties, tracks and the player's clock, and
+`app::animation` (playing only while simulating, taking a reload).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
