@@ -13,6 +13,7 @@ use crate::panels::assets::AssetBrowser;
 use crate::play::{Play, PlayContext, PlayState};
 use crate::selection::Selection;
 use crate::shape_edit::ShapeEdit;
+use crate::timeline::Timeline;
 use crate::tool::Tool;
 use crate::undo::{shortcut, History, SceneView, UndoContext};
 use crate::view::View;
@@ -66,11 +67,17 @@ pub struct Editor {
     /// The sound the inspector's Play button started, so the next press or
     /// Stop can end it.
     pub(crate) audition: Option<VoiceId>,
+    /// The timeline's playhead, selected key and preview pose.
+    pub(crate) timeline: Timeline,
 }
 
 impl Editor {
     /// Lays out the whole editor. Called once per frame with the root `Ui`.
     pub fn ui(&mut self, ui: &mut Ui, frame: &mut UiFrame<'_>) {
+        // Before anything reads the world: the preview's pose was for the
+        // frame just drawn, and every panel and the history see only what
+        // was authored.
+        self.timeline.lift(frame.world);
         // Only while editing: play steps the world every frame, and none of
         // that is an edit.
         let editing = self.play.state() == PlayState::Editing;
@@ -113,6 +120,8 @@ impl Editor {
         // across the whole window: its drop targets are the viewport above and
         // the inspector beside it, and a browser far from both is a long drag.
         panels::assets::show(self, ui, frame);
+        // Over the browser, under the viewport it previews into.
+        panels::timeline::show(self, ui, frame);
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);
@@ -128,6 +137,11 @@ impl Editor {
                 selected: self.selection.ids(frame.world),
             };
             self.history.end_frame(view);
+            // After the history has its after side, for the frame about to
+            // be drawn; lifted again first thing next frame.
+            let posed = self.selection.live_primary(frame.world);
+            self.timeline
+                .pose(frame.world, frame.animation_clips, posed);
         }
     }
 

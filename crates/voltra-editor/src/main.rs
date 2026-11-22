@@ -16,6 +16,7 @@ mod prefab;
 mod selection;
 mod shape_edit;
 mod spawn;
+mod timeline;
 mod tool;
 mod undo;
 mod view;

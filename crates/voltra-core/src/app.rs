@@ -177,6 +177,8 @@ pub struct App {
     registry: ComponentRegistry,
     /// Prefabs, made on first use — see [`spawning::prefab_store`].
     prefabs: Option<Prefabs>,
+    /// Property-animation clips, made on first use like the prefabs.
+    animation_clips: Option<voltra_scene::AnimationClips>,
     /// Entities a tick spawned whose asset handles the loop has not resolved
     /// yet. Emptied right after every tick.
     spawned: Vec<Entity>,
@@ -460,6 +462,10 @@ impl App {
             };
             if let Some(clip) = reloaded {
                 self.scene_audio.restart(&self.world, clip, &mut self.audio);
+                continue;
+            }
+            // A clip is read by its players next frame.
+            if self.reload_animation_clip(&path) {
                 continue;
             }
             // A prefab's instances take the edit, but for what they override.

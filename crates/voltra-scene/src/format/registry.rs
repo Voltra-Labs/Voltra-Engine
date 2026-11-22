@@ -85,6 +85,7 @@ impl ComponentRegistry {
         registry.register::<Parent>("Parent");
         registry.register::<Sprite>("Sprite");
         registry.register::<SpriteAnimation>("SpriteAnimation");
+        registry.register::<crate::AnimationPlayer>(crate::AnimationPlayer::NAME);
         registry.register::<Camera>("Camera");
         registry.register::<AudioSource>("AudioSource");
         registry.register::<AudioListener>("AudioListener");
