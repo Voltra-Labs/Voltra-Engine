@@ -8,6 +8,7 @@ mod gamepads;
 mod gpu_particles;
 mod input_map;
 mod particles;
+mod prefab_sync;
 mod scene_draws;
 mod scenes;
 mod simulation;
@@ -461,13 +462,8 @@ impl App {
                 self.scene_audio.restart(&self.world, clip, &mut self.audio);
                 continue;
             }
-            // Instances already spawned have forgotten their prefab; the next
-            // spawn gets the edit, which is all a reload can promise them.
-            if self
-                .prefabs
-                .as_mut()
-                .is_some_and(|prefabs| prefabs.reload(&path))
-            {
+            // A prefab's instances take the edit, but for what they override.
+            if self.reload_prefab(&path) {
                 continue;
             }
             // Nor do the bindings.
@@ -558,6 +554,9 @@ impl ApplicationHandler for App {
         // already hold sprites naming a texture they have never resolved.
         // Without this they draw untextured forever: the only other callers of
         // `set_texture` are the inspector and Open, and a game has neither.
+        // Instances first, so what they are brought in step with is resolved
+        // with the rest.
+        self.sync_all_instances();
         ui_frame::resolve_world_textures(
             &mut self.world,
             &mut textures,

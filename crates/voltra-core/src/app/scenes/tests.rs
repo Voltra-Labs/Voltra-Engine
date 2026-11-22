@@ -212,3 +212,36 @@ fn the_platformer_s_second_level_loads_with_every_component_known() {
         "nothing in it is unregistered"
     );
 }
+
+#[test]
+fn a_scene_saved_with_an_older_copy_of_a_prefab_arrives_in_step() {
+    use voltra_scene::{PrefabInstance, PrefabPart, Sprite};
+    let root = scratch_root();
+    let registry = ComponentRegistry::with_defaults();
+    let write = |name: &str, world: &World| {
+        let file = voltra_scene::format::to_scene_file(world, &registry).expect("saves");
+        let full = root.join(name);
+        std::fs::create_dir_all(full.parent().expect("a parent")).expect("dir");
+        std::fs::write(full, ron::to_string(&file).expect("serialises")).expect("writes");
+    };
+    // The prefab as it is now: a blue coin.
+    let mut prefab = World::new();
+    let coin = named(&mut prefab, "coin");
+    prefab.insert(coin, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+    let record = *prefab.get::<SceneId>(coin).expect("an id");
+    write("prefabs/coin.ron", &prefab);
+    // A level saved when it was red.
+    let mut level = World::new();
+    let copy = named(&mut level, "coin");
+    level.insert(copy, Transform::default());
+    level.insert(copy, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    level.insert(copy, PrefabInstance::new(path("prefabs/coin.ron")));
+    level.insert(copy, PrefabPart::new(record));
+    write("scenes/level.ron", &level);
+
+    let mut app = app_doing(&root, |tick| tick.load_scene(&path("scenes/level.ron")));
+    app.advance(FRAME);
+
+    let (_, sprite) = app.world.query::<Sprite>().next().expect("the coin");
+    assert_eq!(sprite.color, [0.0, 0.0, 1.0, 1.0]);
+}

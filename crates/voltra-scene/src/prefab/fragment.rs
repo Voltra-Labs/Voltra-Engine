@@ -10,7 +10,7 @@ use crate::transform::Transform;
 
 /// `root` and its descendants as a file [`super::spawn`] can stamp out again.
 ///
-/// What changes on the way out, and only on the root:
+/// What changes on the way out — on the root, and one thing on every entity:
 ///
 /// - **Its parent link is dropped.** The parent stays in the scene, and a
 ///   link to it would name an entity the prefab does not hold. A spawn would
@@ -18,6 +18,8 @@ use crate::transform::Transform;
 /// - **Its own [`PrefabInstance`] is dropped.** Whatever it was an instance
 ///   of, it is now the prefab, and every spawn links its roots to the file
 ///   they came from. A child's link is kept: that child is a nested instance.
+/// - **Every entity's [`super::PrefabPart`] is dropped**: it names a record of
+///   whatever prefab the entity came from, not of this one.
 /// - **Its translation is zeroed; its rotation and scale are kept.** A spawn
 ///   places roots *around* `at`, so a prefab authored where it happened to
 ///   stand in the scene would land that far from every cursor it is dropped
@@ -40,6 +42,9 @@ pub fn fragment(
             continue;
         };
         let mut record = record?;
+        // The file is a prefab of its own: which record of some other one
+        // an entity was is no part of it.
+        record.components.remove(super::PrefabPart::NAME);
         if entity == root {
             record.components.remove("Parent");
             record.components.remove(PrefabInstance::NAME);
