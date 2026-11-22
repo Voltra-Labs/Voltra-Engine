@@ -189,21 +189,17 @@ impl Sleep {
 
     /// Wakes every sleeping body in an island with something awake in it.
     /// Run after the collide, against all of this step's contacts.
-    pub fn wake_islands(&mut self, world: &World, contacts: &[Contact]) {
+    pub fn wake_islands(&mut self, world: &World, contacts: &[(Entity, Entity)]) {
         // Seeds: sleeping bodies touching an awake dynamic body or a moving
         // kinematic one. With none — the usual step of a settled scene —
         // nothing is woken and no island needs building.
         let mut seeds: Vec<Entity> = Vec::new();
-        for contact in contacts {
-            let (a_asleep, b_asleep) = (self.is_asleep(contact.a), self.is_asleep(contact.b));
+        for &(a, b) in contacts {
+            let (a_asleep, b_asleep) = (self.is_asleep(a), self.is_asleep(b));
             if a_asleep == b_asleep {
                 continue;
             }
-            let (sleeper, other) = if a_asleep {
-                (contact.a, contact.b)
-            } else {
-                (contact.b, contact.a)
-            };
+            let (sleeper, other) = if a_asleep { (a, b) } else { (b, a) };
             if is_dynamic(world, other) || is_moving_kinematic(world, other) {
                 seeds.push(sleeper);
             }
@@ -215,14 +211,14 @@ impl Sleep {
         // Then everything asleep joined to a seed by contacts between sleeping
         // bodies: the rest of its island.
         let mut joined: FastMap<Entity, Vec<Entity>> = FastMap::default();
-        for contact in contacts {
-            if self.is_asleep(contact.a)
-                && self.is_asleep(contact.b)
-                && is_dynamic(world, contact.a)
-                && is_dynamic(world, contact.b)
+        for &(a, b) in contacts {
+            if self.is_asleep(a)
+                && self.is_asleep(b)
+                && is_dynamic(world, a)
+                && is_dynamic(world, b)
             {
-                joined.entry(contact.a).or_default().push(contact.b);
-                joined.entry(contact.b).or_default().push(contact.a);
+                joined.entry(a).or_default().push(b);
+                joined.entry(b).or_default().push(a);
             }
         }
         while let Some(entity) = seeds.pop() {
@@ -242,7 +238,8 @@ impl Sleep {
     pub fn settle(
         &mut self,
         world: &mut World,
-        contacts: &[Contact],
+        contacts: &[(Entity, Entity)],
+        driven: &[Entity],
         params: &SleepParams,
         dt: f32,
     ) {
@@ -268,7 +265,12 @@ impl Sleep {
             sleep.rested = if at_rest { sleep.rested + dt } else { 0.0 };
         }
 
-        let islands = Islands::from_contacts(world, contacts);
+        let mut islands = Islands::from_contacts(world, contacts);
+        // A body a joint's motor turns is driven, as one a moving platform
+        // carries is: its island stays awake.
+        for &entity in driven {
+            islands.driven.insert(islands.root(entity));
+        }
         // The least-rested member decides for its island; a driven island
         // never sleeps.
         let mut least: FastMap<Entity, f32> = FastMap::default();
@@ -323,11 +325,11 @@ impl Sleep {
 }
 
 /// Every entity each one is in solid contact with.
-fn partners_of(contacts: &[Contact]) -> FastMap<Entity, FastSet<Entity>> {
+fn partners_of(contacts: &[(Entity, Entity)]) -> FastMap<Entity, FastSet<Entity>> {
     let mut partners: FastMap<Entity, FastSet<Entity>> = FastMap::default();
-    for contact in contacts {
-        partners.entry(contact.a).or_default().insert(contact.b);
-        partners.entry(contact.b).or_default().insert(contact.a);
+    for &(a, b) in contacts {
+        partners.entry(a).or_default().insert(b);
+        partners.entry(b).or_default().insert(a);
     }
     partners
 }
@@ -355,22 +357,21 @@ struct Islands {
 }
 
 impl Islands {
-    fn from_contacts(world: &World, contacts: &[Contact]) -> Self {
+    fn from_contacts(world: &World, contacts: &[(Entity, Entity)]) -> Self {
         let mut islands = Self {
             parent: FastMap::default(),
             driven: FastSet::default(),
         };
-        for contact in contacts {
-            let (a_dynamic, b_dynamic) =
-                (is_dynamic(world, contact.a), is_dynamic(world, contact.b));
+        for &(a, b) in contacts {
+            let (a_dynamic, b_dynamic) = (is_dynamic(world, a), is_dynamic(world, b));
             if a_dynamic && b_dynamic {
-                islands.union(contact.a, contact.b);
+                islands.union(a, b);
             }
-            if a_dynamic && is_moving_kinematic(world, contact.b) {
-                islands.driven.insert(contact.a);
+            if a_dynamic && is_moving_kinematic(world, b) {
+                islands.driven.insert(a);
             }
-            if b_dynamic && is_moving_kinematic(world, contact.a) {
-                islands.driven.insert(contact.b);
+            if b_dynamic && is_moving_kinematic(world, a) {
+                islands.driven.insert(b);
             }
         }
         // Every entry pointed straight at its root, once, so each later

@@ -11,7 +11,7 @@
 
 use voltra_ecs::{Entity, World};
 
-use super::compare::{canonical, differences};
+use super::compare::{canonical, differences, ids_to_records};
 use super::sync::{sync, SyncReport};
 use super::{PrefabInstance, PrefabPart, Prefabs};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
@@ -66,7 +66,10 @@ pub fn refresh_overrides(
         return Ok(false);
     };
     let want = canonical(registry, record)?;
-    let differ = differences(world, registry, entity, is_root, &want)?;
+    let to_record = instance_root(world, entity)
+        .map(|root| ids_to_records(world, root))
+        .unwrap_or_default();
+    let differ = differences(world, registry, entity, is_root, &want, &to_record)?;
     let Some(part) = world.get_mut::<PrefabPart>(entity) else {
         return Ok(false);
     };

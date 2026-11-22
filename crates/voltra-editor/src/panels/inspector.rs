@@ -9,6 +9,7 @@ mod camera;
 mod collision;
 mod delete;
 mod global_light;
+mod joint;
 mod light;
 mod light_layers;
 mod name;
@@ -164,6 +165,13 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         frame.device,
                         frame.queue,
                     ));
+                }
+                if frame.world.get::<voltra_scene::Joint2D>(entity).is_some() {
+                    let ends = joint::ends(frame.world, entity);
+                    if let Some(j) = frame.world.get_mut::<voltra_scene::Joint2D>(entity) {
+                        ui.separator();
+                        claim = claim.or(joint::show(ui, j, &ends));
+                    }
                 }
                 if let Some(glow) = frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity) {
                     ui.separator();

@@ -22,6 +22,10 @@ pub struct SolverParams {
     /// Damping ratio of a contact. Well above one: a contact should absorb,
     /// not ring.
     pub contact_damping_ratio: f32,
+    /// How a joint's rigid parts give way under the bias: twice the contact
+    /// frequency (capped the same way) at this damping ratio — Box2D's
+    /// `jointDampingRatio`, whose default this is.
+    pub joint_damping_ratio: f32,
     /// Ceiling on how fast overlap is pushed out, in world units per second.
     /// Without it, a deep overlap — a body spawned inside a wall — resolves by
     /// launching it across the scene.
@@ -50,6 +54,7 @@ impl Default for SolverParams {
             sub_steps: 4,
             contact_hertz: 30.0,
             contact_damping_ratio: 10.0,
+            joint_damping_ratio: 2.0,
             max_push_speed: 3.0,
             restitution_threshold: 1.0,
             max_rotation: 0.25 * PI,
@@ -89,6 +94,19 @@ impl SolverParams {
             Softness::new(hertz, self.contact_damping_ratio, h),
             Softness::new(2.0 * hertz, self.contact_damping_ratio, h),
         )
+    }
+}
+
+impl SolverParams {
+    /// The spring a joint's rigid parts are solved with: twice the capped
+    /// contact frequency, as Box2D's `jointSoftness` is.
+    pub fn joint_softness(&self, h: f32) -> Softness {
+        let hertz = if h > 0.0 {
+            self.contact_hertz.min(0.125 / h)
+        } else {
+            0.0
+        };
+        Softness::new(2.0 * hertz, self.joint_damping_ratio, h)
     }
 }
 

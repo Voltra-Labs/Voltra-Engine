@@ -205,6 +205,10 @@ impl SolverBodies {
         &self.bodies[index]
     }
 
+    pub fn get_mut(&mut self, index: usize) -> &mut SolverBody {
+        &mut self.bodies[index]
+    }
+
     pub fn len(&self) -> usize {
         self.bodies.len()
     }

@@ -16,6 +16,7 @@
 //!   what warm starting means.
 //! - [`constraint`] — one contact, precomputed into what the passes need.
 //! - [`contact`] — the passes themselves: warm start, solve, restitution.
+//! - [`joint`] — joints, solved in the same passes before the contacts.
 //!
 //! [Solver2D]: https://box2d.org/posts/2024/02/solver2d/
 
@@ -23,6 +24,7 @@ pub mod body;
 pub mod cache;
 pub mod constraint;
 pub mod contact;
+pub mod joint;
 pub mod params;
 pub mod softness;
 
@@ -30,5 +32,9 @@ pub use body::{SolverBodies, SolverBody};
 pub use cache::{CachedImpulse, ContactKey, ImpulseCache};
 pub use constraint::{prepare, ContactConstraint};
 pub use contact::{apply_restitution, solve, warm_start};
+pub use joint::{
+    joint_ends, prepare_joints, solve_joints, store_joints, warm_start_joints, JointConstraint,
+    JointEnds,
+};
 pub use params::SolverParams;
 pub use softness::Softness;

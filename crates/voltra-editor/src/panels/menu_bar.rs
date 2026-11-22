@@ -256,6 +256,20 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     });
                     ui.close();
                 }
+                if ui.button("Spawn pendulum").clicked() {
+                    crate::joints::spawn_pendulum(editor, frame);
+                    ui.close();
+                }
+                let joinable = crate::joints::can_join(editor, frame.world);
+                if ui
+                    .add_enabled(joinable, egui::Button::new("Join selection"))
+                    .on_hover_text("a hinge at the last picked body: to the other selected body, or to the world")
+                    .on_disabled_hover_text("select a body, and at most one other")
+                    .clicked()
+                {
+                    crate::joints::join_selection(editor, frame);
+                    ui.close();
+                }
                 if ui.button("Spawn floor").clicked() {
                     spawn::record(editor, frame, "Spawn floor", |frame| {
                         spawn::body(

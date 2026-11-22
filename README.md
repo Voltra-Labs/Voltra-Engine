@@ -175,6 +175,12 @@ A collider marked `Sensor` is detected and never solved — it reports what
 enters it and stops nothing, which is what a coin, a checkpoint or a damage
 zone is. Both are absent by default, meaning "every layer, and solid".
 
+A `Joint2D` holds two bodies together, or one to the world: a revolute hinge
+(with an optional angle limit and motor), a distance joint (a rod, a spring, or
+a rope that goes slack), or a weld. `Physics ▸ Join selection` hinges the last
+picked body to the other selected one or to the world, and the inspector edits
+the rest; the collider overlay draws every joint.
+
 `Tick::events` is the stream of what began and ended touching, sensors
 included. Each hook is handed every event exactly once, so a pickup can be
 taken in the fixed tick without arriving twice on a fast frame. `Tick::contacts`
@@ -308,6 +314,7 @@ privileged and plain `cargo build` covers everything.
 | 63b | The gizmo moves, turns and scales the whole selection | done |
 | 63c | Duplicate, copy and paste, through the system clipboard as text | done |
 | 64 | Prefab instances follow their file: overrides, Apply, Revert | done |
+| 65 | Joints: revolute (limit, motor), distance (rod, spring, rope), weld | done |
 
 ## Contributing
 
