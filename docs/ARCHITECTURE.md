@@ -438,7 +438,7 @@ silently keep broken data alive across every future save instead of surfacing
 it once. `from_scene_file` therefore rolls back every entity a failing load
 spawned rather than committing a partial world.
 
-**`Scene ▸ Open` loads before it despawns.** The obvious implementation clears
+**`Scene ▸ Open` loads before it despawns** (`scene_file::open`). The obvious implementation clears
 the world and then loads, but a typo'd path, a corrupt file or an unsupported
 version then leaves the user with an empty scene and nothing to show for it —
 and `from_scene_file`'s own rollback cannot help, because the despawning
@@ -4381,6 +4381,52 @@ reporting an entity in full and naming an unbound action; an asset written
 only when it reads, never over a file or as a binary — and `project.rs` (a
 link out of the asset root refused) and `tools/project.rs` (cargo arguments
 from checked pieces).
+
+### The editor opens any scene, and knows when it has unsaved changes
+
+Stage 72. The editor works on one scene at a time — a `SceneDocument`: the
+asset path it came from (`None` while untitled) and the history's position
+when it was opened or saved. `scene_file::{new_scene, open, save, save_as}`
+are the four operations, shared by the menu, the keys, the asset browser
+(double-click) and the bridge; every one stops play first and replaces the
+selection and history together.
+
+- **Unsaved changes are the history's position, not a flag.** `History`
+  numbers each entry as it is recorded (never reusing a number) and
+  answers `position()` — the entry an undo would take back. The scene is
+  dirty while that differs from the saved position. Godot's answer
+  (`UndoRedo::get_version` against the saved version); Unity's
+  `isDirty` flag would need every edit path to set it and could not tell
+  that undoing back to the save makes the scene clean again. It holds
+  because every scene edit already goes through the history.
+- **Ask before letting a scene go.** New, Open (menu, browser, keys) and
+  closing the window go through `scene_dialogs::request`: with unsaved
+  changes it asks Save / Don't Save / Cancel; Save on an untitled scene
+  names a file first and the waiting action runs after that save.
+- **Closing is the UI's to agree to.** `App::with_close_guard` turns a
+  close request into a question the UI answers (`UiFrame::close_requested`
+  / `close` / `cancel_close`); without a UI a close is still immediate, so
+  a guard can never trap a window. The title is requested the same way
+  (`UiFrame::set_title`, applied after the layout and only when changed) —
+  egui's viewport commands have the same shape, and the window stays
+  `App`'s.
+- **Pickers are the editor's own windows,** not native file dialogs: Open
+  lists every scene under the asset root (`voltra_assets::browse::find`,
+  also what `scenes_list` in `voltra-mcp` uses), Save As takes an asset
+  path. A path outside the asset root cannot be typed at all, and no
+  platform dialog crate (GTK on Linux) joins the build — the shape Godot
+  chose for the same reason.
+- **The bridge refuses to drop work.** `open` and `new` over unsaved
+  changes are refused unless `discard_changes`: the person at the editor
+  may be mid-edit. `save` takes an optional path (Save As); `status`
+  reports the scene and `unsaved_changes`.
+
+Pinned by `undo/history/tests.rs` (the position coming back with undo, a
+new edit somewhere new), `document.rs`, `scene_file.rs` (scene paths),
+`main.rs` (the command line), `app/window_requests.rs` (a guarded close
+waiting for the UI, an unguarded one immediate, a guard with no UI not
+trapping), `browse/find.rs`, `bridge/edits/tests.rs` (unsaved changes
+kept unless dropped, clean again after undo) and `voltra-mcp/tests/editor.rs`.
 
 ### A running editor is driven through a bridge, not by speaking MCP
 

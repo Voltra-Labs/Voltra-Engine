@@ -1,10 +1,8 @@
 //! What there is to work with: components, assets, scenes.
 
-use std::path::Path;
-
 use serde_json::{json, Value};
 use voltra_assets::browse;
-use voltra_assets::watch::is_scene;
+use voltra_assets::browse::EntryKind;
 use voltra_scene::ComponentRegistry;
 
 use super::{ToolError, ToolResult};
@@ -54,37 +52,10 @@ pub fn assets_list(project: &Project, dir: Option<&str>) -> ToolResult {
 /// Every scene under the asset root — which is also every prefab — as
 /// asset paths, sorted.
 pub fn scenes_list(project: &Project) -> ToolResult {
-    let mut scenes = Vec::new();
-    walk(project.assets(), "", &mut scenes);
+    let mut scenes: Vec<String> = browse::find(project.assets(), EntryKind::Scene)
+        .iter()
+        .map(|path| path.as_str().to_owned())
+        .collect();
     scenes.sort();
     Ok(json!({ "scenes": scenes }))
-}
-
-/// Collects the scenes under `dir`, named from `prefix`. Links are not
-/// followed: a link out of the root must not be walked into.
-fn walk(dir: &Path, prefix: &str, out: &mut Vec<String>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
-            continue;
-        };
-        if name.starts_with('.') {
-            continue;
-        }
-        let Ok(kind) = entry.file_type() else {
-            continue;
-        };
-        let path = if prefix.is_empty() {
-            name.clone()
-        } else {
-            format!("{prefix}/{name}")
-        };
-        if kind.is_dir() {
-            walk(&entry.path(), &path, out);
-        } else if kind.is_file() && is_scene(&name) {
-            out.push(path);
-        }
-    }
 }

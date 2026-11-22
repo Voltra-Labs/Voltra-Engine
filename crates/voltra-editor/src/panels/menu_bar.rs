@@ -13,7 +13,7 @@ use crate::spawn;
 mod spawn_items;
 use crate::undo::SceneView;
 
-use crate::scene_file::default_path;
+use crate::scene_dialogs::{self, Then};
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::top("menu").show(ui, |ui| {
@@ -74,86 +74,26 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
                 ui.separator();
 
-                if ui.button("Save").clicked() {
-                    // Stops first so what lands on disk is the authored scene
-                    // rather than a mid-flight one, and says so — unlike Clear
-                    // and Open, saving is not itself destructive, so a silent
-                    // mode change would be a surprise.
-                    if editor.stop_play(frame) {
-                        log::info!("stopped play so the saved scene is the authored one");
-                    }
-                    match crate::scene_file::save(frame.world, &editor.registry) {
-                        Ok(path) => log::info!("scene saved to {}", path.display()),
-                        Err(e) => log::error!("{e}"),
-                    }
+                let item = |text: &str, keys: &str| egui::Button::new(text).shortcut_text(keys);
+                if ui.add(item("New", "Ctrl+N")).clicked() {
+                    scene_dialogs::request(editor, frame, Then::New);
                     ui.close();
                 }
-
-                if ui.button("Open").clicked() {
-                    // Silently: Open replaces the world the snapshot belongs
-                    // to, so keeping play alive across it is meaningless. This
-                    // is Unity's answer — opening a scene exits play mode.
-                    editor.stop_play(frame);
-                    // Replaces rather than merges: "Open" meaning "add another
-                    // copy of everything" would surprise anyone. But the world
-                    // is not cleared up front — `load` can fail (missing file,
-                    // bad RON, a component that won't parse), and its own
-                    // rollback only covers entities it spawned itself; an
-                    // entity despawned before the call is outside its reach
-                    // and gone for good. So the pre-existing set is captured
-                    // first and only despawned once `load` has reported
-                    // success, which keeps a failed Open a no-op instead of a
-                    // scene-emptying one.
-                    //
-                    // Between a successful load and the despawn loop below,
-                    // both the old and the new scene are live in the world at
-                    // once. That is fine for the rest of this frame as long as
-                    // nothing in between observes it — no early return, no
-                    // `?`, no logging that walks the world — so the despawn
-                    // runs unconditionally right after `Ok`.
-                    //
-                    // If the loaded file has an entity carrying a `SceneId`
-                    // that matches one already in the world, the old one is
-                    // still in `previous` and gets despawned below, so the
-                    // file's copy wins.
-                    let previous: Vec<Entity> =
-                        frame.world.query::<SceneId>().map(|(e, _)| e).collect();
-                    match voltra_scene::format::load(default_path(), &editor.registry, frame.world)
-                    {
-                        Ok(()) => {
-                            for entity in previous {
-                                frame.world.despawn(entity);
-                            }
-                            // Instances saved with an older copy of their
-                            // prefab open in step with it.
-                            voltra_scene::prefab::sync_all(
-                                frame.world,
-                                &editor.registry,
-                                frame.prefabs,
-                            );
-                            // The world just changed under every handle in
-                            // it: entities from the old scene are gone and
-                            // the new ones carry paths nothing has resolved
-                            // yet. Runs after the despawns above so it never
-                            // wastes a lookup loading a texture for an
-                            // entity about to disappear.
-                            frame.resolve_scene_assets();
-                            // Not load-bearing: a stale `selected` cannot come
-                            // back to address a different entity, since
-                            // `Entities::is_alive` checks the generation and a
-                            // despawn always bumps it. Cleared here only for
-                            // consistency with `Clear`, which already does.
-                            editor.selection.clear();
-                            // Every id in the stack belongs to the scene that
-                            // was just closed. Unity's answer, and the only
-                            // coherent one. Inside the `Ok` arm and only there:
-                            // a failed open is a no-op and must leave the
-                            // history alone.
-                            editor.history.clear();
-                            log::info!("scene loaded");
-                        }
-                        Err(e) => log::error!("could not open the scene: {e}"),
-                    }
+                if ui.add(item("Open…", "Ctrl+O")).clicked() {
+                    scene_dialogs::show_open(editor, frame);
+                    ui.close();
+                }
+                if ui.add(item("Save", "Ctrl+S")).clicked() {
+                    scene_dialogs::save(editor, frame);
+                    ui.close();
+                }
+                if ui.add(item("Save As…", "Ctrl+Shift+S")).clicked() {
+                    scene_dialogs::show_save_as(editor, None);
+                    ui.close();
+                }
+                ui.separator();
+                if ui.button("Quit").clicked() {
+                    scene_dialogs::request(editor, frame, Then::Quit);
                     ui.close();
                 }
             });

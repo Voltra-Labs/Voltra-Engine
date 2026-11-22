@@ -361,3 +361,38 @@ fn clear_empties_both_stacks() {
     assert_eq!(history.undo_label(), None);
     assert_eq!(history.redo_label(), None);
 }
+
+/// One watched move of `id` to `x`, recorded as its own entry.
+fn record_move(history: &mut History, host: &mut FakeHost, fixture: &Fixture, id: SceneId, x: f32) {
+    history.watch(view(host, fixture), [id]);
+    move_to(&mut host.world, id, x);
+    history.end_frame(view(host, fixture));
+}
+
+#[test]
+fn the_position_comes_back_with_undo_and_a_new_edit_is_somewhere_new() {
+    let mut host = FakeHost::new();
+    let mut fixture = Fixture::new();
+    let mut history = History::default();
+    let id = spawn(&mut host.world, 0.0);
+    assert_eq!(history.position(), 0);
+
+    record_move(&mut history, &mut host, &fixture, id, 1.0);
+    let saved = history.position();
+    record_move(&mut history, &mut host, &fixture, id, 2.0);
+    assert_ne!(history.position(), saved);
+
+    history.undo(fixture.ctx(), &mut host);
+    assert_eq!(history.position(), saved, "undone back to the save");
+    history.redo(fixture.ctx(), &mut host);
+    let redone = history.position();
+    history.undo(fixture.ctx(), &mut host);
+
+    // A different edit from the saved state is not the one undone.
+    record_move(&mut history, &mut host, &fixture, id, 3.0);
+    assert_ne!(history.position(), saved);
+    assert_ne!(history.position(), redone);
+
+    history.clear();
+    assert_eq!(history.position(), 0);
+}

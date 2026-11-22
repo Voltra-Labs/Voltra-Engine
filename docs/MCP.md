@@ -76,13 +76,14 @@ sees each change appear:
 
 | Tool | What it does |
 | --- | --- |
-| `editor_status` | Scene, play state, selection, entity count, what undo and redo would do |
+| `editor_status` | Scene, unsaved changes, play state, selection, entity count, what undo and redo would do |
 | `editor_read` | The open scene, live: entities with ids, names, parents, components as RON |
 | `editor_spawn` / `editor_delete` / `editor_reparent` / `editor_rename` | As the file tools, on the open scene |
 | `editor_component_set` / `editor_component_remove` | One component, by registered name |
 | `editor_select` | Select entities (the last the primary); an empty list clears |
 | `editor_history` | `undo` or `redo` — the person's edits or an AI's |
-| `editor_save` | The scene to its file |
+| `editor_save` | The scene to its file, or to `path` (Save As) |
+| `editor_open` / `editor_new` | Another scene, or an empty one; refused over unsaved changes unless `discard_changes` |
 | `editor_play` | `play`, `pause`, `step` (with `frames`), `stop` (the authored scene back) |
 | `editor_input` | Hold an input action for some frames while playing |
 | `editor_screenshot` | The viewport as last drawn — scene, lights, grade — as an image |

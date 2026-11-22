@@ -25,7 +25,7 @@ fn stand_in_editor() -> (u16, Arc<Mutex<Vec<Command>>>) {
                 Command::Screenshot => {
                     Ok(json!({ "width": 2, "height": 1, "png_base64": "iVBORw0KGgo=" }))
                 }
-                Command::Save => Err("only while editing: stop play first".to_owned()),
+                Command::Save { .. } => Err("only while editing: stop play first".to_owned()),
                 _ => Ok(json!({ "ok": true })),
             };
             log.lock()
@@ -66,6 +66,14 @@ async fn tools_reach_the_editor_and_carry_its_answers_back() {
     assert_eq!(refused.is_error, Some(true));
     assert!(text_of(&refused).contains("only while editing"));
 
+    let opened = call(
+        &client,
+        "editor_open",
+        json!({ "path": "scenes/sandbox.ron", "discard_changes": true }),
+    )
+    .await;
+    assert_ne!(opened.is_error, Some(true), "{}", text_of(&opened));
+
     let shot = call(&client, "editor_screenshot", json!({})).await;
     assert_ne!(shot.is_error, Some(true), "{}", text_of(&shot));
     assert!(
@@ -81,6 +89,11 @@ async fn tools_reach_the_editor_and_carry_its_answers_back() {
     assert!(matches!(seen[0], Command::Spawn { .. }));
     assert!(matches!(seen[1], Command::Step { frames: 3 }));
     assert!(matches!(seen[2], Command::Undo));
+    assert!(matches!(seen[3], Command::Save { path: None }));
+    assert!(matches!(
+        &seen[4],
+        Command::Open { path, discard_changes: true } if path == "scenes/sandbox.ron"
+    ));
 }
 
 #[tokio::test]

@@ -70,6 +70,15 @@ impl App {
         self
     }
 
+    /// Asks the UI before closing: a close the person asks for waits until
+    /// the UI answers through [`UiFrame::close`] or
+    /// [`UiFrame::cancel_close`] — the editor's "save changes?" prompt.
+    /// Without a UI a close is still immediate, so nothing traps the window.
+    pub fn with_close_guard(mut self) -> Self {
+        self.window_requests.guard();
+        self
+    }
+
     /// Reads prefabs through `registry` instead of the default one.
     ///
     /// What a game with components of its own needs: a prefab carrying a

@@ -32,11 +32,21 @@ struct Open {
     explicit: bool,
 }
 
+/// An entry and the number it was given when recorded.
+#[derive(Debug)]
+struct Entry {
+    serial: u64,
+    edit: Edit,
+}
+
 /// Everything that can be undone, and everything that has been.
 #[derive(Debug, Default)]
 pub struct History {
-    done: Vec<Edit>,
-    undone: Vec<Edit>,
+    done: Vec<Entry>,
+    undone: Vec<Entry>,
+    /// The serial the next recorded entry gets. Never reused, so a position
+    /// names one state of the scene for as long as the editor runs.
+    next_serial: u64,
     open: Option<Open>,
     /// What the ids being watched looked like when this frame started.
     watched: Records,
@@ -185,34 +195,34 @@ impl History {
     /// Puts the previous entry's `before` side back. Returns whether there was
     /// one.
     pub fn undo(&mut self, ctx: UndoContext<'_>, host: &mut dyn UndoHost) -> bool {
-        let Some(edit) = self.done.pop() else {
+        let Some(entry) = self.done.pop() else {
             return false;
         };
-        apply(&edit, Side::Before, ctx, host);
-        self.undone.push(edit);
+        apply(&entry.edit, Side::Before, ctx, host);
+        self.undone.push(entry);
         self.recorded_this_frame = true;
         true
     }
 
     /// Replays the entry the last undo put back. Returns whether there was one.
     pub fn redo(&mut self, ctx: UndoContext<'_>, host: &mut dyn UndoHost) -> bool {
-        let Some(edit) = self.undone.pop() else {
+        let Some(entry) = self.undone.pop() else {
             return false;
         };
-        apply(&edit, Side::After, ctx, host);
-        self.done.push(edit);
+        apply(&entry.edit, Side::After, ctx, host);
+        self.done.push(entry);
         self.recorded_this_frame = true;
         true
     }
 
     /// What the next undo would put back.
     pub fn undo_label(&self) -> Option<&'static str> {
-        self.done.last().map(|edit| edit.label)
+        self.done.last().map(|entry| entry.edit.label)
     }
 
     /// What the next redo would replay.
     pub fn redo_label(&self) -> Option<&'static str> {
-        self.undone.last().map(|edit| edit.label)
+        self.undone.last().map(|entry| entry.edit.label)
     }
 
     /// Forgets everything, including any edit in progress.
@@ -235,6 +245,15 @@ impl History {
     #[cfg(test)]
     pub fn len(&self) -> usize {
         self.done.len()
+    }
+
+    /// Which state of the scene the history is at: the serial of the entry
+    /// an undo would take back, `0` with none. Undo and redo move it; an edit
+    /// moves it somewhere it has never been. What the editor compares with
+    /// the position it saved at to know whether the scene has unsaved
+    /// changes — Godot's answer, which makes undoing back to the save clean.
+    pub fn position(&self) -> u64 {
+        self.done.last().map_or(0, |entry| entry.serial)
     }
 
     /// Whether there is anything to undo.
@@ -272,7 +291,11 @@ impl History {
         }
 
         self.undone.clear();
-        self.done.push(edit);
+        self.next_serial += 1;
+        self.done.push(Entry {
+            serial: self.next_serial,
+            edit,
+        });
         if self.done.len() > MAX_EDITS {
             self.done.remove(0);
         }

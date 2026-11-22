@@ -16,7 +16,10 @@ use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{AudioSource, Prefabs, Sprite, Tilemap};
 
 use super::simulation::Simulation;
+use super::window_requests::WindowRequests;
 use crate::ui::TextureId;
+
+mod window;
 
 /// What the UI may reach while it is being laid out.
 ///
@@ -101,6 +104,8 @@ pub struct UiFrame<'a> {
     /// The game's input map, and the actions a tool holds through it.
     pub(super) actions: &'a crate::input::ActionMap,
     pub(super) held_actions: &'a mut crate::input::HeldActions,
+    /// The title and close the UI asks for; see `ui_frame/window.rs`.
+    pub(super) window: &'a mut WindowRequests,
 }
 
 impl<'a> UiFrame<'a> {

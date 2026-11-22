@@ -50,7 +50,18 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
             "FSM",
             ui.visuals().widgets.active.bg_fill,
         ),
-        EntryKind::Scene => scene_tile(ui, entry, &response),
+        EntryKind::Scene => {
+            scene_tile(ui, entry, &response);
+            // Unity's and Godot's gesture: a double-click opens the scene,
+            // through "save changes?" like every other way to Open.
+            if response.double_clicked() {
+                crate::scene_dialogs::request(
+                    editor,
+                    frame,
+                    crate::scene_dialogs::Then::Open(entry.path.clone()),
+                );
+            }
+        }
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
         EntryKind::Other => paint_block(ui, rect, ui.visuals().faint_bg_color),
@@ -180,7 +191,7 @@ fn settings_tile(ui: &mut Ui, rect: Rect, kind: &str) {
 }
 
 /// A scene tile: a block with a word on it, and the same drag. Dropped on the
-/// viewport, a scene is spawned as a prefab.
+/// viewport, a scene is spawned as a prefab; double-clicked, it is opened.
 ///
 /// A colour of its own rather than the sound's, so a folder holding both reads
 /// at a glance. Not a rendered thumbnail: that would mean spawning every scene

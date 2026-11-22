@@ -22,6 +22,7 @@ mod tick;
 mod tick_audio;
 mod ui_frame;
 mod ui_input;
+mod window_requests;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -189,6 +190,8 @@ pub struct App {
     spawned: Vec<Entity>,
     /// Actions a tool holds down for some frames — the editor bridge's input.
     held_actions: crate::input::HeldActions,
+    /// The title and close the UI asked for this frame.
+    window_requests: window_requests::WindowRequests,
 }
 
 /// Earth-ish gravity, in world units per second squared.
@@ -551,8 +554,10 @@ impl ApplicationHandler for App {
 
         match event {
             WindowEvent::CloseRequested => {
-                log::info!("close requested, shutting down");
-                event_loop.exit();
+                if self.window_requests.on_close_requested(self.ui.is_some()) {
+                    log::info!("close requested, shutting down");
+                    event_loop.exit();
+                }
             }
             WindowEvent::Resized(size) => {
                 if let Some(renderer) = self.renderer.as_mut() {
@@ -570,6 +575,13 @@ impl ApplicationHandler for App {
 
                 // Must come after everything that reads input this frame.
                 self.input.end_frame();
+
+                // A close the UI agreed to, or asked for itself.
+                if self.window_requests.should_exit() {
+                    log::info!("closing, as the UI asked");
+                    event_loop.exit();
+                    return;
+                }
 
                 if let Some(window) = self.window.as_ref() {
                     window.request_redraw();

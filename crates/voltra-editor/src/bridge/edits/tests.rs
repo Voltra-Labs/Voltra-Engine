@@ -108,3 +108,22 @@ fn a_refused_edit_records_nothing() {
     assert_eq!(editor.history.len(), before);
     assert_eq!(host.world.query::<SceneId>().count(), 0);
 }
+
+#[test]
+fn unsaved_changes_are_kept_unless_the_caller_drops_them_and_undo_cleans_them() {
+    let mut editor = Editor::default();
+    let mut host = Host {
+        world: World::new(),
+    };
+    assert!(crate::bridge::keep_unsaved(&editor, false).is_ok(), "clean");
+
+    apply(&mut editor, &mut host.world, &spawn("Box", None)).expect("spawned");
+    assert!(editor.document.is_dirty(&editor.history));
+    let refused = crate::bridge::keep_unsaved(&editor, false).expect_err("dirty");
+    assert!(refused.contains("discard_changes"), "{refused}");
+    assert!(crate::bridge::keep_unsaved(&editor, true).is_ok());
+
+    // Back to where it was opened: nothing to lose.
+    assert!(undo(&mut editor, &mut host));
+    assert!(!editor.document.is_dirty(&editor.history));
+}

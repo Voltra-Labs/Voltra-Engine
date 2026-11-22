@@ -18,6 +18,7 @@ use voltra_core::UiFrame;
 
 use crate::editor::Editor;
 use crate::play::PlayState;
+use crate::scene_file;
 use crate::selection::Selection;
 
 /// Applies and answers whatever arrived since last frame.
@@ -36,7 +37,8 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
     let editing = editor.play.state() == PlayState::Editing;
     match command {
         Command::Status => Ok(json!({
-            "scene": crate::scene_file::default_path().display().to_string(),
+            "scene": editor.document.path().map(|path| path.as_str()),
+            "unsaved_changes": editor.document.is_dirty(&editor.history),
             "play": format!("{:?}", editor.play.state()),
             "selection": editor.selection.ids(frame.world).iter().map(|id| id.0.to_string()).collect::<Vec<_>>(),
             "entities": frame.world.query::<voltra_scene::SceneId>().count(),
@@ -85,14 +87,39 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             editor.redo(frame);
             Ok(json!({ "redone": label }))
         }
-        Command::Save => {
+        Command::Save { path } => {
             if !editing {
                 return Err(
                     "the editor is playing: stop first, so the authored scene is saved".into(),
                 );
             }
-            let path = crate::scene_file::save(frame.world, &editor.registry)?;
-            Ok(json!({ "saved": path.display().to_string() }))
+            let path = match path {
+                Some(text) => {
+                    let path = scene_file::scene_path(text)?;
+                    scene_file::save_as(editor, frame, path.clone())?;
+                    path
+                }
+                None => scene_file::save(editor, frame)
+                    .map_err(|e| format!("{e} (pass a path to save it as)"))?,
+            };
+            Ok(json!({ "saved": path.as_str() }))
+        }
+        Command::Open {
+            path,
+            discard_changes,
+        } => {
+            let path = scene_file::scene_path(path)?;
+            keep_unsaved(editor, *discard_changes)?;
+            scene_file::open(editor, frame, &path)?;
+            Ok(json!({
+                "opened": path.as_str(),
+                "entities": frame.world.query::<voltra_scene::SceneId>().count(),
+            }))
+        }
+        Command::New { discard_changes } => {
+            keep_unsaved(editor, *discard_changes)?;
+            scene_file::new_scene(editor, frame);
+            Ok(json!({ "new": true }))
         }
         Command::Play => {
             editor.start_play(frame);
@@ -140,4 +167,17 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }))
         }
     }
+}
+
+/// Refuses to let unsaved changes go unless the caller said to: the person
+/// at the editor may be in the middle of them, and an AI must not throw
+/// their work away by accident.
+fn keep_unsaved(editor: &Editor, discard_changes: bool) -> Result<(), String> {
+    if editor.document.is_dirty(&editor.history) && !discard_changes {
+        return Err(format!(
+            "{} has unsaved changes: save it first, or pass discard_changes to drop them",
+            editor.document.name()
+        ));
+    }
+    Ok(())
 }

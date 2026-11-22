@@ -5,12 +5,14 @@ use voltra_core::{UiFrame, VoiceId};
 use voltra_scene::ComponentRegistry;
 
 use crate::camera::ViewportCamera;
+use crate::document::SceneDocument;
 use crate::gizmo::Gizmo;
 use crate::marquee::Marquee;
 use crate::paint::Paint;
 use crate::panels;
 use crate::panels::assets::AssetBrowser;
 use crate::play::{Play, PlayContext, PlayState};
+use crate::scene_dialogs::SceneDialogs;
 use crate::selection::Selection;
 use crate::shape_edit::ShapeEdit;
 use crate::timeline::Timeline;
@@ -72,6 +74,11 @@ pub struct Editor {
     /// The bridge a tool drives the editor through, when started with
     /// `--bridge`; see [`crate::bridge`].
     pub(crate) bridge: Option<voltra_bridge::BridgeServer>,
+    /// Which file the scene came from, and whether it changed since.
+    pub(crate) document: SceneDocument,
+    /// The scene windows — "save changes?", Open, Save As — and a scene
+    /// the command line asked for, opened on the first frame.
+    pub(crate) dialogs: SceneDialogs,
 }
 
 impl Editor {
@@ -114,6 +121,9 @@ impl Editor {
         // After the watch and the keys, before any panel: what a tool asked
         // for is in place before the frame draws.
         crate::bridge::serve(self, frame);
+        // After the edits of the frame so far, so the title's `*` and a
+        // close request see them; its windows are modal, over everything.
+        crate::scene_dialogs::show(self, ui, frame);
 
         panels::menu_bar::show(self, ui, frame);
         // Between the menu bar and everything else, which is where Unity and
