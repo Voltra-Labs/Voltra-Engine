@@ -57,6 +57,12 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         });
         ui.close();
     }
+    if ui.button("Spawn global light").clicked() {
+        spawn::record(editor, frame, "Spawn global light", |frame| {
+            spawn::global_light(frame, "Global light")
+        });
+        ui.close();
+    }
     if ui.button("Spawn camera").clicked() {
         spawn::record(editor, frame, "Spawn camera", |frame| {
             spawn::camera(frame, "Camera", Vec2::ZERO)

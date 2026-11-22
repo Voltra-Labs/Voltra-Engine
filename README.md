@@ -291,6 +291,7 @@ privileged and plain `cargo build` covers everything.
 | 60b | Normal maps on tilemap layers, laid out as the sheet | done |
 | 60c | Light layers on text and particle emitters, GPU ones included | done |
 | 61a | Shadow casters block only the lights of their light layers | done |
+| 61b | Global lights: the ambient lifted for the pixels of their layers | done |
 
 ## Contributing
 

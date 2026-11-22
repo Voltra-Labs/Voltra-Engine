@@ -3439,7 +3439,7 @@ that never touches them lights exactly as before.
   before any geometry, so a light no caster of its layers reaches gets no
   shadow-map rows at all. A caster on no layer blocks nothing. Inspector:
   a folded "blocks light layers" toggle under the caster's shape.
-- **Not yet**: the ambient per layer.
+- **The ambient per layer** is a global light (stage 61b), below.
 
 Pinned by `headless_light_layers.rs` (a layer-2 lamp lights the layer-2
 quad and the background, not the layer-1 quad; every layer lights both; no
@@ -3540,6 +3540,49 @@ the only wall, no row; the softness bringing in an edge just past the
 cone), the gather's (a spot light whose disc reaches the view but whose cone
 does not is left out) and `headless_lights.rs` (a three-quarter cone lights
 both sides behind its centre and not below it).
+
+### A global light adds to the ambient, for the pixels of its layers
+
+Stage 61b. `GlobalLight2D { color, intensity, layers }` — Unity URP's Global
+`Light2D` — on any entity, its place ignored. **An addition, not a
+replacement**: the camera's `ambient` stays what every pixel of a lit frame
+gets, and each global light adds its colour where what was drawn shares one
+of its light layers. Unity's global light instead *is* the ambient of the
+sorting layers it targets (one per layer, a layer without one is black);
+ours keeps the camera as the one switch that makes a frame lit (stage 52)
+and the one ambient a scene without layers needs, and layers lift from it.
+A darker layer is had by lowering the camera's ambient and lifting the
+rest.
+
+- `voltra_render::GlobalLight` in `Lighting::globals`; `light::gather`
+  collects them (all of them — they are not in any view) only into a lit
+  frame. One that gives nothing (no intensity, no colour, no layer) is
+  left out.
+- **Drawn** by `lights_global.wgsl`: one full-screen triangle per light,
+  instanced from a vertex buffer (WebGL2 again), added onto the light map
+  right after its clear, through the accumulate pass's blend. It reads the
+  same light-layer buffer the point lights do (group 0 here) and gives
+  nothing where the pixel shares no bit — the background, drawn by nothing,
+  is on every layer and gets every global light.
+- A global light of every layer is more ambient and needs no layer buffer;
+  one that leaves a layer out makes `Lighting::uses_layers` true, so the
+  layer pass runs for it as for a picky point light.
+- Editor: "Spawn global light" in the Scene menu; an inspector section
+  (colour, intensity, the folded light-layer toggles) that says it needs a
+  lit camera.
+
+Rejected: **an ambient per layer on the camera** (a list of mask/colour
+pairs) — a second place to look for lighting, and it would not merge into
+prefabs or be spawned from a tick like a component does; **replacing the
+ambient per layer** — a pixel on two layers would need a rule for which
+wins, an addition has none.
+
+Pinned by `headless_light_layers.rs` (a layer-2 global light lifts the
+layer-2 quad and the background to ambient + glow and leaves the layer-1
+quad at the ambient; one of every layer lifts both; `uses_layers` follows
+point and global lights), `global_light::tests` (gathered when it gives
+light; default layers not written) and `light::tests` (only into a lit
+frame).
 
 ### wgpu 30 API notes
 

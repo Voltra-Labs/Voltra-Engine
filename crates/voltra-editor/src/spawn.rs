@@ -11,7 +11,7 @@ mod light;
 mod text;
 
 pub(crate) use hud::{hud_button, hud_panel, hud_text, particles};
-pub(crate) use light::light;
+pub(crate) use light::{global_light, light};
 pub(crate) use text::text;
 
 use voltra_assets::AssetPath;

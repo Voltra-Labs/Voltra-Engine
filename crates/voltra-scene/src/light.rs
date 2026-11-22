@@ -219,6 +219,7 @@ pub fn gather(
     Lighting {
         ambient,
         lights,
+        globals: crate::global_light::gather(world),
         occluders,
         shadow_resolution: camera.shadow_resolution,
     }

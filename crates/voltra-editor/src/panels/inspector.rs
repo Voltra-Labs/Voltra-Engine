@@ -8,6 +8,7 @@ mod audio_source;
 mod camera;
 mod collision;
 mod delete;
+mod global_light;
 mod light;
 mod light_layers;
 mod name;
@@ -149,6 +150,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(lamp) = frame.world.get_mut::<voltra_scene::PointLight2D>(entity) {
                     ui.separator();
                     claim = claim.or(light::show(ui, lamp));
+                }
+                if let Some(glow) = frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(global_light::show(ui, glow));
                 }
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();

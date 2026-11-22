@@ -19,6 +19,7 @@ use std::sync::atomic::AtomicBool;
 
 use crate::shader;
 
+mod global;
 mod instance;
 mod layer_input;
 mod lighting;
@@ -28,6 +29,8 @@ mod passes;
 mod reach;
 pub mod shadows;
 
+use global::GlobalInstance;
+pub use global::GlobalLight;
 use instance::LightInstance;
 use layer_input::LayerInput;
 pub use lighting::{
@@ -43,6 +46,8 @@ use shadows::ShadowPass;
 /// renderer.
 pub struct LightPass {
     accumulate: wgpu::RenderPipeline,
+    /// Global lights, a full-screen triangle each.
+    global: wgpu::RenderPipeline,
     composite: wgpu::RenderPipeline,
     composite_layout: wgpu::BindGroupLayout,
     shadows: ShadowPass,
@@ -115,6 +120,8 @@ impl LightPass {
             cache: None,
         });
 
+        let global = global_pipeline(device, layers.layout(), additive);
+
         let texture = |binding| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::FRAGMENT,
@@ -162,6 +169,7 @@ impl LightPass {
         });
         Self {
             accumulate,
+            global,
             composite,
             composite_layout,
             shadows,
@@ -170,4 +178,48 @@ impl LightPass {
             overflow_reported: AtomicBool::new(false),
         }
     }
+}
+
+/// The global lights' pipeline: `lights_global.wgsl`, added onto the light
+/// map with `blend`, reading the scene's light layers through `layers`.
+fn global_pipeline(
+    device: &wgpu::Device,
+    layers: &wgpu::BindGroupLayout,
+    blend: wgpu::BlendState,
+) -> wgpu::RenderPipeline {
+    let module = shader::create_module(device, "lights-global", shader::LIGHTS_GLOBAL);
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("lights-global-layout"),
+        bind_group_layouts: &[Some(layers)],
+        immediate_size: 0,
+    });
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        label: Some("lights-global"),
+        layout: Some(&layout),
+        vertex: wgpu::VertexState {
+            module: &module,
+            entry_point: Some("vs_global"),
+            compilation_options: Default::default(),
+            buffers: &[Some(wgpu::VertexBufferLayout {
+                array_stride: std::mem::size_of::<GlobalInstance>() as u64,
+                step_mode: wgpu::VertexStepMode::Instance,
+                attributes: &wgpu::vertex_attr_array![0 => Float32x4, 1 => Uint32],
+            })],
+        },
+        primitive: wgpu::PrimitiveState::default(),
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState::default(),
+        fragment: Some(wgpu::FragmentState {
+            module: &module,
+            entry_point: Some("fs_global"),
+            compilation_options: Default::default(),
+            targets: &[Some(wgpu::ColorTargetState {
+                format: LIT_FORMAT,
+                blend: Some(blend),
+                write_mask: wgpu::ColorWrites::ALL,
+            })],
+        }),
+        multiview_mask: None,
+        cache: None,
+    })
 }

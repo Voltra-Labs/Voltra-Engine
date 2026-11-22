@@ -3,7 +3,7 @@
 
 use glam::Vec2;
 
-use super::Occluder;
+use super::{GlobalLight, Occluder};
 
 /// The light map's and the lit frame's format: linear, with room past one.
 pub const LIT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
@@ -158,6 +158,9 @@ pub struct Lighting {
     /// scene as drawn and no lighting pass runs.
     pub ambient: Option<[f32; 3]>,
     pub lights: Vec<PointLight>,
+    /// Lights with no place, added onto the ambient for the pixels of
+    /// their layers.
+    pub globals: Vec<GlobalLight>,
     /// What blocks the lights that cast shadows, in the world.
     pub occluders: Vec<Occluder>,
     /// Shadow map texels across each quarter turn around a light; clamped to
@@ -171,6 +174,7 @@ impl Default for Lighting {
         Self {
             ambient: None,
             lights: Vec::new(),
+            globals: Vec::new(),
             occluders: Vec::new(),
             shadow_resolution: DEFAULT_SHADOW_RESOLUTION,
         }
@@ -190,14 +194,16 @@ impl Lighting {
                 .any(|light| light.gives_light() && light.normal_height().is_some())
     }
 
-    /// Whether the frame is lit and some light in it leaves a light layer
-    /// out: when the scene's light layers are read at all.
+    /// Whether the frame is lit and some light in it — point or global —
+    /// leaves a light layer out: when the scene's light layers are read at
+    /// all.
     pub fn uses_layers(&self) -> bool {
         self.ambient.is_some()
-            && self
+            && (self
                 .lights
                 .iter()
                 .any(|light| light.gives_light() && light.layers != ALL_LIGHT_LAYERS)
+                || self.globals.iter().any(GlobalLight::picks_layers))
     }
 
     /// The ambient colour, a non-number or negative channel as zero; `None`

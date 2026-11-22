@@ -5,10 +5,11 @@ use std::sync::atomic::Ordering;
 
 use wgpu::util::DeviceExt;
 
+use super::global::GlobalInstance;
 use super::instance::LightInstance;
 use super::occluder::Edges;
 use super::shadows::{self, ShadowPlan, SHADOW_FORMAT};
-use super::{LightPass, Lighting, LIT_FORMAT};
+use super::{GlobalLight, LightPass, Lighting, LIT_FORMAT};
 use crate::graph::{RenderGraph, Slot, TextureDesc};
 
 impl LightPass {
@@ -64,6 +65,19 @@ impl LightPass {
                 usage: wgpu::BufferUsages::VERTEX,
             })
         });
+        let globals: Vec<GlobalInstance> = lighting
+            .globals
+            .iter()
+            .filter_map(GlobalLight::instance)
+            .collect();
+        let global_count = u32::try_from(globals.len()).unwrap_or(u32::MAX);
+        let global_buffer = (!globals.is_empty()).then(|| {
+            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("global-lights"),
+                contents: bytemuck::cast_slice(&globals),
+                usage: wgpu::BufferUsages::VERTEX,
+            })
+        });
         let desc = |label| TextureDesc {
             label,
             width,
@@ -93,12 +107,19 @@ impl LightPass {
             let surface = normals.map(|view| self.normals.bind(device, view));
             let excluded = layers.map(|view| self.layers.bind(device, view));
             let mut pass = begin(encoder, views.get(map), wgpu::LoadOp::Clear(ambient));
+            let excluded = excluded.as_ref().unwrap_or(self.layers.empty());
+            if let Some(buffer) = &global_buffer {
+                pass.set_pipeline(&self.global);
+                pass.set_bind_group(0, excluded, &[]);
+                pass.set_vertex_buffer(0, buffer.slice(..));
+                pass.draw(0..3, 0..global_count);
+            }
             if let Some(buffer) = &buffer {
                 pass.set_pipeline(&self.accumulate);
                 pass.set_bind_group(0, camera, &[]);
                 pass.set_bind_group(1, group.as_ref().unwrap_or(self.shadows.empty()), &[]);
                 pass.set_bind_group(2, surface.as_ref().unwrap_or(self.normals.empty()), &[]);
-                pass.set_bind_group(3, excluded.as_ref().unwrap_or(self.layers.empty()), &[]);
+                pass.set_bind_group(3, excluded, &[]);
                 pass.set_vertex_buffer(0, buffer.slice(..));
                 pass.draw(0..6, 0..count);
             }
