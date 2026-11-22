@@ -36,6 +36,8 @@ pub struct RunRequest {
     pub inputs: Vec<HeldAction>,
     pub report: Vec<String>,
     pub screenshot: Option<(u32, u32)>,
+    /// Whether to time the run's frames, scope by scope.
+    pub profile: bool,
 }
 
 /// What came of a run: the report, and the screenshot as PNG bytes.
@@ -68,6 +70,12 @@ pub fn run_scene(project: &Project, request: &RunRequest) -> Result<RunOutcome, 
     let mut session =
         Headless::open(app, &asset).map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?;
 
+    // This blocking thread's recorder, emptied: a pool thread may have
+    // profiled a run before.
+    if request.profile {
+        voltra_profile::clear();
+        voltra_profile::set_enabled(true);
+    }
     let mut unknown = Vec::new();
     for frame in 0..request.frames {
         for held in &request.inputs {
@@ -80,6 +88,16 @@ pub fn run_scene(project: &Project, request: &RunRequest) -> Result<RunOutcome, 
         }
         session.step(1, delta);
     }
+    let profile = if request.profile {
+        // The last frame closes here, not at a next step that never comes.
+        voltra_profile::end_frame();
+        let summary = voltra_profile::summary(request.frames as usize);
+        voltra_profile::set_enabled(false);
+        voltra_profile::clear();
+        voltra_bridge::profile::to_json(&summary)
+    } else {
+        Value::Null
+    };
 
     let entities = if request.report.is_empty() {
         summary(session.world())
@@ -133,6 +151,7 @@ pub fn run_scene(project: &Project, request: &RunRequest) -> Result<RunOutcome, 
             "unbound_actions": unknown,
             "log": log,
             "screenshot": screenshot,
+            "profile": profile,
         }),
         png,
     })

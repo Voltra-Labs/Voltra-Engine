@@ -265,6 +265,10 @@ impl App {
     ///
     /// [`Camera`]: voltra_scene::Camera
     fn update(&mut self) {
+        // The frame before this one ends here, its draw and present included.
+        voltra_profile::end_frame();
+        voltra_profile::count("entities", self.world.entity_count() as f64);
+        let _update = voltra_profile::scope("update");
         // Before the frame's actions are derived, so a pad press is seen the
         // frame it happened, like a key's.
         if let Some(pads) = self.gamepads.as_mut() {
@@ -291,22 +295,36 @@ impl App {
     fn advance(&mut self, delta: f32) {
         // Once per frame, before anything reads an action: the fixed tick
         // below sees the same actions as the per-frame one.
+        let input = voltra_profile::scope("input");
         self.input.update_actions(&self.actions);
         // After the actions, which navigate the focus, and before the tick,
         // which reads this frame's clicks.
         self.update_ui_buttons();
-        self.run_update(delta);
+        drop(input);
+        {
+            let _tick = voltra_profile::scope("tick");
+            self.run_update(delta);
+        }
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.
         self.resolve_spawned();
         // After the tick, so a clip the game just switched to is on screen this
         // frame rather than next.
-        self.advance_animations(delta);
-        self.update_camera_rigs(delta);
-        self.advance_particles(delta);
-        // After the tick too, and for the matching reason: a source the game
-        // just spawned or moved is heard from where it is now.
-        self.update_audio();
+        {
+            let _animation = voltra_profile::scope("animation");
+            self.advance_animations(delta);
+            self.update_camera_rigs(delta);
+        }
+        {
+            let _particles = voltra_profile::scope("particles");
+            self.advance_particles(delta);
+        }
+        {
+            // After the tick too, and for the matching reason: a source the
+            // game just spawned or moved is heard from where it is now.
+            let _audio = voltra_profile::scope("audio");
+            self.update_audio();
+        }
         // Spent, whether or not a game installed a tick to read them. Left to
         // pile up they would grow for the length of the session, and a game
         // that installed its hook later would be handed a backlog.
@@ -314,8 +332,11 @@ impl App {
         // Every frame, simulating or not: the editor draws and picks against
         // a solid layer's colliders while authoring too, and a layer painted
         // by the tick above must be solid in the step that follows it.
-        voltra_scene::tilemap::sync_colliders(&mut self.world);
-        self.step_physics(delta);
+        {
+            let _physics = voltra_profile::scope("physics");
+            voltra_scene::tilemap::sync_colliders(&mut self.world);
+            self.step_physics(delta);
+        }
         // The fixed tick spawns too, from inside the steps.
         self.resolve_spawned();
         // Last: a scene change despawns what the ticks and steps were holding,
@@ -329,6 +350,7 @@ impl App {
     /// is on screen this frame rather than next. Costs one non-blocking
     /// `try_recv` when nothing changed, which is almost every frame.
     fn reload_changed_assets(&mut self) {
+        let _reload = voltra_profile::scope("asset reload");
         let Some(watcher) = self.watcher.as_mut() else {
             return;
         };

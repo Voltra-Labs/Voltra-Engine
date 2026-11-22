@@ -19,6 +19,7 @@ voltra-ecs = { path = "crates/voltra-ecs" }
 voltra-jobs = { path = "crates/voltra-jobs" }
 voltra-nav = { path = "crates/voltra-nav" }
 voltra-physics = { path = "crates/voltra-physics" }
+voltra-profile = { path = "crates/voltra-profile" }
 voltra-player = { path = "crates/voltra-player" }
 voltra-render = { path = "crates/voltra-render" }
 voltra-scene = { path = "crates/voltra-scene" }

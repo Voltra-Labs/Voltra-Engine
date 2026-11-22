@@ -90,6 +90,13 @@ pub enum Command {
     },
     /// The viewport as it was last drawn, as PNG bytes in base64.
     Screenshot,
+    /// The last `frames` recorded frames, summarised; `record` first starts
+    /// or stops recording.
+    Profile {
+        frames: u32,
+        #[serde(default)]
+        record: Option<bool>,
+    },
 }
 
 impl Command {

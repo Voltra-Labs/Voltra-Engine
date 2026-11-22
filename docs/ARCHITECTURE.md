@@ -79,6 +79,7 @@ version bump is a one-line change.
 | --- | --- | --- |
 | `voltra-ecs` | Entity handles and component storage. No dependencies at all | `World`, `Entity`, `SparseSet` |
 | `voltra-jobs` | The worker pool and scoped jobs that borrow from their caller. Standard library only | `JobPool`, `Scope` |
+| `voltra-profile` | Where a frame's time goes: named scopes and counters, recorded per thread, summarised as a tree. Standard library only | `scope`, `count`, `end_frame`, `Summary`, `Recorder` |
 | `voltra-assets` | Asset identity, the texture, atlas and clip caches, loading from the asset root | `Handle`, `Assets`, `AssetPath`, `Textures`, `Atlases`, `Clips` |
 | `voltra-audio` | The mixer, decoding, and the output device | `Audio`, `Mixer`, `Voice`, `Clip`, `PlayParams`, `VoiceId`, `decode`, `spatial` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
@@ -4427,6 +4428,51 @@ new edit somewhere new), `document.rs`, `scene_file.rs` (scene paths),
 waiting for the UI, an unguarded one immediate, a guard with no UI not
 trapping), `browse/find.rs`, `bridge/edits/tests.rs` (unsaved changes
 kept unless dropped, clean again after undo) and `voltra-mcp/tests/editor.rs`.
+
+### The profiler records scopes per thread, and summarises them as a tree
+
+Stage 73. `voltra-profile` (standard library only, at the bottom of the
+graph so any crate can time itself) records named scopes —
+`let _scope = voltra_profile::scope("solve");`, timed until dropped — and
+counters (`count("contacts", n)`), frame by frame, into a ring of the last
+600 frames. `Summary::of` turns a run of frames into the frame's time and a
+tree of scopes by path (`update/physics/step/solve`): calls per frame,
+average and worst milliseconds, own time (outside nested scopes).
+
+- **Unity's markers, Godot's monitors.** Scopes are Unity's
+  `ProfilerMarker.Auto()` — a named marker, a guard — and counters are
+  Godot's monitors (entities, contacts). Bevy's `tracing` spans were the
+  other option; a tracing subscriber is a framework to configure and its
+  spans cost more than a timestamp pair, for a profile that wants frame
+  times and a tree.
+- **Per thread, no lock.** Each thread records into its own recorder and
+  closes its own frames (`end_frame`, called by `App::update` and by
+  `Headless::step`). An `App` lives on one thread, so its numbers are its
+  thread's, and two Apps — parallel tests, two headless runs on the MCP
+  server's blocking pool — never mix. The cost is that a scope on a worker
+  thread is read by nobody; none of the frame's work runs on one today.
+- **Off until asked for.** A disabled scope is a thread-local flag read.
+  The editor's Profiler window starts recording when opened (as Unity's
+  does); `editor_profile` starts it, waits for the frames and stops it
+  again if it found it off; `run_scene` with `profile` records only its
+  own run, on a cleared recorder.
+- **What is timed now:** the frame (`update`: input, tick, animation,
+  particles, audio, physics with each `step` and its `collide`, `islands`,
+  `solve`, `settle`, asset reload; `draw`: ui, present or render). CPU time
+  only: GPU timestamps are a later stage, and `present` includes waiting
+  for the display.
+- **The tree is ordered as a tree**: a scope right after its parent,
+  siblings in the order they first ran — first appearance alone would put
+  a child first seen in a later frame (the first physics step) after
+  unrelated scopes.
+
+Pinned by `voltra-profile`'s tests (nesting and depths, the history cap,
+threads kept apart, the tree with own time and calls, a late child under
+its parent), `app/headless/tests.rs` (a profiled session naming
+`update/physics/step/solve` and counting entities and contacts),
+`voltra-mcp/tests/run.rs` (a profiled run, and none unless asked) and
+`voltra-mcp/tests/editor.rs` (recording until the frames are there, and
+left off as found).
 
 ### A running editor is driven through a bridge, not by speaking MCP
 

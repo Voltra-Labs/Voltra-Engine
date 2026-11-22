@@ -11,6 +11,7 @@ voltra-assets.workspace = true
 voltra-bridge.workspace = true
 voltra-core.workspace = true
 voltra-ecs.workspace = true
+voltra-profile.workspace = true
 voltra-scene.workspace = true
 voltra-render.workspace = true
 rmcp.workspace = true

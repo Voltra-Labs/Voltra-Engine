@@ -44,12 +44,16 @@ pub struct RunArgs {
     /// none.
     #[serde(default)]
     pub screenshot: Option<ScreenshotSize>,
+    /// Time the run's frames: each scope's milliseconds (headless: no
+    /// drawing), and counters such as entities and contacts.
+    #[serde(default)]
+    pub profile: bool,
 }
 
 #[tool_router(router = run_router, vis = "pub(super)")]
 impl VoltraMcp {
     #[tool(
-        description = "Run a scene headless, as the player would — the game loop, physics, animation, cameras — for some frames, holding input actions on the frames given. Answers the reported entities (every component as RON) or where each named entity ended up, the engine's log, and optionally a screenshot through the scene's camera."
+        description = "Run a scene headless, as the player would — the game loop, physics, animation, cameras — for some frames, holding input actions on the frames given. Answers the reported entities (every component as RON) or where each named entity ended up, the engine's log, optionally a screenshot through the scene's camera, and optionally a profile: where each frame's time went, scope by scope."
     )]
     async fn run_scene(
         &self,
@@ -63,6 +67,7 @@ impl VoltraMcp {
             inputs: args.inputs,
             report: args.report,
             screenshot: args.screenshot.map(|s| (s.width, s.height)),
+            profile: args.profile,
         };
         let outcome = tokio::task::spawn_blocking(move || run::run_scene(&project, &request))
             .await

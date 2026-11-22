@@ -114,6 +114,7 @@ pub fn step_sleeping(
         return Overlaps::default();
     }
 
+    let collide = voltra_profile::scope("collide");
     sleep.wake_disturbed(world);
     let joints = joint_ends(world);
     let apart = unjoined(&joints);
@@ -130,6 +131,8 @@ pub fn step_sleeping(
         },
         passes,
     );
+    drop(collide);
+    let islands = voltra_profile::scope("islands");
     // A joint links its two bodies as a contact does: one waking wakes the
     // other, and they rest together or not at all.
     let joined: Vec<(Entity, Entity)> = joints
@@ -160,6 +163,10 @@ pub fn step_sleeping(
     }
     sleep.keep_resting(&resting_pairs);
     let contacts = &solved;
+    voltra_profile::count("contacts", overlaps.contacts.len() as f64);
+    voltra_profile::count("contacts solved", solved.len() as f64);
+    drop(islands);
+    let solve_scope = voltra_profile::scope("solve");
 
     let mut bodies = SolverBodies::gather(world);
     for entity in sleep.asleep() {
@@ -239,6 +246,8 @@ pub fn step_sleeping(
     cache.keep(|a, b| resting_pairs.contains(&(a, b)));
     cache.commit();
 
+    drop(solve_scope);
+    let _settle = voltra_profile::scope("settle");
     bodies.scatter(world);
     store_joints(&joint_constraints, world);
     let mut settled: Vec<(Entity, Entity)> = contacts

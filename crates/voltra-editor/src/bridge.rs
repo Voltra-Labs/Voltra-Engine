@@ -157,6 +157,17 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }
             Ok(json!({ "holding": action, "frames": frames }))
         }
+        Command::Profile { frames, record } => {
+            if let Some(record) = record {
+                voltra_profile::set_enabled(*record);
+            }
+            let mut answer = voltra_bridge::profile::to_json(&voltra_profile::summary(
+                (*frames).clamp(1, voltra_profile::HISTORY as u32) as usize,
+            ));
+            answer["recording"] = json!(voltra_profile::is_enabled());
+            answer["frames_recorded"] = json!(voltra_profile::frames_recorded());
+            Ok(answer)
+        }
         Command::Screenshot => {
             let shot = frame.capture_viewport();
             let png = shot.png_bytes().map_err(|e| e.to_string())?;

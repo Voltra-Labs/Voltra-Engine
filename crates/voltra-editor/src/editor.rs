@@ -11,6 +11,7 @@ use crate::marquee::Marquee;
 use crate::paint::Paint;
 use crate::panels;
 use crate::panels::assets::AssetBrowser;
+use crate::panels::profiler::ProfilerPanel;
 use crate::play::{Play, PlayContext, PlayState};
 use crate::scene_dialogs::SceneDialogs;
 use crate::selection::Selection;
@@ -79,6 +80,8 @@ pub struct Editor {
     /// The scene windows — "save changes?", Open, Save As — and a scene
     /// the command line asked for, opened on the first frame.
     pub(crate) dialogs: SceneDialogs,
+    /// Whether the Profiler window is up.
+    pub(crate) profiler: ProfilerPanel,
 }
 
 impl Editor {
@@ -142,6 +145,8 @@ impl Editor {
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);
+        // A floating window, over the docked panels.
+        panels::profiler::show(self, ui, frame);
 
         // Last, so it sees everything every panel did.
         if editing {

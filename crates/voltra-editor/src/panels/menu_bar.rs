@@ -212,6 +212,16 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
             });
 
+            ui.menu_button("Window", |ui| {
+                if ui
+                    .add_enabled(!editor.profiler.is_open(), egui::Button::new("Profiler"))
+                    .clicked()
+                {
+                    editor.profiler.open();
+                    ui.close();
+                }
+            });
+
             ui.separator();
             let (width, height) = frame.viewport_size();
             ui.label(format!("viewport {width}x{height}"));

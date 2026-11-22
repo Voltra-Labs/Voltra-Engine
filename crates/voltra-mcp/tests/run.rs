@@ -163,3 +163,36 @@ async fn an_asset_is_written_only_when_it_reads_as_what_it_is() {
     ));
     assert_eq!(texture["binary"], true);
 }
+
+#[tokio::test]
+async fn a_profiled_run_says_where_its_frames_went() {
+    let (project, _root) = scratch_project();
+    let client = client_for(project).await;
+    let result = call(
+        &client,
+        "run_scene",
+        json!({ "scene": "scenes/sandbox.ron", "frames": 20, "profile": true }),
+    )
+    .await;
+    assert_ne!(result.is_error, Some(true), "{}", text_of(&result));
+    let report = parsed(&text_of(&result));
+    let profile = &report["profile"];
+    assert_eq!(profile["frames"], 20);
+    let paths: Vec<&str> = profile["scopes"]
+        .as_array()
+        .expect("scopes")
+        .iter()
+        .filter_map(|scope| scope["path"].as_str())
+        .collect();
+    assert!(paths.contains(&"update/physics/step/solve"), "{paths:?}");
+
+    let plain = parsed(&text_of(
+        &call(
+            &client,
+            "run_scene",
+            json!({ "scene": "scenes/sandbox.ron", "frames": 5 }),
+        )
+        .await,
+    ));
+    assert!(plain["profile"].is_null(), "only when asked");
+}

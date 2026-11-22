@@ -18,9 +18,22 @@ fn stand_in_editor() -> (u16, Arc<Mutex<Vec<Command>>>) {
     let port = server.address().port();
     let seen = Arc::new(Mutex::new(Vec::new()));
     let log = Arc::clone(&seen);
+    // A recorder that gains ten frames each time it is asked while on.
+    let (mut recording, mut recorded) = (false, 0u64);
     std::thread::spawn(move || loop {
         for pending in server.poll() {
             let answer = match &pending.command {
+                Command::Profile { record, .. } => {
+                    if let Some(on) = record {
+                        recording = *on;
+                    }
+                    if recording {
+                        recorded += 10;
+                    }
+                    Ok(
+                        json!({ "recording": recording, "frames_recorded": recorded, "frames": recorded.min(30) }),
+                    )
+                }
                 Command::Spawn { name, .. } => Ok(json!({ "id": "abc", "name": name })),
                 Command::Screenshot => {
                     Ok(json!({ "width": 2, "height": 1, "png_base64": "iVBORw0KGgo=" }))
@@ -110,5 +123,41 @@ async fn no_editor_is_an_answer_naming_the_flag() {
         text_of(&status).contains("--bridge"),
         "{}",
         text_of(&status)
+    );
+}
+
+#[tokio::test]
+async fn a_profile_records_until_it_has_the_frames_and_leaves_recording_off() {
+    let (port, seen) = stand_in_editor();
+    let client = client_of(VoltraMcp::with_editor_port(repo_project(), port)).await;
+    let profile = call(&client, "editor_profile", json!({ "frames": 30 })).await;
+    assert_ne!(profile.is_error, Some(true), "{}", text_of(&profile));
+    assert!(
+        text_of(&profile).contains("\"frames\": 30"),
+        "{}",
+        text_of(&profile)
+    );
+
+    let seen = seen.lock().expect("not poisoned");
+    assert!(
+        matches!(seen.first(), Some(Command::Profile { record: None, .. })),
+        "asked first"
+    );
+    assert!(seen.iter().any(|c| matches!(
+        c,
+        Command::Profile {
+            record: Some(true),
+            ..
+        }
+    )));
+    assert!(
+        matches!(
+            seen.last(),
+            Some(Command::Profile {
+                record: Some(false),
+                ..
+            })
+        ),
+        "off again, as it was found"
     );
 }

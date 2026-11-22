@@ -18,6 +18,7 @@ use parts::{
 impl App {
     /// Draws the world straight to the window. No UI, no intermediate texture.
     pub(super) fn redraw_without_ui(&mut self) {
+        let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
         let (Some(renderer), Some(textures), Some(atlases), Some(fonts)) = (
             self.renderer.as_mut(),
@@ -75,12 +76,14 @@ impl App {
             self.silhouettes.as_mut(),
             textures,
         );
+        let _render = voltra_profile::scope("render");
         renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
         self.frame_batch = batch;
     }
 
     /// Scene to an offscreen target, then the UI over the top of the window.
     pub(super) fn redraw_with_ui(&mut self) {
+        let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
         let (
             Some(renderer),
@@ -192,7 +195,10 @@ impl App {
             held_actions: &mut self.held_actions,
             window: &mut self.window_requests,
         };
-        egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
+        {
+            let _ui = voltra_profile::scope("ui");
+            egui.prepare(window, &device, &queue, screen, |root| ui(root, &mut frame));
+        }
         if let Some(title) = self.window_requests.take_title() {
             window.set_title(&title);
         }
@@ -203,6 +209,7 @@ impl App {
         let lines = self.lines.upload(&device);
         renderer.render_lines(graded, lines.as_ref());
 
+        let _present = voltra_profile::scope("present");
         renderer.present_with(|pass| egui.render(pass));
     }
 }
