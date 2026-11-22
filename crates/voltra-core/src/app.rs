@@ -7,6 +7,7 @@ mod draw;
 mod framing;
 mod gamepads;
 mod gpu_particles;
+pub mod headless;
 mod input_map;
 mod particles;
 mod prefab_sync;

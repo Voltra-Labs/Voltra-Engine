@@ -4245,6 +4245,33 @@ template that loads into an entity and saves back identical; `describe`
 reports references; unknown names and structure answer no template; a game
 type without a default registers).
 
+### A headless session is the player without a window
+
+MCP M1b. `voltra_core::Headless` runs an `App` — built as a game builds it,
+registry and ticks included — with no window and no device: `open(app,
+scene)` loads a scene through the app's registry, `step(frames, delta)` runs
+`App::advance` and the end of the frame's input as the window would,
+`press`/`release(action)` drive an action through the first of its bindings
+in the real input map, `entity_ron(id)` writes an entity as a scene file
+does, and `set_component(id, name, ron)` sets any registered component from
+text (its handles resolved after).
+
+- **Not a second loop**: every frame is `App::advance` — ticks, fixed steps,
+  animators, players, camera rigs, prefab sync, scene requests — so a scene
+  behaves headless as it does in the player. The window's start does the
+  same device-free setup (`sync_all_instances`, slicings, faces, sounds, the
+  input map, sorting layers); textures are not uploaded, nothing draws, the
+  audio is the silent one.
+- **Input through bindings**, not by writing action states: a fed action
+  reaches a game exactly as a player's key would, dead zones and all.
+- `App::default` has no gravity (`App::new` sets it); `Headless` is built
+  from an `App::new`, as a game is.
+
+Pinned by `app/headless/tests.rs` (the sandbox stepping and its bodies
+falling; a component set from text, read back, and refused for bad text,
+an unknown name or entity; a fed action moving an entity in a game's fixed
+tick and stopping when let go; a missing scene an error).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
