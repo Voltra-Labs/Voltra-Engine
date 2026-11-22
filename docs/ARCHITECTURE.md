@@ -4349,15 +4349,34 @@ protocol's.
 - Tools now: `components_list` (names, references, templates), `assets_list`,
   `scenes_list`, `scene_read`, `scene_create`, `entity_spawn`,
   `entity_delete`, `entity_reparent`, `entity_rename`, `component_set`,
-  `component_remove`.
+  `component_remove`, `prefab_instantiate`, `asset_read`, `asset_write`,
+  `run_scene`, `project_build`, `project_test`, `project_dist`. Usage and the
+  `.mcp.json` example: `docs/MCP.md`.
+- **`run_scene`** (M2c) runs a `Headless` session off the async runtime
+  (`spawn_blocking`: an `App` is not `Send`, so it is made and dropped on the
+  blocking thread) — frames, actions pressed and let go on their frames,
+  then the reported entities as RON or where each named one ended up, the
+  log's last 200 lines, and a screenshot as an MCP image block. No adapter
+  is said in words, not failed.
+- **`asset_write`** writes a RON asset only once it reads as what its name
+  says — a scene (and its version), a clip, a state machine, an input map,
+  an atlas (sliced), sorting layers (as RON) — atomically, and not over an
+  existing file without `overwrite`. Binary assets are not written.
+- **Project tools** (M2d) run cargo with arguments built from checked
+  pieces — package names, a test filter that is not an option, a manifest
+  inside the project — never a client's command line.
 
-Pinned by `voltra-mcp/tests/{discovery,scenes}.rs` — a real `rmcp` client
+Pinned by `voltra-mcp/tests/{discovery,scenes,run}.rs` — a real `rmcp` client
 over an in-process pipe: the tool list, templates naming their fields,
 assets and scenes listed, a scene read as entities, a path out of the
 project refused; a scene made, filled from a template, renamed through a
 name path, read back; five failing edits leaving the file byte-identical;
-a subtree deleted and an entity freed to a root — and `project.rs` (a link
-out of the asset root refused).
+a subtree deleted and an entity freed to a root; a prefab placed and linked,
+and refused into itself; a run whose bodies fall, with an image block; a run
+reporting an entity in full and naming an unbound action; an asset written
+only when it reads, never over a file or as a binary — and `project.rs` (a
+link out of the asset root refused) and `tools/project.rs` (cargo arguments
+from checked pieces).
 
 ### wgpu 30 API notes
 

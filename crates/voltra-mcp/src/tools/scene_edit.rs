@@ -1,21 +1,15 @@
 //! Editing a scene file: entities spawned, deleted, reparented, renamed;
-//! components set and removed — each loaded, edited through the registry
-//! and saved atomically, or not saved at all.
+//! components set and removed — each loaded, edited through
+//! `voltra_scene::edit` and saved atomically, or not saved at all.
 
-use ron::value::RawValue;
 use serde_json::{json, Map, Value};
 use voltra_ecs::{Entity, World};
-use voltra_scene::format::{load, record_entity, save, write, SceneFile, VERSION};
-use voltra_scene::hierarchy::{clear_parent, despawn_recursive, resolve_parents, set_parent};
-use voltra_scene::{ComponentRegistry, Name, SceneId};
+use voltra_scene::edit::{self, find};
+use voltra_scene::format::{load, save, write, SceneFile, VERSION};
+use voltra_scene::ComponentRegistry;
 
-use super::entity_ref::{find, id_of};
 use super::{ToolError, ToolResult};
 use crate::Project;
-
-/// Components a tool must not write by name: the parent link is
-/// `entity_reparent`'s, and the prefab links belong to prefabs.
-const STRUCTURE: [&str; 3] = ["Parent", "PrefabInstance", "PrefabPart"];
 
 /// Loads `path`, runs `edit`, and saves only if it succeeded.
 fn with_scene(
@@ -35,39 +29,13 @@ fn with_scene(
 
 /// `entity` as `scene_read` shows one.
 fn describe(world: &World, registry: &ComponentRegistry, entity: Entity) -> ToolResult {
-    let record = record_entity(world, registry, entity)
-        .ok_or_else(|| ToolError("the entity has no id".to_owned()))?
-        .map_err(ToolError::from_cause)?;
-    let components: Map<String, Value> = record
-        .components
-        .iter()
-        .map(|(name, raw)| (name.clone(), Value::String(raw.get_ron().to_owned())))
-        .collect();
-    Ok(json!({ "id": record.id.0.to_string(), "components": components }))
+    let (id, components) =
+        edit::components_of(world, registry, entity).map_err(ToolError::from_cause)?;
+    Ok(json!({ "id": id.0.to_string(), "components": components }))
 }
 
-/// Sets the component `name` on `entity` from `ron`.
-fn set(
-    world: &mut World,
-    registry: &ComponentRegistry,
-    entity: Entity,
-    name: &str,
-    ron: &str,
-) -> Result<(), ToolError> {
-    if STRUCTURE.contains(&name) {
-        return Err(ToolError(format!(
-            "{name} is structure: use entity_reparent for a parent; prefab links are made by prefabs"
-        )));
-    }
-    let raw = RawValue::from_ron(ron).map_err(|e| ToolError(format!("{name}: {e}")))?;
-    registry
-        .load_one(world, entity, name, raw)
-        .ok_or_else(|| {
-            ToolError(format!(
-                "no component is registered as {name:?}; see components_list"
-            ))
-        })?
-        .map_err(ToolError::from_cause)
+fn found(world: &World, reference: &str) -> Result<Entity, ToolError> {
+    find(world, reference).map_err(ToolError::from_cause)
 }
 
 /// A new, empty scene at `path`. Refused if one is there.
@@ -103,22 +71,16 @@ pub fn entity_spawn(
     components: &Map<String, Value>,
 ) -> ToolResult {
     with_scene(project, path, |world, registry| {
-        let parent = parent.map(|p| find(world, p)).transpose()?;
-        let entity = world.spawn();
-        world.insert(entity, SceneId::new());
-        if let Some(name) = name {
-            world.insert(entity, Name::new(name));
-        }
+        let parent = parent.map(|p| found(world, p)).transpose()?;
+        let mut pairs = Vec::with_capacity(components.len());
         for (component, value) in components {
             let ron = value.as_str().ok_or_else(|| {
                 ToolError(format!("{component}: a component's value is a RON string"))
             })?;
-            set(world, registry, entity, component, ron)?;
+            pairs.push((component.as_str(), ron));
         }
-        if let Some(parent) = parent {
-            set_parent(world, entity, parent).map_err(ToolError::from_cause)?;
-            resolve_parents(world);
-        }
+        let entity =
+            edit::spawn(world, registry, name, parent, pairs).map_err(ToolError::from_cause)?;
         describe(world, registry, entity)
     })
 }
@@ -126,9 +88,9 @@ pub fn entity_spawn(
 /// Deletes `entity` and everything under it.
 pub fn entity_delete(project: &Project, path: &str, entity: &str) -> ToolResult {
     with_scene(project, path, |world, _| {
-        let target = find(world, entity)?;
-        let id = id_of(world, target);
-        let gone = despawn_recursive(world, target).len().max(1);
+        let target = found(world, entity)?;
+        let id = edit::id_of(world, target);
+        let gone = edit::delete(world, target);
         Ok(json!({ "deleted": id, "entities_removed": gone }))
     })
 }
@@ -141,17 +103,9 @@ pub fn entity_reparent(
     parent: Option<&str>,
 ) -> ToolResult {
     with_scene(project, path, |world, registry| {
-        let child = find(world, entity)?;
-        match parent {
-            Some(parent) => {
-                let parent = find(world, parent)?;
-                set_parent(world, child, parent).map_err(ToolError::from_cause)?;
-                resolve_parents(world);
-            }
-            None => {
-                clear_parent(world, child);
-            }
-        }
+        let child = found(world, entity)?;
+        let parent = parent.map(|p| found(world, p)).transpose()?;
+        edit::reparent(world, child, parent).map_err(ToolError::from_cause)?;
         describe(world, registry, child)
     })
 }
@@ -159,12 +113,8 @@ pub fn entity_reparent(
 /// Names `entity` `name`; an empty name takes the name off.
 pub fn entity_rename(project: &Project, path: &str, entity: &str, name: &str) -> ToolResult {
     with_scene(project, path, |world, registry| {
-        let target = find(world, entity)?;
-        if name.is_empty() {
-            world.remove::<Name>(target);
-        } else {
-            world.insert(target, Name::new(name));
-        }
+        let target = found(world, entity)?;
+        edit::rename(world, target, name);
         describe(world, registry, target)
     })
 }
@@ -178,8 +128,9 @@ pub fn component_set(
     ron: &str,
 ) -> ToolResult {
     with_scene(project, path, |world, registry| {
-        let target = find(world, entity)?;
-        set(world, registry, target, component, ron)?;
+        let target = found(world, entity)?;
+        edit::set_component(world, registry, target, component, ron)
+            .map_err(ToolError::from_cause)?;
         describe(world, registry, target)
     })
 }
@@ -192,17 +143,9 @@ pub fn component_remove(
     component: &str,
 ) -> ToolResult {
     with_scene(project, path, |world, registry| {
-        let target = find(world, entity)?;
-        if STRUCTURE.contains(&component) {
-            return Err(ToolError(format!(
-                "{component} is structure and is not removed by name"
-            )));
-        }
-        if !registry.remove_one(world, target, component) {
-            return Err(ToolError(format!(
-                "no component is registered as {component:?}"
-            )));
-        }
+        let target = found(world, entity)?;
+        edit::remove_component(world, registry, target, component)
+            .map_err(ToolError::from_cause)?;
         describe(world, registry, target)
     })
 }

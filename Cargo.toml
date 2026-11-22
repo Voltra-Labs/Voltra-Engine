@@ -37,6 +37,7 @@ rmcp = { version = "3.11.0", default-features = false, features = ["server", "ma
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "io-std"] }
 schemars = "1.2.3"
 serde_json = "1.0.154"
+base64 = "0.23.1"
 # v7 rather than v4: the timestamp in the high bits means sorting by id sorts by
 # creation, so a scene file is deterministic *and* appends new entities at the end.
 uuid = { version = "1.24.0", features = ["v7", "serde"] }

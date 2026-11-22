@@ -48,9 +48,16 @@ fn copy_dir(from: &Path, to: &Path) {
 
 /// A client connected to a server for `project`.
 pub async fn client_for(project: Project) -> RunningService<RoleClient, Client> {
+    client_of(VoltraMcp::new(project)).await
+}
+
+/// A client connected to `server`.
+pub async fn client_of(server: VoltraMcp) -> RunningService<RoleClient, Client> {
+    // What `main` does: the engine's log, which a run hands back.
+    voltra_core::logging::init(false);
     let (server_side, client_side) = tokio::io::duplex(1 << 20);
     tokio::spawn(async move {
-        if let Ok(service) = VoltraMcp::new(project).serve(server_side).await {
+        if let Ok(service) = server.serve(server_side).await {
             let _ = service.waiting().await;
         }
     });

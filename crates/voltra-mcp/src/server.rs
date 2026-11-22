@@ -1,7 +1,10 @@
 //! The MCP server: the tools, as the protocol presents them — one router
 //! per group of tools, added together.
 
+mod assets;
 mod discovery;
+mod project;
+mod run;
 mod scenes;
 
 use rmcp::handler::server::router::tool::ToolRouter;
@@ -24,7 +27,11 @@ impl VoltraMcp {
     pub fn new(project: Project) -> Self {
         Self {
             project,
-            tool_router: Self::discovery_router() + Self::scene_router(),
+            tool_router: Self::discovery_router()
+                + Self::scene_router()
+                + Self::asset_router()
+                + Self::run_router()
+                + Self::project_router(),
         }
     }
 
