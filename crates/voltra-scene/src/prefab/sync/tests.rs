@@ -275,3 +275,49 @@ fn sync_source_reaches_only_that_prefab_s_instances() {
         "another prefab's is not touched"
     );
 }
+
+#[test]
+fn a_joint_inside_a_prefab_joins_the_instance_s_own_bodies_and_follows_edits() {
+    use crate::{Joint2D, JointKind};
+    let mut made = authoring();
+    let coin_id = *made.world.get::<SceneId>(made.coin).expect("an id");
+    made.world.insert(
+        made.glow,
+        Joint2D {
+            b: Some(coin_id),
+            kind: JointKind::rod(0.2),
+            ..Joint2D::default()
+        },
+    );
+    let prefab = prefab_of(&made.world);
+    let mut scene = World::new();
+    let root = instance(&mut scene, &prefab, Vec2::ZERO);
+    let glow = child_named(&scene, root, "glow").expect("glow");
+    let root_id = *scene.get::<SceneId>(root).expect("an id");
+    assert_eq!(
+        scene.get::<Joint2D>(glow).expect("joint").b,
+        Some(root_id),
+        "the copy's own coin, not the prefab's"
+    );
+    assert!(
+        sync(&mut scene, &registry(), &prefab, root)
+            .expect("syncs")
+            .is_empty(),
+        "compared in the file's ids, nothing differs"
+    );
+
+    made.world.insert(
+        made.glow,
+        Joint2D {
+            b: Some(coin_id),
+            kind: JointKind::rope(0.5),
+            ..Joint2D::default()
+        },
+    );
+    let edited = prefab_of(&made.world);
+    let report = sync(&mut scene, &registry(), &edited, root).expect("syncs");
+    assert_eq!(report.changed, 1);
+    let joint = scene.get::<Joint2D>(glow).expect("joint");
+    assert_eq!(joint.kind, JointKind::rope(0.5));
+    assert_eq!(joint.b, Some(root_id), "still the instance's coin");
+}

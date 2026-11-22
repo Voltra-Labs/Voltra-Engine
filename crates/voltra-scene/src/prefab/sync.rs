@@ -39,7 +39,9 @@ use ron::value::RawValue;
 use voltra_ecs::{Entity, World};
 
 use super::adopt::adopt;
-use super::compare::{canonical, differences, parent_record, subtree, STRUCTURE};
+use super::compare::{
+    canonical, differences, ids_to_records, parent_record, rewrite_refs, subtree, STRUCTURE,
+};
 use super::{Prefab, PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::{self, Parent};
@@ -134,7 +136,13 @@ pub fn sync(
         false
     };
 
-    // Every part put back, but for what it overrides.
+    // Every part put back, but for what it overrides. A value naming other
+    // entities is compared in the file's ids and put back in the instance's.
+    let to_record = ids_to_records(world, root);
+    let to_instance: HashMap<SceneId, SceneId> = to_record
+        .iter()
+        .map(|(own, record)| (*record, *own))
+        .collect();
     for record in &records {
         let Some(&entity) = parts.get(&record.id) else {
             continue;
@@ -144,14 +152,16 @@ pub fn sync(
             .get::<PrefabPart>(entity)
             .map(|part| part.overridden.clone())
             .unwrap_or_default();
-        let differ = differences(world, registry, entity, entity == root, &want)?;
+        let differ = differences(world, registry, entity, entity == root, &want, &to_record)?;
         if differ.difference(&overridden).next().is_some() {
             report.touched.push(entity);
         }
         for name in differ.difference(&overridden) {
             match want.get(name) {
                 Some(value) => {
-                    if let Some(result) = registry.load_one(world, entity, name, value) {
+                    let value =
+                        rewrite_refs(name, value, &to_instance)?.unwrap_or_else(|| value.clone());
+                    if let Some(result) = registry.load_one(world, entity, name, &value) {
                         result?;
                     }
                 }
@@ -201,6 +211,19 @@ pub fn sync(
         }
     }
     report.spawned = spawned.len();
+    // A spawned joint names records; now that every record has its entity,
+    // it names those.
+    if !spawned.is_empty() {
+        let to_instance: HashMap<SceneId, SceneId> = parts
+            .iter()
+            .filter_map(|(record, &e)| Some((*record, *world.get::<SceneId>(e)?)))
+            .collect();
+        for (entity, _) in &spawned {
+            if let Some(joint) = world.get_mut::<crate::Joint2D>(*entity) {
+                joint.remap(|id| to_instance.get(&id).copied());
+            }
+        }
+    }
 
     // What the file lost: a part whose record is gone. What was added under
     // it goes with it, as a deleted parent's children do.

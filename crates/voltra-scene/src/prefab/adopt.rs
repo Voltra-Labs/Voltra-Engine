@@ -69,9 +69,13 @@ pub(super) fn adopt(
         .map(|r| r.id)
         .filter(|id| !held.contains(id))
         .collect();
+    let to_record: std::collections::HashMap<SceneId, SceneId> = matched
+        .iter()
+        .filter_map(|&(entity, record)| Some((*world.get::<SceneId>(entity)?, record.id)))
+        .collect();
     for &(entity, record) in &matched {
         let want = canonical(registry, record)?;
-        let overridden = differences(world, registry, entity, entity == root, &want)?;
+        let overridden = differences(world, registry, entity, entity == root, &want, &to_record)?;
         world.insert(
             entity,
             PrefabPart {

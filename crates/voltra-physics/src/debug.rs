@@ -1,4 +1,4 @@
-//! Colliders and contacts, as line segments.
+//! Colliders, joints and contacts, as line segments.
 //!
 //! This is what makes shipping detection without a solver worth doing. A wrong
 //! normal is invisible in a number and obvious as a line pointing the wrong
@@ -11,6 +11,8 @@ use voltra_render::LineBatch;
 use voltra_scene::{Collider, Sensor, Transform};
 
 use crate::narrow::Contact;
+
+mod joints;
 
 /// Collider outlines.
 const SHAPE_COLOR: [f32; 4] = [0.35, 0.9, 0.45, 0.9];
@@ -43,8 +45,10 @@ const CIRCLE_SEGMENTS: usize = 24;
 /// direction, which is the part worth checking.
 const NORMAL_LENGTH: f32 = 0.5;
 
-/// Pushes every collider outline, and every contact, into `lines`.
+/// Pushes every collider outline, every joint, and every contact, into
+/// `lines`.
 pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
+    joints::draw(world, lines);
     for (entity, collider) in world.query::<Collider>() {
         let Some(transform) = world.get::<Transform>(entity) else {
             // No transform means no position, so there is nothing to draw and

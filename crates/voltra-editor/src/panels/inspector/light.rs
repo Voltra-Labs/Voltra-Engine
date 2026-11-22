@@ -208,7 +208,7 @@ impl Default for Height {
 /// toggled — one click, so that is the whole edit. What was tuned is kept
 /// in egui's memory under `key` while it is off (the inspector's body is
 /// salted by entity, so per light) and comes back with it.
-fn optional<T>(ui: &mut Ui, key: &str, value: &mut Option<T>) -> bool
+pub(super) fn optional<T>(ui: &mut Ui, key: &str, value: &mut Option<T>) -> bool
 where
     T: Clone + Default + Send + Sync + 'static,
 {

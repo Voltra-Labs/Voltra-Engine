@@ -6,6 +6,7 @@ mod edit_keys;
 mod editor;
 mod gizmo;
 mod instance;
+mod joints;
 mod marquee;
 mod paint;
 mod panels;

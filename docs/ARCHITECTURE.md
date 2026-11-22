@@ -3813,6 +3813,75 @@ Pinned by:
 - `app::scenes::tests`: a scene saved with an older copy of a prefab arriving
   in step.
 
+### Joints are solved as Box2D v3 solves them, inside every sub-step
+
+Stage 65. `Joint2D` (scene) holds two bodies together, or one to the world:
+**revolute** (the anchors together, the angle free but for an optional limit
+and motor), **distance** (a rod at `length`, a spring about it, or with
+`min < max` a range — a rope at `min` zero) and **weld** (anchors and angle
+held). Box2D's three, with its math (`b2SolveRevoluteJoint`,
+`b2SolveDistanceJoint`, `b2SolveWeldJoint`).
+
+- **A joint lives on any entity and names its bodies** — `a` (none: the
+  entity itself), `b` (none: the world, `anchor_b` then a world point) —
+  Godot's `PinJoint2D` shape rather than Unity's component on the body: one
+  entity holds one component of a kind, and a plank pinned at both ends needs
+  two joints. The common case, a joint on the body held to the world, names
+  neither. Bodies are what the solver gathers: a rigid body, or a collider
+  without one (immovable). A joint naming a body that is not there joins
+  nothing rather than holding to the world.
+- **The angle, the limit and the motor are `a`'s against `b`'s**: the joint
+  lives on the body that turns, held to what it turns on, so a wheel's motor
+  speed is the wheel's.
+- **Inside every sub-step**, before the contacts: warm started, solved with
+  the soft bias (`SolverParams::joint_softness`: twice the capped contact
+  frequency, damping ratio 2 — Box2D's `jointSoftness`), and relaxed after
+  the positions are integrated; once more in the final relax. **Not** the
+  contacts' warm-start-once structure: a soft constraint's
+  `impulse_scale · accumulated` term is tuned against a *sub-step's* impulse,
+  and accumulated over a whole step it over-damped a 2 Hz spring to a
+  quarter of its stiffness (the spring test caught it). A spring sits within
+  0.02 of `g/k` with this.
+- Limits are speculative inside (exactly the speed that closes the gap) and
+  soft past them; a motor's impulse is clamped to `max_torque · h`.
+- **Bodies a joint joins do not collide** unless it says `collide_connected`
+  — Box2D's default, so a hinge's halves can overlap where they meet. The
+  pair is left out before the narrow phase.
+- **Sleep**: a joint links its bodies' islands as a contact does (one waking
+  wakes the other; they rest together), and a motor drives its island, which
+  then never sleeps. `Sleep::wake_islands` and `settle` take body pairs now,
+  contacts' and joints' alike.
+- **Warm starting** keeps the impulses on the component (`#[serde(skip)]`),
+  so they travel with the entity and a loaded joint starts from rest.
+- **Ids**: a joint names bodies by `SceneId`, so a prefab spawn, a paste and
+  a duplicate remap one between two copied bodies to the copies
+  (`Joint2D::remap`), keeping one to a body outside the copy; a prefab sync
+  compares a joint in the file's record ids and writes it back in the
+  instance's, and Apply writes it in record ids.
+- Editor: the inspector's Joint section (kind, ends, anchors, collision,
+  limit, motor, spring); Physics ▸ **Join selection** (a hinge at the last
+  picked body's centre, to the other selected body or the world, starting at
+  the angle they stand at; on a new joint entity if the body has one) and
+  **Spawn pendulum**; the physics overlay draws every joint.
+
+Rejected: **joints on the body, Unity's shape** — one per entity here;
+**XPBD joints** — the contacts are TGS Soft, and two solvers on one body
+fight; **wheel and prismatic joints now** — the same machinery with an axis,
+when a vehicle needs them.
+
+- **Not yet**: wheel, prismatic, motor and mouse joints; a revolute joint's
+  spring; breaking under force; joints on bodies without a collider turning
+  (no inertia without a shape, as before).
+
+Pinned by `tests/joints.rs` (a rod and a pin pendulum keeping their length
+through a swing; a rod between two falling bodies; a rope slack then taut; a
+spring stretched by `g/k` and settled; a weld holding a plank level; a limit
+stopping a hinge and resting on it; a motor at its speed on its axle; joined
+bodies passing through each other unless asked; a hanging pendulum sleeping
+while a motor's wheel does not), `prefab::sync` (a joint inside a prefab
+joining the instance's own bodies, and following an edit) and the scene
+component's format test.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

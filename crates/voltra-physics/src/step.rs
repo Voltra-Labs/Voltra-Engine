@@ -9,7 +9,8 @@ use crate::integrate::{integrate_positions, integrate_velocities};
 use crate::narrow::{manifold, Contact};
 use crate::sleep::Sleep;
 use crate::solver::{
-    apply_restitution, prepare, solve, warm_start, CachedImpulse, ImpulseCache, SolverBodies,
+    apply_restitution, joint_ends, prepare, prepare_joints, solve, solve_joints, store_joints,
+    warm_start, warm_start_joints, CachedImpulse, ImpulseCache, JointEnds, SolverBodies,
     SolverParams,
 };
 
@@ -55,7 +56,9 @@ impl Overlaps {
 ///    needed last step.
 /// 3. **Sub-step**: integrate velocities, solve the contacts with the soft bias
 ///    pushing overlaps apart, integrate positions. Four short steps converge
-///    where four passes over one long step do not.
+///    where four passes over one long step do not. Joints go first in each
+///    sub-step and, as Box2D v3 has them, are warm started and relaxed in it
+///    too (see [`crate::solver::joint`]).
 /// 4. **Relax**: solve once more with the bias off and positions frozen, which
 ///    removes the energy the bias added. Friction is applied here.
 /// 5. **Restitution**, then store the impulses for the next step.
@@ -98,8 +101,30 @@ pub fn step_sleeping(
     }
 
     sleep.wake_disturbed(world);
-    let overlaps = collide_with(world, |a, b| sleep.resting_contact(world, a, b).cloned());
-    sleep.wake_islands(world, &overlaps.contacts);
+    let joints = joint_ends(world);
+    let apart = unjoined(&joints);
+    let overlaps = collide_with(world, |a, b| {
+        if apart.contains(&ordered(a, b)) {
+            return Reuse::Skip;
+        }
+        match sleep.resting_contact(world, a, b) {
+            Some(contact) => Reuse::Contact(*contact),
+            None => Reuse::Test,
+        }
+    });
+    // A joint links its two bodies as a contact does: one waking wakes the
+    // other, and they rest together or not at all.
+    let joined: Vec<(Entity, Entity)> = joints
+        .iter()
+        .filter_map(|joint| joint.b.map(|b| (joint.a, b)))
+        .collect();
+    let mut links: Vec<(Entity, Entity)> = overlaps
+        .contacts
+        .iter()
+        .map(|contact| (contact.a, contact.b))
+        .collect();
+    links.extend_from_slice(&joined);
+    sleep.wake_islands(world, &links);
 
     // Only contacts with an awake dynamic body are solved. After the wake
     // above, a contact touching a sleeping body has nothing awake on the
@@ -133,11 +158,20 @@ pub fn step_sleeping(
         cache,
         params.warm_starting,
     );
+    let mut joint_constraints = prepare_joints(world, &bodies, &joints, h);
+    let joint_softness = params.joint_softness(h);
 
     warm_start(&constraints, &mut bodies);
 
     for _ in 0..sub_steps {
         integrate_velocities(&mut bodies, gravity, h, params.max_rotation);
+        // Joints as Box2D v3 solves them: warm started, solved and relaxed in
+        // every sub-step, so the impulse they carry is one sub-step's — which
+        // is what their springs' `impulse_scale` is tuned against.
+        if params.warm_starting {
+            warm_start_joints(&joint_constraints, &mut bodies);
+        }
+        solve_joints(&mut joint_constraints, &mut bodies, joint_softness, h, true);
         solve(
             &mut constraints,
             &mut bodies,
@@ -146,10 +180,24 @@ pub fn step_sleeping(
             params.max_push_speed,
         );
         integrate_positions(&mut bodies, h);
+        solve_joints(
+            &mut joint_constraints,
+            &mut bodies,
+            joint_softness,
+            h,
+            false,
+        );
     }
 
     // Relaxation: the same solve without the bias, and deliberately without
     // integrating positions afterwards.
+    solve_joints(
+        &mut joint_constraints,
+        &mut bodies,
+        joint_softness,
+        h,
+        false,
+    );
     solve(
         &mut constraints,
         &mut bodies,
@@ -174,7 +222,18 @@ pub fn step_sleeping(
     cache.commit();
 
     bodies.scatter(world);
-    sleep.settle(world, contacts, &params.sleep, dt);
+    store_joints(&joint_constraints, world);
+    let mut settled: Vec<(Entity, Entity)> = contacts
+        .iter()
+        .map(|contact| (contact.a, contact.b))
+        .collect();
+    settled.extend_from_slice(&joined);
+    let driven: Vec<Entity> = joints
+        .iter()
+        .filter(|joint| joint.driven)
+        .flat_map(|joint| std::iter::once(joint.a).chain(joint.b))
+        .collect();
+    sleep.settle(world, &settled, &driven, &params.sleep, dt);
 
     overlaps
 }
@@ -182,17 +241,50 @@ pub fn step_sleeping(
 /// Every overlap in the world right now, sensors kept apart from the rest.
 #[cfg(test)]
 pub(crate) fn collide(world: &World) -> Overlaps {
-    collide_with(world, |_, _| None)
+    collide_with(world, |_, _| Reuse::Test)
 }
 
-/// [`collide`], taking `reuse`'s contact for a pair instead of testing it
-/// when it has one — how sleeping pairs skip the narrow phase.
-fn collide_with(world: &World, reuse: impl Fn(Entity, Entity) -> Option<Contact>) -> Overlaps {
+/// What [`collide_with`] does with a candidate pair.
+enum Reuse {
+    /// Run the narrow phase.
+    Test,
+    /// Take this contact instead — a sleeping pair's.
+    Contact(Contact),
+    /// Leave it out — two bodies a joint joins.
+    Skip,
+}
+
+/// A pair in one order, whichever it arrives in.
+fn ordered(a: Entity, b: Entity) -> (Entity, Entity) {
+    if a.index() <= b.index() {
+        (a, b)
+    } else {
+        (b, a)
+    }
+}
+
+/// The pairs joints keep from colliding: every joint between two bodies
+/// that does not ask to collide.
+fn unjoined(joints: &[JointEnds]) -> crate::hash::FastSet<(Entity, Entity)> {
+    joints
+        .iter()
+        .filter(|joint| !joint.collide_connected)
+        .filter_map(|joint| joint.b.map(|b| ordered(joint.a, b)))
+        .collect()
+}
+
+/// [`collide`], asking `reuse` first about each pair — how sleeping pairs
+/// skip the narrow phase, and jointed ones are left out.
+fn collide_with(world: &World, reuse: impl Fn(Entity, Entity) -> Reuse) -> Overlaps {
     let mut overlaps = Overlaps::default();
     for (a, b) in candidate_pairs(world) {
-        if let Some(contact) = reuse(a, b) {
-            overlaps.contacts.push(contact);
-            continue;
+        match reuse(a, b) {
+            Reuse::Test => {}
+            Reuse::Contact(contact) => {
+                overlaps.contacts.push(contact);
+                continue;
+            }
+            Reuse::Skip => continue,
         }
         let Some(a_shape) = shape(world, a) else {
             continue;

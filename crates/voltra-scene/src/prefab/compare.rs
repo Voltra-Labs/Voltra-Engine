@@ -1,7 +1,7 @@
 //! Comparing an instance part with its record: which components a sync
 //! tracks, what they are in the file, and where the part differs.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use ron::value::RawValue;
 use voltra_ecs::{Entity, World};
@@ -9,6 +9,7 @@ use voltra_ecs::{Entity, World};
 use super::{PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::Parent;
+use crate::joint::Joint2D;
 use crate::scene_id::SceneId;
 
 /// The components a sync rebuilds rather than copies.
@@ -43,19 +44,26 @@ pub(super) fn canonical(
 /// The components of `entity` that differ from `want` (a record's
 /// [`canonical`] values) — changed, missing or extra — among those a sync
 /// tracks. What an instance part overrides.
+///
+/// `to_record` takes the instance's own ids to its records' — what a value
+/// naming another entity of the instance (a joint's bodies) is compared in.
 pub(super) fn differences(
     world: &World,
     registry: &ComponentRegistry,
     entity: Entity,
     is_root: bool,
     want: &BTreeMap<String, Box<RawValue>>,
+    to_record: &HashMap<SceneId, SceneId>,
 ) -> Result<BTreeSet<String>, SceneError> {
     let mut differ = BTreeSet::new();
     for name in registry.names() {
         if !tracked(name, is_root) {
             continue;
         }
-        let have = registry.save_one(world, entity, name).transpose()?;
+        let have = match registry.save_one(world, entity, name).transpose()? {
+            Some(value) => Some(rewrite_refs(name, &value, to_record)?.unwrap_or(value)),
+            None => None,
+        };
         let same = match (want.get(name), &have) {
             (Some(want), Some(have)) => want.get_ron() == have.get_ron(),
             (None, None) => true,
@@ -66,6 +74,39 @@ pub(super) fn differences(
         }
     }
     Ok(differ)
+}
+
+/// `value`, a component naming other entities by id, with those ids taken
+/// through `map` — `None` for a component that names none, which is every
+/// one but a joint. An id `map` does not know is kept.
+pub(super) fn rewrite_refs(
+    name: &str,
+    value: &RawValue,
+    map: &HashMap<SceneId, SceneId>,
+) -> Result<Option<Box<RawValue>>, SceneError> {
+    if name != Joint2D::NAME {
+        return Ok(None);
+    }
+    let mut joint: Joint2D = value.into_rust().map_err(|source| SceneError::Component {
+        name: name.to_owned(),
+        source: source.into(),
+    })?;
+    joint.remap(|id| map.get(&id).copied());
+    Ok(Some(
+        RawValue::from_rust(&joint).map_err(SceneError::Serialize)?,
+    ))
+}
+
+/// The instance at `root`'s own ids, each to the record its part names.
+pub(super) fn ids_to_records(world: &World, root: Entity) -> HashMap<SceneId, SceneId> {
+    std::iter::once(root)
+        .chain(crate::hierarchy::descendants(world, root))
+        .filter_map(|e| {
+            let own = *world.get::<SceneId>(e)?;
+            let record = world.get::<PrefabPart>(e)?.record;
+            Some((own, record))
+        })
+        .collect()
 }
 
 /// The parent record a record names, if it carries one.

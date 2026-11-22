@@ -104,6 +104,7 @@ impl ComponentRegistry {
         registry.register::<ParticleEmitter>("ParticleEmitter");
         registry.register::<PointLight2D>("PointLight2D");
         registry.register::<GlobalLight2D>("GlobalLight2D");
+        registry.register::<crate::Joint2D>(crate::Joint2D::NAME);
         registry.register::<ShadowCaster2D>("ShadowCaster2D");
         registry
     }

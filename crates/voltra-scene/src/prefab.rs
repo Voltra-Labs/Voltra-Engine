@@ -127,6 +127,8 @@ impl Instance {
 /// - **Parent links inside the prefab are remapped** to the fresh ids and
 ///   resolved on the spot, without the whole-world pass a load needs: every
 ///   entity a link can name is one this call just made.
+/// - **Joints between entities of the prefab are remapped** the same way; a
+///   joint to a body outside it keeps naming that body.
 /// - **A link to a parent outside the prefab is cut**, and its entity is a
 ///   root. The id it names belongs to whatever scene the fragment was cut
 ///   from, and following it would hang every instance off one entity there.
@@ -238,6 +240,13 @@ fn spawn_copy(
                 world.remove::<Parent>(entity);
                 roots.push(entity);
             }
+        }
+    }
+
+    // A joint between two bodies of the copy joins the copy's two.
+    for &entity in &entities {
+        if let Some(joint) = world.get_mut::<crate::Joint2D>(entity) {
+            joint.remap(|id| renamed.get(&id).copied());
         }
     }
 
