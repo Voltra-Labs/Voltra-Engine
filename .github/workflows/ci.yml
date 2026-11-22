@@ -9,6 +9,13 @@ env:
   CARGO_TERM_COLOR: always
   # Fail on warnings everywhere, not just where clippy is invoked explicitly.
   RUSTFLAGS: -D warnings
+  # CI builds once and throws the result away: no debug info to write and
+  # cache, no incremental state to keep. Backtraces still name functions.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
+  # MSVC's link.exe is the slow step of every test binary on Windows; LLVM's
+  # linker, shipped with the toolchain, reads the same libraries faster.
+  CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: rust-lld.exe
 
 jobs:
   # Formatting is platform-independent and finishes in seconds, so it runs on
@@ -24,6 +31,8 @@ jobs:
       - run: cargo fmt --all --check
 
   check:
+    # One name for both, though Windows skips clippy: required checks are
+    # matched by name.
     name: clippy + tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -48,7 +57,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
 
+      # Lints once, on Linux: they read the same code on both platforms, and
+      # a second full check on Windows doubled its time. Windows still builds
+      # every target under `-D warnings`, so a compiler warning there fails.
       - name: Clippy
+        if: runner.os == 'Linux'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Tests
