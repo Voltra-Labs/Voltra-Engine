@@ -30,7 +30,7 @@ fn a_headless_renderer_clears_a_target_that_reads_back_as_its_clear_colour() {
     );
     let pixels = read_rgba8(&device, &queue, graded.texture(), 32, 16);
     assert_eq!(pixels.len(), 32 * 16 * 4);
-    for pixel in pixels.chunks_exact(4) {
+    for pixel in pixels.as_chunks::<4>().0 {
         assert!(
             pixel[0] > 240 && pixel[1] < 16 && pixel[2] < 16,
             "red, in RGBA order: {pixel:?}"

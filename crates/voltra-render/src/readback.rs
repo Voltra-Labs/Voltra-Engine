@@ -82,7 +82,7 @@ pub fn read_rgba8(
         };
         for y in 0..height {
             let row = &view[(y * padded) as usize..][..(width * 4) as usize];
-            for pixel in row.chunks_exact(4) {
+            for pixel in row.as_chunks::<4>().0 {
                 if bgra {
                     out.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
                 } else {
