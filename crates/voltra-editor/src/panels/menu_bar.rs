@@ -11,6 +11,8 @@ use voltra_scene::{RigidBody, SceneId};
 use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::spawn;
+
+mod spawn_items;
 use crate::undo::{selected_id, SceneView};
 
 /// Where the editor saves when no path has been chosen.
@@ -25,60 +27,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::top("menu").show(ui, |ui| {
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("Scene", |ui| {
-                if ui.button("Spawn sprite").clicked() {
-                    spawn::record(editor, frame, "Spawn sprite", |frame| {
-                        spawn::sprite(frame, "Sprite", Vec2::ZERO)
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn tilemap").clicked() {
-                    spawn::record(editor, frame, "Spawn tilemap", |frame| {
-                        spawn::tilemap(frame, "Tilemap", Vec2::ZERO)
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn text").clicked() {
-                    spawn::record(editor, frame, "Spawn text", |frame| {
-                        spawn::text(frame, "Text", Vec2::ZERO, None)
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn HUD text").clicked() {
-                    spawn::record(editor, frame, "Spawn HUD text", |frame| {
-                        spawn::hud_text(frame, "HUD text")
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn HUD panel").clicked() {
-                    spawn::record(editor, frame, "Spawn HUD panel", |frame| {
-                        spawn::hud_panel(frame, "HUD panel")
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn HUD button").clicked() {
-                    spawn::record_all(editor, frame, "Spawn HUD button", |frame, _| {
-                        spawn::hud_button(frame, "HUD button")
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn particles").clicked() {
-                    spawn::record(editor, frame, "Spawn particles", |frame| {
-                        spawn::particles(frame, "Particles", Vec2::ZERO)
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn light").clicked() {
-                    spawn::record(editor, frame, "Spawn light", |frame| {
-                        spawn::light(frame, "Light", Vec2::ZERO)
-                    });
-                    ui.close();
-                }
-                if ui.button("Spawn camera").clicked() {
-                    spawn::record(editor, frame, "Spawn camera", |frame| {
-                        spawn::camera(frame, "Camera", Vec2::ZERO)
-                    });
-                    ui.close();
-                }
+                spawn_items::show(editor, ui, frame);
                 let selected = editor.selected.is_some();
                 if ui
                     .add_enabled(selected, egui::Button::new("Create prefab from selection"))
