@@ -24,6 +24,8 @@ use crate::input::{Binding, Direction};
 pub struct Headless {
     app: App,
     frames: u64,
+    /// What the engine logged since the session last handed its lines out.
+    logs: crate::logging::LogCapture,
 }
 
 /// Why a headless edit could not be made.
@@ -83,7 +85,11 @@ impl Headless {
         let mut clips = Clips::new(root.clone());
         resolve_world_clips(&mut app.world, &mut clips);
         app.clips = Some(clips);
-        Self { app, frames: 0 }
+        Self {
+            app,
+            frames: 0,
+            logs: crate::logging::capture(),
+        }
     }
 
     /// Loads `scene`, from `app`'s asset root, into `app`'s world through
@@ -113,6 +119,13 @@ impl Headless {
             self.app.input.end_frame();
             self.frames += 1;
         }
+    }
+
+    /// Every line logged since the session started, or since this was last
+    /// asked — the engine's own account of what it did while it ran. Empty
+    /// unless [`crate::logging::init`] installed the logger.
+    pub fn take_logs(&mut self) -> Vec<crate::logging::LogLine> {
+        self.logs.drain()
     }
 
     /// Frames run so far.

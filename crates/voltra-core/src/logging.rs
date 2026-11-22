@@ -1,6 +1,14 @@
 //! Where a game's log goes.
+//!
+//! To the terminal or a file, through `env_logger` — and, whatever else,
+//! into a ring of recent lines a caller can read back ([`capture`]): what a
+//! headless run hands a tool as "what the engine said while it ran".
+
+mod capture;
 
 use std::path::PathBuf;
+
+pub use capture::{capture, LogCapture, LogLine};
 
 /// The file a windowed build logs to, beside its executable.
 pub const LOG_FILE: &str = "log.txt";
@@ -22,9 +30,14 @@ pub fn init(to_file: bool) {
             builder.target(env_logger::Target::Pipe(Box::new(file)));
         }
     }
+    // Through the ring as well: `capture` reads what passed.
+    let logger = builder.build();
+    let level = logger.filter();
     // A second call — a test harness, a game that also initialises — keeps
     // the first logger rather than panicking.
-    let _ = builder.try_init();
+    if log::set_boxed_logger(Box::new(capture::Tee::new(logger))).is_ok() {
+        log::set_max_level(level);
+    }
 }
 
 /// [`LOG_FILE`] beside the running executable, if it can be found.
