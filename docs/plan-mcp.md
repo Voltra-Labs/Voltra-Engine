@@ -92,7 +92,11 @@ Landed: public `save_one`/`load_one`/`remove_one`/`normalize`, `register` →
 - Tests: every registered default component has a template that loads back
   into an entity; an unregistered name answers `None`, not an error.
 
-### M1b — a headless session
+### M1b — a headless session — done
+
+Landed as `voltra_core::Headless` (`new`, `open`, `step`, `press`/`release`,
+`world`, `entity_ron`, `set_component`, `into_app`); no `fixed_steps(n)` or
+axis feed yet — `step` with a fixed delta covers exact steps.
 
 A `Session` (name to settle: `voltra_core::Headless`?) owning an `App`
 without a window or a device:
