@@ -74,6 +74,9 @@ pub struct App {
     renderer: Option<Renderer>,
     textures: Option<Textures>,
     atlases: Option<Atlases>,
+    /// Sprites' traced outlines, for shadow casters shaped by their sprite.
+    /// `None` until `resumed`, for the root, like the stores around it.
+    silhouettes: Option<voltra_assets::Silhouettes>,
     /// Faces and their glyph atlases. `None` until `resumed`, for the root,
     /// like `clips`.
     fonts: Option<Fonts>,
@@ -492,6 +495,11 @@ impl App {
 
         let device = renderer.context().device();
         for path in images {
+            // Traced outlines go stale with their pixels, whichever store
+            // answers below; they are traced again when next asked for.
+            if let Some(silhouettes) = self.silhouettes.as_mut() {
+                silhouettes.reload(&path);
+            }
             // A re-cut sheet changes no pixels, and a repainted one changes no
             // slicing, so whichever store owns the path answers and the other
             // ignores it.
@@ -562,6 +570,7 @@ impl ApplicationHandler for App {
         let mut atlases = Atlases::new(asset_root.clone());
         ui_frame::resolve_world_atlases(&mut self.world, &mut atlases);
         self.atlases = Some(atlases);
+        self.silhouettes = Some(voltra_assets::Silhouettes::new(asset_root.clone()));
 
         self.load_input_map(&asset_root);
         self.load_sorting_layers(&asset_root);

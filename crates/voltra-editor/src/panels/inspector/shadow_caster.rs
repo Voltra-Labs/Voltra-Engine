@@ -1,7 +1,7 @@
 //! Whether an entity blocks the light of lights that cast shadows, and the
 //! shape it blocks with.
 
-use voltra_core::egui::{Button, RichText, Ui};
+use voltra_core::egui::{self, Button, RichText, Ui};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{CasterShape, ShadowCaster2D};
@@ -15,6 +15,8 @@ pub(super) struct Context<'a> {
     /// The polygon it would start from (its collider in its own space, else
     /// its sprite's quad), if it has either.
     pub starting: Option<Vec<Vec2>>,
+    /// It has a sprite with a texture: a caster can take its silhouette.
+    pub textured_sprite: bool,
     pub shape: &'a mut ShapeEdit,
 }
 
@@ -35,6 +37,7 @@ pub(super) fn show(
     let Context {
         has_collider,
         starting,
+        textured_sprite,
         shape,
     } = context;
     ui.label(RichText::new("Shadows").strong())
@@ -97,6 +100,44 @@ pub(super) fn show(
                     claim = claim.or(Some("Use own shadow shape"));
                 }
             }
+            if textured_sprite && use_silhouette(ui) {
+                replace = Some(CasterShape::Sprite {
+                    alpha: voltra_assets::silhouette::ALPHA_THRESHOLD,
+                });
+                claim = claim.or(Some("Use sprite silhouette"));
+            }
+        }
+        CasterShape::Sprite { alpha } => {
+            let said = if textured_sprite {
+                "shaped by its sprite's silhouette"
+            } else {
+                "shaped by its sprite's silhouette, but it has no textured sprite: it casts nothing"
+            };
+            ui.label(RichText::new(said).weak())
+                .on_hover_text("the outline of its opaque texels, following its frame");
+            ui.horizontal(|ui| {
+                ui.label("opaque from")
+                    .on_hover_text("how opaque a texel must be to be part of the outline");
+                if ui.add(egui::DragValue::new(alpha).range(1..=255)).changed() {
+                    claim = claim.or(Some("Set silhouette alpha"));
+                }
+            });
+            ui.horizontal(|ui| {
+                if has_collider && ui.button("Use collider").clicked() {
+                    replace = Some(CasterShape::Collider);
+                    claim = claim.or(Some("Use collider shadow shape"));
+                }
+                if let Some(points) = starting.clone() {
+                    if ui.button("Use own polygon").clicked() {
+                        replace = Some(CasterShape::Polygon {
+                            points,
+                            closed: true,
+                        });
+                        shape.set_editing(Some(entity));
+                        claim = claim.or(Some("Use own shadow shape"));
+                    }
+                }
+            });
         }
         CasterShape::Polygon { points, closed } => {
             ui.label(RichText::new(format!("own polygon, {} points", points.len())).weak());
@@ -121,6 +162,13 @@ pub(super) fn show(
                     shape.set_editing(None);
                     claim = claim.or(Some("Use collider shadow shape"));
                 }
+                if textured_sprite && use_silhouette(ui) {
+                    replace = Some(CasterShape::Sprite {
+                        alpha: voltra_assets::silhouette::ALPHA_THRESHOLD,
+                    });
+                    shape.set_editing(None);
+                    claim = claim.or(Some("Use sprite silhouette"));
+                }
             });
             if editing {
                 ui.label(
@@ -138,4 +186,11 @@ pub(super) fn show(
         caster.shape = new;
     }
     claim
+}
+
+/// The button that shapes a caster by its sprite's silhouette.
+fn use_silhouette(ui: &mut Ui) -> bool {
+    ui.button("Use sprite silhouette")
+        .on_hover_text("the outline of its sprite's opaque texels, following its frame")
+        .clicked()
 }

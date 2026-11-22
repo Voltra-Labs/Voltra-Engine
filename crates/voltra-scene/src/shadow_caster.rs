@@ -13,9 +13,11 @@ use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
 mod outline;
+mod silhouette;
 mod starting;
 
 pub use outline::{occluders, outlines_of, CIRCLE_SIDES};
+pub use silhouette::{prepare, silhouette_key, SpriteShapes};
 pub use starting::{starting_polygon, EDIT_CIRCLE_SIDES};
 
 /// Blocks the light of every [`PointLight2D`](crate::PointLight2D) that casts
@@ -45,6 +47,19 @@ pub enum CasterShape {
         /// light from both sides.
         closed: bool,
     },
+    /// The outline of the entity's sprite's opaque texels — Unity's
+    /// "Use Renderer Silhouette": traced from its texture for the frame it
+    /// draws now, so an animated sprite's shadow moves with it. Nothing on
+    /// an entity without a textured sprite.
+    Sprite {
+        /// How opaque a texel must be to be part of the outline.
+        #[serde(default = "default_alpha")]
+        alpha: u8,
+    },
+}
+
+fn default_alpha() -> u8 {
+    voltra_assets::silhouette::ALPHA_THRESHOLD
 }
 
 #[cfg(test)]

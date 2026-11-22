@@ -286,6 +286,7 @@ privileged and plain `cargo build` covers everything.
 | 56 | Spot lights: a cone on a point light, aimed by its entity | done |
 | 57 | Normal maps on sprites, shaded by lights with a height | done |
 | 58 | Light layers: a light lights only what shares one of its bits | done |
+| 59 | Shadows from a sprite's silhouette, traced from its alpha | done |
 
 ## Contributing
 

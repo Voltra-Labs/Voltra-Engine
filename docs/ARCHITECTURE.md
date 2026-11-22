@@ -3206,8 +3206,8 @@ point, not ours yet; **a fragment loop over every edge** — needs storage
 buffers in the fragment stage, which the lights deliberately avoid (they
 run on WebGL2).
 
-- **Not yet**: shadows from sprite alpha (Unity's "use renderer
-  silhouette"), per-layer caster masks, contact-hardening penumbrae (a
+- Shadows from sprite alpha landed in stage 59, below.
+- **Not yet**: per-layer caster masks, contact-hardening penumbrae (a
   softness that grows with distance from the occluder), merging a solid
   layer's boxes into one outline (each box casts on its own; its inner
   edges shadow the tiles behind the first row, as Godot's per-tile
@@ -3415,6 +3415,55 @@ that never touches them lights exactly as before.
 Pinned by `headless_light_layers.rs` (a layer-2 lamp lights the layer-2
 quad and the background, not the layer-1 quad; every layer lights both; no
 layer lights nothing), instance, batch and light unit tests.
+
+### A sprite's silhouette is traced on the CPU into ordinary occluders
+
+Stage 59. `CasterShape::Sprite` — Unity's "Use Renderer Silhouette": the
+outline of the sprite's opaque texels casts. **Traced, not rendered**: the
+outline becomes the same `Occluder` polygons a collider or a polygon gives,
+so the shadow map, culling, self-shadowing and softness need nothing new.
+
+- **`voltra_assets::Silhouettes`** decodes a texture once (from the asset
+  root, beside `Textures`, which keeps no pixels on the CPU) and traces each
+  rectangle of it once: the sides between texels at or past half alpha and
+  the rest become directed edges with the opaque side on the right, linked
+  into loops, always taking the rightmost turn where a corner has two ways
+  out (islands touching diagonally stay two loops); only outer loops are
+  kept (a hole's edges would shadow its own inside), then Douglas–Peucker
+  at 0.75 texel turns a staircase into its slope. A shape smaller than that
+  keeps its texel edges. Deterministic. The alpha a texel must reach is the
+  caster's (`CasterShape::Sprite { alpha }`, half by default), and part of
+  the cache key. A sheet's pixels stay decoded for the store's life, for
+  the frames still to come.
+- **Keyed by texture and the rectangle the sprite draws now**
+  (`shadow_caster::silhouette_key`, one function for the tracing and the
+  reading): an animated sprite's frames are traced as they come up and its
+  shadow follows the frame. A frame that is not there (the sprite draws the
+  placeholder) traces nothing. `prepare` traces what this frame's casters need
+  before the lighting is gathered.
+- **Carried onto the quad** by the affine map from texture UV to the quad's
+  corners, read off the quad itself, so flips, regions, atlas frames and
+  pixels-per-unit all land where the sprite is drawn.
+- Hot reload forgets a path's pixels and outlines; they are traced again
+  when next asked for. A texture that will not load is logged once and
+  casts nothing.
+- `light::gather` and `shadow_caster::occluders` take an optional
+  `SpriteShapes` (sheets + silhouettes); without it a sprite caster casts
+  nothing — which is what headless callers that never load textures get.
+- Editor: "Use sprite silhouette" on a textured sprite's caster (its alpha
+  threshold editable, a warning when there is no textured sprite), and
+  back to collider or own polygon; the selected caster's outline in the
+  viewport is its traced silhouette (`UiFrame::sprite_shapes`).
+- **Not yet**: holes, a simplification tolerance per caster, decoding
+  sheets off the main thread.
+
+Pinned by the tracer's unit tests (a square is four corners, a staircase
+its slope, islands apart and holes out — also when they touch only at a
+corner — a rectangle in its own units, the threshold deciding, nothing
+traced from nothing), the store's (traced on demand, forgotten on
+reload, a missing file traces nothing) and the scene's (the outline lands
+on the drawn quad, mirrored when flipped; nothing without silhouettes, a
+texture or the frame it asks for). The shadow from an occluder is pinned by `headless_shadows.rs`.
 
 ### wgpu 30 API notes
 

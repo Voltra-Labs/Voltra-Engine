@@ -79,6 +79,12 @@ pub fn quad(sprite: &Sprite, sheets: Sheets<'_>) -> Quad {
 }
 
 /// What a sprite draws of its texture.
+/// Whether `sprite` asks for a frame that is not there, and so draws the
+/// placeholder: what a caster shaped by its sprite must not trace.
+pub(crate) fn frame_missing(sprite: &Sprite, sheets: Sheets<'_>) -> bool {
+    matches!(slice(sprite, sheets), Slice::Missing)
+}
+
 enum Slice {
     /// All of it.
     Whole,

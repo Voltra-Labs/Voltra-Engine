@@ -265,7 +265,7 @@ fn regenerate_the_lights_scene() {
 #[test]
 fn the_committed_lights_scene_is_lit_and_casts_every_kind_of_shadow() {
     let world = committed();
-    let lighting = light::gather(&world, Vec2::splat(-8.0), Vec2::splat(8.0));
+    let lighting = light::gather(&world, Vec2::splat(-8.0), Vec2::splat(8.0), None);
     assert!(lighting.ambient.is_some(), "the active camera must be lit");
     assert_eq!(lighting.lights.len(), 3);
     assert_eq!(
@@ -357,7 +357,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
     );
 
     let half = view.half_extents();
-    let lighting = light::gather(world, view.position - half, view.position + half);
+    let lighting = light::gather(world, view.position - half, view.position + half, None);
     let normals = RenderTarget::new(
         &device,
         "normals",

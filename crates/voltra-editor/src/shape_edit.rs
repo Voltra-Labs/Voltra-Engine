@@ -46,14 +46,14 @@ pub struct ShapeEdit {
 fn polygon(world: &World, entity: Entity) -> Option<(&[Vec2], bool)> {
     match &world.get::<ShadowCaster2D>(entity)?.shape {
         CasterShape::Polygon { points, closed } => Some((points.as_slice(), *closed)),
-        CasterShape::Collider => None,
+        CasterShape::Collider | CasterShape::Sprite { .. } => None,
     }
 }
 
 fn points_mut(world: &mut World, entity: Entity) -> Option<&mut Vec<Vec2>> {
     match &mut world.get_mut::<ShadowCaster2D>(entity)?.shape {
         CasterShape::Polygon { points, .. } => Some(points),
-        CasterShape::Collider => None,
+        CasterShape::Collider | CasterShape::Sprite { .. } => None,
     }
 }
 

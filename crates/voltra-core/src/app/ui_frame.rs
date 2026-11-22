@@ -38,6 +38,9 @@ pub struct UiFrame<'a> {
     /// `textures` is: a panel that assigns an atlas must produce a handle the
     /// batch about to run can resolve.
     pub atlases: &'a mut Atlases,
+    /// Sprites' traced outlines, for a panel drawing a caster shaped by its
+    /// sprite. `None` before the asset root is known.
+    pub silhouettes: Option<&'a voltra_assets::Silhouettes>,
     /// Faces and glyph atlases, for a panel resolving a text's font.
     pub fonts: &'a mut Fonts,
     /// The project's sorting layers, for the inspector's choice and the pick.
@@ -226,6 +229,16 @@ impl<'a> UiFrame<'a> {
     ///
     /// A panel picking an entity has to ask the same question the draw asked,
     /// or a click lands somewhere other than the pixels it appears to.
+    /// What a caster shaped by its sprite needs to find its outline, when
+    /// silhouettes are loaded.
+    pub fn sprite_shapes(&self) -> Option<voltra_scene::shadow_caster::SpriteShapes<'_>> {
+        self.silhouettes
+            .map(|silhouettes| voltra_scene::shadow_caster::SpriteShapes {
+                sheets: self.sheets(),
+                silhouettes,
+            })
+    }
+
     pub fn sheets(&self) -> Sheets<'_> {
         Sheets::new(self.atlases, self.textures)
             .with_fonts(self.fonts)
