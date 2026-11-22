@@ -191,6 +191,10 @@ impl App {
                 &mut self.animation_clips,
                 &self.asset_root,
             ),
+            state_machines: super::animation::machine_store(
+                &mut self.state_machines,
+                &self.asset_root,
+            ),
             audio: &mut self.audio,
             device: &device,
             queue: &queue,

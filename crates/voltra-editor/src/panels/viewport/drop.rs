@@ -47,10 +47,13 @@ pub(super) fn drop_asset(
     };
     let at = crate::picking::world_at(scene, pointer, frame);
 
-    // A clip is not a thing in the scene: it goes on a player's field.
-    if voltra_assets::watch::is_animation(path.as_str()) {
+    // A clip or a state machine is not a thing in the scene: it goes on a
+    // player's or an animator's field.
+    if voltra_assets::watch::is_animation(path.as_str())
+        || voltra_assets::watch::is_animator(path.as_str())
+    {
         log::info!(
-            "{} is an animation: drop it on an animation player's clip field",
+            "{} is an animation asset: drop it on an animation player's or animator's field",
             path.as_str()
         );
         return;

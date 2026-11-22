@@ -5,6 +5,7 @@
 //! down into both and never back up.
 
 pub mod animation;
+pub mod animator;
 pub mod audio_listener;
 pub mod audio_source;
 pub mod batch;
@@ -29,6 +30,7 @@ pub mod persistent;
 pub mod pick;
 pub mod post;
 pub mod prefab;
+pub mod ron_store;
 pub mod scene_id;
 pub mod shadow_caster;
 pub mod sorting;
@@ -39,6 +41,7 @@ pub mod transform;
 pub mod ui;
 
 pub use animation::SpriteAnimation;
+pub use animator::{Animator, StateMachine, StateMachines};
 pub use audio_listener::AudioListener;
 pub use audio_source::AudioSource;
 pub use batch::{GpuEmitterDraw, SpriteBatch, SpriteRange, Surface};

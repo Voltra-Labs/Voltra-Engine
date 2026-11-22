@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use voltra_assets::AssetPath;
-use voltra_scene::{animation, keyframes, AnimationClips};
+use voltra_scene::{animation, animator, keyframes, AnimationClips, StateMachines};
 
 use crate::app::App;
 
@@ -30,7 +30,23 @@ impl App {
         }
         animation::advance(&mut self.world, delta);
         let clips = clip_store(&mut self.animation_clips, &self.asset_root);
+        // The animators choose the clips first, so a clip a transition
+        // starts plays from this frame.
+        let machines = machine_store(&mut self.state_machines, &self.asset_root);
+        animator::evaluate(&mut self.world, machines, clips);
         keyframes::advance(&mut self.world, clips, delta);
+    }
+
+    /// The state machines the animators run, made on first use.
+    pub fn state_machines(&mut self) -> &mut StateMachines {
+        machine_store(&mut self.state_machines, &self.asset_root)
+    }
+
+    /// Re-reads `path` if it is a state machine the store has loaded.
+    pub(super) fn reload_state_machine(&mut self, path: &AssetPath) -> bool {
+        self.state_machines
+            .as_mut()
+            .is_some_and(|machines| machines.reload(path))
     }
 
     /// The clips the players read, made on first use.
@@ -45,6 +61,20 @@ impl App {
             .as_mut()
             .is_some_and(|clips| clips.reload(path))
     }
+}
+
+/// The state machine store, made on first use, at the clips' root.
+pub(super) fn machine_store<'a>(
+    machines: &'a mut Option<StateMachines>,
+    asset_root: &Option<PathBuf>,
+) -> &'a mut StateMachines {
+    machines.get_or_insert_with(|| {
+        StateMachines::new(
+            asset_root
+                .clone()
+                .unwrap_or_else(voltra_assets::default_root),
+        )
+    })
 }
 
 /// The clip store, made on first use: a clip is a file and nothing else, so

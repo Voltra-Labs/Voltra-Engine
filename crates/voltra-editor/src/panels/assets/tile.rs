@@ -42,6 +42,14 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
             "ANIM",
             ui.visuals().widgets.active.bg_fill,
         ),
+        // Dragged onto an animator's machine field.
+        EntryKind::Animator => badge_tile(
+            ui,
+            entry,
+            &response,
+            "FSM",
+            ui.visuals().widgets.active.bg_fill,
+        ),
         EntryKind::Scene => scene_tile(ui, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.

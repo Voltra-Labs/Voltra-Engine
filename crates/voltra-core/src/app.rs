@@ -180,6 +180,8 @@ pub struct App {
     prefabs: Option<Prefabs>,
     /// Property-animation clips, made on first use like the prefabs.
     animation_clips: Option<voltra_scene::AnimationClips>,
+    /// Animation state machines, made on first use like the clips.
+    state_machines: Option<voltra_scene::StateMachines>,
     /// Entities a tick spawned whose asset handles the loop has not resolved
     /// yet. Emptied right after every tick.
     spawned: Vec<Entity>,
@@ -466,8 +468,9 @@ impl App {
                 self.scene_audio.restart(&self.world, clip, &mut self.audio);
                 continue;
             }
-            // A clip is read by its players next frame.
-            if self.reload_animation_clip(&path) {
+            // A clip is read by its players next frame, a machine by its
+            // animators.
+            if self.reload_animation_clip(&path) || self.reload_state_machine(&path) {
                 continue;
             }
             // A prefab's instances take the edit, but for what they override.

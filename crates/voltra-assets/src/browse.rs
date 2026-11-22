@@ -15,7 +15,8 @@ use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
 use crate::watch::{
-    is_animation, is_clip, is_font, is_input_map, is_scene, is_sorting_layers, is_texture,
+    is_animation, is_animator, is_clip, is_font, is_input_map, is_scene, is_sorting_layers,
+    is_texture,
 };
 
 /// What one row of a listing is.
@@ -48,6 +49,9 @@ pub enum EntryKind {
     /// property tracks an `AnimationPlayer` plays — dragged onto its field,
     /// not into the scene.
     Animation,
+    /// A file [`is_animator`](crate::watch::is_animator) accepts: a state
+    /// machine an `Animator` runs — dragged onto its field.
+    Animator,
     /// A file [`is_scene`](crate::watch::is_scene) accepts: a scene, which is
     /// also what a prefab is, so every one of them can be dropped in.
     Scene,
@@ -156,6 +160,8 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::SortingLayers
         } else if is_animation(&name) {
             EntryKind::Animation
+        } else if is_animator(&name) {
+            EntryKind::Animator
         } else if is_scene(&name) {
             // After `Atlas`, which is a `.ron` too; `is_scene` refuses one
             // anyway, and the order says so without having to read it.
@@ -277,6 +283,7 @@ mod atlas_tests {
         std::fs::write(root.join("default.input.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("default.layers.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("bob.anim.ron"), "").expect("the fixture writes");
+        std::fs::write(root.join("hero.animator.ron"), "").expect("the fixture writes");
 
         let entries = list(&root, None).expect("the root lists");
 
@@ -291,6 +298,7 @@ mod atlas_tests {
         assert_eq!(kind("default.input.ron"), Some(EntryKind::InputMap));
         assert_eq!(kind("default.layers.ron"), Some(EntryKind::SortingLayers));
         assert_eq!(kind("bob.anim.ron"), Some(EntryKind::Animation));
+        assert_eq!(kind("hero.animator.ron"), Some(EntryKind::Animator));
         assert_eq!(
             kind("demo.ron"),
             Some(EntryKind::Scene),

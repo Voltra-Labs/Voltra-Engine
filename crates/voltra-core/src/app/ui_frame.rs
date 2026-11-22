@@ -56,6 +56,8 @@ pub struct UiFrame<'a> {
     /// Loaded animation clips, the store the players read: a timeline's
     /// edit is played by every player of the clip the next frame.
     pub animation_clips: &'a mut voltra_scene::AnimationClips,
+    /// Loaded state machines, the store the animators read.
+    pub state_machines: &'a mut voltra_scene::StateMachines,
     /// The game's own output, for a panel that auditions a sound.
     ///
     /// The same `Audio` the scene plays through rather than a second device:

@@ -3,7 +3,8 @@
 //! is stepped onto, a jump ends on a ceiling, a one-way platform is jumped
 //! up through, a lift — an animation clip — carries it, and the camera
 //! follows with slack, a lead and the level's bounds, and shakes on a hard
-//! landing.
+//! landing. A state machine picks the character's idle, run, jump or fall
+//! clip from what the step sets.
 //!
 //! Run it with `cargo run -p voltra-core --example character`. `A`/`D` or
 //! the arrow keys walk, `Space` jumps.
@@ -16,8 +17,8 @@ use voltra_core::{move_and_slide, App, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    AnimationPlayer, Camera, CameraFollow2D, CameraShake, CharacterBody2D, Collider, FollowBounds,
-    OneWay, SceneId, Sprite, Transform,
+    AnimationPlayer, Animator, Camera, CameraFollow2D, CameraShake, CharacterBody2D, Collider,
+    FollowBounds, OneWay, SceneId, Sprite, Transform,
 };
 
 /// World units per second at full tilt.
@@ -80,6 +81,12 @@ fn main() {
                         }
                     }
                     velocity = slide.velocity;
+                    // What the state machine reads: it picks the clip.
+                    if let Some(animator) = tick.world.get_mut::<Animator>(me) {
+                        animator.set_float("speed", velocity.x.abs());
+                        animator.set_float("rising", velocity.y);
+                        animator.set_bool("grounded", slide.contact.on_floor);
+                    }
                 }
                 None => log::error!("the character lost its body or collider"),
             }
@@ -190,6 +197,13 @@ fn spawn_level(app: &mut App) -> Entity {
         },
     );
     app.world.insert(me, CharacterBody2D::default());
+    // Idle, run, jump and fall, each a clip that squashes and tints it.
+    match AssetPath::new("animations/hero.animator.ron") {
+        Ok(machine) => {
+            app.world.insert(me, Animator::new(machine));
+        }
+        Err(e) => log::error!("the character's state machine path: {e}"),
+    }
     me
 }
 
