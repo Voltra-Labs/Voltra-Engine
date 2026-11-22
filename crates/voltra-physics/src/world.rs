@@ -6,6 +6,7 @@ use voltra_render::glam::Vec2;
 use crate::clock::PhysicsClock;
 use crate::events::{CollisionEvent, Touching};
 use crate::narrow::Contact;
+use crate::one_way::OneWayPasses;
 use crate::sleep::Sleep;
 use crate::solver::{ImpulseCache, SolverParams};
 use crate::step::step_sleeping;
@@ -27,6 +28,7 @@ pub struct PhysicsWorld {
     touching: Touching,
     events: Vec<CollisionEvent>,
     sleep: Sleep,
+    passes: OneWayPasses,
 }
 
 impl PhysicsWorld {
@@ -119,6 +121,7 @@ impl PhysicsWorld {
         self.touching.clear();
         self.events.clear();
         self.sleep.clear();
+        self.passes.clear();
         self.clock.reset();
     }
 
@@ -135,6 +138,7 @@ impl PhysicsWorld {
             gravity,
             dt,
             &mut self.sleep,
+            &mut self.passes,
         );
         self.events = self.touching.update(overlaps.pairs());
         self.contacts = overlaps.contacts;

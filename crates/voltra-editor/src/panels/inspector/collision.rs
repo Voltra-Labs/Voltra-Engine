@@ -1,8 +1,11 @@
 //! What a collider touches, and whether it stops anything.
 
+use voltra_core::egui::DragValue;
 use voltra_core::egui::{RichText, Ui};
 use voltra_ecs::{Entity, World};
-use voltra_scene::{CollisionLayers, Sensor};
+use voltra_scene::{CollisionLayers, OneWay, Sensor};
+
+use super::active;
 
 /// The sensor mark and the two layer masks, for an entity that has a collider.
 ///
@@ -33,6 +36,8 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
         claim = Some("Toggle sensor");
     }
 
+    claim = claim.or(one_way(ui, world, entity));
+
     let mut layers = world
         .get::<CollisionLayers>(entity)
         .copied()
@@ -50,6 +55,51 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
         claim = claim.or(Some("Set collision layers"));
     }
 
+    claim
+}
+
+/// Whether it is solid from one side only, which side, and how wide a
+/// contact may lean from it.
+fn one_way(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
+    let mut on = world.get::<OneWay>(entity).is_some();
+    if ui
+        .checkbox(&mut on, "one way")
+        .on_hover_text("solid only to what meets it from one side: a platform jumped up through")
+        .changed()
+    {
+        if on {
+            world.insert(entity, OneWay::default());
+        } else {
+            world.remove::<OneWay>(entity);
+        }
+        return Some("Toggle one way");
+    }
+    let platform = world.get_mut::<OneWay>(entity)?;
+    let mut claim = None;
+    ui.horizontal(|ui| {
+        ui.label("facing")
+            .on_hover_text("the solid side, from the entity's up, turning with it");
+        let mut facing = (platform.direction.to_angle() - std::f32::consts::FRAC_PI_2).to_degrees();
+        let response = ui.add(DragValue::new(&mut facing).speed(1.0).suffix("°"));
+        if response.changed() {
+            let radians = facing.to_radians() + std::f32::consts::FRAC_PI_2;
+            platform.direction = voltra_render::glam::Vec2::from_angle(radians);
+        }
+        claim = claim.or(active(&response, "Edit one way"));
+        ui.label("arc")
+            .on_hover_text("how far a contact may lean from that side and still be met");
+        let mut arc = platform.arc.to_degrees();
+        let response = ui.add(
+            DragValue::new(&mut arc)
+                .speed(0.5)
+                .range(0.0..=90.0)
+                .suffix("°"),
+        );
+        if response.changed() {
+            platform.arc = arc.to_radians();
+        }
+        claim = claim.or(active(&response, "Edit one way"));
+    });
     claim
 }
 

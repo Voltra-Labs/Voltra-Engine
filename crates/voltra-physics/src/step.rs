@@ -7,6 +7,7 @@ use voltra_scene::{Collider, Sensor, Transform};
 use crate::broad::candidate_pairs;
 use crate::integrate::{integrate_positions, integrate_velocities};
 use crate::narrow::{manifold, Contact};
+use crate::one_way::OneWayPasses;
 use crate::sleep::Sleep;
 use crate::solver::{
     apply_restitution, joint_ends, prepare, prepare_joints, solve, solve_joints, store_joints,
@@ -76,11 +77,21 @@ pub fn step(
     gravity: Vec2,
     dt: f32,
 ) -> Overlaps {
-    step_sleeping(world, cache, params, gravity, dt, &mut Sleep::default())
+    step_sleeping(
+        world,
+        cache,
+        params,
+        gravity,
+        dt,
+        &mut Sleep::default(),
+        &mut OneWayPasses::default(),
+    )
 }
 
 /// [`step`], with bodies at rest put to sleep and left out of the solve
-/// until something disturbs them — see [`crate::sleep`].
+/// until something disturbs them — see [`crate::sleep`] — and the pairs a
+/// one-way collider is letting through remembered — see
+/// [`crate::one_way`].
 ///
 /// The overlaps returned still include sleeping contacts: a resting
 /// character is still standing on the floor, and an event for a pair that
@@ -92,6 +103,7 @@ pub fn step_sleeping(
     gravity: Vec2,
     dt: f32,
     sleep: &mut Sleep,
+    passes: &mut OneWayPasses,
 ) -> Overlaps {
     // A step of no time changes nothing, and dividing the sub-step by it would
     // produce an infinite speculative bias. Note the cache is left untouched:
@@ -103,15 +115,19 @@ pub fn step_sleeping(
     sleep.wake_disturbed(world);
     let joints = joint_ends(world);
     let apart = unjoined(&joints);
-    let overlaps = collide_with(world, |a, b| {
-        if apart.contains(&ordered(a, b)) {
-            return Reuse::Skip;
-        }
-        match sleep.resting_contact(world, a, b) {
-            Some(contact) => Reuse::Contact(*contact),
-            None => Reuse::Test,
-        }
-    });
+    let overlaps = collide_with(
+        world,
+        |a, b| {
+            if apart.contains(&ordered(a, b)) {
+                return Reuse::Skip;
+            }
+            match sleep.resting_contact(world, a, b) {
+                Some(contact) => Reuse::Contact(*contact),
+                None => Reuse::Test,
+            }
+        },
+        passes,
+    );
     // A joint links its two bodies as a contact does: one waking wakes the
     // other, and they rest together or not at all.
     let joined: Vec<(Entity, Entity)> = joints
@@ -241,7 +257,7 @@ pub fn step_sleeping(
 /// Every overlap in the world right now, sensors kept apart from the rest.
 #[cfg(test)]
 pub(crate) fn collide(world: &World) -> Overlaps {
-    collide_with(world, |_, _| Reuse::Test)
+    collide_with(world, |_, _| Reuse::Test, &mut OneWayPasses::default())
 }
 
 /// What [`collide_with`] does with a candidate pair.
@@ -275,7 +291,11 @@ fn unjoined(joints: &[JointEnds]) -> crate::hash::FastSet<(Entity, Entity)> {
 
 /// [`collide`], asking `reuse` first about each pair — how sleeping pairs
 /// skip the narrow phase, and jointed ones are left out.
-fn collide_with(world: &World, reuse: impl Fn(Entity, Entity) -> Reuse) -> Overlaps {
+fn collide_with(
+    world: &World,
+    reuse: impl Fn(Entity, Entity) -> Reuse,
+    passes: &mut OneWayPasses,
+) -> Overlaps {
     let mut overlaps = Overlaps::default();
     for (a, b) in candidate_pairs(world) {
         match reuse(a, b) {
@@ -300,10 +320,11 @@ fn collide_with(world: &World, reuse: impl Fn(Entity, Entity) -> Reuse) -> Overl
         // not push the player out, and a player must not be stopped by it.
         if world.get::<Sensor>(a).is_some() || world.get::<Sensor>(b).is_some() {
             overlaps.sensors.push((a, b));
-        } else {
+        } else if passes.admits(world, a, b, &manifold) {
             overlaps.contacts.push(Contact::new(a, b, manifold));
         }
     }
+    passes.end_step();
     overlaps
 }
 

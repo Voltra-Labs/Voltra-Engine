@@ -94,6 +94,7 @@ impl ComponentRegistry {
         registry.register::<PhysicsMaterial>("PhysicsMaterial");
         registry.register::<CollisionLayers>("CollisionLayers");
         registry.register::<Sensor>("Sensor");
+        registry.register::<crate::OneWay>(crate::OneWay::NAME);
         registry.register::<crate::CharacterBody2D>(crate::CharacterBody2D::NAME);
         registry.register::<PrefabInstance>(PrefabInstance::NAME);
         registry.register::<crate::prefab::PrefabPart>(crate::prefab::PrefabPart::NAME);

@@ -1,6 +1,7 @@
 //! A character moved by `move_and_slide`: walls stop it, slopes are walked
 //! up or slid down by their angle, a floor of tiles has no seams, a low step
-//! is stepped onto, and a jump ends on a ceiling.
+//! is stepped onto, a jump ends on a ceiling, a one-way platform is jumped
+//! up through, and a lift — an animation clip — carries it.
 //!
 //! Run it with `cargo run -p voltra-core --example character`. `A`/`D` or
 //! the arrow keys walk, `Space` jumps.
@@ -8,10 +9,11 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use voltra_assets::AssetPath;
 use voltra_core::{move_and_slide, App, Tick, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Camera, CharacterBody2D, Collider, Sprite, Transform};
+use voltra_scene::{AnimationPlayer, Camera, CharacterBody2D, Collider, OneWay, Sprite, Transform};
 
 /// World units per second at full tilt.
 const WALK_SPEED: f32 = 3.5;
@@ -60,6 +62,11 @@ fn main() {
             velocity.y -= GRAVITY * tick.delta;
             if jump.replace(false) && grounded {
                 velocity.y = JUMP_SPEED;
+                // Off a moving platform with its speed, as a jump off a lift
+                // should be.
+                if let Some(body) = tick.world.get::<CharacterBody2D>(me) {
+                    velocity += body.contact.platform_velocity;
+                }
             }
             match move_and_slide(tick.world, me, velocity, tick.delta) {
                 Some(slide) => velocity = slide.velocity,
@@ -110,7 +117,7 @@ fn spawn_level(app: &mut App) -> Entity {
         [0.6, 0.35, 0.3, 1.0],
     );
     // A floor of separate tiles, its top at y = 0.
-    for i in -12..24 {
+    for i in -12..40 {
         let shade = if i % 2 == 0 {
             stone
         } else {
@@ -133,6 +140,31 @@ fn spawn_level(app: &mut App) -> Entity {
     // A slope gentle enough to walk up, and one too steep, which is slid down.
     ramp(app, Vec2::new(4.5, 0.0), 2.5, 25.0, moss);
     ramp(app, Vec2::new(9.5, 0.0), 2.0, 60.0, steep);
+    // A platform jumped up through from below, and stood on.
+    let ledge = block(
+        app,
+        Vec2::new(13.0, 1.2),
+        Vec2::new(1.0, 0.08),
+        0.0,
+        [0.5, 0.45, 0.7, 1.0],
+    );
+    app.world.insert(ledge, OneWay::default());
+    // A lift up to a high ledge: moved by an animation clip, and riding it
+    // is the character's floor carrying it.
+    let lift = block(
+        app,
+        Vec2::new(15.5, 0.1),
+        Vec2::new(0.6, 0.1),
+        0.0,
+        [0.8, 0.7, 0.4, 1.0],
+    );
+    match AssetPath::new("animations/lift.anim.ron") {
+        Ok(clip) => {
+            app.world.insert(lift, AnimationPlayer::new(clip));
+        }
+        Err(e) => log::error!("the lift's clip path: {e}"),
+    }
+    block(app, Vec2::new(19.5, 2.4), Vec2::new(1.4, 0.1), 0.0, stone);
 
     let me = app.world.spawn();
     app.world.insert(

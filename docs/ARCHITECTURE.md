@@ -4035,6 +4035,49 @@ an overlap, a V corner, a floor of tiles without seams, a low ledge stepped
 onto and a high one not). `cargo run -p voltra-core --example character`
 walks it.
 
+### One-way colliders remember what they let through; floors carry by pose
+
+Stage 68. `OneWay { direction, arc }` (scene) makes a collider solid only to
+what meets it from `direction` — in its own frame, so it turns with it —
+within `arc`. Unity's `PlatformEffector2D`, Godot's one-way collision.
+
+- **The step keeps a memory** (`OneWayPasses`, physics, beside the sleep
+  state in `PhysicsWorld`): an overlap whose normal does not face the solid
+  side is a pass, not a contact, and the pair stays a pass every step until
+  it stops overlapping. Without it a body rising through a platform is
+  caught the step its overlap's normal first turns up — halfway — and popped
+  onto the top; a stateless depth threshold instead would be a number tied
+  to speed and step rate. Unity's effector and Box2D's one-way sample keep
+  the same state. `step` (stateless) starts it empty each call.
+- **Casts** meet a one-way collider only when the face met admits the
+  direction and the shape is not already partly through it, so a character
+  jumps up through, walks through from the side, and lands on top. Rays,
+  points and box overlaps still find it: they ask what is there.
+- Dropping through is the game's: clear the platform's layer from the
+  character's mask for a moment.
+
+**Moving floors carry characters by their pose, not their velocity**:
+`CharacterContact` keeps the floor's position and turn when it was stood
+on, and the next `move_and_slide` first moves the character by however far
+that floor has moved and turned since (`character/carry.rs`), outright — a
+wall it is carried into is pushed out of by the move that follows. A
+platform moved by a kinematic body, an animation clip or the game's code
+carries the same; Godot's velocity-based carry misses the last two.
+`platform_velocity` is what a game adds to a jump off one.
+
+Rejected: **one-way as a collision-layer trick** — layers are symmetric;
+**a carry by the floor's `RigidBody` velocity** — see above.
+
+- **Not yet**: carrying the character's own rotation with a turning floor;
+  dynamic bodies riding animated (non-kinematic) platforms by friction.
+
+Pinned by `tests/one_way.rs` (a body landing on a platform, one thrown up
+from below passing through and landing on top, a solid one still stopping
+it, a character jumping up through and standing, a character carried by a
+platform moving, rising and turning, and nothing once it is gone), the
+cast's one-way test, and the component's format test. The `character`
+example has a one-way ledge and a lift moved by `animations/lift.anim.ron`.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
