@@ -65,6 +65,11 @@ in place, and `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste it — through
 the system clipboard, so a copy pastes into another scene or editor window. `Scene ▸ Save` and
 `Scene ▸ Open` write and read `assets/scenes/scene.ron`.
 
+A prefab dropped from the asset browser stays linked to its file: editing the
+file (on disk or with the inspector's **Apply to prefab** on an edited instance)
+updates every instance, except for the components an instance has changed — the
+inspector lists those as overrides, each with a **Revert**.
+
 The hierarchy lists the scene as a tree. An entity's `Name` is what a row says —
 the inspector renames it, and an unnamed one falls back to its index. Dragging a
 row onto another makes it that entity's child; dragging it onto the empty space
@@ -302,6 +307,7 @@ privileged and plain `cargo build` covers everything.
 | 63a | Multi-selection: Ctrl/Shift clicks, box select, outlines, Delete | done |
 | 63b | The gizmo moves, turns and scales the whole selection | done |
 | 63c | Duplicate, copy and paste, through the system clipboard as text | done |
+| 64 | Prefab instances follow their file: overrides, Apply, Revert | done |
 
 ## Contributing
 

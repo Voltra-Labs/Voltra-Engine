@@ -5,6 +5,7 @@ mod drag;
 mod edit_keys;
 mod editor;
 mod gizmo;
+mod instance;
 mod marquee;
 mod paint;
 mod panels;

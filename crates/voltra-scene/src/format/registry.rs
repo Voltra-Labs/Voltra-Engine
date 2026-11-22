@@ -40,6 +40,10 @@ type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::error::Spanne
 /// reports success.
 type RemoveFn = fn(&mut World, Entity);
 
+/// A registered type's round trip: a stored value read as the type and
+/// written back, for comparing values whatever text they were stored as.
+type NormalizeFn = fn(&RawValue) -> Result<Box<RawValue>, SceneError>;
+
 /// One component type's name and the three conversions that go with it.
 ///
 /// `save`/`load`/`remove` are read by `save_one`/`load_one`/`remove_one` below.
@@ -48,6 +52,7 @@ struct Entry {
     save: SaveFn,
     load: LoadFn,
     remove: RemoveFn,
+    normalize: NormalizeFn,
 }
 
 /// The component types a scene file may contain.
@@ -89,6 +94,7 @@ impl ComponentRegistry {
         registry.register::<CollisionLayers>("CollisionLayers");
         registry.register::<Sensor>("Sensor");
         registry.register::<PrefabInstance>(PrefabInstance::NAME);
+        registry.register::<crate::prefab::PrefabPart>(crate::prefab::PrefabPart::NAME);
         registry.register::<Tilemap>("Tilemap");
         registry.register::<Text>("Text");
         registry.register::<UiRect>("UiRect");
@@ -123,6 +129,10 @@ impl ComponentRegistry {
             },
             remove: |world, entity| {
                 world.remove::<T>(entity);
+            },
+            normalize: |value| {
+                let component: T = value.into_rust().map_err(SceneError::Parse)?;
+                RawValue::from_rust(&component).map_err(SceneError::Serialize)
             },
         });
     }
@@ -161,6 +171,26 @@ impl ComponentRegistry {
                 source: source.into(),
             }),
         )
+    }
+
+    /// `value` as `name`'s type writes it — what [`save_one`](Self::save_one)
+    /// would answer for an entity holding it — so two values are equal
+    /// exactly when they are: one read from a pretty-printed file and one
+    /// taken from a world compare as text. `None` for an unregistered name.
+    pub(crate) fn normalize(
+        &self,
+        name: &str,
+        value: &RawValue,
+    ) -> Option<Result<Box<RawValue>, SceneError>> {
+        let entry = self.entries.iter().find(|e| e.name == name)?;
+        Some((entry.normalize)(value).map_err(|error| match error {
+            // Named, as `load_one` names a value it cannot read.
+            SceneError::Parse(source) => SceneError::Component {
+                name: entry.name.to_owned(),
+                source: source.into(),
+            },
+            other => other,
+        }))
     }
 
     /// Takes `name` off `entity`, returning whether the name was registered.

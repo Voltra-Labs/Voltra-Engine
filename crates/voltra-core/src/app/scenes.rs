@@ -71,6 +71,7 @@ impl App {
     /// Carries out every scene request the frame's ticks made, in order.
     pub(super) fn apply_scene_requests(&mut self) {
         let requests = std::mem::take(&mut self.scenes.requests);
+        let changed = !requests.is_empty();
         for request in requests {
             match request {
                 Request::Replace(path) => self.replace_scene(&path),
@@ -91,6 +92,10 @@ impl App {
                     }
                 }
             }
+        }
+        // A scene saved with an older copy of a prefab arrives in step.
+        if changed {
+            self.sync_all_instances();
         }
         // What the new scenes brought is drawn and heard this very frame.
         self.resolve_spawned();

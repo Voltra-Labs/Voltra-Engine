@@ -8,18 +8,22 @@
 //! saved as, read through the same [`ComponentRegistry`]. Nothing new has to
 //! be able to read one, and any scene can be instanced.
 //!
-//! **Instantiate and forget.** An instance is plain entities, edited and
-//! saved like any other, which is Godot's "make local" taken as the default.
-//! Each root does carry a [`PrefabInstance`] naming its file, but nothing
-//! reads it back: override storage, propagating an edit to the prefab into
-//! its instances, and what an instance becomes when the prefab gains a
-//! component are where all three engines have paid, and they are their own
-//! stage. The link is recorded now so that stage finds it in every scene.
+//! **An instance follows its file.** Each root carries a [`PrefabInstance`]
+//! naming its file and every entity a [`PrefabPart`] naming its record and
+//! the components the instance has made its own; [`sync`] puts every other
+//! component back to what the file says, spawns what the file gained and
+//! despawns what it lost. See `sync.rs`.
 
+mod adopt;
+mod apply;
+mod compare;
 mod cycle;
 mod fragment;
+mod instances;
 mod link;
+mod overrides;
 mod store;
+mod sync;
 mod write;
 
 use std::collections::HashMap;
@@ -32,10 +36,14 @@ use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 use crate::transform::Transform;
 
+pub use apply::{apply, link};
 pub use cycle::reaches;
 pub use fragment::fragment;
-pub use link::PrefabInstance;
+pub use instances::{sync_all, sync_source};
+pub use link::{PrefabInstance, PrefabPart};
+pub use overrides::{instance_root, note_removed, refresh_overrides, revert, revert_instance};
 pub use store::Prefabs;
+pub use sync::{sync, SyncReport};
 pub use write::{write, WriteError};
 
 /// A scene fragment, read and checked once, ready to be spawned.
@@ -131,6 +139,8 @@ impl Instance {
 ///   [`PrefabInstance`], replacing whatever link the record itself carried:
 ///   a root is an instance of the file it was just spawned from. A child's
 ///   own link is kept — that child is a nested instance.
+/// - **Every entity is told which record it is** with a [`PrefabPart`],
+///   overriding nothing, which is what [`sync`] keeps it in step by.
 ///
 /// All-or-nothing, like a load: a component that will not read despawns every
 /// entity this call spawned before the error is returned.
@@ -197,6 +207,12 @@ fn spawn_copy(
                 }
                 return Err(error);
             }
+        }
+        // Which record it is, for keeping it in step with the file. A
+        // prefab's copy only: a scene loaded additively keeps the parts its
+        // own instances carry.
+        if at.is_some() {
+            world.insert(entity, PrefabPart::new(record.id));
         }
     }
 

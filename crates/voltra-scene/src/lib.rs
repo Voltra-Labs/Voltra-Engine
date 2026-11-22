@@ -51,7 +51,7 @@ pub use parallax::Parallax;
 pub use particles::ParticleEmitter;
 pub use persistent::Persistent;
 pub use post::PostProcess;
-pub use prefab::{Instance, Prefab, PrefabInstance, Prefabs};
+pub use prefab::{Instance, Prefab, PrefabInstance, PrefabPart, Prefabs};
 pub use scene_id::{SceneId, UnknownComponents};
 pub use shadow_caster::{CasterShape, ShadowCaster2D};
 pub use sorting::SortingLayers;
