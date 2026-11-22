@@ -54,6 +54,10 @@ type RemapFn = fn(&mut World, Entity, &dyn Fn(SceneId) -> Option<SceneId>);
 type RewriteFn =
     fn(&RawValue, &dyn Fn(SceneId) -> Option<SceneId>) -> Result<Box<RawValue>, SceneError>;
 
+/// A registered type's default value, written as it would be saved: what
+/// a tool fills in to make one.
+type TemplateFn = fn() -> Result<Box<RawValue>, SceneError>;
+
 /// One component type's name and the conversions that go with it.
 ///
 /// `save`/`load`/`remove` are read by `save_one`/`load_one`/`remove_one` below.
@@ -65,6 +69,69 @@ struct Entry {
     normalize: NormalizeFn,
     /// For a type naming other entities by id; `None` for every other.
     refs: Option<(RemapFn, RewriteFn)>,
+    /// For a type with a meaningful default; `None` for one without, or
+    /// for structure (a parent link, a prefab part) a tool must not make
+    /// up.
+    template: Option<TemplateFn>,
+}
+
+/// What the registry says about one component type, for a tool listing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ComponentInfo {
+    /// The name a scene file stores it under.
+    pub name: &'static str,
+    /// Whether it names other entities by id.
+    pub has_refs: bool,
+    /// Whether [`ComponentRegistry::template`] answers for it.
+    pub has_template: bool,
+}
+
+/// A type just registered: what else the registry should know of it.
+///
+/// Returned by [`ComponentRegistry::register`]; a caller that has nothing
+/// to add ignores it.
+pub struct Registration<'r, T> {
+    entry: &'r mut Entry,
+    _type: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T> Registration<'_, T>
+where
+    T: Serialize + DeserializeOwned + 'static,
+{
+    /// Its `Default` is a sensible starting value: [`template`] answers it.
+    ///
+    /// [`template`]: ComponentRegistry::template
+    pub fn with_template(self) -> Self
+    where
+        T: Default,
+    {
+        self.entry.template =
+            Some(|| RawValue::from_rust(&T::default()).map_err(SceneError::Serialize));
+        self
+    }
+
+    /// It names other entities by id: every copy and prefab compare
+    /// rewrites them ([`ComponentRegistry::remap_refs`],
+    /// [`ComponentRegistry::rewrite_refs`]).
+    pub fn with_refs(self) -> Self
+    where
+        T: SceneRefs,
+    {
+        self.entry.refs = Some((
+            |world, entity, map| {
+                if let Some(component) = world.get_mut::<T>(entity) {
+                    component.remap(map);
+                }
+            },
+            |value, map| {
+                let mut component: T = value.into_rust().map_err(SceneError::Parse)?;
+                component.remap(map);
+                RawValue::from_rust(&component).map_err(SceneError::Serialize)
+            },
+        ));
+        self
+    }
 }
 
 /// The component types a scene file may contain.
@@ -90,40 +157,74 @@ impl ComponentRegistry {
     /// when a caller forgets a line is not a format.
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
-        registry.register::<Name>("Name");
-        registry.register::<Transform>("Transform");
+        registry.register::<Name>("Name").with_template();
+        registry.register::<Transform>("Transform").with_template();
         // Stored as the parent's `SceneId`; the live `Entity` is resolved after
         // the whole file is in, by `hierarchy::resolve_parents`.
         registry.register::<Parent>("Parent");
-        registry.register::<Sprite>("Sprite");
-        registry.register::<SpriteAnimation>("SpriteAnimation");
-        registry.register::<crate::Animator>(crate::Animator::NAME);
-        registry.register::<crate::AnimationPlayer>(crate::AnimationPlayer::NAME);
-        registry.register::<Camera>("Camera");
-        registry.register_with_refs::<crate::CameraFollow2D>(crate::CameraFollow2D::NAME);
-        registry.register::<crate::CameraShake>(crate::CameraShake::NAME);
-        registry.register::<AudioSource>("AudioSource");
-        registry.register::<AudioListener>("AudioListener");
-        registry.register::<RigidBody>("RigidBody");
-        registry.register::<Collider>("Collider");
-        registry.register::<PhysicsMaterial>("PhysicsMaterial");
-        registry.register::<CollisionLayers>("CollisionLayers");
-        registry.register::<Sensor>("Sensor");
-        registry.register::<crate::OneWay>(crate::OneWay::NAME);
-        registry.register::<crate::CharacterBody2D>(crate::CharacterBody2D::NAME);
+        registry.register::<Sprite>("Sprite").with_template();
+        registry
+            .register::<SpriteAnimation>("SpriteAnimation")
+            .with_template();
+        registry
+            .register::<crate::Animator>(crate::Animator::NAME)
+            .with_template();
+        registry
+            .register::<crate::AnimationPlayer>(crate::AnimationPlayer::NAME)
+            .with_template();
+        registry.register::<Camera>("Camera").with_template();
+        registry
+            .register_with_refs::<crate::CameraFollow2D>(crate::CameraFollow2D::NAME)
+            .with_template();
+        registry
+            .register::<crate::CameraShake>(crate::CameraShake::NAME)
+            .with_template();
+        registry
+            .register::<AudioSource>("AudioSource")
+            .with_template();
+        registry
+            .register::<AudioListener>("AudioListener")
+            .with_template();
+        registry.register::<RigidBody>("RigidBody").with_template();
+        registry.register::<Collider>("Collider").with_template();
+        registry
+            .register::<PhysicsMaterial>("PhysicsMaterial")
+            .with_template();
+        registry
+            .register::<CollisionLayers>("CollisionLayers")
+            .with_template();
+        registry.register::<Sensor>("Sensor").with_template();
+        registry
+            .register::<crate::OneWay>(crate::OneWay::NAME)
+            .with_template();
+        registry
+            .register::<crate::CharacterBody2D>(crate::CharacterBody2D::NAME)
+            .with_template();
         registry.register::<PrefabInstance>(PrefabInstance::NAME);
         registry.register::<crate::prefab::PrefabPart>(crate::prefab::PrefabPart::NAME);
-        registry.register::<Tilemap>("Tilemap");
-        registry.register::<Text>("Text");
-        registry.register::<UiRect>("UiRect");
-        registry.register::<UiButton>("UiButton");
-        registry.register::<Persistent>("Persistent");
-        registry.register::<Parallax>("Parallax");
-        registry.register::<ParticleEmitter>("ParticleEmitter");
-        registry.register::<PointLight2D>("PointLight2D");
-        registry.register::<GlobalLight2D>("GlobalLight2D");
-        registry.register_with_refs::<crate::Joint2D>(crate::Joint2D::NAME);
-        registry.register::<ShadowCaster2D>("ShadowCaster2D");
+        registry.register::<Tilemap>("Tilemap").with_template();
+        registry.register::<Text>("Text").with_template();
+        registry.register::<UiRect>("UiRect").with_template();
+        registry.register::<UiButton>("UiButton").with_template();
+        registry
+            .register::<Persistent>("Persistent")
+            .with_template();
+        registry.register::<Parallax>("Parallax").with_template();
+        registry
+            .register::<ParticleEmitter>("ParticleEmitter")
+            .with_template();
+        registry
+            .register::<PointLight2D>("PointLight2D")
+            .with_template();
+        registry
+            .register::<GlobalLight2D>("GlobalLight2D")
+            .with_template();
+        registry
+            .register_with_refs::<crate::Joint2D>(crate::Joint2D::NAME)
+            .with_template();
+        registry
+            .register::<ShadowCaster2D>("ShadowCaster2D")
+            .with_template();
         registry
     }
 
@@ -131,7 +232,7 @@ impl ComponentRegistry {
     ///
     /// The name is chosen rather than derived from the Rust path, so renaming a
     /// type in code does not silently invalidate every scene on disk.
-    pub fn register<T>(&mut self, name: &'static str)
+    pub fn register<T>(&mut self, name: &'static str) -> Registration<'_, T>
     where
         T: Serialize + DeserializeOwned + 'static,
     {
@@ -154,33 +255,24 @@ impl ComponentRegistry {
                 RawValue::from_rust(&component).map_err(SceneError::Serialize)
             },
             refs: None,
+            template: None,
         });
+        Registration {
+            entry: self
+                .entries
+                .last_mut()
+                .expect("register just pushed the entry"),
+            _type: std::marker::PhantomData,
+        }
     }
 
-    /// [`register`](Self::register), for a type that names other entities
-    /// by id: every copy and every prefab compare rewrites its references
-    /// ([`remap_refs`](Self::remap_refs), [`rewrite_refs`](Self::rewrite_refs)).
-    pub fn register_with_refs<T>(&mut self, name: &'static str)
+    /// [`register`](Self::register) with [`Registration::with_refs`], for
+    /// a type that names other entities by id.
+    pub fn register_with_refs<T>(&mut self, name: &'static str) -> Registration<'_, T>
     where
         T: Serialize + DeserializeOwned + SceneRefs + 'static,
     {
-        self.register::<T>(name);
-        let entry = self
-            .entries
-            .last_mut()
-            .expect("register just pushed the entry");
-        entry.refs = Some((
-            |world, entity, map| {
-                if let Some(component) = world.get_mut::<T>(entity) {
-                    component.remap(map);
-                }
-            },
-            |value, map| {
-                let mut component: T = value.into_rust().map_err(SceneError::Parse)?;
-                component.remap(map);
-                RawValue::from_rust(&component).map_err(SceneError::Serialize)
-            },
-        ));
+        self.register::<T>(name).with_refs()
     }
 
     /// Rewrites, through `map`, every id the components on `entity` name.
@@ -222,9 +314,30 @@ impl ComponentRegistry {
         self.entries.iter().map(|e| e.name)
     }
 
+    /// Every registered type, in registration order, and what is known of
+    /// it.
+    pub fn describe(&self) -> Vec<ComponentInfo> {
+        self.entries
+            .iter()
+            .map(|e| ComponentInfo {
+                name: e.name,
+                has_refs: e.refs.is_some(),
+                has_template: e.template.is_some(),
+            })
+            .collect()
+    }
+
+    /// `name`'s default value, as a scene file writes it: a starting point
+    /// to edit and hand back to [`load_one`](Self::load_one). `None` for an
+    /// unregistered name, or a type registered without a template.
+    pub fn template(&self, name: &str) -> Option<Result<Box<RawValue>, SceneError>> {
+        let entry = self.entries.iter().find(|e| e.name == name)?;
+        entry.template.map(|make| make())
+    }
+
     /// The entity's value for `name`, or `None` when the name is unregistered
     /// **or** the entity simply has no such component.
-    pub(crate) fn save_one(
+    pub fn save_one(
         &self,
         world: &World,
         entity: Entity,
@@ -238,7 +351,7 @@ impl ComponentRegistry {
     ///
     /// The outer `Option` is the caller's signal to preserve the value untouched
     /// instead of failing.
-    pub(crate) fn load_one(
+    pub fn load_one(
         &self,
         world: &mut World,
         entity: Entity,
@@ -258,7 +371,7 @@ impl ComponentRegistry {
     /// would answer for an entity holding it — so two values are equal
     /// exactly when they are: one read from a pretty-printed file and one
     /// taken from a world compare as text. `None` for an unregistered name.
-    pub(crate) fn normalize(
+    pub fn normalize(
         &self,
         name: &str,
         value: &RawValue,
@@ -278,7 +391,7 @@ impl ComponentRegistry {
     ///
     /// Removing a component the entity does not have is not an error: the
     /// postcondition is "the entity does not have one", and it already held.
-    pub(crate) fn remove_one(&self, world: &mut World, entity: Entity, name: &str) -> bool {
+    pub fn remove_one(&self, world: &mut World, entity: Entity, name: &str) -> bool {
         let Some(entry) = self.entries.iter().find(|e| e.name == name) else {
             return false;
         };

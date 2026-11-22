@@ -26,6 +26,16 @@ pub enum Collider {
     },
 }
 
+impl Default for Collider {
+    /// A box the size of a default sprite, which is what the editor gives a
+    /// spawned body: the collider covers what is drawn.
+    fn default() -> Self {
+        Self::Box {
+            half_extents: Vec2::splat(crate::Sprite::HALF_EXTENT),
+        }
+    }
+}
+
 impl Collider {
     /// The world-space bounds, as `(min, max)`.
     ///
