@@ -1,12 +1,22 @@
-//! A point light's colour, strength, reach, shadows and cone.
+//! A point light's colour, strength, reach, shadows, cone, layers and
+//! cookie.
 
+use voltra_assets::{AssetPath, Textures};
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_render::lights::MAX_SHADOW_SOFTNESS;
+use voltra_render::wgpu;
 use voltra_scene::PointLight2D;
 
 use super::active;
+use super::path_field::{self, PathEdit};
 
-pub(super) fn show(ui: &mut Ui, light: &mut PointLight2D) -> Option<&'static str> {
+pub(super) fn show(
+    ui: &mut Ui,
+    light: &mut PointLight2D,
+    textures: &mut Textures,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> Option<&'static str> {
     ui.label(RichText::new("Point light").strong())
         .on_hover_text("lights only a frame whose camera is lit");
     let mut claim = None;
@@ -146,7 +156,32 @@ pub(super) fn show(ui: &mut Ui, light: &mut PointLight2D) -> Option<&'static str
         "lights only what is on one of these",
         &mut light.layers,
     ));
-    claim
+    claim.or(cookie(ui, light, textures, device, queue))
+}
+
+/// The cookie's path: an image laid over the light that tints and shapes it.
+fn cookie(
+    ui: &mut Ui,
+    light: &mut PointLight2D,
+    textures: &mut Textures,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> Option<&'static str> {
+    ui.label("cookie").on_hover_text(
+        "an image over the light's reach that tints and shapes it; turns with the entity",
+    );
+    let committed = light
+        .cookie
+        .as_ref()
+        .map(AssetPath::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let path = match path_field::show(ui, "light_cookie", "path/to/cookie.png", &committed)? {
+        PathEdit::Cleared => None,
+        PathEdit::Set(path) => Some(path),
+    };
+    light.set_cookie(path, textures, device, queue);
+    Some("Set light cookie")
 }
 
 /// The height checkbox: [`optional`] for a plain number, which has no

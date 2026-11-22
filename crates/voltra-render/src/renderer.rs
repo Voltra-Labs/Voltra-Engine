@@ -97,7 +97,7 @@ impl Renderer {
 
         let post = PostPass::new(ctx.device(), ctx.config().format);
         let bloom = BloomPass::new(ctx.device());
-        let lights = LightPass::new(ctx.device(), camera_binding.layout());
+        let lights = LightPass::new(ctx.device(), camera_binding.layout(), &texture_layout);
         let normals = NormalPass::new(
             ctx.device(),
             ctx.queue(),

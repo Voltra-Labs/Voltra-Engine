@@ -9,7 +9,8 @@ use voltra_render::camera::{Camera2D, CameraBinding};
 use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, TexturePool};
 use voltra_render::{
-    pass, wgpu, Cone, Filter, LightPass, Lighting, PointLight, PostPass, PostSettings, RenderTarget,
+    pass, wgpu, Cone, Cookie, Filter, LightPass, Lighting, PointLight, PostPass, PostSettings,
+    RenderTarget,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
@@ -19,7 +20,16 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 /// A white frame — the camera sees -1..1, 32 pixels a unit — lit by `lighting`, and how
 /// many textures the graph's pool ended with.
 fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
+    lit_by(|_, _| lighting.clone())
+}
+
+/// [`frame`], its lighting made on the frame's device by `lighting` — for
+/// lighting that holds GPU resources, as cookies do.
+fn lit_by(
+    lighting: impl FnOnce(&wgpu::Device, &wgpu::Queue) -> Lighting,
+) -> Option<(Vec<Rgba>, usize)> {
     let (device, queue) = headless_device()?;
+    let lighting = &lighting(&device, &queue);
     let scene = RenderTarget::new(&device, "scene", FORMAT, SIZE, SIZE, Filter::Linear);
     let output = RenderTarget::new(&device, "output", FORMAT, SIZE, SIZE, Filter::Linear);
     let camera = CameraBinding::new(&device);
@@ -30,7 +40,11 @@ fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
         camera.layout(),
         &voltra_render::texture::bind_group_layout(&device),
     );
-    let lights = LightPass::new(&device, camera.layout());
+    let lights = LightPass::new(
+        &device,
+        camera.layout(),
+        &voltra_render::texture::bind_group_layout(&device),
+    );
     let grade = PostPass::new(&device, FORMAT);
     let mut pool = TexturePool::default();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -110,6 +124,7 @@ fn a_lamp_lights_its_disc_and_the_ambient_lights_the_rest() {
         cone: None,
         height: None,
         layers: voltra_render::ALL_LIGHT_LAYERS,
+        cookie: None,
     };
     let Some((pixels, pool)) = frame(&Lighting {
         lights: vec![lamp],
@@ -152,6 +167,7 @@ fn a_light_that_gives_nothing_leaves_the_ambient() {
         cone: None,
         height: None,
         layers: voltra_render::ALL_LIGHT_LAYERS,
+        cookie: None,
     };
     let Some((pixels, _)) = frame(&Lighting {
         lights: vec![dark],
@@ -179,6 +195,7 @@ fn spot(softness: f32) -> PointLight {
         }),
         height: None,
         layers: voltra_render::ALL_LIGHT_LAYERS,
+        cookie: None,
     }
 }
 
@@ -264,4 +281,101 @@ fn a_wide_spot_light_draws_round_behind_its_centre() {
     );
     // Straight below: outside.
     assert!(at(&pixels, 32, 52).r.abs_diff(ambient) <= 3, "below");
+}
+
+/// A lamp at the centre reaching past the frame's corners, wearing the
+/// cookie `texels` (`width` across, one row) laid along `x` and `y`.
+fn wearing(texels: &'static [u8], width: u32, x: Vec2, y: Vec2) -> Option<Vec<Rgba>> {
+    lit_by(|device, queue| {
+        let layout = voltra_render::texture::bind_group_layout(device);
+        let image = voltra_render::Texture::from_rgba8(
+            device,
+            queue,
+            "cookie",
+            texels,
+            width,
+            1,
+            Filter::Nearest,
+        )
+        .expect("the texels fill the image");
+        Lighting {
+            lights: vec![PointLight {
+                cookie: Some(Cookie { index: 0, x, y }),
+                ..round()
+            }],
+            cookies: vec![image.create_bind_group(device, &layout)],
+            ..dim()
+        }
+    })
+    .map(|(pixels, _)| pixels)
+}
+
+/// [`spot`] shining every way.
+fn round() -> PointLight {
+    PointLight {
+        cone: None,
+        ..spot(0.0)
+    }
+}
+
+/// Black on the image's left, white on its right.
+const HALVES: &[u8] = &[0, 0, 0, 255, 255, 255, 255, 255];
+
+#[test]
+fn a_cookie_shapes_the_light_along_the_light_s_axes() {
+    let Some(upright) = wearing(HALVES, 2, Vec2::X, Vec2::Y) else {
+        return;
+    };
+    let ambient = frame(&dim()).expect("adapter, found above").0;
+    let ambient = at(&ambient, 1, 1).r;
+    assert!(
+        at(&upright, 48, 32).r > ambient + 40,
+        "the white half lights"
+    );
+    assert!(
+        at(&upright, 16, 32).r.abs_diff(ambient) <= 3,
+        "the black half does not"
+    );
+
+    // Turned half a turn with its light: the halves swap sides.
+    let turned = wearing(HALVES, 2, Vec2::NEG_X, Vec2::NEG_Y).expect("adapter, found above");
+    assert!(at(&turned, 16, 32).r > ambient + 40);
+    assert!(at(&turned, 48, 32).r.abs_diff(ambient) <= 3);
+}
+
+#[test]
+fn a_cookie_tints_the_light_by_its_colour() {
+    let Some(red) = wearing(&[255, 0, 0, 255], 1, Vec2::X, Vec2::Y) else {
+        return;
+    };
+    let ambient = frame(&dim()).expect("adapter, found above").0;
+    let (lit, ambient) = (at(&red, 40, 32), at(&ambient, 1, 1));
+    assert!(lit.r > ambient.r + 40, "red comes through: {lit:?}");
+    assert!(lit.g.abs_diff(ambient.g) <= 3, "green does not: {lit:?}");
+}
+
+#[test]
+fn a_cookie_the_frame_does_not_hold_is_no_cookie() {
+    let missing = Lighting {
+        lights: vec![PointLight {
+            cookie: Some(Cookie {
+                index: 3,
+                x: Vec2::X,
+                y: Vec2::Y,
+            }),
+            ..round()
+        }],
+        ..dim()
+    };
+    let Some((pixels, _)) = frame(&missing) else {
+        return;
+    };
+    let plain = frame(&Lighting {
+        lights: vec![round()],
+        ..dim()
+    })
+    .expect("adapter, found above")
+    .0;
+    assert_eq!(at(&pixels, 16, 32), at(&plain, 16, 32));
+    assert_eq!(at(&pixels, 48, 32), at(&plain, 48, 32));
 }

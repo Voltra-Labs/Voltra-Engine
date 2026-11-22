@@ -121,7 +121,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
         lights: vec![lamp],
         ..Lighting::default()
     };
-    let lights = LightPass::new(&device, camera.layout());
+    let lights = LightPass::new(&device, camera.layout(), &layout);
     let grade = PostPass::new(&device, FORMAT);
     let mut pool = TexturePool::default();
     let mut graph = RenderGraph::new();
@@ -172,6 +172,7 @@ fn lamp(height: Option<f32>) -> PointLight {
         cone: None,
         height,
         layers: voltra_render::ALL_LIGHT_LAYERS,
+        cookie: None,
     }
 }
 

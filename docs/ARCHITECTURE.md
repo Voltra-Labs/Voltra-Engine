@@ -3301,9 +3301,7 @@ light. `None` is the default and not written.
   tuned cone while off, as the shadows toggle does.
 - A cone of a full turn or more is sent as a point light's edges; a narrow
   one keeps its inner edge at most 1, so its middle is fully lit.
-- Culled by its cone since stage 60a, below.
-- **Not yet**: cookies (a texture shaping the light, Godot's
-  `PointLight2D` texture).
+- Culled by its cone since stage 60a, and given a cookie in 62, below.
 
 Pinned by `headless_lights.rs` (lit ahead and inside the edge, ambient
 behind and beside; a soft edge fading where a hard one does not), the
@@ -3488,8 +3486,13 @@ so the shadow map, culling, self-shadowing and softness need nothing new.
   threshold editable, a warning when there is no textured sprite), and
   back to collider or own polygon; the selected caster's outline in the
   viewport is its traced silhouette (`UiFrame::sprite_shapes`).
-- **Not yet**: holes, a simplification tolerance per caster, decoding
-  sheets off the main thread.
+- **Holes are left out on purpose.** In 2D a hole is enclosed by the
+  shape, so no ray from a light outside it reaches it without crossing
+  the shape — tracing holes would change only a light placed *inside* a
+  hole, and would put their edges into every other light's row for
+  nothing. Revisit when a scene puts a lamp in a hole.
+- **Not yet**: a simplification tolerance per caster, decoding sheets off
+  the main thread.
 
 Pinned by the tracer's unit tests (a square is four corners, a staircase
 its slope, islands apart and holes out — also when they touch only at a
@@ -3584,6 +3587,55 @@ quad at the ambient; one of every layer lifts both; `uses_layers` follows
 point and global lights), `global_light::tests` (gathered when it gives
 light; default layers not written) and `light::tests` (only into a lit
 frame).
+
+### A light's cookie is an image over its reach, bound as the fourth group
+
+Stage 62. `PointLight2D::cookie: Option<AssetPath>` — Godot's
+`PointLight2D` texture, Unity's light cookie: an image laid over the
+square the light's radius reaches, along the entity's axes (turned and
+mirrored with it), each texel multiplying the light by its colour × alpha.
+White leaves it, black takes it away, a colour tints it. Panes on a floor,
+a flashlight's ring, a lamp behind leaves. It multiplies a spot light's
+cone, shadows and normals alike.
+
+- **The frame numbers its cookies.** The render crate knows no asset
+  handles, so `voltra_render::Cookie { index, x, y }` points into
+  `Lighting::cookies: Vec<wgpu::BindGroup>` (reference-counted clones of
+  the store's colour bind groups). `light::gather` takes the `Textures` and
+  wears cookies after culling (`light/cookies.rs`), each image once; with
+  no store — headless callers — every light shines plain, as sprite
+  silhouettes do without one.
+- **Read as colour**, through the texture's sRGB view and sampler — the
+  same bind group a sprite draws with, so a cookie and the sprite showing
+  it agree, and hot reload swaps it under the same handle.
+- **Group 3.** The accumulate pass was at WebGPU's four guaranteed bind
+  groups, so the scene's normals and light layers became one group
+  (`lights::scene_input`, a move-only refactor first) and the cookie took
+  the fourth. Lights are drawn in runs that share a cookie (sorted by it —
+  the light map is additive, so order does not matter), and the lights
+  that wear none bind a zeroed stand-in the shader never samples.
+- The instance carries the inverse of the cookie's axes (two rows) and a
+  flag in the shadow attribute's spare lane; `worn` in `lights.wgsl` maps
+  the offset into the image's `-1..1` and samples its top level
+  (`textureSampleLevel`): the branches before it make derivatives
+  undefined there, and a cookie's texels are large on screen.
+- A cookie that would not load is not worn (the checker would be stamped
+  on the floor); `set_cookie` says so by name. Axes on one line, or a
+  cookie index the frame does not hold, shine plain.
+- Editor: a "cookie" path field in the light inspector; resolved and
+  preloaded with the scene's textures.
+
+Rejected: **a texture array of every cookie** — one draw, but a fixed size
+for every image and a re-upload when one changes; **the cookie in the
+shadow map's group** — a bind group per light and shadow map pair, and a
+layout the store's bind groups would not fit.
+
+Pinned by `headless_lights.rs` (a half-black cookie lights only its white
+half; turned with its light, the halves swap; a red one lets only red
+through; an index the frame does not hold is plain), `light_cookies.rs`
+(through the real store: two lights share one image's index and binding,
+the axes turn with the entity, a missing image and no store are plain;
+saved by path), and the cookie and instance unit tests.
 
 ### wgpu 30 API notes
 

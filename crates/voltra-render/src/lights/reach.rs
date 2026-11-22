@@ -201,6 +201,7 @@ mod tests {
             cone,
             height: None,
             layers: ALL_LIGHT_LAYERS,
+            cookie: None,
         }
     }
 

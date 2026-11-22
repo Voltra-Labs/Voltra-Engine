@@ -32,7 +32,11 @@ fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
         camera.layout(),
         &voltra_render::texture::bind_group_layout(&device),
     );
-    let lights = LightPass::new(&device, camera.layout());
+    let lights = LightPass::new(
+        &device,
+        camera.layout(),
+        &voltra_render::texture::bind_group_layout(&device),
+    );
     let grade = PostPass::new(&device, FORMAT);
     let mut pool = TexturePool::default();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -107,6 +111,7 @@ fn lamp(x: f32, shadow: Option<Shadow>) -> PointLight {
         cone: None,
         height: None,
         layers: voltra_render::ALL_LIGHT_LAYERS,
+        cookie: None,
     }
 }
 

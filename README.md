@@ -292,6 +292,7 @@ privileged and plain `cargo build` covers everything.
 | 60c | Light layers on text and particle emitters, GPU ones included | done |
 | 61a | Shadow casters block only the lights of their light layers | done |
 | 61b | Global lights: the ambient lifted for the pixels of their layers | done |
+| 62 | Light cookies: an image over a light that tints and shapes it | done |
 
 ## Contributing
 

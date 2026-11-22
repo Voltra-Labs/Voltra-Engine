@@ -12,16 +12,23 @@
 //! [`ShadowCaster2D`](crate::ShadowCaster2D); casters are gathered only when
 //! some light in view asks for them.
 
+use voltra_assets::{AssetPath, Handle, Textures};
 use voltra_ecs::World;
 use voltra_render::glam::{Mat3, Vec2};
-use voltra_render::{Cone, Lighting, PointLight, Shadow, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS};
+use voltra_render::{
+    Cone, Lighting, PointLight, Shadow, Texture, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
+};
 
 use crate::camera::{self, Camera};
 use crate::hierarchy::WorldTransforms;
 
+mod cookies;
+
+use cookies::Cookies;
+
 /// Light shining from the entity's position, fading to nothing at its
 /// radius. Scaled with the entity: the radius is in its space.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct PointLight2D {
     /// Linear colour.
@@ -60,6 +67,16 @@ pub struct PointLight2D {
         skip_serializing_if = "is_all_light_layers"
     )]
     pub layers: u32,
+    /// An image laid over the light's reach that tints and shapes it — a
+    /// window's panes thrown on the floor — by path, read as colour: Godot's
+    /// `PointLight2D` texture. It spans the square the radius reaches along
+    /// the entity's axes, so it turns and mirrors with it. `None` — the
+    /// default, and not written — shines plain.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cookie: Option<AssetPath>,
+    /// The handle `cookie` resolves to. Never saved.
+    #[serde(skip)]
+    pub cookie_handle: Option<Handle<Texture>>,
 }
 
 /// What a light's layers are when nothing says otherwise: all of them.
@@ -132,6 +149,8 @@ impl PointLight2D {
             }),
             height: self.height.map(|height| height * scale),
             layers: self.layers,
+            // Which image is the frame's to number: `gather` wears it.
+            cookie: None,
         }
     }
 }
@@ -170,6 +189,8 @@ impl Default for PointLight2D {
             cone: None,
             height: None,
             layers: ALL_LIGHT_LAYERS,
+            cookie: None,
+            cookie_handle: None,
         }
     }
 }
@@ -178,12 +199,14 @@ impl Default for PointLight2D {
 /// lights whose reach — a spot light's cone — touches `view_min..view_max`
 /// and, when one of them
 /// casts shadows, every caster's outline — unlit when that camera has no
-/// ambient colour, or there is no active camera.
+/// ambient colour, or there is no active camera. Lights wear their cookies
+/// from `textures`; without it they shine plain.
 pub fn gather(
     world: &World,
     view_min: Vec2,
     view_max: Vec2,
     sprites: Option<crate::shadow_caster::SpriteShapes<'_>>,
+    textures: Option<&Textures>,
 ) -> Lighting {
     let Some(camera) = camera::active(world).and_then(|entity| world.get::<Camera>(entity)) else {
         return Lighting::default();
@@ -193,20 +216,29 @@ pub fn gather(
         return Lighting::default();
     }
     let transforms = WorldTransforms::from_world(world);
+    let mut cookies = Cookies::new(textures);
     let lights = world
         .query::<PointLight2D>()
-        .map(|(entity, light)| light.placed(transforms.matrix(entity)))
+        .map(|(entity, light)| {
+            let matrix = transforms.matrix(entity);
+            (light, matrix, light.placed(matrix))
+        })
         // By the box it reaches: a spot light aimed away from the view is
         // left out even when its disc would touch it. One that gives
         // nothing reaches nowhere and is left out too.
-        .filter(|light| {
-            light.reach().is_some_and(|reach| {
+        .filter(|(_, _, placed)| {
+            placed.reach().is_some_and(|reach| {
                 let (min, max) = reach.bounds();
                 max.x >= view_min.x
                     && min.x <= view_max.x
                     && max.y >= view_min.y
                     && min.y <= view_max.y
             })
+        })
+        // Worn after culling, so the frame binds only what it draws.
+        .map(|(light, matrix, placed)| PointLight {
+            cookie: cookies.wear(light, matrix),
+            ..placed
         })
         .collect::<Vec<_>>();
     // An occluder out of view can still throw a shadow into it, so casters
@@ -220,6 +252,7 @@ pub fn gather(
         ambient,
         lights,
         globals: crate::global_light::gather(world),
+        cookies: cookies.into_bind_groups(),
         occluders,
         shadow_resolution: camera.shadow_resolution,
     }

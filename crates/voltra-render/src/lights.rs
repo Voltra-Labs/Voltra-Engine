@@ -19,6 +19,7 @@ use std::sync::atomic::AtomicBool;
 
 use crate::shader;
 
+mod cookie;
 mod global;
 mod instance;
 mod lighting;
@@ -28,6 +29,7 @@ mod reach;
 mod scene_input;
 pub mod shadows;
 
+pub use cookie::Cookie;
 use global::GlobalInstance;
 pub use global::GlobalLight;
 use instance::LightInstance;
@@ -51,14 +53,21 @@ pub struct LightPass {
     shadows: ShadowPass,
     /// The scene's normals and light layers, as one group.
     scene: SceneInput,
+    /// Bound as the cookie of the lights that wear none; never sampled.
+    no_cookie: wgpu::BindGroup,
     /// Whether the shadow map running out of rows has been reported since it
     /// last had enough: said when it starts, not every frame it lasts.
     overflow_reported: AtomicBool,
 }
 
 impl LightPass {
-    /// Pipelines drawing lights through `camera_layout`, the world camera's.
-    pub fn new(device: &wgpu::Device, camera_layout: &wgpu::BindGroupLayout) -> Self {
+    /// Pipelines drawing lights through `camera_layout`, the world camera's,
+    /// their cookies through `texture_layout` (`texture::bind_group_layout`).
+    pub fn new(
+        device: &wgpu::Device,
+        camera_layout: &wgpu::BindGroupLayout,
+        texture_layout: &wgpu::BindGroupLayout,
+    ) -> Self {
         let shadows = ShadowPass::new(device);
         let scene = SceneInput::new(device);
         let module = shader::create_module(device, "lights", shader::LIGHTS);
@@ -68,6 +77,7 @@ impl LightPass {
                 Some(camera_layout),
                 Some(shadows.layout()),
                 Some(scene.layout()),
+                Some(texture_layout),
             ],
             immediate_size: 0,
         });
@@ -95,7 +105,8 @@ impl LightPass {
                         2 => Float32x4,
                         3 => Float32x4,
                         4 => Float32x4,
-                        5 => Uint32,
+                        5 => Float32x4,
+                        6 => Uint32,
                     ],
                 })],
             },
@@ -170,6 +181,7 @@ impl LightPass {
             composite_layout,
             shadows,
             scene,
+            no_cookie: no_cookie(device, texture_layout),
             overflow_reported: AtomicBool::new(false),
         }
     }
@@ -216,5 +228,44 @@ fn global_pipeline(
         }),
         multiview_mask: None,
         cache: None,
+    })
+}
+
+/// A cookie for the lights that wear none: a zeroed 1×1 texture, which the
+/// shader never samples, and a sampler, bound through `texture_layout`.
+fn no_cookie(device: &wgpu::Device, texture_layout: &wgpu::BindGroupLayout) -> wgpu::BindGroup {
+    let view = device
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("light-no-cookie"),
+            size: wgpu::Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        })
+        .create_view(&wgpu::TextureViewDescriptor::default());
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("light-no-cookie"),
+        ..Default::default()
+    });
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("light-no-cookie"),
+        layout: texture_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::TextureView(&view),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&sampler),
+            },
+        ],
     })
 }
