@@ -19,7 +19,7 @@
 use voltra_ecs::Entity;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider, OneWay, Transform};
 
 use super::{colliders, rotated, to_local, QueryFilter};
 use crate::narrow::manifold;
@@ -54,8 +54,10 @@ pub struct ShapeHit {
 /// A shape already overlapping something hits it at fraction zero with the
 /// overlap's normal and `depth`, so a mover can push out. One merely
 /// touching is met only when the motion goes into it: sliding along a floor
-/// does not hit the floor. A degenerate shape, or a motion that is not
-/// finite, finds nothing; a motion of no length finds only overlaps.
+/// does not hit the floor. A [`OneWay`] collider is met only from its solid
+/// side, and not at all by a shape that starts inside it. A degenerate
+/// shape, or a motion that is not finite, finds nothing; a motion of no
+/// length finds only overlaps.
 pub fn cast(
     world: &World,
     shape: &Collider,
@@ -76,6 +78,13 @@ pub fn cast(
         let Some(hit) = hit(shape, at, motion, collider, transform, entity) else {
             continue;
         };
+        // A one-way collider is met only on its solid side, and never by a
+        // shape already partly through it.
+        if let Some(one_way) = world.get::<OneWay>(entity) {
+            if hit.depth > TOUCH || !one_way.admits(transform, hit.normal) {
+                continue;
+            }
+        }
         let better = nearest.is_none_or(|best| {
             hit.fraction < best.fraction
                 || (hit.fraction == best.fraction && hit.depth > best.depth)

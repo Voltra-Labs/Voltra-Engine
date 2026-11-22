@@ -292,3 +292,57 @@ fn a_fast_cast_does_not_tunnel_and_a_short_one_falls_short() {
     )
     .is_none());
 }
+
+#[test]
+fn a_one_way_collider_is_met_only_from_its_solid_side() {
+    let mut world = World::new();
+    let ledge = solid(
+        &mut world,
+        Vec2::ZERO,
+        Collider::Box {
+            half_extents: Vec2::new(2.0, 0.1),
+        },
+    );
+    world.insert(ledge, voltra_scene::OneWay::default());
+    let from_above = cast(
+        &world,
+        &square(0.2),
+        &at(0.0, 1.0),
+        Vec2::new(0.0, -2.0),
+        QueryFilter::new(),
+    );
+    assert_eq!(from_above.map(|hit| hit.entity), Some(ledge));
+    assert!(
+        cast(
+            &world,
+            &square(0.2),
+            &at(0.0, -1.0),
+            Vec2::new(0.0, 2.0),
+            QueryFilter::new()
+        )
+        .is_none(),
+        "from below"
+    );
+    assert!(
+        cast(
+            &world,
+            &square(0.2),
+            &at(-3.0, 0.0),
+            Vec2::new(6.0, 0.0),
+            QueryFilter::new()
+        )
+        .is_none(),
+        "from the side"
+    );
+    assert!(
+        cast(
+            &world,
+            &square(0.2),
+            &at(0.0, 0.1),
+            Vec2::new(0.0, -1.0),
+            QueryFilter::new()
+        )
+        .is_none(),
+        "partly through"
+    );
+}
