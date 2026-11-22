@@ -28,7 +28,10 @@ pub use winit::keyboard::KeyCode;
 // with `query`, and has to be able to name what comes back. The types belong to
 // `voltra-physics`; re-exporting them here means a game that only asks "am I
 // standing on something" needs one dependency, not two.
-pub use voltra_physics::{query, CollisionEvent, Contact, QueryFilter, RayHit, Touch};
+pub use voltra_physics::{
+    character, move_and_slide, query, CollisionEvent, Contact, QueryFilter, RayHit, ShapeHit,
+    Slide, Touch,
+};
 
 // A game plays a sound through `Tick::audio` and has to be able to name what
 // it hands over and what comes back. Re-exported for the reason the physics

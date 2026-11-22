@@ -317,6 +317,7 @@ privileged and plain `cargo build` covers everything.
 | 65 | Joints: revolute (limit, motor), distance (rod, spring, rope), weld | done |
 | 66a | Property animation: `.anim.ron` clips of eased keys, `AnimationPlayer` | done |
 | 66b | Timeline: tracks, keys on a time strip, eases, preview pose, Save/Revert | done |
+| 67 | Shape casts; `CharacterBody2D` and `move_and_slide`: slopes, steps, snap | done |
 
 ## Contributing
 

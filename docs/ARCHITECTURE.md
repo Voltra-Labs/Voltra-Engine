@@ -3964,6 +3964,77 @@ clock, `app::animation` (playing only while simulating, taking a reload),
 and the editor's `timeline` (a pose lifted back to the authored values), its
 ruler's scale and its key re-sort.
 
+### Characters are cast and slid, not simulated
+
+Stage 67. `query::cast` (physics) is an exact shape cast — a box or a circle
+moved by a vector, the first collider met, its fraction, distance, normal
+and, for a shape that starts inside, the overlap's depth. On top of it,
+`character::move_and_slide(world, entity, velocity, delta)` moves an entity
+carrying `CharacterBody2D` (scene) and a collider, and answers the velocity
+to keep and what it touched (`Slide`). Godot's `CharacterBody2D` and
+`move_and_slide`; Unity's `CharacterController` and `Rigidbody2D.Slide`.
+
+- **Casts are closed-form**, not stepped: box against box is the separating
+  axis theorem over time (each face axis gives an overlap interval; first
+  touch is the latest entry before the earliest exit — exact for convex
+  polygons); circle against box is a ray against the box grown by the
+  radius, with a corner's region taken against that corner's circle;
+  circle against circle a ray against the summed radii; box against circle
+  the circle cast backwards. No tunnelling, no approximation.
+- **Touching is not hitting**, with tolerances: a shape touching a surface
+  and moving along it or away does not hit it (a motion within 1e-5 of
+  parallel is parallel; an overlap of 1e-5 left to leave is apart). Without
+  them a slide along a slope read as pressing into it and stuck. For a
+  touch the sweep's face is the normal, not the narrow phase's — whose
+  reference face on a corner need not be the one met.
+- **The collider is cast grown by the skin** (unit scale, world units), so
+  the collider is kept exactly a skin from every surface along its normal at
+  any angle, and one that ends nearer overlaps the grown shape and is pushed
+  out. Backing off a skin along the motion instead lets a grazing walk creep
+  into the gap under gravity tick by tick.
+- **The loop**: cast, move to contact, classify the surface by its normal's
+  angle from `up` (floor up to `floor_max_angle`, ceiling past its mirror,
+  wall between), take the part going into it off the motion and off the
+  velocity (a fall ends on landing, a jump on a ceiling), up to
+  `max_slides`. On the ground a leaning wall is slid along as if upright, so
+  a too-steep slope is not climbed by walking into it — Godot's
+  `floor_block_on_wall`; in the air it is slid down. A crease (two surfaces
+  facing across a corner) stops the move. Standing on a slope under gravity
+  alone holds (`stop_on_slope`).
+- **Seams and steps**: a box sliding over a floor of boxes meets the next
+  one's corner level with its own bottom, and the exact cast rightly calls
+  it a wall — the ghost collision every box-shaped character has. Answered
+  as Unity's `stepOffset` and PhysX step climbing answer it: a wall met on
+  the ground is tried as a step of up to `step_height` (lift as far as the
+  room allows, move across, come down onto a floor; kept if it made
+  progress). The same lets a ramp's foot and a low ledge be walked onto.
+- **Snap**: a character that stood on a floor, did not land on one, and is
+  not moving up reaches down by `snap` — down a slope, off a small step.
+- The character is a collider without a rigid body: a static obstacle to
+  the bodies the step moves. The inspector warns when it has one.
+
+Rejected: **a dynamic body with friction and a ground ray** — what the
+platformer example does, and it slides on slopes and pushes crates; fine for
+that game, not for a controller; **a capsule shape first** — the usual cure
+for seams, but a third collider shape touches every narrow-phase pair; the
+step handles seams for boxes, and a capsule can come with its own stage;
+**stepped or bisected casts** — approximate, and they tunnel.
+
+- **Not yet**: moving platforms (the floor's motion carried), pushing
+  dynamic bodies, constant speed on slopes, one-way platforms, a capsule.
+
+Pinned by `query/shape/tests.rs` (a box at a wall, onto a turned floor, a
+slide along a floor not hitting it, the way out of an overlap, a circle at
+a face and a rounded corner and missing past one, box/circle pairs, the
+nearest through a filter, a fast cast not tunnelling) and
+`tests/character.rs` (landing a skin above a floor, walking at full speed, a
+wall taking the speed into it, a gentle slope climbed and a steep one a
+wall, standing on a slope with and without `stop_on_slope`, a jump ending
+on a ceiling, snapping down a slope and falling off a ledge, pushed out of
+an overlap, a V corner, a floor of tiles without seams, a low ledge stepped
+onto and a high one not). `cargo run -p voltra-core --example character`
+walks it.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
