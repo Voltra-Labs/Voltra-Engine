@@ -73,4 +73,7 @@ pub use sprite::{draw_key, Sprite};
 pub use text::{Align, Text};
 pub use tilemap::{Tile, TileMeshCache, Tilemap};
 pub use transform::Transform;
-pub use ui::{UiButton, UiButtons, UiLayout, UiRect, UiSlice, UiStack};
+pub use ui::{
+    UiButton, UiControls, UiLayout, UiRect, UiScroll, UiSlice, UiSlider, UiSliderPart, UiStack,
+    UiTextField, UiToggle,
+};

@@ -131,6 +131,33 @@ impl Headless {
         self.logs.drain()
     }
 
+    /// Lays the UI out on a screen `size` points across, one pixel a point,
+    /// so the controls take the input fed to [`input_mut`](Self::input_mut)
+    /// as a window's would: the cursor in pixels, the buttons, the wheel,
+    /// the keys, a pad and typing. Without one the controls are left alone.
+    pub fn with_screen(mut self, size: voltra_render::glam::Vec2) -> Self {
+        self.app.headless_screen = Some(size);
+        self
+    }
+
+    /// The input the next frame reads: drive the mouse, the keys, a pad and
+    /// the typing with its mutators. The frame's edges clear after each
+    /// step, as a window's do.
+    pub fn input_mut(&mut self) -> &mut crate::Input {
+        &mut self.app.input
+    }
+
+    /// The controls after the last frame: what was clicked, changed or
+    /// submitted, and what has the focus.
+    pub fn controls(&self) -> &voltra_scene::UiControls {
+        &self.app.ui_controls
+    }
+
+    /// Moves the focus to `control`, as a menu opening does.
+    pub fn focus(&mut self, control: Option<voltra_ecs::Entity>) {
+        self.app.ui_controls.focus(control);
+    }
+
     /// Frames run so far.
     pub fn frames(&self) -> u64 {
         self.frames

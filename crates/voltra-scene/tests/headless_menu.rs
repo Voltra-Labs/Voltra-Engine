@@ -24,10 +24,10 @@ use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::text::{prepare, resolve_fonts};
 use voltra_scene::ui::button::ButtonFrames;
 use voltra_scene::ui::stack::{Align as StackAlign, Direction};
-use voltra_scene::ui::{Edges, Navigation, Pointer};
+use voltra_scene::ui::{Edges, Navigation, Pointer, UiInput};
 use voltra_scene::{
     hierarchy, ui, Align, ComponentRegistry, Name, SceneId, Sprite, SpriteBatch, Text, UiButton,
-    UiButtons, UiLayout, UiRect, UiSlice, UiStack,
+    UiControls, UiLayout, UiRect, UiSlice, UiStack,
 };
 use voltra_testkit::{copy_bundled_font, headless_device, read_texture, scratch_root, Rgba, CLEAR};
 
@@ -192,9 +192,14 @@ fn find(world: &World, name: &str) -> Entity {
         .unwrap_or_else(|| panic!("{name} is in the menu"))
 }
 
-fn frame(world: &mut World, buttons: &mut UiButtons, pointer: Pointer, navigation: Navigation) {
+fn frame(world: &mut World, buttons: &mut UiControls, pointer: Pointer, navigation: Navigation) {
     let layout = UiLayout::from_world(world, SCREEN);
-    buttons.update(world, &layout, pointer, navigation);
+    let input = UiInput {
+        pointer,
+        navigation,
+        ..UiInput::default()
+    };
+    buttons.update(world, &layout, None, &input);
 }
 
 fn over(x: f32, y: f32) -> Pointer {
@@ -237,7 +242,7 @@ fn the_menu_stacks_in_slot_order_inside_the_padded_panel() {
 fn a_click_on_a_label_clicks_its_button_and_the_keys_walk_the_column() {
     let root = scratch_root();
     let mut world = loaded(&root);
-    let mut buttons = UiButtons::default();
+    let mut buttons = UiControls::default();
     let (resume, options, quit) = (
         find(&world, "Resume"),
         find(&world, "Options"),
@@ -313,7 +318,7 @@ fn the_menu_draws_sliced_and_shows_each_buttons_state() {
     fonts.upload(&mut textures, &device, &queue);
 
     // Quit held down; the other two left alone.
-    let mut buttons = UiButtons::default();
+    let mut buttons = UiControls::default();
     frame(
         &mut world,
         &mut buttons,

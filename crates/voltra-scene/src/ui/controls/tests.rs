@@ -2,6 +2,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use super::*;
+use crate::ui::button::ButtonFrames;
 use crate::{hierarchy, SceneId, Sprite, Text, UiRect};
 
 const SCREEN: Vec2 = Vec2::new(800.0, 600.0);
@@ -16,26 +17,31 @@ fn button(world: &mut World, at: Vec2) -> Entity {
     e
 }
 
-fn frame(world: &mut World, state: &mut UiButtons, pointer: Pointer, nav: Navigation) {
+fn frame(world: &mut World, state: &mut UiControls, pointer: Pointer, nav: Navigation) {
     let layout = UiLayout::from_world(world, SCREEN);
-    state.update(world, &layout, pointer, nav);
+    let input = UiInput {
+        pointer,
+        navigation: nav,
+        ..UiInput::default()
+    };
+    state.update(world, &layout, None, &input);
 }
 
 fn at(x: f32, y: f32) -> Option<Vec2> {
     Some(Vec2::new(x, y))
 }
 
-fn click(world: &mut World, state: &mut UiButtons, x: f32, y: f32) {
+fn click(world: &mut World, state: &mut UiControls, x: f32, y: f32) {
     let down = Pointer {
         position: at(x, y),
         went_down: true,
-        went_up: false,
+        ..Pointer::default()
     };
     frame(world, state, down, Navigation::default());
     let up = Pointer {
         position: at(x, y),
-        went_down: false,
         went_up: true,
+        ..Pointer::default()
     };
     frame(world, state, up, Navigation::default());
 }
@@ -44,7 +50,7 @@ fn click(world: &mut World, state: &mut UiButtons, x: f32, y: f32) {
 fn a_press_and_release_over_a_button_clicks_it() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     click(&mut world, &mut state, 50.0, 30.0);
     assert!(state.clicked(ok));
     assert_eq!(state.focused(), Some(ok), "a click focuses");
@@ -54,7 +60,7 @@ fn a_press_and_release_over_a_button_clicks_it() {
 fn the_click_lasts_one_frame() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     click(&mut world, &mut state, 50.0, 30.0);
     frame(
         &mut world,
@@ -69,17 +75,17 @@ fn the_click_lasts_one_frame() {
 fn releasing_somewhere_else_cancels_the_click() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     let down = Pointer {
         position: at(50.0, 30.0),
         went_down: true,
-        went_up: false,
+        ..Pointer::default()
     };
     frame(&mut world, &mut state, down, Navigation::default());
     let up = Pointer {
         position: at(500.0, 500.0),
-        went_down: false,
         went_up: true,
+        ..Pointer::default()
     };
     frame(&mut world, &mut state, up, Navigation::default());
     assert!(!state.clicked(ok));
@@ -94,7 +100,7 @@ fn a_click_on_the_label_reaches_the_button() {
     world.insert(label, UiRect::stretched(0.0));
     world.insert(label, Text::new("OK"));
     hierarchy::set_parent(&mut world, label, ok).expect("parents");
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     click(&mut world, &mut state, 50.0, 30.0);
     assert!(state.clicked(ok));
 }
@@ -104,7 +110,7 @@ fn a_disabled_button_takes_no_click_and_shows_its_colour() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
     world.get_mut::<UiButton>(ok).expect("button").disabled = true;
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     click(&mut world, &mut state, 50.0, 30.0);
     assert!(!state.clicked(ok));
     assert_eq!(
@@ -117,7 +123,7 @@ fn a_disabled_button_takes_no_click_and_shows_its_colour() {
 fn hover_tints_and_leaving_restores() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     let over = Pointer {
         position: at(50.0, 30.0),
         ..Pointer::default()
@@ -147,7 +153,7 @@ fn navigation_starts_top_left_and_moves_to_the_nearest_ahead() {
     let first = button(&mut world, Vec2::new(10.0, 10.0));
     let below = button(&mut world, Vec2::new(10.0, 70.0));
     let right = button(&mut world, Vec2::new(200.0, 10.0));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     let go = |dir: Vec2| Navigation {
         direction: Some(dir),
         accept: false,
@@ -176,7 +182,7 @@ fn navigation_starts_top_left_and_moves_to_the_nearest_ahead() {
 fn accept_clicks_the_focused_button() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     state.focus(Some(ok));
     let accept = Navigation {
         direction: None,
@@ -190,7 +196,7 @@ fn accept_clicks_the_focused_button() {
 fn a_despawned_focus_is_dropped() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     state.focus(Some(ok));
     world.despawn(ok);
     frame(
@@ -207,7 +213,7 @@ fn a_button_with_frames_shows_the_frame_of_its_state() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
     world.get_mut::<UiButton>(ok).expect("a button").frames = Some(ButtonFrames::in_a_row(4));
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     let shown = |world: &World| world.get::<Sprite>(ok).expect("a sprite").frame;
 
     frame(
@@ -239,7 +245,9 @@ fn a_button_without_frames_leaves_the_frame_alone() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
     world.get_mut::<Sprite>(ok).expect("a sprite").frame = 3;
-    let mut state = UiButtons::default();
+    let mut state = UiControls::default();
     click(&mut world, &mut state, 50.0, 30.0);
     assert_eq!(world.get::<Sprite>(ok).expect("a sprite").frame, 3);
 }
+
+mod widgets;

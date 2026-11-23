@@ -81,7 +81,7 @@ pub(crate) fn particles(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity
     entity
 }
 
-fn spawn(frame: &mut UiFrame<'_>, name: &str) -> Entity {
+pub(super) fn spawn(frame: &mut UiFrame<'_>, name: &str) -> Entity {
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
     frame.world.insert(entity, Name::new(name));

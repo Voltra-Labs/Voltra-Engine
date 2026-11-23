@@ -30,9 +30,14 @@ mod text;
 mod tilemap;
 mod transform;
 mod ui_button;
+mod ui_controls;
 mod ui_rect;
+mod ui_scroll;
 mod ui_slice;
+mod ui_slider;
 mod ui_stack;
+mod ui_text_field;
+mod ui_toggle;
 
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
@@ -102,6 +107,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     claim = claim.or(ui_button::show(ui, button, shown));
                 }
                 claim = claim.or(ui_stack::show(ui, frame.world, entity));
+                claim = claim.or(ui_controls::show(ui, frame.world, entity));
                 let on_screen = ui::is_ui(frame.world, entity);
                 // Both are read before the world is borrowed mutably below:
                 // the thumbnail map and the atlas store hang off `frame`, and

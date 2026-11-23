@@ -16,6 +16,9 @@ use super::Sprite;
 /// The whole of a texture, as every sprite sampled before frames existed.
 pub(crate) const WHOLE: ([f32; 2], [f32; 2]) = ([0.0, 0.0], [1.0, 1.0]);
 
+/// [`WHOLE`] as the four corners' UVs, in the batch's corner order.
+pub(crate) const WHOLE_UVS: [[f32; 2]; 4] = [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]];
+
 /// One sprite's quad, before its transform: how big, what to sample, what to
 /// bind.
 #[derive(Debug, Clone, Copy, PartialEq)]

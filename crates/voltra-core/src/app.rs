@@ -137,8 +137,14 @@ pub struct App {
     /// Whether `sorting_layers` came from `with_sorting_layers`, which the
     /// conventional file must not then overwrite.
     sorting_layers_from_code: bool,
-    /// The game's buttons: hover, press, focus and this frame's clicks.
-    ui_buttons: voltra_scene::UiButtons,
+    /// The game's controls: hover, press, focus, and this frame's clicks,
+    /// changes and submissions.
+    ui_controls: voltra_scene::UiControls,
+    /// Whether the window takes IME input: while a text field is focused.
+    ime_allowed: bool,
+    /// The screen a windowless run lays its UI out on, in points, if it
+    /// has one: what lets a headless test press its controls.
+    headless_screen: Option<voltra_render::glam::Vec2>,
     /// The game's save slots, in its per-user folder.
     saves: crate::saves::Saves,
     /// Scene changes and additive loads the ticks asked for, and what each
@@ -319,7 +325,7 @@ impl App {
         self.input.update_actions(&self.actions);
         // After the actions, which navigate the focus, and before the tick,
         // which reads this frame's clicks.
-        self.update_ui_buttons();
+        self.update_ui_controls();
         drop(input);
         {
             let _tick = voltra_profile::scope("tick");

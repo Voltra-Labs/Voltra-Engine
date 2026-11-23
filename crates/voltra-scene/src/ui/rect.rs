@@ -27,6 +27,23 @@ impl Rect {
         (self.min + self.max) * 0.5
     }
 
+    /// The same box moved by `by`.
+    pub fn translated(&self, by: Vec2) -> Self {
+        Self::new(self.min + by, self.max + by)
+    }
+
+    /// The part of this box inside `other`: empty — zero width or height —
+    /// when they do not overlap, never inside out.
+    pub fn intersection(&self, other: Rect) -> Self {
+        let min = self.min.max(other.min);
+        Self::new(min, self.max.min(other.max).max(min))
+    }
+
+    /// The smallest box holding both.
+    pub fn union(&self, other: Rect) -> Self {
+        Self::new(self.min.min(other.min), self.max.max(other.max))
+    }
+
     /// Edges included. An empty box contains nothing.
     pub fn contains(&self, point: Vec2) -> bool {
         self.max.x > self.min.x

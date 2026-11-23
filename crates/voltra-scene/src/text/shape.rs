@@ -88,6 +88,26 @@ fn bounds_of(text: &Text, layout: &TextLayout, px: u32) -> Bounds {
     }
 }
 
+/// Where a caret can stand on the first line — before each character and
+/// after the last — as x in the entity's space, the alignment applied:
+/// `content.chars().count() + 1` stops for a line with no control
+/// characters. `None` with no usable font. Needs no glyph rasterized: the
+/// face's metrics place them.
+pub fn caret_stops_at(text: &Text, fonts: &Fonts, px: u32) -> Option<Vec<f32>> {
+    let layout = font(text, fonts)?.layout(&text.content, px)?;
+    let s = scale(text, px);
+    let width = layout.line_widths.first().copied().unwrap_or(0.0);
+    let start = offset(text, width);
+    let mut stops: Vec<f32> = layout
+        .glyphs
+        .iter()
+        .filter(|glyph| glyph.line == 0)
+        .map(|glyph| (start + glyph.pen) * s)
+        .collect();
+    stops.push((start + width) * s);
+    Some(stops)
+}
+
 /// Every glyph quad a text draws, and the texture they sample.
 ///
 /// Empty when the font has no face, and missing the glyphs

@@ -2782,7 +2782,8 @@ geometric focus neighbours, on this engine's pieces.
   frame. The label is a `Text` child; a hit on it reaches the nearest
   `UiButton` above it, as Godot's default `mouse_filter` passes a click on.
 - **The logic is a pure function** in `voltra-scene` —
-  `UiButtons::update(world, layout, Pointer, Navigation)` — so every rule is
+  `UiButtons::update(world, layout, Pointer, Navigation)` (since stage 80
+  `UiControls`) — so every rule is
   tested without a window. A click is a press and a release over the same
   button; releasing elsewhere cancels it; a press focuses. Clicks last one
   frame. Disabled and despawned buttons drop out of hover, press and focus.
@@ -5135,6 +5136,93 @@ bridge with the coin sheet as its skin, drawn 9-sliced in slot order. That
 check found the bridge's edits never looked up the handles of what they
 wrote — a textured sprite spawned by a tool drew the placeholder, a text
 nothing — so an applied edit now resolves the scene's assets.
+
+### Sliders, toggles, text fields and scrolls share the buttons' focus
+
+Stage 80. An options screen: a volume slider, a fullscreen toggle, a name
+field and a list of saves that scrolls — by the mouse, the keyboard and a
+pad.
+
+- **`UiControls`** (was `UiButtons`) holds the one hover, press and focus
+  every control shares, as Godot's viewport keeps one focus owner, and
+  this frame's `clicked`, `changed` and `submitted`.
+  `update(world, layout, fonts, &UiInput)` takes the pointer (with the
+  wheel and Shift), the navigation and the typing; it stays a pure
+  function in `voltra-scene`. A control is a `UiButton` (a toggle is one),
+  a `UiSlider` or a `UiTextField`; one with nothing drawn still takes the
+  pointer — an invisible hit area — and a click on a child reaches the
+  control above it.
+- **`UiToggle`** rides on a `UiButton`, as Godot's `CheckBox` is a button
+  in toggle mode: a click flips `on` and counts as a change; while on, the
+  button's colour is multiplied by `on_tint`, and `on_frames` replaces its
+  frames.
+- **`UiSlider`**: `value` in `min..max`, snapped to `step`; a press or a
+  drag along its rect sets it (a column rises from the bottom); while
+  focused, the navigation along it steps it and across it moves the focus
+  on, as Godot's sliders do. It draws nothing itself: children marked
+  `UiSliderPart::Fill` stretch to the value and `Handle` sits on it, as
+  Unity's `fillRect` and `handleRect` — any picture, 9-sliced or flat.
+  Marker components rather than references: a `Parent` link is remapped
+  on duplicate and prefab instancing, an id inside a component is not.
+- **`UiTextField`** is Godot's `LineEdit`. The entity's `Text` is its
+  style and the field writes what it shows into the text's content — the
+  text, the IME composition at the caret, or the placeholder drawn at half
+  alpha — so the font atlas prepares what is shown. Editing is in
+  characters, never bytes: arrows, Home/End, Shift to select, Ctrl (Option
+  on macOS) for words, Backspace/Delete, Ctrl+A, Enter to submit; a click
+  places the caret and a drag selects. Control characters are left out:
+  one line. The text scrolls sideways to keep the caret in the box and is
+  cut to it; the caret is a whole-pixel bar, not blinking. Caret stops
+  come from the face's metrics (`shape::caret_stops_at`), no glyph needed.
+  No system clipboard yet: nothing in the engine reaches one.
+- **Typing** is `Input::typing`: a key press's `text` (not with Ctrl or
+  the logo key, not a control character) and the IME's `Commit` are typed;
+  `Preedit` shows at the caret; editing keys count their repeats. The loop
+  calls `set_ime_allowed(true)` only while a field has the focus — winit's
+  own advice for games, since an allowed IME swallows keys while it
+  composes — and puts the candidate window under the field. A game reading
+  its own keys can check `tick.ui.editing(world)`.
+- **`UiScroll`** shifts its UI descendants by `offset` and masks them to
+  its rect. The mask is applied on the CPU: every UI quad is axis-aligned,
+  so one cut to the mask with its UVs moved in proportion draws what a
+  scissor would, without a draw call per mask (Godot's `clip_contents`
+  scissors; Unity's `RectMask2D` clips in the shader). `UiLayout` records
+  each element's clip, the nearest scroll above it and each scroll's
+  content box; a masked-off part is not picked. The wheel scrolls the
+  innermost scroll under the pointer; the focus moving to a control —
+  by the navigation or `focus()` — scrolls every scroll above it just
+  enough to show it, which is how keys and pads scroll; the offset stays
+  between none and the content's reach, a stack's padding included.
+- **Headless controls**: `Headless::with_screen(size)` lays the UI out
+  windowless, and `input_mut()` feeds the cursor, buttons, wheel, keys,
+  pad and typing as a window would.
+- Editor: inspector sections for each, *Scroll children* on any UI
+  element, and *Scene ▸ Spawn HUD toggle / slider / text field / scroll
+  list*.
+
+Rejected: **a widget tree with its own event loop** (egui, iced) — the
+game's UI is entities the editor authors and scenes save; **an ECS
+system per control with its own focus** — Godot and Unity both have one
+focus per screen, and two focuses is a bug a pad finds at once.
+
+Pinned by `ui/controls/tests.rs` and `controls/tests/widgets.rs`
+(buttons; a toggle flipping and tinting; a slider dragged off its track
+and stepped, passing the focus across; a field typed into, submitted and
+left by a click elsewhere, keeping left and right; the wheel within the
+content; the focus scrolling a list, a hidden row unclickable),
+`text_field/tests.rs` (characters not bytes, selections, words, limits,
+the composition until it commits), `text_field/view.rs` (scrolling to
+the caret), `slider.rs`, `scroll.rs`, `layout/tests.rs` (a scroll moving
+and masking, nested masks, a stack inside a scroll), `mesh/clip.rs`,
+`mesh/tests.rs` (the caret after the text, the selection under it, a long
+text scrolled and cut to its box, the faint placeholder), core's
+`input/typing.rs`, and `voltra-core/tests/ui_options.rs`: the options
+screen by the mouse (slider pressed and dragged, toggle by its label,
+the field clicked and typed in, the list wheeled and a row clicked), by
+the keyboard (arrows and Enter through the default map, typing, the list
+scrolling to the focus) and by a pad (D-pad and South). Checked by hand:
+the player under Xvfb with `xdotool` — real X11 clicks, typing,
+Backspace, Shift+Home, the toggle, the slider and the wheel.
 
 ### wgpu 30 API notes
 

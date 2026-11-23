@@ -21,6 +21,7 @@ pub mod drive;
 pub mod map;
 pub mod pads;
 mod query;
+pub mod typing;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -33,7 +34,7 @@ pub use map::{Action, ActionMap, MapError};
 use action::ActionStates;
 
 use voltra_render::glam::Vec2;
-use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, Ime, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
 pub use winit::event::MouseButton;
@@ -65,6 +66,9 @@ pub struct Input {
     /// then — `gilrs` is not tied to a window — and a game in the background
     /// must not be steered by them.
     unfocused: bool,
+
+    /// Text, editing keys and IME composition, for a focused text field.
+    typing: typing::Typing,
 
     /// Every action's state, re-derived by [`Input::update_actions`].
     actions: ActionStates,
@@ -172,6 +176,17 @@ impl Input {
         }
     }
 
+    /// What was typed this frame: text, editing keys, IME composition.
+    pub fn typing(&self) -> &typing::Typing {
+        &self.typing
+    }
+
+    /// The typing, to feed it without a window: a test, a second input
+    /// source.
+    pub fn typing_mut(&mut self) -> &mut typing::Typing {
+        &mut self.typing
+    }
+
     // --- winit decoding -----------------------------------------------------
 
     /// Folds one winit event into the state. Unhandled events are ignored.
@@ -179,9 +194,26 @@ impl Input {
         match event {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
-                    self.on_key(code, event.state == ElementState::Pressed, event.repeat);
+                    let pressed = event.state == ElementState::Pressed;
+                    self.on_key(code, pressed, event.repeat);
+                    self.typing.on_key(code, pressed, event.text.as_deref());
                 }
             }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                let state = modifiers.state();
+                self.typing.on_modifiers(
+                    state.shift_key(),
+                    state.control_key(),
+                    state.alt_key(),
+                    state.super_key(),
+                );
+            }
+            WindowEvent::Ime(ime) => match ime {
+                Ime::Preedit(text, cursor) => self.typing.on_preedit(text, *cursor),
+                Ime::Commit(text) => self.typing.on_commit(text),
+                Ime::Disabled => self.typing.on_ime_disabled(),
+                Ime::Enabled => {}
+            },
             WindowEvent::MouseInput { state, button, .. } => {
                 self.on_mouse_button(*button, *state == ElementState::Pressed);
             }
@@ -212,6 +244,7 @@ impl Input {
         self.mouse_delta = Vec2::ZERO;
         self.scroll_delta = 0.0;
         self.pads.end_frame();
+        self.typing.end_frame();
     }
 
     // --- queries ------------------------------------------------------------

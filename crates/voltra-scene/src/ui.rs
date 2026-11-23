@@ -8,19 +8,29 @@
 //! or a column.
 
 pub mod button;
+pub mod controls;
 pub mod edges;
 pub mod layout;
 pub mod mesh;
 pub mod rect;
+pub mod scroll;
 pub mod slice;
+pub mod slider;
 pub mod stack;
+pub mod text_field;
+pub mod toggle;
 
-pub use button::{ButtonFrames, Navigation, Pointer, UiButton, UiButtons};
+pub use button::{ButtonFrames, UiButton};
+pub use controls::{Navigation, Pointer, UiControls, UiInput};
 pub use edges::Edges;
 pub use layout::UiLayout;
 pub use rect::{Rect, UiRect};
+pub use scroll::UiScroll;
 pub use slice::UiSlice;
+pub use slider::{UiSlider, UiSliderPart};
 pub use stack::UiStack;
+pub use text_field::{TextInput, UiTextField};
+pub use toggle::UiToggle;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
@@ -32,20 +42,23 @@ pub fn is_ui(world: &World, entity: Entity) -> bool {
 }
 
 /// The screen-space element under `point`, in points from the target's
-/// top-left: the topmost one with something to draw, by the order
-/// [`mesh::batch`] draws in.
+/// top-left: the topmost one with something to draw, or a control, by the
+/// order [`mesh::batch`] draws in. A part a scroll masks off is not there.
 pub fn element_at(world: &World, layout: &UiLayout, point: Vec2) -> Option<Entity> {
     world
         .query::<UiRect>()
         .filter_map(|(entity, _)| {
+            // A control takes the pointer with nothing drawn: an invisible
+            // hit area, a slider whose track is its parent's picture.
             let order = world
                 .get::<crate::Text>(entity)
                 .map(|text| text.sort_order)
                 .into_iter()
                 .chain(world.get::<crate::Sprite>(entity).map(|s| s.sort_order))
+                .chain(controls::is_control(world, entity).then_some(0))
                 .max()?;
             layout
-                .rect(entity)
+                .visible(entity)
                 .filter(|rect| rect.contains(point))
                 .map(|_| (layout.draw_key(entity, order), entity))
         })

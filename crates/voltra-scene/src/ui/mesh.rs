@@ -11,7 +11,10 @@ use crate::batch::SpriteBatch;
 use crate::sprite::quad::{quad, texels};
 use crate::sprite::sheets::Sheets;
 use crate::sprite::Sprite;
-use crate::text::{shape, ui_px, Align, Text};
+use crate::text::{shape, ui_px, Text};
+
+mod clip;
+mod field;
 
 /// Draw order, then sprite (0) before text (1) on one entity.
 type ElementKey = (i32, u32, u32, u8);
@@ -56,14 +59,43 @@ pub fn batch(world: &World, sheets: Sheets<'_>, layout: &UiLayout, scale: f32) -
         let Some(rect) = layout.rect(entity) else {
             continue;
         };
+        // The mask is in pixels, as the quads are.
+        let mask = layout
+            .clip(entity)
+            .map(|clip| Rect::new(clip.min * scale, clip.max * scale));
+        let target = Target {
+            batch: &mut batch,
+            mask,
+        };
         match element {
             Element::Sprite(sprite, slice) => {
-                push_sprite(&mut batch, rect, sprite, slice, sheets, scale)
+                push_sprite(target, rect, sprite, slice, sheets, scale)
             }
-            Element::Text(text) => push_text(&mut batch, rect, text, sheets, scale),
+            Element::Text(text) => match world.get::<super::UiTextField>(entity) {
+                Some(field) => field::push(target, rect, text, field, sheets, scale),
+                None => push_text(target, rect, text, sheets, scale),
+            },
         }
     }
     batch
+}
+
+/// Where quads go: the batch, cut to the element's mask.
+struct Target<'a> {
+    batch: &'a mut SpriteBatch,
+    mask: Option<Rect>,
+}
+
+impl Target<'_> {
+    fn push(
+        &mut self,
+        corners: [Vec2; 4],
+        uvs: [[f32; 2]; 4],
+        color: [f32; 4],
+        texture: Option<voltra_assets::Handle<voltra_render::Texture>>,
+    ) {
+        clip::push(self.batch, corners, uvs, color, texture, self.mask);
+    }
 }
 
 /// A sprite stretched over its rect, with its frame, region and flips — or,
@@ -73,7 +105,7 @@ pub fn batch(world: &World, sheets: Sheets<'_>, layout: &UiLayout, scale: f32) -
 /// fall; without it — no texture store, a frame that is not there — the
 /// sprite is stretched whole, as it would be with no slice at all.
 fn push_sprite(
-    batch: &mut SpriteBatch,
+    mut target: Target<'_>,
     rect: Rect,
     sprite: &Sprite,
     slice: Option<&UiSlice>,
@@ -93,13 +125,7 @@ fn push_sprite(
             flip_y: sprite.flip_y,
         };
         for piece in slice.pieces(Rect::new(min, max), image, scale) {
-            batch.push_quad(
-                Mat3::IDENTITY,
-                piece.corners,
-                piece.uvs,
-                sprite.color,
-                quad.texture,
-            );
+            target.push(piece.corners, piece.uvs, sprite.color, quad.texture);
         }
         return;
     }
@@ -111,13 +137,7 @@ fn push_sprite(
         Vec2::new(max.x, max.y),
         Vec2::new(max.x, min.y),
     ];
-    batch.push_quad(
-        Mat3::IDENTITY,
-        corners,
-        quad.uvs,
-        sprite.color,
-        quad.texture,
-    );
+    target.push(corners, quad.uvs, sprite.color, quad.texture);
 }
 
 /// A text laid out inside its rect: the first baseline one ascent below the
@@ -125,7 +145,7 @@ fn push_sprite(
 ///
 /// Rasterized at its on-screen size and placed on a whole pixel, so glyph
 /// texels map 1:1 onto the target.
-fn push_text(batch: &mut SpriteBatch, rect: Rect, text: &Text, sheets: Sheets<'_>, scale: f32) {
+fn push_text(mut target: Target<'_>, rect: Rect, text: &Text, sheets: Sheets<'_>, scale: f32) {
     let Some(fonts) = sheets.fonts else {
         return;
     };
@@ -136,16 +156,16 @@ fn push_text(batch: &mut SpriteBatch, rect: Rect, text: &Text, sheets: Sheets<'_
     let (quads, Some(texture)) = shape::glyphs_at(text, fonts, px) else {
         return;
     };
-    let x = match text.align {
-        Align::Left => rect.min.x,
-        Align::Center => rect.center().x,
-        Align::Right => rect.max.x,
-    };
+    let x = super::text_field::view::aligned_x(rect, text.align);
     // `bounds.max.y` is the ascent, in the text's own units — points here.
     let origin = (Vec2::new(x, rect.min.y + bounds.max.y) * scale).round();
     // Glyph quads come y-up in points; the target is y-down in pixels.
     let matrix = Mat3::from_translation(origin) * Mat3::from_scale(Vec2::new(scale, -scale));
     for glyph in quads {
-        batch.push_quad(matrix, glyph.corners, glyph.uvs, text.color, Some(texture));
+        let corners = glyph.corners.map(|c| matrix.transform_point2(c));
+        target.push(corners, glyph.uvs, text.color, Some(texture));
     }
 }
+
+#[cfg(test)]
+mod tests;

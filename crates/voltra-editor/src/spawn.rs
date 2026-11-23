@@ -7,10 +7,12 @@
 //! would drift.
 
 mod hud;
+mod hud_controls;
 mod light;
 mod text;
 
 pub(crate) use hud::{hud_button, hud_column, hud_panel, hud_text, particles};
+pub(crate) use hud_controls::{hud_scroll_list, hud_slider, hud_text_field, hud_toggle};
 pub(crate) use light::{global_light, light};
 pub(crate) use text::text;
 

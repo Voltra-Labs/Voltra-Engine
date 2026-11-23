@@ -74,9 +74,10 @@ pub struct Tick<'a> {
     /// a small file, and a game saving at a checkpoint wants it written
     /// before anything else can go wrong.
     pub saves: &'a crate::saves::Saves,
-    /// The screen-space buttons: what was clicked this frame, what is
-    /// hovered and focused, and where to move the focus.
-    pub ui: &'a mut voltra_scene::UiButtons,
+    /// The screen-space controls: what was clicked, changed or submitted
+    /// this frame, what is hovered and focused, and where to move the
+    /// focus.
+    pub ui: &'a mut voltra_scene::UiControls,
     pub(super) scenes: &'a mut super::scenes::Scenes,
     pub(super) prefabs: &'a mut Prefabs,
     pub(super) registry: &'a ComponentRegistry,
@@ -134,7 +135,7 @@ impl App {
                 actions: &mut self.actions,
                 scenes: &mut self.scenes,
                 saves: &self.saves,
-                ui: &mut self.ui_buttons,
+                ui: &mut self.ui_controls,
                 delta,
                 contacts: self.physics_world.contacts(),
                 events,
