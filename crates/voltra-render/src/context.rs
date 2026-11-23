@@ -2,6 +2,8 @@
 
 use wgpu::SurfaceTarget;
 
+use crate::frame_buffers::FrameBuffers;
+
 /// Owns the GPU device and, for a window, the swapchain surface.
 ///
 /// Without a surface — [`GpuContext::headless`] — the configuration still
@@ -12,43 +14,80 @@ pub struct GpuContext {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    /// The format frames are drawn in: the surface's own when it is sRGB,
+    /// else its sRGB view — see [`srgb_format`].
+    format: wgpu::TextureFormat,
     /// What the adapter can do below full WebGPU: whether compute and
     /// vertex-stage storage, which GPU particles need, are there.
     downlevel: wgpu::DownlevelFlags,
+    /// Buffers made for the frame being recorded; see [`FrameBuffers`].
+    frame_buffers: FrameBuffers,
 }
 
 impl GpuContext {
     /// `target` is anything `wgpu` can build a surface from — typically an
     /// `Arc<winit::window::Window>`. Blocks on adapter/device acquisition,
     /// which happens once at startup.
+    ///
+    /// Native only: a browser cannot block, so the web builds its context
+    /// through [`GpuContext::new_async`].
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(target: impl Into<SurfaceTarget<'static>>, width: u32, height: u32) -> Self {
+        pollster::block_on(Self::new_async(target, width, height))
+    }
+
+    /// [`GpuContext::new`], awaited rather than blocked on: what a browser
+    /// requires, where the adapter and device arrive through promises.
+    ///
+    /// On the web, WebGPU where the browser has it and WebGL2 where it does
+    /// not — decided before the instance exists, since wgpu cannot fall back
+    /// afterwards.
+    pub async fn new_async(
+        target: impl Into<SurfaceTarget<'static>>,
+        width: u32,
+        height: u32,
+    ) -> Self {
         // `_from_env` honours WGPU_BACKEND / WGPU_POWER_PREF for debugging.
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        let descriptor = wgpu::InstanceDescriptor::new_without_display_handle_from_env();
+        #[cfg(target_arch = "wasm32")]
+        let instance = wgpu::util::new_instance_with_webgpu_detection(descriptor).await;
+        #[cfg(not(target_arch = "wasm32"))]
+        let instance = wgpu::Instance::new(descriptor);
 
         let surface = instance
             .create_surface(target)
             .expect("failed to create surface");
 
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-            ..Default::default()
-        }))
-        .expect("no compatible GPU adapter found");
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                compatible_surface: Some(&surface),
+                ..Default::default()
+            })
+            .await
+            .expect("no compatible GPU adapter found");
 
         log::info!("adapter: {:?}", adapter.get_info());
 
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("voltra-device"),
-            required_features: optional_features(&adapter),
-            ..Default::default()
-        }))
-        .expect("failed to request device");
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("voltra-device"),
+                required_features: optional_features(&adapter),
+                required_limits: required_limits(&adapter),
+                ..Default::default()
+            })
+            .await
+            .expect("failed to request device");
+        // Said once, plainly: everything after a lost device fails on its
+        // own terms (a browser's "createBuffer failed"), far from the cause.
+        device.set_device_lost_callback(|reason, message| {
+            log::error!("the GPU device was lost ({reason:?}): {message}");
+        });
 
-        let config = surface
+        let mut config = surface
             .get_default_config(&adapter, width.max(1), height.max(1))
             .expect("surface not supported by adapter");
+        let format = srgb_format(&surface.get_capabilities(&adapter).formats, &mut config);
         surface.configure(&device, &config);
         let downlevel = adapter.get_downlevel_capabilities().flags;
 
@@ -57,7 +96,9 @@ impl GpuContext {
             device,
             queue,
             config,
+            format,
             downlevel,
+            frame_buffers: FrameBuffers::default(),
         }
     }
 
@@ -96,8 +137,10 @@ impl GpuContext {
             surface: None,
             device,
             queue,
+            format: config.format,
             config,
             downlevel,
+            frame_buffers: FrameBuffers::default(),
         })
     }
 
@@ -118,8 +161,36 @@ impl GpuContext {
         &self.queue
     }
 
+    /// Where a pass makes a buffer that only this frame reads.
+    pub fn frame_buffers(&self) -> &FrameBuffers {
+        &self.frame_buffers
+    }
+
+    /// Submits `commands`, then destroys the frame's own buffers, which
+    /// nothing recorded after this can use.
+    pub fn submit(&self, commands: wgpu::CommandBuffer) {
+        self.queue.submit(Some(commands));
+        self.frame_buffers.retire();
+    }
+
     pub fn config(&self) -> &wgpu::SurfaceConfiguration {
         &self.config
+    }
+
+    /// The format everything drawn into the frame is drawn in, and so what
+    /// every pipeline targeting it is built for. Always sRGB when the
+    /// adapter allows it; not always `config().format`, which on the web is
+    /// the canvas's linear format viewed as sRGB.
+    pub fn format(&self) -> wgpu::TextureFormat {
+        self.format
+    }
+
+    /// A view of an acquired frame in [`format`](Self::format).
+    pub fn frame_view(&self, frame: &wgpu::SurfaceTexture) -> wgpu::TextureView {
+        frame.texture.create_view(&wgpu::TextureViewDescriptor {
+            format: Some(self.format),
+            ..Default::default()
+        })
     }
 
     /// A zero-sized surface is invalid, so a minimised window is a no-op.
@@ -166,6 +237,51 @@ impl GpuContext {
     pub fn present(&self, frame: wgpu::SurfaceTexture) {
         self.queue.present(frame);
     }
+}
+
+/// The limits to ask for: wgpu's defaults wherever the adapter meets them —
+/// every native adapter this engine targets, and WebGPU — else what the
+/// adapter has, which on WebGL2 is far below them.
+///
+/// Asking for the defaults on WebGL2 fails device creation outright; asking
+/// for the adapter's own is always granted, and the passes that need more
+/// (GPU particles' storage buffers) already check before they build.
+fn required_limits(adapter: &wgpu::Adapter) -> wgpu::Limits {
+    let available = adapter.limits();
+    let defaults = wgpu::Limits::default();
+    if defaults.check_limits(&available) {
+        defaults
+    } else {
+        log::info!("adapter below wgpu's default limits; asking for its own");
+        available
+    }
+}
+
+/// Picks the sRGB format frames are drawn in and, when the surface has none,
+/// lets `config` be viewed as one.
+///
+/// The colour rules (ARCHITECTURE.md, "egui for the editor UI") assume the
+/// frame encodes on write. Native surfaces offer an sRGB format and
+/// `get_default_config` takes it; a WebGPU canvas offers only linear ones
+/// (`bgra8unorm`, `rgba8unorm`), and drawing into those unconverted would
+/// lighten every mid-tone. The canvas keeps its linear format and is drawn
+/// through an sRGB view of it — WebGPU's own answer, `viewFormats`.
+fn srgb_format(
+    offered: &[wgpu::TextureFormat],
+    config: &mut wgpu::SurfaceConfiguration,
+) -> wgpu::TextureFormat {
+    if config.format.is_srgb() {
+        return config.format;
+    }
+    if let Some(srgb) = offered.iter().copied().find(|f| f.is_srgb()) {
+        config.format = srgb;
+        return srgb;
+    }
+    let srgb = config.format.add_srgb_suffix();
+    if srgb != config.format {
+        config.view_formats.push(srgb);
+    }
+    srgb
 }
 
 /// The features asked for when the adapter has them, and never required:

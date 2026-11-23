@@ -63,7 +63,7 @@ impl App {
         }
         let path = self.input_map();
         let full = root.join(path.as_str());
-        if self.input_map_path.is_none() && !full.exists() {
+        if self.input_map_path.is_none() && !voltra_assets::fs::exists(&full) {
             log::debug!(
                 "no {} under the asset root; no input actions",
                 path.as_str()

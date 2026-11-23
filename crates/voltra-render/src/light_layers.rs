@@ -10,6 +10,7 @@
 //! layer out or some surface is on none; see `sprite_layers.wgsl`.
 
 use std::collections::HashMap;
+use std::sync::{Mutex, PoisonError};
 
 use wgpu::util::DeviceExt;
 
@@ -28,6 +29,10 @@ pub struct LayerPass {
     /// without GPU particles, where every emitter is in the batch.
     particles: Option<wgpu::RenderPipeline>,
     layout: wgpu::BindGroupLayout,
+    /// One small uniform per mask ever drawn, kept: a game uses a handful,
+    /// and making them afresh each frame would allocate every frame — on the
+    /// web, memory only the collector frees (`frame_buffers.rs`).
+    groups: Mutex<HashMap<u32, wgpu::BindGroup>>,
 }
 
 impl LayerPass {
@@ -100,6 +105,7 @@ impl LayerPass {
             pipeline,
             particles,
             layout,
+            groups: Mutex::default(),
         }
     }
 
@@ -121,8 +127,7 @@ impl LayerPass {
         mesh: Option<&Mesh>,
         draws: &[SceneDraw<'_>],
     ) {
-        // One small uniform per distinct mask this frame; a scene has few.
-        let mut groups: HashMap<u32, wgpu::BindGroup> = HashMap::new();
+        let mut groups = self.groups.lock().unwrap_or_else(PoisonError::into_inner);
         for draw in draws {
             let layers = layers_of(draw);
             groups.entry(layers).or_insert_with(|| {

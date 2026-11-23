@@ -1,14 +1,24 @@
 //! Where a game's log goes.
 //!
-//! To the terminal or a file, through `env_logger` — and, whatever else,
-//! into a ring of recent lines a caller can read back ([`capture`]): what a
-//! headless run hands a tool as "what the engine said while it ran".
+//! To the terminal or a file through `env_logger` natively, to the browser's
+//! console on the web — and, whatever else, into a ring of recent lines a
+//! caller can read back ([`capture`]): what a headless run hands a tool as
+//! "what the engine said while it ran".
 
 mod capture;
+#[cfg(not(target_arch = "wasm32"))]
+mod native;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
 use std::path::PathBuf;
 
 pub use capture::{capture, LogCapture, LogLine};
+
+#[cfg(not(target_arch = "wasm32"))]
+use native::platform_logger;
+#[cfg(target_arch = "wasm32")]
+use web::platform_logger;
 
 /// The file a windowed build logs to, beside its executable.
 pub const LOG_FILE: &str = "log.txt";
@@ -21,20 +31,15 @@ pub const LOG_FILE: &str = "log.txt";
 /// fails on start goes nowhere, and the player sees a window that never
 /// opens. A file that cannot be created falls back to the terminal.
 ///
+/// On the web there is no terminal and no file: the log goes to the
+/// browser's console, `to_file` or not, and so does a panic's message.
+///
 /// Call once, first thing in `main`.
 pub fn init(to_file: bool) {
-    let mut builder =
-        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
-    if to_file {
-        if let Some(file) = log_path().and_then(|path| std::fs::File::create(path).ok()) {
-            builder.target(env_logger::Target::Pipe(Box::new(file)));
-        }
-    }
-    // Through the ring as well: `capture` reads what passed.
-    let logger = builder.build();
-    let level = logger.filter();
+    let (logger, level) = platform_logger(to_file);
     // A second call — a test harness, a game that also initialises — keeps
     // the first logger rather than panicking.
+    // Through the ring as well: `capture` reads what passed.
     if log::set_boxed_logger(Box::new(capture::Tee::new(logger))).is_ok() {
         log::set_max_level(level);
     }

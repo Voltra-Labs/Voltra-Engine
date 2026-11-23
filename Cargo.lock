@@ -3751,6 +3751,9 @@ dependencies = [
  "voltra-render",
  "voltra-scene",
  "voltra-testkit",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
  "web-time",
  "winit",
 ]
@@ -3834,6 +3837,7 @@ dependencies = [
 name = "voltra-player"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "log",
  "ron",
  "serde",
@@ -3841,6 +3845,9 @@ dependencies = [
  "voltra-core",
  "voltra-ecs",
  "voltra-scene",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -4204,6 +4211,7 @@ dependencies = [
  "thiserror 2.0.19",
  "wgpu-core-deps-apple",
  "wgpu-core-deps-emscripten",
+ "wgpu-core-deps-wasm",
  "wgpu-core-deps-windows-linux-android",
  "wgpu-hal",
  "wgpu-naga-bridge",
@@ -4224,6 +4232,15 @@ name = "wgpu-core-deps-emscripten"
 version = "30.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85dcf2b2e5c2afb9eda64c570a87a4e570304bf39e52eddbaaf222d655b656ad"
+dependencies = [
+ "wgpu-hal",
+]
+
+[[package]]
+name = "wgpu-core-deps-wasm"
+version = "30.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b20f43aeb9962d05e61e3ccb717e2e27ba1b04e979d4ca7e361384f8ee03db56"
 dependencies = [
  "wgpu-hal",
 ]
@@ -4744,6 +4761,7 @@ checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
 name = "xtask"
 version = "0.1.0"
 dependencies = [
+ "voltra-assets",
  "voltra-player",
 ]
 

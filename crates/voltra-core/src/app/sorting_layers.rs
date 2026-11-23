@@ -64,7 +64,7 @@ impl App {
             return;
         }
         let full = root.join(DEFAULT_SORTING_LAYERS);
-        if !full.exists() {
+        if !voltra_assets::fs::exists(&full) {
             return;
         }
         if let Some(layers) = read(&full) {

@@ -10,6 +10,8 @@ mod gamepads;
 mod gpu_particles;
 pub mod headless;
 mod input_map;
+#[cfg(not(target_arch = "wasm32"))]
+mod native;
 mod particles;
 mod prefab_sync;
 mod scene_draws;
@@ -17,12 +19,20 @@ mod scenes;
 mod simulation;
 mod sorting_layers;
 mod spawning;
+mod startup;
 mod thumbnails;
 mod tick;
 mod tick_audio;
 mod ui_frame;
 mod ui_input;
+#[cfg(target_arch = "wasm32")]
+mod web;
 mod window_requests;
+
+#[cfg(not(target_arch = "wasm32"))]
+use native as platform;
+#[cfg(target_arch = "wasm32")]
+use web as platform;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -32,11 +42,11 @@ use voltra_audio::Audio;
 use voltra_ecs::{Entity, World};
 use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
-use voltra_render::{Filter, LineBatch, RenderTarget, Renderer};
+use voltra_render::{LineBatch, RenderTarget, Renderer};
 use voltra_scene::{ComponentRegistry, Prefabs};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
 use crate::app::audio::SceneAudio;
@@ -192,6 +202,9 @@ pub struct App {
     held_actions: crate::input::HeldActions,
     /// The title and close the UI asked for this frame.
     window_requests: window_requests::WindowRequests,
+    /// The renderer a browser is still building; see `app/web.rs`.
+    #[cfg(target_arch = "wasm32")]
+    pending_renderer: web::PendingRenderer,
 }
 
 /// Earth-ish gravity, in world units per second squared.
@@ -248,10 +261,13 @@ impl App {
         &mut self.physics_world
     }
 
-    pub fn run(mut self) {
+    /// Runs the game until its window closes.
+    ///
+    /// On the web this returns at once, the browser driving the loop from
+    /// then on; natively it returns when the loop ends.
+    pub fn run(self) {
         let event_loop = EventLoop::new().expect("failed to create event loop");
-        event_loop.set_control_flow(ControlFlow::Poll);
-        event_loop.run_app(&mut self).expect("event loop failed");
+        platform::run(self, event_loop);
     }
 
     /// One simulation step, between the events arriving and `Input::end_frame`
@@ -448,114 +464,18 @@ impl ApplicationHandler for App {
                 .expect("failed to create window"),
         );
 
-        let size = window.inner_size();
-        let renderer = Renderer::new(window.clone(), size.width, size.height);
+        // Held from here, so a second `resumed` while the renderer is still
+        // on its way (the web) does not build a second one.
+        self.window = Some(window.clone());
+        platform::start_renderer(self, window);
+    }
 
-        let asset_root = self
-            .asset_root
-            .clone()
-            .unwrap_or_else(voltra_assets::default_root);
-        log::info!("asset root: {}", asset_root.display());
-
-        // The same layout object the sprite pipeline was built with —
-        // `Renderer` owns both, so `texture_layout()` is guaranteed to be it.
-        let mut textures = Textures::new(
-            renderer.context().device(),
-            renderer.context().queue(),
-            renderer.texture_layout(),
-            asset_root.clone(),
-        );
-
-        // `App::world` is public and documented to be populated before `run`,
-        // so by the time there is a device to upload with, the world may
-        // already hold sprites naming a texture they have never resolved.
-        // Without this they draw untextured forever: the only other callers of
-        // `set_texture` are the inspector and Open, and a game has neither.
-        // Instances first, so what they are brought in step with is resolved
-        // with the rest.
-        self.sync_all_instances();
-        ui_frame::resolve_world_textures(
-            &mut self.world,
-            &mut textures,
-            renderer.context().device(),
-            renderer.context().queue(),
-        );
-
-        // The slicing half of the same problem, and for the same reason: a
-        // sprite naming an atlas has never met an `Atlases` either.
-        let mut atlases = Atlases::new(asset_root.clone());
-        ui_frame::resolve_world_atlases(&mut self.world, &mut atlases);
-        self.atlases = Some(atlases);
-        self.silhouettes = Some(voltra_assets::Silhouettes::new(asset_root.clone()));
-
-        self.load_input_map(&asset_root);
-        self.load_sorting_layers(&asset_root);
-        self.gamepads = gamepads::Gamepads::connect();
-
-        // And the legible part: a text in a world populated before `run`
-        // has never met a `Fonts`.
-        let mut fonts = Fonts::new(asset_root.clone());
-        voltra_scene::text::resolve_fonts(&mut self.world, &mut fonts);
-        self.fonts = Some(fonts);
-
-        // The audible third of the same problem: a source in a world populated
-        // before `run` has never met a `Clips` either.
-        let mut clips = Clips::new(asset_root.clone());
-        ui_frame::resolve_world_clips(&mut self.world, &mut clips);
-        self.clips = Some(clips);
-
-        // Last of the three, and the only one that can fail without stopping
-        // anything: with no device this is the silent `Audio` and the game
-        // runs on.
-        self.audio.connect();
-
-        if self.hot_reload {
-            match AssetWatcher::new(&asset_root) {
-                Ok(watcher) => self.watcher = Some(watcher),
-                // Not fatal. Refusing to open the editor because a watch handle
-                // could not be had would trade a working session for a feature
-                // nobody has used yet this run.
-                Err(e) => log::error!("hot reload disabled: {e}"),
-            }
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, (): ()) {
+        // The one event sent to the loop: the web's renderer, built.
+        #[cfg(target_arch = "wasm32")]
+        if let Some(renderer) = self.take_renderer() {
+            self.finish_resume(renderer);
         }
-
-        if self.ui.is_some() {
-            let device = renderer.context().device().clone();
-            let format = renderer.context().config().format;
-
-            // Same format as the window so the UI compositing step has nothing
-            // to convert, and full window size until a panel says otherwise.
-            let target = RenderTarget::new(
-                &device,
-                "scene-viewport",
-                format,
-                size.width,
-                size.height,
-                Filter::Linear,
-            );
-            let post = RenderTarget::new(
-                &device,
-                "scene-viewport-graded",
-                format,
-                size.width,
-                size.height,
-                Filter::Linear,
-            );
-            let mut egui = EguiLayer::new(&window, &device, format);
-            self.viewport = Some(egui.register_view(&device, post.raw_view(), Filter::Linear));
-            self.requested_size = (target.width(), target.height());
-            self.scene_target = Some(target);
-            self.post_target = Some(post);
-            self.egui = Some(egui);
-        }
-
-        self.renderer = Some(renderer);
-        self.textures = Some(textures);
-        self.window = Some(window);
-
-        // Device creation takes long enough to produce a huge first delta;
-        // restarting the clock here keeps frame one honest.
-        self.clock = Clock::new();
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {

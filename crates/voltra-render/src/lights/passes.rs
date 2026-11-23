@@ -3,13 +3,12 @@
 
 use std::sync::atomic::Ordering;
 
-use wgpu::util::DeviceExt;
-
 use super::global::GlobalInstance;
 use super::instance::LightInstance;
 use super::occluder::Edges;
 use super::shadows::{self, ShadowPlan, SHADOW_FORMAT};
 use super::{GlobalLight, LightPass, Lighting, LIT_FORMAT};
+use crate::frame_buffers::FrameBuffers;
 use crate::graph::{RenderGraph, Slot, TextureDesc};
 
 impl LightPass {
@@ -26,6 +25,7 @@ impl LightPass {
         &'a self,
         graph: &mut RenderGraph<'a>,
         device: &'a wgpu::Device,
+        buffers: &FrameBuffers,
         camera: &'a wgpu::BindGroup,
         scene: Slot,
         width: u32,
@@ -71,11 +71,14 @@ impl LightPass {
         // bind group is reference-counted.
         let lighting_cookies = lighting.cookies.clone();
         let buffer = (!instances.is_empty()).then(|| {
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("lights"),
-                contents: bytemuck::cast_slice(&instances),
-                usage: wgpu::BufferUsages::VERTEX,
-            })
+            buffers.create(
+                device,
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("lights"),
+                    contents: bytemuck::cast_slice(&instances),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            )
         });
         let globals: Vec<GlobalInstance> = lighting
             .globals
@@ -84,11 +87,14 @@ impl LightPass {
             .collect();
         let global_count = u32::try_from(globals.len()).unwrap_or(u32::MAX);
         let global_buffer = (!globals.is_empty()).then(|| {
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("global-lights"),
-                contents: bytemuck::cast_slice(&globals),
-                usage: wgpu::BufferUsages::VERTEX,
-            })
+            buffers.create(
+                device,
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("global-lights"),
+                    contents: bytemuck::cast_slice(&globals),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            )
         });
         let desc = |label| TextureDesc {
             label,
@@ -99,7 +105,7 @@ impl LightPass {
         let map = graph.create(desc("light-map"));
         let lit = graph.create(desc("lit-frame"));
 
-        let edges = self.shadows.upload(device, &plan);
+        let edges = self.shadows.upload(device, buffers, &plan);
         let shadow_map = edges.map(|edges| {
             let slot = graph.create(TextureDesc {
                 label: "light-shadows",

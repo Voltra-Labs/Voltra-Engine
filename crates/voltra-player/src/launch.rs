@@ -56,7 +56,7 @@ pub fn resolve(args: &Args, exe_dir: Option<&Path>) -> Result<Launch, LaunchErro
         (Some(path), _) => Some(path.clone()),
         (None, None) => exe_dir
             .map(|dir| dir.join(MANIFEST_FILE))
-            .filter(|path| path.is_file()),
+            .filter(|path| voltra_assets::fs::exists(path)),
         (None, Some(_)) => None,
     };
     let manifest = manifest_path

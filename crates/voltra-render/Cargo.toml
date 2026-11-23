@@ -17,3 +17,8 @@ epaint.workspace = true
 
 [dev-dependencies]
 voltra-testkit.workspace = true
+
+# WebGL2 beside WebGPU in a web build: wgpu picks WebGPU where the browser has
+# it and falls back to WebGL2 where it does not (`GpuContext::new_async`).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wgpu = { workspace = true, features = ["webgl"] }

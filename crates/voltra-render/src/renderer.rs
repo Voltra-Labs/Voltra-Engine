@@ -76,8 +76,20 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Blocks on device creation; native only — see [`GpuContext::new`].
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn new(target: impl Into<SurfaceTarget<'static>>, width: u32, height: u32) -> Self {
         Self::with_context(GpuContext::new(target, width, height), width, height)
+    }
+
+    /// [`Renderer::new`], awaited: the web's way, where nothing may block.
+    pub async fn new_async(
+        target: impl Into<SurfaceTarget<'static>>,
+        width: u32,
+        height: u32,
+    ) -> Self {
+        let ctx = GpuContext::new_async(target, width, height).await;
+        Self::with_context(ctx, width, height)
     }
 
     /// A renderer with no window, drawing only into offscreen targets —
@@ -97,7 +109,7 @@ impl Renderer {
         let texture_layout = texture::bind_group_layout(ctx.device());
         let flat_color = pipeline::create_flat_color(
             ctx.device(),
-            ctx.config().format,
+            ctx.format(),
             camera_binding.layout(),
             &texture_layout,
         );
@@ -107,12 +119,12 @@ impl Renderer {
         let viewport_binding = ViewportBinding::new(ctx.device());
         let lines = pipeline::create_lines(
             ctx.device(),
-            ctx.config().format,
+            ctx.format(),
             camera_binding.layout(),
             viewport_binding.layout(),
         );
 
-        let post = PostPass::new(ctx.device(), ctx.config().format);
+        let post = PostPass::new(ctx.device(), ctx.format());
         let bloom = BloomPass::new(ctx.device());
         let lights = LightPass::new(ctx.device(), camera_binding.layout(), &texture_layout);
         let normals = NormalPass::new(
@@ -124,7 +136,7 @@ impl Renderer {
         let particles = if ParticlePipelines::supported(ctx.downlevel()) {
             Some(ParticlePipelines::new(
                 ctx.device(),
-                ctx.config().format,
+                ctx.format(),
                 camera_binding.layout(),
                 &texture_layout,
             ))
@@ -220,7 +232,7 @@ impl Renderer {
             any = true;
         }
         if any {
-            self.ctx.queue().submit(Some(encoder.finish()));
+            self.ctx.submit(encoder.finish());
         }
     }
 

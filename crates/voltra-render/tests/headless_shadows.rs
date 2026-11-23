@@ -60,6 +60,7 @@ fn frame(lighting: &Lighting) -> Option<(Vec<Rgba>, usize)> {
         .add(
             &mut graph,
             &device,
+            &voltra_render::FrameBuffers::default(),
             camera.bind_group(),
             drawn,
             SIZE,

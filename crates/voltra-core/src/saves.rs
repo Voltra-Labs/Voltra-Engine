@@ -9,6 +9,15 @@
 //! crash cannot leave half of it, and reading it back without trusting it.
 
 pub mod dir;
+#[cfg(not(target_arch = "wasm32"))]
+mod native;
+#[cfg(target_arch = "wasm32")]
+mod web;
+
+#[cfg(not(target_arch = "wasm32"))]
+use native as storage;
+#[cfg(target_arch = "wasm32")]
+use web as storage;
 
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -127,25 +136,18 @@ impl Saves {
         Ok(dir.join(format!("{slot}.{EXTENSION}")))
     }
 
-    /// Writes `data` to `slot`, replacing what was there. Through a
+    /// Writes `data` to `slot`, replacing what was there. Natively through a
     /// temporary file and a rename, so a crash mid-write leaves the previous
-    /// save rather than half of this one.
+    /// save rather than half of this one; on the web one `localStorage`
+    /// write, which the browser already makes whole or not at all.
     pub fn save<T: Serialize>(&self, slot: &str, data: &T) -> Result<(), SaveError> {
         let path = self.path_of(slot)?;
         let text = ron::ser::to_string_pretty(data, ron::ser::PrettyConfig::default())
             .map_err(SaveError::Serialize)?;
-        let io = |source| SaveError::Io {
+        storage::write(&path, &text).map_err(|source| SaveError::Io {
             path: path.clone(),
             source,
-        };
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(io)?;
-        }
-        let mut temporary = path.as_os_str().to_owned();
-        temporary.push(".tmp");
-        let temporary = PathBuf::from(temporary);
-        std::fs::write(&temporary, text).map_err(io)?;
-        std::fs::rename(&temporary, &path).map_err(io)?;
+        })?;
         log::info!("saved {}", path.display());
         Ok(())
     }
@@ -161,15 +163,13 @@ impl Saves {
             path: path.clone(),
             source,
         };
-        let bytes = match std::fs::metadata(&path) {
-            Ok(meta) => meta.len(),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-            Err(e) => return Err(io(e)),
+        let Some(bytes) = storage::size(&path).map_err(io)? else {
+            return Ok(None);
         };
         if bytes > MAX_SAVE_BYTES {
             return Err(SaveError::TooLarge { path, bytes });
         }
-        let text = std::fs::read_to_string(&path).map_err(io)?;
+        let text = storage::read(&path).map_err(io)?;
         ron::from_str(&text)
             .map(Some)
             .map_err(|source| SaveError::Parse {
@@ -181,11 +181,7 @@ impl Saves {
     /// Removes `slot`. Returns whether there was one.
     pub fn delete(&self, slot: &str) -> Result<bool, SaveError> {
         let path = self.path_of(slot)?;
-        match std::fs::remove_file(&path) {
-            Ok(()) => Ok(true),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
-            Err(source) => Err(SaveError::Io { path, source }),
-        }
+        storage::remove(&path).map_err(|source| SaveError::Io { path, source })
     }
 
     /// Every slot saved so far, sorted. Files that are not slots — a
@@ -195,14 +191,10 @@ impl Saves {
         let Some(dir) = self.dir.as_ref() else {
             return Vec::new();
         };
-        let Ok(entries) = std::fs::read_dir(dir) else {
-            return Vec::new();
-        };
         let suffix = format!(".{EXTENSION}");
-        let mut slots: Vec<String> = entries
-            .flatten()
-            .filter_map(|entry| {
-                let name = entry.file_name().into_string().ok()?;
+        let mut slots: Vec<String> = storage::file_names(dir)
+            .into_iter()
+            .filter_map(|name| {
                 let slot = name.strip_suffix(&suffix)?;
                 check_slot(slot).ok()?;
                 Some(slot.to_owned())

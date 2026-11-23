@@ -46,6 +46,15 @@ pub fn read(path: &Path) -> io::Result<Vec<u8>> {
     from_disk(path)
 }
 
+/// Whether a file is at `path`: in the pack mounted over it, else on the
+/// disk. What `Path::is_file` would answer, for a target with no disk.
+pub fn exists(path: &Path) -> bool {
+    if let Some(found) = in_pack(path) {
+        return found;
+    }
+    on_disk(path)
+}
+
 /// [`read`], as UTF-8 text.
 pub fn read_to_string(path: &Path) -> io::Result<String> {
     String::from_utf8(read(path)?).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
@@ -55,6 +64,24 @@ pub fn read_to_string(path: &Path) -> io::Result<String> {
 /// or not found — a path inside a pack's root that the pack lacks is
 /// missing, not looked for on disk, so a web build and a test behave alike.
 fn from_pack(path: &Path) -> Option<io::Result<Vec<u8>>> {
+    with_pack(path, |root, relative, files, key| {
+        files.get(key).cloned().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("{} is not in the asset pack", root.join(relative).display()),
+            )
+        })
+    })
+}
+
+/// Whether the pack covering `path` holds it; `None` when no pack covers it.
+fn in_pack(path: &Path) -> Option<bool> {
+    with_pack(path, |_, _, files, key| files.contains_key(key))
+}
+
+/// Runs `answer` against the pack mounted over `path`, with the pack's root,
+/// `path` relative to it, its files and the key `path` has among them.
+fn with_pack<T>(path: &Path, answer: impl FnOnce(&Path, &Path, &Files, &str) -> T) -> Option<T> {
     let mounted = MOUNTED.read().unwrap_or_else(PoisonError::into_inner);
     let (root, files) = mounted.iter().find(|(root, _)| path.starts_with(root))?;
     let relative = path.strip_prefix(root).ok()?;
@@ -63,17 +90,22 @@ fn from_pack(path: &Path) -> Option<io::Result<Vec<u8>>> {
         .map(|part| part.as_os_str().to_string_lossy())
         .collect::<Vec<_>>()
         .join("/");
-    Some(files.get(&key).cloned().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("{} is not in the asset pack", root.join(relative).display()),
-        )
-    }))
+    Some(answer(root, relative, files, &key))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 fn from_disk(path: &Path) -> io::Result<Vec<u8>> {
     std::fs::read(path)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn on_disk(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(target_arch = "wasm32")]
+fn on_disk(_path: &Path) -> bool {
+    false
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -102,6 +134,8 @@ mod tests {
             read_to_string(&root.join("scenes").join("a.ron")).expect("in the pack"),
             "(version: 1)"
         );
+        assert!(exists(&root.join("scenes/a.ron")));
+        assert!(!exists(&root.join("scenes/b.ron")));
         let missing = read(&root.join("scenes/b.ron")).expect_err("not in the pack");
         assert_eq!(missing.kind(), io::ErrorKind::NotFound);
 
@@ -109,6 +143,7 @@ mod tests {
         let outside = std::env::temp_dir().join(format!("voltra-disk-{}.txt", std::process::id()));
         std::fs::write(&outside, "disk").expect("written");
         assert_eq!(read_to_string(&outside).expect("on disk"), "disk");
+        assert!(exists(&outside));
         let _ = std::fs::remove_file(&outside);
 
         unmount(&root);

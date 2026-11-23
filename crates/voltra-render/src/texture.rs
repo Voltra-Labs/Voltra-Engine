@@ -117,37 +117,29 @@ impl Texture {
             depth_or_array_layers: 1,
         };
 
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: Some(label),
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: FORMAT,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            // Reinterpreting these pixels as plain `Rgba8Unorm` has to be
-            // declared up front; a view format missing from this list is
-            // rejected when the view is created, not when it is sampled.
-            view_formats: &[FORMAT.remove_srgb_suffix()],
-        });
-
-        // `write_texture` has no 256-byte row alignment requirement, unlike
-        // `copy_buffer_to_texture`.
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfo {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            rgba,
-            wgpu::TexelCopyBufferLayout {
-                offset: 0,
-                bytes_per_row: Some(4 * width),
-                rows_per_image: Some(height),
-            },
-            size,
-        );
+        // The raw view reinterprets these pixels where the device can;
+        // where it cannot (WebGL2), the same pixels go up a second time as
+        // plain `Rgba8Unorm` — twice the memory, on the fallback path only,
+        // rather than normal maps decoded as colour.
+        let reinterpret = reinterprets_srgb(device);
+        let texture = upload(device, queue, label, FORMAT, reinterpret, rgba, size);
+        let raw_view = if reinterpret {
+            texture.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(FORMAT.remove_srgb_suffix()),
+                ..Default::default()
+            })
+        } else {
+            upload(
+                device,
+                queue,
+                label,
+                FORMAT.remove_srgb_suffix(),
+                false,
+                rgba,
+                size,
+            )
+            .create_view(&wgpu::TextureViewDescriptor::default())
+        };
 
         let filter = wgpu::FilterMode::from(filter);
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -165,10 +157,7 @@ impl Texture {
 
         Ok(Self {
             view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
-            raw_view: texture.create_view(&wgpu::TextureViewDescriptor {
-                format: Some(FORMAT.remove_srgb_suffix()),
-                ..Default::default()
-            }),
+            raw_view,
             sampler,
             width,
             height,
@@ -314,6 +303,59 @@ pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             },
         ],
     })
+}
+
+/// Whether `device` can view an sRGB texture as its plain counterpart
+/// (`DownlevelFlags::VIEW_FORMATS`). wgpu 30's GL backend — WebGL2 among it
+/// — never can; every other backend always can. Read off the backend
+/// because a `Device` does not report its downlevel flags.
+pub fn reinterprets_srgb(device: &wgpu::Device) -> bool {
+    device.adapter_info().backend != wgpu::Backend::Gl
+}
+
+/// Makes a sampled 2D texture of `format` holding `rgba`; with `view_raw`,
+/// one that can also be viewed as `format` without its sRGB suffix.
+fn upload(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+    format: wgpu::TextureFormat,
+    view_raw: bool,
+    rgba: &[u8],
+    size: wgpu::Extent3d,
+) -> wgpu::Texture {
+    let raw = [format.remove_srgb_suffix()];
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        // Reinterpreting these pixels as plain `Rgba8Unorm` has to be
+        // declared up front; a view format missing from this list is
+        // rejected when the view is created, not when it is sampled.
+        view_formats: if view_raw { &raw } else { &[] },
+    });
+    // `write_texture` has no 256-byte row alignment requirement, unlike
+    // `copy_buffer_to_texture`.
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        rgba,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(4 * size.width),
+            rows_per_image: Some(size.height),
+        },
+        size,
+    );
+    texture
 }
 
 #[cfg(test)]

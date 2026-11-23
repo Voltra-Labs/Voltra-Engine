@@ -49,6 +49,19 @@ pub struct Mesh {
     count: u32,
 }
 
+/// Destroys the buffers rather than leaving them to the drop: on the web a
+/// dropped buffer's memory waits for JavaScript's collector, and meshes are
+/// built afresh every frame (see `frame_buffers.rs`). A mesh owns its
+/// buffers alone, and is dropped after the frame that drew it is submitted.
+impl Drop for Mesh {
+    fn drop(&mut self) {
+        self.vertices.destroy();
+        if let Some(indices) = &self.indices {
+            indices.destroy();
+        }
+    }
+}
+
 impl Mesh {
     /// Uploads vertices for a direct (non-indexed) draw.
     pub fn new<V: Pod>(device: &wgpu::Device, label: &str, vertices: &[V]) -> Self {

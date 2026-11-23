@@ -418,6 +418,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
         .add(
             &mut graph,
             &device,
+            &voltra_render::FrameBuffers::default(),
             binding.bind_group(),
             drawn,
             width,

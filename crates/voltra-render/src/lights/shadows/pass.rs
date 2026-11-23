@@ -1,10 +1,9 @@
 //! The shadow map's pipeline: draws casting edges into it, and binds it —
 //! or an empty stand-in — for the accumulate pass.
 
-use wgpu::util::DeviceExt;
-
 use super::plan::{ShadowInstance, ShadowPlan};
 use super::{QUARTERS, SHADOW_FORMAT};
+use crate::frame_buffers::FrameBuffers;
 use crate::shader;
 
 /// Vertices per casting edge: a quad (two triangles) in each quarter.
@@ -148,14 +147,18 @@ impl ShadowPass {
     pub(in crate::lights) fn upload(
         &self,
         device: &wgpu::Device,
+        buffers: &FrameBuffers,
         plan: &ShadowPlan,
     ) -> Option<wgpu::Buffer> {
         (!plan.instances.is_empty()).then(|| {
-            device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("light-shadow-edges"),
-                contents: bytemuck::cast_slice(&plan.instances),
-                usage: wgpu::BufferUsages::VERTEX,
-            })
+            buffers.create(
+                device,
+                &wgpu::util::BufferInitDescriptor {
+                    label: Some("light-shadow-edges"),
+                    contents: bytemuck::cast_slice(&plan.instances),
+                    usage: wgpu::BufferUsages::VERTEX,
+                },
+            )
         })
     }
 

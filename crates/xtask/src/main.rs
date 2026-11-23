@@ -7,11 +7,12 @@
 
 mod dist;
 mod files;
+mod pack;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use voltra_player::MANIFEST_FILE;
+use voltra_player::{MANIFEST_FILE, PACK_FILE};
 
 const USAGE: &str = "\
 Usage: cargo xtask <TASK>
@@ -19,12 +20,16 @@ Usage: cargo xtask <TASK>
 Tasks:
   dist [--manifest FILE] [--out DIR]
         Build the player in release and package it with its assets and
-        manifest into DIR/<name> (default: build.ron, dist/)";
+        manifest into DIR/<name> (default: build.ron, dist/)
+  pack [--manifest FILE] [--out FILE]
+        Write the manifest and its assets as the one file the web player
+        fetches (default: build.ron, dist/<name>-web/game.pak)";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     let result = match args.next().as_deref() {
         Some("dist") => dist_command(args),
+        Some("pack") => pack_command(args),
         Some("-h" | "--help") | None => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;
@@ -54,6 +59,27 @@ fn dist_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
     }
     let plan = dist::plan(&manifest, &out)?;
     dist::run(&plan, &workspace)
+}
+
+fn pack_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
+    let workspace = workspace_root();
+    let mut manifest = workspace.join(MANIFEST_FILE);
+    let mut out = None;
+    while let Some(arg) = args.next() {
+        let mut value = || args.next().ok_or(format!("`{arg}` needs a value"));
+        match arg.as_str() {
+            "--manifest" => manifest = PathBuf::from(value()?),
+            "--out" => out = Some(PathBuf::from(value()?)),
+            other => return Err(format!("unknown option `{other}`\n\n{USAGE}")),
+        }
+    }
+    let dist = workspace.join("dist");
+    let plan = dist::plan(&manifest, &dist)?;
+    let out = out.unwrap_or_else(|| {
+        dist.join(format!("{}-web", plan.manifest.file_name()))
+            .join(PACK_FILE)
+    });
+    pack::run(&plan, &out)
 }
 
 /// The workspace root: two levels above this crate's manifest. Not the

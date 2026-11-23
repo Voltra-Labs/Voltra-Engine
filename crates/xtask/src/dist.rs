@@ -100,16 +100,12 @@ pub fn run(plan: &Plan, workspace: &Path) -> Result<(), String> {
     prepare_build_dir(&plan.folder, MANIFEST_FILE).map_err(|e| e.to_string())?;
     std::fs::copy(&built, &plan.executable)
         .map_err(|e| format!("could not copy {}: {e}", built.display()))?;
-    let copied = copy_tree(&plan.assets, &plan.folder.join("assets"))
+    let copied = copy_tree(&plan.assets, &plan.folder.join(SHIPPED_ASSETS))
         .map_err(|e| format!("could not copy the assets: {e}"))?;
 
-    // The shipped manifest: the same build, with its assets where the copy
-    // put them.
-    let shipped = Manifest {
-        assets: PathBuf::from("assets"),
-        ..plan.manifest.clone()
-    };
-    let text = shipped.to_ron().map_err(|e| e.to_string())?;
+    let text = shipped(&plan.manifest)
+        .to_ron()
+        .map_err(|e| e.to_string())?;
     std::fs::write(plan.folder.join(MANIFEST_FILE), text)
         .map_err(|e| format!("could not write the manifest: {e}"))?;
 
@@ -120,6 +116,18 @@ pub fn run(plan: &Plan, workspace: &Path) -> Result<(), String> {
     );
     Ok(())
 }
+
+/// The manifest a build ships: the same build, with its assets in the
+/// `assets` folder beside it, where the copy — or the pack — puts them.
+pub fn shipped(manifest: &Manifest) -> Manifest {
+    Manifest {
+        assets: PathBuf::from(SHIPPED_ASSETS),
+        ..manifest.clone()
+    }
+}
+
+/// The asset folder's name inside a build.
+pub const SHIPPED_ASSETS: &str = "assets";
 
 #[cfg(test)]
 mod tests {

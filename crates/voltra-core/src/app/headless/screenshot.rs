@@ -153,7 +153,7 @@ impl Headless {
             .unwrap_or_else(voltra_assets::default_root);
         let device = renderer.context().device();
         let queue = renderer.context().queue();
-        let format = renderer.context().config().format;
+        let format = renderer.context().format();
         let mut textures = Textures::new(device, queue, renderer.texture_layout(), root);
         resolve_world_textures(&mut app.world, &mut textures, device, queue);
         app.scene_target = Some(RenderTarget::new(

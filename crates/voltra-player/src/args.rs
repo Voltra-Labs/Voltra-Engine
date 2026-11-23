@@ -7,6 +7,9 @@
 //! manifest (`build.ron`) is the shape those converge on; `launch` fills in
 //! from it whatever this leaves unsaid.
 
+// The web has no command line: only `Args` itself is used there, empty.
+#![cfg_attr(target_arch = "wasm32", allow(dead_code))]
+
 use std::fmt;
 use std::path::PathBuf;
 

@@ -44,7 +44,7 @@ impl Renderer {
         self.gpu_timer.end(&mut encoder, scope);
 
         self.gpu_timer.finish(&mut encoder);
-        self.ctx.queue().submit(Some(encoder.finish()));
+        self.ctx.submit(encoder.finish());
         self.gpu_timer.submitted();
     }
 
@@ -57,9 +57,7 @@ impl Renderer {
             return;
         };
 
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = self.ctx.frame_view(&frame);
 
         let mut encoder =
             self.ctx
@@ -91,7 +89,7 @@ impl Renderer {
         self.gpu_timer.end(&mut encoder, scope);
 
         self.gpu_timer.finish(&mut encoder);
-        self.ctx.queue().submit(Some(encoder.finish()));
+        self.ctx.submit(encoder.finish());
         self.gpu_timer.submitted();
         self.ctx.present(frame);
     }
