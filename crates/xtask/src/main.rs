@@ -22,7 +22,7 @@ Tasks:
         Build the player in release and package it with its assets and
         manifest into DIR/<name> (default: build.ron, dist/)
   pack [--manifest FILE] [--out FILE]
-        Write the manifest and its assets as the one file the web player
+        Write the manifest and its assets as the one file a web build
         fetches (default: build.ron, dist/<name>-web/game.pak)";
 
 fn main() -> ExitCode {

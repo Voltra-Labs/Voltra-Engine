@@ -19,8 +19,9 @@
 <body>
   <div id="voltra-status">Loading…</div>
   <script type="module">
-    // wasm-bindgen's output beside this page; `init` runs the player's `main`.
-    import init from "./voltra-player.js";
+    // wasm-bindgen's output beside this page, named `game` (`--out-name
+    // game`) whichever binary it is; `init` runs its `main`.
+    import init from "./game.js";
     init().catch((error) => {
       const status = document.getElementById("voltra-status");
       status.dataset.state = "shown";

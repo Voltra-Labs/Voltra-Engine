@@ -22,6 +22,19 @@
 use std::collections::HashSet;
 use std::fmt;
 
+/// The pack's file name, beside the page that runs it.
+pub const PACK_FILE: &str = "game.pak";
+
+/// Where a web build mounts the pack: the folder a native build's executable
+/// sits in. Absolute, so no relative path a scene names can be read against
+/// anything else.
+pub const PACK_ROOT: &str = "/game";
+
+/// The asset folder inside a pack, as inside a native build folder: where
+/// `cargo xtask pack` puts the asset root, and so the asset root a web build
+/// resolves to ([`default_root`](crate::default_root)).
+pub const PACK_ASSETS: &str = "assets";
+
 /// The first four bytes of every pack.
 pub const MAGIC: [u8; 4] = *b"VPAK";
 

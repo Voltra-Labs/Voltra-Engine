@@ -13,5 +13,10 @@ cpal.workspace = true
 symphonia.workspace = true
 log.workspace = true
 
+# The browser's WebAudio as the output device; without it cpal has only a
+# silent host on wasm.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+cpal = { workspace = true, features = ["wasm-bindgen"] }
+
 [dev-dependencies]
 voltra-testkit.workspace = true

@@ -8,7 +8,9 @@
 //! `_process`/`_physics_process` over the same two facts.
 //!
 //! Run it with `cargo run -p voltra-core --example platformer`, or package it
-//! with `cargo xtask dist --manifest platformer.build.ron`.
+//! with `cargo xtask dist --manifest platformer.build.ron`. It also runs in a
+//! browser: built for `wasm32-unknown-unknown` beside the pack `cargo xtask
+//! pack --manifest platformer.build.ron` writes.
 //! `A`/`D` or the arrow keys walk, `Space` jumps, and walking into a coin
 //! takes it — with a sound, which is the point of the ears on the camera.
 
@@ -77,7 +79,12 @@ const GROUND_PROBE: f32 = 0.08;
 
 fn main() {
     voltra_core::logging::init(cfg!(not(debug_assertions)));
+    // Natively at once; in a browser once the game's pack has arrived.
+    voltra_core::when_assets_ready(start);
+}
 
+/// Builds the level, installs the ticks and runs.
+fn start() -> Result<(), String> {
     let mut registry = ComponentRegistry::with_defaults();
     registry.register::<Coin>("Coin");
     let mut app = App::new(WindowConfig {
@@ -171,6 +178,7 @@ fn main() {
             }
         })
         .run();
+    Ok(())
 }
 
 /// Takes any coin the walker began touching, in the step it touched it.

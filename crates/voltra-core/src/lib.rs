@@ -7,6 +7,7 @@ pub mod app;
 pub mod input;
 pub mod logging;
 pub mod saves;
+pub mod start;
 pub mod time;
 pub mod ui;
 pub mod window;
@@ -17,6 +18,7 @@ pub use input::{
     ActionMap, ActionState, Binding, Direction, Input, MouseButton, PadAxis, PadButton,
 };
 pub use saves::{SaveError, Saves};
+pub use start::when_assets_ready;
 pub use time::{Clock, Timestep};
 pub use ui::EguiLayer;
 pub use window::WindowConfig;

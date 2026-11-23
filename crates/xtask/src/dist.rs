@@ -126,8 +126,9 @@ pub fn shipped(manifest: &Manifest) -> Manifest {
     }
 }
 
-/// The asset folder's name inside a build.
-pub const SHIPPED_ASSETS: &str = "assets";
+/// The asset folder's name inside a build — and inside a pack, where the
+/// web build looks for it.
+pub const SHIPPED_ASSETS: &str = voltra_player::PACK_ASSETS;
 
 #[cfg(test)]
 mod tests {

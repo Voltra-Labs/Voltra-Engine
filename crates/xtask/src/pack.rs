@@ -12,14 +12,10 @@ use crate::dist::{self, Plan, SHIPPED_ASSETS};
 use crate::files::tree_files;
 
 /// The pack's files for `plan`: `build.ron`, then `assets/…`, `/`-separated.
+///
+/// The same for a scene build and a game with its own binary: the pack is
+/// the game's files, and which wasm reads them is the page's business.
 pub fn files(plan: &Plan) -> Result<Vec<(String, Vec<u8>)>, String> {
-    if plan.manifest.game.is_some() {
-        return Err(format!(
-            "{} names a game binary; the web player runs scenes, and a game with \
-             its own code has no web entry yet",
-            plan.manifest.name
-        ));
-    }
     let manifest = dist::shipped(&plan.manifest)
         .to_ron()
         .map_err(|e| e.to_string())?;
@@ -101,9 +97,12 @@ mod tests {
     }
 
     #[test]
-    fn a_game_with_its_own_binary_is_not_packed() {
+    fn a_game_with_its_own_binary_packs_its_assets_too() {
         let plan =
             dist::plan(&workspace().join("platformer.build.ron"), Path::new("out")).expect("plans");
-        assert!(files(&plan).is_err());
+        let files = files(&plan).expect("packs");
+        assert!(files
+            .iter()
+            .any(|(path, _)| path == "assets/prefabs/coin.ron"));
     }
 }

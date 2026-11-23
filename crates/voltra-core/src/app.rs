@@ -202,9 +202,10 @@ pub struct App {
     held_actions: crate::input::HeldActions,
     /// The title and close the UI asked for this frame.
     window_requests: window_requests::WindowRequests,
-    /// The renderer a browser is still building; see `app/web.rs`.
+    /// The renderer a browser is still building, and the page's gesture;
+    /// see `app/web.rs`.
     #[cfg(target_arch = "wasm32")]
-    pending_renderer: web::PendingRenderer,
+    web: web::WebState,
 }
 
 /// Earth-ish gravity, in world units per second squared.
@@ -489,6 +490,10 @@ impl ApplicationHandler for App {
         if !consumed {
             self.input.process_window_event(&event);
         }
+        // Before the renderer check: a key pressed while the device is still
+        // on its way is the page's gesture all the same.
+        #[cfg(target_arch = "wasm32")]
+        self.on_web_event(&event);
 
         if self.renderer.is_none() {
             return;

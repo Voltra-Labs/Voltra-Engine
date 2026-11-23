@@ -124,6 +124,15 @@ impl Audio {
         }
     }
 
+    /// Starts output the platform held back until the user interacted — a
+    /// browser does, until the first key, click or touch. A no-op without a
+    /// device, and natively, where the stream is already playing.
+    pub fn resume(&self) {
+        if let Some(output) = &self.output {
+            output.resume();
+        }
+    }
+
     /// Whether anything can actually be heard.
     pub fn is_silent(&self) -> bool {
         self.commands.is_none()
