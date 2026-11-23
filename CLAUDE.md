@@ -37,6 +37,7 @@ Rules:
 cargo run -p voltra-editor                                  # launch the editor
 cargo run -p voltra-player -- assets/scenes/sandbox.ron      # run a scene, no editor
 cargo xtask dist                                            # package build.ron into dist/
+cargo xtask dist --web                                      # the same for the browser (docs/WEB.md)
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings       # must be clean
@@ -60,7 +61,7 @@ crates/
   voltra-editor/     the editor binary
   voltra-player/     the player binary: runs a scene, no editor linked
   xtask/             repo tasks (`cargo xtask dist`), not shipped
-docs/                ARCHITECTURE.md, CONVENTIONS.md
+docs/                ARCHITECTURE.md, CONVENTIONS.md, MCP.md, WEB.md
 ```
 
 ## Hard rules

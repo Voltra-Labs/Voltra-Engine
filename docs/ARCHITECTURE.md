@@ -4494,7 +4494,7 @@ left off as found).
 
 ### The engine builds for the web; every asset read goes through one funnel
 
-W1 of `docs/plan-web.md`. `cargo clippy -p voltra-player --target
+The first web stage. `cargo clippy -p voltra-player --target
 wasm32-unknown-unknown` is clean and in CI; nothing native changed.
 
 - **`voltra_assets::fs`** is where asset bytes come from:
@@ -4524,7 +4524,7 @@ rest, gone when unmounted) and the `wasm32` CI job.
 
 ### A scene runs in a browser: one pack, an awaited renderer, an sRGB view
 
-W2 of `docs/plan-web.md`. The player builds for `wasm32-unknown-unknown`,
+The second web stage. The player builds for `wasm32-unknown-unknown`,
 fetches its game, and draws the sandbox on WebGPU and on WebGL2;
 `crates/voltra-player/web/test/first-frame.mjs` (Playwright) checks both.
 
@@ -4574,12 +4574,12 @@ fetches its game, and draws the sandbox on WebGPU and on WebGL2;
   console** (`logging/web.rs`, with a panic hook); **the watcher refuses**
   on the web (`watch/web.rs`), which the loop already reads as "hot reload
   off". `env_logger` and `notify` are native-only dependencies.
-- **Not yet:** `cargo xtask dist --web` (W4). The canvas takes the page's
-  size; a manifest's window size is a desktop setting.
+- The canvas takes the page's size; a manifest's window size is a desktop
+  setting.
 
 ### In the browser, sound waits for a gesture and any game starts from its pack
 
-W3 of `docs/plan-web.md`. The platformer example runs in a browser, is
+The third web stage. The platformer example runs in a browser, is
 walked by the keyboard and makes its coin's sound;
 `crates/voltra-player/web/test/play.mjs` checks it on WebGPU and WebGL2.
 
@@ -4615,6 +4615,33 @@ walked by the keyboard and makes its coin's sound;
   watches the samples cpal copies into each `AudioBuffer`. Without
   `Audio::resume` the test fails; with it the context runs and the coin's
   samples are not silent.
+
+### A web build is a folder of four files, made by `cargo xtask dist --web`
+
+The last web stage; how to use it is [WEB.md](WEB.md).
+
+- **`dist --web`** builds the manifest's target — the player without
+  `windowed`, or the game's own binary or example — for
+  `wasm32-unknown-unknown` in release, runs `wasm-bindgen --target web
+  --out-name game`, writes `index.html` (the player's
+  `web/index.html`, titled after the game) and packs the manifest and assets
+  (`pack.rs`) into `dist/<name>-web/`. The pack is the folder's mark, as
+  `build.ron` is a native build's: `prepare_build_dir` empties nothing else.
+  Godot's web export and Unity's WebGL build ship the same three things — a
+  page, the wasm with its loader, the game's data.
+- **The CLI is checked, not installed.** `wasm-bindgen`'s CLI must equal the
+  crate's version in `Cargo.lock`; xtask reads both before the long build and
+  names the `cargo install` line when they differ. Installing it from xtask
+  would put a minutes-long compile behind a typo'd flag, and CI installs a
+  prebuilt one (`taiki-e/install-action`).
+- **No wasm-opt, no size profile.** The release wasm is about 13 MB, 4 MB
+  gzipped, which hosts compress on the fly. Shrinking it (`opt-level = "z"`,
+  LTO, `wasm-opt`) would change the native release too or add a tool; it waits
+  for a game that needs a smaller download.
+- **No threads**, so no `COOP`/`COEP` headers: any static host serves it.
+  Threads on the web wait for a game that needs them.
+- The web tests build through `dist --web`, so CI runs the command a person
+  ships with; a `python3 -m http.server` of the folder runs the game.
 
 ### A running editor is driven through a bridge, not by speaking MCP
 

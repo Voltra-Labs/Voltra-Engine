@@ -31,7 +31,7 @@ jobs:
       - run: cargo fmt --all --check
 
   # The player for the browser: it has to keep building for wasm32 while
-  # the web export is assembled (docs/plan-web.md). Lints too — code behind
+  # the engine runs in browsers (docs/WEB.md). Lints too — code behind
   # `cfg(target_arch = "wasm32")` is compiled nowhere else.
   wasm:
     name: clippy (wasm32)
