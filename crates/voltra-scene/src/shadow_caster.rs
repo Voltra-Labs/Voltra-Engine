@@ -17,7 +17,7 @@ mod silhouette;
 mod starting;
 
 pub use outline::{occluders, outlines_of, CIRCLE_SIDES};
-pub use silhouette::{prepare, silhouette_key, SpriteShapes};
+pub use silhouette::{prepare, silhouette_key, sprite_silhouette, SpriteShapes};
 pub use starting::{starting_polygon, EDIT_CIRCLE_SIDES};
 
 /// Blocks the light of every [`PointLight2D`](crate::PointLight2D) that casts

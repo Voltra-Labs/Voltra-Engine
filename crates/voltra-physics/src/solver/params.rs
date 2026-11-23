@@ -46,6 +46,11 @@ pub struct SolverParams {
     pub warm_starting: bool,
     /// When bodies at rest go to sleep. See [`crate::sleep`].
     pub sleep: SleepParams,
+    /// Whether a fast body is swept against static geometry, and a bullet
+    /// against moving bodies, so neither passes through what it meets in a
+    /// step — see `continuous`. On by default, as Box2D's
+    /// `enableContinuous` is.
+    pub continuous: bool,
 }
 
 impl Default for SolverParams {
@@ -60,6 +65,7 @@ impl Default for SolverParams {
             max_rotation: 0.25 * PI,
             warm_starting: true,
             sleep: SleepParams::default(),
+            continuous: true,
         }
     }
 }

@@ -114,9 +114,9 @@ impl SolverBody {
 
 /// `1 / I` for a body of this mass wearing this shape.
 ///
-/// A box turns about its centre with `I = m(hx² + hy²)/3` and a disc with
-/// `I = m·r²/2`, both standard and both in world units, so a scaled collider
-/// resists exactly as much as it looks like it should.
+/// `I` per unit of mass comes from the shape ([`super::inertia`]), in world
+/// units, so a scaled collider resists exactly as much as it looks like it
+/// should.
 ///
 /// Zero — infinite inertia — whenever the answer would be an infinity or a
 /// division by zero: a body that cannot be pushed, a body with no collider to
@@ -131,16 +131,7 @@ fn inverse_inertia(inverse_mass: f32, shape: Option<(&Collider, &Transform)>) ->
         return 0.0;
     };
 
-    let denominator = match collider {
-        Collider::Box { .. } => {
-            let half = collider.world_half_extents(transform);
-            (half.x * half.x + half.y * half.y) / 3.0
-        }
-        Collider::Circle { .. } => {
-            let radius = collider.world_radius(transform);
-            radius * radius / 2.0
-        }
-    };
+    let denominator = super::inertia::unit_inertia(collider, transform);
 
     if denominator > 0.0 {
         inverse_mass / denominator

@@ -171,7 +171,7 @@ impl App {
             camera: &mut renderer.camera,
             textures,
             atlases,
-            silhouettes: self.silhouettes.as_ref(),
+            silhouettes: self.silhouettes.as_mut(),
             fonts,
             sorting_layers: &self.sorting_layers,
             clips,

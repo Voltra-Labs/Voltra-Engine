@@ -352,6 +352,8 @@ privileged and plain `cargo build` covers everything.
 | W2 | A scene runs in a browser: the asset pack, WebGPU with a WebGL2 fallback | done |
 | W3 | Sound and input in the browser; games with their own code on the web | done |
 | W4 | `cargo xtask dist --web`: a folder any static server hosts | done |
+| 75a | Capsule and convex polygon colliders, in every query, a fit to the sprite | done |
+| 75b | Continuous collision: fast bodies stop at walls, bullets at bodies too | done |
 
 ## Contributing
 

@@ -10,6 +10,7 @@ mod audio_source;
 mod camera;
 mod camera_rig;
 mod character;
+mod collider;
 mod collision;
 mod delete;
 mod global_light;
@@ -214,6 +215,18 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     .get::<Tilemap>(entity)
                     .is_some_and(|map| map.collision);
                 let has_collider = frame.world.get::<Collider>(entity).is_some();
+                let textured = frame
+                    .world
+                    .get::<Sprite>(entity)
+                    .is_some_and(|sprite| sprite.texture.is_some());
+                if let Some(shape) = frame.world.get_mut::<Collider>(entity) {
+                    ui.separator();
+                    let outcome = collider::show(ui, shape, textured);
+                    claim = claim.or(outcome.claim);
+                    if outcome.fit_to_sprite {
+                        claim = claim.or(fit_to_sprite(frame, entity));
+                    }
+                }
                 if has_collider || solid_layer {
                     ui.separator();
                     claim = claim.or(collision::show(ui, frame.world, entity));
@@ -290,6 +303,31 @@ fn ui_parent_rect(ui: &Ui, frame: &UiFrame<'_>, entity: voltra_ecs::Entity) -> u
 /// Dragged *or* focused: a `DragValue` can also be clicked into and typed in,
 /// and an entry that closed between two keystrokes would be one undo per
 /// character.
+/// Shapes `entity`'s collider as the convex hull of its sprite's opaque
+/// pixels, grown to eight corners at most; a sprite with nothing opaque, or
+/// silhouettes not loaded, leaves it as it was and says why.
+fn fit_to_sprite(frame: &mut UiFrame<'_>, entity: voltra_ecs::Entity) -> Option<&'static str> {
+    let points: Vec<Vec2> = frame
+        .sprite_silhouette(entity)
+        .into_iter()
+        .flatten()
+        .collect();
+    match voltra_scene::ConvexPolygon::enclosing(&points) {
+        Ok(points) => {
+            let collider = frame.world.get_mut::<Collider>(entity)?;
+            *collider = Collider::Polygon {
+                points,
+                radius: 0.0,
+            };
+            Some("Fit collider to sprite")
+        }
+        Err(error) => {
+            log::warn!("cannot fit the collider to the sprite: {error} in its silhouette");
+            None
+        }
+    }
+}
+
 pub(super) fn active(response: &egui::Response, label: &'static str) -> Option<&'static str> {
     (response.dragged() || response.has_focus()).then_some(label)
 }

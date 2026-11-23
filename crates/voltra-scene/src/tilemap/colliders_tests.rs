@@ -36,7 +36,7 @@ fn generated(world: &World) -> Vec<(Entity, Transform, Collider)> {
 fn half(collider: &Collider) -> Vec2 {
     match collider {
         Collider::Box { half_extents } => *half_extents,
-        Collider::Circle { .. } => panic!("tiles generate boxes"),
+        other => panic!("tiles generate boxes, not a {}", other.kind()),
     }
 }
 

@@ -125,26 +125,15 @@ fn outlines(
 }
 
 /// `entity`'s collider as a world-space outline, counter-clockwise, placed
-/// by its own [`Transform`] as the physics places it, a circle cut into
-/// `sides`; `None` without one, or for a shape with no area.
+/// by its own [`Transform`] as the physics places it, a full turn of any
+/// round part cut into `sides`; `None` without one, or for a shape with no area.
 pub(super) fn collider_outline(world: &World, entity: Entity, sides: usize) -> Option<Vec<Vec2>> {
     let collider = world.get::<Collider>(entity)?;
     let transform = world.get::<Transform>(entity)?;
     if collider.is_degenerate(transform) {
         return None;
     }
-    Some(match collider {
-        Collider::Box { .. } => collider.corners(transform).to_vec(),
-        Collider::Circle { .. } => {
-            let radius = collider.world_radius(transform);
-            (0..sides)
-                .map(|i| {
-                    let turn = i as f32 / sides as f32 * std::f32::consts::TAU;
-                    transform.translation + Vec2::from_angle(turn) * radius
-                })
-                .collect()
-        }
-    })
+    Some(collider.outline(transform, sides))
 }
 
 #[cfg(test)]

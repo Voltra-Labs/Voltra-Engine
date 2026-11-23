@@ -1,26 +1,42 @@
 //! Exactly how two shapes overlap, if they do.
 //!
-//! Three pairs, none of which needs SAT or GJK. Every one of them has a
-//! degenerate case where the obvious formula divides by zero or normalises a
-//! zero vector, and `glam`'s `normalize` of a zero vector is NaN rather than an
-//! error. A NaN normal does not fail here — it spreads into every velocity the
-//! solver touches next stage and the scene quietly stops working. So each case
-//! is handled where it arises, not guarded for at the end.
+//! Every shape is a convex hull grown by a radius (`Collider::world_shape`),
+//! so the general pairs are by kind, as in Box2D v3: polygon against polygon
+//! — a capsule is a two-cornered one — by the separating axis and clipping
+//! (`polygon`), anything against a circle by its nearest feature
+//! (`round`), and capsule against capsule by the closest points of their
+//! segments (`capsule`). Box against box and box against circle keep
+//! closed-form paths of their own: the same answers, measured at 114 against
+//! 284 ns a box pair and 28 against 122 a box–circle pair.
+//!
+//! Every pair has a degenerate case where the obvious formula divides by zero
+//! or normalises a zero vector, and `glam`'s `normalize` of a zero vector is
+//! NaN rather than an error. A NaN normal does not fail here — it spreads into
+//! every velocity the solver touches next stage and the scene quietly stops
+//! working. So each case is handled where it arises, not guarded for at the
+//! end.
 //!
 //! The normal always pushes **`a` away from `b`**. Swapping the arguments
 //! negates it and changes nothing else.
 
 mod box_box;
 mod box_circle;
+mod capsule;
 mod circle;
+mod polygon;
+mod round;
 
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, Transform};
 
+use crate::geometry::Hull;
 use box_box::box_box;
 use box_circle::box_circle;
+use capsule::capsule_capsule;
 use circle::circle_circle;
+use polygon::polygon_polygon;
+use round::{hull_circle, point_point};
 
 /// Below this a difference of positions has no meaningful direction.
 const EPSILON: f32 = 1e-6;
@@ -96,6 +112,14 @@ impl Manifold {
             .fold(f32::INFINITY, f32::min)
     }
 
+    /// The same manifold with its points moved by `offset`.
+    pub(crate) fn moved(mut self, offset: Vec2) -> Self {
+        for point in &mut self.points[..self.count as usize] {
+            point.point += offset;
+        }
+        self
+    }
+
     /// The same manifold with the normal reversed, for the mirrored argument
     /// order. The points do not move: they are already where the shapes meet.
     pub(crate) fn flipped(self) -> Self {
@@ -158,6 +182,41 @@ pub fn manifold(a: Shape<'_>, b: Shape<'_>) -> Option<Manifold> {
             // implementation of the hard case rather than two that can drift.
             Some(box_circle(b, a)?.flipped())
         }
+        _ => hulls(&Hull::of(a.0, a.1), &Hull::of(b.0, b.1)),
+    }
+}
+
+/// The contact two shapes *apart* will make if they close, measured as
+/// though each were grown by half of `margin`: points on the features that
+/// face each other, with positive separations — the gaps there.
+///
+/// What a fast body is given ahead of the solve (`continuous`): the solver
+/// lets a contact of positive separation close exactly that far and no
+/// further, which is a rigid stop where an overlap's soft one would let a
+/// fast body sink in. `None` when the gap is wider than `margin`.
+pub(crate) fn speculative(a: Shape<'_>, b: Shape<'_>, margin: f32) -> Option<Manifold> {
+    if a.0.is_degenerate(a.1) || b.0.is_degenerate(b.1) || margin.is_nan() || margin <= 0.0 {
+        return None;
+    }
+    let (mut grown_a, mut grown_b) = (Hull::of(a.0, a.1), Hull::of(b.0, b.1));
+    grown_a.radius += 0.5 * margin;
+    grown_b.radius += 0.5 * margin;
+    let mut manifold = hulls(&grown_a, &grown_b)?;
+    for point in &mut manifold.points[..manifold.count as usize] {
+        point.separation += margin;
+    }
+    Some(manifold)
+}
+
+/// Any pair, as two placed hulls: by how many corners each has, since a
+/// capsule as short as it is wide is a circle and collides as one.
+fn hulls(a: &Hull, b: &Hull) -> Option<Manifold> {
+    match (a.len(), b.len()) {
+        (1, 1) => point_point(a.vertices()[0], a.radius, b.vertices()[0], b.radius),
+        (_, 1) => hull_circle(a, b.vertices()[0], b.radius),
+        (1, _) => Some(hull_circle(b, a.vertices()[0], a.radius)?.flipped()),
+        (2, 2) => capsule_capsule(a, b),
+        _ => polygon_polygon(a, b),
     }
 }
 

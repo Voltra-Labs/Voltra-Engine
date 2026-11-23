@@ -5,6 +5,7 @@ use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, Transform};
 
 use super::{colliders, normalized, rotated, to_local, QueryFilter};
+use crate::geometry::Hull;
 
 /// Where a ray met a collider.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -81,6 +82,9 @@ fn cast(
             let radius = collider.world_radius(transform);
             sphere(origin - transform.translation, direction, radius)?
         }
+        Collider::Capsule { .. } | Collider::Polygon { .. } => {
+            hull_entry(&Hull::of(collider, transform), origin, direction)?
+        }
     };
     if distance > max {
         return None;
@@ -97,6 +101,9 @@ fn cast(
             Collider::Circle { .. } => (point - transform.translation)
                 .try_normalize()
                 .unwrap_or(-direction),
+            Collider::Capsule { .. } | Collider::Polygon { .. } => {
+                Hull::of(collider, transform).normal_at(point, -direction)
+            }
         }
     };
     Some((point, normal, distance))
@@ -143,6 +150,66 @@ fn sphere(to_centre: Vec2, direction: Vec2, radius: f32) -> Option<f32> {
         return None;
     }
     Some((-along - discriminant.sqrt()).max(0.0))
+}
+
+/// How far a unit ray travels to enter a hull grown by its radius. Zero
+/// when it starts inside.
+///
+/// The grown hull is the union of convex pieces — the core, a rectangle
+/// standing out of each face, a circle on each corner — so the first entry
+/// into it is the first entry into any piece, each exact.
+fn hull_entry(hull: &Hull, origin: Vec2, direction: Vec2) -> Option<f32> {
+    let vertices = hull.vertices();
+    let radius = hull.radius;
+    let mut first: Option<f32> = None;
+    let mut take = |entry: Option<f32>| {
+        if let Some(entry) = entry {
+            first = Some(first.map_or(entry, |best: f32| best.min(entry)));
+        }
+    };
+    if vertices.len() >= 3 {
+        take(convex_entry(vertices, origin, direction));
+    }
+    if radius > 0.0 {
+        for (i, (vertex, normal)) in vertices.iter().zip(hull.normals()).enumerate() {
+            let next = vertices[hull.next(i)];
+            let out = *normal * radius;
+            if vertices.len() >= 2 {
+                let face = [*vertex, *vertex + out, next + out, next];
+                take(convex_entry(&face, origin, direction));
+            }
+            take(sphere(origin - *vertex, direction, radius));
+        }
+    }
+    first
+}
+
+/// How far a unit ray travels to enter the convex polygon of `points`,
+/// counter-clockwise: Box2D's `b2RayCastPolygon`, clipping the ray by each
+/// face's half-plane. Zero when it starts inside.
+fn convex_entry(points: &[Vec2], origin: Vec2, direction: Vec2) -> Option<f32> {
+    let (mut lower, mut upper) = (0.0_f32, f32::INFINITY);
+    for (i, point) in points.iter().enumerate() {
+        let edge = points[(i + 1) % points.len()] - *point;
+        let normal = Vec2::new(edge.y, -edge.x);
+        // How far inside the face's plane the origin is, and how fast the
+        // ray leaves it.
+        let inside = normal.dot(*point - origin);
+        let leaving = normal.dot(direction);
+        if leaving == 0.0 {
+            if inside < 0.0 {
+                return None;
+            }
+        } else if leaving < 0.0 && inside < lower * leaving {
+            lower = inside / leaving;
+        } else if leaving > 0.0 && inside < upper * leaving {
+            upper = inside / leaving;
+        }
+        if upper < lower {
+            return None;
+        }
+    }
+    Some(lower)
 }
 
 /// The outward normal of the box face `point` sits on.

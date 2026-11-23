@@ -7,17 +7,15 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–74 and W1–W4 (README roadmap): batched, lit and post-processed
-rendering; CPU and GPU particles; rigid bodies with joints, characters and
-one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
+Stages 1–75 and W1–W4 (README roadmap): batched, lit and post-processed
+rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
+continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
 undo, gizmos and a timeline; the player; native and web export; an MCP
 server; a profiler.
 
 What a game still cannot do, found by reading the tree (not guessed):
 
-- collide anything but a box or a circle, or stop a fast body tunnelling
-  (`voltra-physics` documents both);
 - be played inside the editor: the editor links no game code, so a game's
   ticks and its own components (the platformer's `Coin`) never run there;
 - show an image in its UI, a slider, a text field, a scrolling list;
@@ -54,42 +52,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 75a — Capsule and convex polygon colliders
-
-**Scope.** `Collider::Capsule { center_offset?, half_height, radius }` and
-`Collider::Polygon { points }` (convex, at most 8 points, counter-clockwise
-after validation) beside `Box` and `Circle`, in contacts, queries (ray,
-point, box, shape cast), sensors, one-way platforms, characters, the
-editor's collider outline and the inspector. A polygon from a sprite's
-silhouette (already traced for shadows, `voltra_assets::Silhouettes`) as a
-convex hull.
-
-**Shape.** Box2D v3, which the solver already follows: a polygon carries a
-radius, so a box is a four-point polygon of radius zero and a capsule is two
-points with a radius; contacts are polygon–polygon (SAT with reference-face
-clipping), polygon–circle, capsule–capsule (segment closest points) and
-capsule–polygon. `box_box.rs` and `box_circle.rs` stay as the fast paths
-they are, or fold into the polygon code if the numbers say so — measured,
-not assumed (`examples/stress.rs`). Shape casts move from exact box/circle
-formulas to GJK + conservative advancement for the new shapes.
-
-**Done when** a capsule character walks a polygon slope and a polygon stack
-settles (physics tests with numbers, like the existing ones), every query
-answers for every shape pair, an old scene loads unchanged, and the editor
-draws and edits the new shapes.
-
-## 75b — Continuous collision
-
-**Scope.** A dynamic body moving more than a fraction of its own size in
-one step is swept against static geometry (time of impact by conservative
-advancement) and stopped at first contact; `RigidBody::bullet` sweeps it
-against dynamic bodies too. Box2D v3's split: continuous against static by
-default, bullets opt in.
-
-**Done when** a body at 200 units/s does not pass through a wall 0.1 thick,
-the stress example's frame time stays within its current budget, and the
-"not simulated yet" line in `voltra-physics` loses continuous collision.
 
 ## 76 — The game as a plugin: the editor plays it
 

@@ -50,7 +50,7 @@ pub use body::{BodyType, RigidBody};
 pub use camera::Camera;
 pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds};
 pub use character::{CharacterBody2D, CharacterContact};
-pub use collider::Collider;
+pub use collider::{Collider, ConvexPolygon, PolygonError, WorldShape};
 pub use filter::{CollisionLayers, Sensor};
 pub use format::{ComponentRegistry, SceneError};
 pub use global_light::GlobalLight2D;

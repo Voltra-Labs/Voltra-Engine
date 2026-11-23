@@ -1230,7 +1230,8 @@ in the narrow phase, rather than at each of the solver's uses.
 ### Rotation: inertia is derived at gather, not stored
 
 **`SolverBody::inverse_inertia` is computed in `gather` from the body's mass and
-its collider** — `I = m(hx² + hy²)/3` for a box, `I = m·r²/2` for a disc, both in
+its collider** — `I = m(hx² + hy²)/3` for a box, `I = m·r²/2` for a disc (and
+since 75a a capsule's and a polygon's, `solver/inertia.rs`), all in
 world units so a scaled collider resists exactly as much as it looks like it
 should. It is not a component field. Inertia is a function of two values a user
 edits in the inspector, and a stored copy would need an invalidation this ECS
@@ -4025,7 +4026,8 @@ step handles seams for boxes, and a capsule can come with its own stage;
 **stepped or bisected casts** — approximate, and they tunnel.
 
 - **Not yet**: moving platforms (the floor's motion carried), pushing
-  dynamic bodies, constant speed on slopes, one-way platforms, a capsule.
+  dynamic bodies, constant speed on slopes, one-way platforms, a capsule
+  (all but pushing and constant speed since landed: 68, 75a).
 
 Pinned by `query/shape/tests.rs` (a box at a wall, onto a turned floor, a
 slide along a floor not hitting it, the way out of an overlap, a circle at
@@ -4038,6 +4040,177 @@ on a ceiling, snapping down a slope and falling off a ledge, pushed out of
 an overlap, a V corner, a floor of tiles without seams, a low ledge stepped
 onto and a high one not). `cargo run -p voltra-core --example character`
 walks it.
+
+### Every shape is a hull grown by a radius; boxes and circles keep fast paths
+
+Stage 75a. `Collider` gains `Capsule { half_height, radius }` — upright
+along the entity's y, `half_height` the whole half height caps included,
+so a box swapped for one keeps its feet where they were, and a circle once
+it is no taller than wide — and `Polygon { points, radius }`, a
+`ConvexPolygon` of at most eight points plus an optional rounding
+(`#[serde(default)]`, so `Polygon(points:[…])` loads). Old scenes load
+unchanged: the two variants are added, nothing is renamed.
+
+- **One representation, Box2D v3's.** `Collider::world_shape` places any
+  shape as a `WorldShape`: up to eight world points grown by a radius — a
+  box its corners and no radius, a circle its centre and its radius, a
+  capsule its two cap centres and theirs, a polygon its points (scaled,
+  turned, re-wound under a mirroring scale) and its rounding. Bounds,
+  outlines (`Collider::outline`, for the debug overlay, the editor and
+  shadow casters), contacts and queries all start from it.
+- **A polygon is convex by construction.** `ConvexPolygon::new` hulls
+  whatever it is given (Andrew's monotone chain, near-duplicates welded,
+  straight corners dropped, counter-clockwise) and refuses fewer than three
+  corners or more than eight; it deserialises through the same check, so a
+  file listing a concave outline loads as its hull and one listing no
+  polygon is a component error naming why. Eight, a fixed array, keeps
+  `Collider` `Copy` with no allocation per contact — Box2D's
+  `B2_MAX_POLYGON_VERTICES` for the same reason.
+  `ConvexPolygon::enclosing` cuts a larger hull to eight by replacing the
+  edge whose neighbours meet with the least area added, so the result still
+  covers every point: what a sprite's traced silhouette becomes (the
+  inspector's **Fit to sprite**, through `shadow_caster::sprite_silhouette`).
+- **Contacts by kind of pair, not by pair of variants** (`narrow/`):
+  polygon–polygon is `b2CollidePolygons` — the separating axis over both
+  shapes' normals with the same `FLIP_BIAS` hysteresis, clipping while the
+  cores overlap, and once only the rounding overlaps the faces' closest
+  points (corner against corner one point along their line); separations
+  subtract both radii and each point sits midway between the surfaces.
+  A capsule is a two-cornered polygon there, as Box2D makes it against a
+  polygon. Anything against a circle goes by its nearest feature
+  (`b2CollidePolygonAndCircle`, a segment's nearest point for a capsule);
+  capsule–capsule is `b2CollideCapsules`, the two segments' closest points
+  clipped to two points where they lie alongside. The general code is
+  pinned to answer as `box_box` does over 400 random box pairs.
+- **The fast paths stay, measured.** Per pair, `box_box` takes 114 ns and
+  the polygon code on the same boxes 284; `box_circle` 28 against 122 —
+  building a hull's normals is most of the difference. Boxes and circles
+  are most of a level, so `box_box.rs`, `box_circle.rs` and `circle.rs`
+  keep their pairs and everything else goes through the hulls.
+- **Casts with a capsule or a polygon are conservative advancement over
+  GJK** (`query/shape/advance.rs`, `geometry/distance.rs`, Box2D's
+  `b2ShapeDistance`): measure the gap between the cores less the radii, move
+  as far as it allows at the speed it closes, again. Under a translation the
+  gap is convex in time, so a step never overshoots and a gap that is not
+  closing never will — which gives "touching is not hitting" for free. Once
+  the nearest points lie on an edge, the normal is that edge's: two shapes a
+  hair apart have nearest points whose difference is mostly rounding. The
+  closed forms for box and circle pairs stay. Rays into a rounded hull take
+  the first entry into its convex pieces — the core, a rectangle out of each
+  face, a circle on each corner — each exact.
+- **Inertia from the shape, about the transform's origin**
+  (`solver/inertia.rs`): `b2ComputeCapsuleMass`, and `b2ComputePolygonMass`
+  moved to the origin by the parallel axis theorem (a rounded polygon is
+  approximated by pushing its corners out, as there). A body's mass sits at
+  its transform's origin for every shape — a centre of mass offset would
+  move every anchor in the solver — so a dynamic polygon is drawn around its
+  origin; a static one can sit anywhere.
+- **A character grows round** (`character::inflated`): a circle, a capsule
+  and a polygon by their radius plus the skin, which is exactly the
+  Minkowski sum; a box keeps growing square, so a box character stands on a
+  ledge's very edge as before. A capsule character crosses a floor of tiles
+  without a step: its rounded bottom meets no corner as a wall.
+- **Particles see boxes and circles**, CPU and GPU alike: a capsule is
+  exactly its middle box and two caps, a polygon the turned box around its
+  points — the one shape that is not a union of the two, and the corner too
+  square is the visible cost.
+- **The inspector** has a Collider section: the kind (switching keeps about
+  the same size), the sizes, a polygon's points (an edit that would make it
+  concave stops at the last convex outline, so a point never vanishes under
+  the pointer), add and remove, and Fit to sprite. The viewport draws every
+  shape through `debug::draw`.
+
+Rejected: **`center_offset` on the capsule** — no other shape has one, and
+the transform is where a shape sits; **a `Vec` of points** — an allocation
+per collider clone and `Collider` no longer `Copy`; **folding boxes into
+the polygon code** — measured above; **GJK/EPA for the manifold** — it gives
+one point and a manifold still has to be clipped, as before; **exact swept
+SAT for polygons** — it does not extend to rounded shapes, and conservative
+advancement is the time of impact the next stage needs anyway.
+
+Pinned by `voltra-scene`'s `collider/tests.rs`, `collider/polygon.rs`
+(hulled in any order, collinear and inner points dropped, eight enforced,
+`enclosing` covering a circle within 12 %, RON as a list, a file of no
+polygon an error) and `world_shape.rs` (a capsule's outline); physics'
+`narrow/polygon.rs` (two points on a polygon floor, the box agreement, a
+rounded polygon's separation and midpoint, corner on corner, a capsule lying
+and standing, far from the origin), `narrow/round.rs`, `narrow/capsule.rs`,
+`geometry/` (segments, GJK), `solver/inertia.rs`, and `tests/shapes.rs`:
+every query for every shape and every shape cast at every shape, a capsule
+cast onto a turned polygon, a cast from inside and a slide along a touch, a
+ray on a cap, a hexagon stack and two lying capsules settling asleep, a
+hexagon rolling down a slope, a capsule character up a polygon slope and
+across tiles, a polygon sensor and a one-way polygon.
+
+### A fast body is stopped ahead of the solve, and swept after it
+
+Stage 75b. A step collides once, at the poses it starts from, then moves
+every body by its solved velocity, so a body crossing more than its own
+size in a step can begin on one side of a wall and end on the other with no
+contact ever found. `continuous` (physics) closes that, on by default
+(`SolverParams::continuous`), with Box2D v3's split: a **fast** body — one
+moving more than half its thinnest extent in a step (`b2ComputeShapeExtent`,
+Box2D's safety factor) — is swept against **static** geometry, and a
+`RigidBody::bullet` (`#[serde(default)]`) against kinematic and dynamic
+bodies too, never against another bullet.
+
+- **Two passes, as Box2D's speculative contacts and its time of impact.**
+  Before the solve, each awake fast body's predicted move (velocity plus a
+  step of gravity) is swept, and what it would meet is handed to the solver
+  as a *speculative* contact: the pair's manifold measured as though both
+  shapes were grown by half the gap (`narrow::speculative`, the hull code
+  with the radii raised and the separations given back), so it has the
+  right features and positive separations. The solver already let a
+  positive separation close exactly and no further — a rigid stop, in the
+  step it happens, with restitution and friction as any contact has. After
+  the solve, each fast body's actual move is swept again, and one that
+  still meets something — knocked off its predicted path, or turning — is
+  moved back to the time of impact a hair short of it, velocity kept; the
+  next step's speculative contact stops it.
+- **Why not stop at the time of impact and leave the next step's overlap to
+  it.** Tried first: an overlap is a soft contact, and at 300 units a second
+  the soft push lets the body sink half a tenth-thick floor in a sub-step —
+  past the middle, the floor's far face is nearer and the body goes through.
+  The speculative contact is rigid; an overlap never forms.
+- **The time of impact is conservative advancement with the turn bounded**
+  (`continuous/toi.rs`, Mirtich's method, which Box2D's started from):
+  advance by the gap over the move's length plus its turn times the shape's
+  reach, so no point of the shape covers the gap in that time and the walk
+  cannot pass through. A shape overlapping at the start is left to the
+  contacts; one within reach is met only if it is moving in. A bullet's
+  sweep against a moving body uses the move relative to it before the solve,
+  and its end pose after.
+- **Filters as contacts have them**: collision layers, sensors (never
+  targets), the pairs a joint keeps apart, and one-way colliders — met only
+  from the solid side and never while letting the pair through.
+- **Speculative contacts are solved, not reported**: a contact about to
+  happen is not one yet, so they reach neither `contacts()` nor events.
+- **The cost** is a length against an extent for every awake body, and the
+  sweeps for the fast few. `examples/stress.rs` runs every scene with it on
+  and off: the level and the pyramid are the same within this machine's
+  noise, and a hundred balls fired at a thin wall, every one fast, cost
+  about 0.05 ms a step.
+
+Rejected: **speculative margins on every contact** — Box2D v3's first line of
+defence, but here the narrow phase reports overlaps only, and "touching is
+not a contact" is what events, sensors and one-way passes rest on; the
+speculative contact is confined to the fast bodies that need it; **bullets
+by default** — every fast body against every moving one is the n² the split
+exists to avoid; **sub-stepping the whole world at the time of impact** —
+Box2D v2's, and the reason v3 dropped it: one fast body re-solves
+everything; **a step-length cap on velocity** — hides the bug rather than
+solving it.
+
+Pinned by `continuous/toi.rs` (a box at a thin wall where its face reaches
+it, a spinning bar stopped just short by its end, away and short of it
+nothing, an overlap left alone) and `tests/continuous.rs`: a box, a circle,
+a capsule and a polygon at 200 units a second never past a wall a tenth
+thick; with it off the circle tunnels; a fast bouncing ball comes back; a
+300-unit fall lands on a thin floor; a bar spinning at 60 rad/s neither
+passes nor sinks into a wall; a bullet stopped by a thin dynamic plank
+(pushing it) and a plain body passing it; a one-way platform catching a
+fast fall and letting a fast rise through; a wall on a layer the body does
+not see passed.
 
 ### One-way colliders remember what they let through; floors carry by pose
 
