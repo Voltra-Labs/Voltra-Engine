@@ -13,6 +13,7 @@ mod character;
 mod collider;
 mod collision;
 mod delete;
+mod game_components;
 mod global_light;
 mod joint;
 mod light;
@@ -232,6 +233,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     claim = claim.or(collision::show(ui, frame.world, entity));
                 }
                 claim = claim.or(character::show(ui, frame.world, entity));
+                claim = claim.or(game_components::show(
+                    ui,
+                    frame.world,
+                    entity,
+                    &editor.registry,
+                ));
                 // Keyed off the shape it would take — a collider, a solid
                 // layer's boxes, a sprite's quad — or off the caster itself.
                 let has_sprite = frame.world.get::<Sprite>(entity).is_some();

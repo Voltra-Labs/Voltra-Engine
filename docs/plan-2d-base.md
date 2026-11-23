@@ -7,7 +7,7 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–75 and W1–W4 (README roadmap): batched, lit and post-processed
+Stages 1–76 and W1–W4 (README roadmap): batched, lit and post-processed
 rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
 continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
@@ -16,8 +16,6 @@ server; a profiler.
 
 What a game still cannot do, found by reading the tree (not guessed):
 
-- be played inside the editor: the editor links no game code, so a game's
-  ticks and its own components (the platformer's `Coin`) never run there;
 - show an image in its UI, a slider, a text field, a scrolling list;
 - wrap a line of text, or ship it in a second language;
 - tween a value from code, or wait on a timer;
@@ -52,30 +50,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 76 — The game as a plugin: the editor plays it
-
-**Scope.** A game crate exposes one entry point — register its components,
-install its ticks — through a small `voltra_core::Game` trait. Native builds
-of the game link it as now; the editor loads the game as a dynamic library
-(`cdylib`, through `libloading`, a leaf crate) named by the project, so Play
-runs the game's ticks and its components show in the inspector by their
-registered names.
-
-**Shape.** Fyrox's plugin model, the closest engine to ours: Rust all the
-way, the editor hosts the game's code, shipping builds link statically. Not
-an embedded language (Lua, rhai): two languages and a doubled API, against
-the point of the engine. Not wasm-hosted scripts (wasmtime): heavy, no host
-inside a browser, a call boundary on every tick.
-
-**The hard parts, decided in the stage:** Rust has no stable ABI, so the
-editor refuses a library built by another compiler or with other flags, and
-says which (a version stamp exported by the plugin); nothing of the game may
-outlive its library (boxed ticks, registered types, `TypeId`s) — the editor
-drops all of it before unloading.
-
-**Done when** the platformer, built as a plugin, is played in the editor
-with its coins counted, and its `Coin` is edited in the inspector.
 
 ## 77 — Hot reload of the game plugin
 

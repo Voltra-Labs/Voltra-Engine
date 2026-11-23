@@ -214,7 +214,10 @@ ray that starts inside a shape hits it at distance zero rather than reporting
 thin air. Queries skip sensors unless asked for them.
 
 ```sh
-cargo run -p voltra-core --example platformer   # A/D to walk, Space to jump
+cargo run -p voltra-platformer                   # A/D to walk, Space to jump
+# The same game in the editor: built together, then loaded and played there.
+cargo build -p voltra-editor -p voltra-platformer
+cargo run -p voltra-editor -- --game platformer.build.ron scenes/platformer.ron
 ```
 
 Useful environment variables (read by `wgpu`):
@@ -247,6 +250,8 @@ Voltra-Engine/
 │   ├── voltra-editor/    # binary: the editor and its panels
 │   ├── voltra-player/    # binary: runs a scene, or the build beside it
 │   └── xtask/            # `cargo xtask dist`: packages a build
+├── games/
+│   └── platformer/       # sample game crate: the editor loads it, its binary ships it
 └── docs/
     ├── ARCHITECTURE.md   # layering, crate graph, planned crates
     └── CONVENTIONS.md    # naming, file/folder rules, code style
@@ -354,6 +359,7 @@ privileged and plain `cargo build` covers everything.
 | W4 | `cargo xtask dist --web`: a folder any static server hosts | done |
 | 75a | Capsule and convex polygon colliders, in every query, a fit to the sprite | done |
 | 75b | Continuous collision: fast bodies stop at walls, bullets at bodies too | done |
+| 76 | The game as a plugin: the editor loads a game crate's library and Play runs it | done |
 
 ## Contributing
 

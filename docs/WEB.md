@@ -37,7 +37,7 @@ The folder holds four files and needs nothing else:
 
 A scene build ships the player, which starts the scene the manifest names.
 A game with its own binary must start through
-`voltra_core::when_assets_ready` — the platformer example's `main` shows
+`voltra_core::when_assets_ready` — the platformer's `games/platformer/src/main.rs` shows
 how — so it runs once the pack has arrived.
 
 ## Try it locally

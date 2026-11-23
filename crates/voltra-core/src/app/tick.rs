@@ -19,6 +19,7 @@ use voltra_scene::{ComponentRegistry, Prefabs};
 
 use crate::app::tick_audio::TickAudio;
 use crate::app::App;
+use crate::game::Turn;
 use crate::input::{ActionMap, Input};
 
 /// A game's turn at the world.
@@ -97,26 +98,7 @@ impl App {
         if !self.simulation.is_running() {
             return;
         }
-        let Some(update) = self.update.as_mut() else {
-            return;
-        };
-
-        let mut tick = Tick {
-            world: &mut self.world,
-            input: &self.input,
-            actions: &mut self.actions,
-            scenes: &mut self.scenes,
-            saves: &self.saves,
-            ui: &mut self.ui_buttons,
-            delta,
-            contacts: self.physics_world.contacts(),
-            events: &self.pending_events,
-            audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
-            prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
-            registry: &self.registry,
-            spawned: &mut self.spawned,
-        };
-        update(&mut tick);
+        self.take_turn(Turn::Frame, delta);
     }
 
     /// Runs the fixed tick, if there is one. Called before each step.
@@ -126,28 +108,53 @@ impl App {
     /// paused — is a step the game's logic belongs in front of. "Advance the
     /// world by one step" has to mean the whole world.
     pub(super) fn run_fixed_update(&mut self, delta: f32) {
-        let Some(fixed) = self.fixed_update.as_mut() else {
-            return;
-        };
+        self.take_turn(Turn::Fixed, delta);
+    }
 
-        let mut tick = Tick {
-            world: &mut self.world,
-            input: &self.input,
-            actions: &mut self.actions,
-            scenes: &mut self.scenes,
-            saves: &self.saves,
-            ui: &mut self.ui_buttons,
-            delta,
-            contacts: self.physics_world.contacts(),
-            // The step before this one's: the step this tick precedes has not
-            // run, so there is nothing newer to hand it.
-            events: self.physics_world.events(),
-            audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
-            prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
-            registry: &self.registry,
-            spawned: &mut self.spawned,
+    /// One turn: the hook installed for it, then the game's.
+    ///
+    /// Both are taken out of the app while they run, so the tick can borrow
+    /// every other field, and put back after.
+    fn take_turn(&mut self, turn: Turn, delta: f32) {
+        let mut hook = match turn {
+            Turn::Frame => self.update.take(),
+            Turn::Fixed => self.fixed_update.take(),
         };
-        fixed(&mut tick);
+        let mut game = self.game.take();
+        if hook.is_some() || game.is_some() {
+            let events: &[CollisionEvent] = match turn {
+                Turn::Frame => &self.pending_events,
+                // The step before this one's: the step this tick precedes has
+                // not run, so there is nothing newer to hand it.
+                Turn::Fixed => self.physics_world.events(),
+            };
+            let mut tick = Tick {
+                world: &mut self.world,
+                input: &self.input,
+                actions: &mut self.actions,
+                scenes: &mut self.scenes,
+                saves: &self.saves,
+                ui: &mut self.ui_buttons,
+                delta,
+                contacts: self.physics_world.contacts(),
+                events,
+                audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
+                prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
+                registry: &self.registry,
+                spawned: &mut self.spawned,
+            };
+            if let Some(hook) = hook.as_mut() {
+                hook(&mut tick);
+            }
+            if let Some(game) = game.as_mut() {
+                game.take_turn(turn, &mut tick);
+            }
+        }
+        match turn {
+            Turn::Frame => self.update = hook,
+            Turn::Fixed => self.fixed_update = hook,
+        }
+        self.game = game;
     }
 }
 

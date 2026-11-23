@@ -90,6 +90,19 @@ impl App {
         self
     }
 
+    /// Runs `game`: registers its components on top of the registry so far,
+    /// and gives it both turns, after any hook installed with
+    /// [`with_update`](Self::with_update) or
+    /// [`with_fixed_update`](Self::with_fixed_update).
+    ///
+    /// Call it after [`with_registry`](Self::with_registry), which would
+    /// otherwise replace what the game registered.
+    pub fn with_game(mut self, game: impl crate::Game + 'static) -> Self {
+        game.register(&mut self.registry);
+        self.game = Some(crate::game::Running::new(Box::new(game)));
+        self
+    }
+
     /// Mixes through `buses` instead of the default master, music, sfx and
     /// ui.
     ///

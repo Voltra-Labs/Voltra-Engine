@@ -63,6 +63,21 @@ impl World {
         self.entities.despawn(entity)
     }
 
+    /// Despawns every entity and drops every storage, empty or not.
+    ///
+    /// Not `World::new()`: the entity allocator is kept, so every handle
+    /// held elsewhere stays stale instead of naming a new entity that took
+    /// its slot and generation. And the storages go too, not just their
+    /// contents — a storage runs the code of the crate that created it, and
+    /// a host about to unload a game's library must not keep one.
+    pub fn clear(&mut self) {
+        let alive: Vec<Entity> = self.entities().collect();
+        for entity in alive {
+            self.despawn(entity);
+        }
+        self.storages.clear();
+    }
+
     pub fn is_alive(&self, entity: Entity) -> bool {
         self.entities.is_alive(entity)
     }
@@ -340,5 +355,19 @@ mod tests {
             .map(|(e, _, _)| e)
             .collect();
         assert_eq!(found, vec![keep]);
+    }
+
+    #[test]
+    fn clearing_despawns_everything_and_keeps_old_handles_stale() {
+        let mut world = World::new();
+        let old = world.spawn();
+        world.insert(old, 7_u32);
+        world.clear();
+
+        assert_eq!(world.entity_count(), 0);
+        assert_eq!(world.component_count::<u32>(), 0);
+        let new = world.spawn();
+        assert_ne!(new, old, "the slot comes back with a new generation");
+        assert!(world.get::<u32>(old).is_none());
     }
 }

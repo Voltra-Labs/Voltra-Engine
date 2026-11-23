@@ -36,6 +36,8 @@ Rules:
 ```sh
 cargo run -p voltra-editor                                  # launch the editor
 cargo run -p voltra-player -- assets/scenes/sandbox.ron      # run a scene, no editor
+cargo build -p voltra-editor -p voltra-platformer            # editor + game, built together (game/stamp.rs)
+cargo run -p voltra-editor -- --game platformer.build.ron    # the editor playing the game
 cargo xtask dist                                            # package build.ron into dist/
 cargo xtask dist --web                                      # the same for the browser (docs/WEB.md)
 cargo build --workspace
@@ -61,6 +63,8 @@ crates/
   voltra-editor/     the editor binary
   voltra-player/     the player binary: runs a scene, no editor linked
   xtask/             repo tasks (`cargo xtask dist`), not shipped
+games/
+  platformer/        sample game crate: a library the editor loads, a binary that ships
 docs/                ARCHITECTURE.md, CONVENTIONS.md, MCP.md, WEB.md
 ```
 

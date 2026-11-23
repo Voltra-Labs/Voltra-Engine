@@ -1789,11 +1789,11 @@ physics — it is whether the world is live — and a game with no rigid bodies 
 to ask for physics to get its logic ticking. The runtime names (`set_simulating`,
 `is_simulating`) already said this; the builder now agrees with them.
 
-`crates/voltra-core/examples/platformer.rs` is the API's first user: walk with
-`A`/`D`, jump with `Space` when there is something flat underfoot, and a camera
-that eases after the walker. It is an example rather
-than a crate because it is documentation that has to keep compiling, and
-`cargo clippy --workspace --all-targets` builds it.
+The platformer was the API's first user: walk with `A`/`D`, jump with
+`Space` when there is something flat underfoot, and a camera that eases
+after the walker. It began as an example of `voltra-core`, and became the
+`games/platformer` crate in stage 76, when a game became a crate the editor
+loads.
 
 Rejected:
 
@@ -4869,6 +4869,98 @@ name path each one entry that undo restores; a refused edit records
 nothing) and `voltra-mcp/tests/editor.rs` (tools reach a stand-in editor
 and carry its answers, the screenshot as an image block; no editor is an
 answer naming the flag).
+
+### The game is a crate the editor loads; its stamp decides whether it may
+
+Stage 76. A game is a crate exposing one value through `voltra_core::Game`:
+`register` names its components, `start` comes before its first turn,
+`update` and `fixed_update` are the two turns `with_update` and
+`with_fixed_update` already gave closures. Its own binary links it and
+hands it to `App::with_game`; the editor loads the same crate's `cdylib`
+and runs a fresh one for every play. Fyrox's plugin model, the closest
+engine to ours: Rust all the way, the editor hosts the game's code, a
+shipped build links it statically. `games/platformer` is the first: a
+`cdylib` + `rlib` library, a binary, and `scenes/platformer.ron`.
+
+- **A game acts on the scene, not on entities it made.** The platformer
+  finds its `Walker`, its `Coin`s (now with a `value`), its `Goal` (naming
+  the next scene) and its `CoinCounter` by querying; the level is a scene
+  file authored like any other. In the editor the scene is whatever the
+  author made, and Play runs the game on it — the shape Unity's
+  `MonoBehaviour`s and Godot's scripts have.
+- **Two symbols** (`voltra_core::export_game!`): `voltra_game_stamp`, a C
+  function answering a `#[repr(C)]` `Stamp`, and `voltra_game_new`, a Rust
+  function answering a `Box<dyn Game>` — called only once the stamp
+  matches. Rust has no stable ABI, and the world is keyed by `TypeId`,
+  which hashes the compiler, the crate metadata and every feature in: a
+  library whose `Transform` has another `TypeId` would find no transforms,
+  silently. So the stamp carries the plugin protocol's version, `rustc -V`
+  (a build script of `voltra-core`), the engine version, the profile, and a
+  fingerprint of the `TypeId`s and layouts of the types a game shares with
+  its host; `Stamp::check` names the first that differs — the compiler
+  before the types it changes. In practice: build the editor and the game
+  in **one** `cargo build -p voltra-editor -p <game>`, so features unify.
+  Each half otherwise carries its own copy of the engine, and that is
+  sound exactly when the types are the same: `tests/plugin.rs` loads the
+  library cargo built for the test run (which is why the crate has no
+  dev-dependencies) and plays a level read by the host with it.
+- **The library's `log` forwards to the host's** through one C function per
+  record: a library carries its own `log`, with no logger in it, and a Rust
+  trait object passed between two copies of the crate that defines it is
+  not one.
+- **Nothing of a library outlives it.** It is loaded from a copy (Windows
+  will not let a build overwrite a loaded library; a loader asked twice for
+  one path hands back the first load), and copies left by earlier
+  processes are removed at the next load. A `GameLibrary` dropped as it is
+  stays loaded for the rest of the process; only the unsafe `close` unloads
+  it, and each game it made keeps it loaded until the game drops. The
+  editor unloads by writing the scene out through the game's registry,
+  `World::clear` — every entity and every storage, since a storage runs
+  the code of the crate that created it — reading it back through the
+  engine's (the game's components kept as unknowns), resetting both
+  registries, and only then closing. Loading is the same rebuild the other
+  way, and a scene the game's types refuse is read back as it was.
+- **Where the game is**: `build.ron`'s `game.package`, its library beside
+  the editor's executable — where the one `cargo build` puts both — or
+  `--game` naming a library or a build manifest (`--game
+  platformer.build.ron`). Game ▸ Reload / Unload; the menu says which is
+  loaded, or why none could be.
+- **The game's components in the inspector** (`inspector/game_components`):
+  every registered name the engine does not have, edited as the RON a scene
+  file holds and applied the moment it reads as the type, the reason shown
+  while it does not — Godot's fallback for a type with no editor of its
+  own; removed with ✕, added from its template.
+- **Found on the way**: the asset watcher counted inotify's access events —
+  every open and close of a read — as changes, so a reload read the file
+  and raised another, for ever, and each reload synced prefab instances
+  over their unsaved edits. A read is now no change (`tests/watch.rs`).
+
+Not yet, and why: **hot reload** (77) — the unload path above is its
+first half; **the profiler inside a game** — the library's
+`voltra-profile` is its own copy, so its scopes are not in the editor's
+profile; **a game's threads** — none may outlive its library, and nothing
+here starts any.
+
+Rejected: **an embedded language** (Lua, rhai) — two languages and a
+doubled API, against the point of the engine; **wasm-hosted scripts**
+(wasmtime) — heavy, no host inside a browser, a call boundary on every
+tick; **the engine as one shared `dylib`** (Bevy's `dynamic_linking`) —
+the game and the editor would share one copy, but only when built
+together, which the stamp already requires, at the price of shipping the
+toolchain's `libstd` beside the editor; **trusting a version string** —
+two builds of one version with different features are different types.
+
+Pinned by `voltra-core`'s `game.rs` (a game registers and starts before its
+first turn; hooks before the game; a Step steps it), `game/stamp.rs` (each
+difference named, the compiler first), `game/plugin.rs` (a record crosses
+as its level, target and text), `game/library.rs` (a missing library says
+build it; a file that is no library is refused and leaves no copy),
+`voltra-ecs`'s `clear`, the editor's `game/project.rs`, `game/rebuild.rs`
+(a game component unknown and back; a scene the game cannot read left as
+it was) and `inspector/game_components.rs`, and `games/platformer`'s
+`tests/level.rs` and `tests/plugin.rs`. Checked by hand: the editor under
+Xvfb with `--game platformer.build.ron --bridge`, the coins set to 5
+through the bridge, Play, walked right — `Coins 5 / 15` — and Stop.
 
 ### wgpu 30 API notes
 

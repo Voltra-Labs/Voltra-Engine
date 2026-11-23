@@ -198,6 +198,8 @@ impl App {
             actions: &self.actions,
             held_actions: &mut self.held_actions,
             window: &mut self.window_requests,
+            registry: &mut self.registry,
+            game: &mut self.game,
         };
         {
             let _ui = voltra_profile::scope("ui");

@@ -10,6 +10,7 @@ use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::spawn;
 
+mod game_menu;
 mod spawn_items;
 use crate::undo::SceneView;
 
@@ -211,6 +212,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.close();
                 }
             });
+
+            game_menu::show(editor, ui, frame);
 
             ui.menu_button("Window", |ui| {
                 if ui

@@ -118,6 +118,9 @@ pub struct App {
     update: Option<TickFn>,
     /// The game's fixed tick, run before each physics step.
     fixed_update: Option<TickFn>,
+    /// The game's own code, run after the hooks above in both turns: one
+    /// handed to `with_game`, or the one an editor's Play put in.
+    game: Option<crate::game::Running>,
     /// Collision events the per-frame tick has not been handed yet.
     ///
     /// A frame can owe two steps, and `PhysicsWorld` only keeps the last
@@ -188,7 +191,7 @@ pub struct App {
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a
     /// game registered through [`App::with_registry`].
-    registry: ComponentRegistry,
+    pub(crate) registry: ComponentRegistry,
     /// Prefabs, made on first use — see [`spawning::prefab_store`].
     prefabs: Option<Prefabs>,
     /// Property-animation clips, made on first use like the prefabs.
@@ -309,7 +312,7 @@ impl App {
     /// velocity set from input one step of latency before it is integrated.
     /// Nothing here has to inherit that: input is read at the top of the frame,
     /// so the frame that saw the key is the frame that moves.
-    fn advance(&mut self, delta: f32) {
+    pub(crate) fn advance(&mut self, delta: f32) {
         // Once per frame, before anything reads an action: the fixed tick
         // below sees the same actions as the per-frame one.
         let input = voltra_profile::scope("input");

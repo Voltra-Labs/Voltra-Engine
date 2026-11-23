@@ -107,6 +107,11 @@ pub struct UiFrame<'a> {
     pub(super) held_actions: &'a mut crate::input::HeldActions,
     /// The title and close the UI asks for; see `ui_frame/window.rs`.
     pub(super) window: &'a mut WindowRequests,
+    /// The components ticks spawn prefabs and load scenes with. A game the
+    /// editor loads registers its own here, as `with_game` does.
+    pub registry: &'a mut voltra_scene::ComponentRegistry,
+    /// The game the turns run; see [`UiFrame::set_game`].
+    pub(super) game: &'a mut Option<crate::game::Running>,
 }
 
 impl<'a> UiFrame<'a> {
@@ -201,6 +206,22 @@ impl<'a> UiFrame<'a> {
     /// the frame that already ran — is worse.
     pub fn set_simulating(&mut self, simulating: bool) {
         self.simulation.set_running(simulating);
+    }
+
+    /// Runs `game` from the next turn on, in place of whatever ran before,
+    /// which is dropped here; `None` runs none. The game starts afresh: its
+    /// [`start`](crate::Game::start) comes before its first turn.
+    ///
+    /// Registers nothing: a game loaded at run time has its components named
+    /// in [`UiFrame::registry`] before any scene holding them is read, which
+    /// is earlier than the play that runs it.
+    pub fn set_game(&mut self, game: Option<Box<dyn crate::Game>>) {
+        *self.game = game.map(crate::game::Running::new);
+    }
+
+    /// Whether a game is running its turns.
+    pub fn has_game(&self) -> bool {
+        self.game.is_some()
     }
 
     /// Runs `count` fixed steps on the next frame regardless of the switch.

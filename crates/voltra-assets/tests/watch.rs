@@ -178,3 +178,21 @@ fn project_files_arrive_too() {
         );
     }
 }
+
+#[test]
+fn reading_an_asset_is_not_a_change_to_it() {
+    // inotify reports every open and close of a read: counted as changes,
+    // the reload that reads the file raised another, for ever.
+    let root = scratch_root();
+    write_png(&root, "sprites/hero.png", 4, 4);
+    let mut watcher = AssetWatcher::new(&root).expect("watching a scratch dir");
+    // Whatever the write above raises, before the watch began or not.
+    drain_for(&mut watcher, Duration::from_millis(600));
+
+    for _ in 0..3 {
+        std::fs::read(root.join("sprites/hero.png")).expect("readable");
+    }
+
+    let seen = drain_for(&mut watcher, Duration::from_millis(900));
+    assert!(seen.is_empty(), "reads reported as changes: {seen:?}");
+}

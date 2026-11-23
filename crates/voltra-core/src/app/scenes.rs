@@ -68,6 +68,14 @@ impl Tick<'_> {
 }
 
 impl App {
+    /// Starts in the scene at `path`: it replaces whatever the world holds
+    /// at the end of the first frame, as a tick's
+    /// [`Tick::load_scene`] does, and through the same reads — the asset
+    /// pack in a browser. What a game with its own binary opens with.
+    pub fn load_scene(&mut self, path: &AssetPath) {
+        self.scenes.requests.push(Request::Replace(path.clone()));
+    }
+
     /// Carries out every scene request the frame's ticks made, in order.
     pub(super) fn apply_scene_requests(&mut self) {
         let requests = std::mem::take(&mut self.scenes.requests);

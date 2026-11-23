@@ -88,7 +88,8 @@ impl AssetWatcher {
     /// Never blocks: this runs once per frame, and a frame that waits on a
     /// filesystem notification is a dropped frame.
     ///
-    /// Event *kinds* are deliberately not inspected, with one exception below. Which kind a save produces
+    /// Event *kinds* are deliberately not inspected, with two exceptions below: an access, which
+    /// is a read and changes nothing, and a created directory. Which kind a save produces
     /// varies by platform and by the program doing the writing — an overwrite
     /// is `Create` on some, `Modify` on others, a rename pair on a third — and
     /// matching on them is what makes a watcher miss changes
@@ -110,6 +111,14 @@ impl AssetWatcher {
             match self.events.try_recv() {
                 Ok(Ok(events)) => {
                     for event in events {
+                        // Reading a file is no change to it. inotify reports
+                        // the opens and closes of every read as access
+                        // events, and the reload that reads the file would
+                        // raise another: a loop of reloads, each of which
+                        // syncs prefab instances over their unsaved edits.
+                        if event.kind.is_access() {
+                            continue;
+                        }
                         for path in &event.paths {
                             let mut found = Vec::new();
                             // The one place the kind matters: a directory that

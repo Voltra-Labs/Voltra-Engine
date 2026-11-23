@@ -4,6 +4,7 @@
 //! allowed to depend on `winit`.
 
 pub mod app;
+pub mod game;
 pub mod input;
 pub mod logging;
 pub mod saves;
@@ -14,6 +15,7 @@ pub mod window;
 
 pub use app::headless::{Headless, HeadlessError, Screenshot, ScreenshotError};
 pub use app::{App, SceneLoad, Tick, UiFrame, DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS};
+pub use game::Game;
 pub use input::{
     ActionMap, ActionState, Binding, Direction, Input, MouseButton, PadAxis, PadButton,
 };
