@@ -102,7 +102,7 @@ pub fn load(
     registry: &ComponentRegistry,
     world: &mut World,
 ) -> Result<(), SceneError> {
-    let text = std::fs::read_to_string(path)?;
+    let text = voltra_assets::fs::read_to_string(path)?;
     let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
     from_scene_file(&file, registry, world)
 }

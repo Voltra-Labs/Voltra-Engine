@@ -19,6 +19,7 @@
 //! lock on the way. A scope on a worker thread is recorded there and read
 //! by nobody until that thread reads it.
 
+mod clock;
 mod recorder;
 mod summary;
 mod thread;

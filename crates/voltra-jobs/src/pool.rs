@@ -19,6 +19,7 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn push(&self, job: Job) {
         lock(&self.queue).push_back(job);
         self.signal.notify_one();
@@ -125,11 +126,11 @@ impl JobPool {
 
     /// Calls `f` on consecutive chunks of `items`, each at least `min_chunk`
     /// long, across the pool. `f` is told where its chunk starts.
-    pub fn for_each_chunk_mut<T: Send>(
+    pub fn for_each_chunk_mut<T: crate::MaybeSend>(
         &self,
         items: &mut [T],
         min_chunk: usize,
-        f: impl Fn(usize, &mut [T]) + Sync,
+        f: impl Fn(usize, &mut [T]) + crate::MaybeSync,
     ) {
         if items.is_empty() {
             return;

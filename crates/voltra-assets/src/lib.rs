@@ -11,6 +11,7 @@ pub mod browse;
 pub mod clips;
 pub mod error;
 pub mod fonts;
+pub mod fs;
 pub mod handle;
 pub mod path;
 pub mod placeholder;

@@ -151,7 +151,7 @@ impl Atlases {
     /// Reads and parses one file. The only place this type touches the disk.
     fn read(&self, path: &AssetPath) -> Result<Atlas, AssetError> {
         let full = self.root.join(path.as_str());
-        let text = std::fs::read_to_string(&full).map_err(|source| AssetError::Read {
+        let text = crate::fs::read_to_string(&full).map_err(|source| AssetError::Read {
             path: full.clone(),
             source,
         })?;

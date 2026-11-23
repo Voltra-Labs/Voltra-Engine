@@ -162,8 +162,8 @@ impl<T: RonAsset> RonStore<T> {
 
     /// The only place this type reads the disk.
     fn read(&self, path: &AssetPath) -> Result<T, RonAssetError> {
-        let text =
-            std::fs::read_to_string(self.root.join(path.as_str())).map_err(RonAssetError::Io)?;
+        let text = voltra_assets::fs::read_to_string(&self.root.join(path.as_str()))
+            .map_err(RonAssetError::Io)?;
         let value: T = ron::from_str(&text).map_err(RonAssetError::Parse)?;
         Ok(value.checked(path.as_str()))
     }

@@ -31,9 +31,23 @@ pub fn decode(path: &Path) -> Result<Clip, AudioError> {
         path: path.to_owned(),
         source,
     })?;
+    decode_stream(
+        MediaSourceStream::new(Box::new(file), Default::default()),
+        path,
+    )
+}
 
-    let stream = MediaSourceStream::new(Box::new(file), Default::default());
+/// [`decode`] for a file already in memory — read from an asset pack, or
+/// fetched by a browser. `path` names it in errors and hints its format.
+pub fn decode_bytes(bytes: Vec<u8>, path: &Path) -> Result<Clip, AudioError> {
+    let cursor = std::io::Cursor::new(bytes);
+    decode_stream(
+        MediaSourceStream::new(Box::new(cursor), Default::default()),
+        path,
+    )
+}
 
+fn decode_stream(stream: MediaSourceStream<'static>, path: &Path) -> Result<Clip, AudioError> {
     let mut hint = Hint::new();
     if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
         hint.with_extension(extension);

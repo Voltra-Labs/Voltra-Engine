@@ -135,7 +135,7 @@ impl ActionMap {
 
     /// Reads a map from `path`.
     pub fn load(path: &Path) -> Result<Self, MapError> {
-        let text = std::fs::read_to_string(path).map_err(|source| MapError::Io {
+        let text = voltra_assets::fs::read_to_string(path).map_err(|source| MapError::Io {
             path: path.to_path_buf(),
             source,
         })?;

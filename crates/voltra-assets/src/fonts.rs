@@ -205,7 +205,7 @@ impl Fonts {
 /// disk.
 fn read(root: &Path, path: &AssetPath) -> Result<fontdue::Font, AssetError> {
     let full = root.join(path.as_str());
-    let bytes = std::fs::read(&full).map_err(|source| AssetError::Read {
+    let bytes = crate::fs::read(&full).map_err(|source| AssetError::Read {
         path: full.clone(),
         source,
     })?;

@@ -3751,6 +3751,7 @@ dependencies = [
  "voltra-render",
  "voltra-scene",
  "voltra-testkit",
+ "web-time",
  "winit",
 ]
 
@@ -3845,6 +3846,9 @@ dependencies = [
 [[package]]
 name = "voltra-profile"
 version = "0.1.0"
+dependencies = [
+ "web-time",
+]
 
 [[package]]
 name = "voltra-render"

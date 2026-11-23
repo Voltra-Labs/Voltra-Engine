@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use voltra_audio::{decode, Clip};
+use voltra_audio::{decode_bytes, AudioError, Clip};
 
 use crate::error::AssetError;
 use crate::handle::Handle;
@@ -59,7 +59,7 @@ impl Clips {
             return *handle;
         }
 
-        let handle = match decode(&self.root.join(path.as_str())) {
+        let handle = match decode_file(&self.root.join(path.as_str())) {
             Ok(clip) => self.store.insert(clip),
             Err(source) => {
                 let error = AssetError::Audio {
@@ -92,7 +92,7 @@ impl Clips {
             return false;
         };
 
-        let clip = match decode(&self.root.join(path.as_str())) {
+        let clip = match decode_file(&self.root.join(path.as_str())) {
             Ok(clip) => clip,
             Err(source) => {
                 let error = AssetError::Audio {
@@ -152,6 +152,16 @@ impl Clips {
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }
+}
+
+/// Decodes the file at `full`, read through [`crate::fs`] so a mounted
+/// pack serves it as the disk would.
+fn decode_file(full: &Path) -> Result<Clip, AudioError> {
+    let bytes = crate::fs::read(full).map_err(|source| AudioError::Read {
+        path: full.to_owned(),
+        source,
+    })?;
+    decode_bytes(bytes, full)
 }
 
 #[cfg(test)]

@@ -11,6 +11,10 @@
 //! queued jobs, so a pool of `n` workers runs `n + 1` jobs at once, and a
 //! job that opens a scope of its own cannot deadlock the pool.
 //!
+//! **On the web** (`wasm32`) there are no threads: the pool has no workers
+//! and a job runs the moment it is spawned, so the bounds are
+//! [`MaybeSend`]/[`MaybeSync`] — `Send`/`Sync` natively, nothing there.
+//!
 //! A job that panics does not take a worker with it: the panic is caught,
 //! the scope finishes its other jobs, and the first panic is resumed on the
 //! caller.
@@ -37,8 +41,10 @@
 //! ```
 
 mod job;
+mod maybe;
 mod pool;
 mod scope;
 
+pub use maybe::{MaybeSend, MaybeSync};
 pub use pool::JobPool;
 pub use scope::Scope;

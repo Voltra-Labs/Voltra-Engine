@@ -10,6 +10,7 @@ impl Job {
     ///
     /// `f` must have run, or been dropped, before anything it borrows for
     /// `'env` is freed. The queue gives no such guarantee; the caller must.
+    #[cfg(not(target_arch = "wasm32"))]
     pub(crate) unsafe fn erase<'env>(f: Box<dyn FnOnce() + Send + 'env>) -> Self {
         // SAFETY: the two types differ only in the trait object's lifetime
         // bound, which is not part of its layout; the caller guarantees the

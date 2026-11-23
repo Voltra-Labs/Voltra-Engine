@@ -4,10 +4,13 @@
 
 use std::any::Any;
 use std::marker::PhantomData;
-use std::panic::{self, AssertUnwindSafe};
+use std::panic;
+#[cfg(not(target_arch = "wasm32"))]
+use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::job::Job;
 use crate::pool::Shared;
 
@@ -43,7 +46,11 @@ impl ScopeState {
 /// invariant, so neither can be stretched to let a job keep a borrow past
 /// the scope.
 pub struct Scope<'scope, 'env: 'scope> {
+    // Unread on the web, where a job runs where it is spawned and never
+    // reaches the queue or the scope's count.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     shared: &'scope Shared,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     state: &'scope ScopeState,
     _scope: PhantomData<&'scope mut &'scope ()>,
     _env: PhantomData<&'env mut &'env ()>,
@@ -59,7 +66,14 @@ impl<'scope, 'env> Scope<'scope, 'env> {
         }
     }
 
+    /// Runs `f` where it is spawned: there are no threads to queue it for.
+    #[cfg(target_arch = "wasm32")]
+    pub fn spawn(&self, f: impl FnOnce() + 'env) {
+        f();
+    }
+
     /// Queues `f` to run on the pool before the scope returns.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn spawn(&self, f: impl FnOnce() + Send + 'env) {
         self.state.pending.fetch_add(1, Ordering::AcqRel);
         // The state is the scope's, which waits for this job; erasing its

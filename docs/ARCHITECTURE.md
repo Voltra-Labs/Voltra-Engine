@@ -4492,6 +4492,36 @@ its parent), `app/headless/tests.rs` (a profiled session naming
 `voltra-mcp/tests/editor.rs` (recording until the frames are there, and
 left off as found).
 
+### The engine builds for the web; every asset read goes through one funnel
+
+W1 of `docs/plan-web.md`. `cargo clippy -p voltra-player --target
+wasm32-unknown-unknown` is clean and in CI; nothing native changed.
+
+- **`voltra_assets::fs`** is where asset bytes come from:
+  `read`/`read_to_string` answer from a pack [`mount`]ed in memory when one
+  covers the path (a path inside a pack's root that the pack lacks is
+  missing, not looked for on disk), and from the disk otherwise — natively;
+  the web has none. Textures, atlases, fonts, clips
+  (`voltra_audio::decode_bytes`), scenes, prefabs, RON stores, the input
+  map, sorting layers and `build.ron` all read through it. A web build will
+  fetch one pack before the game starts; a native test mounts one to test
+  that path without a browser.
+- **`MaybeSend` / `MaybeSync`** (`voltra-jobs`): `Send`/`Sync` natively,
+  nothing on the web, where a job runs where it is spawned and GPU handles
+  are not `Sync` — wgpu's `WasmNotSendSync`, for the same reason.
+  `TextureSizes` is `MaybeSync`.
+- **`web-time`** stands in for `std::time::Instant`, which panics on
+  `wasm32-unknown-unknown`, in `voltra-core::time` and `voltra-profile`;
+  it is a web-only dependency, so native builds keep `std`'s.
+- **`egui-winit` without its defaults** at the workspace, turned back on
+  natively by `voltra-core`: the web build leaves out the native clipboard
+  (`arboard`), which does not build there.
+- **`uuid`'s `js` feature** on the web: ids need randomness, and the
+  browser's crypto is the source there.
+
+Pinned by `fs.rs` (a mounted pack answering for its root, the disk for the
+rest, gone when unmounted) and the `wasm32` CI job.
+
 ### A running editor is driven through a bridge, not by speaking MCP
 
 MCP M3. The editor, started with `--bridge [port]`, listens on
