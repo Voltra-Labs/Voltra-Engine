@@ -70,7 +70,16 @@ impl RenderTarget {
             return false;
         }
 
-        self.texture = create_texture(device, &self.label, self.format, width, height);
+        let old = std::mem::replace(
+            &mut self.texture,
+            create_texture(device, &self.label, self.format, width, height),
+        );
+        // Freed now rather than whenever the drop gets to it — on the web,
+        // whenever JavaScript collects it, and a window dragged wider makes
+        // a full-size texture per step. Safe: a target is resized before
+        // this frame records into it, and `destroy` waits for the frames
+        // already submitted.
+        old.destroy();
         (self.view, self.raw_view) = create_views(device, &self.texture, self.format);
         self.width = width;
         self.height = height;
@@ -139,6 +148,16 @@ impl RenderTarget {
                 },
             ],
         })
+    }
+}
+
+/// Destroys the texture rather than leaving it to the drop, for the reason
+/// [`RenderTarget::resize`] does. Every target lives across frames — a
+/// renderer's, an app's, or the graph pool's, which drops one only after
+/// frames unused — so none is dropped while a recorded frame still uses it.
+impl Drop for RenderTarget {
+    fn drop(&mut self) {
+        self.texture.destroy();
     }
 }
 
