@@ -5,9 +5,10 @@ use voltra_render::glam::{Mat3, Vec2};
 
 use super::layout::UiLayout;
 use super::rect::Rect;
+use super::slice::{Image, UiSlice};
 use super::UiRect;
 use crate::batch::SpriteBatch;
-use crate::sprite::quad::quad;
+use crate::sprite::quad::{quad, texels};
 use crate::sprite::sheets::Sheets;
 use crate::sprite::Sprite;
 use crate::text::{shape, ui_px, Align, Text};
@@ -17,7 +18,8 @@ type ElementKey = (i32, u32, u32, u8);
 
 /// What one screen-space element draws.
 enum Element<'a> {
-    Sprite(&'a Sprite),
+    /// With the 9-slice it is drawn as, if it has one.
+    Sprite(&'a Sprite, Option<&'a UiSlice>),
     Text(&'a Text),
 }
 
@@ -33,7 +35,12 @@ pub fn batch(world: &World, sheets: Sheets<'_>, layout: &UiLayout, scale: f32) -
     for (entity, _) in world.query::<UiRect>() {
         if let Some(sprite) = world.get::<Sprite>(entity) {
             let (order, depth, index) = layout.draw_key(entity, sprite.sort_order);
-            elements.push(((order, depth, index, 0), entity, Element::Sprite(sprite)));
+            let slice = world.get::<UiSlice>(entity);
+            elements.push((
+                (order, depth, index, 0),
+                entity,
+                Element::Sprite(sprite, slice),
+            ));
         }
         if let Some(text) = world.get::<Text>(entity) {
             let (order, depth, index) = layout.draw_key(entity, text.sort_order);
@@ -50,18 +57,26 @@ pub fn batch(world: &World, sheets: Sheets<'_>, layout: &UiLayout, scale: f32) -
             continue;
         };
         match element {
-            Element::Sprite(sprite) => push_sprite(&mut batch, rect, sprite, sheets, scale),
+            Element::Sprite(sprite, slice) => {
+                push_sprite(&mut batch, rect, sprite, slice, sheets, scale)
+            }
             Element::Text(text) => push_text(&mut batch, rect, text, sheets, scale),
         }
     }
     batch
 }
 
-/// A sprite stretched over its rect, with its frame, region and flips.
+/// A sprite stretched over its rect, with its frame, region and flips — or,
+/// with a 9-slice, as its nine pieces.
+///
+/// A 9-slice needs the frame's size in texels to know where its borders
+/// fall; without it — no texture store, a frame that is not there — the
+/// sprite is stretched whole, as it would be with no slice at all.
 fn push_sprite(
     batch: &mut SpriteBatch,
     rect: Rect,
     sprite: &Sprite,
+    slice: Option<&UiSlice>,
     sheets: Sheets<'_>,
     scale: f32,
 ) {
@@ -70,6 +85,24 @@ fn push_sprite(
         return;
     }
     let quad = quad(sprite, sheets);
+    if let (Some(slice), Some(texels)) = (slice, texels(sprite, sheets)) {
+        let image = Image {
+            texels,
+            uvs: quad.uvs,
+            flip_x: sprite.flip_x,
+            flip_y: sprite.flip_y,
+        };
+        for piece in slice.pieces(Rect::new(min, max), image, scale) {
+            batch.push_quad(
+                Mat3::IDENTITY,
+                piece.corners,
+                piece.uvs,
+                sprite.color,
+                quad.texture,
+            );
+        }
+        return;
+    }
     // The batch's corner order — top-left, bottom-left, bottom-right,
     // top-right — with y already pointing down.
     let corners = [

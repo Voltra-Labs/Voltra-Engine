@@ -201,3 +201,45 @@ fn a_despawned_focus_is_dropped() {
     );
     assert_eq!(state.focused(), None);
 }
+
+#[test]
+fn a_button_with_frames_shows_the_frame_of_its_state() {
+    let mut world = World::new();
+    let ok = button(&mut world, Vec2::new(10.0, 10.0));
+    world.get_mut::<UiButton>(ok).expect("a button").frames = Some(ButtonFrames::in_a_row(4));
+    let mut state = UiButtons::default();
+    let shown = |world: &World| world.get::<Sprite>(ok).expect("a sprite").frame;
+
+    frame(
+        &mut world,
+        &mut state,
+        Pointer::default(),
+        Navigation::default(),
+    );
+    assert_eq!(shown(&world), 4, "normal");
+    let over = Pointer {
+        position: at(50.0, 30.0),
+        ..Pointer::default()
+    };
+    frame(&mut world, &mut state, over, Navigation::default());
+    assert_eq!(shown(&world), 5, "hovered");
+    let down = Pointer {
+        went_down: true,
+        ..over
+    };
+    frame(&mut world, &mut state, down, Navigation::default());
+    assert_eq!(shown(&world), 6, "pressed");
+    world.get_mut::<UiButton>(ok).expect("a button").disabled = true;
+    frame(&mut world, &mut state, over, Navigation::default());
+    assert_eq!(shown(&world), 7, "disabled");
+}
+
+#[test]
+fn a_button_without_frames_leaves_the_frame_alone() {
+    let mut world = World::new();
+    let ok = button(&mut world, Vec2::new(10.0, 10.0));
+    world.get_mut::<Sprite>(ok).expect("a sprite").frame = 3;
+    let mut state = UiButtons::default();
+    click(&mut world, &mut state, 50.0, 30.0);
+    assert_eq!(world.get::<Sprite>(ok).expect("a sprite").frame, 3);
+}

@@ -6,6 +6,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use super::rect::{Rect, UiRect};
+use super::stack::UiStack;
 use crate::hierarchy;
 
 /// The screen box of every entity with a [`UiRect`], and how many UI
@@ -55,22 +56,53 @@ impl UiLayout {
         chain.reverse();
         chain.push(entity);
 
-        let mut parent: Option<(Rect, u32)> = None;
+        let mut parent: Option<(Entity, Rect, u32)> = None;
         for link in chain {
-            if let Some(&known) = self.resolved.get(&link) {
-                parent = Some(known);
+            if let Some(&(rect, depth)) = self.resolved.get(&link) {
+                parent = Some((link, rect, depth));
                 continue;
             }
             let Some(rect) = world.get::<UiRect>(link) else {
                 continue;
             };
             let resolved = match parent {
-                Some((parent_rect, depth)) => (rect.resolve(parent_rect), depth + 1),
+                Some((above, parent_rect, depth)) => {
+                    let placed = self
+                        .stacked(world, above, parent_rect, depth + 1, link)
+                        .unwrap_or_else(|| rect.resolve(parent_rect));
+                    (placed, depth + 1)
+                }
                 None => (rect.resolve(screen), 0),
             };
             self.resolved.insert(link, resolved);
-            parent = Some(resolved);
+            parent = Some((link, resolved.0, resolved.1));
         }
+    }
+
+    /// Where `child` goes when `parent` stacks it: the whole stack is
+    /// arranged at once, every child of it recorded at `depth`, since where
+    /// one goes depends on all the others. `None` when `parent` is no
+    /// [`UiStack`] or `child` is not its own child.
+    fn stacked(
+        &mut self,
+        world: &World,
+        parent: Entity,
+        parent_rect: Rect,
+        depth: u32,
+        child: Entity,
+    ) -> Option<Rect> {
+        let stack = world.get::<UiStack>(parent)?;
+        if hierarchy::parent_of(world, child) != Some(parent) {
+            return None;
+        }
+        let mut found = None;
+        for (entity, rect) in stack.arrange(world, parent, parent_rect) {
+            if entity == child {
+                found = Some(rect);
+            }
+            self.resolved.entry(entity).or_insert((rect, depth));
+        }
+        found
     }
 
     /// The box `entity` occupies, or `None` if it has no `UiRect`.

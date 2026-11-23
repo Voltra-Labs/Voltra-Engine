@@ -364,6 +364,7 @@ privileged and plain `cargo build` covers everything.
 | 76 | The game as a plugin: the editor loads a game crate's library and Play runs it | done |
 | 77 | Hot reload: an edit to the game's code is rebuilt and swapped in mid-play | done |
 | 78 | `cargo xtask new-game`: a game crate to play, edit in the editor and package | done |
+| 79 | UI images: 9-slice panels, image buttons, rows and columns | done |
 
 ## Contributing
 

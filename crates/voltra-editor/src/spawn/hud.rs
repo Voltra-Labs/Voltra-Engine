@@ -5,6 +5,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
     hierarchy, Align, Name, ParticleEmitter, SceneId, Sprite, Text, Transform, UiButton, UiRect,
+    UiStack,
 };
 
 /// Size a new HUD label's text is, in points.
@@ -32,6 +33,18 @@ pub(crate) fn hud_panel(frame: &mut UiFrame<'_>, name: &str) -> Entity {
         entity,
         Sprite::new([0.08, 0.09, 0.12, 1.0]).with_sort_order(-1),
     );
+    entity
+}
+
+/// Drops a dark HUD panel that stacks its UI children in a column — a
+/// menu's frame: buttons parented under it line up by slot.
+pub(crate) fn hud_column(frame: &mut UiFrame<'_>, name: &str) -> Entity {
+    let entity = hud_panel(frame, name);
+    frame.world.insert(
+        entity,
+        UiRect::pinned(Vec2::splat(0.5), Vec2::ZERO, Vec2::new(220.0, 260.0)),
+    );
+    frame.world.insert(entity, UiStack::default());
     entity
 }
 

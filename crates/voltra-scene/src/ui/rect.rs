@@ -58,6 +58,15 @@ pub struct UiRect {
     pub anchor_max: Vec2,
     pub offset_min: Vec2,
     pub offset_max: Vec2,
+    /// Where it goes among the children of a [`UiStack`](super::UiStack):
+    /// lower first, ties by entity index. Ignored anywhere else; `0`, the
+    /// default, is not written.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub slot: i32,
+}
+
+fn is_zero(slot: &i32) -> bool {
+    *slot == 0
 }
 
 impl Default for UiRect {
@@ -79,6 +88,7 @@ impl UiRect {
             anchor_max: anchor,
             offset_min: min,
             offset_max: min + size,
+            slot: 0,
         }
     }
 
@@ -89,7 +99,14 @@ impl UiRect {
             anchor_max: Vec2::ONE,
             offset_min: Vec2::splat(margin),
             offset_max: Vec2::splat(-margin),
+            slot: 0,
         }
+    }
+
+    /// The same box, `slot`th among a stack's children.
+    pub fn with_slot(mut self, slot: i32) -> Self {
+        self.slot = slot;
+        self
     }
 
     /// The box inside `parent`.

@@ -9,7 +9,8 @@ use crate::hierarchy;
 use crate::sprite::Sprite;
 
 /// Makes a [`UiRect`] element clickable and focusable, and tints its
-/// `Sprite` by state.
+/// `Sprite` by state — and, with [`frames`](Self::frames), swaps the atlas
+/// frame it shows, so a button is drawn from an image per state.
 ///
 /// Godot's `Button`, minus the text it carries: the label is a `Text`
 /// child, and a click on the label reaches the button, as Godot's default
@@ -26,6 +27,37 @@ pub struct UiButton {
     /// Takes no click and no focus.
     #[serde(default)]
     pub disabled: bool,
+    /// The frame of the sprite's atlas shown in each state, if the states
+    /// are images; the tint above still applies, so an image button keeps
+    /// its colours white. Not written when there are none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub frames: Option<ButtonFrames>,
+}
+
+/// One atlas frame per button state: Unity's sprite-swap transition.
+///
+/// Frames of the button's own `Sprite` atlas, rather than four images of
+/// their own: a UI skin is one sheet, and the sprite already names it —
+/// the frame is the one thing a state changes.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ButtonFrames {
+    pub normal: u32,
+    pub hovered: u32,
+    pub pressed: u32,
+    pub disabled: u32,
+}
+
+impl ButtonFrames {
+    /// Four frames in a row from `first`: normal, hovered, pressed,
+    /// disabled — how a skin sheet is usually cut.
+    pub fn in_a_row(first: u32) -> Self {
+        Self {
+            normal: first,
+            hovered: first + 1,
+            pressed: first + 2,
+            disabled: first + 3,
+        }
+    }
 }
 
 impl Default for UiButton {
@@ -36,6 +68,7 @@ impl Default for UiButton {
             pressed: [0.14, 0.15, 0.2, 1.0],
             disabled_color: [0.2, 0.2, 0.2, 0.5],
             disabled: false,
+            frames: None,
         }
     }
 }
@@ -148,17 +181,40 @@ impl UiButtons {
             let Some(sprite) = world.get_mut::<Sprite>(entity) else {
                 continue;
             };
-            sprite.color = if button.disabled {
-                button.disabled_color
+            let state = if button.disabled {
+                State::Disabled
             } else if self.pressed == Some(entity) {
-                button.pressed
+                State::Pressed
             } else if self.hovered == Some(entity) || self.focused == Some(entity) {
-                button.hovered
+                State::Hovered
             } else {
-                button.normal
+                State::Normal
             };
+            sprite.color = match state {
+                State::Normal => button.normal,
+                State::Hovered => button.hovered,
+                State::Pressed => button.pressed,
+                State::Disabled => button.disabled_color,
+            };
+            if let Some(frames) = button.frames {
+                sprite.frame = match state {
+                    State::Normal => frames.normal,
+                    State::Hovered => frames.hovered,
+                    State::Pressed => frames.pressed,
+                    State::Disabled => frames.disabled,
+                };
+            }
         }
     }
+}
+
+/// What a button shows.
+#[derive(Clone, Copy)]
+enum State {
+    Normal,
+    Hovered,
+    Pressed,
+    Disabled,
 }
 
 /// The button `hit` is, or the nearest one above it — a click on a label

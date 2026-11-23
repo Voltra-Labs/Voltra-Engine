@@ -31,13 +31,15 @@ mod tilemap;
 mod transform;
 mod ui_button;
 mod ui_rect;
+mod ui_slice;
+mod ui_stack;
 
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
     hierarchy, ui, AudioSource, Camera, Collider, Parallax, ParticleEmitter, Sprite, Text, Tilemap,
-    Transform, UiButton, UiLayout, UiRect,
+    Transform, UiButton, UiLayout, UiRect, UiStack,
 };
 
 use crate::editor::Editor;
@@ -90,12 +92,16 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     claim = transform::show(ui, transform);
                 }
                 let parent_rect = ui_parent_rect(ui, frame, entity);
+                let stacked = hierarchy::parent_of(frame.world, entity)
+                    .is_some_and(|parent| frame.world.get::<UiStack>(parent).is_some());
                 if let Some(rect) = frame.world.get_mut::<UiRect>(entity) {
-                    claim = claim.or(ui_rect::show(ui, rect, parent_rect));
+                    claim = claim.or(ui_rect::show(ui, rect, parent_rect, stacked));
                 }
+                let shown = frame.world.get::<Sprite>(entity).map_or(0, |s| s.frame);
                 if let Some(button) = frame.world.get_mut::<UiButton>(entity) {
-                    claim = claim.or(ui_button::show(ui, button));
+                    claim = claim.or(ui_button::show(ui, button, shown));
                 }
+                claim = claim.or(ui_stack::show(ui, frame.world, entity));
                 let on_screen = ui::is_ui(frame.world, entity);
                 // Both are read before the world is borrowed mutably below:
                 // the thumbnail map and the atlas store hang off `frame`, and
@@ -126,6 +132,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         preview,
                     ));
                 }
+                claim = claim.or(ui_slice::show(ui, frame.world, entity));
                 if frame.world.get::<Sprite>(entity).is_some() {
                     ui.separator();
                     claim = claim.or(animation::show(ui, frame.world, entity, frames_in_atlas));

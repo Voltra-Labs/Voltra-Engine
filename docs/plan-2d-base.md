@@ -7,7 +7,7 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–78 and W1–W4 (README roadmap): batched, lit and post-processed
+Stages 1–79 and W1–W4 (README roadmap): batched, lit and post-processed
 rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
 continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
@@ -16,7 +16,7 @@ server; a profiler.
 
 What a game still cannot do, found by reading the tree (not guessed):
 
-- show an image in its UI, a slider, a text field, a scrolling list;
+- show a slider, a text field, a scrolling list in its UI;
 - wrap a line of text, or ship it in a second language;
 - tween a value from code, or wait on a timer;
 - give one sprite its own shader;
@@ -50,15 +50,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 79 — UI 1: images, 9-slice panels, layout
-
-**Scope.** `UiImage` (a texture or atlas frame in a `UiRect`, with a tint),
-9-slice borders for panels and buttons, and `UiLayout` rows and columns with
-spacing, padding and alignment; buttons drawn from images in their states.
-
-**Done when** a pause menu — panel, title, three image buttons laid out in a
-column — is built in a test scene and drawn and clicked headless.
 
 ## 80 — UI 2: slider, toggle, text field, scroll
 

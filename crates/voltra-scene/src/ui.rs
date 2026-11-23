@@ -2,16 +2,25 @@
 //! in the world, drawn after it in the target's own pixels.
 //!
 //! A HUD, and since stage 35 buttons: [`UiButton`] takes clicks, hover and
-//! keyboard/gamepad focus.
+//! keyboard/gamepad focus. An image is a `Sprite` on a `UiRect` — a
+//! texture, a region or an atlas frame, tinted — drawn whole or, with a
+//! [`UiSlice`], as a 9-slice; a [`UiStack`] lays its children out in a row
+//! or a column.
 
 pub mod button;
+pub mod edges;
 pub mod layout;
 pub mod mesh;
 pub mod rect;
+pub mod slice;
+pub mod stack;
 
-pub use button::{Navigation, Pointer, UiButton, UiButtons};
+pub use button::{ButtonFrames, Navigation, Pointer, UiButton, UiButtons};
+pub use edges::Edges;
 pub use layout::UiLayout;
 pub use rect::{Rect, UiRect};
+pub use slice::UiSlice;
+pub use stack::UiStack;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;

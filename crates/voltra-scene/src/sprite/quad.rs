@@ -78,13 +78,24 @@ pub fn quad(sprite: &Sprite, sheets: Sheets<'_>) -> Quad {
     }
 }
 
-/// What a sprite draws of its texture.
+/// The size in texels of what `sprite` draws — its frame, its region or
+/// its whole texture — or `None` when that is not known: no texture store
+/// to ask, or a frame that is not there and draws the placeholder.
+pub fn texels(sprite: &Sprite, sheets: Sheets<'_>) -> Option<UVec2> {
+    match slice(sprite, sheets) {
+        Slice::Whole => sheets.size(sprite.texture_handle),
+        Slice::Cut { size, .. } => Some(size),
+        Slice::Missing => None,
+    }
+}
+
 /// Whether `sprite` asks for a frame that is not there, and so draws the
 /// placeholder: what a caster shaped by its sprite must not trace.
 pub(crate) fn frame_missing(sprite: &Sprite, sheets: Sheets<'_>) -> bool {
     matches!(slice(sprite, sheets), Slice::Missing)
 }
 
+/// What a sprite draws of its texture.
 enum Slice {
     /// All of it.
     Whole,

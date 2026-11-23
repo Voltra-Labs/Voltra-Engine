@@ -57,7 +57,13 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
                     "the editor is playing: stop first, edits land in the authored scene".into(),
                 );
             }
-            edits::apply(editor, frame.world, command)
+            let answer = edits::apply(editor, frame.world, command)?;
+            // What the edit wrote names its texture, atlas, font or clip by
+            // path; the handles that draw them are this session's, so they
+            // are looked up now — or a textured sprite spawned here draws
+            // the placeholder and a text nothing, with no word why.
+            frame.resolve_scene_assets();
+            Ok(answer)
         }
         Command::Select { entities } => {
             let mut ids = Vec::new();

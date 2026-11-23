@@ -5072,6 +5072,70 @@ file filled in, the assets copied, the manifest planned by `dist` and
 `game/project.rs` (the asset root beside the manifest). Checked by hand: a
 generated game played in the editor under Xvfb through the bridge.
 
+### UI images are sprites; panels 9-slice and stack their children
+
+Stage 79. A menu built from a skin sheet: panels and button faces that keep
+a crisp frame at any size, and children laid out in rows and columns.
+
+- **An image is a `Sprite` on a `UiRect`** — the plan's `UiImage`. A
+  sprite already names a texture, a region or an atlas frame, carries a
+  tint, resolves its handles on load and hot reload, and has an inspector
+  with pickers; a second image type would have duplicated all of it for
+  the same five fields. The world-only fields (pixels per unit, normal map,
+  light layers) are ignored in screen space, as `Transform` is.
+- **`UiSlice`** draws the element's sprite as nine pieces: corners at
+  their own size, edges stretched along one axis, the middle along both
+  (`center: false` leaves a frame around nothing). Borders are `Edges` in
+  texels of the drawn frame, drawn at `scale` points per texel; borders
+  wider than the rect shrink in proportion until they meet, as Unity's do;
+  a mirrored sprite draws its right border on the left. On the element, as
+  Godot's `NinePatchRect` margins, rather than on the image as Unity's
+  sprite `border`: an atlas here is a list of frames with no per-image
+  metadata, and one frame sliced two ways costs nothing this way. Without
+  the frame's size in texels — no texture store, a missing frame — it is
+  stretched whole. A linear sampler blends a border's last texel into the
+  first pixels of the stretched piece next to it, as in every engine;
+  skins pad their borders or use a nearest-filtered texture.
+- **`UiStack`** places the `UiRect` children of its element one after
+  another — `Row` left to right, `Column` top to bottom — `spacing` apart
+  inside `padding`, the run justified `Start`/`Center`/`End` along the
+  stack and each child aligned (or `Stretch`ed, the default as Godot's
+  fill) across it. Godot's `BoxContainer`, Unity's layout groups. A child
+  keeps the size its own `UiRect` resolves to in the padded box; its
+  position is the stack's. Laid out inside `UiLayout::from_world`: the
+  first child reached arranges the whole stack, since where one goes
+  depends on the rest. Children past the end overflow rather than vanish.
+- **Order is `UiRect::slot`**, then entity index. The hierarchy keeps no
+  sibling order (a stored list was rejected for `Parent`), and a scene file
+  writes entities in id order, so a menu's reading order has to be said.
+  `0` is not written. Rejected: sibling order in `Parent` — it would change
+  every scene and the hierarchy panel for one consumer; a list of ids on
+  the stack — duplicate and prefab instancing remap `Parent`, not ids
+  inside other components.
+- **`UiButton::frames`** swaps the sprite's atlas frame by state — Unity's
+  sprite-swap transition — frames of the button's own atlas, since a skin
+  is one sheet. The tint still applies, so an image button keeps its
+  colours white. `ButtonFrames::in_a_row(first)` is how a skin is cut.
+- Inspector: *9-slice* and *Stack* sections with add and remove buttons,
+  the state frames under the button's colours, the slot on a stacked
+  child's rect. *Scene ▸ Spawn HUD column*: a centred panel that stacks.
+
+Pinned by `ui/slice.rs` (nine pieces, corners at size, borders scaled by
+points and pixels, borders that meet, no middle, mirroring, bad numbers),
+`ui/stack/tests.rs` (columns and rows, slots over spawn order, centring
+and end, grandchildren inside a stacked parent, overflow, a despawned
+child), `ui/button/tests.rs` (a frame per state, none without frames) and
+`tests/headless_menu.rs`: a pause menu — a 9-sliced panel stacking a title
+and three image buttons spawned out of order — written to a scene file and
+read back, laid out in slot order, a click on a label clicking its button,
+the arrow keys walking the column, and drawn on the GPU with the panel's
+and buttons' frames 4 points thick and each button's middle its state's.
+Checked by hand: the editor under Xvfb, a pause menu spawned through the
+bridge with the coin sheet as its skin, drawn 9-sliced in slot order. That
+check found the bridge's edits never looked up the handles of what they
+wrote — a textured sprite spawned by a tool drew the placeholder, a text
+nothing — so an applied edit now resolves the scene's assets.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
