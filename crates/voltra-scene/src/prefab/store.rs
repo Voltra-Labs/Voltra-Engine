@@ -137,7 +137,7 @@ impl Prefabs {
     /// Reads, parses and checks one file. The only place this type touches
     /// the disk.
     fn read(&self, path: &AssetPath) -> Result<Prefab, SceneError> {
-        let text = std::fs::read_to_string(self.root.join(path.as_str()))?;
+        let text = voltra_assets::fs::read_to_string(&self.root.join(path.as_str()))?;
         let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
         Ok(Prefab::new(file)?.with_source(path.clone()))
     }

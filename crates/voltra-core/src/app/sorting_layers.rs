@@ -27,7 +27,7 @@ struct LayersFile {
 /// Reads a layers file. `None`, with the reason logged, for one that will
 /// not read, is of another version, or names an empty layer.
 fn read(path: &Path) -> Option<SortingLayers> {
-    let text = match std::fs::read_to_string(path) {
+    let text = match voltra_assets::fs::read_to_string(path) {
         Ok(text) => text,
         Err(e) => {
             log::warn!("could not read {}: {e}", path.display());

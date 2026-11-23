@@ -65,13 +65,16 @@ pub fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
         armed: true,
     };
 
-    let mut file = File::create(&guard.path)?;
-    file.write_all(bytes)?;
-    // Flushed before the rename, not after: otherwise the rename can reach
-    // disk before the bytes do, and a power loss leaves the destination
-    // renamed and empty rather than holding the old or the new contents.
-    file.sync_all()?;
-    drop(file);
+    // Closed at the end of the block, before the rename.
+    {
+        let mut file = File::create(&guard.path)?;
+        file.write_all(bytes)?;
+        // Flushed before the rename, not after: otherwise the rename can
+        // reach disk before the bytes do, and a power loss leaves the
+        // destination renamed and empty rather than holding the old or the
+        // new contents.
+        file.sync_all()?;
+    }
 
     std::fs::rename(&guard.path, path)?;
     guard.armed = false;

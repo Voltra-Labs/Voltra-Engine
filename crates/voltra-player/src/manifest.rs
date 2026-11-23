@@ -177,7 +177,7 @@ impl Manifest {
     }
 
     pub fn load(path: &Path) -> Result<Self, ManifestError> {
-        let text = std::fs::read_to_string(path).map_err(|source| ManifestError::Io {
+        let text = voltra_assets::fs::read_to_string(path).map_err(|source| ManifestError::Io {
             path: path.to_path_buf(),
             source,
         })?;

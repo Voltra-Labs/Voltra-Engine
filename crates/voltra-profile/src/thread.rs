@@ -1,9 +1,9 @@
 //! The calling thread's recorder, behind free functions: what the engine's
 //! scopes and the loop's `end_frame` use.
 
+use crate::clock::Instant;
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::time::Instant;
 
 use crate::recorder::{Frame, Recorder};
 use crate::summary::Summary;

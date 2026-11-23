@@ -43,6 +43,9 @@ base64 = "0.23.1"
 # v7 rather than v4: the timestamp in the high bits means sorting by id sorts by
 # creation, so a scene file is deterministic *and* appends new entities at the end.
 uuid = { version = "1.24.0", features = ["v7", "serde"] }
+# `std::time::Instant` panics on wasm32-unknown-unknown; this is the same
+# type natively and `performance.now()` on the web. Web builds only.
+web-time = "1.1.0"
 # PNG only: the default feature set drags in jpeg, gif, tiff, webp and more.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 # The output device and nothing else: the mixer is ours, the way Godot's and
@@ -61,7 +64,9 @@ symphonia = { version = "0.6.1", default-features = false, features = [
 # be used against wgpu 30, so the backend is ours; `epaint` is the tessellated
 # output it consumes, and is all the render layer needs to know about.
 egui = "0.35.0"
-egui-winit = "0.35.0"
+# Without its defaults so the web build leaves out the native clipboard;
+# `voltra-core` turns them back on for native targets.
+egui-winit = { version = "0.35.0", default-features = false }
 epaint = { version = "0.35.0", default-features = false, features = ["bytemuck"] }
 pollster = "1.0.1"
 log = "0.4.33"

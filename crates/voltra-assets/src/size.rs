@@ -14,8 +14,9 @@ use crate::textures::Textures;
 /// UVs it samples — is exactly what has to stay testable headless. The editor
 /// and the draw path pass `Textures`; a test passes a map.
 ///
-/// `Sync` so a batch can be built across the job pool's threads.
-pub trait TextureSizes: Sync {
+/// `Sync` so a batch can be built across the job pool's threads — natively;
+/// on the web there are none, and GPU handles are not `Sync` there.
+pub trait TextureSizes: voltra_jobs::MaybeSync {
     /// The size of `texture` in texels, or `None` for a handle this store
     /// never issued.
     fn size(&self, texture: Handle<Texture>) -> Option<UVec2>;

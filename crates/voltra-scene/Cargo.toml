@@ -19,3 +19,8 @@ uuid.workspace = true
 [dev-dependencies]
 voltra-testkit.workspace = true
 image.workspace = true
+
+# The web has no OS randomness for ids: the browser's crypto supplies it.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+

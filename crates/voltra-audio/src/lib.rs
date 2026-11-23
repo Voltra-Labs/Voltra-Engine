@@ -36,7 +36,7 @@ pub use audio::Audio;
 pub use bus::{BusId, Buses, DEFAULT_BUSES, MAX_BUSES};
 pub use clip::Clip;
 pub use command::Command;
-pub use decode::decode;
+pub use decode::{decode, decode_bytes};
 pub use device::Output;
 pub use error::AudioError;
 pub use limiter::Limiter;

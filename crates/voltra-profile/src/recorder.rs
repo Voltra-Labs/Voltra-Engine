@@ -2,7 +2,9 @@
 //! and the frames before it.
 
 use std::collections::VecDeque;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 /// How many closed frames a recorder keeps: ten seconds at 60 frames a
 /// second, what a person scrubbing a graph or a tool asking for "the last

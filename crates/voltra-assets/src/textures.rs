@@ -323,7 +323,7 @@ pub(crate) fn decode_file(root: &Path, path: &AssetPath) -> Result<DecodedImage,
     // could climb out of the root. That check lives in the constructor
     // precisely so it cannot be forgotten here.
     let full = root.join(path.as_str());
-    let bytes = std::fs::read(&full).map_err(|source| AssetError::Read {
+    let bytes = crate::fs::read(&full).map_err(|source| AssetError::Read {
         path: full.clone(),
         source,
     })?;

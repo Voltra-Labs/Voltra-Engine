@@ -35,3 +35,12 @@ serde.workspace = true
 # build an asset root without a fixture on disk.
 [dev-dependencies]
 voltra-testkit.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time.workspace = true
+
+# egui-winit's defaults, natively: the system clipboard, links, and both
+# Linux display servers. The web has none of them.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+egui-winit = { workspace = true, features = ["clipboard", "links", "wayland", "x11"] }
+
