@@ -2,35 +2,55 @@
 //! anything else.
 
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Copies every file under `from` to the same place under `to`, creating
 /// directories as needed. Returns how many files were copied.
 ///
-/// Hidden files and directories (a leading `.`) and temporaries (`*.tmp`, the
-/// atomic save's half-written file) are left behind: neither is an asset.
-/// Symbolic links are not followed, so a link out of the tree cannot copy a
-/// stranger's files into a build.
+/// Which files: [`tree_files`]'s.
 pub fn copy_tree(from: &Path, to: &Path) -> io::Result<usize> {
     std::fs::create_dir_all(to)?;
-    let mut copied = 0;
-    for entry in std::fs::read_dir(from)? {
+    let files = tree_files(from)?;
+    for relative in &files {
+        let target = to.join(relative);
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(from.join(relative), target)?;
+    }
+    Ok(files.len())
+}
+
+/// Every file under `root` that is an asset, relative to `root`, sorted.
+///
+/// Hidden files and directories (a leading `.`) and temporaries (`*.tmp`, the
+/// atomic save's half-written file) are left out: neither is an asset.
+/// Symbolic links are not followed, so a link out of the tree cannot copy a
+/// stranger's files into a build.
+pub fn tree_files(root: &Path) -> io::Result<Vec<PathBuf>> {
+    let mut found = Vec::new();
+    walk(root, Path::new(""), &mut found)?;
+    found.sort();
+    Ok(found)
+}
+
+fn walk(root: &Path, relative: &Path, found: &mut Vec<PathBuf>) -> io::Result<()> {
+    for entry in std::fs::read_dir(root.join(relative))? {
         let entry = entry?;
         let name = entry.file_name();
-        let name = name.to_string_lossy();
-        if name.starts_with('.') || name.ends_with(".tmp") {
+        let shown = name.to_string_lossy();
+        if shown.starts_with('.') || shown.ends_with(".tmp") {
             continue;
         }
         let kind = entry.file_type()?;
-        let target = to.join(entry.file_name());
+        let path = relative.join(&name);
         if kind.is_dir() {
-            copied += copy_tree(&entry.path(), &target)?;
+            walk(root, &path, found)?;
         } else if kind.is_file() {
-            std::fs::copy(entry.path(), &target)?;
-            copied += 1;
+            found.push(path);
         }
     }
-    Ok(copied)
+    Ok(())
 }
 
 /// Readies `dir` to receive a build: creates it, or empties one that a
@@ -60,8 +80,6 @@ pub fn prepare_build_dir(dir: &Path, marker: &str) -> io::Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::*;
 
     fn scratch() -> PathBuf {

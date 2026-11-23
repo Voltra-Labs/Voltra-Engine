@@ -19,11 +19,16 @@ pub enum Platform {
     MacOs,
     /// Linux and the other Unixes: the XDG base directories.
     Unix,
+    /// A browser: no folders, only the page's `localStorage`, under keys
+    /// that read as the path below (`/<game>/saves/<slot>.save.ron`).
+    Web,
 }
 
 impl Platform {
     pub fn current() -> Self {
-        if cfg!(windows) {
+        if cfg!(target_arch = "wasm32") {
+            Self::Web
+        } else if cfg!(windows) {
             Self::Windows
         } else if cfg!(target_os = "macos") {
             Self::MacOs
@@ -65,6 +70,8 @@ pub fn resolve(
         folder
     };
     let base = match platform {
+        // The storage is the page's own, so there is no home to find.
+        Platform::Web => PathBuf::from("/"),
         Platform::Windows => absolute("APPDATA")?,
         Platform::MacOs => absolute("HOME")?.join("Library/Application Support"),
         Platform::Unix => absolute("XDG_DATA_HOME")
@@ -110,6 +117,14 @@ mod tests {
         } else {
             path.to_owned()
         }
+    }
+
+    #[test]
+    fn web_saves_are_keyed_by_game_with_no_environment() {
+        assert_eq!(
+            resolve(Platform::Web, "Sky Rift", env(&[])),
+            Some(PathBuf::from("/").join("Sky Rift").join("saves"))
+        );
     }
 
     #[test]

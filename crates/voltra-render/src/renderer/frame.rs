@@ -32,11 +32,9 @@ impl Renderer {
             return;
         };
 
-        let view = frame
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let view = self.ctx.frame_view(&frame);
         let (width, height) = (self.ctx.config().width, self.ctx.config().height);
-        let format = self.ctx.config().format;
+        let format = self.ctx.format();
         let device = self.ctx.device().clone();
         let target = self.frame_target.get_or_insert_with(|| {
             RenderTarget::new(
@@ -99,7 +97,7 @@ impl Renderer {
         self.gpu_timer.end(&mut encoder, scope);
 
         self.gpu_timer.finish(&mut encoder);
-        self.ctx.queue().submit(Some(encoder.finish()));
+        self.ctx.submit(encoder.finish());
         self.gpu_timer.submitted();
         self.ctx.present(frame);
     }
@@ -174,7 +172,7 @@ impl Renderer {
         );
         self.gpu_timer.end(&mut encoder, scope);
         self.gpu_timer.finish(&mut encoder);
-        self.ctx.queue().submit(Some(encoder.finish()));
+        self.ctx.submit(encoder.finish());
         self.gpu_timer.submitted();
     }
 
@@ -269,6 +267,7 @@ fn record_post(
         .add(
             &mut graph,
             device,
+            ctx.frame_buffers(),
             chain.camera,
             drawn,
             width,

@@ -68,6 +68,7 @@ fn lit_by(
         .add(
             &mut graph,
             &device,
+            &voltra_render::FrameBuffers::default(),
             camera.bind_group(),
             drawn,
             SIZE,

@@ -58,7 +58,9 @@ pub enum AssetError {
         path: PathBuf,
         message: &'static str,
     },
-    /// The filesystem watch could not be established.
+    /// The filesystem watch could not be established. Native only: the web
+    /// has no watcher to fail.
+    #[cfg(not(target_arch = "wasm32"))]
     Watch {
         root: PathBuf,
         source: notify_debouncer_full::notify::Error,
@@ -96,6 +98,7 @@ impl fmt::Display for AssetError {
             Self::Font { path, message } => {
                 write!(f, "{} is not a usable font: {message}", path.display())
             }
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Watch { root, source } => {
                 write!(f, "could not watch {}: {source}", root.display())
             }
@@ -111,6 +114,7 @@ impl std::error::Error for AssetError {
             Self::Parse { source, .. } => Some(source),
             Self::Audio { source, .. } => Some(source),
             Self::Atlas { source, .. } => Some(source),
+            #[cfg(not(target_arch = "wasm32"))]
             Self::Watch { source, .. } => Some(source),
             Self::Absolute(_) | Self::EscapesRoot(_) | Self::Empty | Self::Font { .. } => None,
         }

@@ -11,7 +11,7 @@ fn a_headless_renderer_clears_a_target_that_reads_back_as_its_clear_colour() {
     assert!(!renderer.context().has_surface());
     let device = renderer.context().device().clone();
     let queue = renderer.context().queue().clone();
-    let format = renderer.context().config().format;
+    let format = renderer.context().format();
     let target = RenderTarget::new(&device, "t", format, 32, 16, Filter::Linear);
     let graded = RenderTarget::new(&device, "g", format, 32, 16, Filter::Linear);
     renderer.clear_color = voltra_render::wgpu::Color {

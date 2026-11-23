@@ -7,3 +7,6 @@
 
 # `cargo xtask dist` output
 /dist
+
+# Playwright for the web player test, installed by CI or by hand.
+node_modules/

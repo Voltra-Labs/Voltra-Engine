@@ -76,14 +76,15 @@ impl LogCapture {
     }
 }
 
-/// The installed logger: `env_logger`'s, with every line it lets through
-/// copied into the ring.
+/// The installed logger: the platform's — `env_logger` natively, the
+/// browser console on the web — with every line it lets through copied into
+/// the ring.
 pub(super) struct Tee {
-    inner: env_logger::Logger,
+    inner: Box<dyn Log>,
 }
 
 impl Tee {
-    pub(super) fn new(inner: env_logger::Logger) -> Self {
+    pub(super) fn new(inner: Box<dyn Log>) -> Self {
         Self { inner }
     }
 }
@@ -94,7 +95,7 @@ impl Log for Tee {
     }
 
     fn log(&self, record: &Record<'_>) {
-        if !self.inner.matches(record) {
+        if !self.inner.enabled(record.metadata()) {
             return;
         }
         self.inner.log(record);

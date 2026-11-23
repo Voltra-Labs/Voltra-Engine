@@ -45,7 +45,7 @@ impl RenderTarget {
         });
 
         let texture = create_texture(device, label, format, width, height);
-        let (view, raw_view) = create_views(&texture, format);
+        let (view, raw_view) = create_views(device, &texture, format);
 
         Self {
             texture,
@@ -71,7 +71,7 @@ impl RenderTarget {
         }
 
         self.texture = create_texture(device, &self.label, self.format, width, height);
-        (self.view, self.raw_view) = create_views(&self.texture, self.format);
+        (self.view, self.raw_view) = create_views(device, &self.texture, self.format);
         self.width = width;
         self.height = height;
         true
@@ -148,15 +148,23 @@ fn clamp_size(width: u32, height: u32) -> (u32, u32) {
     (width.max(1), height.max(1))
 }
 
-/// The attachment view and the conversion-free view, in that order.
+/// The attachment view and the conversion-free view, in that order — the
+/// same view twice where the device cannot reinterpret (see
+/// `create_texture`).
 fn create_views(
+    device: &wgpu::Device,
     texture: &wgpu::Texture,
     format: wgpu::TextureFormat,
 ) -> (wgpu::TextureView, wgpu::TextureView) {
+    let raw = if crate::texture::reinterprets_srgb(device) {
+        format.remove_srgb_suffix()
+    } else {
+        format
+    };
     (
         texture.create_view(&wgpu::TextureViewDescriptor::default()),
         texture.create_view(&wgpu::TextureViewDescriptor {
-            format: Some(format.remove_srgb_suffix()),
+            format: Some(raw),
             ..Default::default()
         }),
     )
@@ -171,8 +179,15 @@ fn create_texture(
 ) -> wgpu::Texture {
     // Reinterpreting an sRGB texture as its plain counterpart has to be
     // declared up front; a view format missing from this list is rejected.
+    // Where the device cannot (WebGL2), none is declared and the raw view
+    // falls back to the sRGB one (`create_views`): only the editor's panel
+    // reads it, and the editor does not run there.
     let raw = format.remove_srgb_suffix();
-    let view_formats = if raw == format { Vec::new() } else { vec![raw] };
+    let view_formats = if raw == format || !crate::texture::reinterprets_srgb(device) {
+        Vec::new()
+    } else {
+        vec![raw]
+    };
 
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some(label),

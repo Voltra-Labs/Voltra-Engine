@@ -73,13 +73,27 @@ are left to W2, which gives the player its web entry point.
 **Done when** the player checks for wasm32 in CI, and nothing native
 changed (the workspace tests are untouched and green).
 
-## W2 — a scene runs in a browser
+## W2 — a scene runs in a browser — done
+
+Landed: `cargo xtask pack` writes `game.pak` (the build folder without the
+executable, `voltra_assets::pack`); the web player fetches it, mounts it at
+`/game` and resolves its launch from the manifest inside; `App` awaits its
+renderer on the web and finishes `resumed` from `user_event`; WebGPU with a
+WebGL2 fallback, frames always drawn sRGB; per-frame GPU buffers destroyed
+after the submit (the web frees nothing on drop); saves in `localStorage`;
+log and panics to the console; `notify` and `env_logger` native only.
+Decisions in ARCHITECTURE.md, "A scene runs in a browser".
+
+Check it: `node crates/voltra-player/web/test/first-frame.mjs` (needs
+`wasm-bindgen` 0.2.126 and Playwright) builds into `target/web-test`,
+serves it, and finds the sandbox's sprites on WebGPU and on WebGL2. CI runs
+it in the `web` job.
 
 - Async renderer creation in `App` on the web, canvas appended to the page
   and following its size.
-- The asset pack: `xtask` writes `assets.pak` (paths and bytes, nothing
-  clever); the web player fetches it before the app starts and installs it
-  behind `voltra_assets::fs`.
+- The asset pack: `xtask` writes it (paths and bytes, nothing clever); the
+  web player fetches it before the app starts and installs it behind
+  `voltra_assets::fs`.
 - WebGPU, with WebGL2 through wgpu's `webgl` feature when
   `navigator.gpu` is missing; shaders checked against WebGL2.
 - Saves in `localStorage`.
@@ -107,7 +121,7 @@ changed (the workspace tests are untouched and green).
 
 - `wasm-bindgen-cli` on CI and on people's machines: install in xtask, or
   document. W4.
-- Whether the pack is one file or many fetches: one file is simplest and
-  is the default; streaming large games is later. W2.
+- ~~Whether the pack is one file or many fetches~~: one file (W2);
+  streaming large games is later.
 - Threads on the web (`atomics`, COOP/COEP headers): not before a game
   needs them.

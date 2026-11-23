@@ -19,76 +19,19 @@
 
 mod args;
 mod launch;
+#[cfg(not(target_arch = "wasm32"))]
+mod native;
 mod scene;
+mod start;
+#[cfg(target_arch = "wasm32")]
+mod web;
 
-use std::path::PathBuf;
-use std::process::ExitCode;
+#[cfg(not(target_arch = "wasm32"))]
+fn main() -> std::process::ExitCode {
+    native::main()
+}
 
-use args::Parsed;
-use voltra_core::{App, WindowConfig};
-
-fn main() -> ExitCode {
-    let exe_dir = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(PathBuf::from));
-    voltra_core::logging::init(cfg!(feature = "windowed"));
-
-    // Skipping the executable's own path, which `parse` does not want to know
-    // about — it is the one argument no user typed.
-    let args = match args::parse(std::env::args().skip(1)) {
-        Ok(Parsed::Run(args)) => args,
-        Ok(Parsed::Help) => {
-            println!("{}", args::USAGE);
-            return ExitCode::SUCCESS;
-        }
-        Err(error) => {
-            log::error!("{error}");
-            println!("{}", args::USAGE);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    let launch = match launch::resolve(&args, exe_dir.as_deref()) {
-        Ok(launch) => launch,
-        Err(error) => {
-            log::error!("{error}");
-            println!("{}", args::USAGE);
-            return ExitCode::FAILURE;
-        }
-    };
-
-    // Before the window: a build that cannot read its scene has nothing to
-    // show, and a window opening onto an empty world reads as a working build
-    // of a broken game.
-    let world = match scene::load(&launch.scene) {
-        Ok(world) => world,
-        Err(error) => {
-            log::error!("could not load {}: {error}", launch.scene.display());
-            return ExitCode::FAILURE;
-        }
-    };
-    scene::describe(&world, &launch.scene);
-
-    let defaults = WindowConfig::default();
-    let (width, height) = launch.size.unwrap_or((defaults.width, defaults.height));
-    let mut app = App::new(WindowConfig {
-        title: launch.title.clone(),
-        width,
-        height,
-    });
-    app.world = world;
-
-    // Physics from the first frame, and no hot reload: a game simulates the
-    // moment it starts — there is no authoring state to protect — and it has
-    // no reason to watch files it will never see change.
-    // Saves go under the game's own name, which a build's manifest gives.
-    let mut app = app.with_simulation().with_game_name(&launch.title);
-    if let Some(root) = launch.asset_root {
-        app = app.with_asset_root(root);
-    }
-
-    // Runs until the window closes. Anything after this line is unreachable
-    // until `App::run` learns to return, so the exit code is the one above.
-    app.run();
-    ExitCode::SUCCESS
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    web::main();
 }

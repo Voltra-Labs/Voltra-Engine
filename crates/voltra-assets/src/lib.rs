@@ -13,6 +13,7 @@ pub mod error;
 pub mod fonts;
 pub mod fs;
 pub mod handle;
+pub mod pack;
 pub mod path;
 pub mod placeholder;
 pub mod root;

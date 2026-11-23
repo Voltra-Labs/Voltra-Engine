@@ -10,3 +10,5 @@ publish = false
 [dependencies]
 # For the build manifest, which the player reads too: one parser, not two.
 voltra-player.workspace = true
+# The asset pack's format, which the web player reads back.
+voltra-assets.workspace = true

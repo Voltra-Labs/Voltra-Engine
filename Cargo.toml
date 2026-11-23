@@ -46,6 +46,13 @@ uuid = { version = "1.24.0", features = ["v7", "serde"] }
 # `std::time::Instant` panics on wasm32-unknown-unknown; this is the same
 # type natively and `performance.now()` on the web. Web builds only.
 web-time = "1.1.0"
+# The web player's way into the browser: calling JavaScript, awaiting its
+# promises, and the DOM APIs it names (console, fetch, localStorage). Web
+# builds only, and `wasm-bindgen` must match the CLI `cargo xtask` runs.
+wasm-bindgen = "0.2.126"
+wasm-bindgen-futures = "0.4.76"
+js-sys = "0.3.103"
+web-sys = "0.3.103"
 # PNG only: the default feature set drags in jpeg, gif, tiff, webp and more.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 # The output device and nothing else: the mixer is ours, the way Godot's and

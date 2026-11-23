@@ -123,6 +123,7 @@ fn lit_by(lamp: Option<u32>, globals: Vec<GlobalLight>, left: u32) -> Option<Vec
         .add(
             &mut graph,
             &device,
+            &voltra_render::FrameBuffers::default(),
             camera.bind_group(),
             drawn,
             SIZE,

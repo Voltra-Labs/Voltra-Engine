@@ -4522,6 +4522,62 @@ wasm32-unknown-unknown` is clean and in CI; nothing native changed.
 Pinned by `fs.rs` (a mounted pack answering for its root, the disk for the
 rest, gone when unmounted) and the `wasm32` CI job.
 
+### A scene runs in a browser: one pack, an awaited renderer, an sRGB view
+
+W2 of `docs/plan-web.md`. The player builds for `wasm32-unknown-unknown`,
+fetches its game, and draws the sandbox on WebGPU and on WebGL2;
+`crates/voltra-player/web/test/first-frame.mjs` (Playwright) checks both.
+
+- **The game is one pack** (`voltra_assets::pack`, written by `cargo xtask
+  pack`): the native build folder without the executable — the shipped
+  `build.ron` and `assets/…` — as `"VPAK"`, a version, and length-prefixed
+  paths and bytes. Godot's `.pck` and Unity's WebGL `.data` have the same
+  shape: one fetch before the game starts, nothing fetched mid-frame, no
+  compression (the server gzips). `decode` trusts nothing — every length is
+  checked against what is left before allocating, paths must stay inside
+  the pack, duplicates and trailing bytes are refused. The web player mounts
+  it at `/game` (`voltra_player::PACK_ROOT`), where a native build's
+  executable would sit, and `launch::resolve` reads the manifest from there
+  exactly as natively — so the launch rules have one implementation.
+- **The renderer is awaited** (`GpuContext::new_async`, `Renderer::new_async`;
+  the blocking `new` is native only). `App::resumed` makes the window, then
+  `platform::start_renderer` either builds it inline (native) or in a
+  `spawn_local` future that leaves it in a slot and wakes the loop through an
+  `EventLoopProxy<()>`; `user_event` finishes startup (`finish_resume`). The
+  slot rather than the renderer in the event keeps the event type `()` on
+  both targets, and `finish_resume` resizes to the canvas and asks for the
+  first frame, since both may have happened while the device was on its way.
+  The web loop is `spawn_app`ed with `ControlFlow::Wait` — the frame asked
+  for at the end of each frame is paced by the browser.
+- **WebGPU first, WebGL2 after** (`wgpu::util::new_instance_with_webgpu_detection`,
+  `webgl` feature on wasm only). On an adapter below wgpu's default limits
+  the device asks for the adapter's own (`required_limits`): native and
+  WebGPU keep the defaults.
+- **The frame is always drawn sRGB.** A WebGPU canvas offers only linear
+  formats; the surface keeps one and frames are drawn through its sRGB view
+  (`view_formats`), so `GpuContext::format()` — not `config().format` — is
+  what pipelines are built for and `frame_view` what passes draw into.
+  Colours match a native window byte for byte (the test looks for the
+  sandbox's linear colours sRGB-encoded).
+- **No `VIEW_FORMATS` on GL.** wgpu 30's GL backend never reinterprets sRGB
+  as linear, so `Texture` uploads its pixels a second time as `Rgba8Unorm`
+  for its raw view there (normal maps stay data), and a `RenderTarget`'s raw
+  view falls back to the sRGB one (only the editor reads it).
+  `texture::reinterprets_srgb` decides, from the backend.
+- **What a frame makes, a frame destroys.** On the web a dropped
+  `wgpu::Buffer` is freed only when JavaScript collects it. `Mesh` destroys
+  its buffers on drop, per-frame pass buffers (lights, shadow edges) go
+  through `FrameBuffers`, destroyed by `GpuContext::submit`, and the light
+  layers' per-mask uniforms are cached in `LayerPass`.
+- **Saves are `localStorage`** under the key the folder rules give the slot
+  (`Platform::Web`: `/<game>/saves/<slot>.save.ron`); **the log is the
+  console** (`logging/web.rs`, with a panic hook); **the watcher refuses**
+  on the web (`watch/web.rs`), which the loop already reads as "hot reload
+  off". `env_logger` and `notify` are native-only dependencies.
+- **Not yet:** sound (cpal's web backend, W3) and `cargo xtask dist --web`
+  (W4). The canvas takes the page's size; a manifest's window size is a
+  desktop setting.
+
 ### A running editor is driven through a bridge, not by speaking MCP
 
 MCP M3. The editor, started with `--bridge [port]`, listens on
@@ -4601,14 +4657,30 @@ Verified against the crate source, not from memory:
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
 | Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
 | D3D12 / FXC | A WGSL loop that writes a vector component by a **runtime index** (`v[i] = …`) fails pipeline creation: FXC must unroll it and cannot (`X3511`). Write the components out. Windows CI hits this; reproduce locally with `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc cargo test` |
-| Data textures | A normal map must be sampled through a non-sRGB view (`Texture::raw_view`, `Textures::raw_bind_group`); the sRGB view decodes it as colour. The view format must be listed in `view_formats` at creation, which `Texture::from_rgba8` does |
+| Data textures | A normal map must be sampled through a non-sRGB view (`Texture::raw_view`, `Textures::raw_bind_group`); the sRGB view decodes it as colour. The view format must be listed in `view_formats` at creation, which `Texture::from_rgba8` does — except on GL, which cannot, where it uploads a second `Rgba8Unorm` copy |
 | `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
 | Headless tests | `headless_device()` needs an adapter; in a Linux container without a GPU, `apt-get install mesa-vulkan-drivers` (lavapipe) makes the GPU tests run instead of skipping |
 | WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |
+| Web backends | `wgpu::util::new_instance_with_webgpu_detection(desc).await` drops `BROWSER_WEBGPU` when the browser has no working WebGPU, so the `webgl` feature's GL backend serves; detection must happen before the instance exists |
+| Web canvas formats | A WebGPU canvas offers `bgra8unorm` / `rgba8unorm` / `rgba16float`, never sRGB: configure the linear format with its sRGB variant in `view_formats` and draw through that view |
+| Web buffers | `Drop` for a web `Buffer`/`Texture` is a no-op — the browser frees it when the JS wrapper is collected. Call `destroy()` on anything made per frame (after the submit) |
+| Web limits | `Limits::default()` fails `request_device` on WebGL2; ask for `adapter.limits()` when `Limits::default().check_limits(&adapter.limits())` is false |
+| GL `VIEW_FORMATS` | The GL backend (WebGL2 included) never sets `DownlevelFlags::VIEW_FORMATS`; a texture declaring `view_formats` fails validation there |
+| Device lost | `device.set_device_lost_callback(callback)`, a `Fn(DeviceLostReason, String)`; natively it fires only on loss or an explicit `destroy`, not on drop |
+| Headless Chromium | WebGPU canvases need `--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=vulkan --enable-unsafe-swiftshader`; on ANGLE's GL path the swap chain's shared image cannot be made and the device is lost on the first present |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7
 rather than trusting a tutorial.
+
+### winit 0.30 on the web
+
+| Thing | winit 0.30.13 (`src/platform/web.rs`, `platform_impl/web/`) |
+| --- | --- |
+| Run | `EventLoopExtWebSys::spawn_app(app)` returns at once; `run_app` throws to unwind |
+| Canvas | `WindowAttributesExtWebSys::with_append(true)` appends it to `<body>`; focusable (tabindex) by default |
+| Size | A requested inner size is written into the canvas's **style** and pins it; leave it out and size the canvas in CSS — a `ResizeObserver` sends `Resized` |
+| Proxy | `EventLoop::create_proxy` only (not on `ActiveEventLoop`); the web proxy is an `mpsc::Sender<T>` plus a wake, so `T` need not be `Send` |
 
 ### egui 0.35 API notes
 
