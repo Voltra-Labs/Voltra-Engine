@@ -73,6 +73,10 @@ jobs:
           node-version: 22
       - name: Playwright and Chromium
         run: npm install --no-save --no-package-lock playwright@1.63.0 && npx playwright install --with-deps chromium
+      # Chromium's WebGPU canvas presents through Vulkan (SwiftShader); the
+      # loader and a CPU driver give it one on a runner with no GPU.
+      - name: Vulkan loader
+        run: sudo apt-get install -y libvulkan1 mesa-vulkan-drivers
       - run: node crates/voltra-player/web/test/first-frame.mjs
 
   check:

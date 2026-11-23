@@ -52,6 +52,11 @@ const types = {
 };
 const server = createServer((request, response) => {
   const path = decodeURIComponent(new URL(request.url, "http://x").pathname);
+  if (path === "/probe") {
+    response.writeHead(200, { "content-type": "text/html" });
+    response.end("<!doctype html><canvas width=64 height=64></canvas>");
+    return;
+  }
   const file = normalize(join(site, path === "/" ? "index.html" : path));
   if (!file.startsWith(site + sep) || !existsSync(file)) {
     response.writeHead(404).end();
@@ -80,6 +85,11 @@ const backends = [
   {
     name: "WebGPU",
     expect: "backend: BrowserWebGpu",
+    // Whether this Chromium can show a WebGPU canvas at all, asked in plain
+    // JavaScript before the player is: some builds headless cannot (the
+    // swap chain's shared image is refused and the device lost), which is
+    // the machine's limit, not the engine's.
+    probe: true,
     args: [
       "--enable-unsafe-webgpu", "--enable-features=Vulkan", "--use-vulkan=swiftshader",
       "--use-angle=vulkan", "--enable-unsafe-swiftshader",
@@ -94,6 +104,10 @@ const backends = [
 
 const failures = [];
 for (const backend of backends) {
+  if (backend.probe && !(await canPresentWebGpu(backend))) {
+    console.log(`\n== ${backend.name}: SKIPPED — this Chromium cannot present a WebGPU canvas headless`);
+    continue;
+  }
   const failure = await check(backend);
   if (failure) failures.push(`${backend.name}: ${failure}`);
 }
@@ -103,6 +117,42 @@ if (failures.length > 0) {
   process.exit(1);
 }
 console.log("PASS");
+
+// Clears a WebGPU canvas a few frames running; false when there is no
+// adapter or the device is lost doing it.
+async function canPresentWebGpu(backend) {
+  const browser = await playwright.chromium.launch({ args: backend.args });
+  try {
+    const page = await browser.newPage();
+    await page.goto(`${url}probe`);
+    return await page.evaluate(async () => {
+      const adapter = await navigator.gpu?.requestAdapter();
+      if (!adapter) return false;
+      const device = await adapter.requestDevice();
+      let lost = false;
+      device.lost.then(() => { lost = true; });
+      const context = document.querySelector("canvas").getContext("webgpu");
+      context.configure({ device, format: navigator.gpu.getPreferredCanvasFormat() });
+      for (let i = 0; i < 5; i++) {
+        const encoder = device.createCommandEncoder();
+        encoder.beginRenderPass({
+          colorAttachments: [{
+            view: context.getCurrentTexture().createView(),
+            loadOp: "clear", storeOp: "store", clearValue: { r: 1, g: 0, b: 0, a: 1 },
+          }],
+        }).end();
+        device.queue.submit([encoder.finish()]);
+        await new Promise((frame) => requestAnimationFrame(frame));
+      }
+      await new Promise((settle) => setTimeout(settle, 300));
+      return !lost;
+    });
+  } catch {
+    return false;
+  } finally {
+    await browser.close();
+  }
+}
 
 // Opens the page on one backend; what went wrong, or null.
 async function check(backend) {
