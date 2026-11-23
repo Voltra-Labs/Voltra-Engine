@@ -101,7 +101,20 @@ it in the `web` job.
   built page, waits for the first frame and finds the sandbox's sprites in
   a screenshot.
 
-## W3 — sound and input in the browser
+## W3 — sound and input in the browser — done
+
+Landed: cpal's `wasm-bindgen` backend; `Audio::resume` from the first key,
+click or touch; the canvas focused when the game starts; gilrs's web
+support as it is. `voltra_core::when_assets_ready` starts any game from
+its pack (the platformer example runs in a browser), `cargo xtask pack`
+packs game builds, and the page loads `game.js` whatever the binary.
+Decisions in ARCHITECTURE.md, "In the browser, sound waits for a gesture".
+
+Check it: `node crates/voltra-player/web/test/play.mjs` walks the
+platformer right into a coin with the keyboard — the level scrolls, the
+`AudioContext` goes from suspended to running on that key, and the coin's
+samples reach WebAudio — on WebGPU and WebGL2. CI runs it beside
+`first-frame.mjs`.
 
 - cpal's `wasm-bindgen` backend; the stream opens on the first gesture.
 - Keyboard focus on the canvas; gamepads through gilrs's web support.

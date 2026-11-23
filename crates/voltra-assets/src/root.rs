@@ -42,6 +42,7 @@ const MAX_ASCENT: usize = 6;
 ///
 /// [`App::with_asset_root`](../../voltra_core/struct.App.html) overrides this;
 /// this is what it falls back to.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn default_root() -> PathBuf {
     resolve_root(
         std::env::var_os(ROOT_ENV).map(PathBuf::from),
@@ -51,6 +52,14 @@ pub fn default_root() -> PathBuf {
             .and_then(|exe| exe.parent().map(Path::to_path_buf)),
         &std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
     )
+}
+
+/// On the web: the asset folder of the pack mounted before the game started
+/// (`voltra_core::when_assets_ready`). There is no environment, manifest
+/// directory or executable to resolve from, and the pack's layout is fixed.
+#[cfg(target_arch = "wasm32")]
+pub fn default_root() -> PathBuf {
+    Path::new(crate::pack::PACK_ROOT).join(crate::pack::PACK_ASSETS)
 }
 
 /// The resolution rules, with every input passed in.

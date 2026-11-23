@@ -47,9 +47,10 @@ jobs:
           key: wasm32
       - run: cargo clippy -p voltra-player --target wasm32-unknown-unknown -- -D warnings
 
-  # The web player end to end: built, packed and opened in Chromium on
-  # WebGPU and on WebGL2 (SwiftShader, no GPU), the sandbox's sprites found
-  # in a screenshot. See crates/voltra-player/web/test/first-frame.mjs.
+  # The web builds end to end, opened in Chromium on WebGPU and on WebGL2
+  # (SwiftShader, no GPU): the player's sandbox found in a screenshot, and
+  # the platformer walked into a coin by the keyboard and heard. See
+  # crates/voltra-player/web/test/.
   web:
     name: web player (Chromium)
     runs-on: ubuntu-latest
@@ -77,7 +78,10 @@ jobs:
       # loader and a CPU driver give it one on a runner with no GPU.
       - name: Vulkan loader
         run: sudo apt-get install -y libvulkan1 mesa-vulkan-drivers
-      - run: node crates/voltra-player/web/test/first-frame.mjs
+      - name: The player's first frame
+        run: node crates/voltra-player/web/test/first-frame.mjs
+      - name: A game played, with sound
+        run: node crates/voltra-player/web/test/play.mjs
 
   check:
     # One name for both, though Windows skips clippy: required checks are

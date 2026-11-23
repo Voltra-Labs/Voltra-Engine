@@ -131,5 +131,7 @@ impl App {
         // The first redraw may have been asked for before there was anything
         // to draw it with.
         window.request_redraw();
+        #[cfg(target_arch = "wasm32")]
+        super::web::started(&window);
     }
 }

@@ -547,6 +547,8 @@ dependencies = [
  "block2 0.6.2",
  "coreaudio-rs",
  "dasp_sample",
+ "futures-channel",
+ "futures-util",
  "jni",
  "js-sys",
  "libc",
@@ -562,6 +564,8 @@ dependencies = [
  "objc2-core-audio-types",
  "objc2-core-foundation",
  "objc2-foundation 0.3.2",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "web-sys",
  "windows",
  "windows-core",
@@ -3738,6 +3742,7 @@ dependencies = [
  "env_logger",
  "gilrs",
  "image",
+ "js-sys",
  "log",
  "ron",
  "serde",
@@ -3837,7 +3842,6 @@ dependencies = [
 name = "voltra-player"
 version = "0.1.0"
 dependencies = [
- "js-sys",
  "log",
  "ron",
  "serde",
@@ -3845,9 +3849,6 @@ dependencies = [
  "voltra-core",
  "voltra-ecs",
  "voltra-scene",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
 ]
 
 [[package]]

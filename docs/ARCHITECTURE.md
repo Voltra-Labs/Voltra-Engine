@@ -4536,7 +4536,7 @@ fetches its game, and draws the sandbox on WebGPU and on WebGL2;
   compression (the server gzips). `decode` trusts nothing — every length is
   checked against what is left before allocating, paths must stay inside
   the pack, duplicates and trailing bytes are refused. The web player mounts
-  it at `/game` (`voltra_player::PACK_ROOT`), where a native build's
+  it at `/game` (`voltra_assets::pack::PACK_ROOT`), where a native build's
   executable would sit, and `launch::resolve` reads the manifest from there
   exactly as natively — so the launch rules have one implementation.
 - **The renderer is awaited** (`GpuContext::new_async`, `Renderer::new_async`;
@@ -4574,9 +4574,47 @@ fetches its game, and draws the sandbox on WebGPU and on WebGL2;
   console** (`logging/web.rs`, with a panic hook); **the watcher refuses**
   on the web (`watch/web.rs`), which the loop already reads as "hot reload
   off". `env_logger` and `notify` are native-only dependencies.
-- **Not yet:** sound (cpal's web backend, W3) and `cargo xtask dist --web`
-  (W4). The canvas takes the page's size; a manifest's window size is a
-  desktop setting.
+- **Not yet:** `cargo xtask dist --web` (W4). The canvas takes the page's
+  size; a manifest's window size is a desktop setting.
+
+### In the browser, sound waits for a gesture and any game starts from its pack
+
+W3 of `docs/plan-web.md`. The platformer example runs in a browser, is
+walked by the keyboard and makes its coin's sound;
+`crates/voltra-player/web/test/play.mjs` checks it on WebGPU and WebGL2.
+
+- **`voltra_core::when_assets_ready(start)`** is how a game with its own
+  `main` starts on both targets: at once natively; on the web after
+  `game.pak` beside the page is fetched and mounted at
+  `voltra_assets::pack::PACK_ROOT`. Its error, or the fetch's, is logged and
+  shown in the page's `#voltra-status`. The player's web entry uses it too,
+  so the fetch has one implementation. On the web
+  `voltra_assets::default_root()` is the pack's asset folder (`/game/assets`,
+  `PACK_ASSETS`) — a pack's layout is fixed, so a game needs no root of its
+  own. `cargo xtask pack` packs a game build like a scene build, and the page
+  imports `game.js` (`wasm-bindgen --out-name game`) whichever binary it is.
+- **Sound starts on the first key, click or touch.** Browsers keep an
+  `AudioContext` suspended until the user interacts; only a call made while
+  handling that interaction lifts it (Godot's and Unity's web exports wait for
+  the same gesture). cpal's `wasm-bindgen` feature gives WebAudio as the
+  device; `Output::open`'s `play` is refused quietly there, so `App` calls
+  `Audio::resume` (→ `stream.play()`) from the first pressed key, button or
+  touch (`app/web.rs`). It waits while there is no device yet: the page
+  remembers the gesture, so a stream opened after it starts on its own.
+  Natively `resume` is a no-op on a playing stream.
+- **The canvas takes the keyboard** when the game starts (`focus_window`):
+  a page's keys go to the focused element, and a canvas has none until
+  clicked.
+- **Gamepads** need nothing of ours: gilrs reads the browser's Gamepad API
+  on wasm by itself.
+- **Testing the gesture headless.** Headless Chromium ignores the autoplay
+  policy (with or without `--autoplay-policy=user-gesture-required`) and
+  reports user activation from the first load, so `play.mjs` applies the
+  rule itself from an init script — a context made before the first trusted
+  key or pointer starts suspended, and `resume` before one waits — and
+  watches the samples cpal copies into each `AudioBuffer`. Without
+  `Audio::resume` the test fails; with it the context runs and the coin's
+  samples are not silent.
 
 ### A running editor is driven through a bridge, not by speaking MCP
 
@@ -4718,6 +4756,7 @@ Both differ from most training data and from every tutorial written against
 | End of stream | `next_packet()` returns `Ok(None)`; it is not an `IoError` of kind `UnexpectedEof` any more |
 | Samples out | `decoded.copy_to_vec_interleaved(&mut vec)` **resizes** its destination, so decode into a scratch `Vec` and extend from it |
 | `AudioSpec` | not `Copy`; read `rate()` and `channels().count()` rather than storing the spec |
+| Web | Without the `wasm-bindgen` feature cpal on `wasm32-unknown-unknown` has only the null host (no device). With it, the WebAudio host makes an `AudioContext` per stream and schedules buffers on timers; `play()` is `ctx.resume()`, which a browser honours only during a user gesture. `audioworklet` needs atomics (threads) |
 
 ### `fontdue` 0.9 notes
 

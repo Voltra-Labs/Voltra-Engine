@@ -22,9 +22,10 @@ use crate::mixer::Mixer;
 /// Dropping it stops the sound: `cpal` closes the stream with the handle, so
 /// this is kept alive for exactly as long as audio should be audible.
 pub struct Output {
-    /// Never read. It exists to be dropped at the right time — see above —
-    /// and every message for it goes down the command channel instead.
-    _stream: cpal::Stream,
+    /// Dropped at the right time — see above — and otherwise only started
+    /// again ([`Output::resume`]); every message for the mixer goes down the
+    /// command channel instead.
+    stream: cpal::Stream,
     rate: u32,
     channels: u16,
 }
@@ -86,10 +87,23 @@ impl Output {
         log::info!("audio: {channels} channels at {rate} Hz");
 
         Ok(Self {
-            _stream: stream,
+            stream,
             rate,
             channels,
         })
+    }
+
+    /// Starts the stream again, if something held it back.
+    ///
+    /// A browser keeps a page's audio suspended until the user interacts with
+    /// it — the `play` in [`Output::open`] runs too early there and is
+    /// refused quietly — so the loop calls this from the first key, click or
+    /// touch. Natively the stream is already playing and this changes
+    /// nothing.
+    pub fn resume(&self) {
+        if let Err(e) = self.stream.play() {
+            log::warn!("audio output could not start: {e}");
+        }
     }
 
     /// Samples per second per channel the device runs at.
