@@ -8,6 +8,7 @@
 mod dist;
 mod files;
 mod pack;
+mod web;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -18,9 +19,11 @@ const USAGE: &str = "\
 Usage: cargo xtask <TASK>
 
 Tasks:
-  dist [--manifest FILE] [--out DIR]
+  dist [--web] [--manifest FILE] [--out DIR]
         Build the player in release and package it with its assets and
-        manifest into DIR/<name> (default: build.ron, dist/)
+        manifest into DIR/<name> (default: build.ron, dist/). With --web,
+        build it for the browser into DIR/<name>-web: the page, the wasm
+        and the pack, for any static server
   pack [--manifest FILE] [--out FILE]
         Write the manifest and its assets as the one file a web build
         fetches (default: build.ron, dist/<name>-web/game.pak)";
@@ -49,16 +52,23 @@ fn dist_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
     let workspace = workspace_root();
     let mut manifest = workspace.join(MANIFEST_FILE);
     let mut out = workspace.join("dist");
+    let mut for_web = false;
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or(format!("`{arg}` needs a value"));
         match arg.as_str() {
             "--manifest" => manifest = PathBuf::from(value()?),
             "--out" => out = PathBuf::from(value()?),
+            "--web" => for_web = true,
             other => return Err(format!("unknown option `{other}`\n\n{USAGE}")),
         }
     }
     let plan = dist::plan(&manifest, &out)?;
-    dist::run(&plan, &workspace)
+    if for_web {
+        let web = web::plan(&plan, &out);
+        web::run(&plan, &web, &workspace)
+    } else {
+        dist::run(&plan, &workspace)
+    }
 }
 
 fn pack_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {

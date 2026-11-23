@@ -1,4 +1,4 @@
-// The web player's first frame: build the player and the sandbox's pack,
+// The web player's first frame: `cargo xtask dist --web` of build.ron,
 // open the page on WebGPU and on WebGL2, and find the sandbox's sprites.
 //
 //   node crates/voltra-player/web/test/first-frame.mjs [--skip-build] [--out DIR]
@@ -8,15 +8,8 @@
 
 import { build, encode, onEveryBackend, options, serve, waitFor } from "./harness.mjs";
 
-const { skipBuild, site } = options("web-test");
-if (!skipBuild) {
-  build({
-    site,
-    cargo: ["-p", "voltra-player"],
-    wasm: "voltra-player.wasm",
-    manifest: "build.ron",
-  });
-}
+const { skipBuild, out } = options("web-test");
+const site = build({ out, manifest: "build.ron", skipBuild });
 
 const server = await serve(site);
 // `sandbox.ron`'s second crate and its floor, as the frame stores them.

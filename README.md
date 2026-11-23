@@ -46,6 +46,7 @@ cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no edit
 cargo run -p voltra-player -- assets/scenes/lights.ron    # 2D lights and shadows
 cargo xtask dist                # package build.ron into dist/<name>/ to hand out
 cargo xtask dist --manifest platformer.build.ron   # a game with its own code
+cargo xtask dist --web          # the same build for the browser (docs/WEB.md)
 cargo run -p voltra-mcp -- --project .             # MCP server for an AI client (docs/MCP.md)
 cargo run -p voltra-editor -- --bridge             # editor an MCP client can drive live
 cargo build --workspace         # build everything
@@ -347,6 +348,10 @@ privileged and plain `cargo build` covers everything.
 | 72 | Scenes in the editor: New, Open, Save As, unsaved-changes prompt, title, CLI scene | done |
 | 73 | Profiler (`voltra-profile`): frame scopes and counters, the editor's Profiler window, MCP profiles | done |
 | 74 | GPU time per render pass in the profiler, read back without waiting | done |
+| W1 | The engine builds for `wasm32`; every asset read through one funnel | done |
+| W2 | A scene runs in a browser: the asset pack, WebGPU with a WebGL2 fallback | done |
+| W3 | Sound and input in the browser; games with their own code on the web | done |
+| W4 | `cargo xtask dist --web`: a folder any static server hosts | done |
 
 ## Contributing
 

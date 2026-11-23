@@ -6,7 +6,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -15,13 +15,13 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const workspace = resolve(here, "../../../..");
 
 /// `--skip-build` and `--out DIR` from the command line, with `name` the
-/// default folder under `target/`.
+/// default folder under `target/`: where `cargo xtask dist --web` writes.
 export function options(name) {
   const args = process.argv.slice(2);
   const outAt = args.indexOf("--out");
   return {
     skipBuild: args.includes("--skip-build"),
-    site: resolve(outAt >= 0 ? args[outAt + 1] : join(workspace, "target", name)),
+    out: resolve(outAt >= 0 ? args[outAt + 1] : join(workspace, "target", name)),
   };
 }
 
@@ -30,19 +30,18 @@ function run(command, commandArgs) {
   execFileSync(command, commandArgs, { cwd: workspace, stdio: "inherit" });
 }
 
-/// Builds a page into `site`: the wasm `cargo` builds with `cargo` args,
-/// found at `wasm` under the wasm32 release folder, run through
-/// wasm-bindgen as `game.js`; the pack of `manifest`; and the page.
-export function build({ site, cargo, wasm, manifest }) {
-  mkdirSync(site, { recursive: true });
-  run("cargo", ["build", "--release", "--target", "wasm32-unknown-unknown", ...cargo]);
-  const targetDir = process.env.CARGO_TARGET_DIR ?? join(workspace, "target");
-  run("wasm-bindgen", [
-    "--target", "web", "--no-typescript", "--out-name", "game", "--out-dir", site,
-    join(targetDir, "wasm32-unknown-unknown/release", wasm),
-  ]);
-  run("cargo", ["xtask", "pack", "--manifest", join(workspace, manifest), "--out", join(site, "game.pak")]);
-  copyFileSync(join(workspace, "crates/voltra-player/web/index.html"), join(site, "index.html"));
+/// The web build of `manifest` under `out`, made with `cargo xtask dist
+/// --web` — the command a person ships with — unless `skipBuild`; the
+/// folder it is in either way.
+export function build({ out, manifest, skipBuild }) {
+  if (!skipBuild) {
+    run("cargo", ["xtask", "dist", "--web", "--manifest", join(workspace, manifest), "--out", out]);
+  }
+  const folders = existsSync(out) ? readdirSync(out).filter((name) => name.endsWith("-web")) : [];
+  if (folders.length !== 1) {
+    throw new Error(`expected one web build in ${out}, found ${folders.length}; run without --skip-build`);
+  }
+  return join(out, folders[0]);
 }
 
 /// Serves `site` on a free local port, plus `/probe`, a bare canvas.

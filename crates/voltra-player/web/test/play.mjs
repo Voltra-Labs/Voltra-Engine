@@ -4,7 +4,8 @@
 //
 //   node crates/voltra-player/web/test/play.mjs [--skip-build] [--out DIR]
 //
-// What it pins (W3 of docs/plan-web.md):
+// What it pins (the web's sound and input; ARCHITECTURE.md, "In the
+// browser, sound waits for a gesture"):
 // - the canvas has the keyboard without being clicked (`app/web.rs`);
 // - an action read by a tick moves the game (`move_right` on ArrowRight);
 // - sound waits for that first key (the autoplay policy is on), then starts
@@ -16,15 +17,8 @@
 
 import { build, encode, onEveryBackend, options, serve, waitFor, measure } from "./harness.mjs";
 
-const { skipBuild, site } = options("web-play");
-if (!skipBuild) {
-  build({
-    site,
-    cargo: ["-p", "voltra-core", "--example", "platformer"],
-    wasm: "examples/platformer.wasm",
-    manifest: "platformer.build.ron",
-  });
-}
+const { skipBuild, out } = options("web-play");
+const site = build({ out, manifest: "platformer.build.ron", skipBuild });
 
 // Every buffer cpal fills is copied into an `AudioBuffer`; keep the loudest
 // sample seen, and every context's state, where the test can ask for them.
