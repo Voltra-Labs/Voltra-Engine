@@ -16,13 +16,34 @@ use voltra_scene::{ComponentRegistry, Text};
 
 const FRAME: f32 = 1.0 / 60.0;
 
-/// The library cargo built for this run, beside the crate's binary — whose
-/// path cargo hands integration tests.
+/// The library cargo built for this run.
+///
+/// `cargo build` copies it beside the crate's binary — whose path cargo
+/// hands integration tests — but `cargo test` leaves it where it compiled
+/// it, beside the `rlib` the test links: under `deps/`, or under
+/// `build/voltra-platformer/<hash>/out/` in cargo's newer layout. Of those
+/// found, the newest is this run's.
 fn built_library() -> PathBuf {
     let binary = PathBuf::from(env!("CARGO_BIN_EXE_voltra-platformer"));
-    let file = binary.with_file_name(library_file("voltra-platformer"));
-    assert!(file.is_file(), "cargo built {}", file.display());
-    file
+    let profile = binary.parent().expect("the binary is in a folder");
+    let file = library_file("voltra-platformer");
+    let mut found: Vec<PathBuf> = vec![profile.join(&file), profile.join("deps").join(&file)];
+    if let Ok(units) = std::fs::read_dir(profile.join("build").join("voltra-platformer")) {
+        found.extend(
+            units
+                .flatten()
+                .map(|unit| unit.path().join("out").join(&file)),
+        );
+    }
+    found
+        .into_iter()
+        .filter_map(|path| {
+            let modified = std::fs::metadata(&path).ok()?.modified().ok()?;
+            Some((modified, path))
+        })
+        .max_by_key(|(modified, _)| *modified)
+        .map(|(_, path)| path)
+        .unwrap_or_else(|| panic!("cargo built {file} under {}", profile.display()))
 }
 
 #[test]
