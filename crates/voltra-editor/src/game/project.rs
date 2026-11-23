@@ -14,6 +14,26 @@ const MANIFEST: &str = "build.ron";
 struct Manifest {
     #[serde(default)]
     game: Option<GameCrate>,
+    /// The asset root, relative to the manifest's folder.
+    #[serde(default = "default_assets")]
+    assets: PathBuf,
+}
+
+fn default_assets() -> PathBuf {
+    PathBuf::from("assets")
+}
+
+/// The asset root the build manifest at `manifest` names: what the editor
+/// opens a game's scenes from when started with `--game` that manifest.
+pub(crate) fn assets_of(manifest: &Path) -> Result<PathBuf, String> {
+    let text = std::fs::read_to_string(manifest)
+        .map_err(|e| format!("cannot read {}: {e}", manifest.display()))?;
+    let parsed = read(&text).map_err(|e| format!("cannot read {}: {e}", manifest.display()))?;
+    let dir = manifest
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    Ok(dir.join(parsed.assets))
 }
 
 #[derive(Debug, serde::Deserialize)]
@@ -74,11 +94,14 @@ fn game_package(manifest: &Path) -> Result<Option<String>, String> {
 }
 
 fn parse(text: &str) -> Result<Option<String>, ron::error::SpannedError> {
+    Ok(read(text)?.game.map(|game| game.package))
+}
+
+fn read(text: &str) -> Result<Manifest, ron::error::SpannedError> {
     // `game: (package: …)` with `Some` implied, as the player reads it.
     let options =
         ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
-    let manifest: Manifest = options.from_str(text)?;
-    Ok(manifest.game.map(|game| game.package))
+    options.from_str(text)
 }
 
 #[cfg(test)]
@@ -89,6 +112,17 @@ mod tests {
     fn the_game_crate_is_read_and_the_rest_skipped() {
         let text = r#"(version: 1, name: "Plat", window: (width: 8, height: 8), game: (package: "my-game", bin: "my-game"))"#;
         assert_eq!(parse(text).expect("parses"), Some("my-game".to_owned()));
+    }
+
+    #[test]
+    fn the_asset_root_is_beside_the_manifest() {
+        let dir = std::env::temp_dir().join(format!("voltra-assets-of-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("dir");
+        let manifest = dir.join("build.ron");
+        std::fs::write(&manifest, r#"(version: 1, name: "G", assets: "content")"#).expect("write");
+        assert_eq!(assets_of(&manifest), Ok(dir.join("content")));
+        std::fs::write(&manifest, r#"(version: 1, name: "G")"#).expect("write");
+        assert_eq!(assets_of(&manifest), Ok(dir.join("assets")));
     }
 
     #[test]

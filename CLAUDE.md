@@ -41,6 +41,7 @@ cargo run -p voltra-editor -- --game platformer.build.ron    # the editor playin
 cargo test -p voltra-platformer --test hot_reload -- --ignored  # hot reload end to end (slow)
 cargo xtask dist                                            # package build.ron into dist/
 cargo xtask dist --web                                      # the same for the browser (docs/WEB.md)
+cargo xtask new-game my-game                                # a game crate in games/ (docs/ARCHITECTURE.md, stage 78)
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings       # must be clean
@@ -66,6 +67,7 @@ crates/
   xtask/             repo tasks (`cargo xtask dist`), not shipped
 games/
   platformer/        sample game crate: a library the editor loads, a binary that ships
+                     (`cargo xtask new-game` makes more, from crates/xtask/template/)
 docs/                ARCHITECTURE.md, CONVENTIONS.md, MCP.md, WEB.md
 ```
 

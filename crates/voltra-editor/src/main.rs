@@ -51,6 +51,18 @@ fn main() {
     });
 
     let mut editor = Editor::default();
+    // A game's own manifest brings its own assets: its scenes, its input
+    // map, its sprites are under the folder it names.
+    if let Some(manifest) = args
+        .game
+        .as_ref()
+        .filter(|p| p.extension().is_some_and(|e| e == "ron"))
+    {
+        match game::project_assets(manifest) {
+            Ok(root) => app = app.with_asset_root(root),
+            Err(problem) => log::error!("{problem}"),
+        }
+    }
     // A library named on the command line; otherwise the project's, from
     // `build.ron`, loaded on the first frame either way.
     if let Some(path) = args.game {

@@ -82,6 +82,11 @@ jobs:
         run: node crates/voltra-player/web/test/first-frame.mjs
       - name: A game played, with sound
         run: node crates/voltra-player/web/test/play.mjs
+      - name: A generated game, built for the web
+        run: |
+          cargo xtask new-game ci-game
+          cargo xtask dist --web --manifest games/ci-game/build.ron --out target/ci-dist
+          test -f "target/ci-dist/Ci Game-web/game_bg.wasm"
 
   check:
     # One name for both, though Windows skips clippy: required checks are
@@ -122,3 +127,13 @@ jobs:
         # present, which is the normal case on hosted runners. They still guard
         # local runs and any self-hosted machine that has one.
         run: cargo test --workspace
+
+      # A game made from the template builds natively, lints clean, and its
+      # library loads and plays as the editor loads it (its tests/plugin.rs).
+      # Linux only, like the lints: the template is the same on both.
+      - name: A generated game
+        if: runner.os == 'Linux'
+        run: |
+          cargo xtask new-game ci-game
+          cargo test -p ci-game
+          cargo clippy -p ci-game --all-targets -- -D warnings

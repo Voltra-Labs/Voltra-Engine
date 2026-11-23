@@ -7,6 +7,7 @@
 
 mod dist;
 mod files;
+mod new_game;
 mod pack;
 mod web;
 
@@ -26,13 +27,18 @@ Tasks:
         and the pack, for any static server
   pack [--manifest FILE] [--out FILE]
         Write the manifest and its assets as the one file a web build
-        fetches (default: build.ron, dist/<name>-web/game.pak)";
+        fetches (default: build.ron, dist/<name>-web/game.pak)
+  new-game NAME [--title TITLE]
+        Make games/NAME: a game crate the editor loads and plays, with its
+        build.ron, a first scene and a test that loads it as the editor
+        does";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     let result = match args.next().as_deref() {
         Some("dist") => dist_command(args),
         Some("pack") => pack_command(args),
+        Some("new-game") => new_game_command(args),
         Some("-h" | "--help") | None => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;
@@ -69,6 +75,31 @@ fn dist_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
     } else {
         dist::run(&plan, &workspace)
     }
+}
+
+fn new_game_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {
+    let mut name = None;
+    let mut title = None;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--title" => title = Some(args.next().ok_or("`--title` needs a value")?),
+            other if other.starts_with("--") => {
+                return Err(format!("unknown option `{other}`\n\n{USAGE}"))
+            }
+            other if name.is_none() => name = Some(other.to_owned()),
+            other => return Err(format!("one name only, not `{other}` too")),
+        }
+    }
+    let name = name.ok_or(format!("new-game needs a name\n\n{USAGE}"))?;
+    let names = new_game::Names::new(&name, title.as_deref())?;
+    let dir = new_game::create(&workspace_root(), &names)?;
+    // Best effort: a template filled in with a long name may want rewrapping.
+    let _ = std::process::Command::new("cargo")
+        .args(["fmt", "--package", &names.package])
+        .current_dir(&dir)
+        .status();
+    println!("{}", new_game::next_steps(&names));
+    Ok(())
 }
 
 fn pack_command(mut args: impl Iterator<Item = String>) -> Result<(), String> {

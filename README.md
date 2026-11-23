@@ -46,6 +46,7 @@ cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no edit
 cargo run -p voltra-player -- assets/scenes/lights.ron    # 2D lights and shadows
 cargo xtask dist                # package build.ron into dist/<name>/ to hand out
 cargo xtask dist --manifest platformer.build.ron   # a game with its own code
+cargo xtask new-game my-game                      # start a game of your own: games/my-game
 cargo xtask dist --web          # the same build for the browser (docs/WEB.md)
 cargo run -p voltra-mcp -- --project .             # MCP server for an AI client (docs/MCP.md)
 cargo run -p voltra-editor -- --bridge             # editor an MCP client can drive live
@@ -362,6 +363,7 @@ privileged and plain `cargo build` covers everything.
 | 75b | Continuous collision: fast bodies stop at walls, bullets at bodies too | done |
 | 76 | The game as a plugin: the editor loads a game crate's library and Play runs it | done |
 | 77 | Hot reload: an edit to the game's code is rebuilt and swapped in mid-play | done |
+| 78 | `cargo xtask new-game`: a game crate to play, edit in the editor and package | done |
 
 ## Contributing
 

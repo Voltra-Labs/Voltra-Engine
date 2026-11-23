@@ -7,7 +7,7 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–77 and W1–W4 (README roadmap): batched, lit and post-processed
+Stages 1–78 and W1–W4 (README roadmap): batched, lit and post-processed
 rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
 continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
@@ -50,22 +50,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 78 — `cargo xtask new-game`
-
-**Scope.** A template crate: `Cargo.toml` set up for both the plugin and a
-static binary, a `build.ron`, an asset folder with a scene, a `main` through
-`when_assets_ready`. Builds with `dist` and `dist --web` untouched.
-
-**Done when** CI generates a game, builds it native and web, and loads it in
-the editor headless.
-
-**Found in 77:** a game built from a workspace other than the editor's has
-other `TypeId`s for every engine type (cargo hashes a path dependency by its
-path from the workspace root), and the stamp refuses it. So the generated
-project is one workspace holding the game *and* an editor launcher — Fyrox's
-`editor` package beside the game, for the same reason — rather than a lone
-crate pointed at an editor built elsewhere.
 
 ## 79 — UI 1: images, 9-slice panels, layout
 

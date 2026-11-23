@@ -5033,6 +5033,45 @@ playing the platformer, `WALK_SPEED` edited in `walker.rs`, rebuilt and
 swapped in three seconds later, the walker at the new speed and the
 counter as it was.
 
+### A new game is a crate in the engine's workspace, made from a template
+
+Stage 78. `cargo xtask new-game <name> [--title T]` writes
+`games/<name>/`: `Cargo.toml` (`cdylib` + `rlib`, a `[[bin]]`, workspace
+dependencies, no dev-dependencies), `src/lib.rs` (a `Game` moving a
+`Player` component by the move actions, `export_game!`), `src/main.rs`
+(through `when_assets_ready`, opening `scenes/main.ron`), `build.ron`
+(`game: (package: …)`, its own `assets`), the first scene, a `README.md`,
+and `tests/plugin.rs`, which loads the crate's own library as the editor
+does and plays the scene headless with a key held. The engine's starting
+assets are copied in: the input map and sorting layers the loop reads by
+convention, the default font and its licence, a texture. It is formatted
+after it is written, and refuses a folder that is there already.
+
+- **In this workspace, not a project of its own** — the finding of 77: a
+  game and the editor that plays it must share a workspace root, or every
+  engine type has another `TypeId` and the stamp refuses the library.
+  `games/*` is a member glob, so a new game builds at once with the editor
+  beside it. A game in a repository of its own needs the editor built in
+  that repository too — an editor launcher crate depending on the editor
+  as a library, Fyrox's `editor` package — which is a stage of its own.
+- **A game brings its assets.** `--game games/<name>/build.ron` makes the
+  editor's asset root the folder that manifest names: the game's scenes,
+  input map and sprites are the ones it opens and watches. `dist` and
+  `dist --web` take the manifest as they are.
+- **Names**: lowercase letters, digits and single dashes, starting with a
+  letter; the type is the name in CamelCase (`space-trader` →
+  `SpaceTrader`), refused where it would shadow a type the template uses
+  (`game`, `tick`, `player`, `app`); the title is the name's words
+  capitalised unless given.
+
+CI generates `ci-game` and runs its tests and clippy (Linux), and builds
+it for the web (the web job). Pinned by `xtask/src/new_game.rs` (a name
+becomes a package, a crate, a type and a title; bad names refused; every
+file filled in, the assets copied, the manifest planned by `dist` and
+`dist --web` as it is, and never written over a game) and the editor's
+`game/project.rs` (the asset root beside the manifest). Checked by hand: a
+generated game played in the editor under Xvfb through the bridge.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

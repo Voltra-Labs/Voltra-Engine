@@ -33,6 +33,11 @@ mod source;
 
 use voltra_core::game::swap::rebuild;
 
+/// The asset root the build manifest at `manifest` names.
+pub(crate) fn project_assets(manifest: &std::path::Path) -> Result<PathBuf, String> {
+    project::assets_of(manifest)
+}
+
 /// The loaded game, or why there is none, and how it is rebuilt.
 #[derive(Default)]
 pub(crate) struct GameHost {
