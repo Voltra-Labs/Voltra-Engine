@@ -364,7 +364,7 @@ impl VoltraMcp {
     }
 
     #[tool(
-        description = "Where the running editor's frames go: frame time and fps, each scope (update, tick, physics/step/solve, draw, ui, present…) with calls, average, worst and own milliseconds and its share of the frame, and counters such as entities and contacts. Records for as long as it needs when recording is off. Play first to profile the game rather than the editor at rest."
+        description = "Where the running editor's frames go: frame time and fps, each scope (update, tick, physics/step/solve, draw, ui, present…) with calls, average, worst and own milliseconds and its share of the frame, GPU milliseconds per render pass (scene, lights, bloom, grade, egui…) where the adapter can time them, and counters such as entities and contacts. Records for as long as it needs when recording is off. Play first to profile the game rather than the editor at rest."
     )]
     async fn editor_profile(
         &self,

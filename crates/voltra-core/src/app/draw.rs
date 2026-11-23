@@ -3,7 +3,7 @@
 //! with the UI composited over the top.
 
 use voltra_render::egui_backend::ScreenDescriptor;
-use voltra_render::{Filter, Layer};
+use voltra_render::{Filter, Layer, Renderer};
 use voltra_scene::sprite::sheets::Sheets;
 
 use super::{App, UiFrame};
@@ -77,7 +77,9 @@ impl App {
             textures,
         );
         let _render = voltra_profile::scope("render");
+        renderer.set_gpu_timing(voltra_profile::is_enabled());
         renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
+        record_gpu_timings(renderer);
         self.frame_batch = batch;
     }
 
@@ -113,6 +115,8 @@ impl App {
         else {
             return;
         };
+        // Every pass this frame records is timed while the profiler records.
+        renderer.set_gpu_timing(voltra_profile::is_enabled());
 
         // Cloned handles rather than borrows: `renderer.camera` goes into the
         // UI callback mutably, which rules out holding a borrow of the renderer
@@ -211,5 +215,14 @@ impl App {
 
         let _present = voltra_profile::scope("present");
         renderer.present_with(|pass| egui.render(pass));
+        record_gpu_timings(renderer);
+    }
+}
+
+/// Hands the profiler the GPU pass timings that have come back — measured a
+/// frame or a few ago.
+fn record_gpu_timings(renderer: &mut Renderer) {
+    for (pass, ms) in renderer.gpu_timings() {
+        voltra_profile::gpu(pass, ms);
     }
 }

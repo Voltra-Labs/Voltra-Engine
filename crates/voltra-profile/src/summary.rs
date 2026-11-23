@@ -37,6 +37,18 @@ pub struct CounterStat {
     pub last: f64,
 }
 
+/// A GPU pass over a run of frames.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GpuStat {
+    pub name: &'static str,
+    /// Milliseconds per run of the pass.
+    pub avg: f64,
+    pub max: f64,
+    /// How many timings came back: GPU timings arrive late and in bursts,
+    /// so this need not match the frames.
+    pub samples: usize,
+}
+
 /// What [`crate::summary`] answers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Summary {
@@ -46,6 +58,9 @@ pub struct Summary {
     /// In tree order: a scope, then what ran inside it.
     pub scopes: Vec<ScopeStat>,
     pub counters: Vec<CounterStat>,
+    /// Each GPU pass, in the order they first came back; empty where the
+    /// adapter cannot time passes or nothing drew.
+    pub gpu: Vec<GpuStat>,
 }
 
 #[derive(Default)]
@@ -69,6 +84,7 @@ impl Summary {
         let mut scopes: HashMap<String, Accumulator> = HashMap::new();
         let mut counters: Vec<(&'static str, f64, f64, f64, usize)> = Vec::new();
         let mut frame_ms = Vec::new();
+        let mut gpu: Vec<GpuStat> = Vec::new();
 
         for frame in frames {
             frame_ms.push(ms(frame.duration));
@@ -103,6 +119,21 @@ impl Summary {
                     entry.max = entry.max.max(total);
                     entry.min = entry.min.min(total);
                     entry.seen += 1;
+                }
+            }
+            for &(name, ms) in &frame.gpu {
+                match gpu.iter_mut().find(|g| g.name == name) {
+                    Some(g) => {
+                        g.avg += ms;
+                        g.max = g.max.max(ms);
+                        g.samples += 1;
+                    }
+                    None => gpu.push(GpuStat {
+                        name,
+                        avg: ms,
+                        max: ms,
+                        samples: 1,
+                    }),
                 }
             }
             for &(name, value) in &frame.counters {
@@ -165,6 +196,10 @@ impl Summary {
                 })
             })
             .collect();
+        for g in &mut gpu {
+            g.avg /= g.samples as f64;
+        }
+        summary.gpu = gpu;
         summary.counters = counters
             .into_iter()
             .map(|(name, sum, max, last, seen)| CounterStat {

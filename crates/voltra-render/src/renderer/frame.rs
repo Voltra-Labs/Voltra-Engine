@@ -53,12 +53,18 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("frame-encoder"),
         });
+        let scope = self.gpu_timer.begin(&mut encoder, "scene");
         {
             let target = self.frame_target.as_ref().expect("made just above");
             self.record_scene(&mut encoder, target.view(), mesh, draws);
         }
+        self.gpu_timer.end(&mut encoder, scope);
+        let scope = self.gpu_timer.begin(&mut encoder, "normals");
         let normals = self.record_normals(&mut encoder, (width, height), mesh, draws);
+        self.gpu_timer.end(&mut encoder, scope);
+        let scope = self.gpu_timer.begin(&mut encoder, "light layers");
         let layers = self.record_layers(&mut encoder, (width, height), mesh, draws);
+        self.gpu_timer.end(&mut encoder, scope);
         let target = self.frame_target.as_ref().expect("made just above");
         record_post(
             &self.ctx,
@@ -81,15 +87,20 @@ impl Renderer {
                     .map(RenderTarget::view),
             },
             &mut self.transients,
+            &mut self.gpu_timer,
             &mut encoder,
             target.view(),
             &view,
             (width, height),
             post,
         );
+        let scope = self.gpu_timer.begin(&mut encoder, "hud");
         self.record_ui(&mut encoder, &view, width, height, ui);
+        self.gpu_timer.end(&mut encoder, scope);
 
+        self.gpu_timer.finish(&mut encoder);
         self.ctx.queue().submit(Some(encoder.finish()));
+        self.gpu_timer.submitted();
         self.ctx.present(frame);
     }
 
@@ -115,10 +126,16 @@ impl Renderer {
                     label: Some("scene-encoder"),
                 });
 
+        let scope = self.gpu_timer.begin(&mut encoder, "scene");
         self.record_scene(&mut encoder, target.view(), mesh, draws);
+        self.gpu_timer.end(&mut encoder, scope);
         let size = (target.width(), target.height());
+        let scope = self.gpu_timer.begin(&mut encoder, "normals");
         let normals = self.record_normals(&mut encoder, size, mesh, draws);
+        self.gpu_timer.end(&mut encoder, scope);
+        let scope = self.gpu_timer.begin(&mut encoder, "light layers");
         let layers = self.record_layers(&mut encoder, size, mesh, draws);
+        self.gpu_timer.end(&mut encoder, scope);
         record_post(
             &self.ctx,
             Chain {
@@ -140,12 +157,14 @@ impl Renderer {
                     .map(RenderTarget::view),
             },
             &mut self.transients,
+            &mut self.gpu_timer,
             &mut encoder,
             target.view(),
             output.view(),
             (target.width(), target.height()),
             post,
         );
+        let scope = self.gpu_timer.begin(&mut encoder, "hud");
         self.record_ui(
             &mut encoder,
             output.view(),
@@ -153,7 +172,10 @@ impl Renderer {
             output.height(),
             ui,
         );
+        self.gpu_timer.end(&mut encoder, scope);
+        self.gpu_timer.finish(&mut encoder);
         self.ctx.queue().submit(Some(encoder.finish()));
+        self.gpu_timer.submitted();
     }
 
     /// The screen-space layer, over the scene, in the target's pixels.
@@ -229,6 +251,7 @@ fn record_post(
     ctx: &GpuContext,
     chain: Chain<'_>,
     transients: &mut TexturePool,
+    timer: &mut crate::gpu_timer::GpuTimer,
     encoder: &mut wgpu::CommandEncoder,
     scene: &wgpu::TextureView,
     frame: &wgpu::TextureView,
@@ -238,6 +261,7 @@ fn record_post(
     let (device, queue) = (ctx.device(), ctx.queue());
     let grade = chain.grade;
     let mut graph = RenderGraph::new();
+    graph.time_with(timer);
     let drawn = graph.import(scene);
     let frame = graph.import_output(frame);
     let scene = chain

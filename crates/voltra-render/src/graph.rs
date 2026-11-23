@@ -89,11 +89,18 @@ impl std::error::Error for GraphError {}
 pub struct RenderGraph<'a> {
     resources: Vec<Resource<'a>>,
     passes: Vec<Pass<'a>>,
+    /// Times each pass on the GPU by its name, when given one.
+    timer: Option<&'a mut crate::gpu_timer::GpuTimer>,
 }
 
 impl<'a> RenderGraph<'a> {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Times every pass that runs on the GPU, under its name.
+    pub fn time_with(&mut self, timer: &'a mut crate::gpu_timer::GpuTimer) {
+        self.timer = Some(timer);
     }
 
     /// A texture the caller owns and has already filled, to be read.
@@ -186,6 +193,7 @@ impl<'a> RenderGraph<'a> {
             order.push(index);
         }
 
+        let mut timer = self.timer;
         let mut passes: Vec<Option<Pass<'a>>> = self.passes.into_iter().map(Some).collect();
         for index in order {
             let pass = passes[index].take().expect("each pass runs once");
@@ -201,7 +209,11 @@ impl<'a> RenderGraph<'a> {
                         })
                         .collect(),
                 };
+                let scope = timer.as_mut().map(|timer| timer.begin(encoder, pass.name));
                 (pass.record)(encoder, &views);
+                if let (Some(timer), Some(scope)) = (timer.as_mut(), scope) {
+                    timer.end(encoder, scope);
+                }
             }
         }
         pool.end_frame();

@@ -31,6 +31,8 @@ pub(super) fn show(ui: &mut Ui, summary: &Summary) {
                     ui.end_row();
                 }
             });
+        ui.separator();
+        gpu(ui, summary);
         if summary.counters.is_empty() {
             return;
         }
@@ -52,4 +54,31 @@ pub(super) fn show(ui: &mut Ui, summary: &Summary) {
                 }
             });
     });
+}
+
+/// Each pass's time on the GPU, which comes back frames after it ran.
+fn gpu(ui: &mut Ui, summary: &Summary) {
+    if summary.gpu.is_empty() {
+        ui.weak("no GPU timings: the adapter cannot time passes, or nothing drew yet");
+        return;
+    }
+    let total: f64 = summary.gpu.iter().map(|pass| pass.avg).sum();
+    egui::Grid::new("profiler_gpu")
+        .striped(true)
+        .num_columns(3)
+        .show(ui, |ui| {
+            for heading in ["GPU pass", "avg ms", "max ms"] {
+                ui.strong(heading);
+            }
+            ui.end_row();
+            for pass in &summary.gpu {
+                ui.label(pass.name);
+                ui.label(format!("{:.3}", pass.avg));
+                ui.label(format!("{:.3}", pass.max));
+                ui.end_row();
+            }
+            ui.strong("all passes");
+            ui.strong(format!("{total:.3}"));
+            ui.end_row();
+        });
 }

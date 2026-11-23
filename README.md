@@ -76,7 +76,8 @@ Open and closing the window ask "save changes?" first.
 `Window ▸ Profiler` shows what each frame costs: a graph of frame times
 against the 60 and 30 fps lines, and a tree of the engine's scopes (update,
 tick, physics and its steps, draw, ui, present) with calls, average, worst
-and own milliseconds, then counters such as entities and contacts. Press
+and own milliseconds, each render pass's time on the GPU (where the
+adapter can time it), then counters such as entities and contacts. Press
 Play to profile the game rather than the editor at rest.
 
 A prefab dropped from the asset browser stays linked to its file: editing the
@@ -345,6 +346,7 @@ privileged and plain `cargo build` covers everything.
 | M3 | The live editor bridge: an AI edits, plays and screenshots a running editor, each edit one undo entry | done |
 | 72 | Scenes in the editor: New, Open, Save As, unsaved-changes prompt, title, CLI scene | done |
 | 73 | Profiler (`voltra-profile`): frame scopes and counters, the editor's Profiler window, MCP profiles | done |
+| 74 | GPU time per render pass in the profiler, read back without waiting | done |
 
 ## Contributing
 

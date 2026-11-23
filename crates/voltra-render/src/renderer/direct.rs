@@ -17,7 +17,7 @@ impl Renderer {
     ///
     /// The widths in `mesh` are in pixels, so the size uploaded here is the
     /// target's, not the window's.
-    pub fn render_lines(&self, target: &RenderTarget, mesh: Option<&Mesh>) {
+    pub fn render_lines(&mut self, target: &RenderTarget, mesh: Option<&Mesh>) {
         if mesh.is_none() {
             return;
         }
@@ -32,6 +32,7 @@ impl Renderer {
                     label: Some("lines-encoder"),
                 });
 
+        let scope = self.gpu_timer.begin(&mut encoder, "overlay");
         pass::draw_lines(
             &mut encoder,
             target.view(),
@@ -40,8 +41,11 @@ impl Renderer {
             self.viewport_binding.bind_group(),
             mesh,
         );
+        self.gpu_timer.end(&mut encoder, scope);
 
+        self.gpu_timer.finish(&mut encoder);
         self.ctx.queue().submit(Some(encoder.finish()));
+        self.gpu_timer.submitted();
     }
 
     /// Acquires the window's frame, clears it, and hands the pass to `record`.
@@ -64,6 +68,7 @@ impl Renderer {
                     label: Some("present-encoder"),
                 });
 
+        let scope = self.gpu_timer.begin(&mut encoder, "egui");
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("present-pass"),
@@ -83,8 +88,11 @@ impl Renderer {
             });
             record(&mut pass);
         }
+        self.gpu_timer.end(&mut encoder, scope);
 
+        self.gpu_timer.finish(&mut encoder);
         self.ctx.queue().submit(Some(encoder.finish()));
+        self.gpu_timer.submitted();
         self.ctx.present(frame);
     }
 }

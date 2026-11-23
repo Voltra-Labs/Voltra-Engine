@@ -18,6 +18,7 @@ fn frame(duration: u64, spans: Vec<Span>, counters: Vec<(&'static str, f64)>) ->
         duration: Duration::from_millis(duration),
         spans,
         counters,
+        gpu: Vec::new(),
     }
 }
 
@@ -95,4 +96,19 @@ fn a_child_first_seen_in_a_later_frame_still_sits_under_its_parent() {
         .map(|s| s.path)
         .collect();
     assert_eq!(paths, ["physics", "physics/step", "draw"]);
+}
+
+#[test]
+fn gpu_timings_average_over_the_ones_that_came_back() {
+    let mut first = frame(16, vec![], vec![]);
+    first.gpu = vec![("scene", 2.0), ("bloom", 1.0)];
+    let late = frame(16, vec![], vec![]);
+    let mut burst = frame(16, vec![], vec![]);
+    burst.gpu = vec![("scene", 4.0), ("scene", 3.0)];
+    let summary = Summary::of(&[first, late, burst]);
+    let scene = &summary.gpu[0];
+    assert_eq!((scene.name, scene.samples), ("scene", 3));
+    assert!((scene.avg - 3.0).abs() < 1e-9);
+    assert!((scene.max - 4.0).abs() < 1e-9);
+    assert_eq!(summary.gpu[1].name, "bloom");
 }

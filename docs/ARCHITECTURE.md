@@ -4458,9 +4458,27 @@ average and worst milliseconds, own time (outside nested scopes).
   own run, on a cleared recorder.
 - **What is timed now:** the frame (`update`: input, tick, animation,
   particles, audio, physics with each `step` and its `collide`, `islands`,
-  `solve`, `settle`, asset reload; `draw`: ui, present or render). CPU time
-  only: GPU timestamps are a later stage, and `present` includes waiting
-  for the display.
+  `solve`, `settle`, asset reload; `draw`: ui, present or render) on the
+  CPU, where `present` includes waiting for the display — and each render
+  pass on the GPU (below).
+- **GPU time per pass** (stage 74). `voltra_render::GpuTimer` writes a
+  timestamp into the encoder before and after each named pass
+  (`CommandEncoder::write_timestamp`): every pass of the render graph by
+  its name, plus `scene`, `normals`, `light layers`, `hud`, `overlay` and
+  `egui`. When the encoder is finished the timestamps are resolved and
+  copied into one of eight readback buffers, mapped after the submit and
+  read with a non-blocking poll when they land — a frame or a few later,
+  since the GPU runs behind; nothing ever waits for it. Timings arrive in
+  the frame they land in (`voltra_profile::gpu`) and summarise per pass
+  (average, worst, samples). Timing needs `TIMESTAMP_QUERY` and
+  `TIMESTAMP_QUERY_INSIDE_ENCODERS`, asked for when the adapter has both
+  and never required; without them the timer times nothing. Encoder-level
+  timestamps rather than `timestamp_writes` on each pass descriptor: one
+  hook around a graph pass covers whatever it records, however many passes
+  that is, without threading a query set through every pass's code — the
+  shape of Bevy's render-graph diagnostics. A pass that turns out to draw
+  nothing (normals in an unlit frame) reads as near zero rather than
+  missing.
 - **The tree is ordered as a tree**: a scope right after its parent,
   siblings in the order they first ran — first appearance alone would put
   a child first seen in a later frame (the first physics step) after
@@ -4545,6 +4563,9 @@ Verified against the crate source, not from memory:
 | Pipeline | `VertexState::buffers` is `&[Option<VertexBufferLayout>]` — the entries are wrapped in `Option` |
 | Device poll | `PollType::Wait` is a struct variant; use `PollType::wait_indefinitely()` |
 | Buffer readback | `Buffer::get_mapped_range` returns `Result` |
+| Timestamps in encoders | `CommandEncoder::write_timestamp(&QuerySet, index)` needs **both** `Features::TIMESTAMP_QUERY` and `TIMESTAMP_QUERY_INSIDE_ENCODERS` requested; ticks × `Queue::get_timestamp_period()` = ns (1.0 on the web) |
+| Query resolve | `resolve_query_set(&set, range, &buffer, offset)` into a `QUERY_RESOLVE \| COPY_SRC` buffer, 8 bytes (`QUERY_SIZE`) a query; copy to a `MAP_READ` buffer to read |
+| Non-blocking map | `buffer.map_async(MapMode::Read, range, callback)` then `device.poll(PollType::Poll)` each frame; the callback must be `Send + 'static` |
 | Compute pipeline | `ComputePipelineDescriptor { label, layout, module, entry_point: Option<&str>, compilation_options, cache }` |
 | Compute pass | `begin_compute_pass(&ComputePassDescriptor { label, timestamp_writes })`; `dispatch_workgroups(x, y, z)` |
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |

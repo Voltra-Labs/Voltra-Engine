@@ -31,6 +31,9 @@ pub struct Frame {
     pub spans: Vec<Span>,
     /// The last value each counter was given during the frame.
     pub counters: Vec<(&'static str, f64)>,
+    /// GPU pass timings, in milliseconds, that came back during the frame —
+    /// measured a frame or a few before, since the GPU runs behind.
+    pub gpu: Vec<(&'static str, f64)>,
 }
 
 /// Records the frames of whoever owns it. [`crate::scope`] and the other
@@ -42,6 +45,7 @@ pub struct Recorder {
     depth: u16,
     spans: Vec<Span>,
     counters: Vec<(&'static str, f64)>,
+    gpu: Vec<(&'static str, f64)>,
     history: VecDeque<Frame>,
     next_index: u64,
 }
@@ -54,6 +58,7 @@ impl Default for Recorder {
             depth: 0,
             spans: Vec::new(),
             counters: Vec::new(),
+            gpu: Vec::new(),
             history: VecDeque::new(),
             next_index: 0,
         }
@@ -72,6 +77,7 @@ impl Recorder {
             self.frame_start = now;
             self.spans.clear();
             self.counters.clear();
+            self.gpu.clear();
         }
         self.enabled = enabled;
     }
@@ -114,6 +120,13 @@ impl Recorder {
         }
     }
 
+    /// Records that the GPU took `ms` milliseconds over the pass `name`.
+    pub fn gpu(&mut self, name: &'static str, ms: f64) {
+        if self.enabled {
+            self.gpu.push((name, ms));
+        }
+    }
+
     /// Closes the frame at `now` and starts the next.
     pub fn end_frame(&mut self, now: Instant) {
         if !self.enabled {
@@ -124,6 +137,7 @@ impl Recorder {
             duration: now.saturating_duration_since(self.frame_start),
             spans: std::mem::take(&mut self.spans),
             counters: std::mem::take(&mut self.counters),
+            gpu: std::mem::take(&mut self.gpu),
         };
         self.next_index += 1;
         self.history.push_back(frame);
@@ -143,6 +157,7 @@ impl Recorder {
         self.history.clear();
         self.spans.clear();
         self.counters.clear();
+        self.gpu.clear();
     }
 }
 
