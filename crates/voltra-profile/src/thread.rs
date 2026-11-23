@@ -41,6 +41,11 @@ pub fn count(name: &'static str, value: f64) {
     RECORDER.with_borrow_mut(|recorder| recorder.count(name, value));
 }
 
+/// Records a GPU pass timing, in milliseconds, that came back this frame.
+pub fn gpu(name: &'static str, ms: f64) {
+    RECORDER.with_borrow_mut(|recorder| recorder.gpu(name, ms));
+}
+
 /// Closes this thread's frame. Called once a frame by the loop that owns
 /// the thread.
 pub fn end_frame() {

@@ -20,6 +20,7 @@ use crate::{pipeline, texture};
 
 mod direct;
 mod frame;
+mod gpu_timing;
 mod light_layers;
 mod normals;
 
@@ -58,6 +59,8 @@ pub struct Renderer {
     layer_target: Option<RenderTarget>,
     /// The render graph's per-frame textures, kept between frames.
     transients: TexturePool,
+    /// Times the passes on the GPU while asked to; see `gpu_timing.rs`.
+    gpu_timer: crate::gpu_timer::GpuTimer,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
     particles: Option<ParticlePipelines>,
     /// Where the world is drawn before the post pass on the window path,
@@ -142,6 +145,8 @@ impl Renderer {
             camera
         };
 
+        let gpu_timer = crate::gpu_timer::GpuTimer::new(ctx.device(), ctx.queue());
+
         Self {
             ctx,
             flat_color,
@@ -158,6 +163,7 @@ impl Renderer {
             layers,
             layer_target: None,
             transients: TexturePool::default(),
+            gpu_timer,
             particles,
             frame_target: None,
             viewport_binding,

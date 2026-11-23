@@ -8,6 +8,7 @@ pub mod bloom;
 pub mod camera;
 pub mod context;
 pub mod egui_backend;
+pub mod gpu_timer;
 pub mod graph;
 pub mod light_layers;
 pub mod lights;
@@ -29,6 +30,7 @@ pub use bloom::{BloomPass, BloomSettings};
 pub use camera::{screen_projection, Camera2D, CameraBinding};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
+pub use gpu_timer::{GpuScope, GpuTimer};
 pub use light_layers::LayerPass;
 pub use lights::{
     Cone, Cookie, GlobalLight, LightPass, Lighting, Occluder, PointLight, Reach, Shadow,

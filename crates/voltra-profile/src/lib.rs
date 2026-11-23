@@ -24,8 +24,8 @@ mod summary;
 mod thread;
 
 pub use recorder::{Frame, Recorder, Span, HISTORY};
-pub use summary::{CounterStat, ScopeStat, Stat, Summary};
+pub use summary::{CounterStat, GpuStat, ScopeStat, Stat, Summary};
 pub use thread::{
-    clear, count, end_frame, frames_recorded, is_enabled, scope, set_enabled, summary, with_frames,
-    Scope,
+    clear, count, end_frame, frames_recorded, gpu, is_enabled, scope, set_enabled, summary,
+    with_frames, Scope,
 };

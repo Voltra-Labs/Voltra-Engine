@@ -86,7 +86,7 @@ sees each change appear:
 | `editor_open` / `editor_new` | Another scene, or an empty one; refused over unsaved changes unless `discard_changes` |
 | `editor_play` | `play`, `pause`, `step` (with `frames`), `stop` (the authored scene back) |
 | `editor_input` | Hold an input action for some frames while playing |
-| `editor_profile` | Where the frames go: frame time and fps, each scope's calls and milliseconds as a tree, counters; records as long as it needs |
+| `editor_profile` | Where the frames go: frame time and fps, each scope's calls and milliseconds as a tree, GPU milliseconds per render pass, counters; records as long as it needs |
 | `editor_screenshot` | The viewport as last drawn — scene, lights, grade — as an image |
 
 **Every edit is one undo entry**, labelled `AI: spawn`, `AI: set component`

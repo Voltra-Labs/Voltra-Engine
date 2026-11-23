@@ -41,6 +41,7 @@ impl GpuContext {
 
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("voltra-device"),
+            required_features: optional_features(&adapter),
             ..Default::default()
         }))
         .expect("failed to request device");
@@ -75,6 +76,7 @@ impl GpuContext {
         log::info!("headless adapter: {:?}", adapter.get_info());
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("voltra-headless-device"),
+            required_features: optional_features(&adapter),
             ..Default::default()
         }))
         .ok()?;
@@ -163,5 +165,16 @@ impl GpuContext {
 
     pub fn present(&self, frame: wgpu::SurfaceTexture) {
         self.queue.present(frame);
+    }
+}
+
+/// The features asked for when the adapter has them, and never required:
+/// GPU timing, both of its features or neither.
+fn optional_features(adapter: &wgpu::Adapter) -> wgpu::Features {
+    let timing = crate::gpu_timer::timing_features();
+    if adapter.features().contains(timing) {
+        timing
+    } else {
+        wgpu::Features::empty()
     }
 }

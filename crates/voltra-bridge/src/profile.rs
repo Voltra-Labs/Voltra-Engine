@@ -24,6 +24,15 @@ pub fn to_json(summary: &Summary) -> Value {
             "own_ms": round(scope.own),
             "share": if summary.frame.avg > 0.0 { round(scope.total.avg / summary.frame.avg) } else { 0.0 },
         })).collect::<Vec<_>>(),
+        // Per run of each pass on the GPU; timings arrive frames late, so
+        // `samples` need not equal `frames`. Empty where the adapter cannot
+        // time passes, or in a headless run, which draws nothing.
+        "gpu": summary.gpu.iter().map(|pass| json!({
+            "pass": pass.name,
+            "avg_ms": round(pass.avg),
+            "max_ms": round(pass.max),
+            "samples": pass.samples,
+        })).collect::<Vec<_>>(),
         "counters": summary.counters.iter().map(|counter| json!({
             "name": counter.name,
             "avg": round(counter.avg),
