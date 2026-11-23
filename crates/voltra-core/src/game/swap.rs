@@ -1,5 +1,10 @@
-//! Reading the world back in through another registry: what loading and
-//! unloading a game does to the scene.
+//! Reading the world back in through another registry: what loading,
+//! unloading and reloading a game does to the scene.
+//!
+//! What a reload keeps is what a scene file keeps: every entity with a
+//! `SceneId` and every registered component on it, a body's velocity and a
+//! counter's count included. A game's own struct is made afresh, so state
+//! that must live through an edit of the code belongs in a component.
 
 use voltra_ecs::World;
 use voltra_scene::format::{from_scene_file, to_scene_file};
@@ -11,7 +16,9 @@ use voltra_scene::{ComponentRegistry, SceneError};
 /// Loading a game: the scene's `Coin`s, kept as unknown components while no
 /// game knew the name, become the game's own type. Unloading one: its
 /// components go back to being kept unknown, and no storage the game's
-/// code made is left in the world.
+/// code made is left in the world. Reloading one: the old library's types
+/// written out, the new library's read in, and nothing of the old left to
+/// run once it is closed.
 ///
 /// A scene `to` cannot read — a component of the game's whose saved value
 /// its type no longer accepts — is read back through `from` instead, which
@@ -19,7 +26,7 @@ use voltra_scene::{ComponentRegistry, SceneError};
 ///
 /// Entities with no `SceneId` are transient by the same rule play's
 /// snapshot uses, and do not survive.
-pub(crate) fn rebuild(
+pub fn rebuild(
     world: &mut World,
     from: &ComponentRegistry,
     to: &ComponentRegistry,

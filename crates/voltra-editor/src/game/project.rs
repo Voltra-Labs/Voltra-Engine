@@ -21,26 +21,45 @@ struct GameCrate {
     package: String,
 }
 
-/// The game library the project names, if it names one: `build.ron` beside
-/// the asset root says which crate, and the library is looked for beside
-/// this editor's executable — where `cargo build -p voltra-editor -p <game>`
+/// A game the project names: its crate, the folder of the manifest naming
+/// it, and its library.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct NamedGame {
+    pub package: String,
+    /// Where `build.ron` is: the workspace the crate is built in.
+    pub project: PathBuf,
+    pub library: PathBuf,
+}
+
+/// The game the project names, if it names one: `build.ron` beside the
+/// asset root says which crate, and the library is looked for beside this
+/// editor's executable — where `cargo build -p voltra-editor -p <game>`
 /// puts both, built together as they must be (`voltra_core::game::stamp`).
-pub(crate) fn library(asset_root: &Path) -> Result<Option<PathBuf>, String> {
+pub(crate) fn named(asset_root: &Path) -> Result<Option<NamedGame>, String> {
     let Some(manifest) = asset_root.parent().map(|dir| dir.join(MANIFEST)) else {
         return Ok(None);
     };
-    library_of(&manifest)
+    named_by(&manifest)
 }
 
-/// The game library the build manifest at `manifest` names, beside this
-/// editor; `None` when it names none.
-pub(crate) fn library_of(manifest: &Path) -> Result<Option<PathBuf>, String> {
+/// The game the build manifest at `manifest` names; `None` when it names
+/// none.
+pub(crate) fn named_by(manifest: &Path) -> Result<Option<NamedGame>, String> {
     let Some(package) = game_package(manifest)? else {
         return Ok(None);
     };
     let exe = std::env::current_exe().map_err(|e| format!("cannot find this editor: {e}"))?;
     let dir = exe.parent().ok_or("this editor is in no folder")?;
-    Ok(Some(dir.join(library_file(&package))))
+    // `platformer.build.ron` has an empty parent: the current folder.
+    let project = manifest
+        .parent()
+        .filter(|dir| !dir.as_os_str().is_empty())
+        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    Ok(Some(NamedGame {
+        library: dir.join(library_file(&package)),
+        package,
+        project,
+    }))
 }
 
 /// The game crate `manifest` names: `None` for a project with no game, or
@@ -77,6 +96,16 @@ mod tests {
         let text = r#"(version: 1, name: "Sandbox", scene: "scenes/sandbox.ron")"#;
         assert_eq!(parse(text).expect("parses"), None);
         assert_eq!(game_package(Path::new("no/such/build.ron")), Ok(None));
+    }
+
+    #[test]
+    fn a_manifest_named_without_a_folder_is_in_the_current_one() {
+        let named = named_by(Path::new("platformer.build.ron"));
+        // Run from the crate's folder, where there is no such file.
+        assert_eq!(named, Ok(None));
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../platformer.build.ron");
+        let named = named_by(&root).expect("reads").expect("names a game");
+        assert!(!named.project.as_os_str().is_empty());
     }
 
     #[test]

@@ -37,9 +37,20 @@ impl Default for Goal {
     }
 }
 
-/// The text that shows the coins taken.
+/// The text that shows the coins taken, and the count it shows.
+///
+/// The count lives here rather than in the game: a component is written
+/// out and read back by everything that keeps a scene — a save, a play
+/// session's snapshot, the editor reloading the game's code mid-play —
+/// and the game's own struct is made afresh by the last of those.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
-pub struct CoinCounter;
+#[serde(default)]
+pub struct CoinCounter {
+    /// What the coins taken were worth.
+    pub taken: u32,
+    /// What all the coins were worth when the run began; zero until then.
+    pub total: u32,
+}
 
 /// The button that saves, as F5 does.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]

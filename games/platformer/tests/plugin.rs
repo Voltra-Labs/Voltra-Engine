@@ -83,3 +83,74 @@ fn the_game_from_the_library_takes_a_coin() {
         "{texts:?}"
     );
 }
+
+#[test]
+fn reloading_the_library_mid_play_keeps_the_world_and_the_count() {
+    let first = GameLibrary::open(&built_library()).expect("a library this build can run");
+    let mut app = App::default().with_game(first.new_game());
+    app.gravity = voltra_render::glam::Vec2::new(0.0, -9.81);
+    let mut session = Headless::open(app, &AssetPath::new(FIRST_LEVEL).expect("a path"))
+        .expect("the level loads");
+    session.step(30, FRAME);
+    session.press("move_right");
+    let mut frames = 0;
+    while !counter_reads(&session, "Coins 1 / 3") && frames < 240 {
+        session.step(1, FRAME);
+        frames += 1;
+    }
+    assert!(
+        counter_reads(&session, "Coins 1 / 3"),
+        "took the first coin"
+    );
+    let walker_before = walker_x(&session);
+
+    // A second load of the library is a fresh copy: what a rebuild gives.
+    let second = GameLibrary::open(&built_library()).expect("loads again");
+    session
+        .swap_game(&second)
+        .expect("the scene reads through the new library");
+    // SAFETY: the swap rebuilt the world and the registry through the
+    // second library and dropped the first's game.
+    unsafe { first.close() };
+
+    assert!(
+        (walker_x(&session) - walker_before).abs() < 1e-4,
+        "the walker stayed put"
+    );
+    assert!(
+        counter_reads(&session, "Coins 1 / 3"),
+        "the count lived through it"
+    );
+    // The new game's turns move the walker on: up to the ledge's foot.
+    session.press("move_right");
+    session.step(60, FRAME);
+    assert!(
+        walker_x(&session) > walker_before + 0.5,
+        "the new code walks it: {} from {walker_before}",
+        walker_x(&session)
+    );
+}
+
+fn counter_reads(session: &Headless, words: &str) -> bool {
+    session
+        .world()
+        .query::<Text>()
+        .any(|(_, text)| text.content == words)
+}
+
+fn walker_x(session: &Headless) -> f32 {
+    let named = |name: &str| {
+        session
+            .world()
+            .query::<voltra_scene::Name>()
+            .find(|(_, n)| n.as_str() == name)
+            .map(|(e, _)| e)
+    };
+    let walker = named("Walker").expect("the level has a walker");
+    session
+        .world()
+        .get::<voltra_scene::Transform>(walker)
+        .expect("placed")
+        .translation
+        .x
+}

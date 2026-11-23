@@ -7,6 +7,10 @@
 //! types. Play makes a fresh game from the library and the loop runs its
 //! turns; Stop drops it with the rest of the play session.
 //!
+//! A game named by a manifest is also watched ([`reload`]): a change to
+//! its sources rebuilds it, and the new library replaces the old one —
+//! mid-play too — with the world carried across through the registries.
+//!
 //! Unloading is the same in reverse, with one rule on top: nothing the
 //! library made may outlive it. The scene is written out through the
 //! game's registry and read back through the engine's, which leaves the
@@ -20,14 +24,16 @@ use voltra_core::{Game, UiFrame};
 use voltra_scene::ComponentRegistry;
 
 use crate::editor::Editor;
+use crate::play::PlayState;
 use crate::selection::Selection;
 
 mod project;
-mod rebuild;
+pub(crate) mod reload;
+mod source;
 
-pub(crate) use rebuild::rebuild;
+use voltra_core::game::swap::rebuild;
 
-/// The loaded game, or why there is none.
+/// The loaded game, or why there is none, and how it is rebuilt.
 #[derive(Default)]
 pub(crate) struct GameHost {
     library: Option<GameLibrary>,
@@ -37,6 +43,9 @@ pub(crate) struct GameHost {
     problem: Option<String>,
     /// Whether the first frame's load has been tried.
     tried: bool,
+    /// Watching the game's sources and rebuilding them, when the game was
+    /// named by a manifest.
+    pub(crate) reload: reload::Reload,
 }
 
 impl GameHost {
@@ -64,19 +73,36 @@ impl GameHost {
         self.library.as_ref().map(GameLibrary::new_game)
     }
 
-    /// The library to load: the one asked for — named directly, or by the
-    /// build manifest asked for — or the project's.
-    fn wanted(&self) -> Result<Option<PathBuf>, String> {
-        if let Some(path) = &self.asked {
-            if path.extension().is_some_and(|ext| ext == "ron") {
-                return project::library_of(path)?
-                    .map(Some)
-                    .ok_or_else(|| format!("{} names no game crate", path.display()));
+    /// The game to load: the one asked for — a library named directly, or
+    /// the game a build manifest names — or the project's.
+    fn wanted(&self) -> Result<Option<Wanted>, String> {
+        let named = match &self.asked {
+            Some(path) if path.extension().is_some_and(|ext| ext == "ron") => {
+                project::named_by(path)?
+                    .ok_or_else(|| format!("{} names no game crate", path.display()))?
             }
-            return Ok(Some(path.clone()));
-        }
-        project::library(&voltra_assets::default_root())
+            Some(path) => {
+                return Ok(Some(Wanted {
+                    library: path.clone(),
+                    named: None,
+                }))
+            }
+            None => match project::named(&voltra_assets::default_root())? {
+                Some(named) => named,
+                None => return Ok(None),
+            },
+        };
+        Ok(Some(Wanted {
+            library: named.library.clone(),
+            named: Some(named),
+        }))
     }
+}
+
+/// A library to load, and the crate it comes from when that is known.
+struct Wanted {
+    library: PathBuf,
+    named: Option<project::NamedGame>,
 }
 
 /// Loads the game once, on the first frame, before a scene the command
@@ -88,12 +114,11 @@ pub(crate) fn load_at_start(editor: &mut Editor, frame: &mut UiFrame<'_>) {
     load(editor, frame);
 }
 
-/// Loads the project's game, replacing one already loaded. Stops play
-/// first: a play session runs the game being replaced.
+/// Loads the project's game, replacing one already loaded — mid-play too —
+/// and watches its sources when it knows them.
 pub(crate) fn load(editor: &mut Editor, frame: &mut UiFrame<'_>) {
-    editor.stop_play(frame);
-    let path = match editor.game.wanted() {
-        Ok(Some(path)) => path,
+    let wanted = match editor.game.wanted() {
+        Ok(Some(wanted)) => wanted,
         Ok(None) => {
             editor.game.problem = None;
             return;
@@ -104,31 +129,68 @@ pub(crate) fn load(editor: &mut Editor, frame: &mut UiFrame<'_>) {
             return;
         }
     };
-    let library = match GameLibrary::open(&path) {
+    if let Some(named) = &wanted.named {
+        editor.game.reload.watch(named);
+    }
+    open_and_install(editor, frame, &wanted.library);
+}
+
+/// Opens the library at `path` and puts it in place of the loaded one, or
+/// says why not and keeps the one there is.
+pub(crate) fn open_and_install(
+    editor: &mut Editor,
+    frame: &mut UiFrame<'_>,
+    path: &std::path::Path,
+) -> bool {
+    let library = match GameLibrary::open(path) {
         Ok(library) => library,
         Err(error) => {
             log::warn!("no game loaded: {error}");
             editor.game.problem = Some(error.to_string());
-            return;
+            return false;
         }
     };
-    // The old game out first, so the scene is read in by one game at a time.
-    unload(editor, frame);
+    install(editor, frame, library)
+}
+
+/// Puts `library` in place of the loaded game's, the world read across
+/// from one's components to the other's, and closes the old one. A play
+/// session goes on with a fresh game from the new library. `false`, with
+/// the old game still in place and running, when the scene does not read
+/// with the new one's components.
+fn install(editor: &mut Editor, frame: &mut UiFrame<'_>, library: GameLibrary) -> bool {
     let mut registry = ComponentRegistry::with_defaults();
     library.register(&mut registry);
+    let playing = editor.play.state() != PlayState::Editing;
+    // The old game's turns end before its types are written out.
+    if playing {
+        frame.set_game(None);
+    }
     if !swap_registry(editor, frame, registry) {
         let problem = format!(
             "{} was not loaded: the scene does not read with its components (see the log)",
-            path.display()
+            library.path().display()
         );
         editor.game.problem = Some(problem);
-        // SAFETY: the swap was undone; nothing of the library's is left.
+        if playing {
+            frame.set_game(editor.game.new_game());
+        }
+        // SAFETY: the swap was undone; nothing of the new library's is left.
         unsafe { library.close() };
-        return;
+        return false;
     }
+    *frame.registry = ComponentRegistry::with_defaults();
     library.register(frame.registry);
+    if playing {
+        frame.set_game(Some(library.new_game()));
+    }
     editor.game.problem = None;
-    editor.game.library = Some(library);
+    if let Some(old) = editor.game.library.replace(library) {
+        // SAFETY: the world and both registries were rebuilt through the new
+        // library; the old game was dropped by `set_game` above.
+        unsafe { old.close() };
+    }
+    true
 }
 
 /// Unloads the game, if one is loaded, leaving its components in the scene
@@ -139,6 +201,7 @@ pub(crate) fn unload(editor: &mut Editor, frame: &mut UiFrame<'_>) {
     }
     editor.stop_play(frame);
     frame.set_game(None);
+    editor.game.reload.stop();
     swap_registry(editor, frame, ComponentRegistry::with_defaults());
     *frame.registry = ComponentRegistry::with_defaults();
     if let Some(library) = editor.game.library.take() {

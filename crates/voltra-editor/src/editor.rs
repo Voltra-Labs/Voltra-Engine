@@ -92,6 +92,9 @@ impl Editor {
         // First of all, once: the game names its components before any scene
         // that holds them is read.
         crate::game::load_at_start(self, frame);
+        // Then whatever a change to its sources rebuilt, swapped in before
+        // anything reads the world this frame.
+        crate::game::reload::poll(self, frame);
         // Before anything reads the world: the preview's pose was for the
         // frame just drawn, and every panel and the history see only what
         // was authored.

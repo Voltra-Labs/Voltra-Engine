@@ -218,6 +218,7 @@ cargo run -p voltra-platformer                   # A/D to walk, Space to jump
 # The same game in the editor: built together, then loaded and played there.
 cargo build -p voltra-editor -p voltra-platformer
 cargo run -p voltra-editor -- --game platformer.build.ron scenes/platformer.ron
+# Edit games/platformer/src while it plays: it is rebuilt and swapped in.
 ```
 
 Useful environment variables (read by `wgpu`):
@@ -360,6 +361,7 @@ privileged and plain `cargo build` covers everything.
 | 75a | Capsule and convex polygon colliders, in every query, a fit to the sprite | done |
 | 75b | Continuous collision: fast bodies stop at walls, bullets at bodies too | done |
 | 76 | The game as a plugin: the editor loads a game crate's library and Play runs it | done |
+| 77 | Hot reload: an edit to the game's code is rebuilt and swapped in mid-play | done |
 
 ## Contributing
 

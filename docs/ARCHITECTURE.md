@@ -4935,8 +4935,7 @@ shipped build links it statically. `games/platformer` is the first: a
   and raised another, for ever, and each reload synced prefab instances
   over their unsaved edits. A read is now no change (`tests/watch.rs`).
 
-Not yet, and why: **hot reload** (77) — the unload path above is its
-first half; **the profiler inside a game** — the library's
+Not yet, and why: **the profiler inside a game** — the library's
 `voltra-profile` is its own copy, so its scopes are not in the editor's
 profile; **a game's threads** — none may outlive its library, and nothing
 here starts any.
@@ -4961,6 +4960,78 @@ it was) and `inspector/game_components.rs`, and `games/platformer`'s
 `tests/level.rs` and `tests/plugin.rs`. Checked by hand: the editor under
 Xvfb with `--game platformer.build.ron --bridge`, the coins set to 5
 through the bridge, Play, walked right — `Coins 5 / 15` — and Stop.
+
+### A changed game is rebuilt and swapped in mid-play, through the registries
+
+Stage 77. The editor watches the game crate named by the manifest
+(`voltra_core::game::watch`, found with `cargo metadata`), and a change to
+a `.rs` file or the manifest — not under `target`, and not a read, which
+inotify reports too — queues a build. The build runs off the frame
+(`game::builder`, cargo's stderr read on its own thread); the old code keeps
+running until it is done. A library that built is opened and installed
+in place of the old one, mid-play too; a change made during a build queues
+one more, so the last edit is the one built.
+
+- **The swap is the scene's own round trip** (`game::swap::rebuild`): the
+  world written out through the old library's registry, cleared — entities
+  and storages — and read back through the new one's, then the old library
+  closed. What survives is what a scene file keeps: every entity with a
+  `SceneId` and its registered components, a body's velocity included.
+  The play session goes on with a fresh game from the new library, whose
+  `start` runs again. Fyrox reloads the same way, by serializing its scene
+  across the swap; Unity's domain reload does too, and loses what it does
+  not serialize, as this does.
+- **State that must outlive an edit lives in a component.** The
+  platformer's count moved from its `Platformer` struct to `CoinCounter
+  { taken, total }`, which a save, a play snapshot and a reload all carry;
+  `start` sets the total only on a counter that has none.
+- **Built with the editor.** The build is `cargo build -p <game>` plus
+  `-p voltra-editor` when the editor is in the game's workspace, with the
+  editor's profile: every dependency then resolves the features the
+  running editor was built with, or the stamp would refuse the result.
+  When only the game changed, cargo relinks nothing of the editor; an
+  engine edit relinks it too, and the new library is refused by its stamp
+  — on Windows the relink itself fails, a running executable being locked
+  — and either way the editor says so and keeps the old code.
+- **The game lives in the editor's workspace.** Found by the scratch-crate
+  test: built from a workspace of its own, a game's engine crates came out
+  with every flag the editor's had and other `-C metadata` — cargo hashes a
+  path dependency by its path *from the workspace's root* — so other
+  `TypeId`s, and the stamp refused it (`Mismatch::Types`, as it should).
+  A game and the editor that plays it share one workspace; the template of
+  78 puts the editor in the game's.
+- **A failed build is shown, not hidden**: the Game menu says the old code
+  runs and lists the compiler's errors with where they are
+  (`builder::summary`), and the log has them. Game ▸ Rebuild builds on
+  demand.
+- **A scene the new types cannot read** — a component whose saved value
+  the edited type no longer accepts — is read back through the old
+  library's, which wrote it; the old game goes on and the menu says why.
+
+Rejected: **patching code in place** (hot-patching functions, as
+`hot-lib-reloader` or Live++ do) — the world would keep values of the old
+types, whose layout the edit may have changed; the round trip through text
+is the one migration that cannot misread a field; **reloading only between
+plays** — the iteration loop this stage exists for is a level being played
+while its code is edited; **building the game alone** — its dependencies
+would resolve fewer features than the editor's, and every rebuild be
+refused.
+
+Pinned by `game/builder.rs` (a command that succeeds is built; one that
+fails answers cargo's own words; the summary is the errors and where they
+are), `game/watch.rs` (an edited source is a change; notes and build
+output are not), the editor's `game/source.rs` (built with the editor when
+they share a workspace; this workspace's platformer found by `cargo
+metadata`), `games/platformer/tests/plugin.rs` (a reload mid-play keeps
+the walker where it was and the count, and the new code walks it on) and
+`tests/hot_reload.rs`, ignored by default for its build: a scratch crate
+built, played, its tick's constant edited, the edit seen, rebuilt, swapped
+in mid-play with its `Mover`'s distance carried across and the new speed
+applied; then a broken edit that fails to build, names the error, and
+leaves the last good code running. Checked by hand: the editor under Xvfb
+playing the platformer, `WALK_SPEED` edited in `walker.rs`, rebuilt and
+swapped in three seconds later, the walker at the new speed and the
+counter as it was.
 
 ### wgpu 30 API notes
 

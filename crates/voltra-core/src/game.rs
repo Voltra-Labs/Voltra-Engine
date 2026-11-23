@@ -16,9 +16,14 @@ use voltra_scene::ComponentRegistry;
 use crate::app::Tick;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod builder;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod library;
 pub mod plugin;
 pub mod stamp;
+pub mod swap;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod watch;
 
 /// A game: its components, and what it does each turn while the world is
 /// live.

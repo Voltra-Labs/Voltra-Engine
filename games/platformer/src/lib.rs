@@ -32,13 +32,11 @@ use components::{Goal, SaveButton};
 /// The first level, under the asset root.
 pub const FIRST_LEVEL: &str = "scenes/platformer.ron";
 
-/// The game's state for one run: made fresh for every play in the editor.
+/// The game's state between two turns: made fresh for every play in the
+/// editor, and again when its code is reloaded. What must outlive both —
+/// the coins taken — is on the scene's [`CoinCounter`](components::CoinCounter).
 #[derive(Debug, Default)]
 pub struct Platformer {
-    /// What the coins taken were worth.
-    coins: u32,
-    /// What all the coins were worth when the run started.
-    total: u32,
     /// A jump asked for this frame, to be spent by the next step: the one
     /// piece of state the two turns share. Without it the fixed turn would
     /// have to read the key edge itself and would miss it on a frame that
@@ -48,21 +46,13 @@ pub struct Platformer {
     rebinding: bool,
 }
 
-impl Platformer {
-    /// What the coins taken so far were worth.
-    pub fn coins(&self) -> u32 {
-        self.coins
-    }
-}
-
 impl Game for Platformer {
     fn register(&self, registry: &mut ComponentRegistry) {
         components::register(registry);
     }
 
     fn start(&mut self, tick: &mut Tick<'_>) {
-        self.total = coins::total(tick.world);
-        coins::show(tick.world, self.coins, self.total);
+        coins::start(tick.world);
         if walker::find(tick.world).is_none() {
             log::warn!("the scene has no Walker: nothing for the keys to move");
         }
@@ -86,14 +76,14 @@ impl Game for Platformer {
             log::info!("press a key for jump");
             self.rebinding = true;
         } else if save_clicked || tick.input.was_binding_pressed(Binding::Key(KeyCode::F5)) {
-            progress::save(tick, walker, self.coins);
+            let taken = coins::taken(tick.world);
+            progress::save(tick, walker, taken);
             // Let go of the focus a click gave it, or the pad's South —
             // jump — would press it again on the next jump.
             tick.ui.focus(None);
         } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F9)) {
             if let Some(loaded) = progress::load(tick, walker) {
-                self.coins = loaded;
-                coins::show(tick.world, self.coins, self.total);
+                coins::set(tick.world, loaded);
             }
         } else if tick.input.action("jump").pressed() {
             self.jump = true;
@@ -105,10 +95,9 @@ impl Game for Platformer {
         let Some(walker) = walker::find(tick.world) else {
             return;
         };
-        let taken = coins::take(tick, walker);
-        if taken > 0 {
-            self.coins += taken;
-            coins::show(tick.world, self.coins, self.total);
+        let worth = coins::take(tick, walker);
+        if worth > 0 {
+            coins::add(tick.world, worth);
         }
         if let Some(next) = reached_goal(tick, walker) {
             // The walker, camera and HUD are `Persistent` and come along;

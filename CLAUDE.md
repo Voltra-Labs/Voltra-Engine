@@ -38,6 +38,7 @@ cargo run -p voltra-editor                                  # launch the editor
 cargo run -p voltra-player -- assets/scenes/sandbox.ron      # run a scene, no editor
 cargo build -p voltra-editor -p voltra-platformer            # editor + game, built together (game/stamp.rs)
 cargo run -p voltra-editor -- --game platformer.build.ron    # the editor playing the game
+cargo test -p voltra-platformer --test hot_reload -- --ignored  # hot reload end to end (slow)
 cargo xtask dist                                            # package build.ron into dist/
 cargo xtask dist --web                                      # the same for the browser (docs/WEB.md)
 cargo build --workspace

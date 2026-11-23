@@ -90,12 +90,48 @@ pub fn label(taken: u32, total: u32) -> String {
     format!("Coins {taken} / {total}")
 }
 
-/// Writes the count on every [`CoinCounter`].
-pub fn show(world: &mut World, taken: u32, total: u32) {
+/// Starts every counter that has not started: its total is what the
+/// scene's coins are worth now. A counter carried through a reload of the
+/// game's code keeps its count.
+pub fn start(world: &mut World) {
+    let total = total(world);
+    update(world, |counter| {
+        if counter.total == 0 {
+            counter.total = total;
+        }
+    });
+}
+
+/// Adds `worth` to every counter.
+pub fn add(world: &mut World, worth: u32) {
+    update(world, |counter| counter.taken += worth);
+}
+
+/// Sets every counter to `taken`, as a loaded save does.
+pub fn set(world: &mut World, taken: u32) {
+    update(world, |counter| counter.taken = taken);
+}
+
+/// What the first counter says was taken.
+pub fn taken(world: &World) -> u32 {
+    world
+        .query::<CoinCounter>()
+        .map(|(_, c)| c.taken)
+        .next()
+        .unwrap_or(0)
+}
+
+/// Changes every counter by `change` and writes its text.
+fn update(world: &mut World, change: impl Fn(&mut CoinCounter)) {
     let counters: Vec<Entity> = world.query::<CoinCounter>().map(|(e, _)| e).collect();
-    for counter in counters {
-        if let Some(text) = world.get_mut::<Text>(counter) {
-            text.content = label(taken, total);
+    for entity in counters {
+        let Some(counter) = world.get_mut::<CoinCounter>(entity) else {
+            continue;
+        };
+        change(counter);
+        let words = label(counter.taken, counter.total);
+        if let Some(text) = world.get_mut::<Text>(entity) {
+            text.content = words;
         }
     }
 }

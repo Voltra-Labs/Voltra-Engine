@@ -25,8 +25,30 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     .on_hover_text("build.ron names no game crate; Play runs the physics alone");
             }
         }
+        if editor.game.reload.building() {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label("Building…");
+            });
+        } else if let Some(errors) = editor.game.reload.failure() {
+            ui.colored_label(egui::Color32::LIGHT_RED, "Build failed: the old code runs")
+                .on_hover_text(errors.to_owned());
+            ui.label(egui::RichText::new(errors).small().monospace());
+        }
         ui.separator();
         let loaded = editor.game.loaded().is_some();
+        if ui
+            .add_enabled(
+                editor.game.reload.can_build() && !editor.game.reload.building(),
+                egui::Button::new("Rebuild game"),
+            )
+            .on_hover_text("build the game's crate and swap it in, as a change to its sources does")
+            .on_disabled_hover_text("building, or a game named by a library rather than a crate")
+            .clicked()
+        {
+            editor.game.reload.rebuild();
+            ui.close();
+        }
         if ui
             .button(if loaded { "Reload game" } else { "Load game" })
             .on_hover_text(

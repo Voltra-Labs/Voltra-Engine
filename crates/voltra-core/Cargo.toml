@@ -59,7 +59,9 @@ web-sys = { workspace = true, features = [
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # The logger games start through `logging::init`, terminal or file.
 env_logger.workspace = true
-# The editor loads a game crate's library to run its code.
+# The editor loads a game crate's library to run its code, and reloads it
+# when the crate's sources change.
 libloading.workspace = true
+notify-debouncer-full.workspace = true
 egui-winit = { workspace = true, features = ["clipboard", "links", "wayland", "x11"] }
 
