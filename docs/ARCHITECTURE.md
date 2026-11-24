@@ -69,8 +69,10 @@ decoding is arithmetic over a file — which is what keeps its tests headless on
 a machine with no sound card.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`), exactly one
-on `wgpu` (`voltra-render`), and exactly one on `cpal` and `symphonia`
-(`voltra-audio`). Everything else consumes them through re-exports, so a
+on `wgpu` (`voltra-render`), exactly one on `cpal` and `symphonia`
+(`voltra-audio`), and exactly one on `tungstenite` (`voltra-net`, which
+opens every socket a game plays over; the editor bridge's loopback socket
+is a tool's, not a game's). Everything else consumes them through re-exports, so a
 version bump is a one-line change.
 
 ### Current crates
@@ -86,6 +88,7 @@ version bump is a one-line change.
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
+| `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
 | `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs — and a running editor, through the bridge — for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
@@ -5544,6 +5547,78 @@ Stage 87, version 0.1: a base is solid when someone else can use it.
 - **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
   The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
 
+### The network is a polled datagram transport, written in-house
+
+Stage 111. A new crate, `voltra-net`, owns every socket a game plays over.
+One trait, `Transport`, moves datagrams of at most `MAX_DATAGRAM` (1200)
+bytes: `update(now)` once a tick for the I/O that is neither a send nor a
+receive (accepting, handshakes, flushes, releasing delayed datagrams),
+`send(to, bytes)`, `recv()` drained until `None`, `reaches(address)` for
+routing, and `take_closed`/`close` for transports with a stream per peer.
+An `Address` names the transport kind as well as the peer (`Udp`,
+`WebSocket`, `Memory`, and `Server` — the one peer a browser page dialled,
+whose socket it never learns), so a UDP and a WebSocket peer on the same
+`ip:port` are two peers.
+
+- **Backends**: `UdpTransport` (`std::net::UdpSocket`, non-blocking);
+  `WebSocketServer` and `WebSocketClient` natively, over `tungstenite`;
+  `BrowserWebSocket` on wasm (`web-sys`'s `WebSocket`, its `onmessage`
+  pushing into a queue the tick drains); `MemoryNetwork` endpoints in one
+  process; `Conditioned<T>` wrapping any of them with seeded loss,
+  latency, jitter (which reorders) and duplication; `MultiTransport` for a
+  server on UDP and WebSockets at once, routing a send by address kind.
+- **Polled, no runtime.** Godot's `PacketPeer.poll()` and renet's
+  `update`/`send_packets` have the same shape; a browser can only call us
+  back, and a tokio runtime (as `renet2`'s WebSocket and WebTransport
+  servers need) would be a second scheduler beside the frame loop. The
+  native WebSocket listener runs `tungstenite`'s handshakes on non-blocking
+  streams and resumes them each update; only the native *client* uses a
+  short-lived thread, because std has no non-blocking `connect` and a frame
+  must not wait on one.
+- **Unreliable by contract**, every backend: a full buffer or a stream
+  still opening drops the datagram and answers `Ok`. Errors mean a wrong
+  request (`TooLarge`, `Unreachable`) or a dead transport (`Closed`, `Io`).
+  Over WebSockets nothing is lost, which makes stage 112's acks redundant
+  there but harmless — one protocol over both.
+- **Untrusted input is bounded at the transport.** UDP reads into a buffer
+  one byte longer than the limit and drops a datagram that fills it (and
+  skips Windows' ICMP resets), at most 256 skipped per call; WebSockets set
+  `max_message_size` and `max_frame_size` to the datagram limit (a longer
+  message ends the stream), a 256 KiB write buffer per stream, and cap
+  streams (1024), half-open handshakes (64, 5 s each) and queued datagrams
+  (8192) — `WebSocketLimits`.
+- **Conditions are a wrapper, not a memory-network feature**, so the
+  editor's network panel (stage 117) can put the same loss and latency on
+  a real socket. Unity Transport's `SimulatorPipelineStage` and renet's
+  conditioner sit in the same place. Applied on the way out; a bad link
+  both ways wraps both ends.
+
+**In-house, not `renet` or `laminar`.** Read from their sources (renet
+2.0.1, laminar 0.5.0): renet's core is transport-agnostic and its channels
+are good, but it has no unreliable-*sequenced* channel, its handshake lives
+in `renet_netcode` (connect tokens from a matchmaker, UDP only), and a
+browser needs the `renet2` fork's async servers. laminar binds and owns its
+own `UdpSocket`, reaches the caller over `crossbeam` channels, is UDP only,
+and drags `rand` 0.8 and `clap` 2. Either way the transports, the web path
+and the handshake would be ours, and what is left — channels, acks,
+fragmentation — is the part whose bounds on untrusted input we most want
+to own and test (stage 112). CLAUDE.md's rule against framework crates
+points the same way. `tungstenite` stays: it is a leaf (a protocol over any
+`Read + Write`), and only `voltra-net` may name it, as only `voltra-core`
+names `winit`.
+
+Pinned by `voltra-net/tests/udp.rs` (a client and server exchange
+datagrams; a datagram one byte over the limit, sent raw, is dropped and the
+next one arrives whole), `tests/websocket.rs` (an exchange; a closed client
+reported and then unreachable; a hand-made client's over-long frame ending
+its stream with nothing taken; a connection that never shakes hands timed
+out while a real client still gets in), the unit tests of `memory.rs`,
+`conditions.rs` (latency held to the millisecond, loss near its share and
+counted, jitter reordering, duplicates, a seed replaying) and `multi.rs`,
+and `crates/voltra-player/web/test/net.mjs` in CI's web job: the wasm
+`examples/web_probe.rs` in Chromium opens a `BrowserWebSocket` to the native
+`examples/echo_server.rs` and gets its datagram back.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5657,3 +5732,16 @@ Both differ from most training data and from every tutorial written against
 | Ids | `GamepadId` → `usize::from(id)`; stable for a pad while connected, reused by UUID on reconnect |
 | Errors | `Gilrs::new()` returns `Error::NotImplemented(dummy)` on unsupported platforms — usable, but we just skip pads |
 | Filters | default filters apply a small stick dead zone and axis-to-button thresholds before we see values |
+
+### `tungstenite` 0.30 notes
+
+| Thing | 0.30.0 |
+| --- | --- |
+| `WebSocketConfig` | `#[non_exhaustive]`: build it from `default()` with the setters (`max_message_size(Some(n))`, `max_frame_size`, `write_buffer_size`, `max_write_buffer_size`, `read_buffer_size`); `max_write_buffer_size` must exceed `write_buffer_size` or it panics |
+| Defaults | 64 MiB messages, 16 MiB frames, unlimited write buffer: far too trusting for a game server — set all three |
+| Non-blocking accept | `accept_with_config(stream, Some(config))` on a non-blocking stream returns `Err(HandshakeError::Interrupted(mid))`; keep `mid` and call `mid.handshake()` again later. Types: `handshake::{MidHandshake, HandshakeError}`, `handshake::server::{ServerHandshake, NoCallback}` |
+| Client over our own stream | `client::client_with_config(url, stream, config)`; `&str`/`String` are `IntoClientRequest` without the `url` feature |
+| `send` | write + flush. `Err(Io(WouldBlock))` means the frame **is** buffered — flush later, do not resend. `Err(WriteBufferFull(msg))` means it was not |
+| `read` | `Err(Io(WouldBlock))` when nothing complete is in; partial frames are kept inside. Pings are answered on the next read/write/flush |
+| `Message::Binary` | holds a `bytes::Bytes`; `Message::binary(vec)` builds one |
+| Over-long message | `Err(Capacity(..))` from `read`: treat as the end of that stream |

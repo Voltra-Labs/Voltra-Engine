@@ -1,0 +1,40 @@
+[package]
+name = "voltra-net"
+description = "Networking for the Voltra engine: datagram transports (UDP, WebSocket, in-memory) and the connections over them."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+log.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# The native WebSocket listener and client. A browser has its own.
+tungstenite.workspace = true
+
+# The browser's WebSocket: the only socket a page may open to a game server.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen.workspace = true
+js-sys.workspace = true
+web-sys = { workspace = true, features = [
+    "WebSocket",
+    "BinaryType",
+    "MessageEvent",
+    "CloseEvent",
+    "Event",
+] }
+
+# The web probe example (`examples/web_probe.rs`): a page that connects to a
+# native server, run by `crates/voltra-player/web/test/net.mjs`.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+web-sys = { workspace = true, features = [
+    "console",
+    "Window",
+    "Document",
+    "Location",
+] }
+
+# The examples' logger, natively.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+env_logger.workspace = true

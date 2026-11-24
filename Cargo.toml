@@ -88,6 +88,10 @@ fontdue = "0.9.5"
 # crate over dlopen/LoadLibrary; what is loaded, and when it is trusted, is
 # ours (`voltra-core/src/game/library.rs`).
 libloading = "0.8.9"
+# The native WebSocket listener and client of `voltra-net`: the blocking,
+# stream-based crate, over a `TcpStream` we make non-blocking — no async
+# runtime in the engine. Only `voltra-net` may name it.
+tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
 
 # Our crates stay debuggable; dependencies are compiled optimized because we
 # never step into them and wgpu/naga are painfully slow at opt-level 0.

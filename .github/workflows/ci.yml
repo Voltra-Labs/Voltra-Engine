@@ -46,6 +46,8 @@ jobs:
         with:
           key: wasm32
       - run: cargo clippy -p voltra-player --target wasm32-unknown-unknown -- -D warnings
+      # The browser's WebSocket transport and the page that probes it.
+      - run: cargo clippy -p voltra-net --target wasm32-unknown-unknown --all-targets -- -D warnings
 
   # The web builds end to end, opened in Chromium on WebGPU and on WebGL2
   # (SwiftShader, no GPU): the player's sandbox found in a screenshot, and
@@ -87,6 +89,9 @@ jobs:
         run: node crates/voltra-player/web/test/materials.mjs
       - name: The platformer walked by a finger on its on-screen stick
         run: node crates/voltra-player/web/test/touch.mjs
+      # voltra-net's browser WebSocket reaching a native server (no GPU).
+      - name: A page connected to a native server
+        run: node crates/voltra-player/web/test/net.mjs
       # The guide's checked blocks (docs/guide): a game made, tested and
       # built for the web, as a reader following it would.
       - name: The guide, followed
