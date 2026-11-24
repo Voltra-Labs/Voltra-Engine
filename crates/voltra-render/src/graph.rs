@@ -61,9 +61,15 @@ struct Pass<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GraphError {
     /// `pass` reads a slot nothing imported and no earlier pass wrote.
-    ReadBeforeWrite { pass: &'static str },
+    ReadBeforeWrite {
+        /// The name of the pass that reads it.
+        pass: &'static str,
+    },
     /// `pass` names a slot this graph never handed out.
-    UnknownSlot { pass: &'static str },
+    UnknownSlot {
+        /// The name of the pass that names it.
+        pass: &'static str,
+    },
 }
 
 impl fmt::Display for GraphError {
@@ -94,6 +100,7 @@ pub struct RenderGraph<'a> {
 }
 
 impl<'a> RenderGraph<'a> {
+    /// An empty graph.
     pub fn new() -> Self {
         Self::default()
     }

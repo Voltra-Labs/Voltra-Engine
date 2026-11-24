@@ -39,9 +39,39 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         });
         ui.close();
     }
+    if ui.button("Spawn HUD column").clicked() {
+        spawn::record(editor, frame, "Spawn HUD column", |frame| {
+            spawn::hud_column(frame, "HUD column")
+        });
+        ui.close();
+    }
     if ui.button("Spawn HUD button").clicked() {
         spawn::record_all(editor, frame, "Spawn HUD button", |frame, _| {
             spawn::hud_button(frame, "HUD button")
+        });
+        ui.close();
+    }
+    if ui.button("Spawn HUD toggle").clicked() {
+        spawn::record_all(editor, frame, "Spawn HUD toggle", |frame, _| {
+            spawn::hud_toggle(frame, "HUD toggle")
+        });
+        ui.close();
+    }
+    if ui.button("Spawn HUD slider").clicked() {
+        spawn::record_all(editor, frame, "Spawn HUD slider", |frame, _| {
+            spawn::hud_slider(frame, "HUD slider")
+        });
+        ui.close();
+    }
+    if ui.button("Spawn HUD text field").clicked() {
+        spawn::record(editor, frame, "Spawn HUD text field", |frame| {
+            spawn::hud_text_field(frame, "HUD text field")
+        });
+        ui.close();
+    }
+    if ui.button("Spawn HUD scroll list").clicked() {
+        spawn::record(editor, frame, "Spawn HUD scroll list", |frame| {
+            spawn::hud_scroll_list(frame, "HUD scroll list")
         });
         ui.close();
     }

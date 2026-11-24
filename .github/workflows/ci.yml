@@ -49,7 +49,8 @@ jobs:
 
   # The web builds end to end, opened in Chromium on WebGPU and on WebGL2
   # (SwiftShader, no GPU): the player's sandbox found in a screenshot, and
-  # the platformer walked into a coin by the keyboard and heard. See
+  # the platformer walked into a coin by the keyboard and heard, and the
+  # sample materials compiled and drawn by each backend. See
   # crates/voltra-player/web/test/.
   web:
     name: web player (Chromium)
@@ -82,6 +83,14 @@ jobs:
         run: node crates/voltra-player/web/test/first-frame.mjs
       - name: A game played, with sound
         run: node crates/voltra-player/web/test/play.mjs
+      - name: Sprite materials on both backends
+        run: node crates/voltra-player/web/test/materials.mjs
+      - name: The platformer walked by a finger on its on-screen stick
+        run: node crates/voltra-player/web/test/touch.mjs
+      # The guide's checked blocks (docs/guide): a game made, tested and
+      # built for the web, as a reader following it would.
+      - name: The guide, followed
+        run: cargo xtask guide
 
   check:
     # One name for both, though Windows skips clippy: required checks are
@@ -122,3 +131,24 @@ jobs:
         # present, which is the normal case on hosted runners. They still guard
         # local runs and any self-hosted machine that has one.
         run: cargo test --workspace
+
+      # The editor itself, launched under Xvfb on a software Vulkan driver
+      # and driven through its bridge: grid snapping, the Console's filter,
+      # a project setting saved and read back (crates/voltra-editor/tests/bridge.rs).
+      # winit opens libxkbcommon-x11 at run time on X11, and the runner
+      # image does not ship it: without it the editor panics at startup.
+      - name: The editor through its bridge
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers libxkbcommon-x11-0
+          xvfb-run -a cargo test -p voltra-editor --test bridge -- --ignored
+
+      # A game made from the template builds natively, lints clean, and its
+      # library loads and plays as the editor loads it (its tests/plugin.rs).
+      # Linux only, like the lints: the template is the same on both.
+      - name: A generated game
+        if: runner.os == 'Linux'
+        run: |
+          cargo xtask new-game ci-game
+          cargo test -p ci-game
+          cargo clippy -p ci-game --all-targets -- -D warnings

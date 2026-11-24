@@ -65,6 +65,7 @@ fn lit_by(lamp: Option<u32>, globals: Vec<GlobalLight>, left: u32) -> Option<Vec
         normal: None,
         light_layers,
         indices,
+        material: None,
     };
     let mesh_draws = [range(0..6, left), range(6..12, 2)];
     let draws = [

@@ -15,7 +15,9 @@ pub const SAVE_DIR_ENV: &str = "VOLTRA_SAVE_DIR";
 /// The platforms whose rules differ.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
+    /// Windows: the roaming app-data folder.
     Windows,
+    /// macOS: the user's Application Support folder.
     MacOs,
     /// Linux and the other Unixes: the XDG base directories.
     Unix,
@@ -25,6 +27,7 @@ pub enum Platform {
 }
 
 impl Platform {
+    /// The platform this build runs on.
     pub fn current() -> Self {
         if cfg!(target_arch = "wasm32") {
             Self::Web

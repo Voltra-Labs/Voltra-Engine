@@ -17,10 +17,12 @@ use serde::{Deserialize, Serialize};
 pub struct Name(pub String);
 
 impl Name {
+    /// A name from anything that turns into a string.
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
     }
 
+    /// The name as text.
     pub fn as_str(&self) -> &str {
         &self.0
     }

@@ -21,6 +21,27 @@ pub fn drive_action(input: &mut Input, actions: &ActionMap, action: &str, down: 
             };
             input.on_pad_axis(0, axis, if down { full } else { 0.0 });
         }
+        Binding::Touch(zone, direction) => {
+            // A finger of its own, by an id no platform hands out: down in
+            // the zone's middle and slid fully this way, or lifted.
+            const DRIVEN: u64 = u64::MAX;
+            let screen = input.screen();
+            let start = zone.centre(screen);
+            if down {
+                let radius = super::stick_radius(screen);
+                let offset = match direction {
+                    super::TouchDir::Hold => voltra_render::glam::Vec2::ZERO,
+                    super::TouchDir::Left => voltra_render::glam::Vec2::new(-radius, 0.0),
+                    super::TouchDir::Right => voltra_render::glam::Vec2::new(radius, 0.0),
+                    super::TouchDir::Up => voltra_render::glam::Vec2::new(0.0, -radius),
+                    super::TouchDir::Down => voltra_render::glam::Vec2::new(0.0, radius),
+                };
+                input.on_touch(DRIVEN, super::TouchPhase::Started, start);
+                input.on_touch(DRIVEN, super::TouchPhase::Moved, start + offset);
+            } else {
+                input.on_touch(DRIVEN, super::TouchPhase::Ended, start);
+            }
+        }
     }
     true
 }
@@ -52,6 +73,7 @@ impl HeldActions {
         });
     }
 
+    /// Whether nothing is being held.
     pub fn is_empty(&self) -> bool {
         self.held.is_empty()
     }

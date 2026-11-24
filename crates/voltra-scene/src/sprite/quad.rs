@@ -16,6 +16,9 @@ use super::Sprite;
 /// The whole of a texture, as every sprite sampled before frames existed.
 pub(crate) const WHOLE: ([f32; 2], [f32; 2]) = ([0.0, 0.0], [1.0, 1.0]);
 
+/// [`WHOLE`] as the four corners' UVs, in the batch's corner order.
+pub(crate) const WHOLE_UVS: [[f32; 2]; 4] = [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]];
+
 /// One sprite's quad, before its transform: how big, what to sample, what to
 /// bind.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -78,13 +81,24 @@ pub fn quad(sprite: &Sprite, sheets: Sheets<'_>) -> Quad {
     }
 }
 
-/// What a sprite draws of its texture.
+/// The size in texels of what `sprite` draws — its frame, its region or
+/// its whole texture — or `None` when that is not known: no texture store
+/// to ask, or a frame that is not there and draws the placeholder.
+pub fn texels(sprite: &Sprite, sheets: Sheets<'_>) -> Option<UVec2> {
+    match slice(sprite, sheets) {
+        Slice::Whole => sheets.size(sprite.texture_handle),
+        Slice::Cut { size, .. } => Some(size),
+        Slice::Missing => None,
+    }
+}
+
 /// Whether `sprite` asks for a frame that is not there, and so draws the
 /// placeholder: what a caster shaped by its sprite must not trace.
 pub(crate) fn frame_missing(sprite: &Sprite, sheets: Sheets<'_>) -> bool {
     matches!(slice(sprite, sheets), Slice::Missing)
 }
 
+/// What a sprite draws of its texture.
 enum Slice {
     /// All of it.
     Whole,
@@ -248,6 +262,7 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
+                materials: None,
             },
         );
 
@@ -273,6 +288,7 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
+                materials: None,
             },
         );
 
@@ -292,6 +308,7 @@ mod tests {
             visible: None,
             time: 0.0,
             layers: None,
+            materials: None,
         };
         let upright = quad(&sprite, sheets);
 
@@ -331,6 +348,7 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
+                materials: None,
             },
         );
 
@@ -357,6 +375,7 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
+                materials: None,
             },
         );
 
@@ -380,6 +399,7 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
+                materials: None,
             },
         );
 
@@ -410,6 +430,7 @@ mod tests {
                 visible: None,
                 time: 0.0,
                 layers: None,
+                materials: None,
             },
         );
 

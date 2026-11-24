@@ -209,11 +209,8 @@ mod tests {
         let native =
             dist::plan(&workspace().join("platformer.build.ron"), Path::new("out")).expect("plans");
         let web = plan(&native, Path::new("out"));
-        assert_eq!(
-            web.cargo_args,
-            ["--package", "voltra-core", "--example", "platformer"]
-        );
-        assert_eq!(web.wasm, Path::new("examples").join("platformer.wasm"));
+        assert_eq!(web.cargo_args, ["--package", "voltra-platformer"]);
+        assert_eq!(web.wasm, PathBuf::from("voltra-platformer.wasm"));
     }
 
     #[test]

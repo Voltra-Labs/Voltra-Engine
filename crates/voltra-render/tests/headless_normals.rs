@@ -87,6 +87,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
         normal: map.as_ref(),
         light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
         indices: 0..6,
+        material: None,
     })];
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -97,6 +98,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
         normal: None,
         light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
         indices: 0..6,
+        material: None,
     }];
     pass::draw_mesh_batches(
         &mut encoder,

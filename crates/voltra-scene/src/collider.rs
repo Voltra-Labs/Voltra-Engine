@@ -1,14 +1,23 @@
 //! The shape an entity occupies, at the origin.
 //!
 //! Where it sits — and which way it faces — comes from the entity's
-//! [`Transform`], so a collider is a size and nothing else. The box is
+//! [`Transform`], so a collider is a size and nothing else. Every shape is
 //! *oriented*: it turns with the sprite it covers. Only its world-space
 //! bounds, which the broad phase compares, stay axis-aligned.
+//!
+//! [`Collider::world_shape`] places any of them as one thing — world points
+//! grown by a radius — which is what the physics collides.
 
 use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
 use crate::Transform;
+
+mod polygon;
+mod world_shape;
+
+pub use polygon::{ConvexPolygon, PolygonError};
+pub use world_shape::WorldShape;
 
 /// The shape used for collision.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -19,9 +28,40 @@ pub enum Collider {
     /// when the transform is, and a name that says otherwise is the kind of
     /// lie that outlives the code it came from.
     Box {
+        /// Half the width and height, before the transform's scale.
         half_extents: Vec2,
     },
+    /// A circle around the transform's origin.
     Circle {
+        /// Before the transform's scale, which applies its larger axis.
+        radius: f32,
+    },
+    /// A rectangle with half-circle ends, upright along the entity's y:
+    /// what a character stands in, since a rounded bottom does not catch on
+    /// the seam between two floor tiles.
+    ///
+    /// `half_height` is half the whole height, caps included — the same
+    /// measure as a box's `half_extents.y`, so a box swapped for a capsule
+    /// keeps its feet where they were. A capsule is never shorter than it is
+    /// wide: below `radius` it is a circle. The radius scales with the
+    /// transform's x, the height with its y.
+    Capsule {
+        /// Half the whole height, caps included, before the transform's y scale.
+        half_height: f32,
+        /// Of the half-circle ends, before the transform's x scale.
+        radius: f32,
+    },
+    /// A convex polygon of up to eight points, around the transform's origin,
+    /// optionally rounded by `radius`.
+    ///
+    /// The body's mass sits at the transform's origin whatever the points, so
+    /// a dynamic polygon is drawn around it; a static one can sit anywhere.
+    Polygon {
+        /// The corners, convex, around the transform's origin.
+        points: ConvexPolygon,
+        /// How far the surface stands off the points: zero is sharp corners.
+        /// Scales with the larger axis of the transform, as a circle does.
+        #[serde(default)]
         radius: f32,
     },
 }
@@ -37,6 +77,16 @@ impl Default for Collider {
 }
 
 impl Collider {
+    /// The shape's name, as the inspector and the logs show it.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Self::Box { .. } => "Box",
+            Self::Circle { .. } => "Circle",
+            Self::Capsule { .. } => "Capsule",
+            Self::Polygon { .. } => "Polygon",
+        }
+    }
+
     /// The world-space bounds, as `(min, max)`.
     ///
     /// Scale is applied, and its absolute value is taken: a mirrored sprite has
@@ -61,15 +111,77 @@ impl Collider {
             // inverted one. `is_degenerate` is what rejects it; this only makes
             // sure the bounds stay well-formed on the way there.
             Self::Circle { .. } => Vec2::splat(self.world_radius(transform).max(0.0)),
+            Self::Capsule { .. } | Self::Polygon { .. } => {
+                return self.world_shape(transform).bounds();
+            }
         };
         (transform.translation - half, transform.translation + half)
     }
 
+    /// The shape in world space: its hull's points, grown by its radius.
+    ///
+    /// A box is its four corners; a circle its centre; a capsule the centres
+    /// of its two caps — or one, once it is no taller than wide; a polygon its
+    /// points, scaled, turned and placed, still counter-clockwise under a
+    /// mirroring scale.
+    pub fn world_shape(&self, transform: &Transform) -> WorldShape {
+        match self {
+            Self::Box { .. } => WorldShape::new(&self.corners(transform), 0.0),
+            Self::Circle { .. } => {
+                WorldShape::new(&[transform.translation], self.world_radius(transform))
+            }
+            Self::Capsule { .. } => {
+                let radius = self.world_radius(transform);
+                let reach = self.capsule_reach(transform);
+                if reach <= radius.abs() * 1e-4 {
+                    return WorldShape::new(&[transform.translation], radius);
+                }
+                let up = Vec2::from_angle(transform.rotation).rotate(Vec2::Y) * reach;
+                WorldShape::new(
+                    &[transform.translation - up, transform.translation + up],
+                    radius,
+                )
+            }
+            Self::Polygon { points, .. } => {
+                let rotation = Vec2::from_angle(transform.rotation);
+                let mut placed = [Vec2::ZERO; ConvexPolygon::MAX_POINTS];
+                let points = points.points();
+                for (out, point) in placed.iter_mut().zip(points) {
+                    *out = transform.translation + rotation.rotate(*point * transform.scale);
+                }
+                let placed = &mut placed[..points.len()];
+                // A mirror turns the winding round; the narrow phase's
+                // normals depend on it running counter-clockwise.
+                if transform.scale.x * transform.scale.y < 0.0 {
+                    placed.reverse();
+                }
+                WorldShape::new(placed, self.world_radius(transform))
+            }
+        }
+    }
+
+    /// How far a capsule's cap centres sit from its middle, in world units.
+    fn capsule_reach(&self, transform: &Transform) -> f32 {
+        match self {
+            Self::Capsule { half_height, .. } => {
+                (half_height * transform.scale.y.abs() - self.world_radius(transform)).max(0.0)
+            }
+            _ => 0.0,
+        }
+    }
+
+    /// The surface in world space as a closed polyline, counter-clockwise,
+    /// with round parts cut so that a full turn takes `sides` segments.
+    pub fn outline(&self, transform: &Transform, sides: usize) -> Vec<Vec2> {
+        self.world_shape(transform).outline(sides)
+    }
+
     /// The four corners in world space, counter-clockwise from `(+hx, +hy)`.
     ///
-    /// Four copies of the centre for a circle, which has no corners: callers
-    /// that care about the difference match on the variant first, and the
-    /// degenerate answer is a point rather than a shape of the wrong size.
+    /// Four copies of the centre for any other shape, which has no such
+    /// corners: callers that care about the difference match on the variant
+    /// first, and the degenerate answer is a point rather than a shape of the
+    /// wrong size.
     pub fn corners(&self, transform: &Transform) -> [Vec2; 4] {
         let half = self.world_half_extents(transform);
         let rotation = Vec2::from_angle(transform.rotation);
@@ -82,19 +194,21 @@ impl Collider {
         .map(|corner| transform.translation + rotation.rotate(corner))
     }
 
-    /// The scaled half extents, for a box. `Vec2::ZERO` for a circle.
+    /// The scaled half extents, for a box. `Vec2::ZERO` for any other shape.
     pub fn world_half_extents(&self, transform: &Transform) -> Vec2 {
         match self {
             Self::Box { half_extents } => (*half_extents * transform.scale).abs(),
-            Self::Circle { .. } => Vec2::ZERO,
+            _ => Vec2::ZERO,
         }
     }
 
-    /// The scaled radius, for a circle. Zero for a box.
+    /// The scaled radius: a circle's, a capsule's caps', a polygon's
+    /// rounding. Zero for a box.
     ///
-    /// A non-uniform scale takes the larger axis. A true ellipse is a different
-    /// shape rather than a parameter of this one, and the larger axis keeps the
-    /// collider covering the sprite instead of cutting into it.
+    /// A non-uniform scale takes the larger axis for a circle and a polygon.
+    /// A true ellipse is a different shape rather than a parameter of this
+    /// one, and the larger axis keeps the collider covering the sprite instead
+    /// of cutting into it. A capsule's radius takes the x axis, across it.
     ///
     /// The *scale* is taken as its absolute value and the *radius* is not, and
     /// that asymmetry is the point: a negative scale is a mirrored sprite and
@@ -104,7 +218,10 @@ impl Collider {
     /// working collider of the wrong provenance.
     pub fn world_radius(&self, transform: &Transform) -> f32 {
         match self {
-            Self::Circle { radius } => radius * transform.scale.abs().max_element(),
+            Self::Circle { radius } | Self::Polygon { radius, .. } => {
+                radius * transform.scale.abs().max_element()
+            }
+            Self::Capsule { radius, .. } => radius * transform.scale.x.abs(),
             Self::Box { .. } => 0.0,
         }
     }
@@ -112,196 +229,27 @@ impl Collider {
     /// Whether this shape has any area once scaled.
     ///
     /// A scene file can contain a zero or negative radius, and an inverted
-    /// shape reports contacts with a backwards normal.
+    /// shape reports contacts with a backwards normal. A polygon squashed
+    /// flat by its scale has no area whatever its rounding: its points no
+    /// longer have an inside to push out of. Anything that is not a number
+    /// is degenerate too.
     pub fn is_degenerate(&self, transform: &Transform) -> bool {
         match self {
             Self::Box { .. } => {
                 let half = self.world_half_extents(transform);
-                half.x <= 0.0 || half.y <= 0.0
+                !(half.x > 0.0 && half.y > 0.0)
             }
-            Self::Circle { .. } => self.world_radius(transform) <= 0.0,
+            Self::Circle { .. } | Self::Capsule { .. } => {
+                let radius = self.world_radius(transform);
+                !(radius > 0.0 && self.capsule_reach(transform).is_finite())
+            }
+            Self::Polygon { points, radius } => {
+                let squash = (transform.scale.x * transform.scale.y).abs();
+                !(points.area() * squash > 0.0 && *radius >= 0.0 && radius.is_finite())
+            }
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_rotated_box_is_bounded_by_a_larger_aabb() {
-        use std::f32::consts::{FRAC_PI_4, SQRT_2};
-
-        let collider = Collider::Box {
-            half_extents: Vec2::splat(1.0),
-        };
-        let transform = Transform::default().with_rotation(FRAC_PI_4);
-
-        let (min, max) = collider.world_aabb(&transform);
-
-        // A unit square turned 45° spans its diagonal, √2 either side.
-        assert!((max.x - SQRT_2).abs() < 1e-5, "{max:?}");
-        assert!((min.y + SQRT_2).abs() < 1e-5, "{min:?}");
-    }
-
-    #[test]
-    fn the_corners_follow_the_rotation_counter_clockwise() {
-        use std::f32::consts::FRAC_PI_2;
-
-        let collider = Collider::Box {
-            half_extents: Vec2::splat(1.0),
-        };
-        let corners = collider.corners(&Transform::default().with_rotation(FRAC_PI_2));
-
-        // (+1,+1) turned a quarter turn is (-1,+1).
-        assert!(
-            (corners[0] - Vec2::new(-1.0, 1.0)).length() < 1e-5,
-            "{corners:?}"
-        );
-        // Counter-clockwise, so the shoelace sum is positive. The clipping in
-        // the narrow phase depends on this winding.
-        let area: f32 = (0..4)
-            .map(|i| {
-                let (p, q) = (corners[i], corners[(i + 1) % 4]);
-                p.x * q.y - q.x * p.y
-            })
-            .sum();
-        assert!(area > 0.0, "{corners:?}");
-    }
-
-    #[test]
-    fn the_corners_follow_the_translation_and_scale() {
-        let collider = Collider::Box {
-            half_extents: Vec2::splat(1.0),
-        };
-        let transform =
-            Transform::from_translation(Vec2::new(5.0, 0.0)).with_scale(Vec2::splat(2.0));
-
-        let corners = collider.corners(&transform);
-
-        assert!(
-            (corners[0] - Vec2::new(7.0, 2.0)).length() < 1e-5,
-            "{corners:?}"
-        );
-        assert!(
-            (corners[2] - Vec2::new(3.0, -2.0)).length() < 1e-5,
-            "{corners:?}"
-        );
-    }
-
-    #[test]
-    fn a_circle_has_no_corners_but_still_answers() {
-        let collider = Collider::Circle { radius: 2.0 };
-        let transform = Transform::from_translation(Vec2::new(1.0, 1.0));
-
-        assert_eq!(collider.corners(&transform), [transform.translation; 4]);
-    }
-
-    #[test]
-    fn a_box_spans_twice_its_half_extents() {
-        let collider = Collider::Box {
-            half_extents: Vec2::new(2.0, 3.0),
-        };
-        let (min, max) = collider.world_aabb(&Transform::default());
-
-        assert_eq!(min, Vec2::new(-2.0, -3.0));
-        assert_eq!(max, Vec2::new(2.0, 3.0));
-    }
-
-    #[test]
-    fn a_box_follows_the_transform_translation() {
-        let collider = Collider::Box {
-            half_extents: Vec2::splat(1.0),
-        };
-        let transform = Transform::from_translation(Vec2::new(10.0, -4.0));
-        let (min, max) = collider.world_aabb(&transform);
-
-        assert_eq!(min, Vec2::new(9.0, -5.0));
-        assert_eq!(max, Vec2::new(11.0, -3.0));
-    }
-
-    #[test]
-    fn a_collider_is_scaled_by_its_transform() {
-        // A scaled sprite with an unscaled collider is a bug that looks like a
-        // physics bug: the outline and the picture disagree and neither is
-        // obviously the wrong one.
-        let collider = Collider::Box {
-            half_extents: Vec2::splat(1.0),
-        };
-        let transform = Transform::default().with_scale(Vec2::new(3.0, 5.0));
-        let (min, max) = collider.world_aabb(&transform);
-
-        assert_eq!(min, Vec2::new(-3.0, -5.0));
-        assert_eq!(max, Vec2::new(3.0, 5.0));
-    }
-
-    #[test]
-    fn a_negative_scale_still_gives_a_min_below_its_max() {
-        // A mirrored sprite is a negative scale, and an AABB whose min exceeds
-        // its max overlaps nothing — the collider would silently stop working.
-        let collider = Collider::Box {
-            half_extents: Vec2::splat(2.0),
-        };
-        let transform = Transform::default().with_scale(Vec2::new(-1.0, 1.0));
-        let (min, max) = collider.world_aabb(&transform);
-
-        assert!(min.x <= max.x && min.y <= max.y, "got {min:?}..{max:?}");
-    }
-
-    #[test]
-    fn a_circle_takes_the_larger_axis_of_a_non_uniform_scale() {
-        // A true ellipse is a different shape, not a parameter. Taking the
-        // larger axis keeps the collider covering the sprite rather than
-        // cutting into it.
-        let collider = Collider::Circle { radius: 1.0 };
-        let transform = Transform::default().with_scale(Vec2::new(2.0, 5.0));
-
-        assert_eq!(collider.world_radius(&transform), 5.0);
-    }
-
-    #[test]
-    fn a_circles_aabb_is_its_bounding_square() {
-        let collider = Collider::Circle { radius: 2.0 };
-        let (min, max) = collider.world_aabb(&Transform::default());
-
-        assert_eq!(min, Vec2::splat(-2.0));
-        assert_eq!(max, Vec2::splat(2.0));
-    }
-
-    #[test]
-    fn a_zero_or_negative_shape_is_degenerate() {
-        let t = Transform::default();
-
-        assert!(Collider::Circle { radius: 0.0 }.is_degenerate(&t));
-        assert!(Collider::Circle { radius: -1.0 }.is_degenerate(&t));
-        assert!(Collider::Box {
-            half_extents: Vec2::ZERO
-        }
-        .is_degenerate(&t));
-        assert!(!Collider::Circle { radius: 1.0 }.is_degenerate(&t));
-    }
-
-    #[test]
-    fn a_shape_scaled_to_nothing_is_degenerate() {
-        let flat = Transform::default().with_scale(Vec2::new(1.0, 0.0));
-
-        assert!(Collider::Box {
-            half_extents: Vec2::splat(1.0)
-        }
-        .is_degenerate(&flat));
-    }
-
-    #[test]
-    fn a_collider_round_trips_through_ron() {
-        for collider in [
-            Collider::Box {
-                half_extents: Vec2::new(1.0, 2.0),
-            },
-            Collider::Circle { radius: 3.0 },
-        ] {
-            let text = ron::to_string(&collider).expect("serialise");
-            let back: Collider = ron::from_str(&text).expect("deserialise");
-            assert_eq!(back, collider);
-        }
-    }
-}
+mod tests;

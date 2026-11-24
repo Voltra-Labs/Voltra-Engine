@@ -21,6 +21,7 @@ use crate::hierarchy::{self, WorldTransforms};
 /// `Parallax` above an entity is the one that applies; they do not multiply.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Parallax {
+    /// How much of the camera's movement it follows, per axis; see above.
     pub factor: Vec2,
     /// Draws the layer again every `repeat` units, as many times as it
     /// takes to cover the view — Godot's `repeat_size`. Per axis; `0` on an

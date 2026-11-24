@@ -7,8 +7,11 @@ use super::TextureError;
 /// thread, since it needs no device.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecodedImage {
+    /// Pixels as RGBA8, row by row from the top-left.
     pub rgba: Vec<u8>,
+    /// Width, in pixels.
     pub width: u32,
+    /// Height, in pixels.
     pub height: u32,
 }
 

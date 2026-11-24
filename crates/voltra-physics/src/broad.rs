@@ -32,6 +32,7 @@ struct Candidate {
 /// tests pin, since a timing is not deterministic.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Sweep {
+    /// The overlapping pairs found.
     pub pairs: Vec<(Entity, Entity)>,
     /// Bounds tests performed: pairs whose x ranges overlapped.
     pub tests: usize,

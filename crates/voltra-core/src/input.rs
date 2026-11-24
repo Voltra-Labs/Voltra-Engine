@@ -21,19 +21,22 @@ pub mod drive;
 pub mod map;
 pub mod pads;
 mod query;
+pub mod touch;
+pub mod typing;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 
 pub use action::ActionState;
-pub use binding::{Binding, Direction, PadAxis, PadButton};
+pub use binding::{Binding, Direction, PadAxis, PadButton, TouchDir, TouchZone};
 pub use drive::{drive_action, HeldActions};
 pub use map::{Action, ActionMap, MapError};
+pub use touch::{Touch, TouchPhase};
 
 use action::ActionStates;
 
 use voltra_render::glam::Vec2;
-use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, Ime, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, PhysicalKey};
 
 pub use winit::event::MouseButton;
@@ -66,6 +69,14 @@ pub struct Input {
     /// must not be steered by them.
     unfocused: bool,
 
+    /// Text, editing keys and IME composition, for a focused text field.
+    typing: typing::Typing,
+
+    /// Fingers on the screen.
+    touches: touch::Touches,
+    /// The window's size in physical pixels, which touch zones are parts of.
+    screen: Vec2,
+
     /// Every action's state, re-derived by [`Input::update_actions`].
     actions: ActionStates,
     /// Action names asked for that the map does not have, so each is warned
@@ -74,6 +85,7 @@ pub struct Input {
 }
 
 impl Input {
+    /// An input with nothing held, no actions bound and a zero-sized screen.
     pub fn new() -> Self {
         Self::default()
     }
@@ -96,6 +108,7 @@ impl Input {
         }
     }
 
+    /// Folds a mouse button transition into the state.
     pub fn on_mouse_button(&mut self, button: MouseButton, pressed: bool) {
         if pressed {
             self.buttons_pressed.insert(button);
@@ -106,6 +119,7 @@ impl Input {
         }
     }
 
+    /// Records the cursor at `position`; the first one is not reported as movement.
     pub fn on_cursor_moved(&mut self, position: Vec2) {
         self.cursor = position;
         if let Some(last) = self.last_cursor {
@@ -114,6 +128,7 @@ impl Input {
         self.last_cursor = Some(position);
     }
 
+    /// Adds `lines` of scroll to this frame's total.
     pub fn on_scroll(&mut self, lines: f32) {
         self.scroll_delta += lines;
     }
@@ -170,6 +185,41 @@ impl Input {
         for button in self.buttons_held.drain() {
             self.buttons_released.insert(button);
         }
+        self.touches.release_all();
+    }
+
+    /// A finger went down, moved or lifted, at `position` in physical pixels.
+    pub fn on_touch(&mut self, id: u64, phase: TouchPhase, position: Vec2) {
+        if self.unfocused {
+            return;
+        }
+        self.touches.on_touch(id, phase, position);
+    }
+
+    /// The fingers down this frame, and those that lifted in it.
+    pub fn touches(&self) -> &[Touch] {
+        self.touches.list()
+    }
+
+    /// The window's size in physical pixels: what touch zones divide.
+    pub fn set_screen(&mut self, size: Vec2) {
+        self.screen = size.max(Vec2::ZERO);
+    }
+
+    /// The window's size in physical pixels, as last set.
+    pub fn screen(&self) -> Vec2 {
+        self.screen
+    }
+
+    /// What was typed this frame: text, editing keys, IME composition.
+    pub fn typing(&self) -> &typing::Typing {
+        &self.typing
+    }
+
+    /// The typing, to feed it without a window: a test, a second input
+    /// source.
+    pub fn typing_mut(&mut self) -> &mut typing::Typing {
+        &mut self.typing
     }
 
     // --- winit decoding -----------------------------------------------------
@@ -179,9 +229,26 @@ impl Input {
         match event {
             WindowEvent::KeyboardInput { event, .. } => {
                 if let PhysicalKey::Code(code) = event.physical_key {
-                    self.on_key(code, event.state == ElementState::Pressed, event.repeat);
+                    let pressed = event.state == ElementState::Pressed;
+                    self.on_key(code, pressed, event.repeat);
+                    self.typing.on_key(code, pressed, event.text.as_deref());
                 }
             }
+            WindowEvent::ModifiersChanged(modifiers) => {
+                let state = modifiers.state();
+                self.typing.on_modifiers(
+                    state.shift_key(),
+                    state.control_key(),
+                    state.alt_key(),
+                    state.super_key(),
+                );
+            }
+            WindowEvent::Ime(ime) => match ime {
+                Ime::Preedit(text, cursor) => self.typing.on_preedit(text, *cursor),
+                Ime::Commit(text) => self.typing.on_commit(text),
+                Ime::Disabled => self.typing.on_ime_disabled(),
+                Ime::Enabled => {}
+            },
             WindowEvent::MouseInput { state, button, .. } => {
                 self.on_mouse_button(*button, *state == ElementState::Pressed);
             }
@@ -196,6 +263,19 @@ impl Input {
                     MouseScrollDelta::PixelDelta(pos) => pos.y as f32 / 120.0,
                 };
                 self.on_scroll(lines);
+            }
+            WindowEvent::Touch(touch) => {
+                let phase = match touch.phase {
+                    winit::event::TouchPhase::Started => TouchPhase::Started,
+                    winit::event::TouchPhase::Moved => TouchPhase::Moved,
+                    winit::event::TouchPhase::Ended => TouchPhase::Ended,
+                    winit::event::TouchPhase::Cancelled => TouchPhase::Cancelled,
+                };
+                let at = Vec2::new(touch.location.x as f32, touch.location.y as f32);
+                self.on_touch(touch.id, phase, at);
+            }
+            WindowEvent::Resized(size) => {
+                self.set_screen(Vec2::new(size.width as f32, size.height as f32));
             }
             WindowEvent::Focused(false) => self.on_focus_lost(),
             WindowEvent::Focused(true) => self.on_focus_gained(),
@@ -212,30 +292,38 @@ impl Input {
         self.mouse_delta = Vec2::ZERO;
         self.scroll_delta = 0.0;
         self.pads.end_frame();
+        self.typing.end_frame();
+        self.touches.end_frame();
     }
 
     // --- queries ------------------------------------------------------------
 
+    /// Whether `code` is held.
     pub fn is_key_down(&self, code: KeyCode) -> bool {
         self.keys_held.contains(&code)
     }
 
+    /// Whether `code` went down this frame; key repeat does not count.
     pub fn was_key_pressed(&self, code: KeyCode) -> bool {
         self.keys_pressed.contains(&code)
     }
 
+    /// Whether `code` went up this frame.
     pub fn was_key_released(&self, code: KeyCode) -> bool {
         self.keys_released.contains(&code)
     }
 
+    /// Whether `button` is held.
     pub fn is_mouse_button_down(&self, button: MouseButton) -> bool {
         self.buttons_held.contains(&button)
     }
 
+    /// Whether `button` went down this frame.
     pub fn was_mouse_button_pressed(&self, button: MouseButton) -> bool {
         self.buttons_pressed.contains(&button)
     }
 
+    /// Whether `button` went up this frame.
     pub fn was_mouse_button_released(&self, button: MouseButton) -> bool {
         self.buttons_released.contains(&button)
     }
@@ -259,6 +347,17 @@ impl Input {
     /// neither or both are. Saves every caller writing the same branch.
     pub fn axis(&self, negative: KeyCode, positive: KeyCode) -> f32 {
         f32::from(self.is_key_down(positive)) - f32::from(self.is_key_down(negative))
+    }
+}
+
+/// How far a virtual stick's finger slides to push it fully, in pixels: a
+/// twelfth of the screen's shorter side, or 60 before the size is known.
+pub(crate) fn stick_radius(screen: Vec2) -> f32 {
+    let side = screen.x.min(screen.y);
+    if side > 0.0 {
+        side / 12.0
+    } else {
+        60.0
     }
 }
 

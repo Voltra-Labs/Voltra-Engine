@@ -31,8 +31,11 @@ pub trait RonAsset: Serialize + DeserializeOwned + Default + 'static {
 /// Why a file could not be read or written.
 #[derive(Debug)]
 pub enum RonAssetError {
+    /// The file could not be read or written.
     Io(std::io::Error),
+    /// The text is not valid RON for the type.
     Parse(ron::error::SpannedError),
+    /// The value could not be turned into RON.
     Serialize(ron::Error),
 }
 
@@ -57,6 +60,7 @@ pub struct RonStore<T: RonAsset> {
 }
 
 impl<T: RonAsset> RonStore<T> {
+    /// A store reading from under `root`, with nothing loaded yet.
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
             root: root.into(),
@@ -146,10 +150,12 @@ impl<T: RonAsset> RonStore<T> {
         &self.root
     }
 
+    /// How many assets are loaded.
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    /// Whether no asset is loaded.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

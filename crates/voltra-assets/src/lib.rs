@@ -5,6 +5,8 @@
 //! it. Sits below `voltra-scene` and above `voltra-render`, and reaches wgpu
 //! only through `voltra_render::wgpu`.
 
+#![warn(missing_docs)]
+
 pub mod atlas;
 pub mod atlases;
 pub mod browse;
@@ -13,6 +15,8 @@ pub mod error;
 pub mod fonts;
 pub mod fs;
 pub mod handle;
+pub mod material;
+pub mod materials;
 pub mod pack;
 pub mod path;
 pub mod placeholder;
@@ -30,12 +34,14 @@ pub use clips::Clips;
 pub use error::AssetError;
 pub use fonts::{Font, Fonts, DEFAULT_FONT};
 pub use handle::Handle;
+pub use material::{Material, MaterialFile};
+pub use materials::Materials;
 pub use path::AssetPath;
 pub use root::{default_root, ROOT_ENV};
 pub use silhouette::Silhouettes;
 pub use size::TextureSizes;
 pub use store::Assets;
-pub use textures::Textures;
+pub use textures::{RenderTexture, Textures};
 pub use watch::AssetWatcher;
 
 /// The rasterizer, for a caller that needs a face's own metrics. Only this

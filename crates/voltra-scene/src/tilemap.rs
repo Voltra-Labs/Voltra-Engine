@@ -48,8 +48,11 @@ pub use terrain::Terrain;
 /// One cell's contents: which frame of the atlas, and which way round.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Tile {
+    /// The atlas frame, at most [`Self::MAX_FRAME`].
     pub frame: u32,
+    /// Mirrored left to right.
     pub flip_x: bool,
+    /// Mirrored top to bottom.
     pub flip_y: bool,
 }
 
@@ -58,6 +61,7 @@ impl Tile {
     /// are its flips, and `0` is an empty cell.
     pub const MAX_FRAME: u32 = (1 << 30) - 2;
 
+    /// A tile showing `frame`, not flipped.
     pub fn new(frame: u32) -> Self {
         Self {
             frame,
@@ -96,6 +100,10 @@ pub struct Tilemap {
         skip_serializing_if = "crate::light::is_default_light_layers"
     )]
     pub light_layers: u32,
+    /// The material the layer's tiles are drawn with, if not the plain
+    /// sprite shader. Not written when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<crate::SpriteMaterial>,
     /// Whether every tile of this layer is solid.
     ///
     /// Per layer rather than per tile, as Unity's `TilemapCollider2D` is: a
@@ -106,6 +114,7 @@ pub struct Tilemap {
     /// The sheet the atlas cuts.
     pub texture: Option<AssetPath>,
     #[serde(skip)]
+    /// What `texture` resolves to in this session's textures. Never written.
     pub texture_handle: Option<Handle<Texture>>,
     /// A normal map laid out as the sheet is — the same frames at the same
     /// texels — for lights with a [`height`](crate::PointLight2D::height),
@@ -120,6 +129,7 @@ pub struct Tilemap {
     /// The slicing whose frames the cells name.
     pub atlas: Option<AssetPath>,
     #[serde(skip)]
+    /// What `atlas` resolves to in this session's atlases. Never written.
     pub atlas_handle: Option<Handle<Atlas>>,
     /// Frames that animate, by the frame a cell names: every cell showing
     /// that frame cycles through the animation instead.
@@ -143,6 +153,7 @@ impl Default for Tilemap {
             sort_order: 0,
             sorting_layer: crate::sorting::default_layer(),
             light_layers: crate::light::default_light_layers(),
+            material: None,
             collision: false,
             texture: None,
             texture_handle: None,
@@ -227,6 +238,7 @@ impl Tilemap {
         self.chunks.values().map(Chunk::len).sum()
     }
 
+    /// Whether no cell holds a tile.
     pub fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }

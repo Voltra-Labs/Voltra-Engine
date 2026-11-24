@@ -23,6 +23,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, Transform};
 
+use crate::geometry::Hull;
 use crate::narrow::manifold;
 
 /// A collider covering `at`, if any.
@@ -87,6 +88,11 @@ fn contains(collider: &Collider, transform: &Transform, at: Vec2) -> bool {
         Collider::Circle { .. } => {
             let radius = collider.world_radius(transform);
             at.distance_squared(transform.translation) <= radius * radius
+        }
+        Collider::Capsule { .. } | Collider::Polygon { .. } => {
+            let hull = Hull::of(collider, transform);
+            let (nearest, inside) = hull.nearest(at);
+            inside || at.distance_squared(nearest) <= hull.radius * hull.radius
         }
     }
 }

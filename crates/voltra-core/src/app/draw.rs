@@ -9,6 +9,7 @@ use voltra_scene::sprite::sheets::Sheets;
 use super::{App, UiFrame};
 
 mod parts;
+pub(super) mod shots;
 pub(super) mod world;
 
 use parts::{
@@ -20,6 +21,7 @@ impl App {
     pub(super) fn redraw_without_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.resolve_materials();
         let (Some(renderer), Some(textures), Some(atlases), Some(fonts)) = (
             self.renderer.as_mut(),
             self.textures.as_mut(),
@@ -41,6 +43,48 @@ impl App {
             renderer.context().queue(),
             scale,
         );
+        voltra_scene::camera::target::resolve_world(
+            &mut self.world,
+            textures,
+            renderer.context().device(),
+            renderer.context().queue(),
+        );
+        let frame_shots = voltra_scene::camera::shots(&self.world);
+        if shots::needs_shots(&frame_shots) {
+            let config = renderer.context().config();
+            let screen = (config.width, config.height);
+            let rects = shots::ShotDraw {
+                world: &self.world,
+                renderer,
+                textures,
+                atlases,
+                fonts,
+                silhouettes: self.silhouettes.as_mut(),
+                sorting_layers: &self.sorting_layers,
+                batch: &mut self.frame_batch,
+                tile_meshes: &mut self.tile_meshes,
+                gpu_rings: &self.gpu_rings,
+                materials: self.materials.as_ref(),
+                material_bank: &mut self.material_bank,
+                pool: &mut self.camera_pool,
+                elapsed: self.elapsed,
+            }
+            .draw(&frame_shots, screen);
+            let hud = shots::hud(&self.world, atlases, textures, fonts, screen, scale);
+            let hud_mesh = hud.upload(renderer.context().device());
+            let white = renderer.white_bind_group().clone();
+            let hud_draws = mesh_draws(&hud, textures, &white);
+            let placed = shots::placed(&self.camera_pool, &rects);
+            let _render = voltra_profile::scope("render");
+            renderer.present_composite(
+                &placed,
+                Layer {
+                    mesh: hud_mesh.as_ref(),
+                    draws: &hud_draws,
+                },
+            );
+            return;
+        }
         // Rebuilt every frame, but for tilemap chunks drawn last frame from
         // the same cells, which are copied: a level's tiles are the bulk of
         // its quads and change least.
@@ -50,6 +94,10 @@ impl App {
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
             .at_time(clock_seconds(self.elapsed))
             .with_layers(&self.sorting_layers);
+        let sheets = match self.materials.as_ref() {
+            Some(materials) => sheets.with_materials(materials),
+            None => sheets,
+        };
         // Into last frame's buffers, taken out for the frame and put back.
         let mut batch = std::mem::take(&mut self.frame_batch);
         batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
@@ -58,7 +106,16 @@ impl App {
         // rather than borrowed, so the borrow on `renderer` ends here instead
         // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
-        let draws = super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings);
+        let format = renderer.context().format();
+        let bank = super::scene_draws::prepare_materials(
+            &mut self.material_bank,
+            renderer,
+            format,
+            &batch,
+            self.materials.as_ref(),
+        );
+        let draws =
+            super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings, bank, None);
 
         let config = renderer.context().config();
         let hud = ui_batch(&self.world, sheets, config.width, config.height, scale);
@@ -87,6 +144,7 @@ impl App {
     pub(super) fn redraw_with_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.resolve_materials();
         let (
             Some(renderer),
             Some(window),
@@ -138,6 +196,34 @@ impl App {
         self.thumbnails.sync(egui, &device, textures);
 
         let scale = window.scale_factor() as f32;
+        // The scene's render textures, so a minimap shows in the editor too.
+        // The editor's own view draws below, through the editor's camera.
+        voltra_scene::camera::target::resolve_world(&mut self.world, textures, &device, &queue);
+        let texture_shots: Vec<_> = voltra_scene::camera::shots(&self.world)
+            .into_iter()
+            .filter(|shot| shot.target.is_some())
+            .collect();
+        if !texture_shots.is_empty() {
+            let editor_camera = renderer.camera;
+            shots::ShotDraw {
+                world: &self.world,
+                renderer,
+                textures,
+                atlases,
+                fonts,
+                silhouettes: self.silhouettes.as_mut(),
+                sorting_layers: &self.sorting_layers,
+                batch: &mut self.frame_batch,
+                tile_meshes: &mut self.tile_meshes,
+                gpu_rings: &self.gpu_rings,
+                materials: self.materials.as_ref(),
+                material_bank: &mut self.material_bank,
+                pool: &mut self.camera_pool,
+                elapsed: self.elapsed,
+            }
+            .draw(&texture_shots, (width.max(1), height.max(1)));
+            renderer.camera = editor_camera;
+        }
         world::WorldDraw {
             world: &self.world,
             renderer,
@@ -149,6 +235,8 @@ impl App {
             batch: &mut self.frame_batch,
             tile_meshes: &mut self.tile_meshes,
             gpu_rings: &self.gpu_rings,
+            materials: self.materials.as_ref(),
+            material_bank: &mut self.material_bank,
             elapsed: self.elapsed,
             scale,
         }
@@ -171,8 +259,9 @@ impl App {
             camera: &mut renderer.camera,
             textures,
             atlases,
-            silhouettes: self.silhouettes.as_ref(),
+            silhouettes: self.silhouettes.as_mut(),
             fonts,
+            materials: self.materials.as_mut(),
             sorting_layers: &self.sorting_layers,
             clips,
             prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
@@ -198,6 +287,8 @@ impl App {
             actions: &self.actions,
             held_actions: &mut self.held_actions,
             window: &mut self.window_requests,
+            registry: &mut self.registry,
+            game: &mut self.game,
         };
         {
             let _ui = voltra_profile::scope("ui");
@@ -224,5 +315,15 @@ impl App {
 fn record_gpu_timings(renderer: &mut Renderer) {
     for (pass, ms) in renderer.gpu_timings() {
         voltra_profile::gpu(pass, ms);
+    }
+}
+
+impl App {
+    /// Points every sprite and tile layer naming a material at it — a
+    /// spawned one, a path edited — before a draw reads them.
+    pub(super) fn resolve_materials(&mut self) {
+        if let Some(materials) = self.materials.as_mut() {
+            voltra_scene::sprite_material::resolve_world(&mut self.world, materials);
+        }
     }
 }

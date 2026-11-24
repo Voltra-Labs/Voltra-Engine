@@ -16,7 +16,9 @@ pub const VERSION: u32 = 1;
 /// time, and a rebinding shows up in a diff as the one line it changed.
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ActionMap {
+    /// The format version; must equal [`VERSION`].
     pub version: u32,
+    /// Each action's bindings, by name.
     #[serde(default)]
     pub actions: BTreeMap<String, Action>,
 }
@@ -32,6 +34,7 @@ pub const MAX_DEADZONE: f32 = 0.95;
 /// One action's bindings, any of which drives it, and its dead zone.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Action {
+    /// The controls that drive the action; any one does.
     #[serde(default)]
     pub bindings: Vec<Binding>,
     /// Analog travel, `0` to `1`, below which the action is not held. Keys
@@ -56,20 +59,32 @@ fn default_deadzone() -> f32 {
 /// Why a map could not be read or written.
 #[derive(Debug)]
 pub enum MapError {
+    /// The file could not be read or written.
     Io {
+        /// The file involved.
         path: PathBuf,
+        /// The underlying I/O error.
         source: std::io::Error,
     },
+    /// The file is not RON for an action map.
     Parse {
+        /// The file that did not parse.
         path: PathBuf,
+        /// The parser's error, with its position.
         source: Box<ron::error::SpannedError>,
     },
+    /// The map could not be written as RON.
     Serialize(ron::Error),
+    /// The file's version is not [`VERSION`].
     UnsupportedVersion {
+        /// The file involved.
         path: PathBuf,
+        /// The version it declares.
         found: u32,
     },
+    /// An action has an empty name.
     EmptyActionName {
+        /// The file involved.
         path: PathBuf,
     },
 }
@@ -106,6 +121,7 @@ impl std::error::Error for MapError {
 }
 
 impl ActionMap {
+    /// An empty map at the current [`VERSION`].
     pub fn new() -> Self {
         Self {
             version: VERSION,

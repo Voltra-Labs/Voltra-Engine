@@ -16,7 +16,9 @@ use crate::Sprite;
 /// quad is resolved against, and the traced outlines.
 #[derive(Clone, Copy)]
 pub struct SpriteShapes<'a> {
+    /// The sheets a sprite's quad is resolved against.
     pub sheets: Sheets<'a>,
+    /// The traced outlines.
     pub silhouettes: &'a Silhouettes,
 }
 
@@ -100,6 +102,36 @@ pub(super) fn sprite_outlines(
                 .collect()
         })
         .collect()
+}
+
+/// `entity`'s sprite outline in its own space — where its collider's points
+/// are — traced first if it has not been; nothing without a sprite, a
+/// texture, or opaque texels. What a collider fitted to its sprite is the
+/// convex hull of.
+pub fn sprite_silhouette(
+    world: &World,
+    entity: Entity,
+    alpha: u8,
+    sheets: Sheets<'_>,
+    silhouettes: &mut Silhouettes,
+) -> Vec<Vec<Vec2>> {
+    let Some((path, rect, _)) = world
+        .get::<Sprite>(entity)
+        .and_then(|sprite| silhouette_key(sprite, sheets))
+    else {
+        return Vec::new();
+    };
+    silhouettes.ensure(path, rect, alpha);
+    sprite_outlines(
+        world,
+        entity,
+        Mat3::IDENTITY,
+        alpha,
+        SpriteShapes {
+            sheets,
+            silhouettes,
+        },
+    )
 }
 
 /// The affine map from a texture UV to where it lands on `drawn`'s quad, in

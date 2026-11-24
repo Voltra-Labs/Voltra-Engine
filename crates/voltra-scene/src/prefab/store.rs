@@ -126,10 +126,12 @@ impl Prefabs {
         &self.root
     }
 
+    /// How many prefabs are loaded.
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    /// Whether no prefab is loaded.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

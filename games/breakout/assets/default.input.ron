@@ -1,0 +1,22 @@
+// The actions a game reads with `tick.input.action("jump")`. Loaded from
+// here by convention when the game names no other map; hot reloaded.
+(
+    version: 1,
+    actions: {
+        // On a touch screen: a thumb slid in the bottom-left corner walks,
+        // a finger in the bottom-right jumps.
+        "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp), Pad(South), Touch(BottomRight, Hold)]),
+        "move_left": (bindings: [Key(KeyA), Key(ArrowLeft), Pad(DPadLeft), PadAxis(LeftStickX, Negative), Touch(BottomLeft, Left)]),
+        "move_right": (bindings: [Key(KeyD), Key(ArrowRight), Pad(DPadRight), PadAxis(LeftStickX, Positive), Touch(BottomLeft, Right)]),
+        // Up and down, for a game seen from above.
+        "move_up": (bindings: [Key(KeyW), Key(ArrowUp), Pad(DPadUp), PadAxis(LeftStickY, Positive)]),
+        "move_down": (bindings: [Key(KeyS), Key(ArrowDown), Pad(DPadDown), PadAxis(LeftStickY, Negative)]),
+        // Menu navigation: what `UiButton`s focus and press with. Accept is
+        // not Space, which a game is likely to want for itself.
+        "ui_up": (bindings: [Key(ArrowUp), Pad(DPadUp)]),
+        "ui_down": (bindings: [Key(ArrowDown), Pad(DPadDown)]),
+        "ui_left": (bindings: [Key(ArrowLeft), Pad(DPadLeft)]),
+        "ui_right": (bindings: [Key(ArrowRight), Pad(DPadRight)]),
+        "ui_accept": (bindings: [Key(Enter), Key(NumpadEnter), Pad(South)]),
+    },
+)

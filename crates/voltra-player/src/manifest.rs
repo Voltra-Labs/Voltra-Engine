@@ -22,6 +22,7 @@ pub const VERSION: u32 = 1;
 /// A build, as `build.ron` describes it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Manifest {
+    /// The format version; must equal [`VERSION`].
     pub version: u32,
     /// The game's name: the window title, the build folder, the executable.
     pub name: String,
@@ -30,6 +31,7 @@ pub struct Manifest {
     /// start and may leave it out.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub scene: Option<String>,
+    /// The window the build opens.
     #[serde(default)]
     pub window: Window,
     /// The asset root, relative to the manifest's own directory.
@@ -45,9 +47,12 @@ pub struct Manifest {
 /// package's own binary when both are left out.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct GameBinary {
+    /// The cargo package holding the game.
     pub package: String,
+    /// The binary target of `package`, if it is not the package's own.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bin: Option<String>,
+    /// The example target of `package`, in place of a binary.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
 }
@@ -97,7 +102,9 @@ fn ron_options() -> ron::Options {
 /// The window a build opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Window {
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
 }
 
@@ -117,18 +124,27 @@ fn default_assets() -> PathBuf {
 /// Why a manifest could not be used.
 #[derive(Debug)]
 pub enum ManifestError {
+    /// The file could not be read.
     Io {
+        /// The file that could not be read.
         path: PathBuf,
+        /// The underlying I/O error.
         source: std::io::Error,
     },
+    /// The file is not valid RON for a manifest.
     Parse {
+        /// The file that did not parse.
         path: PathBuf,
+        /// The parser's error, with its position.
         source: Box<ron::error::SpannedError>,
     },
+    /// The manifest could not be written as RON.
     Serialize(ron::Error),
     /// Valid RON describing something that cannot be a build.
     Invalid {
+        /// The file that was refused.
         path: PathBuf,
+        /// What is wrong with it.
         reason: String,
     },
 }
@@ -176,6 +192,7 @@ impl Manifest {
         Ok(manifest)
     }
 
+    /// Reads, parses and checks the manifest at `path`.
     pub fn load(path: &Path) -> Result<Self, ManifestError> {
         let text = voltra_assets::fs::read_to_string(path).map_err(|source| ManifestError::Io {
             path: path.to_path_buf(),
@@ -184,6 +201,7 @@ impl Manifest {
         Self::from_ron(&text, path)
     }
 
+    /// The manifest as RON text, the form [`Manifest::from_ron`] reads back.
     pub fn to_ron(&self) -> Result<String, ManifestError> {
         ron_options()
             .to_string_pretty(self, ron::ser::PrettyConfig::default())

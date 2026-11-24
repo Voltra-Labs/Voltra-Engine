@@ -49,6 +49,21 @@ impl App {
 
     /// Keeps the save slots in `dir` instead of the per-user folder: a
     /// portable build, or a test.
+    /// How every image is filtered when it does not land 1:1 on pixels:
+    /// `Filter::Nearest` keeps pixel art crisp. Linear when not given.
+    pub fn with_texture_filter(mut self, filter: voltra_render::Filter) -> Self {
+        self.texture_filter = filter;
+        self
+    }
+
+    /// The language the game starts in: the table `locale/<language>.ron`
+    /// it reads keyed texts from. English (`en`) when not given.
+    pub fn with_language(mut self, language: &str) -> Self {
+        self.language = language.to_owned();
+        self
+    }
+
+    /// Keeps saves in `dir` instead of the per-game default.
     pub fn with_save_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.saves = crate::saves::Saves::in_dir(dir);
         self
@@ -87,6 +102,19 @@ impl App {
     /// and register on top, or the engine's own components stop loading.
     pub fn with_registry(mut self, registry: ComponentRegistry) -> Self {
         self.registry = registry;
+        self
+    }
+
+    /// Runs `game`: registers its components on top of the registry so far,
+    /// and gives it both turns, after any hook installed with
+    /// [`with_update`](Self::with_update) or
+    /// [`with_fixed_update`](Self::with_fixed_update).
+    ///
+    /// Call it after [`with_registry`](Self::with_registry), which would
+    /// otherwise replace what the game registered.
+    pub fn with_game(mut self, game: impl crate::Game + 'static) -> Self {
+        game.register(&mut self.registry);
+        self.game = Some(crate::game::Running::new(Box::new(game)));
         self
     }
 

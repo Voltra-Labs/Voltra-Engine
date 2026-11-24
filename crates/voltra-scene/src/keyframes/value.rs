@@ -7,7 +7,9 @@ use voltra_render::glam::Vec2;
 /// [`ValueKind`]; a key of another kind is dropped when the clip loads.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Value {
+    /// A single number.
     Float(f32),
+    /// A 2D vector.
     Vec2(Vec2),
     /// RGBA, each `0..=1` — the components' own colour fields, so a key
     /// holds what the inspector shows. A light's colour has no alpha; its
@@ -20,13 +22,18 @@ pub enum Value {
 /// Which [`Value`] variant a property takes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValueKind {
+    /// A single number.
     Float,
+    /// A 2D vector.
     Vec2,
+    /// An RGBA colour.
     Color,
+    /// A whole number.
     Int,
 }
 
 impl Value {
+    /// Which kind of value this is.
     pub fn kind(&self) -> ValueKind {
         match self {
             Self::Float(_) => ValueKind::Float,

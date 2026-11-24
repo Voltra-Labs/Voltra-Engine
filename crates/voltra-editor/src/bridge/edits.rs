@@ -24,6 +24,7 @@ pub(crate) fn apply(
     let touched: Vec<SceneId> = match command {
         Command::Spawn { .. } => Vec::new(),
         Command::Delete { entity }
+        | Command::Drag { entity, .. }
         | Command::Reparent { entity, .. }
         | Command::Rename { entity, .. }
         | Command::ComponentSet { entity, .. }
@@ -127,6 +128,36 @@ fn run(
             let target = find(world, entity).map_err(|e| e.to_string())?;
             edit::remove_component(world, registry, target, component)
                 .map_err(|e| e.to_string())?;
+            Ok((Some(target), describe(world, target)?))
+        }
+        Command::Drag {
+            entity,
+            tool,
+            from,
+            to,
+        } => {
+            let target = find(world, entity).map_err(|e| e.to_string())?;
+            let tool = match tool.as_str() {
+                "move" => crate::tool::Tool::Translate,
+                "rotate" => crate::tool::Tool::Rotate,
+                "scale" => crate::tool::Tool::Scale,
+                other => return Err(format!("{other:?} is not move, rotate or scale")),
+            };
+            if world.get::<voltra_scene::Transform>(target).is_none() {
+                return Err("it has no transform to drag".into());
+            }
+            let start = voltra_scene::hierarchy::world_transform(world, target);
+            let updated = crate::gizmo::drag_to(
+                target,
+                tool,
+                start,
+                (*from).into(),
+                (*to).into(),
+                &editor.snap,
+            );
+            if !voltra_scene::hierarchy::set_world_transform(world, target, &updated) {
+                return Err("its transform could not be set".into());
+            }
             Ok((Some(target), describe(world, target)?))
         }
         _ => Err("not an edit".into()),

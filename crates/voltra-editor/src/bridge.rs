@@ -46,7 +46,74 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             "redo": editor.history.redo_label(),
         })),
         Command::Read => read::entities(frame.world, &editor.registry),
+        Command::Snap {
+            enabled,
+            step,
+            angle,
+            scale,
+        } => {
+            let snap = &mut editor.snap;
+            if let Some(v) = enabled {
+                snap.enabled = *v;
+            }
+            for (field, value) in [
+                (&mut snap.step, step),
+                (&mut snap.angle, angle),
+                (&mut snap.scale, scale),
+            ] {
+                if let Some(v) = value.filter(|v| v.is_finite() && *v > 0.0) {
+                    *field = v;
+                }
+            }
+            Ok(json!({
+                "enabled": snap.enabled,
+                "step": snap.step,
+                "angle": snap.angle,
+                "scale": snap.scale,
+            }))
+        }
+        Command::Console {
+            level,
+            filter,
+            last,
+        } => {
+            editor.console.read();
+            let level = match level.as_deref() {
+                Some(name) => crate::console::level_named(name)
+                    .ok_or_else(|| format!("{name:?} is no log level"))?,
+                None => log::Level::Info,
+            };
+            let lines: Vec<Value> = editor
+                .console
+                .shown(level, filter.as_deref().unwrap_or(""))
+                .map(|line| {
+                    json!({
+                        "level": line.level.to_string(),
+                        "target": line.target,
+                        "message": line.message,
+                    })
+                })
+                .collect();
+            let skip = lines.len().saturating_sub(last.unwrap_or(usize::MAX));
+            Ok(json!({ "lines": lines[skip..] }))
+        }
+        Command::Settings { file, text } => {
+            let which = crate::project_settings::SettingsFile::named(file)
+                .ok_or_else(|| format!("{file:?} is not input, layers or build"))?;
+            let assets = frame.textures.root().to_path_buf();
+            match text {
+                Some(text) => {
+                    let path = crate::project_settings::write(which, &assets, text)?;
+                    Ok(json!({ "saved": path.display().to_string() }))
+                }
+                None => {
+                    let text = crate::project_settings::read(which, &assets)?;
+                    Ok(json!({ "path": which.path(&assets).display().to_string(), "text": text }))
+                }
+            }
+        }
         Command::Spawn { .. }
+        | Command::Drag { .. }
         | Command::Delete { .. }
         | Command::Reparent { .. }
         | Command::Rename { .. }
@@ -57,7 +124,13 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
                     "the editor is playing: stop first, edits land in the authored scene".into(),
                 );
             }
-            edits::apply(editor, frame.world, command)
+            let answer = edits::apply(editor, frame.world, command)?;
+            // What the edit wrote names its texture, atlas, font or clip by
+            // path; the handles that draw them are this session's, so they
+            // are looked up now — or a textured sprite spawned here draws
+            // the placeholder and a text nothing, with no word why.
+            frame.resolve_scene_assets();
+            Ok(answer)
         }
         Command::Select { entities } => {
             let mut ids = Vec::new();

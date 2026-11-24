@@ -33,6 +33,7 @@ pub struct Joint2D {
     /// Whether the two bodies still collide with each other. Off — Box2D's
     /// default — so a hinge's two halves can overlap where they meet.
     pub collide_connected: bool,
+    /// Which constraint this is, and its own parameters.
     pub kind: JointKind,
     /// The impulses the joint needed last step, which the next one starts
     /// from — warm starting, as the contacts do. Never saved: a loaded
@@ -104,6 +105,7 @@ pub enum JointKind {
         #[serde(default)]
         min: f32,
         #[serde(default)]
+        /// The longest distance held; see `min`.
         max: f32,
         /// Pulls the distance towards `length` like a spring; `None` holds it
         /// there rigidly, or not at all inside a range.
@@ -165,6 +167,7 @@ impl JointKind {
 pub struct AngleLimit {
     /// Radians, at most `upper`.
     pub lower: f32,
+    /// Radians, at least `lower`.
     pub upper: f32,
 }
 
@@ -230,6 +233,7 @@ pub struct JointImpulses {
     pub motor: f32,
     /// The lower and upper limits' — angle or distance.
     pub lower: f32,
+    /// The upper limit's.
     pub upper: f32,
 }
 

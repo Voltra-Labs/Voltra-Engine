@@ -1,0 +1,9 @@
+// See hit_flash.wgsl.
+(
+    version: 1,
+    shader: "materials/hit_flash.wgsl",
+    uniforms: {
+        "flash": Float(0.0),
+        "flash_color": Color((1.0, 1.0, 1.0, 1.0)),
+    },
+)

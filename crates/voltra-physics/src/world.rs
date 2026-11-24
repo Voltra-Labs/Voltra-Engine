@@ -46,6 +46,7 @@ impl PhysicsWorld {
         }
     }
 
+    /// The solver's parameters.
     pub fn params(&self) -> &SolverParams {
         &self.params
     }

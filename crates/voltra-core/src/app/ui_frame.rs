@@ -42,10 +42,14 @@ pub struct UiFrame<'a> {
     /// batch about to run can resolve.
     pub atlases: &'a mut Atlases,
     /// Sprites' traced outlines, for a panel drawing a caster shaped by its
-    /// sprite. `None` before the asset root is known.
-    pub silhouettes: Option<&'a voltra_assets::Silhouettes>,
+    /// sprite or fitting a collider to one. `None` before the asset root is
+    /// known.
+    pub silhouettes: Option<&'a mut voltra_assets::Silhouettes>,
     /// Faces and glyph atlases, for a panel resolving a text's font.
     pub fonts: &'a mut Fonts,
+    /// Sprite materials, for a panel naming one and editing its uniforms.
+    /// `None` before the asset root is known.
+    pub materials: Option<&'a mut voltra_assets::Materials>,
     /// The project's sorting layers, for the inspector's choice and the pick.
     pub sorting_layers: &'a voltra_scene::SortingLayers,
     /// Loaded sounds, shared with the loop's own playback for the same reason
@@ -106,6 +110,11 @@ pub struct UiFrame<'a> {
     pub(super) held_actions: &'a mut crate::input::HeldActions,
     /// The title and close the UI asks for; see `ui_frame/window.rs`.
     pub(super) window: &'a mut WindowRequests,
+    /// The components ticks spawn prefabs and load scenes with. A game the
+    /// editor loads registers its own here, as `with_game` does.
+    pub registry: &'a mut voltra_scene::ComponentRegistry,
+    /// The game the turns run; see [`UiFrame::set_game`].
+    pub(super) game: &'a mut Option<crate::game::Running>,
 }
 
 impl<'a> UiFrame<'a> {
@@ -202,6 +211,22 @@ impl<'a> UiFrame<'a> {
         self.simulation.set_running(simulating);
     }
 
+    /// Runs `game` from the next turn on, in place of whatever ran before,
+    /// which is dropped here; `None` runs none. The game starts afresh: its
+    /// [`start`](crate::Game::start) comes before its first turn.
+    ///
+    /// Registers nothing: a game loaded at run time has its components named
+    /// in [`UiFrame::registry`] before any scene holding them is read, which
+    /// is earlier than the play that runs it.
+    pub fn set_game(&mut self, game: Option<Box<dyn crate::Game>>) {
+        *self.game = game.map(crate::game::Running::new);
+    }
+
+    /// Whether a game is running its turns.
+    pub fn has_game(&self) -> bool {
+        self.game.is_some()
+    }
+
     /// Runs `count` fixed steps on the next frame regardless of the switch.
     ///
     /// Additive, so two requests in one frame run two steps.
@@ -278,12 +303,37 @@ impl<'a> UiFrame<'a> {
     /// silhouettes are loaded.
     pub fn sprite_shapes(&self) -> Option<voltra_scene::shadow_caster::SpriteShapes<'_>> {
         self.silhouettes
+            .as_deref()
             .map(|silhouettes| voltra_scene::shadow_caster::SpriteShapes {
                 sheets: self.sheets(),
                 silhouettes,
             })
     }
 
+    /// `entity`'s sprite outline in its own space, traced now if it has not
+    /// been: what a collider is fitted to. Empty without silhouettes, a
+    /// textured sprite or any opaque texel.
+    pub fn sprite_silhouette(
+        &mut self,
+        entity: voltra_ecs::Entity,
+    ) -> Vec<Vec<voltra_render::glam::Vec2>> {
+        let Some(silhouettes) = self.silhouettes.as_deref_mut() else {
+            return Vec::new();
+        };
+        let sheets = Sheets::new(self.atlases, self.textures)
+            .with_fonts(self.fonts)
+            .seen_from(self.camera.position)
+            .with_layers(self.sorting_layers);
+        voltra_scene::shadow_caster::sprite_silhouette(
+            self.world,
+            entity,
+            voltra_assets::silhouette::ALPHA_THRESHOLD,
+            sheets,
+            silhouettes,
+        )
+    }
+
+    /// The sprite sheets the world is drawn with: atlases, textures and fonts, seen from the camera.
     pub fn sheets(&self) -> Sheets<'_> {
         Sheets::new(self.atlases, self.textures)
             .with_fonts(self.fonts)

@@ -26,6 +26,7 @@ use crate::{
     AudioListener, AudioSource, Camera, Collider, CollisionLayers, GlobalLight2D, Name, Parallax,
     Parent, ParticleEmitter, Persistent, PhysicsMaterial, PointLight2D, PrefabInstance, RigidBody,
     Sensor, ShadowCaster2D, Sprite, SpriteAnimation, Text, Tilemap, Transform, UiButton, UiRect,
+    UiScroll, UiSlice, UiSlider, UiSliderPart, UiStack, UiTextField, UiToggle,
 };
 
 /// The component types a scene file may contain.
@@ -37,6 +38,7 @@ pub struct ComponentRegistry {
 }
 
 impl ComponentRegistry {
+    /// An empty registry, with no component registered.
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
@@ -100,6 +102,20 @@ impl ComponentRegistry {
         registry.register::<Text>("Text").with_template();
         registry.register::<UiRect>("UiRect").with_template();
         registry.register::<UiButton>("UiButton").with_template();
+        registry.register::<UiSlice>("UiSlice").with_template();
+        registry.register::<UiStack>("UiStack").with_template();
+        registry
+            .register::<crate::CameraTarget>("CameraTarget")
+            .with_template();
+        registry.register::<UiScroll>("UiScroll").with_template();
+        registry.register::<UiToggle>("UiToggle").with_template();
+        registry.register::<UiSlider>("UiSlider").with_template();
+        registry
+            .register::<UiSliderPart>("UiSliderPart")
+            .with_template();
+        registry
+            .register::<UiTextField>("UiTextField")
+            .with_template();
         registry
             .register::<Persistent>("Persistent")
             .with_template();
@@ -202,6 +218,7 @@ impl ComponentRegistry {
         })
     }
 
+    /// The registered component names, in registration order.
     pub fn names(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.entries.iter().map(|e| e.name)
     }

@@ -19,6 +19,8 @@
 //! lock on the way. A scope on a worker thread is recorded there and read
 //! by nobody until that thread reads it.
 
+#![warn(missing_docs)]
+
 mod clock;
 mod recorder;
 mod summary;

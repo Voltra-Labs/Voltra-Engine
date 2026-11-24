@@ -55,13 +55,16 @@ pub struct ParticleEmitter {
     /// Colour at birth and at death, alpha included: fading to an alpha of
     /// zero is how a particle disappears rather than blinking out.
     pub color_start: [f32; 4],
+    /// The colour at death, RGBA.
     pub color_end: [f32; 4],
     /// The image every particle draws, by path. `None` is a flat square.
     #[serde(default)]
     pub texture: Option<AssetPath>,
     #[serde(skip)]
+    /// What `texture` resolves to in this session's textures. Never written.
     pub texture_handle: Option<Handle<Texture>>,
     #[serde(default)]
+    /// Draw order among sprites and tilemap layers. See [`Sprite::sort_order`](crate::Sprite::sort_order).
     pub sort_order: i32,
     /// The named layer it draws on, before `sort_order` is consulted. See
     /// [`SortingLayers`](crate::sorting::SortingLayers).
@@ -218,11 +221,14 @@ impl ParticleEmitter {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Simulation {
     #[default]
+    /// Simulated on the CPU, one particle at a time.
     Cpu,
+    /// Simulated by a compute shader on the GPU.
     Gpu,
 }
 
 impl Simulation {
+    /// Whether it is simulated on the CPU.
     pub fn is_cpu(&self) -> bool {
         *self == Self::Cpu
     }
@@ -234,8 +240,11 @@ pub struct Particle {
     /// In world space for a world-space emitter, in the emitter's space
     /// otherwise.
     pub position: Vec2,
+    /// Units per second, in the space `position` is in.
     pub velocity: Vec2,
+    /// Seconds since it was born.
     pub age: f32,
+    /// Seconds it lives; it dies when `age` reaches it.
     pub lifetime: f32,
 }
 

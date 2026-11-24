@@ -44,8 +44,11 @@ pub struct CharacterBody2D {
 /// What a character's last move touched.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct CharacterContact {
+    /// Whether the last move ended on a floor.
     pub on_floor: bool,
+    /// Whether the last move touched a wall.
     pub on_wall: bool,
+    /// Whether the last move touched a ceiling.
     pub on_ceiling: bool,
     /// The floor's normal while on one; zero otherwise.
     pub floor_normal: Vec2,
@@ -83,14 +86,17 @@ impl CharacterBody2D {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "CharacterBody2D";
 
+    /// Whether the last move ended on a floor.
     pub fn is_on_floor(&self) -> bool {
         self.contact.on_floor
     }
 
+    /// Whether the last move touched a wall.
     pub fn is_on_wall(&self) -> bool {
         self.contact.on_wall
     }
 
+    /// Whether the last move touched a ceiling.
     pub fn is_on_ceiling(&self) -> bool {
         self.contact.on_ceiling
     }

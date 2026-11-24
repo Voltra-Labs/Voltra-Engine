@@ -12,6 +12,7 @@ use glam::{Mat4, Vec2, Vec3};
 /// screen, which is the direction people expect a zoom control to move.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Camera2D {
+    /// World position at the centre of the view.
     pub position: Vec2,
     /// Private because `half_extents` divides by it. Write through
     /// [`Self::set_zoom`], which clamps.
@@ -31,6 +32,7 @@ impl Default for Camera2D {
 }
 
 impl Camera2D {
+    /// A camera at `position`; `zoom` is clamped by [`Self::set_zoom`].
     pub fn new(position: Vec2, zoom: f32, aspect: f32) -> Self {
         let mut camera = Self {
             position,
@@ -58,6 +60,7 @@ impl Camera2D {
     /// `zoom`, so zero produces infinities and a large enough value produces
     /// denormals. Godot clamps its editor zoom for the same reason.
     pub const MIN_ZOOM: f32 = 1.0 / 128.0;
+    /// The largest zoom [`Self::set_zoom`] allows.
     pub const MAX_ZOOM: f32 = 128.0;
 
     /// The world point under a viewport pixel.
@@ -175,6 +178,7 @@ pub struct CameraBinding {
 }
 
 impl CameraBinding {
+    /// Creates the camera uniform buffer with its layout and bind group.
     pub fn new(device: &wgpu::Device) -> Self {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("camera-bind-group-layout"),
@@ -242,10 +246,12 @@ impl CameraBinding {
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&uniform));
     }
 
+    /// The layout of the camera's bind group (group 0).
     pub fn layout(&self) -> &wgpu::BindGroupLayout {
         &self.layout
     }
 
+    /// The bind group holding the camera's view-projection matrix.
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }

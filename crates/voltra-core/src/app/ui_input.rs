@@ -1,7 +1,8 @@
-//! The game's buttons, fed the frame's pointer and navigation.
+//! The game's controls, fed the frame's pointer, navigation and typing —
+//! and the window told to take IME input while a text field has the focus.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::ui::{Navigation, Pointer};
+use voltra_scene::ui::{Navigation, Pointer, UiInput};
 use voltra_scene::UiLayout;
 use winit::event::MouseButton;
 
@@ -19,42 +20,86 @@ const RIGHT: &str = "ui_right";
 const ACCEPT: &str = "ui_accept";
 
 impl App {
-    /// Updates hover, press, click and focus before the tick reads them.
+    /// Updates hover, press, click, focus and typing before the tick reads
+    /// them.
     ///
     /// In a window with no editor around it only: the editor's viewport is a
     /// panel, and its HUD is something being authored, not played — clicking
     /// it selects, it does not press. With no window yet there is no screen
-    /// to lay the buttons out on.
-    pub(super) fn update_ui_buttons(&mut self) {
+    /// to lay the controls out on, unless a headless run gave one.
+    pub(super) fn update_ui_controls(&mut self) {
         if self.ui.is_some() {
             return;
         }
+        let (screen, scale) = match (self.window.as_ref(), self.headless_screen) {
+            (Some(window), _) => {
+                let scale = window.scale_factor() as f32;
+                let scale = if scale.is_finite() && scale > 0.0 {
+                    scale
+                } else {
+                    1.0
+                };
+                let size = window.inner_size();
+                (
+                    Vec2::new(size.width as f32, size.height as f32) / scale,
+                    scale,
+                )
+            }
+            (None, Some(screen)) => (screen, 1.0),
+            (None, None) => return,
+        };
+        let layout = UiLayout::from_world(&self.world, screen);
+        let input = UiInput {
+            pointer: pointer_of(&self.input, scale),
+            navigation: navigation_of(&self.input, &self.actions),
+            text: self.input.typing().text().clone(),
+        };
+        self.ui_controls
+            .update(&mut self.world, &layout, self.fonts.as_ref(), &input);
+
+        // The IME only while typing: a game's keys are its own otherwise,
+        // and on some platforms an IME swallows them.
+        let editing = self.ui_controls.editing(&self.world);
         let Some(window) = self.window.as_ref() else {
             return;
         };
-        let scale = window.scale_factor() as f32;
-        let scale = if scale.is_finite() && scale > 0.0 {
-            scale
-        } else {
-            1.0
-        };
-        let size = window.inner_size();
-        let screen = Vec2::new(size.width as f32, size.height as f32) / scale;
-        let layout = UiLayout::from_world(&self.world, screen);
-        let pointer = pointer_of(&self.input, scale);
-        let navigation = navigation_of(&self.input, &self.actions);
-        self.ui_buttons
-            .update(&mut self.world, &layout, pointer, navigation);
+        if editing.is_some() != self.ime_allowed {
+            self.ime_allowed = editing.is_some();
+            window.set_ime_allowed(self.ime_allowed);
+        }
+        if let Some(rect) = editing.and_then(|field| layout.rect(field)) {
+            // Where the IME puts its candidate window: under the field.
+            let at = rect.min * scale;
+            let size = rect.size() * scale;
+            window.set_ime_cursor_area(
+                winit::dpi::PhysicalPosition::new(at.x as f64, at.y as f64),
+                winit::dpi::PhysicalSize::new(size.x as f64, size.y as f64),
+            );
+        }
     }
 }
 
-/// The mouse in points, with this frame's left-button edges.
+/// The mouse in points, with this frame's left-button edges, the wheel and
+/// whether Shift is held — or, while a finger is on the screen, the first
+/// finger: down when it touches, up when it lifts, so a tap is a click.
 pub(super) fn pointer_of(input: &Input, scale: f32) -> Pointer {
+    if let Some(finger) = input.touches().iter().min_by_key(|t| t.id) {
+        let position = finger.position / scale;
+        return Pointer {
+            position: position.is_finite().then_some(position),
+            went_down: finger.began,
+            went_up: finger.ended,
+            scroll: Vec2::ZERO,
+            extend: false,
+        };
+    }
     let position = input.cursor_position() / scale;
     Pointer {
         position: position.is_finite().then_some(position),
         went_down: input.was_mouse_button_pressed(MouseButton::Left),
         went_up: input.was_mouse_button_released(MouseButton::Left),
+        scroll: Vec2::new(0.0, input.scroll_delta()),
+        extend: input.typing().shift(),
     }
 }
 
@@ -117,6 +162,21 @@ mod tests {
         let input = Input::new();
         let nav = navigation_of(&input, &ActionMap::new());
         assert_eq!(nav, Navigation::default());
+    }
+
+    #[test]
+    fn a_finger_is_the_pointer_and_a_tap_a_click() {
+        let mut input = Input::new();
+        input.on_touch(
+            4,
+            crate::input::TouchPhase::Started,
+            Vec2::new(300.0, 150.0),
+        );
+        let down = pointer_of(&input, 1.5);
+        assert_eq!(down.position, Some(Vec2::new(200.0, 100.0)));
+        assert!(down.went_down && !down.went_up);
+        input.on_touch(4, crate::input::TouchPhase::Ended, Vec2::new(300.0, 150.0));
+        assert!(pointer_of(&input, 1.5).went_up);
     }
 
     #[test]

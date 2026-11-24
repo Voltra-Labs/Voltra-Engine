@@ -4,6 +4,8 @@
 //! *nothing* about windowing: callers hand it anything that converts into a
 //! [`wgpu::SurfaceTarget`], which keeps `winit` out of the render layer.
 
+#![warn(missing_docs)]
+
 pub mod bloom;
 pub mod camera;
 pub mod context;
@@ -14,6 +16,7 @@ pub mod graph;
 pub mod light_layers;
 pub mod lights;
 pub mod lines;
+pub mod material;
 pub mod mesh;
 pub mod normals;
 pub mod particles;
@@ -44,10 +47,10 @@ pub use normals::NormalPass;
 pub use particles::{
     GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse, SimStep,
 };
-pub use pass::MeshDraw;
+pub use pass::{MaterialDraw, MeshDraw};
 pub use post::{PostPass, PostSettings};
 pub use readback::read_rgba8;
-pub use renderer::{Layer, Renderer};
+pub use renderer::{Layer, Placed, Renderer};
 pub use scene_draw::SceneDraw;
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};

@@ -17,7 +17,9 @@ pub enum WriteError {
     /// The selection holds an instance of `through`, which is `target` or
     /// holds one — writing it would make `target` contain itself.
     Cycle {
+        /// The prefab being written.
         target: AssetPath,
+        /// The prefab the selection holds an instance of, which leads back to `target`.
         through: AssetPath,
     },
 }

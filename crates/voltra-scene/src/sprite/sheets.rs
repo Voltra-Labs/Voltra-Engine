@@ -18,7 +18,9 @@ use voltra_render::Texture;
 /// their geometry headless.
 #[derive(Clone, Copy, Default)]
 pub struct Sheets<'a> {
+    /// The slicings frame indices are resolved against.
     pub atlases: Option<&'a Atlases>,
+    /// The textures' sizes, for turning pixels into UVs.
     pub textures: Option<&'a dyn TextureSizes>,
     /// The faces and glyph atlases a [`Text`](crate::Text) draws from.
     /// Absent draws and picks no text at all.
@@ -37,6 +39,9 @@ pub struct Sheets<'a> {
     pub time: f32,
     /// The project's sorting layers. `None` sorts by the default list.
     pub layers: Option<&'a crate::sorting::SortingLayers>,
+    /// The materials sprites and tile layers name. Absent draws every one
+    /// with the plain sprite shader.
+    pub materials: Option<&'a voltra_assets::Materials>,
 }
 
 impl<'a> Sheets<'a> {
@@ -50,6 +55,7 @@ impl<'a> Sheets<'a> {
             visible: None,
             time: 0.0,
             layers: None,
+            materials: None,
         }
     }
 
@@ -57,6 +63,12 @@ impl<'a> Sheets<'a> {
     /// them once text exists.
     pub fn with_fonts(mut self, fonts: &'a Fonts) -> Self {
         self.fonts = Some(fonts);
+        self
+    }
+
+    /// The same stores, with the materials sprites and layers name.
+    pub fn with_materials(mut self, materials: &'a voltra_assets::Materials) -> Self {
+        self.materials = Some(materials);
         self
     }
 

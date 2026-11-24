@@ -162,6 +162,18 @@ pub fn step_sleeping(
         }
     }
     sleep.keep_resting(&resting_pairs);
+    if params.continuous {
+        let _continuous = voltra_profile::scope("continuous");
+        let touching: crate::hash::FastSet<(Entity, Entity)> = overlaps
+            .contacts
+            .iter()
+            .map(|contact| ordered(contact.a, contact.b))
+            .collect();
+        // Solved, never reported: a contact about to happen is not one yet.
+        solved.extend(crate::continuous::speculative_contacts(
+            world, sleep, gravity, dt, passes, &apart, &touching,
+        ));
+    }
     let contacts = &solved;
     voltra_profile::count("contacts", overlaps.contacts.len() as f64);
     voltra_profile::count("contacts solved", solved.len() as f64);
@@ -247,6 +259,10 @@ pub fn step_sleeping(
     cache.commit();
 
     drop(solve_scope);
+    if params.continuous {
+        let _continuous = voltra_profile::scope("continuous");
+        crate::continuous::sweep(world, &mut bodies, passes, &apart);
+    }
     let _settle = voltra_profile::scope("settle");
     bodies.scatter(world);
     store_joints(&joint_constraints, world);

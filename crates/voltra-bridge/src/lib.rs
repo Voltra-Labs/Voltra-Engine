@@ -7,6 +7,8 @@
 //! talks to it through a [`BridgeClient`]. Neither side knows MCP here: the
 //! editor binary stays free of the protocol and its async runtime.
 
+#![warn(missing_docs)]
+
 pub mod client;
 pub mod profile;
 pub mod protocol;

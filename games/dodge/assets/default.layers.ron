@@ -1,0 +1,7 @@
+// The project's sorting layers, back to front: a drawable on a later layer
+// draws over one on an earlier layer whatever their sort orders. Read by the
+// editor and the game alike; hot reloaded.
+(
+    version: 1,
+    layers: ["Background", "Default", "Foreground"],
+)

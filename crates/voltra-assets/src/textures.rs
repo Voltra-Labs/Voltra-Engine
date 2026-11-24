@@ -15,6 +15,11 @@ use crate::store::Assets;
 
 mod generated;
 mod preload;
+mod render_texture;
+
+pub use render_texture::{
+    is_render_texture, RenderTexture, RenderTextureFile, RENDER_TEXTURE_SUFFIX,
+};
 
 /// Loads textures from an asset root and hands out shared handles to them.
 ///
@@ -45,6 +50,16 @@ pub struct Textures {
     /// a reload repairs them. Asked by a caller that uses a texture as data
     /// (a normal map), for which the checker's pixels would be nonsense.
     broken: HashSet<Handle<Texture>>,
+    /// How every image is filtered when it does not land 1:1 on pixels: the
+    /// project's choice, Godot's `default_texture_filter` — `Nearest` for
+    /// pixel art.
+    filter: Filter,
+    /// The format a render texture is made in: the one the sprite pipeline
+    /// draws into.
+    target_format: voltra_render::wgpu::TextureFormat,
+    /// The targets render textures are drawn into, by the handle sprites
+    /// show them through.
+    targets: HashMap<Handle<Texture>, RenderTexture>,
 }
 
 impl Textures {
@@ -78,7 +93,27 @@ impl Textures {
             bind_groups,
             raw_bind_groups,
             broken: HashSet::new(),
+            filter: Filter::Linear,
+            target_format: voltra_render::wgpu::TextureFormat::Rgba8UnormSrgb,
+            targets: HashMap::new(),
         }
+    }
+
+    /// Filters every image loaded from now on with `filter`. Set before
+    /// anything loads, as a project setting is.
+    pub fn set_filter(&mut self, filter: Filter) {
+        self.filter = filter;
+    }
+
+    /// The filter images are loaded with.
+    pub fn filter(&self) -> Filter {
+        self.filter
+    }
+
+    /// Makes render textures in `format`: the format the renderer's sprite
+    /// pipeline draws into, or a camera could not draw into them.
+    pub fn set_target_format(&mut self, format: voltra_render::wgpu::TextureFormat) {
+        self.target_format = format;
     }
 
     /// The handle for `path`, loading it if this is the first time.
@@ -92,6 +127,9 @@ impl Textures {
             return *handle;
         }
 
+        if is_render_texture(path.as_str()) {
+            return self.load_render_texture(device, queue, path);
+        }
         let texture = self.read(device, queue, path);
         self.admit(device, queue, path, texture)
     }
@@ -138,7 +176,7 @@ impl Textures {
     }
 
     /// Stores `texture` under a new handle, with both its bind groups.
-    fn insert(&mut self, device: &Device, texture: Texture) -> Handle<Texture> {
+    pub(crate) fn insert(&mut self, device: &Device, texture: Texture) -> Handle<Texture> {
         let bind_group = texture.create_bind_group(device, &self.layout);
         let raw_bind_group = texture.create_raw_bind_group(device, &self.layout);
         let handle = self.store.insert(texture);
@@ -150,7 +188,7 @@ impl Textures {
     /// Puts `texture` under `handle` in place of what was there, with fresh
     /// bind groups: the old ones still name the old texture's views, so
     /// swapping the texture alone would change nothing the GPU can see.
-    fn swap(&mut self, device: &Device, handle: Handle<Texture>, texture: Texture) {
+    pub(crate) fn swap(&mut self, device: &Device, handle: Handle<Texture>, texture: Texture) {
         let bind_group = texture.create_bind_group(device, &self.layout);
         let raw_bind_group = texture.create_raw_bind_group(device, &self.layout);
         let slot = self
@@ -180,6 +218,9 @@ impl Textures {
         let Some(&handle) = self.by_path.get(path) else {
             return false;
         };
+        if is_render_texture(path.as_str()) {
+            return self.reload_render_texture(device, handle, path);
+        }
 
         let texture = match self.read(device, queue, path) {
             Ok(texture) => texture,
@@ -275,6 +316,7 @@ impl Textures {
         self.store.len()
     }
 
+    /// Whether no texture is stored.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }
@@ -298,12 +340,12 @@ impl Textures {
         path: &AssetPath,
         image: &DecodedImage,
     ) -> Result<Texture, AssetError> {
-        Texture::from_decoded(device, queue, path.as_str(), image, Filter::Linear).map_err(
-            |source| AssetError::Decode {
+        Texture::from_decoded(device, queue, path.as_str(), image, self.filter).map_err(|source| {
+            AssetError::Decode {
                 path: self.root.join(path.as_str()),
                 source,
-            },
-        )
+            }
+        })
     }
 
     /// Whether `path` has been asked for already.

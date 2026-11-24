@@ -20,12 +20,18 @@ pub enum AssetError {
     EscapesRoot(String),
     /// A path with nothing left after normalisation.
     Empty,
+    /// A file that could not be read.
     Read {
+        /// The file that could not be read.
         path: PathBuf,
+        /// The underlying I/O error.
         source: std::io::Error,
     },
+    /// An image that could not be decoded.
     Decode {
+        /// The file that could not be decoded.
         path: PathBuf,
+        /// Why the image was refused.
         source: TextureError,
     },
     /// A file that should have been RON was not.
@@ -34,7 +40,9 @@ pub enum AssetError {
     /// position, and inlining that widens every `Result` in the crate — which
     /// is `clippy::result_large_err`.
     Parse {
+        /// The file that was not valid RON.
         path: PathBuf,
+        /// The parse error, with its position.
         source: Box<ron::error::SpannedError>,
     },
     /// A sound that would not decode, or a file that is not one.
@@ -43,26 +51,34 @@ pub enum AssetError {
     /// path and a decoder error of its own, and inlining it widens every
     /// `Result` in the crate.
     Audio {
+        /// The sound file.
         path: PathBuf,
+        /// Why it would not decode.
         source: Box<AudioError>,
     },
     /// Valid RON that does not describe a slicing.
     Atlas {
+        /// The atlas file.
         path: PathBuf,
+        /// Why it does not describe a slicing.
         source: crate::atlas::AtlasError,
     },
     /// Bytes that are not a font `fontdue` can parse.
     ///
     /// `fontdue` reports a static message rather than an error type.
     Font {
+        /// The font file.
         path: PathBuf,
+        /// What `fontdue` reported.
         message: &'static str,
     },
     /// The filesystem watch could not be established. Native only: the web
     /// has no watcher to fail.
     #[cfg(not(target_arch = "wasm32"))]
     Watch {
+        /// The directory that could not be watched.
         root: PathBuf,
+        /// The underlying watcher error.
         source: notify_debouncer_full::notify::Error,
     },
 }

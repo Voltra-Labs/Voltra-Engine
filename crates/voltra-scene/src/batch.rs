@@ -9,6 +9,8 @@ use crate::sprite::sheets::Sheets;
 use crate::sprite::Sprite;
 use crate::text::{shape, Text};
 
+pub use material_use::MaterialUse;
+
 pub use surface::Surface;
 
 /// Corners per quad. Where they land is [`quad`]'s question, not this one's.
@@ -33,12 +35,17 @@ pub struct SpriteRange {
     pub light_layers: u32,
     /// Index range into [`SpriteBatch::indices`] (and thus the uploaded mesh).
     pub indices: std::ops::Range<u32>,
+    /// The material the run draws through, an index into
+    /// [`SpriteBatch::materials`]; `None` for the plain sprite shader. Part
+    /// of what splits a run.
+    pub material: Option<u32>,
 }
 
 /// A GPU particle emitter's place in the batch's draw order. Its particles
 /// are the renderer's; the batch only knows when to draw them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuEmitterDraw {
+    /// The emitter's entity.
     pub entity: voltra_ecs::Entity,
     /// `None` draws against the renderer's white bind group.
     pub texture: Option<Handle<Texture>>,
@@ -58,7 +65,9 @@ pub struct SpriteBatch {
     /// The view quads are culled against, from the [`Sheets`] the batch was
     /// built with. `None` keeps every quad.
     visible: Option<(Vec2, Vec2)>,
+    /// Four corners per sprite, in draw order.
     pub vertices: Vec<Vertex>,
+    /// Triangle indices into `vertices`, six per sprite.
     pub indices: Vec<u32>,
     /// Draw-order runs of same-texture sprites, covering all of `indices`.
     ///
@@ -68,6 +77,9 @@ pub struct SpriteBatch {
     /// GPU particle emitters, each drawn just before the range at its
     /// `before` index — where its sort key put it among the quads.
     pub gpu_emitters: Vec<GpuEmitterDraw>,
+    /// Every material and set of uniform values a range draws through,
+    /// once each.
+    pub materials: Vec<MaterialUse>,
 }
 
 impl SpriteBatch {
@@ -92,12 +104,14 @@ impl SpriteBatch {
         let quad = quad(sprite, sheets);
         if let Some(vertices) = placed(self.visible, matrix, quad.corners(), quad.uvs, sprite.color)
         {
+            let material = self.material(sprite.material.as_ref(), sheets);
             self.append_quad(
                 vertices,
                 Surface {
                     texture: quad.texture,
                     normal: sprite.normal_handle,
                     light_layers: sprite.light_layers,
+                    material,
                 },
             );
         }
@@ -177,6 +191,7 @@ impl SpriteBatch {
             texture,
             normal,
             light_layers,
+            material,
         } = surface;
         let sealed = self
             .gpu_emitters
@@ -187,6 +202,7 @@ impl SpriteBatch {
                 if range.texture == texture
                     && range.normal == normal
                     && range.light_layers == light_layers
+                    && range.material == material
                     && !sealed =>
             {
                 range.indices.end = indices.end;
@@ -196,6 +212,7 @@ impl SpriteBatch {
                 normal,
                 light_layers,
                 indices,
+                material,
             }),
         }
     }
@@ -215,6 +232,7 @@ impl SpriteBatch {
         });
     }
 
+    /// How many sprite quads the batch holds.
     pub fn sprite_count(&self) -> usize {
         self.vertices.len() / CORNERS_PER_QUAD
     }
@@ -276,6 +294,10 @@ pub(crate) fn placed(
 mod build;
 #[cfg(test)]
 mod cull_tests;
+mod material_use;
 mod surface;
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod material_tests;

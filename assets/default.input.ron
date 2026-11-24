@@ -3,9 +3,11 @@
 (
     version: 1,
     actions: {
-        "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp), Pad(South)]),
-        "move_left": (bindings: [Key(KeyA), Key(ArrowLeft), Pad(DPadLeft), PadAxis(LeftStickX, Negative)]),
-        "move_right": (bindings: [Key(KeyD), Key(ArrowRight), Pad(DPadRight), PadAxis(LeftStickX, Positive)]),
+        // On a touch screen: a thumb slid in the bottom-left corner walks,
+        // a finger in the bottom-right jumps.
+        "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp), Pad(South), Touch(BottomRight, Hold)]),
+        "move_left": (bindings: [Key(KeyA), Key(ArrowLeft), Pad(DPadLeft), PadAxis(LeftStickX, Negative), Touch(BottomLeft, Left)]),
+        "move_right": (bindings: [Key(KeyD), Key(ArrowRight), Pad(DPadRight), PadAxis(LeftStickX, Positive), Touch(BottomLeft, Right)]),
         // Up and down, for a game seen from above.
         "move_up": (bindings: [Key(KeyW), Key(ArrowUp), Pad(DPadUp), PadAxis(LeftStickY, Positive)]),
         "move_down": (bindings: [Key(KeyS), Key(ArrowDown), Pad(DPadDown), PadAxis(LeftStickY, Negative)]),

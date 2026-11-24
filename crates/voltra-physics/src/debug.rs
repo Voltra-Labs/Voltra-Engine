@@ -31,7 +31,7 @@ const CONTACT_COLOR: [f32; 4] = [1.0, 0.2, 1.0, 1.0];
 /// Outline thickness, in pixels.
 const WIDTH: f32 = 1.5;
 
-/// Segments used to approximate a circle.
+/// Segments used to approximate a full turn of a round shape.
 ///
 /// Twenty-four is where the corners stop being visible at the sizes a collider
 /// is drawn at. It is a debug overlay, not geometry — doubling it doubles the
@@ -60,22 +60,12 @@ pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
         } else {
             SHAPE_COLOR
         };
-        match collider {
-            Collider::Box { .. } => {
-                // The four turned corners, not the world AABB: the AABB is what
-                // the broad phase compares, and drawing it would show a box
-                // that grows as it rotates — the outline has to be the shape
-                // the narrow phase actually collides.
-                outline(lines, &collider.corners(transform), color);
-            }
-            Collider::Circle { .. } => {
-                circle(
-                    lines,
-                    transform.translation,
-                    collider.world_radius(transform),
-                    color,
-                );
-            }
+        // The shape the narrow phase collides — a box's turned corners, not
+        // the world AABB the broad phase compares, which would grow as it
+        // rotates. Nothing for a shape with no area: there is no outline to
+        // trust, and the narrow phase ignores it too.
+        if !collider.is_degenerate(transform) {
+            outline(lines, &collider.outline(transform, CIRCLE_SEGMENTS), color);
         }
     }
 
@@ -95,24 +85,9 @@ pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
 }
 
 /// A closed polyline through `corners`.
-fn outline(lines: &mut LineBatch, corners: &[Vec2; 4], color: [f32; 4]) {
+fn outline(lines: &mut LineBatch, corners: &[Vec2], color: [f32; 4]) {
     for i in 0..corners.len() {
         lines.push(corners[i], corners[(i + 1) % corners.len()], WIDTH, color);
-    }
-}
-
-/// A closed polyline of [`CIRCLE_SEGMENTS`] segments.
-fn circle(lines: &mut LineBatch, centre: Vec2, radius: f32, color: [f32; 4]) {
-    if radius <= 0.0 {
-        return;
-    }
-
-    let point = |i: usize| {
-        let angle = i as f32 / CIRCLE_SEGMENTS as f32 * std::f32::consts::TAU;
-        centre + Vec2::new(angle.cos(), angle.sin()) * radius
-    };
-    for i in 0..CIRCLE_SEGMENTS {
-        lines.push(point(i), point(i + 1), WIDTH, color);
     }
 }
 
@@ -289,5 +264,43 @@ mod tests {
         draw(&world, &[], &mut lines);
 
         assert!(lines.is_empty());
+    }
+
+    #[test]
+    fn a_capsule_and_a_polygon_are_drawn_as_their_outlines() {
+        let mut world = World::new();
+        let capsule = world.spawn();
+        world.insert(capsule, Transform::default());
+        world.insert(
+            capsule,
+            Collider::Capsule {
+                half_height: 1.0,
+                radius: 0.5,
+            },
+        );
+        let mut lines = LineBatch::default();
+        draw(&world, &[], &mut lines);
+        let expected = Collider::Capsule {
+            half_height: 1.0,
+            radius: 0.5,
+        }
+        .outline(&Transform::default(), CIRCLE_SEGMENTS)
+        .len();
+        assert_eq!(lines.len(), expected);
+
+        let mut world = World::new();
+        let triangle = world.spawn();
+        world.insert(triangle, Transform::default());
+        world.insert(
+            triangle,
+            Collider::Polygon {
+                points: voltra_scene::ConvexPolygon::new(&[Vec2::ZERO, Vec2::X, Vec2::Y])
+                    .expect("a triangle"),
+                radius: 0.0,
+            },
+        );
+        let mut lines = LineBatch::default();
+        draw(&world, &[], &mut lines);
+        assert_eq!(lines.len(), 3, "one segment an edge");
     }
 }

@@ -45,17 +45,27 @@ pub enum SaveError {
     /// A slot name that is empty, too long, or not just letters, digits,
     /// `-` and `_` — which is what keeps a slot inside the saves folder.
     BadSlot(String),
+    /// The slot file is over [`MAX_SAVE_BYTES`].
     TooLarge {
+        /// The slot file.
         path: PathBuf,
+        /// Its size in bytes.
         bytes: u64,
     },
+    /// The slot file could not be read, written or removed.
     Io {
+        /// The file involved.
         path: PathBuf,
+        /// The underlying I/O error.
         source: std::io::Error,
     },
+    /// The value could not be written as RON.
     Serialize(ron::Error),
+    /// The slot file is not RON for the type asked for.
     Parse {
+        /// The file that did not parse.
         path: PathBuf,
+        /// The parser's error, with its position.
         source: Box<ron::error::SpannedError>,
     },
 }

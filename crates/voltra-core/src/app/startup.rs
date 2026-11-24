@@ -38,6 +38,8 @@ impl App {
             renderer.texture_layout(),
             asset_root.clone(),
         );
+        textures.set_filter(self.texture_filter);
+        textures.set_target_format(renderer.context().format());
 
         // `App::world` is public and documented to be populated before `run`,
         // so by the time there is a device to upload with, the world may
@@ -70,6 +72,8 @@ impl App {
         let mut fonts = Fonts::new(asset_root.clone());
         voltra_scene::text::resolve_fonts(&mut self.world, &mut fonts);
         self.fonts = Some(fonts);
+        self.open_locale(&asset_root);
+        self.materials = Some(voltra_assets::Materials::new(asset_root.clone()));
 
         // The audible third of the same problem: a source in a world populated
         // before `run` has never met a `Clips` either.
@@ -133,5 +137,19 @@ impl App {
         window.request_redraw();
         #[cfg(target_arch = "wasm32")]
         super::web::started(&window);
+    }
+}
+
+impl App {
+    /// Opens the string tables under `root` in the language the game was
+    /// built to start in.
+    pub(super) fn open_locale(&mut self, root: &std::path::Path) {
+        let language = if self.language.is_empty() {
+            "en"
+        } else {
+            self.language.as_str()
+        };
+        self.locale = voltra_scene::Locale::open(root, language);
+        self.locale.localize(&mut self.world);
     }
 }

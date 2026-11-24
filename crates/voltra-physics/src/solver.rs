@@ -24,6 +24,7 @@ pub mod body;
 pub mod cache;
 pub mod constraint;
 pub mod contact;
+mod inertia;
 pub mod joint;
 pub mod params;
 pub mod softness;

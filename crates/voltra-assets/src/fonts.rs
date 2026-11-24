@@ -18,7 +18,7 @@ use crate::textures::Textures;
 
 pub use atlas::{Glyph, GlyphAtlas, GlyphKey, GlyphMetrics, GlyphRect};
 pub use font::Font;
-pub use layout::{PlacedGlyph, TextLayout};
+pub use layout::{PlacedGlyph, TextLayout, Wrap};
 
 /// The font a `Text` naming none draws with, relative to the asset root.
 ///
@@ -192,10 +192,12 @@ impl Fonts {
         &self.root
     }
 
+    /// How many fonts are stored.
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    /// Whether no font is stored.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

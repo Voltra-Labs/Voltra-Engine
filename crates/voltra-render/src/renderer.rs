@@ -18,11 +18,14 @@ use crate::target::RenderTarget;
 use crate::texture::Texture;
 use crate::{pipeline, texture};
 
+mod composite;
 mod direct;
 mod frame;
 mod gpu_timing;
 mod light_layers;
 mod normals;
+
+pub use composite::Placed;
 
 /// Drives one frame at a time on top of a [`GpuContext`].
 pub struct Renderer {
@@ -68,10 +71,12 @@ pub struct Renderer {
     frame_target: Option<RenderTarget>,
     /// The size the line shader widens against, rewritten every frame.
     viewport_binding: ViewportBinding,
+    /// The world camera, rewritten into its uniform every frame.
     pub camera: Camera2D,
     /// What the next frame is lit by; unlit by default. Set before each
     /// frame, as [`camera`](Self::camera) is.
     pub lighting: Lighting,
+    /// The colour the frame is cleared to before anything is drawn.
     pub clear_color: wgpu::Color,
 }
 
@@ -190,8 +195,15 @@ impl Renderer {
         }
     }
 
+    /// The GPU context the renderer draws on.
     pub fn context(&self) -> &GpuContext {
         &self.ctx
+    }
+
+    /// The layout of group 0, the camera, every sprite pipeline binds:
+    /// what a material pipeline is made against.
+    pub fn camera_layout(&self) -> &wgpu::BindGroupLayout {
+        self.camera_binding.layout()
     }
 
     /// Layout every texture bind group must be built against.
@@ -236,10 +248,12 @@ impl Renderer {
         }
     }
 
+    /// The bind group drawn against when geometry has no texture of its own.
     pub fn white_bind_group(&self) -> &wgpu::BindGroup {
         &self.white_bind_group
     }
 
+    /// Resizes the surface and sets the camera's aspect to match.
     pub fn resize(&mut self, width: u32, height: u32) {
         self.ctx.resize(width, height);
         // Without this the image stretches when the window is not square.
@@ -251,11 +265,14 @@ impl Renderer {
 /// top-left - with the sprite pipeline. [`Layer::EMPTY`] draws nothing.
 #[derive(Clone, Copy)]
 pub struct Layer<'a> {
+    /// The mesh the draws index into, or `None` for nothing.
     pub mesh: Option<&'a Mesh>,
+    /// The index ranges to draw, in order.
     pub draws: &'a [MeshDraw<'a>],
 }
 
 impl Layer<'_> {
+    /// A layer that draws nothing.
     pub const EMPTY: Layer<'static> = Layer {
         mesh: None,
         draws: &[],

@@ -130,6 +130,10 @@ pub struct Sprite {
         skip_serializing_if = "crate::light::is_default_light_layers"
     )]
     pub light_layers: u32,
+    /// The material it is drawn with, if not the plain sprite shader. Not
+    /// written when there is none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<crate::SpriteMaterial>,
 }
 
 impl Default for Sprite {
@@ -150,6 +154,7 @@ impl Default for Sprite {
             normal_map: None,
             normal_handle: None,
             light_layers: crate::light::default_light_layers(),
+            material: None,
         }
     }
 }
@@ -163,6 +168,7 @@ impl Sprite {
     /// reports it.
     pub const HALF_EXTENT: f32 = 0.5;
 
+    /// A sprite of flat `color`, RGBA.
     pub fn new(color: [f32; 4]) -> Self {
         Self {
             color,
@@ -170,6 +176,7 @@ impl Sprite {
         }
     }
 
+    /// Sets the draw order; see [`Self::sort_order`].
     pub fn with_sort_order(mut self, order: i32) -> Self {
         self.sort_order = order;
         self

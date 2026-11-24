@@ -1,5 +1,7 @@
 //! In-house entity-component storage.
 
+#![warn(missing_docs)]
+
 pub mod entity;
 pub mod hash;
 pub mod storage;

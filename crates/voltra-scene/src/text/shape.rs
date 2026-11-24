@@ -5,7 +5,7 @@
 //! [`quad`](crate::sprite::quad::quad) is one: a click must land on the
 //! pixels it appears to.
 
-use voltra_assets::fonts::TextLayout;
+use voltra_assets::fonts::{TextLayout, Wrap};
 use voltra_assets::{Font, Fonts, Handle};
 use voltra_render::glam::Vec2;
 use voltra_render::Texture;
@@ -18,6 +18,7 @@ pub struct GlyphQuad {
     /// Top-left, bottom-left, bottom-right, top-right, as the batch takes
     /// them.
     pub corners: [Vec2; 4],
+    /// Texture coordinates for each corner, in the same order.
     pub uvs: [[f32; 2]; 4],
 }
 
@@ -26,7 +27,9 @@ pub struct GlyphQuad {
 /// the last line's descent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Bounds {
+    /// The corner with the smallest x and y.
     pub min: Vec2,
+    /// The corner with the largest x and y.
     pub max: Vec2,
 }
 
@@ -63,13 +66,14 @@ fn offset(text: &Text, width: f32) -> f32 {
 
 /// The laid-out box, or `None` with no usable font.
 pub fn bounds(text: &Text, fonts: &Fonts) -> Option<Bounds> {
-    bounds_at(text, fonts, text.px())
+    bounds_at(text, fonts, text.px(), text.max_width)
 }
 
 /// [`bounds`] rasterized at `px` rather than the text's own
-/// `pixels_per_em` - what a screen-space text uses to land 1:1 on pixels.
-pub fn bounds_at(text: &Text, fonts: &Fonts, px: u32) -> Option<Bounds> {
-    let layout = font(text, fonts)?.layout(&text.content, px)?;
+/// `pixels_per_em` - what a screen-space text uses to land 1:1 on pixels —
+/// and wrapped at `width` entity units, or not at all.
+pub fn bounds_at(text: &Text, fonts: &Fonts, px: u32, width: Option<f32>) -> Option<Bounds> {
+    let layout = font(text, fonts)?.layout(&text.content, px, text.wrap_at(px, width))?;
     Some(bounds_of(text, &layout, px))
 }
 
@@ -88,6 +92,26 @@ fn bounds_of(text: &Text, layout: &TextLayout, px: u32) -> Bounds {
     }
 }
 
+/// Where a caret can stand on the first line — before each character and
+/// after the last — as x in the entity's space, the alignment applied:
+/// `content.chars().count() + 1` stops for a line with no control
+/// characters. `None` with no usable font. Needs no glyph rasterized: the
+/// face's metrics place them.
+pub fn caret_stops_at(text: &Text, fonts: &Fonts, px: u32) -> Option<Vec<f32>> {
+    let layout = font(text, fonts)?.layout(&text.content, px, Wrap::default())?;
+    let s = scale(text, px);
+    let width = layout.line_widths.first().copied().unwrap_or(0.0);
+    let start = offset(text, width);
+    let mut stops: Vec<f32> = layout
+        .glyphs
+        .iter()
+        .filter(|glyph| glyph.line == 0)
+        .map(|glyph| (start + glyph.pen) * s)
+        .collect();
+    stops.push((start + width) * s);
+    Some(stops)
+}
+
 /// Every glyph quad a text draws, and the texture they sample.
 ///
 /// Empty when the font has no face, and missing the glyphs
@@ -96,16 +120,21 @@ fn bounds_of(text: &Text, layout: &TextLayout, px: u32) -> Bounds {
 /// `None` until the atlas's first upload; the quads are computed anyway, so
 /// their placement is testable without a GPU.
 pub fn glyphs(text: &Text, fonts: &Fonts) -> (Vec<GlyphQuad>, Option<Handle<Texture>>) {
-    glyphs_at(text, fonts, text.px())
+    glyphs_at(text, fonts, text.px(), text.max_width)
 }
 
-/// [`glyphs`] rasterized at `px`; see [`bounds_at`].
-pub fn glyphs_at(text: &Text, fonts: &Fonts, px: u32) -> (Vec<GlyphQuad>, Option<Handle<Texture>>) {
+/// [`glyphs`] rasterized at `px` and wrapped at `width`; see [`bounds_at`].
+pub fn glyphs_at(
+    text: &Text,
+    fonts: &Fonts,
+    px: u32,
+    width: Option<f32>,
+) -> (Vec<GlyphQuad>, Option<Handle<Texture>>) {
     let Some(font) = font(text, fonts) else {
         return (Vec::new(), None);
     };
     let texture = font.texture();
-    let Some(layout) = font.layout(&text.content, px) else {
+    let Some(layout) = font.layout(&text.content, px, text.wrap_at(px, width)) else {
         return (Vec::new(), None);
     };
 

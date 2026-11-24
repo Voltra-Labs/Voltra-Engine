@@ -1,11 +1,13 @@
 mod bridge;
 mod camera;
 mod clipboard;
+mod console;
 mod delete;
 mod document;
 mod drag;
 mod edit_keys;
 mod editor;
+mod game;
 mod gizmo;
 mod instance;
 mod joints;
@@ -15,10 +17,12 @@ mod panels;
 mod picking;
 mod play;
 mod prefab;
+mod project_settings;
 mod scene_dialogs;
 mod scene_file;
 mod selection;
 mod shape_edit;
+mod snap;
 mod spawn;
 mod timeline;
 mod tool;
@@ -35,10 +39,14 @@ use voltra_scene::{SceneId, Sprite, Transform};
 const CHECKER: &str = "sprites/checker.png";
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // The engine's logger, not a bare `env_logger`: it copies every line
+    // into the ring the Console window and the bridge read.
+    voltra_core::logging::init(false);
 
     let Some(args) = Args::parse(std::env::args().skip(1)) else {
-        log::error!("usage: voltra-editor [scene.ron] [--bridge [port]]");
+        log::error!(
+            "usage: voltra-editor [scene.ron] [--bridge [port]] [--game library-or-build.ron]"
+        );
         std::process::exit(2);
     };
 
@@ -48,6 +56,23 @@ fn main() {
     });
 
     let mut editor = Editor::default();
+    // A game's own manifest brings its own assets: its scenes, its input
+    // map, its sprites are under the folder it names.
+    if let Some(manifest) = args
+        .game
+        .as_ref()
+        .filter(|p| p.extension().is_some_and(|e| e == "ron"))
+    {
+        match game::project_assets(manifest) {
+            Ok(root) => app = app.with_asset_root(root),
+            Err(problem) => log::error!("{problem}"),
+        }
+    }
+    // A library named on the command line; otherwise the project's, from
+    // `build.ron`, loaded on the first frame either way.
+    if let Some(path) = args.game {
+        editor.game = game::GameHost::at(path);
+    }
     match args.scene {
         // Opened on the first frame: opening needs the frame's stores.
         Some(scene) => editor.dialogs.open_at_start(scene),
@@ -81,6 +106,9 @@ struct Args {
     scene: Option<AssetPath>,
     /// The port `--bridge` asks for — its argument, or the default.
     bridge: Option<u16>,
+    /// The game `--game` names — a library, or a build manifest naming its
+    /// crate — instead of the project's.
+    game: Option<std::path::PathBuf>,
 }
 
 impl Args {
@@ -95,6 +123,8 @@ impl Args {
                     .next_if(|next| next.parse::<u16>().is_ok())
                     .and_then(|port| port.parse().ok());
                 parsed.bridge = Some(port.unwrap_or(voltra_bridge::DEFAULT_PORT));
+            } else if arg == "--game" {
+                parsed.game = Some(args.next()?.into());
             } else if arg.starts_with("--") || parsed.scene.is_some() {
                 return None;
             } else {
@@ -158,5 +188,9 @@ mod tests {
         assert_eq!(parse("--nope"), None);
         assert_eq!(parse("a.ron b.ron"), None);
         assert_eq!(parse("a.png"), None);
+        let game = parse("--game target/debug/libgame.so scenes/a.ron").expect("parses");
+        assert_eq!(game.game, Some("target/debug/libgame.so".into()));
+        assert!(game.scene.is_some());
+        assert_eq!(parse("--game"), None, "the flag needs its path");
     }
 }

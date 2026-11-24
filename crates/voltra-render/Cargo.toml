@@ -14,6 +14,8 @@ bytemuck.workspace = true
 glam.workspace = true
 image.workspace = true
 epaint.workspace = true
+# A material file names its uniforms by value (`material::Uniform`).
+serde.workspace = true
 
 [dev-dependencies]
 voltra-testkit.workspace = true

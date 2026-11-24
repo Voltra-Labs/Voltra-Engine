@@ -6,7 +6,7 @@ use std::fmt;
 use voltra_render::Texture;
 
 use super::atlas::{GlyphAtlas, GlyphKey, GlyphMetrics};
-use super::layout::{layout, TextLayout};
+use super::layout::{layout, TextLayout, Wrap};
 use crate::handle::Handle;
 
 /// A face plus its glyph atlas.
@@ -25,6 +25,7 @@ pub struct Font {
 }
 
 impl Font {
+    /// A font over `face`; `None` is a font that draws nothing.
     pub fn new(face: Option<fontdue::Font>) -> Self {
         Self {
             face,
@@ -33,10 +34,12 @@ impl Font {
         }
     }
 
+    /// The parsed face, or `None` when the file was missing or unreadable.
     pub fn face(&self) -> Option<&fontdue::Font> {
         self.face.as_ref()
     }
 
+    /// The glyphs rasterized so far.
     pub fn atlas(&self) -> &GlyphAtlas {
         &self.atlas
     }
@@ -55,9 +58,10 @@ impl Font {
         self.texture = Some(texture);
     }
 
-    /// `content` laid out at `px` pixels per em, or `None` with no face.
-    pub fn layout(&self, content: &str, px: u32) -> Option<TextLayout> {
-        Some(layout(self.face.as_ref()?, content, px))
+    /// `content` laid out at `px` pixels per em, broken as `wrap` says, or
+    /// `None` with no face.
+    pub fn layout(&self, content: &str, px: u32, wrap: Wrap) -> Option<TextLayout> {
+        Some(layout(self.face.as_ref()?, content, px, wrap))
     }
 
     /// Rasterizes every glyph of `content` at `px` the atlas does not hold.

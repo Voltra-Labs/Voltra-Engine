@@ -10,6 +10,7 @@ use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::spawn;
 
+mod game_menu;
 mod spawn_items;
 use crate::undo::SceneView;
 
@@ -152,6 +153,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     crate::delete::selection(editor, frame);
                     ui.close();
                 }
+                ui.separator();
+                snap_menu(ui, &mut editor.snap);
             });
 
             ui.menu_button("Physics", |ui| {
@@ -212,12 +215,22 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
             });
 
+            game_menu::show(editor, ui, frame);
+
             ui.menu_button("Window", |ui| {
                 if ui
                     .add_enabled(!editor.profiler.is_open(), egui::Button::new("Profiler"))
                     .clicked()
                 {
                     editor.profiler.open();
+                    ui.close();
+                }
+                if ui.button("Console").clicked() {
+                    editor.console.open = true;
+                    ui.close();
+                }
+                if ui.button("Project Settings").clicked() {
+                    editor.settings.open();
                     ui.close();
                 }
             });
@@ -228,5 +241,36 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             ui.separator();
             ui.label(format!("{} entities", frame.world.entity_count()));
         });
+    });
+}
+
+/// Snapping on or off, the grid shown or not, and the three steps.
+fn snap_menu(ui: &mut egui::Ui, snap: &mut crate::snap::Snap) {
+    ui.checkbox(&mut snap.enabled, "Snap to grid")
+        .on_hover_text("moves land on the grid, turns and scales on steps; Ctrl flips it");
+    ui.checkbox(&mut snap.show_grid, "Show grid");
+    egui::Grid::new("snap_steps").num_columns(2).show(ui, |ui| {
+        ui.label("grid");
+        ui.add(
+            egui::DragValue::new(&mut snap.step)
+                .speed(0.01)
+                .range(0.01..=1000.0),
+        );
+        ui.end_row();
+        ui.label("angle");
+        ui.add(
+            egui::DragValue::new(&mut snap.angle)
+                .speed(0.5)
+                .range(0.1..=180.0)
+                .suffix("°"),
+        );
+        ui.end_row();
+        ui.label("scale");
+        ui.add(
+            egui::DragValue::new(&mut snap.scale)
+                .speed(0.01)
+                .range(0.01..=100.0),
+        );
+        ui.end_row();
     });
 }

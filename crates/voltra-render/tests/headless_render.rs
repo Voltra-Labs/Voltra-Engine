@@ -380,12 +380,14 @@ fn draw_mesh_batches_binds_a_different_texture_per_range() {
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 0..6,
+            material: None,
         },
         MeshDraw {
             texture: &red,
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 6..12,
+            material: None,
         },
     ];
 

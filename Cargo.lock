@@ -290,6 +290,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "breakout"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "voltra-assets",
+ "voltra-core",
+ "voltra-ecs",
+ "voltra-render",
+ "voltra-scene",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -744,6 +757,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
+]
+
+[[package]]
+name = "dodge"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "voltra-assets",
+ "voltra-core",
+ "voltra-ecs",
+ "voltra-render",
+ "voltra-scene",
 ]
 
 [[package]]
@@ -3743,7 +3769,9 @@ dependencies = [
  "gilrs",
  "image",
  "js-sys",
+ "libloading",
  "log",
+ "notify-debouncer-full",
  "ron",
  "serde",
  "voltra-assets",
@@ -3772,7 +3800,6 @@ name = "voltra-editor"
 version = "0.1.0"
 dependencies = [
  "base64",
- "env_logger",
  "log",
  "ron",
  "serde",
@@ -3782,6 +3809,7 @@ dependencies = [
  "voltra-core",
  "voltra-ecs",
  "voltra-physics",
+ "voltra-player",
  "voltra-profile",
  "voltra-render",
  "voltra-scene",
@@ -3839,6 +3867,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-platformer"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "serde",
+ "voltra-assets",
+ "voltra-core",
+ "voltra-ecs",
+ "voltra-render",
+ "voltra-scene",
+]
+
+[[package]]
 name = "voltra-player"
 version = "0.1.0"
 dependencies = [
@@ -3868,6 +3909,7 @@ dependencies = [
  "image",
  "log",
  "pollster",
+ "serde",
  "voltra-testkit",
  "wgpu",
 ]

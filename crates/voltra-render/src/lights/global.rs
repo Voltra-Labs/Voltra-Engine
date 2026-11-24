@@ -16,6 +16,7 @@ use super::ALL_LIGHT_LAYERS;
 pub struct GlobalLight {
     /// Linear colour, multiplied by `intensity`.
     pub color: [f32; 3],
+    /// Multiplier on `color`.
     pub intensity: f32,
     /// The light layers it lights. [`ALL_LIGHT_LAYERS`] is more ambient.
     pub layers: u32,

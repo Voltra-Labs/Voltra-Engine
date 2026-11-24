@@ -24,6 +24,7 @@ impl<T> Default for Assets<T> {
 }
 
 impl<T> Assets<T> {
+    /// An empty arena.
     pub fn new() -> Self {
         Self {
             slots: Vec::new(),
@@ -81,6 +82,7 @@ impl<T> Assets<T> {
         self.live
     }
 
+    /// Whether no asset is stored.
     pub fn is_empty(&self) -> bool {
         self.live == 0
     }

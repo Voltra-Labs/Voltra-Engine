@@ -149,14 +149,17 @@ impl GpuContext {
         self.surface.is_some()
     }
 
+    /// The GPU device.
     pub fn device(&self) -> &wgpu::Device {
         &self.device
     }
 
+    /// The adapter's downlevel capability flags.
     pub fn downlevel(&self) -> wgpu::DownlevelFlags {
         self.downlevel
     }
 
+    /// The queue commands are submitted to.
     pub fn queue(&self) -> &wgpu::Queue {
         &self.queue
     }
@@ -173,6 +176,7 @@ impl GpuContext {
         self.frame_buffers.retire();
     }
 
+    /// The surface configuration: size, format and present mode.
     pub fn config(&self) -> &wgpu::SurfaceConfiguration {
         &self.config
     }
@@ -203,6 +207,7 @@ impl GpuContext {
         self.reconfigure();
     }
 
+    /// Applies the current configuration to the surface; does nothing without one.
     pub fn reconfigure(&mut self) {
         if let Some(surface) = &self.surface {
             surface.configure(&self.device, &self.config);
@@ -234,6 +239,7 @@ impl GpuContext {
         }
     }
 
+    /// Presents a frame from [`Self::acquire`] to the window.
     pub fn present(&self, frame: wgpu::SurfaceTexture) {
         self.queue.present(frame);
     }

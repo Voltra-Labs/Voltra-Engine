@@ -24,6 +24,7 @@ pub struct Shelves {
 }
 
 impl Shelves {
+    /// An empty sheet of `width` by `height` texels.
     pub fn new(width: u32, height: u32) -> Self {
         Self {
             width,
@@ -71,10 +72,12 @@ impl Shelves {
         Some((0, y))
     }
 
+    /// Width of the sheet, in texels.
     pub fn width(&self) -> u32 {
         self.width
     }
 
+    /// Height of the sheet, in texels.
     pub fn height(&self) -> u32 {
         self.height
     }

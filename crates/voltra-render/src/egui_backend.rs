@@ -26,7 +26,9 @@ use texture::BoundTexture;
 /// egui's logical points onto them.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ScreenDescriptor {
+    /// Width of the target, in physical pixels.
     pub width: u32,
+    /// Height of the target, in physical pixels.
     pub height: u32,
     /// Physical pixels per logical point — the display's scale factor.
     pub pixels_per_point: f32,

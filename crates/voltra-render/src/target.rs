@@ -22,6 +22,7 @@ pub struct RenderTarget {
 }
 
 impl RenderTarget {
+    /// A target of `width` by `height` texels in `format`, sampled with `filter`.
     pub fn new(
         device: &wgpu::Device,
         label: &str,
@@ -70,13 +71,23 @@ impl RenderTarget {
             return false;
         }
 
-        self.texture = create_texture(device, &self.label, self.format, width, height);
+        let old = std::mem::replace(
+            &mut self.texture,
+            create_texture(device, &self.label, self.format, width, height),
+        );
+        // Freed now rather than whenever the drop gets to it — on the web,
+        // whenever JavaScript collects it, and a window dragged wider makes
+        // a full-size texture per step. Safe: a target is resized before
+        // this frame records into it, and `destroy` waits for the frames
+        // already submitted.
+        old.destroy();
         (self.view, self.raw_view) = create_views(device, &self.texture, self.format);
         self.width = width;
         self.height = height;
         true
     }
 
+    /// The underlying texture.
     pub fn texture(&self) -> &wgpu::Texture {
         &self.texture
     }
@@ -96,14 +107,17 @@ impl RenderTarget {
         &self.raw_view
     }
 
+    /// The texel format.
     pub fn format(&self) -> wgpu::TextureFormat {
         self.format
     }
 
+    /// Width, in texels.
     pub fn width(&self) -> u32 {
         self.width
     }
 
+    /// Height, in texels.
     pub fn height(&self) -> u32 {
         self.height
     }
@@ -139,6 +153,42 @@ impl RenderTarget {
                 },
             ],
         })
+    }
+}
+
+impl RenderTarget {
+    /// Binds this target for sampling through its sRGB view: read back as
+    /// linear and written encoded again, what drawing one camera's picture
+    /// into another target through the sprite pipeline needs.
+    pub fn create_srgb_bind_group(
+        &self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(&self.label),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&self.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        })
+    }
+}
+
+/// Destroys the texture rather than leaving it to the drop, for the reason
+/// [`RenderTarget::resize`] does. Every target lives across frames — a
+/// renderer's, an app's, or the graph pool's, which drops one only after
+/// frames unused — so none is dropped while a recorded frame still uses it.
+impl Drop for RenderTarget {
+    fn drop(&mut self) {
+        self.texture.destroy();
     }
 }
 

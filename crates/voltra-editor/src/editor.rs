@@ -82,11 +82,25 @@ pub struct Editor {
     pub(crate) dialogs: SceneDialogs,
     /// Whether the Profiler window is up.
     pub(crate) profiler: ProfilerPanel,
+    /// The grid, and what snaps to it.
+    pub(crate) snap: crate::snap::Snap,
+    /// The log, kept for the Console window and the bridge.
+    pub(crate) console: crate::console::Console,
+    /// The Project Settings window.
+    pub(crate) settings: panels::project_settings::ProjectSettingsWindow,
+    /// The project's game, loaded from its library; see [`crate::game`].
+    pub(crate) game: crate::game::GameHost,
 }
 
 impl Editor {
     /// Lays out the whole editor. Called once per frame with the root `Ui`.
     pub fn ui(&mut self, ui: &mut Ui, frame: &mut UiFrame<'_>) {
+        // First of all, once: the game names its components before any scene
+        // that holds them is read.
+        crate::game::load_at_start(self, frame);
+        // Then whatever a change to its sources rebuilt, swapped in before
+        // anything reads the world this frame.
+        crate::game::reload::poll(self, frame);
         // Before anything reads the world: the preview's pose was for the
         // frame just drawn, and every panel and the history see only what
         // was authored.
@@ -145,8 +159,11 @@ impl Editor {
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);
-        // A floating window, over the docked panels.
+        // Floating windows, over the docked panels.
         panels::profiler::show(self, ui, frame);
+        panels::console::show(self, ui);
+        let assets = frame.textures.root().to_path_buf();
+        panels::project_settings::show(self, ui, &assets);
 
         // Last, so it sees everything every panel did.
         if editing {
@@ -207,8 +224,11 @@ impl Editor {
         self.shape.cancel_drag();
     }
 
-    /// Enters play, snapshotting the scene the first time.
+    /// Enters play, snapshotting the scene the first time — and, the first
+    /// time, starting a fresh game from the loaded library, whose turns run
+    /// until Stop. A paused session resumes the game it had.
     pub(crate) fn start_play(&mut self, frame: &mut UiFrame<'_>) {
+        let from_editing = self.play.state() == PlayState::Editing;
         self.play.play(
             PlayContext {
                 registry: &self.registry,
@@ -217,6 +237,9 @@ impl Editor {
             },
             frame,
         );
+        if from_editing && self.play.state() == PlayState::Playing {
+            frame.set_game(self.game.new_game());
+        }
     }
 
     /// Stops stepping and leaves the scene where it is.
@@ -240,6 +263,8 @@ impl Editor {
         if self.play.state() == PlayState::Editing {
             return false;
         }
+        // The game first: it belongs to the session the restore discards.
+        frame.set_game(None);
         self.play.stop(
             PlayContext {
                 registry: &self.registry,

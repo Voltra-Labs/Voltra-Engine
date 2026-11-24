@@ -1,0 +1,27 @@
+[package]
+name = "breakout"
+description = "Breakout: a Voltra game."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# A `cdylib` for the editor to load, play and reload; an `rlib` for the
+# binary that ships. No dev-dependencies: the tests then build the engine
+# with the features the library is built with, which is what lets
+# `tests/plugin.rs` load the library cargo built for the run.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "breakout"
+path = "src/main.rs"
+
+[dependencies]
+voltra-assets.workspace = true
+voltra-core.workspace = true
+voltra-ecs.workspace = true
+voltra-render.workspace = true
+voltra-scene.workspace = true
+log.workspace = true
+serde.workspace = true

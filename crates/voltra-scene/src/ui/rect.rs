@@ -5,11 +5,14 @@ use voltra_render::glam::Vec2;
 /// An axis-aligned box in screen space, in points, origin top-left, y down.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect {
+    /// The top-left corner, in points.
     pub min: Vec2,
+    /// The bottom-right corner, in points.
     pub max: Vec2,
 }
 
 impl Rect {
+    /// A rect from corner `min` to corner `max`.
     pub fn new(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
     }
@@ -19,12 +22,31 @@ impl Rect {
         Self::new(Vec2::ZERO, size.max(Vec2::ZERO))
     }
 
+    /// Width and height, in points.
     pub fn size(&self) -> Vec2 {
         self.max - self.min
     }
 
+    /// The middle of the rect, in points.
     pub fn center(&self) -> Vec2 {
         (self.min + self.max) * 0.5
+    }
+
+    /// The same box moved by `by`.
+    pub fn translated(&self, by: Vec2) -> Self {
+        Self::new(self.min + by, self.max + by)
+    }
+
+    /// The part of this box inside `other`: empty — zero width or height —
+    /// when they do not overlap, never inside out.
+    pub fn intersection(&self, other: Rect) -> Self {
+        let min = self.min.max(other.min);
+        Self::new(min, self.max.min(other.max).max(min))
+    }
+
+    /// The smallest box holding both.
+    pub fn union(&self, other: Rect) -> Self {
+        Self::new(self.min.min(other.min), self.max.max(other.max))
     }
 
     /// Edges included. An empty box contains nothing.
@@ -54,10 +76,23 @@ impl Rect {
 /// `Transform`, if any, is ignored.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiRect {
+    /// Where in the parent the box's top-left corner is anchored: `(0, 0)` is the parent's top-left, `(1, 1)` its bottom-right.
     pub anchor_min: Vec2,
+    /// Where in the parent the box's bottom-right corner is anchored, as `anchor_min`.
     pub anchor_max: Vec2,
+    /// Points added to the top-left corner after anchoring.
     pub offset_min: Vec2,
+    /// Points added to the bottom-right corner after anchoring.
     pub offset_max: Vec2,
+    /// Where it goes among the children of a [`UiStack`](super::UiStack):
+    /// lower first, ties by entity index. Ignored anywhere else; `0`, the
+    /// default, is not written.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub slot: i32,
+}
+
+fn is_zero(slot: &i32) -> bool {
+    *slot == 0
 }
 
 impl Default for UiRect {
@@ -79,6 +114,7 @@ impl UiRect {
             anchor_max: anchor,
             offset_min: min,
             offset_max: min + size,
+            slot: 0,
         }
     }
 
@@ -89,7 +125,14 @@ impl UiRect {
             anchor_max: Vec2::ONE,
             offset_min: Vec2::splat(margin),
             offset_max: Vec2::splat(-margin),
+            slot: 0,
         }
+    }
+
+    /// The same box, `slot`th among a stack's children.
+    pub fn with_slot(mut self, slot: i32) -> Self {
+        self.slot = slot;
+        self
     }
 
     /// The box inside `parent`.

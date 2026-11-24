@@ -29,7 +29,9 @@ pub enum BodyType {
 /// — is `0.0` instead of a branch repeated at each of them.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RigidBody {
+    /// How the body moves, if at all.
     pub body_type: BodyType,
+    /// World units per second.
     pub velocity: Vec2,
     /// Radians per second, counter-clockwise.
     pub angular_velocity: f32,
@@ -57,6 +59,12 @@ pub struct RigidBody {
     /// sets the same value it already has.
     #[serde(default = "can_sleep_by_default")]
     pub can_sleep: bool,
+    /// Whether a fast move is swept against other moving bodies too, not
+    /// only against static geometry: Box2D's `isBullet`. For a projectile
+    /// that must not pass through a thin crate; off by default, since every
+    /// dynamic body already stops at walls however fast it goes.
+    #[serde(default)]
+    pub bullet: bool,
 }
 
 fn can_sleep_by_default() -> bool {
@@ -75,6 +83,7 @@ impl Default for RigidBody {
             angular_damping: 0.0,
             lock_rotation: false,
             can_sleep: true,
+            bullet: false,
         }
     }
 }
@@ -185,6 +194,7 @@ mod tests {
             angular_damping: 0.2,
             lock_rotation: false,
             can_sleep: false,
+            bullet: true,
         };
 
         let text = ron::to_string(&body).expect("serialise");

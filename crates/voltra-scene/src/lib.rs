@@ -4,6 +4,8 @@
 //! `voltra-render`, which knows nothing about entities. Dependencies point
 //! down into both and never back up.
 
+#![warn(missing_docs)]
+
 pub mod animation;
 pub mod animator;
 pub mod audio_listener;
@@ -22,6 +24,7 @@ pub mod hierarchy;
 pub mod joint;
 pub mod keyframes;
 pub mod light;
+pub mod locale;
 pub mod material;
 pub mod name;
 pub mod one_way;
@@ -36,9 +39,12 @@ pub mod scene_id;
 pub mod shadow_caster;
 pub mod sorting;
 pub mod sprite;
+pub mod sprite_material;
 pub mod text;
 pub mod tilemap;
+pub mod timer;
 pub mod transform;
+pub mod tween;
 pub mod ui;
 
 pub use animation::SpriteAnimation;
@@ -47,10 +53,10 @@ pub use audio_listener::AudioListener;
 pub use audio_source::AudioSource;
 pub use batch::{GpuEmitterDraw, SpriteBatch, SpriteRange, Surface};
 pub use body::{BodyType, RigidBody};
-pub use camera::Camera;
+pub use camera::{Camera, CameraTarget, Viewport};
 pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds};
 pub use character::{CharacterBody2D, CharacterContact};
-pub use collider::Collider;
+pub use collider::{Collider, ConvexPolygon, PolygonError, WorldShape};
 pub use filter::{CollisionLayers, Sensor};
 pub use format::{ComponentRegistry, SceneError};
 pub use global_light::GlobalLight2D;
@@ -58,6 +64,7 @@ pub use hierarchy::{Parent, WorldTransforms};
 pub use joint::{AngleLimit, Joint2D, JointImpulses, JointKind, Motor, Spring};
 pub use keyframes::{AnimationClip, AnimationClips, AnimationPlayer};
 pub use light::{LightCone, LightShadows, PointLight2D};
+pub use locale::Locale;
 pub use material::PhysicsMaterial;
 pub use name::Name;
 pub use one_way::OneWay;
@@ -70,7 +77,13 @@ pub use scene_id::{SceneId, UnknownComponents};
 pub use shadow_caster::{CasterShape, ShadowCaster2D};
 pub use sorting::SortingLayers;
 pub use sprite::{draw_key, Sprite};
+pub use sprite_material::SpriteMaterial;
 pub use text::{Align, Text};
 pub use tilemap::{Tile, TileMeshCache, Tilemap};
+pub use timer::{TimerId, Timers};
 pub use transform::Transform;
-pub use ui::{UiButton, UiButtons, UiLayout, UiRect};
+pub use tween::{TweenId, Tweens};
+pub use ui::{
+    UiButton, UiControls, UiLayout, UiRect, UiScroll, UiSlice, UiSlider, UiSliderPart, UiStack,
+    UiTextField, UiToggle,
+};

@@ -8,6 +8,7 @@ use voltra_assets::Textures;
 use voltra_render::{Filter, RenderTarget, Renderer};
 
 use super::Headless;
+use crate::app::draw::shots;
 use crate::app::draw::world::WorldDraw;
 use crate::app::ui_frame::resolve_world_textures;
 
@@ -15,8 +16,11 @@ use crate::app::ui_frame::resolve_world_textures;
 /// shows them (sRGB).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screenshot {
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
+    /// Pixels, four bytes each (red, green, blue, alpha), row by row, `width * height * 4` bytes.
     pub rgba: Vec<u8>,
 }
 
@@ -89,6 +93,7 @@ impl Headless {
     pub fn screenshot(&mut self, width: u32, height: u32) -> Result<Screenshot, ScreenshotError> {
         let (width, height) = (width.max(1), height.max(1));
         self.ensure_renderer(width, height)?;
+        self.app.resolve_materials();
         let app = &mut self.app;
         let (
             Some(renderer),
@@ -117,6 +122,61 @@ impl Headless {
         app.framing.apply(&app.world, &mut renderer.camera);
         // A texture a tick named since the last shot.
         resolve_world_textures(&mut app.world, textures, &device, &queue);
+        voltra_scene::camera::target::resolve_world(&mut app.world, textures, &device, &queue);
+        let frame_shots = voltra_scene::camera::shots(&app.world);
+        if shots::needs_shots(&frame_shots) {
+            voltra_scene::text::prepare(&app.world, fonts, 1.0);
+            fonts.upload(textures, &device, &queue);
+            let rects = shots::ShotDraw {
+                world: &app.world,
+                renderer,
+                textures,
+                atlases,
+                fonts,
+                silhouettes: app.silhouettes.as_mut(),
+                sorting_layers: &app.sorting_layers,
+                batch: &mut app.frame_batch,
+                tile_meshes: &mut app.tile_meshes,
+                gpu_rings: &app.gpu_rings,
+                materials: app.materials.as_ref(),
+                material_bank: &mut app.material_bank,
+                pool: &mut app.camera_pool,
+                elapsed: app.elapsed,
+            }
+            .draw(&frame_shots, (width, height));
+            let hud = shots::hud(&app.world, atlases, textures, fonts, (width, height), 1.0);
+            let hud_mesh = hud.upload(&device);
+            let white = renderer.white_bind_group().clone();
+            let hud_draws: Vec<voltra_render::MeshDraw<'_>> = hud
+                .ranges
+                .iter()
+                .map(|range| voltra_render::MeshDraw {
+                    texture: match range.texture {
+                        Some(handle) => textures.bind_group(handle),
+                        None => &white,
+                    },
+                    normal: None,
+                    light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
+                    indices: range.indices.clone(),
+                    material: None,
+                })
+                .collect();
+            let placed = shots::placed(&app.camera_pool, &rects);
+            renderer.composite(
+                graded,
+                &placed,
+                voltra_render::Layer {
+                    mesh: hud_mesh.as_ref(),
+                    draws: &hud_draws,
+                },
+            );
+            let rgba = voltra_render::read_rgba8(&device, &queue, graded.texture(), width, height);
+            return Ok(Screenshot {
+                width,
+                height,
+                rgba,
+            });
+        }
         WorldDraw {
             world: &app.world,
             renderer,
@@ -128,6 +188,8 @@ impl Headless {
             batch: &mut app.frame_batch,
             tile_meshes: &mut app.tile_meshes,
             gpu_rings: &app.gpu_rings,
+            materials: app.materials.as_ref(),
+            material_bank: &mut app.material_bank,
             elapsed: app.elapsed,
             scale: 1.0,
         }
@@ -155,6 +217,8 @@ impl Headless {
         let queue = renderer.context().queue();
         let format = renderer.context().format();
         let mut textures = Textures::new(device, queue, renderer.texture_layout(), root);
+        textures.set_filter(app.texture_filter);
+        textures.set_target_format(format);
         resolve_world_textures(&mut app.world, &mut textures, device, queue);
         app.scene_target = Some(RenderTarget::new(
             device,

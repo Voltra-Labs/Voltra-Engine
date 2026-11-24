@@ -39,10 +39,12 @@ pub struct World {
 }
 
 impl World {
+    /// An empty world.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Allocates a live entity with no components.
     pub fn spawn(&mut self) -> Entity {
         self.entities.spawn()
     }
@@ -63,10 +65,27 @@ impl World {
         self.entities.despawn(entity)
     }
 
+    /// Despawns every entity and drops every storage, empty or not.
+    ///
+    /// Not `World::new()`: the entity allocator is kept, so every handle
+    /// held elsewhere stays stale instead of naming a new entity that took
+    /// its slot and generation. And the storages go too, not just their
+    /// contents — a storage runs the code of the crate that created it, and
+    /// a host about to unload a game's library must not keep one.
+    pub fn clear(&mut self) {
+        let alive: Vec<Entity> = self.entities().collect();
+        for entity in alive {
+            self.despawn(entity);
+        }
+        self.storages.clear();
+    }
+
+    /// Whether `entity` is live.
     pub fn is_alive(&self, entity: Entity) -> bool {
         self.entities.is_alive(entity)
     }
 
+    /// How many entities are live.
     pub fn entity_count(&self) -> usize {
         self.entities.len()
     }
@@ -110,14 +129,17 @@ impl World {
             .insert(entity, component)
     }
 
+    /// The `T` of `entity`, if it has one.
     pub fn get<T: 'static>(&self, entity: Entity) -> Option<&T> {
         self.storage::<T>()?.get(entity)
     }
 
+    /// The `T` of `entity`, mutably, if it has one.
     pub fn get_mut<T: 'static>(&mut self, entity: Entity) -> Option<&mut T> {
         self.storage_mut::<T>()?.get_mut(entity)
     }
 
+    /// Removes `entity`'s `T`, returning it.
     pub fn remove<T: 'static>(&mut self, entity: Entity) -> Option<T> {
         self.storage_mut::<T>()?.remove(entity)
     }
@@ -132,6 +154,7 @@ impl World {
         self.storage::<T>().into_iter().flat_map(SparseSet::iter)
     }
 
+    /// Every entity holding a `T`, in dense order, the components mutably.
     pub fn query_mut<T: 'static>(&mut self) -> impl Iterator<Item = (Entity, &mut T)> {
         self.storage_mut::<T>()
             .into_iter()
@@ -340,5 +363,19 @@ mod tests {
             .map(|(e, _, _)| e)
             .collect();
         assert_eq!(found, vec![keep]);
+    }
+
+    #[test]
+    fn clearing_despawns_everything_and_keeps_old_handles_stale() {
+        let mut world = World::new();
+        let old = world.spawn();
+        world.insert(old, 7_u32);
+        world.clear();
+
+        assert_eq!(world.entity_count(), 0);
+        assert_eq!(world.component_count::<u32>(), 0);
+        let new = world.spawn();
+        assert_ne!(new, old, "the slot comes back with a new generation");
+        assert!(world.get::<u32>(old).is_none());
     }
 }

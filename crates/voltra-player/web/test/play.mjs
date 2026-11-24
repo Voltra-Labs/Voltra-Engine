@@ -1,4 +1,4 @@
-// A game with its own code, played in the browser: the platformer example
+// A game with its own code, played in the browser: the platformer game
 // built for the web, its walker walked right with the keyboard into a coin,
 // and the coin's sound heard — on WebGPU and on WebGL2.
 //

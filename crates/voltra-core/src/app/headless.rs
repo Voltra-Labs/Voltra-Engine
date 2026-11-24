@@ -81,6 +81,8 @@ impl Headless {
         let mut fonts = Fonts::new(root.clone());
         voltra_scene::text::resolve_fonts(&mut app.world, &mut fonts);
         app.fonts = Some(fonts);
+        app.open_locale(&root);
+        app.materials = Some(voltra_assets::Materials::new(root.clone()));
         let mut clips = Clips::new(root.clone());
         resolve_world_clips(&mut app.world, &mut clips);
         app.clips = Some(clips);
@@ -131,6 +133,50 @@ impl Headless {
         self.logs.drain()
     }
 
+    /// Lays the UI out on a screen `size` points across, one pixel a point,
+    /// so the controls take the input fed to [`input_mut`](Self::input_mut)
+    /// as a window's would: the cursor in pixels, the buttons, the wheel,
+    /// the keys, a pad and typing. Without one the controls are left alone.
+    pub fn with_screen(mut self, size: voltra_render::glam::Vec2) -> Self {
+        self.app.headless_screen = Some(size);
+        self
+    }
+
+    /// The input the next frame reads: drive the mouse, the keys, a pad and
+    /// the typing with its mutators. The frame's edges clear after each
+    /// step, as a window's do.
+    pub fn input_mut(&mut self) -> &mut crate::Input {
+        &mut self.app.input
+    }
+
+    /// The controls after the last frame: what was clicked, changed or
+    /// submitted, and what has the focus.
+    pub fn controls(&self) -> &voltra_scene::UiControls {
+        &self.app.ui_controls
+    }
+
+    /// The faces the world's texts resolved to: what measures a text's
+    /// lines without drawing it.
+    pub fn fonts(&self) -> Option<&Fonts> {
+        self.app.fonts.as_ref()
+    }
+
+    /// The current language and its strings.
+    pub fn locale(&self) -> &voltra_scene::Locale {
+        &self.app.locale
+    }
+
+    /// Switches the language, as a game's options screen does; the texts
+    /// take it on the next frame. Answers whether its table was read.
+    pub fn set_language(&mut self, language: &str) -> bool {
+        self.app.locale.set_language(language)
+    }
+
+    /// Moves the focus to `control`, as a menu opening does.
+    pub fn focus(&mut self, control: Option<voltra_ecs::Entity>) {
+        self.app.ui_controls.focus(control);
+    }
+
     /// Frames run so far.
     pub fn frames(&self) -> u64 {
         self.frames
@@ -158,14 +204,17 @@ impl Headless {
         driven
     }
 
+    /// The world.
     pub fn world(&self) -> &World {
         &self.app.world
     }
 
+    /// The world, mutably.
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.app.world
     }
 
+    /// The registry of components scene files can name.
     pub fn registry(&self) -> &ComponentRegistry {
         &self.app.registry
     }
@@ -198,6 +247,38 @@ impl Headless {
             .ok_or_else(|| HeadlessError::NoComponent(name.to_owned()))??;
         // A component read from text names no handles yet.
         self.app.spawned.push(entity);
+        self.app.resolve_spawned();
+        Ok(())
+    }
+
+    /// Replaces the running game with a fresh one made by `library`, keeping
+    /// the world: written out through the old game's registry, read back
+    /// through the new one's — what the editor does when a game's code is
+    /// rebuilt mid-play. The old game is dropped first; its library may be
+    /// closed once this returns. A scene the new types cannot read is left
+    /// as it was, with the old game running, and the error answered.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn swap_game(
+        &mut self,
+        library: &crate::game::library::GameLibrary,
+    ) -> Result<(), SceneError> {
+        let mut registry = ComponentRegistry::with_defaults();
+        library.register(&mut registry);
+        let old = self.app.game.take();
+        if let Err(error) =
+            crate::game::swap::rebuild(&mut self.app.world, &self.app.registry, &registry)
+        {
+            self.app.game = old;
+            return Err(error);
+        }
+        drop(old);
+        self.app.registry = registry;
+        self.app.game = Some(crate::game::Running::new(library.new_game()));
+        // Contacts, sleep and pending events all name entities the rebuild
+        // replaced; every handle is resolved again for the new ones.
+        self.app.physics_world.reset();
+        self.app.pending_events.clear();
+        self.app.spawned.extend(self.app.world.entities());
         self.app.resolve_spawned();
         Ok(())
     }

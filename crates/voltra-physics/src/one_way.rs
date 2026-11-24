@@ -64,11 +64,22 @@ impl OneWayPasses {
         self.next.clear();
     }
 
+    /// Whether `a` and `b` are being let through, as of the last step.
+    pub(crate) fn is_passing(&self, a: Entity, b: Entity) -> bool {
+        let pair = if a.index() <= b.index() {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        self.passing.contains(&pair) || self.next.contains(&pair)
+    }
+
     /// How many pairs are passing through.
     pub fn len(&self) -> usize {
         self.passing.len()
     }
 
+    /// Whether no pair is passing through.
     pub fn is_empty(&self) -> bool {
         self.passing.is_empty()
     }

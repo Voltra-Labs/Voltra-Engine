@@ -13,6 +13,8 @@
 //! — a path that would leave it, by `..`, an absolute path or a link, is
 //! refused.
 
+#![warn(missing_docs)]
+
 pub mod project;
 pub mod server;
 pub mod tools;

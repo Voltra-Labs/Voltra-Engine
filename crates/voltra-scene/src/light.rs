@@ -211,6 +211,19 @@ pub fn gather(
     let Some(camera) = camera::active(world).and_then(|entity| world.get::<Camera>(entity)) else {
         return Lighting::default();
     };
+    gather_through(world, camera, view_min, view_max, sprites, textures)
+}
+
+/// [`gather`] for the frame seen through `camera` — one of several a frame
+/// draws, each with its own ambient colour and shadow resolution.
+pub fn gather_through(
+    world: &World,
+    camera: &Camera,
+    view_min: Vec2,
+    view_max: Vec2,
+    sprites: Option<crate::shadow_caster::SpriteShapes<'_>>,
+    textures: Option<&Textures>,
+) -> Lighting {
     let ambient = camera.ambient;
     if ambient.is_none() {
         return Lighting::default();

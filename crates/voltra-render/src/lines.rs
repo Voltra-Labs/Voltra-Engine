@@ -42,13 +42,16 @@ const MIN_LENGTH: f32 = 1e-6;
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct LineVertex {
+    /// One endpoint of the segment, in the world.
     pub a: [f32; 2],
+    /// The other endpoint of the segment, in the world.
     pub b: [f32; 2],
     /// `.x` picks the endpoint — `0.0` for `a`, `1.0` for `b`. `.y` picks the
     /// side, `-1.0` or `+1.0`, which the shader multiplies by half the width.
     pub corner: [f32; 2],
     /// Width in logical pixels, applied after projection.
     pub width: f32,
+    /// RGBA colour of the line.
     pub color: [f32; 4],
 }
 
@@ -78,6 +81,7 @@ pub struct ViewportBinding {
 }
 
 impl ViewportBinding {
+    /// Creates the viewport-size uniform with its layout and bind group.
     pub fn new(device: &wgpu::Device) -> Self {
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("viewport-layout"),
@@ -134,6 +138,7 @@ impl ViewportBinding {
         &self.layout
     }
 
+    /// The bind group holding the viewport size.
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }
@@ -196,6 +201,7 @@ impl LineBatch {
         self.vertices.len() / 4
     }
 
+    /// Whether no segments are held.
     pub fn is_empty(&self) -> bool {
         self.vertices.is_empty()
     }

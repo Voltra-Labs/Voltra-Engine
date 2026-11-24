@@ -17,7 +17,7 @@ mod silhouette;
 mod starting;
 
 pub use outline::{occluders, outlines_of, CIRCLE_SIDES};
-pub use silhouette::{prepare, silhouette_key, SpriteShapes};
+pub use silhouette::{prepare, silhouette_key, sprite_silhouette, SpriteShapes};
 pub use starting::{starting_polygon, EDIT_CIRCLE_SIDES};
 
 /// Blocks the light of every [`PointLight2D`](crate::PointLight2D) that casts
@@ -25,6 +25,7 @@ pub use starting::{starting_polygon, EDIT_CIRCLE_SIDES};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ShadowCaster2D {
+    /// What blocks the light.
     pub shape: CasterShape,
     /// Shadowed by its own near side. Off — the default — light reaches it
     /// and its shadow starts behind it: a wall's lit face stays lit.
@@ -62,6 +63,7 @@ pub enum CasterShape {
     /// Points in the entity's own space, carried by its transform and its
     /// parents' like a sprite.
     Polygon {
+        /// The outline's corners.
         points: Vec<Vec2>,
         /// The last point joins the first. Open, it is a line that blocks
         /// light from both sides.

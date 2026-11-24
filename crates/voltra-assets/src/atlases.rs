@@ -140,10 +140,12 @@ impl Atlases {
         &self.root
     }
 
+    /// How many slicings are stored.
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    /// Whether no slicing is stored.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

@@ -3,7 +3,10 @@
 //! Everything GPU-side lives in `voltra-render`; this crate is the only place
 //! allowed to depend on `winit`.
 
+#![warn(missing_docs)]
+
 pub mod app;
+pub mod game;
 pub mod input;
 pub mod logging;
 pub mod saves;
@@ -13,7 +16,10 @@ pub mod ui;
 pub mod window;
 
 pub use app::headless::{Headless, HeadlessError, Screenshot, ScreenshotError};
-pub use app::{App, SceneLoad, Tick, UiFrame, DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS};
+pub use app::{
+    parse_sorting_layers, App, SceneLoad, Tick, UiFrame, DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS,
+};
+pub use game::Game;
 pub use input::{
     ActionMap, ActionState, Binding, Direction, Input, MouseButton, PadAxis, PadButton,
 };

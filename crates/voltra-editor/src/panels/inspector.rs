@@ -9,9 +9,12 @@ mod animator;
 mod audio_source;
 mod camera;
 mod camera_rig;
+mod camera_view;
 mod character;
+mod collider;
 mod collision;
 mod delete;
+mod game_components;
 mod global_light;
 mod joint;
 mod light;
@@ -24,18 +27,26 @@ mod prefab;
 mod shadow_caster;
 mod sorting_layer;
 mod sprite;
+mod sprite_material;
 mod text;
 mod tilemap;
 mod transform;
 mod ui_button;
+mod ui_controls;
 mod ui_rect;
+mod ui_scroll;
+mod ui_slice;
+mod ui_slider;
+mod ui_stack;
+mod ui_text_field;
+mod ui_toggle;
 
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
     hierarchy, ui, AudioSource, Camera, Collider, Parallax, ParticleEmitter, Sprite, Text, Tilemap,
-    Transform, UiButton, UiLayout, UiRect,
+    Transform, UiButton, UiLayout, UiRect, UiStack,
 };
 
 use crate::editor::Editor;
@@ -88,12 +99,17 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     claim = transform::show(ui, transform);
                 }
                 let parent_rect = ui_parent_rect(ui, frame, entity);
+                let stacked = hierarchy::parent_of(frame.world, entity)
+                    .is_some_and(|parent| frame.world.get::<UiStack>(parent).is_some());
                 if let Some(rect) = frame.world.get_mut::<UiRect>(entity) {
-                    claim = claim.or(ui_rect::show(ui, rect, parent_rect));
+                    claim = claim.or(ui_rect::show(ui, rect, parent_rect, stacked));
                 }
+                let shown = frame.world.get::<Sprite>(entity).map_or(0, |s| s.frame);
                 if let Some(button) = frame.world.get_mut::<UiButton>(entity) {
-                    claim = claim.or(ui_button::show(ui, button));
+                    claim = claim.or(ui_button::show(ui, button, shown));
                 }
+                claim = claim.or(ui_stack::show(ui, frame.world, entity));
+                claim = claim.or(ui_controls::show(ui, frame.world, entity));
                 let on_screen = ui::is_ui(frame.world, entity);
                 // Both are read before the world is borrowed mutably below:
                 // the thumbnail map and the atlas store hang off `frame`, and
@@ -124,6 +140,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         preview,
                     ));
                 }
+                if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
+                    let materials = frame.materials.as_deref_mut();
+                    claim = claim.or(sprite_material::show(ui, &mut sprite.material, materials));
+                }
+                claim = claim.or(ui_slice::show(ui, frame.world, entity));
                 if frame.world.get::<Sprite>(entity).is_some() {
                     ui.separator();
                     claim = claim.or(animation::show(ui, frame.world, entity, frames_in_atlas));
@@ -147,6 +168,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             paint: &mut editor.paint,
                         },
                     ));
+                }
+                if let Some(map) = frame.world.get_mut::<Tilemap>(entity) {
+                    let materials = frame.materials.as_deref_mut();
+                    claim = claim.or(sprite_material::show(ui, &mut map.material, materials));
                 }
                 if let Some(text) = frame.world.get_mut::<Text>(entity) {
                     ui.separator();
@@ -192,6 +217,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.separator();
                     claim = claim.or(camera::show(ui, camera));
                 }
+                if frame.world.get::<Camera>(entity).is_some() {
+                    claim = claim.or(camera_view::show(ui, frame.world, entity));
+                }
                 claim = claim.or(camera_rig::show(ui, frame.world, entity));
                 if let Some(source) = frame.world.get_mut::<AudioSource>(entity) {
                     ui.separator();
@@ -214,11 +242,29 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     .get::<Tilemap>(entity)
                     .is_some_and(|map| map.collision);
                 let has_collider = frame.world.get::<Collider>(entity).is_some();
+                let textured = frame
+                    .world
+                    .get::<Sprite>(entity)
+                    .is_some_and(|sprite| sprite.texture.is_some());
+                if let Some(shape) = frame.world.get_mut::<Collider>(entity) {
+                    ui.separator();
+                    let outcome = collider::show(ui, shape, textured);
+                    claim = claim.or(outcome.claim);
+                    if outcome.fit_to_sprite {
+                        claim = claim.or(fit_to_sprite(frame, entity));
+                    }
+                }
                 if has_collider || solid_layer {
                     ui.separator();
                     claim = claim.or(collision::show(ui, frame.world, entity));
                 }
                 claim = claim.or(character::show(ui, frame.world, entity));
+                claim = claim.or(game_components::show(
+                    ui,
+                    frame.world,
+                    entity,
+                    &editor.registry,
+                ));
                 // Keyed off the shape it would take — a collider, a solid
                 // layer's boxes, a sprite's quad — or off the caster itself.
                 let has_sprite = frame.world.get::<Sprite>(entity).is_some();
@@ -290,6 +336,31 @@ fn ui_parent_rect(ui: &Ui, frame: &UiFrame<'_>, entity: voltra_ecs::Entity) -> u
 /// Dragged *or* focused: a `DragValue` can also be clicked into and typed in,
 /// and an entry that closed between two keystrokes would be one undo per
 /// character.
+/// Shapes `entity`'s collider as the convex hull of its sprite's opaque
+/// pixels, grown to eight corners at most; a sprite with nothing opaque, or
+/// silhouettes not loaded, leaves it as it was and says why.
+fn fit_to_sprite(frame: &mut UiFrame<'_>, entity: voltra_ecs::Entity) -> Option<&'static str> {
+    let points: Vec<Vec2> = frame
+        .sprite_silhouette(entity)
+        .into_iter()
+        .flatten()
+        .collect();
+    match voltra_scene::ConvexPolygon::enclosing(&points) {
+        Ok(points) => {
+            let collider = frame.world.get_mut::<Collider>(entity)?;
+            *collider = Collider::Polygon {
+                points,
+                radius: 0.0,
+            };
+            Some("Fit collider to sprite")
+        }
+        Err(error) => {
+            log::warn!("cannot fit the collider to the sprite: {error} in its silhouette");
+            None
+        }
+    }
+}
+
 pub(super) fn active(response: &egui::Response, label: &'static str) -> Option<&'static str> {
     (response.dragged() || response.has_focus()).then_some(label)
 }

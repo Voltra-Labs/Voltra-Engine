@@ -1,0 +1,9 @@
+// See outline.wgsl.
+(
+    version: 1,
+    shader: "materials/outline.wgsl",
+    uniforms: {
+        "color": Color((0.1, 1.0, 0.2, 1.0)),
+        "width": Float(1.0),
+    },
+)

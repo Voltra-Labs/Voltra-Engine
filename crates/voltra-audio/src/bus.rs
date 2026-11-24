@@ -162,6 +162,7 @@ impl Buses {
         self.names.iter().map(String::as_str)
     }
 
+    /// How many buses there are.
     pub fn len(&self) -> usize {
         self.names.len()
     }

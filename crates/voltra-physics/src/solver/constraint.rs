@@ -83,10 +83,12 @@ impl ContactConstraint {
         Vec2::new(-self.normal.y, self.normal.x)
     }
 
+    /// The contact points in use.
     pub fn points(&self) -> &[ContactPoint] {
         &self.points[..self.count as usize]
     }
 
+    /// The contact points in use, mutably.
     pub fn points_mut(&mut self) -> &mut [ContactPoint] {
         &mut self.points[..self.count as usize]
     }

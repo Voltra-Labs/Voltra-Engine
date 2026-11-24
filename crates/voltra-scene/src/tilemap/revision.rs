@@ -28,6 +28,7 @@ impl Revision {
         Self(NEXT.fetch_add(1, Ordering::Relaxed))
     }
 
+    /// The revision as a number, which only ever grows.
     pub fn get(self) -> u64 {
         self.0
     }

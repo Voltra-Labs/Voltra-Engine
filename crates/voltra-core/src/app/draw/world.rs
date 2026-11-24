@@ -27,6 +27,9 @@ pub(in crate::app) struct WorldDraw<'a> {
     pub batch: &'a mut SpriteBatch,
     pub tile_meshes: &'a mut TileMeshCache,
     pub gpu_rings: &'a GpuParticleRings,
+    /// The materials sprites name, and what they are drawn with.
+    pub materials: Option<&'a voltra_assets::Materials>,
+    pub material_bank: &'a mut Option<voltra_render::material::MaterialBank>,
     /// Seconds the app has run, for animated tiles.
     pub elapsed: f64,
     /// Physical pixels per point, for text and the HUD.
@@ -55,11 +58,28 @@ impl WorldDraw<'_> {
             .visible_in(view_min(&camera), view_max(&camera))
             .at_time(clock_seconds(self.elapsed))
             .with_layers(self.sorting_layers);
+        let sheets = match self.materials {
+            Some(materials) => sheets.with_materials(materials),
+            None => sheets,
+        };
         self.batch.rebuild(self.world, sheets, self.tile_meshes);
         let mesh = self.batch.upload(&device);
         let white = self.renderer.white_bind_group().clone();
-        let draws =
-            crate::app::scene_draws::scene_draws(self.batch, self.textures, &white, self.gpu_rings);
+        let bank = crate::app::scene_draws::prepare_materials(
+            self.material_bank,
+            self.renderer,
+            target.format(),
+            self.batch,
+            self.materials,
+        );
+        let draws = crate::app::scene_draws::scene_draws(
+            self.batch,
+            self.textures,
+            &white,
+            self.gpu_rings,
+            bank,
+            None,
+        );
         // The game's HUD over the scene, in the target's pixels: what the
         // window shows in a build.
         let hud = ui_batch(

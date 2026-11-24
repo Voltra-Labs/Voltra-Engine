@@ -23,6 +23,7 @@ mod startup;
 mod thumbnails;
 mod tick;
 mod tick_audio;
+mod tick_time;
 mod ui_frame;
 mod ui_input;
 #[cfg(target_arch = "wasm32")]
@@ -60,13 +61,15 @@ use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 pub use input_map::DEFAULT_INPUT_MAP;
 pub use scenes::SceneLoad;
-pub use sorting_layers::DEFAULT_SORTING_LAYERS;
+pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
 pub use tick::Tick;
 pub use tick_audio::TickAudio;
 pub use ui_frame::UiFrame;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
 
+/// The application: the window, the world and the frame loop that runs
+/// the game's callbacks each frame.
 #[derive(Default)]
 pub struct App {
     config: WindowConfig,
@@ -89,6 +92,15 @@ pub struct App {
     renderer: Option<Renderer>,
     textures: Option<Textures>,
     atlases: Option<Atlases>,
+    /// The materials sprites and tile layers name.
+    pub(crate) materials: Option<voltra_assets::Materials>,
+    /// The pipelines and uniforms they draw with; made with the first one.
+    material_bank: Option<voltra_render::material::MaterialBank>,
+    /// The scene and picture targets of the screen's cameras, when a frame
+    /// draws several: split screen, a pixel-perfect view.
+    camera_pool: Vec<(voltra_render::RenderTarget, voltra_render::RenderTarget)>,
+    /// How images are filtered: the project's choice, nearest for pixel art.
+    texture_filter: voltra_render::Filter,
     /// Sprites' traced outlines, for shadow casters shaped by their sprite.
     /// `None` until `resumed`, for the root, like the stores around it.
     silhouettes: Option<voltra_assets::Silhouettes>,
@@ -118,6 +130,9 @@ pub struct App {
     update: Option<TickFn>,
     /// The game's fixed tick, run before each physics step.
     fixed_update: Option<TickFn>,
+    /// The game's own code, run after the hooks above in both turns: one
+    /// handed to `with_game`, or the one an editor's Play put in.
+    game: Option<crate::game::Running>,
     /// Collision events the per-frame tick has not been handed yet.
     ///
     /// A frame can owe two steps, and `PhysicsWorld` only keeps the last
@@ -134,8 +149,23 @@ pub struct App {
     /// Whether `sorting_layers` came from `with_sorting_layers`, which the
     /// conventional file must not then overwrite.
     sorting_layers_from_code: bool,
-    /// The game's buttons: hover, press, focus and this frame's clicks.
-    ui_buttons: voltra_scene::UiButtons,
+    /// The game's controls: hover, press, focus, and this frame's clicks,
+    /// changes and submissions.
+    ui_controls: voltra_scene::UiControls,
+    /// Whether the window takes IME input: while a text field is focused.
+    ime_allowed: bool,
+    /// Properties moving to values over time, started from the ticks.
+    pub(crate) tweens: voltra_scene::Tweens,
+    /// Moments to come, asked for from the ticks.
+    pub(crate) timers: voltra_scene::Timers,
+    /// The language the game starts in, before the locale is opened; empty
+    /// for English.
+    language: String,
+    /// The current language and its strings.
+    pub(crate) locale: voltra_scene::Locale,
+    /// The screen a windowless run lays its UI out on, in points, if it
+    /// has one: what lets a headless test press its controls.
+    headless_screen: Option<voltra_render::glam::Vec2>,
     /// The game's save slots, in its per-user folder.
     saves: crate::saves::Saves,
     /// Scene changes and additive loads the ticks asked for, and what each
@@ -188,7 +218,7 @@ pub struct App {
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a
     /// game registered through [`App::with_registry`].
-    registry: ComponentRegistry,
+    pub(crate) registry: ComponentRegistry,
     /// Prefabs, made on first use — see [`spawning::prefab_store`].
     prefabs: Option<Prefabs>,
     /// Property-animation clips, made on first use like the prefabs.
@@ -216,6 +246,8 @@ pub struct App {
 const DEFAULT_GRAVITY: Vec2 = Vec2::new(0.0, -9.81);
 
 impl App {
+    /// An app opening a window as `config` describes, saving under a
+    /// directory named after its title until told otherwise.
     pub fn new(config: WindowConfig) -> Self {
         Self {
             // Named after the window until the game says otherwise: the
@@ -235,6 +267,7 @@ impl App {
         self.simulation.set_running(simulating);
     }
 
+    /// Whether the physics steps run each frame.
     pub fn is_simulating(&self) -> bool {
         self.simulation.is_running()
     }
@@ -309,19 +342,35 @@ impl App {
     /// velocity set from input one step of latency before it is integrated.
     /// Nothing here has to inherit that: input is read at the top of the frame,
     /// so the frame that saw the key is the frame that moves.
-    fn advance(&mut self, delta: f32) {
+    pub(crate) fn advance(&mut self, delta: f32) {
         // Once per frame, before anything reads an action: the fixed tick
         // below sees the same actions as the per-frame one.
         let input = voltra_profile::scope("input");
+        // The size touch zones divide, before the actions read them.
+        if let Some(window) = self.window.as_ref() {
+            let size = window.inner_size();
+            self.input.set_screen(voltra_render::glam::Vec2::new(
+                size.width as f32,
+                size.height as f32,
+            ));
+        } else if let Some(screen) = self.headless_screen {
+            self.input.set_screen(screen);
+        }
         self.input.update_actions(&self.actions);
         // After the actions, which navigate the focus, and before the tick,
         // which reads this frame's clicks.
-        self.update_ui_buttons();
+        self.update_ui_controls();
         drop(input);
+        // Before the tick, so it reads this frame's finished tweens and
+        // fired timers, as it reads this frame's clicks.
+        self.step_tweens_and_timers(delta);
         {
             let _tick = voltra_profile::scope("tick");
             self.run_update(delta);
         }
+        // After the tick, which may have switched the language or spawned a
+        // keyed text, and before anything draws one.
+        self.locale.localize(&mut self.world);
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.
         self.resolve_spawned();
@@ -398,6 +447,18 @@ impl App {
             }
             // A prefab's instances take the edit, but for what they override.
             if self.reload_prefab(&path) {
+                continue;
+            }
+            // A material, or a shader one names: compiled again next draw.
+            if self
+                .materials
+                .as_mut()
+                .is_some_and(|materials| materials.reload(&path))
+            {
+                continue;
+            }
+            // Strings land in their texts next frame.
+            if self.locale.reload(&path) {
                 continue;
             }
             // Nor do the bindings.

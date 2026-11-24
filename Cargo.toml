@@ -1,6 +1,6 @@
 ﻿[workspace]
 resolver = "2"
-members = ["crates/*"]
+members = ["crates/*", "games/*"]
 
 [workspace.package]
 version = "0.1.0"
@@ -84,6 +84,10 @@ gilrs = "0.11.2"
 # Rasterizes and lays out glyphs for `Text`. A leaf crate: parses the font,
 # hands back coverage bitmaps; the atlas and the draw are ours.
 fontdue = "0.9.5"
+# Opens a game's dynamic library so the editor can run its code. A leaf
+# crate over dlopen/LoadLibrary; what is loaded, and when it is trusted, is
+# ours (`voltra-core/src/game/library.rs`).
+libloading = "0.8.9"
 
 # Our crates stay debuggable; dependencies are compiled optimized because we
 # never step into them and wgpu/naga are painfully slow at opt-level 0.

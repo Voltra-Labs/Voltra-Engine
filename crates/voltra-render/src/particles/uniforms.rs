@@ -13,6 +13,7 @@ pub struct SimStep {
     /// The first slot born this step; the next `spawn_count` follow it,
     /// wrapping round the ring.
     pub spawn_start: u32,
+    /// How many slots are born this step.
     pub spawn_count: u32,
     /// Varies newborns from one step to the next.
     pub seed: u32,
@@ -24,9 +25,13 @@ pub struct SimStep {
     pub basis: [Vec2; 2],
     /// Radians from +x, and the width of the cone around it.
     pub direction: f32,
+    /// Width of the cone, in radians.
     pub spread: f32,
+    /// Range a newborn's speed is drawn from, as (min, max).
     pub speed: (f32, f32),
+    /// Range a newborn's lifetime is drawn from, in seconds, as (min, max).
     pub lifetime: (f32, f32),
+    /// Added to every live particle's velocity, per second.
     pub acceleration: Vec2,
     /// Takes a particle's position and velocity into the world, where the
     /// colliders are: the identity for a world-space emitter, the emitter's
@@ -65,7 +70,9 @@ pub struct ParticleLook {
     pub place: Mat3,
     /// Side of the square at birth and at death.
     pub size: (f32, f32),
+    /// Linear RGBA at birth.
     pub color_start: [f32; 4],
+    /// Linear RGBA at death.
     pub color_end: [f32; 4],
 }
 

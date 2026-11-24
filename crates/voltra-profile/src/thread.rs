@@ -53,11 +53,13 @@ pub fn end_frame() {
     RECORDER.with_borrow_mut(|recorder| recorder.end_frame(now));
 }
 
+/// Starts or stops recording on this thread.
 pub fn set_enabled(enabled: bool) {
     let now = Instant::now();
     RECORDER.with_borrow_mut(|recorder| recorder.set_enabled(enabled, now));
 }
 
+/// Whether this thread is recording.
 pub fn is_enabled() -> bool {
     RECORDER.with_borrow(Recorder::is_enabled)
 }

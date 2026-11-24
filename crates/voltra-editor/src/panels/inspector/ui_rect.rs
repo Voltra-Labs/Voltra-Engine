@@ -27,8 +27,14 @@ const PRESETS: [(&str, Vec2); 9] = [
 const PRESET_MARGIN: f32 = 16.0;
 
 /// `parent` is the box the element is anchored in, as the last frame laid
-/// it out — what a preset needs to keep the element's size.
-pub(super) fn show(ui: &mut Ui, rect: &mut UiRect, parent: Rect) -> Option<&'static str> {
+/// it out — what a preset needs to keep the element's size. `stacked` when
+/// its parent is a stack, which places it by its slot.
+pub(super) fn show(
+    ui: &mut Ui,
+    rect: &mut UiRect,
+    parent: Rect,
+    stacked: bool,
+) -> Option<&'static str> {
     ui.label(RichText::new("UI Rect").strong())
         .on_hover_text("drawn on the screen, not in the world; points, y down");
 
@@ -69,6 +75,15 @@ pub(super) fn show(ui: &mut Ui, rect: &mut UiRect, parent: Rect) -> Option<&'sta
         ));
         claim = claim.or(pair(ui, "offset min", &mut rect.offset_min, 1.0, None));
         claim = claim.or(pair(ui, "offset max", &mut rect.offset_max, 1.0, None));
+        if stacked {
+            ui.label("slot")
+                .on_hover_text("its place in the parent's stack: lower first");
+            claim = claim.or(active(
+                &ui.add(DragValue::new(&mut rect.slot).speed(0.1)),
+                "Edit UI rect",
+            ));
+            ui.end_row();
+        }
     });
     claim
 }

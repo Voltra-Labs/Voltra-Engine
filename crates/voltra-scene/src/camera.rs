@@ -13,6 +13,14 @@ use voltra_render::Camera2D;
 
 use crate::hierarchy::world_matrix;
 
+mod shots;
+pub mod target;
+mod viewport;
+
+pub use shots::{shots, Shot};
+pub use target::CameraTarget;
+pub use viewport::Viewport;
+
 /// A camera authored into the scene.
 ///
 /// Its position comes from the entity's [`Transform`], composed through any
@@ -62,6 +70,16 @@ pub struct Camera {
         skip_serializing_if = "is_default_shadow_resolution"
     )]
     pub shadow_resolution: u32,
+    /// The part of the screen it draws into: the whole of it by default —
+    /// not written then — or a part, for split screen and a picture in a
+    /// picture.
+    #[serde(default, skip_serializing_if = "Viewport::is_full")]
+    pub viewport: Viewport,
+    /// Snaps the view to the target's pixel grid, so pixel art stays crisp
+    /// and does not shimmer as the camera moves. Pair it with nearest
+    /// texture filtering. Not written when off.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pixel_perfect: bool,
 }
 
 fn default_shadow_resolution() -> u32 {
@@ -84,6 +102,8 @@ impl Default for Camera {
             post: crate::post::PostProcess::default(),
             ambient: None,
             shadow_resolution: default_shadow_resolution(),
+            viewport: Viewport::FULL,
+            pixel_perfect: false,
         }
     }
 }
@@ -96,8 +116,10 @@ impl Camera {
     /// whatever `view` hands it, so these exist to say what the field means,
     /// and so a UI can stop a drag at the wall rather than at infinity.
     pub const MIN_SIZE: f32 = 1.0 / Camera2D::MAX_ZOOM;
+    /// The largest [`Self::size`] the camera's zoom limit allows.
     pub const MAX_SIZE: f32 = 1.0 / Camera2D::MIN_ZOOM;
 
+    /// A camera with `size` and every other field at its default.
     pub fn new(size: f32) -> Self {
         Self {
             size,
@@ -105,6 +127,7 @@ impl Camera {
         }
     }
 
+    /// Sets the draw order among cameras; see [`Camera::priority`].
     pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
         self

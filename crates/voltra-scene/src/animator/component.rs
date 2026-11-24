@@ -57,6 +57,7 @@ impl Animator {
         self.state.current.as_deref()
     }
 
+    /// Sets a float parameter. A value that is not finite is ignored.
     pub fn set_float(&mut self, name: &str, value: f32) {
         if value.is_finite() {
             self.state
@@ -65,6 +66,7 @@ impl Animator {
         }
     }
 
+    /// Sets a bool parameter.
     pub fn set_bool(&mut self, name: &str, value: bool) {
         self.state
             .params

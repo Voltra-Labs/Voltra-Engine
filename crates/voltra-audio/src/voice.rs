@@ -135,6 +135,7 @@ impl Voice {
         }
     }
 
+    /// The id the voice was started under.
     pub fn id(&self) -> VoiceId {
         self.id
     }

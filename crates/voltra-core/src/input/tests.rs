@@ -303,3 +303,85 @@ mod pads {
         assert!(!input.is_binding_down(Binding::PadAxis(PadAxis::LeftStickX, Direction::Negative)));
     }
 }
+
+mod touch_bindings {
+    use voltra_render::glam::Vec2;
+
+    use crate::input::{ActionMap, Binding, Input, TouchDir, TouchPhase, TouchZone};
+
+    fn map() -> ActionMap {
+        let mut map = ActionMap::new();
+        map.bind(
+            "right",
+            Binding::Touch(TouchZone::BottomLeft, TouchDir::Right),
+        );
+        map.bind(
+            "jump",
+            Binding::Touch(TouchZone::BottomRight, TouchDir::Hold),
+        );
+        map
+    }
+
+    fn input() -> Input {
+        let mut input = Input::new();
+        input.set_screen(Vec2::new(1200.0, 600.0));
+        input
+    }
+
+    #[test]
+    fn a_thumb_slid_right_in_the_bottom_left_walks_right_by_how_far() {
+        let mut input = input();
+        // The radius is 600 / 12 = 50 pixels.
+        input.on_touch(1, TouchPhase::Started, Vec2::new(200.0, 500.0));
+        input.on_touch(1, TouchPhase::Moved, Vec2::new(225.0, 490.0));
+        input.update_actions(&map());
+        // Half the radius; past the default dead zone of a quarter, a third.
+        assert!(
+            (input.binding_value(Binding::Touch(TouchZone::BottomLeft, TouchDir::Right)) - 0.5)
+                .abs()
+                < 1e-4
+        );
+        assert!((input.action("right").strength() - 1.0 / 3.0).abs() < 1e-4);
+        input.end_frame();
+        input.on_touch(1, TouchPhase::Moved, Vec2::new(400.0, 500.0));
+        input.update_actions(&map());
+        assert_eq!(
+            input.action("right").strength(),
+            1.0,
+            "fully at the radius and past it"
+        );
+        input.on_touch(1, TouchPhase::Ended, Vec2::new(400.0, 500.0));
+        input.update_actions(&map());
+        assert_eq!(
+            input.action("right").strength(),
+            0.0,
+            "a lifted finger drives nothing"
+        );
+    }
+
+    #[test]
+    fn a_finger_down_elsewhere_drives_nothing_and_a_hold_presses() {
+        let mut input = input();
+        input.on_touch(1, TouchPhase::Started, Vec2::new(200.0, 100.0));
+        input.on_touch(1, TouchPhase::Moved, Vec2::new(400.0, 100.0));
+        input.update_actions(&map());
+        assert_eq!(
+            input.action("right").strength(),
+            0.0,
+            "it went down in the top half"
+        );
+        input.on_touch(2, TouchPhase::Started, Vec2::new(1000.0, 500.0));
+        input.update_actions(&map());
+        assert!(input.action("jump").pressed());
+    }
+
+    #[test]
+    fn touch_bindings_read_from_a_file() {
+        let text = r#"(version: 1, actions: {"right": (bindings: [Touch(BottomLeft, Right)])})"#;
+        let map = ActionMap::from_ron(text, std::path::Path::new("x.input.ron")).expect("reads");
+        assert_eq!(
+            map.bindings("right"),
+            &[Binding::Touch(TouchZone::BottomLeft, TouchDir::Right)]
+        );
+    }
+}

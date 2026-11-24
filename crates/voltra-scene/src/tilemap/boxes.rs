@@ -21,7 +21,9 @@ use super::Tilemap;
 /// A rectangle of cells: `min` included, `max` excluded on both axes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CellRect {
+    /// The first cell, included.
     pub min: IVec2,
+    /// One past the last cell, excluded.
     pub max: IVec2,
 }
 

@@ -4,11 +4,16 @@
 
 A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs/wgpu) (Vulkan, Metal, DX12, GL, WebGPU) and [`winit`](https://github.com/rust-windowing/winit).
 
-> **Status: early rewrite.** Voltra was originally a C++/OpenGL engine. The Rust
-> rewrite starts from an empty slate; the C++ tree is preserved on the `main`
-> branch history and tagged `v0-cpp-final`. Today it runs an editor: an
-> in-house ECS, textured sprite batching, a 2D camera, and an egui interface
-> with a hierarchy, an inspector, an asset browser and a live viewport.
+> **Status: 0.1 — a 2D base.** Voltra was originally a C++/OpenGL engine; the
+> C++ tree is preserved in the `main` branch history and tagged
+> `v0-cpp-final`. The Rust rewrite is a 2D engine with an editor, a player,
+> native and web export, and games written as Rust crates the editor hot
+> reloads. 3D is on the roadmap, not in the tree. See
+> [CHANGELOG.md](CHANGELOG.md).
+
+**New here? Start with [the guide](docs/guide/README.md)** — from install
+to a game in a browser. `games/` holds three sample games: `platformer`,
+`breakout` and `dodge`.
 
 ## Design stance
 
@@ -35,8 +40,9 @@ A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs
 | Rust | 1.97+ (stable) |
 | Platform toolchain | MSVC Build Tools on Windows; `cc` + Vulkan drivers on Linux |
 
-Install Rust with [rustup](https://rustup.rs). No other system dependency is
-needed — everything else comes from Cargo.
+Install Rust with [rustup](https://rustup.rs). On Linux, the audio and
+gamepad layers also need `libasound2-dev`, `libudev-dev` and `pkg-config`;
+nothing else is needed — the rest comes from Cargo.
 
 ## Build and run
 
@@ -46,7 +52,10 @@ cargo run -p voltra-player -- assets/scenes/sandbox.ron   # run a scene, no edit
 cargo run -p voltra-player -- assets/scenes/lights.ron    # 2D lights and shadows
 cargo xtask dist                # package build.ron into dist/<name>/ to hand out
 cargo xtask dist --manifest platformer.build.ron   # a game with its own code
+cargo xtask new-game my-game                      # start a game of your own: games/my-game
 cargo xtask dist --web          # the same build for the browser (docs/WEB.md)
+cargo xtask guide               # run the guide's checked commands, as CI does
+cargo run -p breakout           # a sample game (also: dodge, voltra-platformer)
 cargo run -p voltra-mcp -- --project .             # MCP server for an AI client (docs/MCP.md)
 cargo run -p voltra-editor -- --bridge             # editor an MCP client can drive live
 cargo build --workspace         # build everything
@@ -214,7 +223,11 @@ ray that starts inside a shape hits it at distance zero rather than reporting
 thin air. Queries skip sensors unless asked for them.
 
 ```sh
-cargo run -p voltra-core --example platformer   # A/D to walk, Space to jump
+cargo run -p voltra-platformer                   # A/D to walk, Space to jump
+# The same game in the editor: built together, then loaded and played there.
+cargo build -p voltra-editor -p voltra-platformer
+cargo run -p voltra-editor -- --game platformer.build.ron scenes/platformer.ron
+# Edit games/platformer/src while it plays: it is rebuilt and swapped in.
 ```
 
 Useful environment variables (read by `wgpu`):
@@ -247,6 +260,8 @@ Voltra-Engine/
 │   ├── voltra-editor/    # binary: the editor and its panels
 │   ├── voltra-player/    # binary: runs a scene, or the build beside it
 │   └── xtask/            # `cargo xtask dist`: packages a build
+├── games/
+│   └── platformer/       # sample game crate: the editor loads it, its binary ships it
 └── docs/
     ├── ARCHITECTURE.md   # layering, crate graph, planned crates
     └── CONVENTIONS.md    # naming, file/folder rules, code style
@@ -352,6 +367,20 @@ privileged and plain `cargo build` covers everything.
 | W2 | A scene runs in a browser: the asset pack, WebGPU with a WebGL2 fallback | done |
 | W3 | Sound and input in the browser; games with their own code on the web | done |
 | W4 | `cargo xtask dist --web`: a folder any static server hosts | done |
+| 75a | Capsule and convex polygon colliders, in every query, a fit to the sprite | done |
+| 75b | Continuous collision: fast bodies stop at walls, bullets at bodies too | done |
+| 76 | The game as a plugin: the editor loads a game crate's library and Play runs it | done |
+| 77 | Hot reload: an edit to the game's code is rebuilt and swapped in mid-play | done |
+| 78 | `cargo xtask new-game`: a game crate to play, edit in the editor and package | done |
+| 79 | UI images: 9-slice panels, image buttons, rows and columns | done |
+| 80 | UI controls: slider, toggle, text field with IME, scrolling lists | done |
+| 81 | Text wrapping and localization: string tables per language | done |
+| 82 | Tweens and timers from the tick, gone with their entity | done |
+| 83 | Sprite materials: a WGSL fragment and its uniforms, on every backend | done |
+| 84 | Several cameras: split screen, render textures, pixel-perfect views | done |
+| 85 | Editor comfort: grid snapping, a console, project settings | done |
+| 86 | Touch: fingers as pointers, a tap as a click, virtual sticks | done |
+| 87 | Version 0.1: a user guide checked by CI, two more sample games, every public item documented | done |
 
 ## Contributing
 

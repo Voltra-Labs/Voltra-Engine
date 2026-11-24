@@ -23,17 +23,23 @@ pub enum Property {
     Rotation,
     /// `Transform::scale`.
     Scale,
+    /// `Sprite::color`.
     SpriteColor,
     /// `Sprite::frame`, an index into its atlas.
     SpriteFrame,
+    /// `Text::color`.
     TextColor,
     /// `PointLight2D::color`; the keys' alpha is ignored.
     LightColor,
+    /// `PointLight2D::intensity`.
     LightIntensity,
+    /// `PointLight2D::radius`.
     LightRadius,
     /// `GlobalLight2D::color`; the keys' alpha is ignored.
     GlobalLightColor,
+    /// `GlobalLight2D::intensity`.
     GlobalLightIntensity,
+    /// `Tilemap::color`.
     TilemapColor,
 }
 

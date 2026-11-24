@@ -14,6 +14,8 @@
 //! levels need one. The grid is the game's to own and rebake: navigation
 //! is a question a game asks, not something every frame pays for.
 
+#![warn(missing_docs)]
+
 pub mod grid;
 pub mod path;
 

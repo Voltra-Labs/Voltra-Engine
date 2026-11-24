@@ -19,7 +19,9 @@ use voltra_scene::{BodyType, Collider, RigidBody, Transform};
 /// One body as the solver sees it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SolverBody {
+    /// The entity the body belongs to.
     pub entity: Entity,
+    /// Linear velocity, in world units per second.
     pub velocity: Vec2,
     /// How far this body has moved since the step began. Applied to the
     /// `Transform` once, at scatter, so a contact's separation can be tracked
@@ -46,9 +48,13 @@ pub struct SolverBody {
     /// `inverse_mass` gives zero: a locked, immovable or collider-less body
     /// does not turn.
     pub inverse_inertia: f32,
+    /// How the body moves: static, kinematic or dynamic.
     pub body_type: BodyType,
+    /// Multiplier on the world's gravity for this body.
     pub gravity_scale: f32,
+    /// How quickly linear velocity decays.
     pub linear_damping: f32,
+    /// How quickly angular velocity decays.
     pub angular_damping: f32,
 }
 
@@ -114,9 +120,9 @@ impl SolverBody {
 
 /// `1 / I` for a body of this mass wearing this shape.
 ///
-/// A box turns about its centre with `I = m(hx² + hy²)/3` and a disc with
-/// `I = m·r²/2`, both standard and both in world units, so a scaled collider
-/// resists exactly as much as it looks like it should.
+/// `I` per unit of mass comes from the shape ([`super::inertia`]), in world
+/// units, so a scaled collider resists exactly as much as it looks like it
+/// should.
 ///
 /// Zero — infinite inertia — whenever the answer would be an infinity or a
 /// division by zero: a body that cannot be pushed, a body with no collider to
@@ -131,16 +137,7 @@ fn inverse_inertia(inverse_mass: f32, shape: Option<(&Collider, &Transform)>) ->
         return 0.0;
     };
 
-    let denominator = match collider {
-        Collider::Box { .. } => {
-            let half = collider.world_half_extents(transform);
-            (half.x * half.x + half.y * half.y) / 3.0
-        }
-        Collider::Circle { .. } => {
-            let radius = collider.world_radius(transform);
-            radius * radius / 2.0
-        }
-    };
+    let denominator = super::inertia::unit_inertia(collider, transform);
 
     if denominator > 0.0 {
         inverse_mass / denominator
@@ -197,26 +194,32 @@ impl SolverBodies {
         }
     }
 
+    /// The index of `entity`'s body, if it has one.
     pub fn index_of(&self, entity: Entity) -> Option<usize> {
         self.index.get(&entity).copied()
     }
 
+    /// The body at `index`.
     pub fn get(&self, index: usize) -> &SolverBody {
         &self.bodies[index]
     }
 
+    /// The body at `index`, mutably.
     pub fn get_mut(&mut self, index: usize) -> &mut SolverBody {
         &mut self.bodies[index]
     }
 
+    /// How many bodies there are.
     pub fn len(&self) -> usize {
         self.bodies.len()
     }
 
+    /// Whether there are no bodies.
     pub fn is_empty(&self) -> bool {
         self.bodies.is_empty()
     }
 
+    /// Every body, mutably, in index order.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut SolverBody> {
         self.bodies.iter_mut()
     }

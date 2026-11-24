@@ -11,24 +11,34 @@
 //! tuning and the contact impulses that have to survive from one step to the
 //! next. The solver is TGS Soft — sub-stepping, warm starting, soft constraints
 //! and relaxation — and [`solver`] documents each piece where it lives. Bodies
-//! rotate, boxes are oriented, and a contact carries up to two points.
+//! rotate; every shape — box, circle, capsule, convex polygon — is oriented,
+//! and a contact carries up to two points ([`narrow`]).
 //!
 //! Bodies at rest sleep, by island, and wake when disturbed — [`sleep`].
 //!
 //! [`query`] asks the world without stepping it — rays, points, boxes and
 //! shape casts — and [`character`] moves a game's character with them.
 //!
+//! A fast body stops at what it meets instead of passing through it in one
+//! step: against static geometry always, against moving bodies when it is a
+//! `RigidBody::bullet` — continuous collision, by speculative contacts ahead
+//! of the solve and a time of impact after it (`continuous`).
+//!
 //! What is not simulated yet, so that its absence is not mistaken for a bug:
-//! **continuous collision** (a fast enough body tunnels)
-//! and **rolling resistance** (a circle on a floor rolls forever). Mass ratios
+//! **rolling resistance** (a circle on a floor rolls forever), and a fast
+//! body that is not a bullet still passes through a thin *moving* one. Mass ratios
 //! past roughly a hundred to one squeeze the lighter body out sideways rather
 //! than holding it, which is the ordinary limit of an impulse solver.
+
+#![warn(missing_docs)]
 
 pub mod broad;
 pub mod character;
 pub mod clock;
+mod continuous;
 pub mod debug;
 pub mod events;
+mod geometry;
 /// The fast entity-keyed maps, which live in `voltra-ecs` beside the type
 /// they hash.
 pub use voltra_ecs::hash;

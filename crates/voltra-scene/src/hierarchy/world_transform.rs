@@ -192,10 +192,12 @@ impl WorldTransforms {
         }
     }
 
+    /// How many entities have a composed matrix.
     pub fn len(&self) -> usize {
         self.len
     }
 
+    /// Whether no entity has a composed matrix.
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }

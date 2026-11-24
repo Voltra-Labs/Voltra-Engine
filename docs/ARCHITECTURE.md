@@ -1230,7 +1230,8 @@ in the narrow phase, rather than at each of the solver's uses.
 ### Rotation: inertia is derived at gather, not stored
 
 **`SolverBody::inverse_inertia` is computed in `gather` from the body's mass and
-its collider** — `I = m(hx² + hy²)/3` for a box, `I = m·r²/2` for a disc, both in
+its collider** — `I = m(hx² + hy²)/3` for a box, `I = m·r²/2` for a disc (and
+since 75a a capsule's and a polygon's, `solver/inertia.rs`), all in
 world units so a scaled collider resists exactly as much as it looks like it
 should. It is not a component field. Inertia is a function of two values a user
 edits in the inspector, and a stored copy would need an invalidation this ECS
@@ -1788,11 +1789,11 @@ physics — it is whether the world is live — and a game with no rigid bodies 
 to ask for physics to get its logic ticking. The runtime names (`set_simulating`,
 `is_simulating`) already said this; the builder now agrees with them.
 
-`crates/voltra-core/examples/platformer.rs` is the API's first user: walk with
-`A`/`D`, jump with `Space` when there is something flat underfoot, and a camera
-that eases after the walker. It is an example rather
-than a crate because it is documentation that has to keep compiling, and
-`cargo clippy --workspace --all-targets` builds it.
+The platformer was the API's first user: walk with `A`/`D`, jump with
+`Space` when there is something flat underfoot, and a camera that eases
+after the walker. It began as an example of `voltra-core`, and became the
+`games/platformer` crate in stage 76, when a game became a crate the editor
+loads.
 
 Rejected:
 
@@ -2781,7 +2782,8 @@ geometric focus neighbours, on this engine's pieces.
   frame. The label is a `Text` child; a hit on it reaches the nearest
   `UiButton` above it, as Godot's default `mouse_filter` passes a click on.
 - **The logic is a pure function** in `voltra-scene` —
-  `UiButtons::update(world, layout, Pointer, Navigation)` — so every rule is
+  `UiButtons::update(world, layout, Pointer, Navigation)` (since stage 80
+  `UiControls`) — so every rule is
   tested without a window. A click is a press and a release over the same
   button; releasing elsewhere cancels it; a press focuses. Clicks last one
   frame. Disabled and despawned buttons drop out of hover, press and focus.
@@ -4025,7 +4027,8 @@ step handles seams for boxes, and a capsule can come with its own stage;
 **stepped or bisected casts** — approximate, and they tunnel.
 
 - **Not yet**: moving platforms (the floor's motion carried), pushing
-  dynamic bodies, constant speed on slopes, one-way platforms, a capsule.
+  dynamic bodies, constant speed on slopes, one-way platforms, a capsule
+  (all but pushing and constant speed since landed: 68, 75a).
 
 Pinned by `query/shape/tests.rs` (a box at a wall, onto a turned floor, a
 slide along a floor not hitting it, the way out of an overlap, a circle at
@@ -4038,6 +4041,177 @@ on a ceiling, snapping down a slope and falling off a ledge, pushed out of
 an overlap, a V corner, a floor of tiles without seams, a low ledge stepped
 onto and a high one not). `cargo run -p voltra-core --example character`
 walks it.
+
+### Every shape is a hull grown by a radius; boxes and circles keep fast paths
+
+Stage 75a. `Collider` gains `Capsule { half_height, radius }` — upright
+along the entity's y, `half_height` the whole half height caps included,
+so a box swapped for one keeps its feet where they were, and a circle once
+it is no taller than wide — and `Polygon { points, radius }`, a
+`ConvexPolygon` of at most eight points plus an optional rounding
+(`#[serde(default)]`, so `Polygon(points:[…])` loads). Old scenes load
+unchanged: the two variants are added, nothing is renamed.
+
+- **One representation, Box2D v3's.** `Collider::world_shape` places any
+  shape as a `WorldShape`: up to eight world points grown by a radius — a
+  box its corners and no radius, a circle its centre and its radius, a
+  capsule its two cap centres and theirs, a polygon its points (scaled,
+  turned, re-wound under a mirroring scale) and its rounding. Bounds,
+  outlines (`Collider::outline`, for the debug overlay, the editor and
+  shadow casters), contacts and queries all start from it.
+- **A polygon is convex by construction.** `ConvexPolygon::new` hulls
+  whatever it is given (Andrew's monotone chain, near-duplicates welded,
+  straight corners dropped, counter-clockwise) and refuses fewer than three
+  corners or more than eight; it deserialises through the same check, so a
+  file listing a concave outline loads as its hull and one listing no
+  polygon is a component error naming why. Eight, a fixed array, keeps
+  `Collider` `Copy` with no allocation per contact — Box2D's
+  `B2_MAX_POLYGON_VERTICES` for the same reason.
+  `ConvexPolygon::enclosing` cuts a larger hull to eight by replacing the
+  edge whose neighbours meet with the least area added, so the result still
+  covers every point: what a sprite's traced silhouette becomes (the
+  inspector's **Fit to sprite**, through `shadow_caster::sprite_silhouette`).
+- **Contacts by kind of pair, not by pair of variants** (`narrow/`):
+  polygon–polygon is `b2CollidePolygons` — the separating axis over both
+  shapes' normals with the same `FLIP_BIAS` hysteresis, clipping while the
+  cores overlap, and once only the rounding overlaps the faces' closest
+  points (corner against corner one point along their line); separations
+  subtract both radii and each point sits midway between the surfaces.
+  A capsule is a two-cornered polygon there, as Box2D makes it against a
+  polygon. Anything against a circle goes by its nearest feature
+  (`b2CollidePolygonAndCircle`, a segment's nearest point for a capsule);
+  capsule–capsule is `b2CollideCapsules`, the two segments' closest points
+  clipped to two points where they lie alongside. The general code is
+  pinned to answer as `box_box` does over 400 random box pairs.
+- **The fast paths stay, measured.** Per pair, `box_box` takes 114 ns and
+  the polygon code on the same boxes 284; `box_circle` 28 against 122 —
+  building a hull's normals is most of the difference. Boxes and circles
+  are most of a level, so `box_box.rs`, `box_circle.rs` and `circle.rs`
+  keep their pairs and everything else goes through the hulls.
+- **Casts with a capsule or a polygon are conservative advancement over
+  GJK** (`query/shape/advance.rs`, `geometry/distance.rs`, Box2D's
+  `b2ShapeDistance`): measure the gap between the cores less the radii, move
+  as far as it allows at the speed it closes, again. Under a translation the
+  gap is convex in time, so a step never overshoots and a gap that is not
+  closing never will — which gives "touching is not hitting" for free. Once
+  the nearest points lie on an edge, the normal is that edge's: two shapes a
+  hair apart have nearest points whose difference is mostly rounding. The
+  closed forms for box and circle pairs stay. Rays into a rounded hull take
+  the first entry into its convex pieces — the core, a rectangle out of each
+  face, a circle on each corner — each exact.
+- **Inertia from the shape, about the transform's origin**
+  (`solver/inertia.rs`): `b2ComputeCapsuleMass`, and `b2ComputePolygonMass`
+  moved to the origin by the parallel axis theorem (a rounded polygon is
+  approximated by pushing its corners out, as there). A body's mass sits at
+  its transform's origin for every shape — a centre of mass offset would
+  move every anchor in the solver — so a dynamic polygon is drawn around its
+  origin; a static one can sit anywhere.
+- **A character grows round** (`character::inflated`): a circle, a capsule
+  and a polygon by their radius plus the skin, which is exactly the
+  Minkowski sum; a box keeps growing square, so a box character stands on a
+  ledge's very edge as before. A capsule character crosses a floor of tiles
+  without a step: its rounded bottom meets no corner as a wall.
+- **Particles see boxes and circles**, CPU and GPU alike: a capsule is
+  exactly its middle box and two caps, a polygon the turned box around its
+  points — the one shape that is not a union of the two, and the corner too
+  square is the visible cost.
+- **The inspector** has a Collider section: the kind (switching keeps about
+  the same size), the sizes, a polygon's points (an edit that would make it
+  concave stops at the last convex outline, so a point never vanishes under
+  the pointer), add and remove, and Fit to sprite. The viewport draws every
+  shape through `debug::draw`.
+
+Rejected: **`center_offset` on the capsule** — no other shape has one, and
+the transform is where a shape sits; **a `Vec` of points** — an allocation
+per collider clone and `Collider` no longer `Copy`; **folding boxes into
+the polygon code** — measured above; **GJK/EPA for the manifold** — it gives
+one point and a manifold still has to be clipped, as before; **exact swept
+SAT for polygons** — it does not extend to rounded shapes, and conservative
+advancement is the time of impact the next stage needs anyway.
+
+Pinned by `voltra-scene`'s `collider/tests.rs`, `collider/polygon.rs`
+(hulled in any order, collinear and inner points dropped, eight enforced,
+`enclosing` covering a circle within 12 %, RON as a list, a file of no
+polygon an error) and `world_shape.rs` (a capsule's outline); physics'
+`narrow/polygon.rs` (two points on a polygon floor, the box agreement, a
+rounded polygon's separation and midpoint, corner on corner, a capsule lying
+and standing, far from the origin), `narrow/round.rs`, `narrow/capsule.rs`,
+`geometry/` (segments, GJK), `solver/inertia.rs`, and `tests/shapes.rs`:
+every query for every shape and every shape cast at every shape, a capsule
+cast onto a turned polygon, a cast from inside and a slide along a touch, a
+ray on a cap, a hexagon stack and two lying capsules settling asleep, a
+hexagon rolling down a slope, a capsule character up a polygon slope and
+across tiles, a polygon sensor and a one-way polygon.
+
+### A fast body is stopped ahead of the solve, and swept after it
+
+Stage 75b. A step collides once, at the poses it starts from, then moves
+every body by its solved velocity, so a body crossing more than its own
+size in a step can begin on one side of a wall and end on the other with no
+contact ever found. `continuous` (physics) closes that, on by default
+(`SolverParams::continuous`), with Box2D v3's split: a **fast** body — one
+moving more than half its thinnest extent in a step (`b2ComputeShapeExtent`,
+Box2D's safety factor) — is swept against **static** geometry, and a
+`RigidBody::bullet` (`#[serde(default)]`) against kinematic and dynamic
+bodies too, never against another bullet.
+
+- **Two passes, as Box2D's speculative contacts and its time of impact.**
+  Before the solve, each awake fast body's predicted move (velocity plus a
+  step of gravity) is swept, and what it would meet is handed to the solver
+  as a *speculative* contact: the pair's manifold measured as though both
+  shapes were grown by half the gap (`narrow::speculative`, the hull code
+  with the radii raised and the separations given back), so it has the
+  right features and positive separations. The solver already let a
+  positive separation close exactly and no further — a rigid stop, in the
+  step it happens, with restitution and friction as any contact has. After
+  the solve, each fast body's actual move is swept again, and one that
+  still meets something — knocked off its predicted path, or turning — is
+  moved back to the time of impact a hair short of it, velocity kept; the
+  next step's speculative contact stops it.
+- **Why not stop at the time of impact and leave the next step's overlap to
+  it.** Tried first: an overlap is a soft contact, and at 300 units a second
+  the soft push lets the body sink half a tenth-thick floor in a sub-step —
+  past the middle, the floor's far face is nearer and the body goes through.
+  The speculative contact is rigid; an overlap never forms.
+- **The time of impact is conservative advancement with the turn bounded**
+  (`continuous/toi.rs`, Mirtich's method, which Box2D's started from):
+  advance by the gap over the move's length plus its turn times the shape's
+  reach, so no point of the shape covers the gap in that time and the walk
+  cannot pass through. A shape overlapping at the start is left to the
+  contacts; one within reach is met only if it is moving in. A bullet's
+  sweep against a moving body uses the move relative to it before the solve,
+  and its end pose after.
+- **Filters as contacts have them**: collision layers, sensors (never
+  targets), the pairs a joint keeps apart, and one-way colliders — met only
+  from the solid side and never while letting the pair through.
+- **Speculative contacts are solved, not reported**: a contact about to
+  happen is not one yet, so they reach neither `contacts()` nor events.
+- **The cost** is a length against an extent for every awake body, and the
+  sweeps for the fast few. `examples/stress.rs` runs every scene with it on
+  and off: the level and the pyramid are the same within this machine's
+  noise, and a hundred balls fired at a thin wall, every one fast, cost
+  about 0.05 ms a step.
+
+Rejected: **speculative margins on every contact** — Box2D v3's first line of
+defence, but here the narrow phase reports overlaps only, and "touching is
+not a contact" is what events, sensors and one-way passes rest on; the
+speculative contact is confined to the fast bodies that need it; **bullets
+by default** — every fast body against every moving one is the n² the split
+exists to avoid; **sub-stepping the whole world at the time of impact** —
+Box2D v2's, and the reason v3 dropped it: one fast body re-solves
+everything; **a step-length cap on velocity** — hides the bug rather than
+solving it.
+
+Pinned by `continuous/toi.rs` (a box at a thin wall where its face reaches
+it, a spinning bar stopped just short by its end, away and short of it
+nothing, an overlap left alone) and `tests/continuous.rs`: a box, a circle,
+a capsule and a polygon at 200 units a second never past a wall a tenth
+thick; with it off the circle tunnels; a fast bouncing ball comes back; a
+300-unit fall lands on a thin floor; a bar spinning at 60 rad/s neither
+passes nor sinks into a wall; a bullet stopped by a thin dynamic plank
+(pushing it) and a plain body passing it; a one-way platform catching a
+fast fall and letting a fast rise through; a wall on a layer the body does
+not see passed.
 
 ### One-way colliders remember what they let through; floors carry by pose
 
@@ -4697,6 +4871,679 @@ nothing) and `voltra-mcp/tests/editor.rs` (tools reach a stand-in editor
 and carry its answers, the screenshot as an image block; no editor is an
 answer naming the flag).
 
+### The game is a crate the editor loads; its stamp decides whether it may
+
+Stage 76. A game is a crate exposing one value through `voltra_core::Game`:
+`register` names its components, `start` comes before its first turn,
+`update` and `fixed_update` are the two turns `with_update` and
+`with_fixed_update` already gave closures. Its own binary links it and
+hands it to `App::with_game`; the editor loads the same crate's `cdylib`
+and runs a fresh one for every play. Fyrox's plugin model, the closest
+engine to ours: Rust all the way, the editor hosts the game's code, a
+shipped build links it statically. `games/platformer` is the first: a
+`cdylib` + `rlib` library, a binary, and `scenes/platformer.ron`.
+
+- **A game acts on the scene, not on entities it made.** The platformer
+  finds its `Walker`, its `Coin`s (now with a `value`), its `Goal` (naming
+  the next scene) and its `CoinCounter` by querying; the level is a scene
+  file authored like any other. In the editor the scene is whatever the
+  author made, and Play runs the game on it — the shape Unity's
+  `MonoBehaviour`s and Godot's scripts have.
+- **Two symbols** (`voltra_core::export_game!`): `voltra_game_stamp`, a C
+  function answering a `#[repr(C)]` `Stamp`, and `voltra_game_new`, a Rust
+  function answering a `Box<dyn Game>` — called only once the stamp
+  matches. Rust has no stable ABI, and the world is keyed by `TypeId`,
+  which hashes the compiler, the crate metadata and every feature in: a
+  library whose `Transform` has another `TypeId` would find no transforms,
+  silently. So the stamp carries the plugin protocol's version, `rustc -V`
+  (a build script of `voltra-core`), the engine version, the profile, and a
+  fingerprint of the `TypeId`s and layouts of the types a game shares with
+  its host; `Stamp::check` names the first that differs — the compiler
+  before the types it changes. In practice: build the editor and the game
+  in **one** `cargo build -p voltra-editor -p <game>`, so features unify.
+  Each half otherwise carries its own copy of the engine, and that is
+  sound exactly when the types are the same: `tests/plugin.rs` loads the
+  library cargo built for the test run (which is why the crate has no
+  dev-dependencies) and plays a level read by the host with it.
+- **The library's `log` forwards to the host's** through one C function per
+  record: a library carries its own `log`, with no logger in it, and a Rust
+  trait object passed between two copies of the crate that defines it is
+  not one.
+- **Nothing of a library outlives it.** It is loaded from a copy (Windows
+  will not let a build overwrite a loaded library; a loader asked twice for
+  one path hands back the first load), and copies left by earlier
+  processes are removed at the next load. A `GameLibrary` dropped as it is
+  stays loaded for the rest of the process; only the unsafe `close` unloads
+  it, and each game it made keeps it loaded until the game drops. The
+  editor unloads by writing the scene out through the game's registry,
+  `World::clear` — every entity and every storage, since a storage runs
+  the code of the crate that created it — reading it back through the
+  engine's (the game's components kept as unknowns), resetting both
+  registries, and only then closing. Loading is the same rebuild the other
+  way, and a scene the game's types refuse is read back as it was.
+- **Where the game is**: `build.ron`'s `game.package`, its library beside
+  the editor's executable — where the one `cargo build` puts both — or
+  `--game` naming a library or a build manifest (`--game
+  platformer.build.ron`). Game ▸ Reload / Unload; the menu says which is
+  loaded, or why none could be.
+- **The game's components in the inspector** (`inspector/game_components`):
+  every registered name the engine does not have, edited as the RON a scene
+  file holds and applied the moment it reads as the type, the reason shown
+  while it does not — Godot's fallback for a type with no editor of its
+  own; removed with ✕, added from its template.
+- **Found on the way**: the asset watcher counted inotify's access events —
+  every open and close of a read — as changes, so a reload read the file
+  and raised another, for ever, and each reload synced prefab instances
+  over their unsaved edits. A read is now no change (`tests/watch.rs`).
+
+Not yet, and why: **the profiler inside a game** — the library's
+`voltra-profile` is its own copy, so its scopes are not in the editor's
+profile; **a game's threads** — none may outlive its library, and nothing
+here starts any.
+
+Rejected: **an embedded language** (Lua, rhai) — two languages and a
+doubled API, against the point of the engine; **wasm-hosted scripts**
+(wasmtime) — heavy, no host inside a browser, a call boundary on every
+tick; **the engine as one shared `dylib`** (Bevy's `dynamic_linking`) —
+the game and the editor would share one copy, but only when built
+together, which the stamp already requires, at the price of shipping the
+toolchain's `libstd` beside the editor; **trusting a version string** —
+two builds of one version with different features are different types.
+
+Pinned by `voltra-core`'s `game.rs` (a game registers and starts before its
+first turn; hooks before the game; a Step steps it), `game/stamp.rs` (each
+difference named, the compiler first), `game/plugin.rs` (a record crosses
+as its level, target and text), `game/library.rs` (a missing library says
+build it; a file that is no library is refused and leaves no copy),
+`voltra-ecs`'s `clear`, the editor's `game/project.rs`, `game/rebuild.rs`
+(a game component unknown and back; a scene the game cannot read left as
+it was) and `inspector/game_components.rs`, and `games/platformer`'s
+`tests/level.rs` and `tests/plugin.rs`. Checked by hand: the editor under
+Xvfb with `--game platformer.build.ron --bridge`, the coins set to 5
+through the bridge, Play, walked right — `Coins 5 / 15` — and Stop.
+
+### A changed game is rebuilt and swapped in mid-play, through the registries
+
+Stage 77. The editor watches the game crate named by the manifest
+(`voltra_core::game::watch`, found with `cargo metadata`), and a change to
+a `.rs` file or the manifest — not under `target`, and not a read, which
+inotify reports too — queues a build. The build runs off the frame
+(`game::builder`, cargo's stderr read on its own thread); the old code keeps
+running until it is done. A library that built is opened and installed
+in place of the old one, mid-play too; a change made during a build queues
+one more, so the last edit is the one built.
+
+- **The swap is the scene's own round trip** (`game::swap::rebuild`): the
+  world written out through the old library's registry, cleared — entities
+  and storages — and read back through the new one's, then the old library
+  closed. What survives is what a scene file keeps: every entity with a
+  `SceneId` and its registered components, a body's velocity included.
+  The play session goes on with a fresh game from the new library, whose
+  `start` runs again. Fyrox reloads the same way, by serializing its scene
+  across the swap; Unity's domain reload does too, and loses what it does
+  not serialize, as this does.
+- **State that must outlive an edit lives in a component.** The
+  platformer's count moved from its `Platformer` struct to `CoinCounter
+  { taken, total }`, which a save, a play snapshot and a reload all carry;
+  `start` sets the total only on a counter that has none.
+- **Built with the editor.** The build is `cargo build -p <game>` plus
+  `-p voltra-editor` when the editor is in the game's workspace, with the
+  editor's profile: every dependency then resolves the features the
+  running editor was built with, or the stamp would refuse the result.
+  When only the game changed, cargo relinks nothing of the editor; an
+  engine edit relinks it too, and the new library is refused by its stamp
+  — on Windows the relink itself fails, a running executable being locked
+  — and either way the editor says so and keeps the old code.
+- **The game lives in the editor's workspace.** Found by the scratch-crate
+  test: built from a workspace of its own, a game's engine crates came out
+  with every flag the editor's had and other `-C metadata` — cargo hashes a
+  path dependency by its path *from the workspace's root* — so other
+  `TypeId`s, and the stamp refused it (`Mismatch::Types`, as it should).
+  A game and the editor that plays it share one workspace; the template of
+  78 puts the editor in the game's.
+- **A failed build is shown, not hidden**: the Game menu says the old code
+  runs and lists the compiler's errors with where they are
+  (`builder::summary`), and the log has them. Game ▸ Rebuild builds on
+  demand.
+- **A scene the new types cannot read** — a component whose saved value
+  the edited type no longer accepts — is read back through the old
+  library's, which wrote it; the old game goes on and the menu says why.
+
+Rejected: **patching code in place** (hot-patching functions, as
+`hot-lib-reloader` or Live++ do) — the world would keep values of the old
+types, whose layout the edit may have changed; the round trip through text
+is the one migration that cannot misread a field; **reloading only between
+plays** — the iteration loop this stage exists for is a level being played
+while its code is edited; **building the game alone** — its dependencies
+would resolve fewer features than the editor's, and every rebuild be
+refused.
+
+Pinned by `game/builder.rs` (a command that succeeds is built; one that
+fails answers cargo's own words; the summary is the errors and where they
+are), `game/watch.rs` (an edited source is a change; notes and build
+output are not), the editor's `game/source.rs` (built with the editor when
+they share a workspace; this workspace's platformer found by `cargo
+metadata`), `games/platformer/tests/plugin.rs` (a reload mid-play keeps
+the walker where it was and the count, and the new code walks it on) and
+`tests/hot_reload.rs`, ignored by default for its build: a scratch crate
+built, played, its tick's constant edited, the edit seen, rebuilt, swapped
+in mid-play with its `Mover`'s distance carried across and the new speed
+applied; then a broken edit that fails to build, names the error, and
+leaves the last good code running. Checked by hand: the editor under Xvfb
+playing the platformer, `WALK_SPEED` edited in `walker.rs`, rebuilt and
+swapped in three seconds later, the walker at the new speed and the
+counter as it was.
+
+### A new game is a crate in the engine's workspace, made from a template
+
+Stage 78. `cargo xtask new-game <name> [--title T]` writes
+`games/<name>/`: `Cargo.toml` (`cdylib` + `rlib`, a `[[bin]]`, workspace
+dependencies, no dev-dependencies), `src/lib.rs` (a `Game` moving a
+`Player` component by the move actions, `export_game!`), `src/main.rs`
+(through `when_assets_ready`, opening `scenes/main.ron`), `build.ron`
+(`game: (package: …)`, its own `assets`), the first scene, a `README.md`,
+and `tests/plugin.rs`, which loads the crate's own library as the editor
+does and plays the scene headless with a key held. The engine's starting
+assets are copied in: the input map and sorting layers the loop reads by
+convention, the default font and its licence, a texture. It is formatted
+after it is written, and refuses a folder that is there already.
+
+- **In this workspace, not a project of its own** — the finding of 77: a
+  game and the editor that plays it must share a workspace root, or every
+  engine type has another `TypeId` and the stamp refuses the library.
+  `games/*` is a member glob, so a new game builds at once with the editor
+  beside it. A game in a repository of its own needs the editor built in
+  that repository too — an editor launcher crate depending on the editor
+  as a library, Fyrox's `editor` package — which is a stage of its own.
+- **A game brings its assets.** `--game games/<name>/build.ron` makes the
+  editor's asset root the folder that manifest names: the game's scenes,
+  input map and sprites are the ones it opens and watches. `dist` and
+  `dist --web` take the manifest as they are.
+- **Names**: lowercase letters, digits and single dashes, starting with a
+  letter; the type is the name in CamelCase (`space-trader` →
+  `SpaceTrader`), refused where it would shadow a type the template uses
+  (`game`, `tick`, `player`, `app`); the title is the name's words
+  capitalised unless given.
+
+CI generates `ci-game` and runs its tests and clippy (Linux), and builds
+it for the web (the web job). Pinned by `xtask/src/new_game.rs` (a name
+becomes a package, a crate, a type and a title; bad names refused; every
+file filled in, the assets copied, the manifest planned by `dist` and
+`dist --web` as it is, and never written over a game) and the editor's
+`game/project.rs` (the asset root beside the manifest). Checked by hand: a
+generated game played in the editor under Xvfb through the bridge.
+
+### UI images are sprites; panels 9-slice and stack their children
+
+Stage 79. A menu built from a skin sheet: panels and button faces that keep
+a crisp frame at any size, and children laid out in rows and columns.
+
+- **An image is a `Sprite` on a `UiRect`** — the plan's `UiImage`. A
+  sprite already names a texture, a region or an atlas frame, carries a
+  tint, resolves its handles on load and hot reload, and has an inspector
+  with pickers; a second image type would have duplicated all of it for
+  the same five fields. The world-only fields (pixels per unit, normal map,
+  light layers) are ignored in screen space, as `Transform` is.
+- **`UiSlice`** draws the element's sprite as nine pieces: corners at
+  their own size, edges stretched along one axis, the middle along both
+  (`center: false` leaves a frame around nothing). Borders are `Edges` in
+  texels of the drawn frame, drawn at `scale` points per texel; borders
+  wider than the rect shrink in proportion until they meet, as Unity's do;
+  a mirrored sprite draws its right border on the left. On the element, as
+  Godot's `NinePatchRect` margins, rather than on the image as Unity's
+  sprite `border`: an atlas here is a list of frames with no per-image
+  metadata, and one frame sliced two ways costs nothing this way. Without
+  the frame's size in texels — no texture store, a missing frame — it is
+  stretched whole. A linear sampler blends a border's last texel into the
+  first pixels of the stretched piece next to it, as in every engine;
+  skins pad their borders or use a nearest-filtered texture.
+- **`UiStack`** places the `UiRect` children of its element one after
+  another — `Row` left to right, `Column` top to bottom — `spacing` apart
+  inside `padding`, the run justified `Start`/`Center`/`End` along the
+  stack and each child aligned (or `Stretch`ed, the default as Godot's
+  fill) across it. Godot's `BoxContainer`, Unity's layout groups. A child
+  keeps the size its own `UiRect` resolves to in the padded box; its
+  position is the stack's. Laid out inside `UiLayout::from_world`: the
+  first child reached arranges the whole stack, since where one goes
+  depends on the rest. Children past the end overflow rather than vanish.
+- **Order is `UiRect::slot`**, then entity index. The hierarchy keeps no
+  sibling order (a stored list was rejected for `Parent`), and a scene file
+  writes entities in id order, so a menu's reading order has to be said.
+  `0` is not written. Rejected: sibling order in `Parent` — it would change
+  every scene and the hierarchy panel for one consumer; a list of ids on
+  the stack — duplicate and prefab instancing remap `Parent`, not ids
+  inside other components.
+- **`UiButton::frames`** swaps the sprite's atlas frame by state — Unity's
+  sprite-swap transition — frames of the button's own atlas, since a skin
+  is one sheet. The tint still applies, so an image button keeps its
+  colours white. `ButtonFrames::in_a_row(first)` is how a skin is cut.
+- Inspector: *9-slice* and *Stack* sections with add and remove buttons,
+  the state frames under the button's colours, the slot on a stacked
+  child's rect. *Scene ▸ Spawn HUD column*: a centred panel that stacks.
+
+Pinned by `ui/slice.rs` (nine pieces, corners at size, borders scaled by
+points and pixels, borders that meet, no middle, mirroring, bad numbers),
+`ui/stack/tests.rs` (columns and rows, slots over spawn order, centring
+and end, grandchildren inside a stacked parent, overflow, a despawned
+child), `ui/button/tests.rs` (a frame per state, none without frames) and
+`tests/headless_menu.rs`: a pause menu — a 9-sliced panel stacking a title
+and three image buttons spawned out of order — written to a scene file and
+read back, laid out in slot order, a click on a label clicking its button,
+the arrow keys walking the column, and drawn on the GPU with the panel's
+and buttons' frames 4 points thick and each button's middle its state's.
+Checked by hand: the editor under Xvfb, a pause menu spawned through the
+bridge with the coin sheet as its skin, drawn 9-sliced in slot order. That
+check found the bridge's edits never looked up the handles of what they
+wrote — a textured sprite spawned by a tool drew the placeholder, a text
+nothing — so an applied edit now resolves the scene's assets.
+
+### Sliders, toggles, text fields and scrolls share the buttons' focus
+
+Stage 80. An options screen: a volume slider, a fullscreen toggle, a name
+field and a list of saves that scrolls — by the mouse, the keyboard and a
+pad.
+
+- **`UiControls`** (was `UiButtons`) holds the one hover, press and focus
+  every control shares, as Godot's viewport keeps one focus owner, and
+  this frame's `clicked`, `changed` and `submitted`.
+  `update(world, layout, fonts, &UiInput)` takes the pointer (with the
+  wheel and Shift), the navigation and the typing; it stays a pure
+  function in `voltra-scene`. A control is a `UiButton` (a toggle is one),
+  a `UiSlider` or a `UiTextField`; one with nothing drawn still takes the
+  pointer — an invisible hit area — and a click on a child reaches the
+  control above it.
+- **`UiToggle`** rides on a `UiButton`, as Godot's `CheckBox` is a button
+  in toggle mode: a click flips `on` and counts as a change; while on, the
+  button's colour is multiplied by `on_tint`, and `on_frames` replaces its
+  frames.
+- **`UiSlider`**: `value` in `min..max`, snapped to `step`; a press or a
+  drag along its rect sets it (a column rises from the bottom); while
+  focused, the navigation along it steps it and across it moves the focus
+  on, as Godot's sliders do. It draws nothing itself: children marked
+  `UiSliderPart::Fill` stretch to the value and `Handle` sits on it, as
+  Unity's `fillRect` and `handleRect` — any picture, 9-sliced or flat.
+  Marker components rather than references: a `Parent` link is remapped
+  on duplicate and prefab instancing, an id inside a component is not.
+- **`UiTextField`** is Godot's `LineEdit`. The entity's `Text` is its
+  style and the field writes what it shows into the text's content — the
+  text, the IME composition at the caret, or the placeholder drawn at half
+  alpha — so the font atlas prepares what is shown. Editing is in
+  characters, never bytes: arrows, Home/End, Shift to select, Ctrl (Option
+  on macOS) for words, Backspace/Delete, Ctrl+A, Enter to submit; a click
+  places the caret and a drag selects. Control characters are left out:
+  one line. The text scrolls sideways to keep the caret in the box and is
+  cut to it; the caret is a whole-pixel bar, not blinking. Caret stops
+  come from the face's metrics (`shape::caret_stops_at`), no glyph needed.
+  No system clipboard yet: nothing in the engine reaches one.
+- **Typing** is `Input::typing`: a key press's `text` (not with Ctrl or
+  the logo key, not a control character) and the IME's `Commit` are typed;
+  `Preedit` shows at the caret; editing keys count their repeats. The loop
+  calls `set_ime_allowed(true)` only while a field has the focus — winit's
+  own advice for games, since an allowed IME swallows keys while it
+  composes — and puts the candidate window under the field. A game reading
+  its own keys can check `tick.ui.editing(world)`.
+- **`UiScroll`** shifts its UI descendants by `offset` and masks them to
+  its rect. The mask is applied on the CPU: every UI quad is axis-aligned,
+  so one cut to the mask with its UVs moved in proportion draws what a
+  scissor would, without a draw call per mask (Godot's `clip_contents`
+  scissors; Unity's `RectMask2D` clips in the shader). `UiLayout` records
+  each element's clip, the nearest scroll above it and each scroll's
+  content box; a masked-off part is not picked. The wheel scrolls the
+  innermost scroll under the pointer; the focus moving to a control —
+  by the navigation or `focus()` — scrolls every scroll above it just
+  enough to show it, which is how keys and pads scroll; the offset stays
+  between none and the content's reach, a stack's padding included.
+- **Headless controls**: `Headless::with_screen(size)` lays the UI out
+  windowless, and `input_mut()` feeds the cursor, buttons, wheel, keys,
+  pad and typing as a window would.
+- Editor: inspector sections for each, *Scroll children* on any UI
+  element, and *Scene ▸ Spawn HUD toggle / slider / text field / scroll
+  list*.
+
+Rejected: **a widget tree with its own event loop** (egui, iced) — the
+game's UI is entities the editor authors and scenes save; **an ECS
+system per control with its own focus** — Godot and Unity both have one
+focus per screen, and two focuses is a bug a pad finds at once.
+
+Pinned by `ui/controls/tests.rs` and `controls/tests/widgets.rs`
+(buttons; a toggle flipping and tinting; a slider dragged off its track
+and stepped, passing the focus across; a field typed into, submitted and
+left by a click elsewhere, keeping left and right; the wheel within the
+content; the focus scrolling a list, a hidden row unclickable),
+`text_field/tests.rs` (characters not bytes, selections, words, limits,
+the composition until it commits), `text_field/view.rs` (scrolling to
+the caret), `slider.rs`, `scroll.rs`, `layout/tests.rs` (a scroll moving
+and masking, nested masks, a stack inside a scroll), `mesh/clip.rs`,
+`mesh/tests.rs` (the caret after the text, the selection under it, a long
+text scrolled and cut to its box, the faint placeholder), core's
+`input/typing.rs`, and `voltra-core/tests/ui_options.rs`: the options
+screen by the mouse (slider pressed and dragged, toggle by its label,
+the field clicked and typed in, the list wheeled and a row clicked), by
+the keyboard (arrows and Enter through the default map, typing, the list
+scrolling to the focus) and by a pad (D-pad and South). Checked by hand:
+the player under Xvfb with `xdotool` — real X11 clicks, typing,
+Backspace, Shift+Home, the toggle, the slider and the wheel.
+
+### Text wraps at a width; keyed texts read the current language's table
+
+Stage 81. A dialogue box whose words wrap to it, in the player's
+language, switched while the game runs.
+
+- **Wrapping is the layout's** (`voltra_assets::fonts::layout`, with a
+  `Wrap { max_width, line_spacing }` in pixels): greedy, as Godot's and
+  Unity's are — as many words as fit, a break at the last space before
+  the one that does not, the spaces at the break dropped; a word wider
+  than the line breaks between characters rather than sticking out; `\n`
+  still breaks. Line spacing scales the face's line height. Draw, pick and
+  bounds all go through it, so a wrapped text is picked where it is drawn.
+- **`Text::max_width`** (entity units; points on screen) and
+  `line_spacing` — neither written when unset. In a `UiRect` the rect's
+  width caps the wrap, so a large `max_width` means "wrap to the rect", as
+  Godot's `autowrap` on a `Label`. A text field never wraps: one line.
+- **`Text::key`**: a string-table key, Godot's auto-translate and Unity's
+  localized string. The **`Locale`** (`voltra-scene`) holds the current
+  language and its table, `locale/<language>.ron`
+  (`(version: 1, strings: {key: string})`, read through the asset funnel,
+  so the web bundle carries it), and writes each keyed text's string into
+  its `content` every frame — after the tick, so a language switched or a
+  text spawned shows the next draw, in the editor as in the game. A key
+  the table lacks, or a language with no table, shows the key, logged
+  once per key and language: a missing string is seen where it is
+  missing. A saved table is read again while the game runs.
+- **Where it is reached**: `App::with_language` (English otherwise),
+  `tick.locale.set_language("es")`, `tick.locale.text(key)` for strings a
+  game builds in code, `Headless::set_language`. Language names are file
+  names: letters, digits, `-` and `_`.
+- Inspector: *translated* with its key (the content then shown, not
+  edited), *wrap* with its width, *line spacing*.
+
+Rejected: **gettext / Fluent** — plural rules and arguments are worth
+having, but a key-to-string table is what this stage's texts need, and
+Fluent's syntax would be a second format beside RON; a string with
+placeholders can be filled by the game from `text(key)` until a stage
+needs more. **One file for all languages** (Godot's CSV) — one file per
+language is what a translator is handed, and a language added is a file
+added.
+
+Pinned by `fonts/tests.rs` (words past the width break, the space at the
+break dropped; a long word between characters; newlines and a wide width
+unchanged; line spacing; bad widths wrap nothing), `locale/tests.rs`
+(keys in the current language, a missing string and a missing table
+showing keys, keyed texts following the language and plain ones not, a
+saved table read again, a newer table refused) and
+`voltra-core/tests/dialogue.rs`: a dialogue box wrapped to 240 points,
+clicked from English to Spanish by a button the game's tick answers —
+the line re-wrapped within the box, a speaker name missing in Spanish
+showing its key — and back from code.
+
+### Tweens and timers are asked for in the tick and asked about after
+
+Stage 82. A game moving a property to a value over time, or waiting for a
+moment, from code — what a door sliding open or a power-up wearing off
+needs, without authoring a clip.
+
+- **`Tweens`** (`voltra-scene`): `tick.tween(entity, property, to,
+  seconds, ease)` over the `keyframes::Property` list clips already
+  animate, with their `Ease`s — one code path writes a property for both.
+  `tweens.then(previous, …)` chains a tween to start when another
+  finishes, from where it left the property and with the rest of that
+  frame; `cancel` stops one and its chain; `finished(id)` is true the
+  frame it lands, exactly on its value. A second tween on the same
+  property of the same entity takes it over (the newest target wins, as
+  a retargeted move expects); a value of the wrong kind is refused,
+  logged and finished at once so a chain behind it still runs.
+- **`Timers`**: `tick.after(seconds, owner)` once, `tick.every(seconds,
+  owner)` repeating; `timers.fired(id)` the frame one comes, `times(id)`
+  how often in a long frame. Periods below a millisecond are raised to
+  one, so a long frame cannot spin.
+- **Asked about, not called back** — Godot's timers emit signals and
+  Unity's `Invoke` names a method; here the tick checks, as it checks a
+  click. A callback is the game's code held by the engine, and a game
+  library reloaded mid-play (stage 77) must leave none of its code
+  behind. Ids and values only.
+- **Gone with their entity**: a tween's entity, a timer's owner, despawned
+  — or replaced by a scene change or a reload's rebuild — drops it on the
+  next step, and the chain behind a tween with it.
+- Stepped once a frame, on the frame's delta, while the game simulates
+  (an editor authoring moves nothing), before the tick: the tick reads
+  this frame's finished tweens and fired timers.
+
+Pinned by `tween/tests.rs` (moved and landed exactly; eased; a chain
+started where the last left off with the spare time; a despawned
+entity's tween and its chain stopped, not finished; a newer tween taking
+a property over and leaving others; cancel; a wrong-kind value refused
+with its chain still running; a missing component dropped), `timer.rs`
+(once; repeating with a long frame counted; owners; a zero period
+bounded) and `voltra-core/tests/tweens.rs`: a tick fading a sprite out
+while moving it right, then up in a chained tween, a timer at 0.75 s
+despawning a second entity mid-shrink — its tween stopped and its own
+timer never firing — and a repeating beat, all on the frames they are
+due.
+
+### A sprite material is a WGSL fragment function and its uniforms
+
+Stage 83. A hit flash, an outline, a dissolve: a sprite or tile layer
+drawn through a shader of the game's own, without the engine growing a
+second sprite pass.
+
+- **The asset**: `x.material.ron` — `(version: 1, shader:
+  "materials/x.wgsl", uniforms: {"flash": Float(0.0), "tint":
+  Color((1, 1, 1, 1))})` — naming a WGSL file that defines `fn
+  fragment(in: Fragment) -> vec4<f32>`. The engine composes the whole
+  shader around it (`voltra_render::material::compose`): the sprite
+  pipeline's camera (group 0) and texture (group 1, `albedo`,
+  `albedo_sampler`), its vertex stage, `Fragment` (position, tint, UV),
+  `sprite_color(in)` — what the plain shader would draw — and `struct
+  Material` from the declared uniforms at group 2. Godot's
+  `canvas_item` shader with the vertex stage fixed; Unity's sprite
+  material. Uniform types are `f32`, `vec2` and `vec4`, laid out by
+  WGSL's uniform rules in name order, at most 256 bytes.
+- **Checked before compiled**: the composed source is parsed and
+  validated with `wgpu::naga` when the material loads, because `wgpu`
+  reports a broken shader to an error scope, asynchronously, not to its
+  caller. A material that will not read or validate is still a handle,
+  its error logged once and shown in the inspector; its sprites draw
+  plainly. Editing the `.wgsl` or the `.ron` reloads it.
+- **On the entity**: `Sprite::material` / `Tilemap::material`, a
+  `SpriteMaterial` — the path, and this entity's uniform values by name
+  (`set("flash", Uniform::Float(1.0))` from a tick; a field per uniform in
+  the inspector). The material is shared, the values are the entity's.
+- **Batching**: each distinct (material revision, uniform block) is one
+  `MaterialUse` in the batch; a range carries its index, so a run splits
+  only where the material or its values change. A scene without materials
+  batches exactly as before.
+- **Drawing**: `MaterialBank` (render) compiles each material once per
+  target format — keyed by its revision, so an edited material is a new
+  pipeline and an old one is let go after unused frames — and uploads the
+  frame's uniform blocks into one buffer, bound per range at a dynamic
+  offset (strided by the device's `min_uniform_buffer_offset_alignment`).
+  `MeshDraw::material` carries the pipeline and offset; the scene and UI
+  passes switch pipelines only between runs that differ. Normals and
+  light layers ignore materials: a material colours, lighting still
+  multiplies. Screen-space sprites draw plainly.
+
+Rejected: **a shader graph** — a node editor is a project of its own,
+and WGSL is what the engine already speaks; **materials writing the
+vertex stage** — a 2D sprite's corners are the batch's, and a vertex
+shader per material would make every material a batch of its own;
+**push constants for the uniforms** — not on WebGL2.
+
+Pinned by `material/uniforms.rs` (layout order and alignment; overrides
+of the right kind; too many or badly named uniforms refused),
+`material/compose.rs` (a material composes valid; a broken one says what
+and where), voltra-assets' `materials/tests.rs` (loaded, composed, laid
+out; a broken shader a handle with an error; the shader's edit reloads
+the material naming it), `batch/material_tests.rs` (runs split only
+where a material or its values change; no store, no materials, batched
+as before), `voltra-core/tests/materials.rs` (the shipped hit flash and
+outline drawn through the engine's own frame, natively) and
+`crates/voltra-player/web/test/materials.mjs` (the same scene, built
+with `dist --web`, on WebGPU and WebGL2, in CI).
+
+### Several cameras draw a frame; one can draw into a texture
+
+Stage 84. Two players on one screen, a minimap, pixel art that stays
+crisp while the camera moves.
+
+- **Which cameras draw** (`camera::shots`): every active camera, Unity's
+  model — those with a `CameraTarget` first, then the screen's, each set
+  by priority, lowest first, a later one over an earlier where viewports
+  overlap. A screen camera wholly under a later full-screen one is left
+  out, so a scene of several full-screen cameras draws only the highest,
+  exactly as when one camera took the frame.
+- **`Camera::viewport`**: a rectangle of the screen in fractions from its
+  top-left (Unity's `rect`); `LEFT` and `RIGHT` split it for two players.
+  Not written when full.
+- **`CameraTarget`**: a camera drawing into a render texture instead —
+  Unity's `targetTexture`, Godot's camera in a `SubViewport`. Its own
+  component because `Camera` is `Copy` and a path is not. The texture is a
+  `x.rendertexture.ron` (`(version: 1, width, height, nearest)`) that
+  `Textures` loads like an image: its targets are made in the renderer's
+  format, and a sprite or a HUD image naming the same file shows the
+  picture (`Texture::of_target` shares the target's texture). Texture
+  cameras draw first, so what shows them is this frame's; a camera never
+  draws the sprite showing its own texture, since a texture cannot be
+  sampled while drawn into. The editor draws render textures too, under
+  its own camera.
+- **The frame**: one plain full-screen camera keeps the direct path.
+  Otherwise each shot is drawn through its own view, lighting (its
+  ambient: `light::gather_through`) and grade into a target the size of
+  its viewport — `render_scene` as the editor's view uses it — and
+  `Renderer::composite` / `present_composite` lay the pictures on the
+  output with the HUD over them, once. Each shot's batch is rebuilt for
+  its view (culling and parallax are per camera); a shot's commands are
+  submitted before the next's uniforms are written.
+- **`Camera::pixel_perfect`** snaps the view so the target's pixel edges
+  fall on the world's pixel grid (`Shot::view`): moved by under half a
+  pixel, never scaled. With nearest filtering —
+  `App::with_texture_filter(Filter::Nearest)`, the project's choice as
+  Godot's `default_texture_filter` is — a sprite at whole texels lands
+  texel for pixel.
+
+Rejected: **scissoring one target per camera** — each camera's light
+map, bloom and grade are its own, and the chain already draws a camera
+into a target; **an integer-scaled low-resolution target for pixel
+art** — a pixel-perfect view gives crisp texels at any window size,
+and an upscaled target can come later as a camera option.
+
+Pinned by `camera/shots.rs` (several full-screen cameras draw only the
+highest; split halves both drawn, a texture camera first; unresolved and
+inactive left out; pixel-perfect edges on whole pixels),
+`camera/viewport.rs`, and `voltra-core/tests/cameras.rs`: a split screen
+— red on the left only, blue on the right only — with a minimap drawn
+into a render texture and shown by a HUD image, both blocks in it; and a
+pixel-perfect camera off the pixel grid whose every pixel over a 4 × 4
+texture matches a reference worked out on the CPU, texel by texel.
+
+### The editor snaps to a grid, shows its log, and edits project settings
+
+Stage 85.
+
+- **Grid snapping** (`snap.rs`, Edit ▸ Snap to grid): a move lands on the
+  grid — absolute, so things line up with each other, as Unity's grid
+  snapping does — a turn on multiples of `angle` degrees, a scale on
+  multiples of `scale` (never on zero, a way in with no way out). Ctrl
+  flips it for the drag. The grid is drawn under the gizmo while snapping
+  is on, doubling its spacing when zoomed out so it never passes about a
+  hundred lines a side. One function snaps the viewport's drags and the
+  bridge's.
+- **The Console** (Window ▸ Console): the engine's log ring (stage 70's
+  capture), read each frame, kept to 2000 lines, filtered by level — the
+  chosen one and louder — and by text over target and message, coloured
+  by level, counts in the level buttons. Unity's Console, Godot's Output.
+  The editor now starts the engine's logger (`logging::init`) rather than
+  a bare `env_logger`: before, nothing it logged reached the ring.
+- **Project Settings** (Window ▸ Project Settings): the input map, the
+  sorting layers and `build.ron`, each edited as the RON file it is, and
+  saved only if it reads — through the same parsers the engine and the
+  player use (`ActionMap::from_ron`, `parse_sorting_layers`,
+  `Manifest::from_ron`) — atomically, through a temporary file. The
+  engine's watch reads the saved file back, so bindings and layers apply
+  at once. Text rather than a form per file: the files are the truth, a
+  form would be a second editor of each, and RON is what a person diffs.
+- **The bridge** gains `Snap`, `Drag` (what a gizmo drag from one point
+  to another does, snapped, one undo entry), `Console` (the window's
+  filter) and `Settings` (read, or check and save).
+
+Pinned by `snap.rs` (a move on the grid; off and Ctrl; turns and scales
+on steps; a sparse grid however far out), `console.rs` (levels and text
+filters), `project_settings.rs` (saved and read back; a file the engine
+would not read refused and not written; `build.ron` beside the assets)
+and `voltra-editor/tests/bridge.rs`: the editor launched on a scratch
+project under Xvfb and driven through its bridge — a snapped move and
+turn and an unsnapped one, a missing texture's warning in the Console at
+warn and not at error, a bad layers file refused and a good one saved
+and read back live. In CI, on a software Vulkan driver.
+
+### Touches are pointers; a virtual stick is a binding
+
+Stage 86. The platformer played on a phone's browser.
+
+- **`Input::touches`**: each finger's id, where it went down, where it is,
+  and whether it went down or lifted this frame — kept to the end of the
+  frame it lifts in, so a tap inside one frame is seen. From winit's
+  `WindowEvent::Touch`, which its web backend raises for pointer events of
+  type touch. Lost focus lifts every finger, as it releases every key.
+- **A tap is a click**: while a finger is down, the first one drives the
+  UI pointer — down when it touches, up when it lifts — so every control
+  of stage 80 works by touch without knowing it.
+- **`Binding::Touch(zone, dir)`**: a finger that went down in a zone of
+  the screen (`Anywhere`, `LeftHalf`, `RightHalf`, `BottomLeft`,
+  `BottomRight`) — `Hold` for an on-screen button, or a direction for a
+  floating virtual stick whose strength is how far the finger has slid
+  from where it went down, as a share of a radius (a twelfth of the
+  screen's shorter side). Floating, as most mobile games' sticks are, so
+  a thumb that lands off-centre still works; through the action map, so
+  dead zones apply and a game reads `move_right` as it does from a key.
+  The default map binds walking to `Touch(BottomLeft, …)` and jumping to
+  `Touch(BottomRight, Hold)`; the platformer draws the two zones.
+  `Input` knows the screen's size from the window each frame.
+- The web page's canvas is `touch-action: none`: a finger on the game is
+  not a scroll or a zoom of the page.
+
+Pinned by `input/touch.rs` (down, moved, lifted over frames; a tap in one
+frame; an unknown finger ignored), the touch bindings in `input/tests.rs`
+(a slide's strength by how far, through the dead zone; a finger down
+elsewhere drives nothing; a hold presses; read from a file),
+`app/ui_input.rs` (a finger is the pointer, a tap a click) and
+`crates/voltra-player/web/test/touch.mjs`: the platformer built for the
+web on a touch screen, a finger held and slid right on its stick through
+Chromium's touch input, and the walker walking right — on WebGPU and
+WebGL2, in CI.
+
+### The guide is checked by running it; every public item is documented
+
+Stage 87, version 0.1: a base is solid when someone else can use it.
+
+- **`docs/guide/`**: seven chapters — install, a first scene, a first game
+  crate, physics, UI, audio, export — written for someone who has not read
+  this file. A shell block right under a `<!-- ci -->` line is a checked
+  step: `cargo xtask guide` (`crates/xtask/src/guide.rs`) runs every such
+  block, chapter by chapter in file order, with `bash -e` from the
+  workspace root, and fails on the first that does. CI runs it in the web
+  job (it needs the wasm target and `wasm-bindgen`): a game made with
+  `new-game`, tested, and built with `dist --web` into a folder whose page,
+  wasm and pack are checked to exist. Rust's doctests were the alternative
+  and were rejected — the steps are shell, not Rust, and a guide's prose
+  around them should read as a guide, not as a crate's API docs. Blocks
+  without the mark (launching the editor, `apt-get`, a local server) are
+  for the reader only: they need a display, root or a forever-running
+  process. A guide that drifts from the tree now fails the build, which is
+  the only thing that keeps one honest.
+- **`#![warn(missing_docs)]`** on every library crate, with clippy's
+  `-D warnings` making it an error: every public type, field, variant and
+  function says what it is. The generated game's template carries it too,
+  so a game started from it begins documented.
+- **Two more sample games**, each a `new-game` crate grown, each with a
+  headless `tests/level.rs` that plays it: `breakout` (a no-gravity ball
+  with a bounce of one, bricks taken on `Touch::Began`, the paddle tilting
+  the rebound, a lost ball served again) and `dodge` (rocks spawned by a
+  timer that quickens, kinematic sensors, a tween fading the player out
+  when hit). With the platformer they cover physics events, characters,
+  timers, tweens and the HUD — what the guide points at for "more".
+- **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
+  The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -4737,6 +5584,11 @@ Verified against the crate source, not from memory:
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7
 rather than trusting a tutorial.
+
+- `wgpu::naga` is re-exported (wgpu_core is in every build, WebGL2 included): `naga::front::wgsl::parse_str` and `naga::valid::Validator::new(ValidationFlags::all(), Capabilities::empty()).validate`, errors through `emit_to_string(source)` — synchronous shader checking, unlike `create_shader_module`, whose errors go to an error scope.
+- A uniform buffer bound with `has_dynamic_offset: true` and `min_binding_size: None` takes per-draw offsets in `set_bind_group(2, group, &[offset])`; offsets must be multiples of `limits().min_uniform_buffer_offset_alignment` (256 on most adapters, WebGL2 included).
+
+- A `wgpu::Buffer` is destroyed when its owner drops, even if a recorded command buffer not yet submitted names it: keep a per-frame mesh alive until after `queue.submit` (found by `Renderer::composite`).
 
 ### winit 0.30 on the web
 

@@ -26,13 +26,18 @@ pub fn is_atlas(name: &str) -> bool {
 /// batch time, against [`Atlas::sheet`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Frame {
+    /// Left edge, in texels from the sheet's left.
     pub x: u32,
+    /// Top edge, in texels from the sheet's top.
     pub y: u32,
+    /// Width, in texels.
     pub width: u32,
+    /// Height, in texels.
     pub height: u32,
 }
 
 impl Frame {
+    /// A frame of `width` by `height` texels with its top-left corner at (`x`, `y`).
     pub const fn new(x: u32, y: u32, width: u32, height: u32) -> Self {
         Self {
             x,
@@ -42,6 +47,7 @@ impl Frame {
         }
     }
 
+    /// Width and height, in texels.
     pub const fn size(&self) -> UVec2 {
         UVec2::new(self.width, self.height)
     }
@@ -78,11 +84,16 @@ impl Frame {
 /// rectangles is exactly the work this avoids.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Grid {
+    /// Size of one cell, in texels.
     pub cell: UVec2,
+    /// Cells across.
     pub columns: u32,
+    /// Cells down.
     pub rows: u32,
+    /// Border before the first cell, in texels.
     #[serde(default)]
     pub margin: UVec2,
+    /// Gap between neighbouring cells, in texels.
     #[serde(default)]
     pub padding: UVec2,
 }
@@ -99,11 +110,13 @@ impl Grid {
         }
     }
 
+    /// The grid with `margin` as its border before the first cell.
     pub const fn with_margin(mut self, margin: UVec2) -> Self {
         self.margin = margin;
         self
     }
 
+    /// The grid with `padding` as its gap between cells.
     pub const fn with_padding(mut self, padding: UVec2) -> Self {
         self.padding = padding;
         self
@@ -177,6 +190,7 @@ impl Atlas {
         Self::new(grid.sheet(), grid.frames())
     }
 
+    /// The slicing with `texture` as the sheet it was cut from.
     pub fn with_texture(mut self, texture: AssetPath) -> Self {
         self.texture = Some(texture);
         self
@@ -201,14 +215,17 @@ impl Atlas {
         self.frames.get(index as usize).copied()
     }
 
+    /// Every frame, in index order.
     pub fn frames(&self) -> &[Frame] {
         &self.frames
     }
 
+    /// How many frames there are.
     pub fn len(&self) -> usize {
         self.frames.len()
     }
 
+    /// Whether there are no frames.
     pub fn is_empty(&self) -> bool {
         self.frames.is_empty()
     }
@@ -222,6 +239,7 @@ impl Atlas {
 /// understand both forms would spread the grid arithmetic over every caller.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AtlasFile {
+    /// The file format version.
     pub version: u32,
     /// The sheet this slicing is cut against, in texels. Read from the grid
     /// when there is one, so a grid file does not have to repeat itself.
@@ -234,6 +252,7 @@ pub struct AtlasFile {
     /// a sheet that is a grid plus two odd rectangles is one file.
     #[serde(default)]
     pub grid: Option<Grid>,
+    /// Explicit rectangles, appended after the grid's cells.
     #[serde(default)]
     pub frames: Vec<Frame>,
 }
