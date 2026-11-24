@@ -17,6 +17,10 @@ pub struct Particle {
     pub age: f32,
     /// Seconds it lives; it dies when `age` reaches it.
     pub lifetime: f32,
+    /// Its angle, in radians, counter-clockwise.
+    pub rotation: f32,
+    /// Radians per second its angle turns by.
+    pub spin: f32,
 }
 
 impl Particle {
@@ -39,4 +43,8 @@ pub struct Particles {
     pub(crate) burst: u32,
     pub(crate) rng: Option<Rng>,
     pub(crate) gpu: gpu::GpuPlan,
+    /// The outline newborns are born on, as of the last step: the entity's
+    /// collider, as [`shape::outline_table`](super::shape::outline_table)
+    /// lays it out. Empty unless the shape is an outline.
+    pub(crate) outline: Vec<[f32; 4]>,
 }

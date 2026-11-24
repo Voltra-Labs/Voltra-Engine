@@ -5544,6 +5544,82 @@ Stage 87, version 0.1: a base is solid when someone else can use it.
 - **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
   The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
 
+### Particles look things up over their life, and the GPU reads the same answers from a table
+
+Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
+at their defaults, so every scene written before still loads as it was:
+
+- **`shape: EmitShape`** — `Point` (the old behaviour), `Circle`, `Ring`,
+  `Box`, `Edge` (a line on the emitter's x) and `Outline`, the entity's own
+  `Collider` as it sits at the origin (read each advance, 32 segments a
+  turn; the origin when there is none). Uniform by area (`r = √lerp(r₀²,
+  r₁², u)`) and by perimeter length. Unity's Shape module and Godot's
+  emission shapes; the direction and spread still say which way.
+- **`size_curve`, `speed_curve`, `alpha_curve: Option<Curve>`** — multipliers
+  over a life (`t` = age / lifetime). The size curve multiplies the old
+  start/end blend; the speed curve scales the *distance covered* each step
+  (`p += v · speed(t) · dt`), not the stored velocity, so acceleration and
+  collisions are untouched; alpha multiplies the colour's.
+- **`gradient: Option<Gradient>`** — replaces `color_start..color_end` when it
+  has a stop.
+- **`rotation`, `angular_velocity`** — ranges picked per newborn; the quad
+  turns about its centre.
+- **`flipbook: Option<Flipbook>`** — an atlas (stage 25's `*.atlas.ron`, read
+  through `Atlas::frame` / `Frame::uv` only), an optional list of frame
+  indices (empty = all, in order; out of range left out; at most 64), and
+  `FlipbookTiming::OverLife { cycles }` or `PerSecond { fps }` — Unity's
+  Texture Sheet Animation. The emitter's `texture` stays the sheet, as a
+  sprite's does. Resolved with the sprites' atlases (`resolve_world_atlases`,
+  `resolve_entity`).
+
+`Curve` (`voltra_scene::curve`) and `Gradient` (`voltra_scene::gradient`)
+are general: keys at `t ∈ 0..=1`, read in order, broken ones skipped, flat
+past the ends; a curve's key carries the clip's `Ease` for the segment that
+leaves it (stage 66's vocabulary, so a curve and a clip read alike); an
+empty curve is `1`, an empty gradient "none". A line's width curve
+(stage 101) is the same type.
+
+**One look, two readers.** `particles::look` is the single answer —
+`size_at`, `speed_at`, `color_at` — that the CPU's quads use exactly and
+that `look::tables` samples into `voltra_render::ParticleTables`: four rows
+of 64 RGBA32F texels (colour; size, speed, alpha; flipbook UV rects; the
+outline's corners with the fraction of the perimeter before each), one
+small texture per GPU ring, written only when it changes
+(`GpuParticles::set_tables`). The compute shader reads the speed row and
+the outline; the vertex shader the rest, blending the two nearest samples
+(`textureLoad`, so an unfilterable float texture needs no feature). This is
+how Godot's `GPUParticles2D` bakes its curves (`CurveTexture`,
+`GradientTexture1D`); Unity's VFX Graph does the same with baked curves.
+Evaluating keys in WGSL would mean a storage buffer of keys and a loop per
+vertex for no visible gain. `ParticleLook` lost its size and colours —
+they live in the table — and gained the flipbook timing; the 32-byte GPU
+particle's padding became its rotation and spin.
+
+Shapes and spin are drawn from the CPU's xorshift on one side and the PCG
+hash on the other, so the two place newborns differently but alike;
+everything else is deterministic and the same formula on both sides
+(`EmitShape::offset` ↔ `spawn_offset`, `shape::on_outline` ↔ `on_outline`,
+`FlipbookTiming::index` ↔ `frame_of`). The culling reach grew by the
+shape's extent, the speed curve's peak and the size curve's peak (×√2 for a
+turned square).
+
+`Headless::screenshot` now dispatches the GPU emitters' owed steps before
+drawing, as the window's draw does — a headless shot of a GPU emitter showed
+its particles where they were born.
+
+Pinned by `voltra-core/tests/particles_cpu_gpu.rs` — each feature
+screenshotted with the emitter on the CPU and on the GPU (lavapipe in CI):
+size curve, speed curve, alpha curve with a gradient, rotation with spin and
+flipbook frames (both timings) match pixel for pixel within an edge and
+measure what they should; each shape covers the same box about as densely
+and nothing outside itself. Unit tests: `curve`, `gradient`,
+`particles::{shape, flipbook, look, format_tests}` (a stage-51 emitter
+loads as the default; every new field round-trips; a plain one writes
+none), `voltra-render` `particles::{tables, uniforms}`.
+
+Not done: sub-emitters, sorting by age, a curve per axis (non-square
+particles), random-between-two-curves, and a flipbook's random start frame.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5573,6 +5649,7 @@ Verified against the crate source, not from memory:
 | `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
 | Headless tests | `headless_device()` needs an adapter; in a Linux container without a GPU, `apt-get install mesa-vulkan-drivers` (lavapipe) makes the GPU tests run instead of skipping |
 | WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |
+| Float data textures | `Rgba32Float` is not filterable without `Features::FLOAT32_FILTERABLE`: bind it as `TextureSampleType::Float { filterable: false }` and read it with `textureLoad` (vertex and compute stages alike); `write_texture` rows need no 256-byte alignment |
 | Web backends | `wgpu::util::new_instance_with_webgpu_detection(desc).await` drops `BROWSER_WEBGPU` when the browser has no working WebGPU, so the `webgl` feature's GL backend serves; detection must happen before the instance exists |
 | Web canvas formats | A WebGPU canvas offers `bgra8unorm` / `rgba8unorm` / `rgba16float`, never sRGB: configure the linear format with its sRGB variant in `view_formats` and draw through that view |
 | Web buffers | `Drop` for a web `Buffer`/`Texture` is a no-op — the browser frees it when the JS wrapper is collected. Call `destroy()` on anything made per frame (after the submit) |

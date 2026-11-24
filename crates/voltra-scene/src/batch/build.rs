@@ -165,7 +165,7 @@ impl SpriteBatch {
                     Drawn::Particles(emitter) => {
                         // What the CPU still holds — all of it, on the CPU;
                         // what is left from before a switch, on the GPU.
-                        particles::mesh::push(batch, matrix, emitter);
+                        particles::mesh::push(batch, matrix, emitter, sheets.atlases);
                         // One draw however many repeats: the particles are
                         // where they are, not where a copy of the emitter is.
                         // Left out when nothing can be alive, or nothing

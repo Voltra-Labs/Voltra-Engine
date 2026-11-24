@@ -94,6 +94,9 @@ impl Headless {
         let (width, height) = (width.max(1), height.max(1));
         self.ensure_renderer(width, height)?;
         self.app.resolve_materials();
+        // What the window's draw does first: GPU emitters run the steps they
+        // owe, so a shot shows where their particles are now.
+        self.app.step_gpu_particles();
         let app = &mut self.app;
         let (
             Some(renderer),

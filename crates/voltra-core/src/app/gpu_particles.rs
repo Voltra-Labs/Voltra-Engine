@@ -51,19 +51,24 @@ impl App {
             let step = emitter.take_gpu_step().unwrap_or_default();
             owed.push((entity, step, emitter.gpu_look(transforms.matrix(entity))));
             let device = renderer.context().device();
+            let queue = renderer.context().queue();
             let ring = self
                 .gpu_rings
                 .rings
                 .entry(entity)
-                .or_insert_with(|| GpuParticles::new(device, pipelines, capacity));
+                .or_insert_with(|| GpuParticles::new(device, queue, pipelines, capacity));
             if ring.capacity() != capacity {
-                *ring = GpuParticles::new(device, pipelines, capacity);
+                *ring = GpuParticles::new(device, queue, pipelines, capacity);
             }
             ring.set_colliders(
                 device,
                 renderer.context().queue(),
                 pipelines,
                 emitter.gpu_colliders(),
+            );
+            ring.set_tables(
+                renderer.context().queue(),
+                &emitter.gpu_tables(self.atlases.as_ref()),
             );
         }
         // A despawned emitter, or one switched back to the CPU.

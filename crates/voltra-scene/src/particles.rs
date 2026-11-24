@@ -1,19 +1,24 @@
 //! Particle emitters: many short-lived quads from one component.
 //!
-//! CPU-side and 2D, drawn by the sprite pipeline like everything else — a
-//! particle is a tinted, textured quad that sorts with the sprites by its
-//! emitter's `sort_order`. Unity's `ParticleSystem` and Godot's
-//! `CPUParticles2D` cover the same ground; this is the subset a 2D game
-//! reaches for first: a continuous rate, bursts, spread, gravity-like
-//! acceleration, and size and colour from birth to death.
+//! 2D, drawn by the sprite pipeline like everything else — a particle is a
+//! tinted, textured quad that sorts with the sprites by its emitter's
+//! `sort_order` — or simulated and drawn on the GPU with the same look.
+//! Unity's `ParticleSystem` and Godot's `CPUParticles2D` cover the same
+//! ground; this is the subset a 2D game reaches for: a continuous rate,
+//! bursts, spread, gravity-like acceleration, an emission shape, size,
+//! speed and alpha along curves over a life, a colour gradient, spin and
+//! flipbook frames.
 
 mod collide;
 pub mod collision;
+pub mod flipbook;
 pub mod gpu;
+pub mod look;
 pub mod mesh;
 pub mod obstacles;
 mod particle;
 pub mod rng;
+pub mod shape;
 pub mod simulate;
 mod simulation;
 
@@ -21,9 +26,14 @@ use voltra_assets::{AssetPath, Handle, Textures};
 use voltra_render::glam::Vec2;
 use voltra_render::Texture;
 
+use crate::curve::Curve;
+use crate::gradient::Gradient;
+
 pub use collision::ParticleCollision;
+pub use flipbook::{Flipbook, FlipbookTiming};
 pub use obstacles::Obstacles;
 pub use particle::{Particle, Particles};
+pub use shape::EmitShape;
 pub use simulate::advance;
 pub use simulation::Simulation;
 
@@ -52,13 +62,41 @@ pub struct ParticleEmitter {
     /// Units per second squared, every particle, every frame — gravity, or
     /// a rising drift for smoke.
     pub acceleration: Vec2,
+    /// Where round the emitter particles are born. A point by default.
+    #[serde(default, skip_serializing_if = "EmitShape::is_point")]
+    pub shape: EmitShape,
     /// Side of a particle's square at birth and at death, in units.
     pub size: (f32, f32),
+    /// What the size is multiplied by over a life, `t` from `0` at birth to
+    /// `1` at death. `None` changes nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_curve: Option<Curve>,
+    /// What the distance a particle covers is multiplied by over its life:
+    /// `1` is its velocity, `0` holds it still. `None` changes nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub speed_curve: Option<Curve>,
     /// Colour at birth and at death, alpha included: fading to an alpha of
     /// zero is how a particle disappears rather than blinking out.
     pub color_start: [f32; 4],
     /// The colour at death, RGBA.
     pub color_end: [f32; 4],
+    /// The colour over a life, in place of `color_start` to `color_end`
+    /// when it has a stop.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gradient: Option<Gradient>,
+    /// What the alpha is multiplied by over a life. `None` changes nothing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alpha_curve: Option<Curve>,
+    /// A newborn's angle, in radians, picked between the two.
+    #[serde(default, skip_serializing_if = "is_zero_range")]
+    pub rotation: (f32, f32),
+    /// A newborn's spin, in radians per second, picked between the two.
+    #[serde(default, skip_serializing_if = "is_zero_range")]
+    pub angular_velocity: (f32, f32),
+    /// Frames of an atlas each particle steps through, drawn from
+    /// `texture`. `None` draws the whole texture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flipbook: Option<Flipbook>,
     /// The image every particle draws, by path. `None` is a flat square.
     #[serde(default)]
     pub texture: Option<AssetPath>,
@@ -120,9 +158,17 @@ impl Default for ParticleEmitter {
             direction: std::f32::consts::FRAC_PI_2,
             spread: 0.5,
             acceleration: Vec2::new(0.0, -2.0),
+            shape: EmitShape::Point,
             size: (0.2, 0.0),
+            size_curve: None,
+            speed_curve: None,
             color_start: [1.0, 1.0, 1.0, 1.0],
             color_end: [1.0, 1.0, 1.0, 0.0],
+            gradient: None,
+            alpha_curve: None,
+            rotation: (0.0, 0.0),
+            angular_velocity: (0.0, 0.0),
+            flipbook: None,
             texture: None,
             texture_handle: None,
             sort_order: 0,
@@ -199,6 +245,32 @@ impl ParticleEmitter {
         gpu::look(self, matrix)
     }
 
+    /// What the GPU particles look up over their life: the curves, the
+    /// gradient, the flipbook's frames resolved against `atlases` and the
+    /// outline they are born on. See [`look::tables`].
+    pub fn gpu_tables(
+        &self,
+        atlases: Option<&voltra_assets::Atlases>,
+    ) -> voltra_render::ParticleTables {
+        look::tables(self, atlases)
+    }
+
+    /// Refreshes the flipbook's atlas handle from its path, as
+    /// [`Sprite::set_atlas`](crate::Sprite::set_atlas) does a sprite's.
+    pub fn resolve_atlas(&mut self, atlases: &mut voltra_assets::Atlases) {
+        if let Some(flipbook) = &mut self.flipbook {
+            flipbook.resolve(atlases);
+        }
+    }
+
+    /// Restarts it: every particle gone, the rate's debt and the bursts
+    /// forgotten, the generator reseeded — what an editor's preview does
+    /// after an edit. A GPU ring keeps its slots; its ledger empties, so its
+    /// particles die out as new ones take their place.
+    pub fn restart(&mut self) {
+        self.state = Particles::default();
+    }
+
     /// Sets or clears the texture path and refreshes its handle, as
     /// [`Sprite::set_texture`](crate::Sprite::set_texture) does.
     pub fn set_texture(
@@ -213,8 +285,14 @@ impl ParticleEmitter {
     }
 }
 
+fn is_zero_range(range: &(f32, f32)) -> bool {
+    *range == (0.0, 0.0)
+}
+
 #[cfg(test)]
 mod collision_tests;
+#[cfg(test)]
+mod format_tests;
 #[cfg(test)]
 mod gpu_tests;
 #[cfg(test)]

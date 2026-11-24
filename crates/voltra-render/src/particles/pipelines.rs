@@ -30,6 +30,7 @@ impl ParticlePipelines {
                 storage(0, wgpu::ShaderStages::COMPUTE, false),
                 uniform(1, wgpu::ShaderStages::COMPUTE),
                 storage(2, wgpu::ShaderStages::COMPUTE, true),
+                table(3, wgpu::ShaderStages::COMPUTE),
             ],
         });
         let draw_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -37,6 +38,7 @@ impl ParticlePipelines {
             entries: &[
                 storage(0, wgpu::ShaderStages::VERTEX, true),
                 uniform(1, wgpu::ShaderStages::VERTEX),
+                table(2, wgpu::ShaderStages::VERTEX),
             ],
         });
 
@@ -138,6 +140,21 @@ fn uniform(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayou
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false,
             min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+/// An emitter's lookup tables: read texel by texel, never filtered, so a
+/// 32-bit float texture needs no filtering feature.
+fn table(binding: u32, visibility: wgpu::ShaderStages) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
         },
         count: None,
     }

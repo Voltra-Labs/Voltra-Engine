@@ -7,8 +7,9 @@ use voltra_render::ParticleCollider;
 
 use super::collide::{collide, Space};
 use super::rng::Rng;
-use super::{Obstacles, Particle, ParticleEmitter, Simulation, MAX_PARTICLES};
+use super::{shape, EmitShape, Obstacles, Particle, ParticleEmitter, Simulation, MAX_PARTICLES};
 use crate::hierarchy::WorldTransforms;
+use crate::Collider;
 
 /// The longest step simulated at once. A frame that stalls for a second must
 /// not fire a second's worth of particles in one place.
@@ -37,9 +38,29 @@ pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
     } else {
         Obstacles::default()
     };
+    // The outlines born on, read before the emitters are borrowed: an
+    // emitter's collider is its own entity's, wherever it now is.
+    let outlines: Vec<(Entity, Vec<[f32; 4]>)> = world
+        .query::<ParticleEmitter>()
+        .filter(|(_, emitter)| emitter.shape == EmitShape::Outline)
+        .map(|(entity, _)| {
+            (
+                entity,
+                shape::collider_outline(world.get::<Collider>(entity)),
+            )
+        })
+        .collect();
+    for (entity, outline) in outlines {
+        if let Some(emitter) = world.get_mut::<ParticleEmitter>(entity) {
+            emitter.state.outline = outline;
+        }
+    }
     let mut scratch = Scratch::default();
     let mut finished = Vec::new();
     for (entity, emitter) in world.query_mut::<ParticleEmitter>() {
+        if emitter.shape != EmitShape::Outline && !emitter.state.outline.is_empty() {
+            emitter.state.outline.clear();
+        }
         let matrix = transforms.matrix(entity);
         step(emitter, entity, matrix, dt, gpu, &obstacles, &mut scratch);
         if emitter.is_finished() {
@@ -67,14 +88,20 @@ fn step(
     scratch: &mut Scratch,
 ) {
     let acceleration = finite_or_zero(emitter.acceleration);
-    let state = &mut emitter.state;
     scratch.before.clear();
-    for particle in &mut state.particles {
+    // Velocity, then the distance it covers scaled by the speed curve at the
+    // particle's new age: `particles_sim.wgsl`'s order.
+    let speed_curve = emitter.speed_curve.as_ref();
+    for particle in &mut emitter.state.particles {
         scratch.before.push(particle.position);
         particle.age += dt;
+        let t = particle.progress();
+        let speed = finite_or(speed_curve.map_or(1.0, |curve| curve.sample(t)), 0.0);
         particle.velocity += acceleration * dt;
-        particle.position += particle.velocity * dt;
+        particle.position += particle.velocity * (speed * dt);
+        particle.rotation += particle.spin * dt;
     }
+    let state = &mut emitter.state;
     let space = Space::new(if emitter.world_space {
         Mat3::IDENTITY
     } else {
@@ -137,13 +164,17 @@ fn step(
         let speed = rng.between(emitter.speed.0, emitter.speed.1);
         let angle = emitter.direction + (rng.unit() - 0.5) * emitter.spread;
         let local_velocity = Vec2::from_angle(angle) * speed;
+        let (a, b) = (rng.unit(), rng.unit());
+        let offset = emitter.shape.offset(&state.outline, a, b);
+        let rotation = rng.between(emitter.rotation.0, emitter.rotation.1);
+        let spin = rng.between(emitter.angular_velocity.0, emitter.angular_velocity.1);
         let (position, velocity) = if emitter.world_space {
             (
-                matrix.transform_point2(Vec2::ZERO),
+                matrix.transform_point2(offset),
                 matrix.transform_vector2(local_velocity),
             )
         } else {
-            (Vec2::ZERO, local_velocity)
+            (offset, local_velocity)
         };
         if !(position.is_finite() && velocity.is_finite() && lifetime.is_finite()) {
             continue;
@@ -153,6 +184,8 @@ fn step(
             velocity,
             age: 0.0,
             lifetime,
+            rotation: finite_or(rotation, 0.0),
+            spin: finite_or(spin, 0.0),
         });
     }
 }
@@ -162,5 +195,13 @@ fn finite_or_zero(v: Vec2) -> Vec2 {
         v
     } else {
         Vec2::ZERO
+    }
+}
+
+fn finite_or(v: f32, fallback: f32) -> f32 {
+    if v.is_finite() {
+        v
+    } else {
+        fallback
     }
 }

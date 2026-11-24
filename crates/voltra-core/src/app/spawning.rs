@@ -100,7 +100,7 @@ pub(super) fn resolve_entity(
         }
     }
     if let Some(map) = world.get_mut::<Tilemap>(entity) {
-        if let Some(atlases) = atlases {
+        if let Some(atlases) = atlases.as_deref_mut() {
             let path = map.atlas.clone();
             map.set_atlas(path, atlases);
         }
@@ -110,6 +110,12 @@ pub(super) fn resolve_entity(
             let normal = map.normal_map.clone();
             map.set_normal_map(normal, textures, device, queue);
         }
+    }
+    if let (Some(emitter), Some(atlases)) = (
+        world.get_mut::<voltra_scene::ParticleEmitter>(entity),
+        atlases,
+    ) {
+        emitter.resolve_atlas(atlases);
     }
     if let (Some(emitter), Some((textures, device, queue))) = (
         world.get_mut::<voltra_scene::ParticleEmitter>(entity),

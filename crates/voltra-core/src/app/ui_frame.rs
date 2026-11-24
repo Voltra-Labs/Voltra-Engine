@@ -418,8 +418,8 @@ pub(super) fn resolve_world_clips(world: &mut World, clips: &mut Clips) {
     }
 }
 
-/// Re-resolves every [`Sprite`]'s and [`Tilemap`]'s atlas handle from its
-/// path.
+/// Re-resolves every [`Sprite`]'s, [`Tilemap`]'s and particle flipbook's
+/// atlas handle from its path.
 ///
 /// The slicing half of [`resolve_world_textures`], and separate from it
 /// because it needs no device: a world can be re-sliced headless, and only the
@@ -432,5 +432,8 @@ pub(super) fn resolve_world_atlases(world: &mut World, atlases: &mut Atlases) {
     for (_, map) in world.query_mut::<Tilemap>() {
         let path = map.atlas.clone();
         map.set_atlas(path, atlases);
+    }
+    for (_, emitter) in world.query_mut::<voltra_scene::ParticleEmitter>() {
+        emitter.resolve_atlas(atlases);
     }
 }

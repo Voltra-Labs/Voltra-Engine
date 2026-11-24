@@ -45,7 +45,8 @@ pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
 pub use normals::NormalPass;
 pub use particles::{
-    GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse, SimStep,
+    FrameTiming, GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse,
+    ParticleTables, SimStep, SpawnShape,
 };
 pub use pass::{MaterialDraw, MeshDraw};
 pub use post::{PostPass, PostSettings};
