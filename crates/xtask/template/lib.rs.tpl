@@ -5,6 +5,8 @@
 //! physics step). It acts on the scene it is given — `scenes/main.ron`,
 //! edited in the editor — by asking the world for its components.
 
+#![warn(missing_docs)]
+
 use serde::{Deserialize, Serialize};
 use voltra_core::{Game, Tick};
 use voltra_render::glam::Vec2;
@@ -21,6 +23,7 @@ pub const FIRST_SCENE: &str = "scenes/main.ron";
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Player {
+    /// World units a second.
     pub speed: f32,
 }
 

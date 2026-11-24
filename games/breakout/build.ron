@@ -1,0 +1,9 @@
+// Breakout: what `cargo xtask dist --manifest games/breakout/build.ron`
+// packages, and what the editor opens with `--game` this file.
+(
+    version: 1,
+    name: "Breakout",
+    window: (width: 1280, height: 720),
+    assets: "assets",
+    game: (package: "breakout"),
+)
