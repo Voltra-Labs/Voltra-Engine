@@ -85,6 +85,7 @@ impl Gizmo {
         frame: &mut UiFrame<'_>,
         selection: &Selection,
         tool: Tool,
+        snap: &crate::snap::Snap,
     ) -> GizmoOutcome {
         let viewport = viewport_size(response);
         if viewport.x <= 0.0 || viewport.y <= 0.0 {
@@ -120,7 +121,9 @@ impl Gizmo {
 
         if let Some(active) = self.drag.as_mut() {
             let entity = active.entity;
-            let updated = active.transform(cursor_world);
+            // Ctrl flips snapping for this frame of the drag, as in Unity.
+            let invert = response.ctx.input(|input| input.modifiers.command);
+            let updated = snap.apply(active.tool, active.transform(cursor_world), invert);
             // The drag works in world space, because that is where the cursor
             // is; the entity stores a transform local to its parent. This is
             // the one conversion between the two, and it is why the drag
@@ -223,3 +226,25 @@ fn viewport_size(response: &Response) -> Vec2 {
 
 #[cfg(test)]
 mod tests;
+
+/// Where a drag of `entity` with `tool` from `from` to `to`, world units,
+/// leaves it from `start`, snapped by `snap`: what the viewport does over
+/// a whole drag, done at once — the move handle grabbed in its centre, the
+/// scale handle on both axes, the ring for a turn.
+pub(crate) fn drag_to(
+    entity: voltra_ecs::Entity,
+    tool: Tool,
+    start: Transform,
+    from: Vec2,
+    to: Vec2,
+    snap: &crate::snap::Snap,
+) -> Transform {
+    let handle = match tool {
+        Tool::Rotate => handle::Handle::Ring,
+        Tool::Translate | Tool::Scale => handle::Handle::Both,
+    };
+    let mut drag = Drag::begin(entity, tool, handle, from, start);
+    // Through the middle as well, so a turn knows which way it went round.
+    drag.transform(from.lerp(to, 0.5));
+    snap.apply(tool, drag.transform(to), false)
+}

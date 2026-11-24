@@ -61,7 +61,7 @@ use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 pub use input_map::DEFAULT_INPUT_MAP;
 pub use scenes::SceneLoad;
-pub use sorting_layers::DEFAULT_SORTING_LAYERS;
+pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
 pub use tick::Tick;
 pub use tick_audio::TickAudio;
 pub use ui_frame::UiFrame;

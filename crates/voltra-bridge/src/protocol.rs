@@ -90,6 +90,43 @@ pub enum Command {
     },
     /// The viewport as it was last drawn, as PNG bytes in base64.
     Screenshot,
+    /// The grid and snapping: sets what is given, answers all of it.
+    Snap {
+        #[serde(default)]
+        enabled: Option<bool>,
+        #[serde(default)]
+        step: Option<f32>,
+        #[serde(default)]
+        angle: Option<f32>,
+        #[serde(default)]
+        scale: Option<f32>,
+    },
+    /// What a gizmo drag of `entity` with `tool` — `move`, `rotate` or
+    /// `scale` — from `from` to `to`, world units, does: snapped as the
+    /// viewport's would be, one undo entry.
+    Drag {
+        entity: String,
+        tool: String,
+        from: [f32; 2],
+        to: [f32; 2],
+    },
+    /// The Console's lines at `level` (`error` … `trace`, default `info`)
+    /// or louder holding `filter`, the last `last` of them.
+    Console {
+        #[serde(default)]
+        level: Option<String>,
+        #[serde(default)]
+        filter: Option<String>,
+        #[serde(default)]
+        last: Option<usize>,
+    },
+    /// A project settings file — `input`, `layers` or `build` — read, or,
+    /// with `text`, checked and saved as the Project Settings window saves.
+    Settings {
+        file: String,
+        #[serde(default)]
+        text: Option<String>,
+    },
     /// The last `frames` recorded frames, summarised; `record` first starts
     /// or stops recording.
     Profile {
@@ -109,6 +146,7 @@ impl Command {
             Self::Rename { .. } => "AI: rename",
             Self::ComponentSet { .. } => "AI: set component",
             Self::ComponentRemove { .. } => "AI: remove component",
+            Self::Drag { .. } => "AI: drag",
             _ => "AI",
         }
     }

@@ -3774,7 +3774,6 @@ name = "voltra-editor"
 version = "0.1.0"
 dependencies = [
  "base64",
- "env_logger",
  "log",
  "ron",
  "serde",
@@ -3784,6 +3783,7 @@ dependencies = [
  "voltra-core",
  "voltra-ecs",
  "voltra-physics",
+ "voltra-player",
  "voltra-profile",
  "voltra-render",
  "voltra-scene",

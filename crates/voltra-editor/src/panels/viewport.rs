@@ -144,9 +144,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // The gizmo gets first refusal, for the same reason egui gets it
             // before the scene does: a handle drawn over a sprite has to be
             // grabbable, and a drag on one must not also re-select.
-            let outcome = editor
-                .gizmo
-                .update(&scene, frame, &editor.selection, editor.tool);
+            let outcome =
+                editor
+                    .gizmo
+                    .update(&scene, frame, &editor.selection, editor.tool, &editor.snap);
 
             // Every frame the drag holds an entity, so the history keeps one
             // entry open for the whole drag instead of one per frame. The entry
@@ -171,6 +172,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             editor.camera.navigate(ui, &scene, frame.camera);
 
+            // The grid under everything else drawn over the scene.
+            if editor.snap.enabled {
+                let camera = *frame.camera;
+                editor.snap.draw_grid(&camera, frame.lines());
+            }
             // After navigation, so the gizmo is laid out against the camera
             // this frame ends with rather than the one it started with.
             editor

@@ -24,8 +24,26 @@ struct LayersFile {
     layers: Vec<String>,
 }
 
+/// The sorting layers a layers file's `text` holds, or why it holds none:
+/// it does not parse, is of another version, or names an empty layer. What
+/// the editor's project settings check an edit with before saving it.
+pub fn parse_sorting_layers(text: &str) -> Result<SortingLayers, String> {
+    let file: LayersFile =
+        ron::from_str(text).map_err(|e| format!("not a sorting layers file: {e}"))?;
+    if file.version != VERSION {
+        return Err(format!(
+            "sorting layers version {}; this build reads {VERSION}",
+            file.version
+        ));
+    }
+    if file.layers.iter().any(|name| name.trim().is_empty()) {
+        return Err("an empty sorting layer name".to_owned());
+    }
+    Ok(SortingLayers::new(file.layers))
+}
+
 /// Reads a layers file. `None`, with the reason logged, for one that will
-/// not read, is of another version, or names an empty layer.
+/// not read or does not parse.
 fn read(path: &Path) -> Option<SortingLayers> {
     let text = match voltra_assets::fs::read_to_string(path) {
         Ok(text) => text,
@@ -34,26 +52,13 @@ fn read(path: &Path) -> Option<SortingLayers> {
             return None;
         }
     };
-    let file: LayersFile = match ron::from_str(&text) {
-        Ok(file) => file,
+    match parse_sorting_layers(&text) {
+        Ok(layers) => Some(layers),
         Err(e) => {
-            log::warn!("{} is not a sorting layers file: {e}", path.display());
-            return None;
+            log::warn!("{}: {e}", path.display());
+            None
         }
-    };
-    if file.version != VERSION {
-        log::warn!(
-            "{} is sorting layers version {}; this build reads {VERSION}",
-            path.display(),
-            file.version
-        );
-        return None;
     }
-    if file.layers.iter().any(|name| name.trim().is_empty()) {
-        log::warn!("{} names an empty sorting layer", path.display());
-        return None;
-    }
-    Some(SortingLayers::new(file.layers))
 }
 
 impl App {

@@ -5435,6 +5435,46 @@ into a render texture and shown by a HUD image, both blocks in it; and a
 pixel-perfect camera off the pixel grid whose every pixel over a 4 × 4
 texture matches a reference worked out on the CPU, texel by texel.
 
+### The editor snaps to a grid, shows its log, and edits project settings
+
+Stage 85.
+
+- **Grid snapping** (`snap.rs`, Edit ▸ Snap to grid): a move lands on the
+  grid — absolute, so things line up with each other, as Unity's grid
+  snapping does — a turn on multiples of `angle` degrees, a scale on
+  multiples of `scale` (never on zero, a way in with no way out). Ctrl
+  flips it for the drag. The grid is drawn under the gizmo while snapping
+  is on, doubling its spacing when zoomed out so it never passes about a
+  hundred lines a side. One function snaps the viewport's drags and the
+  bridge's.
+- **The Console** (Window ▸ Console): the engine's log ring (stage 70's
+  capture), read each frame, kept to 2000 lines, filtered by level — the
+  chosen one and louder — and by text over target and message, coloured
+  by level, counts in the level buttons. Unity's Console, Godot's Output.
+  The editor now starts the engine's logger (`logging::init`) rather than
+  a bare `env_logger`: before, nothing it logged reached the ring.
+- **Project Settings** (Window ▸ Project Settings): the input map, the
+  sorting layers and `build.ron`, each edited as the RON file it is, and
+  saved only if it reads — through the same parsers the engine and the
+  player use (`ActionMap::from_ron`, `parse_sorting_layers`,
+  `Manifest::from_ron`) — atomically, through a temporary file. The
+  engine's watch reads the saved file back, so bindings and layers apply
+  at once. Text rather than a form per file: the files are the truth, a
+  form would be a second editor of each, and RON is what a person diffs.
+- **The bridge** gains `Snap`, `Drag` (what a gizmo drag from one point
+  to another does, snapped, one undo entry), `Console` (the window's
+  filter) and `Settings` (read, or check and save).
+
+Pinned by `snap.rs` (a move on the grid; off and Ctrl; turns and scales
+on steps; a sparse grid however far out), `console.rs` (levels and text
+filters), `project_settings.rs` (saved and read back; a file the engine
+would not read refused and not written; `build.ron` beside the assets)
+and `voltra-editor/tests/bridge.rs`: the editor launched on a scratch
+project under Xvfb and driven through its bridge — a snapped move and
+turn and an unsnapped one, a missing texture's warning in the Console at
+warn and not at error, a bad layers file refused and a good one saved
+and read back live. In CI, on a software Vulkan driver.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -1,6 +1,7 @@
 mod bridge;
 mod camera;
 mod clipboard;
+mod console;
 mod delete;
 mod document;
 mod drag;
@@ -16,10 +17,12 @@ mod panels;
 mod picking;
 mod play;
 mod prefab;
+mod project_settings;
 mod scene_dialogs;
 mod scene_file;
 mod selection;
 mod shape_edit;
+mod snap;
 mod spawn;
 mod timeline;
 mod tool;
@@ -36,7 +39,9 @@ use voltra_scene::{SceneId, Sprite, Transform};
 const CHECKER: &str = "sprites/checker.png";
 
 fn main() {
-    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    // The engine's logger, not a bare `env_logger`: it copies every line
+    // into the ring the Console window and the bridge read.
+    voltra_core::logging::init(false);
 
     let Some(args) = Args::parse(std::env::args().skip(1)) else {
         log::error!(

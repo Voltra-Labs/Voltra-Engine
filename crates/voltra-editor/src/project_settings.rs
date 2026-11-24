@@ -1,0 +1,144 @@
+//! The project's settings files: the input map, the sorting layers and the
+//! build manifest — read, checked and saved as the files they already are.
+
+use std::path::{Path, PathBuf};
+
+use voltra_core::input::ActionMap;
+use voltra_core::{parse_sorting_layers, DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS};
+
+/// One of the files the Project Settings window edits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SettingsFile {
+    /// `default.input.ron`, under the asset root.
+    InputMap,
+    /// `default.layers.ron`, under the asset root.
+    SortingLayers,
+    /// `build.ron`, beside the asset root.
+    Build,
+}
+
+impl SettingsFile {
+    pub(crate) const ALL: [Self; 3] = [Self::InputMap, Self::SortingLayers, Self::Build];
+
+    pub(crate) fn label(self) -> &'static str {
+        match self {
+            Self::InputMap => "Input map",
+            Self::SortingLayers => "Sorting layers",
+            Self::Build => "Build",
+        }
+    }
+
+    /// The name a tool asks for it by.
+    pub(crate) fn named(name: &str) -> Option<Self> {
+        match name {
+            "input" | "input_map" => Some(Self::InputMap),
+            "layers" | "sorting_layers" => Some(Self::SortingLayers),
+            "build" => Some(Self::Build),
+            _ => None,
+        }
+    }
+
+    /// Where it is for the project whose asset root is `assets`.
+    pub(crate) fn path(self, assets: &Path) -> PathBuf {
+        match self {
+            Self::InputMap => assets.join(DEFAULT_INPUT_MAP),
+            Self::SortingLayers => assets.join(DEFAULT_SORTING_LAYERS),
+            Self::Build => assets
+                .parent()
+                .filter(|dir| !dir.as_os_str().is_empty())
+                .unwrap_or(Path::new("."))
+                .join(voltra_player::MANIFEST_FILE),
+        }
+    }
+
+    /// Whether `text` is a file of this kind the engine reads, and why not.
+    pub(crate) fn check(self, text: &str, path: &Path) -> Result<(), String> {
+        match self {
+            Self::InputMap => ActionMap::from_ron(text, path)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            Self::SortingLayers => parse_sorting_layers(text).map(|_| ()),
+            Self::Build => voltra_player::Manifest::from_ron(text, path)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+        }
+    }
+}
+
+/// The file's text, or an empty one for a project that has none yet.
+pub(crate) fn read(file: SettingsFile, assets: &Path) -> Result<String, String> {
+    let path = file.path(assets);
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(String::new()),
+        Err(e) => Err(format!("cannot read {}: {e}", path.display())),
+    }
+}
+
+/// Checks `text` and saves it as the file, through a temporary file and a
+/// rename, so a crash mid-write leaves the old file. A file that would not
+/// read is refused, with why, and nothing is written. The engine's watch
+/// reads the saved file back: the bindings and layers apply at once.
+pub(crate) fn write(file: SettingsFile, assets: &Path, text: &str) -> Result<PathBuf, String> {
+    let path = file.path(assets);
+    file.check(text, &path)?;
+    let temporary = path.with_extension("ron.tmp");
+    std::fs::write(&temporary, text)
+        .and_then(|()| std::fs::rename(&temporary, &path))
+        .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    log::info!("saved {}", path.display());
+    Ok(path)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project() -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "voltra-settings-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        std::fs::create_dir_all(dir.join("assets")).expect("folders");
+        dir.join("assets")
+    }
+
+    #[test]
+    fn layers_are_saved_and_read_back() {
+        let assets = project();
+        let text = r#"(version: 1, layers: ["Sky", "Default", "Fx"])"#;
+        let path = write(SettingsFile::SortingLayers, &assets, text).expect("saves");
+        assert_eq!(path, assets.join(DEFAULT_SORTING_LAYERS));
+        assert_eq!(
+            read(SettingsFile::SortingLayers, &assets),
+            Ok(text.to_owned())
+        );
+    }
+
+    #[test]
+    fn a_file_the_engine_would_not_read_is_refused_and_not_written() {
+        let assets = project();
+        let error = write(
+            SettingsFile::SortingLayers,
+            &assets,
+            r#"(version: 1, layers: [""])"#,
+        )
+        .expect_err("an empty name");
+        assert!(error.contains("empty"), "{error}");
+        assert_eq!(
+            read(SettingsFile::SortingLayers, &assets),
+            Ok(String::new())
+        );
+        assert!(write(SettingsFile::InputMap, &assets, "(version: 1, actions: {").is_err());
+        assert!(write(SettingsFile::Build, &assets, "(nope)").is_err());
+    }
+
+    #[test]
+    fn the_build_manifest_is_beside_the_assets() {
+        let assets = project();
+        let text = r#"(version: 1, name: "Game", scene: "scenes/a.ron")"#;
+        let path = write(SettingsFile::Build, &assets, text).expect("saves");
+        assert_eq!(path, assets.parent().expect("a parent").join("build.ron"));
+    }
+}

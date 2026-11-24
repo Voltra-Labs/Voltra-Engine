@@ -82,6 +82,12 @@ pub struct Editor {
     pub(crate) dialogs: SceneDialogs,
     /// Whether the Profiler window is up.
     pub(crate) profiler: ProfilerPanel,
+    /// The grid, and what snaps to it.
+    pub(crate) snap: crate::snap::Snap,
+    /// The log, kept for the Console window and the bridge.
+    pub(crate) console: crate::console::Console,
+    /// The Project Settings window.
+    pub(crate) settings: panels::project_settings::ProjectSettingsWindow,
     /// The project's game, loaded from its library; see [`crate::game`].
     pub(crate) game: crate::game::GameHost,
 }
@@ -153,8 +159,11 @@ impl Editor {
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);
-        // A floating window, over the docked panels.
+        // Floating windows, over the docked panels.
         panels::profiler::show(self, ui, frame);
+        panels::console::show(self, ui);
+        let assets = frame.textures.root().to_path_buf();
+        panels::project_settings::show(self, ui, &assets);
 
         // Last, so it sees everything every panel did.
         if editing {
