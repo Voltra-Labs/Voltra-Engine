@@ -5865,6 +5865,73 @@ LTR, RTL and a mixed line; stops that do not fit move nothing) and
 `ab שלום` field through every position, x never decreasing, back through
 the Hebrew; the left arrow walks it back; no font, logical).
 
+### Rich text is inline tags parsed into spans the layout sets as one paragraph
+
+Stage 93. A dialogue line can colour a name, embolden a warning, enlarge a
+number and put a coin beside it, and a translated string can do the same.
+
+- **Markup** (`text/markup.rs`): BBCode-like, Godot's `RichTextLabel` and
+  TextMeshPro's shape — `[b]`, `[color=#f00]` (`#rgb`, `#rgba`,
+  `#rrggbb`, `#rrggbbaa`, a few names), `[size=24]` (the em height in the
+  text's own units), `[font=fonts/x.ttf]`, and `[icon=…]`, which closes
+  nothing. Tags close in any order (each run's style is recomputed from the
+  tags still open, so `[b][color]…[/b]…[/color]` does what it says). `[[`
+  is a literal `[`. An unknown tag, a value that does not read, or a close
+  with nothing open is shown as written — the typo is seen where it is —
+  and logged once per spelling for the session.
+- **Spans, one paragraph** (`text/paragraph.rs`): the parsed runs become
+  stage 91's `Span`s, each with its font, raster size (`px × size /
+  text.size`), faux bold or not, and a tag back to its style; the layout
+  shapes, bidi-orders and wraps them as one paragraph, so a style crosses
+  a line break, a run of another size makes its line taller, and a
+  `[font=…]` still falls back to the language's fonts. Colour is not in
+  the span — it changes no glyph — the draw looks it up by the glyph's tag:
+  a run's colour replaces the text's, with the text's alpha multiplied in,
+  so fading a text fades every colour in it.
+- **Bold**: `Text::bold_font`, the family's bold file, sets a `[b]` run;
+  with none — and for a `[b]` inside a `[font=…]`, whose family we do not
+  know — faux bold (stage 91's dilation, the advance widened to match).
+  Godot's `FontVariation` embolden and TextMeshPro's "bold" weight are the
+  same fallback; a font *family* asset naming regular/bold/italic files is
+  the general version, deferred until a stage needs italics too.
+- **Icons**: `[icon=sprites/ui.atlas.ron/3]` is frame 3 of an atlas, drawn
+  from the texture the atlas names; `[icon=sprites/coin.png]` is a whole
+  image. Atlases are named by frame index — named regions do not exist yet.
+  The icon stands on the baseline in a box as tall as its font's ascent,
+  as wide as the picture's aspect makes it, and carries an object
+  replacement character (U+FFFC) in the parsed string, which bidi and line
+  breaking treat as one neutral object. `text::icons::resolve_world` loads
+  what the tags name — every frame before the draw, a scan for `[icon=`
+  when nothing changed, since a language switch can bring an icon — into
+  `Text::icons` (never saved); an icon that does not resolve is logged and
+  keeps its room but draws nothing. The batch and the UI mesh push icon
+  quads with their own texture beside the glyphs'.
+- **`Text::rich`** (on by default, not written when on): off shows the
+  brackets. A text field's text is never rich — what was typed, brackets
+  and all — however its `Text` is set; the field draws, measures and
+  rasterizes it plain.
+- **Strings from the locale table** are contents like any other, so they
+  may carry markup.
+- Inspector: *rich text*, *bold font*.
+
+Rejected: **HTML-like tags** (TextMeshPro's `<b>`) — square brackets need
+no escaping in RON strings and are what Godot users write; **a separate
+`RichText` component** (Godot's `Label` vs `RichTextLabel`) — one text type
+whose plain case costs one scan for `[` keeps every caller (pick, bounds,
+UI, locale) on one path.
+
+Pinned by `text/markup/tests.rs` (tags out, styled runs; nesting closed in
+any order; colours in four spellings and names; unknown tags, bad values
+and stray closes shown; an icon as one object character; `[[`; a font
+path), `text/rich_tests.rs` (plain is one span; `[size]`, `[b]` and
+`[font]` set their spans; a bold file instead of faux bold; rich off shows
+brackets; a run's colour and the text's alpha on the glyphs; a coloured run
+on two lines of a wrap; an icon's em box with the next letter after it; a
+keyed string's markup) and `voltra-scene/tests/headless_rich_text.rs`: a
+red word, a larger green one and an atlas coin on one line, matched against
+`tests/references/rich_text_line.png`, and a green run still green on the
+line it wraps onto.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

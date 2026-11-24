@@ -125,6 +125,10 @@ impl SpriteBatch {
         let Some(fonts) = sheets.fonts else {
             return;
         };
+        for icon in shape::icons_at(text, fonts, text.px(), text.max_width) {
+            let surface = Surface::textured(Some(icon.texture)).on(text.light_layers);
+            self.push_quad_on(matrix, icon.corners, icon.uvs, icon.color, surface);
+        }
         let (quads, Some(texture)) = shape::glyphs(text, fonts) else {
             return;
         };

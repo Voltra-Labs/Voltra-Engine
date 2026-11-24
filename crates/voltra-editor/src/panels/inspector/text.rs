@@ -108,6 +108,27 @@ pub(super) fn show(
         text.set_font(path, fonts);
         claim = claim.or(Some("Set font"));
     }
+    if ui
+        .checkbox(&mut text.rich, "rich text")
+        .on_hover_text("[b], [color=#f00], [size=24], [font=…], [icon=…] style the content")
+        .changed()
+    {
+        claim = claim.or(Some("Toggle rich text"));
+    }
+    ui.label("bold font")
+        .on_hover_text("the face [b] uses; with none, the regular face is thickened");
+    let committed = text
+        .bold_font
+        .as_ref()
+        .map(|path| path.as_str().to_owned())
+        .unwrap_or_default();
+    if let Some(edit) = path_field::show(ui, "bold_font_path", "faux bold", &committed) {
+        text.bold_font = match edit {
+            PathEdit::Cleared => None,
+            PathEdit::Set(path) => Some(path),
+        };
+        claim = claim.or(Some("Set bold font"));
+    }
     claim.or(super::light_layers::show(
         ui,
         "text_light_layers",

@@ -24,6 +24,8 @@ pub(crate) fn aligned_x(rect: Rect, align: Align) -> f32 {
 pub(crate) fn stops(style: &Text, content: &str, fonts: &Fonts) -> Option<Vec<f32>> {
     let mut text = style.clone();
     text.content = content.to_owned();
+    // Measured as drawn: brackets typed into a field are text.
+    text.rich = false;
     shape::caret_stops_at(&text, fonts, ui_px(&text, 1.0))
 }
 

@@ -1,5 +1,7 @@
 //! The text component: a string drawn in the world with a font.
 
+pub mod icons;
+pub mod markup;
 pub mod paragraph;
 pub mod shape;
 
@@ -65,6 +67,17 @@ pub struct Text {
     /// [`DEFAULT_FONT`](voltra_assets::DEFAULT_FONT).
     #[serde(default)]
     pub font: Option<AssetPath>,
+    /// The face a `[b]` run is set in — the family's bold file. `None` —
+    /// the default, and not written — thickens the regular face instead
+    /// (faux bold), as does a `[b]` inside a `[font=…]`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bold_font: Option<AssetPath>,
+    /// Whether the content's inline tags (`[b]`, `[color=#f00]`,
+    /// `[size=24]`, `[font=…]`, `[icon=…]`; see
+    /// [`markup`](crate::text::markup)) style it. On — the default, and not
+    /// written; off shows the brackets as typed, as a text field does.
+    #[serde(default = "yes", skip_serializing_if = "is_yes")]
+    pub rich: bool,
     /// The em height, in entity units: before the transform's scale, one
     /// line of capitals is a little under this tall.
     pub size: f32,
@@ -101,6 +114,18 @@ pub struct Text {
     /// serialised: it addresses a slot in this session's [`Fonts`].
     #[serde(skip)]
     pub font_handle: Option<Handle<Font>>,
+    /// The images its `[icon=…]` tags name, resolved by
+    /// [`icons::resolve_world`]. Never serialised.
+    #[serde(skip)]
+    pub icons: Vec<icons::TextIcon>,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn is_yes(value: &bool) -> bool {
+    *value
 }
 
 fn one() -> f32 {
@@ -119,6 +144,8 @@ impl Default for Text {
             max_width: None,
             line_spacing: 1.0,
             font: None,
+            bold_font: None,
+            rich: true,
             size: 1.0,
             pixels_per_em: Self::DEFAULT_PIXELS_PER_EM,
             color: [1.0, 1.0, 1.0, 1.0],
@@ -127,6 +154,7 @@ impl Default for Text {
             sorting_layer: crate::sorting::default_layer(),
             light_layers: crate::light::default_light_layers(),
             font_handle: None,
+            icons: Vec::new(),
         }
     }
 }
@@ -201,6 +229,18 @@ pub fn prepare(world: &World, fonts: &mut Fonts, ui_scale: f32) {
         } else {
             text.px()
         };
+        // A field draws what was typed, brackets and all.
+        let plain;
+        let text = if text.rich && world.get::<crate::UiTextField>(entity).is_some() {
+            plain = Text {
+                rich: false,
+                ..text.clone()
+            };
+            &plain
+        } else {
+            text
+        };
+        paragraph::load_fonts(text, fonts);
         if let Some(layout) = shape::wrapped(text, fonts, px) {
             fonts.rasterize(&layout);
         }
@@ -222,3 +262,6 @@ pub fn ui_px(text: &Text, scale: f32) -> u32 {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod rich_tests;

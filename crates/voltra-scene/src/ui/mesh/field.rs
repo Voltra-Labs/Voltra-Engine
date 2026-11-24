@@ -29,11 +29,15 @@ pub(super) fn push(
         0.0
     };
 
+    let plain = Text {
+        rich: false,
+        ..text.clone()
+    };
     let measured = sheets.fonts.and_then(|fonts| {
-        let px = ui_px(text, scale);
+        let px = ui_px(&plain, scale);
         Some((
-            shape::caret_stops_at(text, fonts, px)?,
-            shape::bounds_at(text, fonts, px, None)?,
+            shape::caret_stops_at(&plain, fonts, px)?,
+            shape::bounds_at(&plain, fonts, px, None)?,
         ))
     });
     let origin = aligned_x(rect, text.align) - scroll;
@@ -67,6 +71,8 @@ pub(super) fn push(
     }
 
     let mut shown = text.clone();
+    // What was typed, brackets and all: a field is not rich text.
+    shown.rich = false;
     if placeholder {
         shown.color[3] *= PLACEHOLDER_ALPHA;
     }

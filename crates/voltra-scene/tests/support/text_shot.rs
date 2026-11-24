@@ -69,7 +69,14 @@ impl Shot {
         let (device, queue) = headless_device()?;
         let layout = texture::bind_group_layout(&device);
         let mut textures = Textures::new(&device, &queue, &layout, &self.root);
-        let atlases = Atlases::new(&self.root);
+        let mut atlases = Atlases::new(&self.root);
+        voltra_scene::text::icons::resolve_world(
+            &mut self.world,
+            &mut atlases,
+            &mut textures,
+            &device,
+            &queue,
+        );
         resolve_fonts(&mut self.world, &mut self.fonts);
         prepare(&self.world, &mut self.fonts, 1.0);
         self.fonts.upload(&mut textures, &device, &queue);

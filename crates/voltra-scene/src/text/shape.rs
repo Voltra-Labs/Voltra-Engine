@@ -12,6 +12,7 @@ use voltra_assets::{Fonts, Handle};
 use voltra_render::glam::Vec2;
 use voltra_render::Texture;
 
+use super::markup::Style;
 use super::paragraph;
 use super::Text;
 
@@ -72,8 +73,21 @@ pub fn layout_at(
     width: Option<f32>,
 ) -> Option<Arc<TextLayout>> {
     let font = text.font_handle?;
-    let (content, spans) = paragraph::spans(text, fonts, font, px);
-    fonts.layout(&content, &spans, text.wrap_at(px, width))
+    let paragraph = paragraph::of(text, fonts, font, px);
+    fonts.layout(
+        &paragraph.content,
+        &paragraph.spans,
+        text.wrap_at(px, width),
+    )
+}
+
+/// The rich-text styles of `text`'s spans, by tag; one default for plain
+/// text.
+fn styles(text: &Text, fonts: &Fonts, px: u32) -> Vec<Style> {
+    match text.font_handle {
+        Some(font) => paragraph::of(text, fonts, font, px).styles,
+        None => Vec::new(),
+    }
 }
 
 /// The laid-out box, or `None` with no usable font.
@@ -147,6 +161,12 @@ pub fn glyphs_at(
     };
     let s = scale(text, px);
     let atlas = fonts.atlas();
+    let styles = styles(text, fonts, px);
+    let color_of = |tag: u32| {
+        styles
+            .get(tag as usize)
+            .map_or(text.color, |style| paragraph::color(text, style))
+    };
     let quads = layout
         .glyphs
         .iter()
@@ -168,7 +188,7 @@ pub fn glyphs_at(
                     Vec2::new(right, top),
                 ],
                 uvs: atlas.uvs(rect),
-                color: text.color,
+                color: color_of(placed.tag),
             })
         })
         .collect();
@@ -179,4 +199,65 @@ pub fn glyphs_at(
 /// it: what [`prepare`](super::prepare) does for every text.
 pub(crate) fn wrapped(text: &Text, fonts: &Fonts, px: u32) -> Option<Arc<TextLayout>> {
     layout_at(text, fonts, px, text.max_width)
+}
+
+/// One inline icon's quad, in the entity's space.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IconQuad {
+    /// Top-left, bottom-left, bottom-right, top-right.
+    pub corners: [Vec2; 4],
+    /// Texture coordinates for each corner.
+    pub uvs: [[f32; 2]; 4],
+    /// The texture it samples.
+    pub texture: Handle<Texture>,
+    /// White faded by the text's alpha, or its run's `[color]`.
+    pub color: [f32; 4],
+}
+
+/// Every inline icon `text` draws, at `px` and wrapped at `width` as
+/// [`glyphs_at`] lays it out: each standing on its line's baseline in the
+/// em box the line gave it. Empty for an icon whose image did not resolve
+/// ([`icons::resolve_world`](super::icons::resolve_world) logs why).
+pub fn icons_at(text: &Text, fonts: &Fonts, px: u32, width: Option<f32>) -> Vec<IconQuad> {
+    if text.icons.is_empty() {
+        return Vec::new();
+    }
+    let Some(layout) = layout_at(text, fonts, px, width) else {
+        return Vec::new();
+    };
+    let styles = styles(text, fonts, px);
+    let s = scale(text, px);
+    layout
+        .objects
+        .iter()
+        .filter_map(|object| {
+            let style = styles.get(object.tag as usize)?;
+            let reference = style.icon.as_ref()?;
+            let icon = text
+                .icons
+                .iter()
+                .find(|icon| icon.reference == *reference)?;
+            let texture = icon.texture?;
+            let start = offset(text, layout.line_widths[object.line]);
+            let left = (start + object.pen) * s;
+            let bottom = -layout.baselines[object.line] * s;
+            let right = left + object.width * s;
+            let top = bottom + object.height * s;
+            let color = match style.color {
+                Some(_) => paragraph::color(text, style),
+                None => [1.0, 1.0, 1.0, text.color[3]],
+            };
+            Some(IconQuad {
+                corners: [
+                    Vec2::new(left, top),
+                    Vec2::new(left, bottom),
+                    Vec2::new(right, bottom),
+                    Vec2::new(right, top),
+                ],
+                uvs: icon.uvs,
+                texture,
+                color,
+            })
+        })
+        .collect()
 }
