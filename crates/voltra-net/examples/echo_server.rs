@@ -1,15 +1,17 @@
-//! A native WebSocket server that sends every datagram back: what the web
-//! probe (`web_probe.rs`) connects to in `crates/voltra-player/web/test/net.mjs`.
+//! A native server that sends every message back to whoever sent it, on
+//! the channel it came on: what the web probe (`web_probe.rs`) connects to
+//! in `crates/voltra-player/web/test/net.mjs`.
 //!
 //!   cargo run -p voltra-net --example echo_server -- --port-file PATH [--seconds N]
 //!
-//! Listens on a free loopback port and writes the port to `PATH`, so the
-//! test needs no fixed port; exits after `N` seconds (default 60).
+//! Listens for WebSockets on a free loopback port and writes the port to
+//! `PATH`, so the test needs no fixed port; exits after `N` seconds
+//! (default 60).
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> std::process::ExitCode {
     use std::time::{Duration, Instant};
-    use voltra_net::{Transport, WebSocketServer};
+    use voltra_net::{Endpoint, NetConfig, NetEvent, WebSocketServer};
 
     env_logger::init();
     let args: Vec<String> = std::env::args().collect();
@@ -26,29 +28,35 @@ fn main() -> std::process::ExitCode {
         .and_then(|s| s.parse().ok())
         .unwrap_or(60);
 
-    let mut server = match WebSocketServer::bind("127.0.0.1:0") {
-        Ok(server) => server,
+    let listener = match WebSocketServer::bind("127.0.0.1:0") {
+        Ok(listener) => listener,
         Err(e) => {
             log::error!("could not listen: {e}");
             return std::process::ExitCode::FAILURE;
         }
     };
-    if let Err(e) = std::fs::write(port_file, server.local_socket().port().to_string()) {
+    let port = listener.local_socket().port();
+    let mut server = Endpoint::server(listener, NetConfig::default());
+    if let Err(e) = std::fs::write(port_file, port.to_string()) {
         log::error!("could not write {port_file}: {e}");
         return std::process::ExitCode::FAILURE;
     }
 
     let start = Instant::now();
     while start.elapsed() < Duration::from_secs(seconds) {
-        if let Err(e) = server.update(start.elapsed()) {
-            log::error!("the server failed: {e}");
-            return std::process::ExitCode::FAILURE;
-        }
-        while let Ok(Some(datagram)) = server.recv() {
-            if let Err(e) = server.send(datagram.from, &datagram.payload) {
-                log::error!("could not answer {}: {e}", datagram.from);
+        server.receive(start.elapsed());
+        for event in server.events() {
+            match event {
+                NetEvent::Connected(peer) => log::info!("{peer} joined"),
+                NetEvent::Disconnected { peer, reason } => log::info!("{peer} left: {reason}"),
             }
         }
+        for message in server.take_messages() {
+            if let Err(e) = server.send(message.from, message.channel, &message.bytes) {
+                log::error!("could not answer {}: {e}", message.from);
+            }
+        }
+        server.flush(start.elapsed());
         std::thread::sleep(Duration::from_millis(5));
     }
     std::process::ExitCode::SUCCESS

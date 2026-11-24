@@ -1,5 +1,7 @@
-//! A page that opens a WebSocket to a native server and checks a datagram
-//! comes back: the browser half of `crates/voltra-player/web/test/net.mjs`.
+//! A page that connects to a native server through the browser's WebSocket
+//! — the handshake, then a short message and one long enough to go in
+//! fragments, each echoed back: the browser half of
+//! `crates/voltra-player/web/test/net.mjs`.
 //!
 //! The server is named by the page's query, `?server=ws://127.0.0.1:PORT/`.
 //! On success the page's title becomes `voltra-net: echoed`; anything else
@@ -11,13 +13,15 @@ fn main() {
     use std::rc::Rc;
     use std::time::Duration;
 
-    use voltra_net::{Address, BrowserWebSocket, Transport};
+    use voltra_net::{Address, BrowserWebSocket, ChannelId, Endpoint, NetConfig, NetEvent, PeerId};
     use wasm_bindgen::closure::Closure;
     use wasm_bindgen::JsCast;
 
     const PING: &[u8] = b"voltra ping";
+    const LONG: usize = 3000;
 
     let say = |line: &str| web_sys::console::log_1(&line.into());
+    let fail = |line: &str| web_sys::console::error_1(&line.into());
     let Some(window) = web_sys::window() else {
         return;
     };
@@ -28,39 +32,60 @@ fn main() {
         .find_map(|pair| pair.strip_prefix("server="))
         .map(str::to_owned)
     else {
-        web_sys::console::error_1(&"no ?server= in the page's address".into());
+        fail("no ?server= in the page's address");
         return;
     };
     let transport = match BrowserWebSocket::connect(&url) {
         Ok(transport) => transport,
         Err(e) => {
-            web_sys::console::error_1(&format!("could not connect: {e}").into());
+            fail(&format!("could not connect: {e}"));
             return;
         }
     };
     say(&format!("voltra-net probe: connecting to {url}"));
+    let client = Rc::new(RefCell::new(Endpoint::client(
+        transport,
+        Address::Server,
+        NetConfig::default(),
+    )));
 
-    let transport = Rc::new(RefCell::new(transport));
+    let long: Vec<u8> = (0..LONG).map(|i| (i % 251) as u8).collect();
     let document = window.document();
-    let mut ticks = 0u32;
+    let mut ticks = 0u64;
+    let mut echoed = (false, false);
     let tick = Closure::<dyn FnMut()>::new(move || {
         ticks += 1;
-        let mut transport = transport.borrow_mut();
-        // A datagram a tick, as a game would: dropped until the socket opens.
-        if let Err(e) = transport.update(Duration::from_millis(u64::from(ticks) * 20)) {
-            web_sys::console::error_1(&format!("update failed: {e}").into());
-        }
-        if transport.is_open() {
-            if let Err(e) = transport.send(Address::Server, PING) {
-                web_sys::console::error_1(&format!("send failed: {e}").into());
+        let now = Duration::from_millis(ticks * 20);
+        let mut client = client.borrow_mut();
+        client.receive(now);
+        for event in client.events().to_vec() {
+            match event {
+                NetEvent::Connected(_) => {
+                    say(&format!(
+                        "voltra-net probe: joined as {:?}",
+                        client.local_id()
+                    ));
+                    for bytes in [PING, &long[..]] {
+                        if let Err(e) =
+                            client.send(PeerId::SERVER, ChannelId::RELIABLE_ORDERED, bytes)
+                        {
+                            fail(&format!("send failed: {e}"));
+                        }
+                    }
+                }
+                NetEvent::Disconnected { reason, .. } => fail(&format!("disconnected: {reason}")),
             }
         }
-        while let Ok(Some(datagram)) = transport.recv() {
-            if datagram.payload == PING && datagram.from == Address::Server {
-                say("voltra-net probe: echoed");
-                if let Some(document) = document.as_ref() {
-                    document.set_title("voltra-net: echoed");
-                }
+        for message in client.take_messages() {
+            echoed.0 |= message.bytes == PING;
+            echoed.1 |= message.bytes == long;
+        }
+        client.flush(now);
+        if echoed == (true, true) {
+            echoed = (false, false);
+            say("voltra-net probe: echoed");
+            if let Some(document) = document.as_ref() {
+                document.set_title("voltra-net: echoed");
             }
         }
     });

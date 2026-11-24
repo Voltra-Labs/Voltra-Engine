@@ -8,6 +8,8 @@ repository.workspace = true
 
 [dependencies]
 log.workspace = true
+serde.workspace = true
+postcard.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # The native WebSocket listener and client. A browser has its own.

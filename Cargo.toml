@@ -18,6 +18,7 @@ voltra-core = { path = "crates/voltra-core" }
 voltra-ecs = { path = "crates/voltra-ecs" }
 voltra-jobs = { path = "crates/voltra-jobs" }
 voltra-nav = { path = "crates/voltra-nav" }
+voltra-net = { path = "crates/voltra-net" }
 voltra-physics = { path = "crates/voltra-physics" }
 voltra-profile = { path = "crates/voltra-profile" }
 voltra-player = { path = "crates/voltra-player" }
@@ -92,6 +93,10 @@ libloading = "0.8.9"
 # stream-based crate, over a `TcpStream` we make non-blocking — no async
 # runtime in the engine. Only `voltra-net` may name it.
 tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+# A game's network messages: serde values as compact bytes (varints, no
+# field names). `alloc` only — no `heapless`, no COBS framing (a datagram
+# is already framed).
+postcard = { version = "1.2.0", default-features = false, features = ["alloc"] }
 
 # Our crates stay debuggable; dependencies are compiled optimized because we
 # never step into them and wgpu/naga are painfully slow at opt-level 0.

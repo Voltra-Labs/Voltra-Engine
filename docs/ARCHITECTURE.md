@@ -88,10 +88,10 @@ version bump is a one-line change.
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
-| `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport` |
+| `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport`, `Endpoint`, `NetConfig`, `ChannelKind`, `ChannelId`, `PeerId`, `NetEvent`, `DisconnectReason`, `Message` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
 | `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs — and a running editor, through the bridge — for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
-| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
+| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
@@ -5619,6 +5619,99 @@ and `crates/voltra-player/web/test/net.mjs` in CI's web job: the wasm
 `examples/web_probe.rs` in Chromium opens a `BrowserWebSocket` to the native
 `examples/echo_server.rs` and gets its datagram back.
 
+### A connection is a stateless handshake, packet acks and per-channel windows
+
+Stage 112. `voltra_net::Endpoint` is a server or a client over any
+`Transport`: one type for both roles, because after the handshake both ends
+are the same — peers, messages on channels, events — as Godot's
+`MultiplayerPeer` and Unity's `NetworkDriver` are one type. Polled:
+`receive(now)` at the top of a tick, `flush(now)` at the bottom, the
+caller's clock in both. A server numbers clients from `PeerId(1)`; to a
+client its server is `PeerId::SERVER`, and `local_id()` is the number the
+server gave it (what replication will name an owner by).
+
+- **Handshake** (`packet.rs` lays out every packet): request (protocol
+  version, the config's fingerprint, a nonce) → challenge (a cookie: a
+  keyed hash of address, nonce and a 10 s time slice, so the server keeps
+  nothing per stranger) → response (the cookie back) → accept (a session id,
+  the client's `PeerId`) or deny (a reason). netcode's shape without its
+  encryption. Request and response are padded to 64 bytes — more than any
+  answer — so a spoofed source gets no amplification. The fingerprint
+  hashes the game's `NetConfig::protocol`, the channel layout, the message
+  size and the channel budget: a mismatch is refused as
+  `ProtocolMismatch` at the door rather than misread later. A response
+  from a connected address with a new nonce is that client restarted.
+- **Keep-alive, timeouts, reasons**: an empty payload when an ack is owed or
+  the line was quiet for `keepalive` (250 ms); `timeout` (10 s) of silence
+  drops a peer; a client gives up after `connect_timeout` (5 s).
+  `DisconnectReason`: `Left`, `Closed`, `Kicked`, `ServerFull`,
+  `ProtocolMismatch`, `Violation`, `Shutdown` (sent, three times, as a
+  `disconnect` packet), and `Timeout`, `ConnectTimeout`, `TransportClosed`
+  (seen only locally). Dropping an endpoint says goodbye to every peer.
+- **Packet acks**, as Gaffer On Games lays them out and netcode, renet and
+  Unity Transport keep: every payload carries the newest sequence received
+  and 32 bits for the ones before. A reliable fragment is acknowledged
+  when a packet that carried it is, and resent after 1.5 smoothed RTTs
+  (RFC 6298's 1/8 gain; clamped to 20 ms–1 s). Sequences start at 1 so
+  "nothing received yet" acknowledges nothing.
+- **Channels** (`NetConfig::channels`, default one of each, `ChannelId`
+  constants naming them): `ReliableOrdered`, `ReliableUnordered`,
+  `UnreliableSequenced` (older than the newest delivered is dropped). Each
+  has its own numbering, so head-of-line blocking stays inside a channel.
+  A reliable channel's window is 512 messages from the oldest not yet
+  handed out; the sender stops at the same 512 (`SendError::ChannelFull`),
+  so an honest peer is never outside it.
+- **Fragmentation**: a message over 1024 bytes goes as fragments of
+  exactly 1024 but the last; reassembled per message id, reliable ones
+  fragment by fragment, sequenced ones whole or not at all (at most four
+  half-built). `max_message_size` (64 KiB default, 16 MiB at most) caps a
+  message.
+- **Untrusted input**: every length is checked before slicing
+  (`wire.rs`), a message id must be in the window (or just behind it, a
+  resend), a fragment count within the largest message, and each
+  reassembly is charged to the channel's budget (`channel_budget`, 1 MiB)
+  *before* its buffer is allocated. The sender counts the same charge
+  against the same budget, so going over can only be hostile: the peer is
+  disconnected with `Violation`. Junk from strangers is dropped; a receive
+  reads at most 16 384 datagrams. Nothing in a datagram can panic us — the
+  tests feed it random bytes. Not done: encryption and authentication
+  (netcode.io's connect tokens) — the session id stops blind spoofing, not
+  an on-path attacker.
+- **Typed messages**: `encode(&value)` / `Message::decode::<T>()` (and
+  `Endpoint::send_message`) are serde over `postcard` — varints, no field
+  names. A message is one value; trailing bytes are an error.
+- **`tick.net`** in `voltra-core` (`app/tick_net.rs`, type `Net`): `host`,
+  `join`, `start(endpoint)` (the seam for a hand-built one), `stop`,
+  `peers`, `send`, `send_message`, `broadcast`, `received`,
+  `take_received`, `events`, `kick`, `disconnect`, `stats`, and
+  `endpoint()` for engine code built on it (replication, stage 114). The
+  loop receives before the ticks and flushes after the fixed steps, every
+  frame, simulating or not; the session's clock is the sum of the frame
+  deltas, so a headless run is deterministic. Messages and events are per
+  frame, like collision events in the per-frame hook; `take_received`
+  hands each message out once for a fixed tick that runs twice. A session
+  `stop`ped is kept one more frame so the game hears its own goodbye.
+  `voltra_core::net` re-exports the crate.
+
+Pinned by `voltra-net/tests/connections.rs`, over the memory network with
+20 % loss, 30–70 ms latency (jitter reorders) and 5 % duplication: 1500
+messages up to five fragments long each way, every one delivered exactly
+once and the ordered ones in order, with resends counted; a sequenced
+channel never going backwards and losing some; typed messages; the largest
+message whole and one byte more refused; another protocol or channel
+layout refused; a full server refusing one more; leave and kick seen by
+both ends with their reasons; timeouts both ways and a connect to nobody;
+a dropped endpoint's goodbye; 2000 random datagrams from a stranger, and a
+client whose payloads' frames are turned to junk cut off for `Violation`
+while an honest one carries on. `tests/sockets.rs`: one server on UDP and
+WebSockets at once, a client on each, a message each way. Unit tests of
+`acks.rs`, `channel/` (send, receive, assembly), `packet.rs` (every packet
+round-trips; padding; 50 000 random packets) and `message.rs` (10 000
+random byte strings decoded). `voltra-core/tests/net.rs`: two headless
+games, one hosting and one joining over a lossy link, talking through
+their ticks. The web probe of stage 111 now runs the whole handshake from
+the browser and echoes a fragmented message.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5745,3 +5838,12 @@ Both differ from most training data and from every tutorial written against
 | `read` | `Err(Io(WouldBlock))` when nothing complete is in; partial frames are kept inside. Pings are answered on the next read/write/flush |
 | `Message::Binary` | holds a `bytes::Bytes`; `Message::binary(vec)` builds one |
 | Over-long message | `Err(Capacity(..))` from `read`: treat as the end of that stream |
+
+### `postcard` 1.2 notes
+
+| Thing | 1.2.0 |
+| --- | --- |
+| Features | `default` pulls `heapless`; `default-features = false, features = ["alloc"]` is enough for `to_allocvec` |
+| Decode | `from_bytes` ignores trailing bytes; `take_from_bytes` returns them — check they are empty for "one message is one value" |
+| Untrusted lengths | a sequence's `size_hint` is `None` when its claimed length exceeds the bytes left, so serde preallocates nothing for a lying length |
+| `Error` | `#[non_exhaustive]`, `Clone + Eq`; `DeserializeBadEncoding` is the generic "not well encoded" |
