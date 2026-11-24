@@ -36,11 +36,9 @@ pub(crate) struct Shaped {
     pub object: bool,
 }
 
-/// The shaping faces of a layout's fonts, made once per layout: a
-/// `rustybuzz::Face` borrows its font's bytes, so it cannot be kept in the
-/// font itself.
+/// A layout's fonts that can shape, looked up once per layout.
 pub(crate) struct Faces<'a> {
-    faces: Vec<(Handle<Font>, Option<rustybuzz::Face<'a>>)>,
+    faces: Vec<(Handle<Font>, Option<&'a Font>)>,
     lookup: &'a dyn Fn(Handle<Font>) -> Option<&'a Font>,
 }
 
@@ -52,16 +50,16 @@ impl<'a> Faces<'a> {
         }
     }
 
-    fn get(&mut self, font: Handle<Font>) -> Option<&rustybuzz::Face<'a>> {
+    fn get(&mut self, font: Handle<Font>) -> Option<&'a Font> {
         let index = match self.faces.iter().position(|(h, _)| *h == font) {
             Some(index) => index,
             None => {
-                let face = (self.lookup)(font).and_then(Font::shaper);
+                let face = (self.lookup)(font).filter(|font| font.shaper().is_some());
                 self.faces.push((font, face));
                 self.faces.len() - 1
             }
         };
-        self.faces[index].1.as_ref()
+        self.faces[index].1
     }
 }
 
@@ -175,13 +173,14 @@ fn covered(faces: &mut Faces<'_>, chain: &[Handle<Font>], stretch: &str) -> bool
     chain.iter().any(|font| {
         faces
             .get(*font)
+            .and_then(Font::shaper)
             .is_some_and(|face| wanted.iter().any(|c| face.glyph_index(*c).is_some()))
     })
 }
 
 /// `range` of `text` shaped by one face, in logical order.
 fn shape_once(
-    face: &rustybuzz::Face<'_>,
+    face: &Font,
     font: Handle<Font>,
     text: &str,
     run: &Run,
@@ -208,8 +207,10 @@ fn shape_once(
     });
     buffer.guess_segment_properties();
 
-    let shaped = rustybuzz::shape(face, &[], buffer);
-    let scale = style.px as f32 / face.units_per_em().max(1) as f32;
+    let (Some(shaper), Some(shaped)) = (face.shaper(), face.shape(buffer)) else {
+        return Vec::new();
+    };
+    let scale = style.px as f32 / shaper.units_per_em().max(1) as f32;
     let bold = if style.embolden {
         embolden::strength(style.px) as f32
     } else {

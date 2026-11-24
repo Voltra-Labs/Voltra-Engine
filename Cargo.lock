@@ -3913,6 +3913,7 @@ dependencies = [
  "pollster",
  "ron",
  "rustybuzz",
+ "self_cell",
  "serde",
  "unicode-bidi",
  "unicode-linebreak",
