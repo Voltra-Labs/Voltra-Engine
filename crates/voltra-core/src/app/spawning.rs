@@ -50,6 +50,24 @@ impl Tick<'_> {
         self.spawned.extend_from_slice(&instance.entities);
         Ok(instance)
     }
+
+    /// A copy of `entity` and everything under it, as the editor's
+    /// duplicate makes one: fresh ids, links inside it remapped, the copy a
+    /// root (parent it where it belongs) and linked to no prefab — every
+    /// component the registry knows, through the same cut a prefab file is
+    /// made with. What a screen built from a template row does once per
+    /// row.
+    pub fn duplicate(&mut self, entity: Entity) -> Result<Instance, SceneError> {
+        let file = prefab::fragment(self.world, self.registry, entity)?;
+        let copy = Prefab::new(file)?;
+        let instance = prefab::spawn(self.world, self.registry, &copy, &Transform::default())?;
+        for &made in &instance.entities {
+            self.world.remove::<voltra_scene::PrefabInstance>(made);
+            self.world.remove::<voltra_scene::PrefabPart>(made);
+        }
+        self.spawned.extend_from_slice(&instance.entities);
+        Ok(instance)
+    }
 }
 
 /// The prefab store, made on first use.

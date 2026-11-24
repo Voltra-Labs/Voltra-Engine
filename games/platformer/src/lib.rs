@@ -15,7 +15,8 @@
 //! [`CoinCounter`](components::CoinCounter). `A`/`D` or the arrows walk,
 //! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump — and
 //! keeps it for the next run — and F11 (or the HUD's button) goes
-//! fullscreen and back.
+//! fullscreen and back. Escape pauses, and the pause menu opens the
+//! engine's options screen ([`menu`]): display, volumes, controls.
 
 #![warn(missing_docs)]
 
@@ -29,6 +30,7 @@ pub mod camera;
 pub mod coins;
 pub mod components;
 pub mod display;
+pub mod menu;
 pub mod progress;
 pub mod walker;
 
@@ -49,6 +51,8 @@ pub struct Platformer {
     jump: bool,
     /// F1 was pressed: the next key becomes jump.
     rebinding: bool,
+    /// The pause menu or the options screen, when one is over the level.
+    menu: menu::Menu,
 }
 
 impl Game for Platformer {
@@ -57,6 +61,9 @@ impl Game for Platformer {
     }
 
     fn start(&mut self, tick: &mut Tick<'_>) {
+        // The display and the volumes the options screen kept; the
+        // controls the loop has laid over the map already.
+        voltra_core::options::Settings::apply_saved(tick);
         coins::start(tick.world);
         if walker::find(tick.world).is_none() {
             log::warn!("the scene has no Walker: nothing for the keys to move");
@@ -64,6 +71,9 @@ impl Game for Platformer {
     }
 
     fn update(&mut self, tick: &mut Tick<'_>) {
+        if self.menu.update(tick) {
+            return;
+        }
         let Some(walker) = walker::find(tick.world) else {
             return;
         };
@@ -108,6 +118,12 @@ impl Game for Platformer {
         let Some(walker) = walker::find(tick.world) else {
             return;
         };
+        if self.menu.is_open() {
+            // Paused: the walker stands where it is, whatever is held.
+            self.jump = false;
+            walker::halt(tick.world, walker);
+            return;
+        }
         let worth = coins::take(tick, walker);
         if worth > 0 {
             coins::add(tick.world, worth);

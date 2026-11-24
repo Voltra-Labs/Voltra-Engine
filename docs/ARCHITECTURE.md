@@ -5660,6 +5660,71 @@ on by asking), the platformer's `tests/level.rs` (F11 headless) and
 web, its Fullscreen button clicked, the canvas the page's fullscreen
 element, clicked again and it is not — on WebGPU and WebGL2, in CI.
 
+### The options screen is a prefab the engine's code fills by name
+
+Stage 90. `assets/prefabs/options.prefab.ron` and `voltra_core::options`:
+a display row (windowed, fullscreen, exclusive where the monitor has
+modes), a resolution slider, a vsync toggle, one volume slider per bus,
+a scrolling list with one row per action to rebind, Reset controls and
+Back — built from stage 80's controls only (stage 94 brings dropdowns,
+tabs and a theme, and restyles it).
+
+- **A prefab, not an engine-drawn dialog** — the shape of Unity's and
+  Godot's sample options menus: a scene the game instances, a script
+  behind it. `OptionsScreen::open(tick, &OptionsConfig)` spawns it,
+  unlinks it from its file (a prefab sync must not put back the texts it
+  writes), finds each part by its `Name` and fills the lists by stamping
+  the prefab's own `Volume row` and `Binding row` once per bus and action
+  with the new `Tick::duplicate` (the editor's duplicate: a prefab
+  fragment spawned again, unlinked), then removes the templates and sizes a
+  fixed list to its rows. Restyle anything, keep the names; a part
+  missing is a warning and that row is left out. `update(tick)` each frame
+  answers `Outcome::Open` or `Closed`; `close` saves and despawns.
+- **Every change applies as it is made** — `tick.window` (from the next
+  frame), the bus volume, the action map — **and is kept on close**:
+  the controls through `tick.save_controls()` (stage 88's overrides), the
+  rest as `Settings` (`options.settings.ron` beside the slots: fullscreen,
+  windowed size, vsync, volume by bus; versioned, every field defaulted).
+  `Settings::apply_saved(tick)` puts the display and volumes back from a
+  game's `start`; the loop already laid the controls over the map. The
+  screen opens on the game as it runs (the window's real state, the live
+  volumes) plus the windowed size kept — F11 since the last save shows.
+- **Rebinding**: a row clicked waits ("press a key… (Esc cancels)"); the
+  next control pressed becomes the action's first binding *of its kind*
+  (`ActionMap::assign`: keyboard and mouse, or gamepad — a row shows one of
+  each, `Jump: Space / Pad South`), read from the frame after the click so
+  the accept that started it is not taken. Unlike `rebind`, `assign`
+  takes the control off no other action: binding jump to the key that
+  walks would silently unbind walking. The clash is shown instead, on
+  both rows and in a clash colour (`ActionMap::conflicts`, among the
+  listed actions), for the player to resolve — Unity's rebinding sample
+  and Godot's projects do the same. The cancel action is `ui_cancel`
+  (Escape, a pad's East), new in the default map with `pause` (Escape,
+  Start); it cannot be bound from the screen. `Binding` is `Display` now
+  (`J`, `Up`, `Mouse Left`, `Pad South`).
+- **Resolutions** are the window's monitor's modes, else the common 16:9
+  sizes that fit on it, plus the size it starts at — smallest first, so
+  the slider's right is bigger; none on the web ("set by the page"), where
+  vsync reads "the browser's".
+- The platformer pauses on Escape (`menu.rs`, `assets/prefabs/
+  pause.prefab.ron`): Resume, Options; Back returns to the pause menu. The
+  walker stands still under it. `cargo xtask new-game` copies the options
+  prefab into a new game.
+
+Pinned by `options/settings.rs` (a round trip; another version refused;
+missing fields defaulted), `options/screen/labels.rs` (names as words; a
+row with both kinds and its clash), `options/screen/display.rs` (modes,
+else the common sizes; the display mode going round; no exclusive without
+modes), `input/rebinding.rs` (assign by kind, no repeats, a clash kept and
+reported), `input/label.rs`, `options/screen/tests.rs` (the shipped prefab
+opened headless: a volume per bus and a row per action, the templates
+gone; a rebound key shown, a clash coloured, Back saving both files;
+Escape cancelling a rebind before closing; the display rows reaching the
+window; a volume slider setting its bus) and the platformer's
+`tests/options.rs`: Escape, Options, jump rebound to J, Back, Escape —
+then a new headless session with the same player folder, where J jumps
+and Space does not; and the level standing still under the pause menu.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

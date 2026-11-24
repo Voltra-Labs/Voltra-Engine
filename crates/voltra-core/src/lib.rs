@@ -9,6 +9,7 @@ pub mod app;
 pub mod game;
 pub mod input;
 pub mod logging;
+pub mod options;
 pub mod saves;
 pub mod start;
 mod storage;

@@ -86,6 +86,12 @@ impl<'a> TickAudio<'a> {
         self.audio.set_bus_volume(bus, volume, over);
     }
 
+    /// Every bus by name, in id order, master first: what an options screen
+    /// lists a volume slider for.
+    pub fn buses(&self) -> &voltra_audio::Buses {
+        self.audio.buses()
+    }
+
     /// The volume `bus` was last set to.
     pub fn bus_volume(&self, bus: BusId) -> f32 {
         self.audio.bus_volume(bus)

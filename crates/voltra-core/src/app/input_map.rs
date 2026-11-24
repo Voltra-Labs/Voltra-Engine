@@ -230,6 +230,8 @@ mod tests {
             "ui_left",
             "ui_right",
             "ui_accept",
+            "ui_cancel",
+            "pause",
         ] {
             assert!(!map.bindings(action).is_empty(), "{action} is bound");
         }

@@ -72,6 +72,15 @@ fn is_grounded(tick: &Tick<'_>, entity: Entity) -> bool {
     })
 }
 
+/// Stops the walker walking: under a menu. It still falls, as a paused
+/// game's character lands rather than hangs in the air.
+pub fn halt(world: &mut World, walker: Entity) {
+    if let Some(body) = world.get_mut::<RigidBody>(walker) {
+        body.velocity.x = 0.0;
+        body.velocity.y = body.velocity.y.min(0.0);
+    }
+}
+
 /// Puts the walker at `at`, standing still: after a load or a level change.
 pub fn place(world: &mut World, walker: Entity, at: Vec2) {
     if let Some(transform) = world.get_mut::<Transform>(walker) {
