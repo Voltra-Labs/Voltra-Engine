@@ -1,6 +1,6 @@
 //! Text layout: a string into kerned, wrapped glyph positions.
 
-use voltra_assets::fonts::Wrap;
+use voltra_assets::fonts::{RunStyle, Span, TextLayout, Wrap};
 use voltra_assets::Fonts;
 
 use super::{assets, Bench, Outcome};
@@ -28,12 +28,12 @@ pub(super) fn benches() -> Vec<Bench> {
     vec![
         Bench::new("text/layout/paragraph-1k", 15.0, |config| {
             with_font(|fonts| {
-                let font = fonts.try_get(fonts.default_font())?;
                 let wrap = Wrap {
                     max_width: Some(400.0),
                     line_spacing: 1.0,
                 };
-                measure(config, 1, iter(|| font.layout(PARAGRAPH, PX, wrap)))
+                plain(fonts, PARAGRAPH, wrap)?;
+                measure(config, 1, iter(|| plain(fonts, PARAGRAPH, wrap)))
             })
         }),
         Bench::new("text/layout/labels-100", 25.0, |config| {
@@ -41,14 +41,14 @@ pub(super) fn benches() -> Vec<Bench> {
                 .map(|i| format!("Score {}  ·  Coins {}", i * 250, i % 37))
                 .collect();
             with_font(|fonts| {
-                let font = fonts.try_get(fonts.default_font())?;
+                plain(fonts, &labels[0], Wrap::default())?;
                 measure(
                     config,
                     1,
                     iter(|| {
                         labels
                             .iter()
-                            .filter_map(|label| font.layout(label, PX, Wrap::default()))
+                            .filter_map(|label| plain(fonts, label, Wrap::default()))
                             .map(|layout| layout.glyphs.len())
                             .sum::<usize>()
                     }),
@@ -56,6 +56,13 @@ pub(super) fn benches() -> Vec<Bench> {
             })
         }),
     ]
+}
+
+/// `content` laid out afresh — past the layout cache — in the default font
+/// at [`PX`].
+fn plain(fonts: &Fonts, content: &str, wrap: Wrap) -> Option<TextLayout> {
+    let style = RunStyle::plain(fonts.default_font(), PX);
+    fonts.layout_uncached(content, &[Span::whole(content, style)], wrap)
 }
 
 /// Runs `time` against the shipped default font, or skips when it will not

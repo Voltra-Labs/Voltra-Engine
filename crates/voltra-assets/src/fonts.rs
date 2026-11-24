@@ -229,6 +229,13 @@ impl Fonts {
         })
     }
 
+    /// [`layout`](Self::layout) without the cache: the full cost of
+    /// shaping and breaking `text`, every call — what a benchmark measures
+    /// and what the cache saves.
+    pub fn layout_uncached(&self, text: &str, spans: &[Span], wrap: Wrap) -> Option<TextLayout> {
+        layout::layout(self, text, spans, wrap)
+    }
+
     /// [`layout`](Self::layout) of a plain string, all in `font` at `px`.
     pub fn layout_plain(
         &self,
