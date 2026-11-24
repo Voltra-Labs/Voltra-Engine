@@ -76,9 +76,15 @@ pub fn measure(config: &Config, per: u32, mut run: impl FnMut(u64) -> Duration) 
             iterations = iterations.saturating_mul(2);
         }
     };
-    let iterations = if per_iteration > 0.0 {
+    let iterations = if config.sample_time.is_zero() {
+        // No time asked of a sample: one run is one sample.
+        1
+    } else if per_iteration > 0.0 {
         (config.sample_time.as_secs_f64() / per_iteration).clamp(1.0, 1e9) as u64
     } else {
+        // The clock saw no time pass in the warm-up (a coarse clock, as
+        // Windows' can be, under a fast routine): far more runs than one
+        // fill a sample.
         1_000_000
     };
     let samples: Vec<f64> = (0..config.samples.max(1))
