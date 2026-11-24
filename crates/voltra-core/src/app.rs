@@ -25,6 +25,7 @@ mod thumbnails;
 mod tick;
 mod tick_audio;
 mod tick_controls;
+pub mod tick_net;
 mod tick_time;
 mod ui_frame;
 mod ui_input;
@@ -68,6 +69,7 @@ pub use scenes::SceneLoad;
 pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
 pub use tick::Tick;
 pub use tick_audio::TickAudio;
+pub use tick_net::Net;
 pub use ui_frame::UiFrame;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
@@ -190,6 +192,9 @@ pub struct App {
     actions_from_code: bool,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
     simulation: Simulation,
+    /// The game's network session, received before the ticks and flushed
+    /// after them.
+    net: tick_net::Net,
     /// The output device, or a silent stand-in when there is none.
     ///
     /// Not an `Option`: [`Audio::silent`] already is the "no device" case, and
@@ -371,6 +376,8 @@ impl App {
         // which reads this frame's clicks.
         self.update_ui_controls();
         drop(input);
+        // Before the tick, so it reads this frame's messages and events.
+        self.receive_net(delta);
         // Before the tick, so it reads this frame's finished tweens and
         // fired timers, as it reads this frame's clicks.
         self.step_tweens_and_timers(delta);
@@ -418,6 +425,8 @@ impl App {
         // Last: a scene change despawns what the ticks and steps were holding,
         // so it waits until they have let go.
         self.apply_scene_requests();
+        // What every tick of the frame queued goes out together.
+        self.flush_net();
     }
 
     /// Applies whatever the watcher saw since the last frame.

@@ -88,6 +88,11 @@ pub struct Tick<'a> {
     /// this frame, what is hovered and focused, and where to move the
     /// focus.
     pub ui: &'a mut voltra_scene::UiControls,
+    /// The network session: host or join one, send to peers, read what
+    /// they sent and who came and went this frame — see [`Net`].
+    ///
+    /// [`Net`]: super::Net
+    pub net: &'a mut super::Net,
     /// The window: fullscreen, its size, vsync and the monitors' modes,
     /// read as the loop last saw them and changed from the next frame on.
     pub window: &'a mut crate::window::GameWindow,
@@ -158,6 +163,7 @@ impl App {
                 tweens: &mut self.tweens,
                 timers: &mut self.timers,
                 ui: &mut self.ui_controls,
+                net: &mut self.net,
                 window: &mut self.game_window,
                 delta,
                 contacts: self.physics_world.contacts(),

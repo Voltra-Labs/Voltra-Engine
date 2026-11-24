@@ -219,6 +219,18 @@ impl Headless {
         driven
     }
 
+    /// The network session: what a headless server hosts on, and what a
+    /// test reads a run's joins and messages from.
+    pub fn net(&self) -> &crate::Net {
+        self.app.net()
+    }
+
+    /// The network session, mutably — to host or join before the first
+    /// step.
+    pub fn net_mut(&mut self) -> &mut crate::Net {
+        self.app.net_mut()
+    }
+
     /// The world.
     pub fn world(&self) -> &World {
         &self.app.world

@@ -19,7 +19,7 @@ pub mod window;
 
 pub use app::headless::{Headless, HeadlessError, Screenshot, ScreenshotError};
 pub use app::{
-    parse_bus_layout, parse_sorting_layers, App, SceneLoad, Tick, UiFrame, DEFAULT_BUS_LAYOUT,
+    parse_bus_layout, parse_sorting_layers, App, Net, SceneLoad, Tick, UiFrame, DEFAULT_BUS_LAYOUT,
     DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS,
 };
 pub use game::Game;
@@ -43,6 +43,9 @@ pub use winit::keyboard::KeyCode;
 // Navigation, the same way: a game asks for a path and needs no second
 // dependency to hold the answer.
 pub use voltra_nav as nav;
+// The network a game hosts or joins through `Tick::net`: its transports,
+// channels, peers and events, named without a second dependency.
+pub use voltra_net as net;
 pub use voltra_physics::{
     character, move_and_slide, query, CollisionEvent, Contact, QueryFilter, RayHit, ShapeHit,
     Slide, Touch,

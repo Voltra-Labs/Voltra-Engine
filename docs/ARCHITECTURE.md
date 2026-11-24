@@ -69,8 +69,10 @@ decoding is arithmetic over a file — which is what keeps its tests headless on
 a machine with no sound card.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`), exactly one
-on `wgpu` (`voltra-render`), and exactly one on `cpal` and `symphonia`
-(`voltra-audio`). Everything else consumes them through re-exports, so a
+on `wgpu` (`voltra-render`), exactly one on `cpal` and `symphonia`
+(`voltra-audio`), and exactly one on `tungstenite` (`voltra-net`, which
+opens every socket a game plays over; the editor bridge's loopback socket
+is a tool's, not a game's). Everything else consumes them through re-exports, so a
 version bump is a one-line change.
 
 ### Current crates
@@ -86,11 +88,13 @@ version bump is a one-line change.
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
+| `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport`, `Endpoint`, `NetConfig`, `ChannelKind`, `ChannelId`, `PeerId`, `NetEvent`, `DisconnectReason`, `Message` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
 | `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs — and a running editor, through the bridge — for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
-| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
+| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
+| `voltra-server` | A dedicated server: a scene headless at a fixed tick, hosted over UDP and WebSockets; a library a game's own server binary is built on | `Server`, `ServerOptions`, `Pacer` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
 ### Planned crates
@@ -5898,6 +5902,219 @@ moving parameter and a buffer that is not a whole number of blocks: zero.
 layouts applied and undone), `layout.rs`, `app/bus_layout.rs` (the
 conventional file, a broken one changing nothing, a reload, the shipped
 file reads) and `project_settings.rs` (saved, refused when it would not mix).
+### The network is a polled datagram transport, written in-house
+
+Stage 111. A new crate, `voltra-net`, owns every socket a game plays over.
+One trait, `Transport`, moves datagrams of at most `MAX_DATAGRAM` (1200)
+bytes: `update(now)` once a tick for the I/O that is neither a send nor a
+receive (accepting, handshakes, flushes, releasing delayed datagrams),
+`send(to, bytes)`, `recv()` drained until `None`, `reaches(address)` for
+routing, and `take_closed`/`close` for transports with a stream per peer.
+An `Address` names the transport kind as well as the peer (`Udp`,
+`WebSocket`, `Memory`, and `Server` — the one peer a browser page dialled,
+whose socket it never learns), so a UDP and a WebSocket peer on the same
+`ip:port` are two peers.
+
+- **Backends**: `UdpTransport` (`std::net::UdpSocket`, non-blocking);
+  `WebSocketServer` and `WebSocketClient` natively, over `tungstenite`;
+  `BrowserWebSocket` on wasm (`web-sys`'s `WebSocket`, its `onmessage`
+  pushing into a queue the tick drains); `MemoryNetwork` endpoints in one
+  process; `Conditioned<T>` wrapping any of them with seeded loss,
+  latency, jitter (which reorders) and duplication; `MultiTransport` for a
+  server on UDP and WebSockets at once, routing a send by address kind.
+- **Polled, no runtime.** Godot's `PacketPeer.poll()` and renet's
+  `update`/`send_packets` have the same shape; a browser can only call us
+  back, and a tokio runtime (as `renet2`'s WebSocket and WebTransport
+  servers need) would be a second scheduler beside the frame loop. The
+  native WebSocket listener runs `tungstenite`'s handshakes on non-blocking
+  streams and resumes them each update; only the native *client* uses a
+  short-lived thread, because std has no non-blocking `connect` and a frame
+  must not wait on one.
+- **Unreliable by contract**, every backend: a full buffer or a stream
+  still opening drops the datagram and answers `Ok`. Errors mean a wrong
+  request (`TooLarge`, `Unreachable`) or a dead transport (`Closed`, `Io`).
+  Over WebSockets nothing is lost, which makes stage 112's acks redundant
+  there but harmless — one protocol over both.
+- **Untrusted input is bounded at the transport.** UDP reads into a buffer
+  one byte longer than the limit and drops a datagram that fills it (and
+  skips Windows' ICMP resets), at most 256 skipped per call; WebSockets set
+  `max_message_size` and `max_frame_size` to the datagram limit (a longer
+  message ends the stream), a 256 KiB write buffer per stream, and cap
+  streams (1024), half-open handshakes (64, 5 s each) and queued datagrams
+  (8192) — `WebSocketLimits`.
+- **Conditions are a wrapper, not a memory-network feature**, so the
+  editor's network panel (stage 117) can put the same loss and latency on
+  a real socket. Unity Transport's `SimulatorPipelineStage` and renet's
+  conditioner sit in the same place. Applied on the way out; a bad link
+  both ways wraps both ends.
+
+**In-house, not `renet` or `laminar`.** Read from their sources (renet
+2.0.1, laminar 0.5.0): renet's core is transport-agnostic and its channels
+are good, but it has no unreliable-*sequenced* channel, its handshake lives
+in `renet_netcode` (connect tokens from a matchmaker, UDP only), and a
+browser needs the `renet2` fork's async servers. laminar binds and owns its
+own `UdpSocket`, reaches the caller over `crossbeam` channels, is UDP only,
+and drags `rand` 0.8 and `clap` 2. Either way the transports, the web path
+and the handshake would be ours, and what is left — channels, acks,
+fragmentation — is the part whose bounds on untrusted input we most want
+to own and test (stage 112). CLAUDE.md's rule against framework crates
+points the same way. `tungstenite` stays: it is a leaf (a protocol over any
+`Read + Write`), and only `voltra-net` may name it, as only `voltra-core`
+names `winit`.
+
+Pinned by `voltra-net/tests/udp.rs` (a client and server exchange
+datagrams; a datagram one byte over the limit, sent raw, is dropped and the
+next one arrives whole), `tests/websocket.rs` (an exchange; a closed client
+reported and then unreachable; a hand-made client's over-long frame ending
+its stream with nothing taken; a connection that never shakes hands timed
+out while a real client still gets in), the unit tests of `memory.rs`,
+`conditions.rs` (latency held to the millisecond, loss near its share and
+counted, jitter reordering, duplicates, a seed replaying) and `multi.rs`,
+and `crates/voltra-player/web/test/net.mjs` in CI's web job: the wasm
+`examples/web_probe.rs` in Chromium opens a `BrowserWebSocket` to the native
+`examples/echo_server.rs` and gets its datagram back.
+
+### A connection is a stateless handshake, packet acks and per-channel windows
+
+Stage 112. `voltra_net::Endpoint` is a server or a client over any
+`Transport`: one type for both roles, because after the handshake both ends
+are the same — peers, messages on channels, events — as Godot's
+`MultiplayerPeer` and Unity's `NetworkDriver` are one type. Polled:
+`receive(now)` at the top of a tick, `flush(now)` at the bottom, the
+caller's clock in both. A server numbers clients from `PeerId(1)`; to a
+client its server is `PeerId::SERVER`, and `local_id()` is the number the
+server gave it (what replication will name an owner by).
+
+- **Handshake** (`packet.rs` lays out every packet): request (protocol
+  version, the config's fingerprint, a nonce) → challenge (a cookie: a
+  keyed hash of address, nonce and a 10 s time slice, so the server keeps
+  nothing per stranger) → response (the cookie back) → accept (a session id,
+  the client's `PeerId`) or deny (a reason). netcode's shape without its
+  encryption. Request and response are padded to 64 bytes — more than any
+  answer — so a spoofed source gets no amplification. The fingerprint
+  hashes the game's `NetConfig::protocol`, the channel layout, the message
+  size and the channel budget: a mismatch is refused as
+  `ProtocolMismatch` at the door rather than misread later. A response
+  from a connected address with a new nonce is that client restarted.
+- **Keep-alive, timeouts, reasons**: an empty payload when an ack is owed or
+  the line was quiet for `keepalive` (250 ms); `timeout` (10 s) of silence
+  drops a peer; a client gives up after `connect_timeout` (5 s).
+  `DisconnectReason`: `Left`, `Closed`, `Kicked`, `ServerFull`,
+  `ProtocolMismatch`, `Violation`, `Shutdown` (sent, three times, as a
+  `disconnect` packet), and `Timeout`, `ConnectTimeout`, `TransportClosed`
+  (seen only locally). Dropping an endpoint says goodbye to every peer.
+- **Packet acks**, as Gaffer On Games lays them out and netcode, renet and
+  Unity Transport keep: every payload carries the newest sequence received
+  and 32 bits for the ones before. A reliable fragment is acknowledged
+  when a packet that carried it is, and resent after 1.5 smoothed RTTs
+  (RFC 6298's 1/8 gain; clamped to 20 ms–1 s). Sequences start at 1 so
+  "nothing received yet" acknowledges nothing.
+- **Channels** (`NetConfig::channels`, default one of each, `ChannelId`
+  constants naming them): `ReliableOrdered`, `ReliableUnordered`,
+  `UnreliableSequenced` (older than the newest delivered is dropped). Each
+  has its own numbering, so head-of-line blocking stays inside a channel.
+  A reliable channel's window is 512 messages from the oldest not yet
+  handed out; the sender stops at the same 512 (`SendError::ChannelFull`),
+  so an honest peer is never outside it.
+- **Fragmentation**: a message over 1024 bytes goes as fragments of
+  exactly 1024 but the last; reassembled per message id, reliable ones
+  fragment by fragment, sequenced ones whole or not at all (at most four
+  half-built). `max_message_size` (64 KiB default, 16 MiB at most) caps a
+  message.
+- **Untrusted input**: every length is checked before slicing
+  (`wire.rs`), a message id must be in the window (or just behind it, a
+  resend), a fragment count within the largest message, and each
+  reassembly is charged to the channel's budget (`channel_budget`, 1 MiB)
+  *before* its buffer is allocated. The sender counts the same charge
+  against the same budget, so going over can only be hostile: the peer is
+  disconnected with `Violation`. Junk from strangers is dropped; a receive
+  reads at most 16 384 datagrams. Nothing in a datagram can panic us — the
+  tests feed it random bytes. Not done: encryption and authentication
+  (netcode.io's connect tokens) — the session id stops blind spoofing, not
+  an on-path attacker.
+- **Typed messages**: `encode(&value)` / `Message::decode::<T>()` (and
+  `Endpoint::send_message`) are serde over `postcard` — varints, no field
+  names. A message is one value; trailing bytes are an error.
+- **`tick.net`** in `voltra-core` (`app/tick_net.rs`, type `Net`): `host`,
+  `join`, `start(endpoint)` (the seam for a hand-built one), `stop`,
+  `peers`, `send`, `send_message`, `broadcast`, `received`,
+  `take_received`, `events`, `kick`, `disconnect`, `stats`, and
+  `endpoint()` for engine code built on it (replication, stage 114). The
+  loop receives before the ticks and flushes after the fixed steps, every
+  frame, simulating or not; the session's clock is the sum of the frame
+  deltas, so a headless run is deterministic. Messages and events are per
+  frame, like collision events in the per-frame hook; `take_received`
+  hands each message out once for a fixed tick that runs twice. A session
+  `stop`ped is kept one more frame so the game hears its own goodbye.
+  `voltra_core::net` re-exports the crate.
+
+Pinned by `voltra-net/tests/connections.rs`, over the memory network with
+20 % loss, 30–70 ms latency (jitter reorders) and 5 % duplication: 1500
+messages up to five fragments long each way, every one delivered exactly
+once and the ordered ones in order, with resends counted; a sequenced
+channel never going backwards and losing some; typed messages; the largest
+message whole and one byte more refused; another protocol or channel
+layout refused; a full server refusing one more; leave and kick seen by
+both ends with their reasons; timeouts both ways and a connect to nobody;
+a dropped endpoint's goodbye; 2000 random datagrams from a stranger, and a
+client whose payloads' frames are turned to junk cut off for `Violation`
+while an honest one carries on. `tests/sockets.rs`: one server on UDP and
+WebSockets at once, a client on each, a message each way. Unit tests of
+`acks.rs`, `channel/` (send, receive, assembly), `packet.rs` (every packet
+round-trips; padding; 50 000 random packets) and `message.rs` (10 000
+random byte strings decoded). `voltra-core/tests/net.rs`: two headless
+games, one hosting and one joining over a lossy link, talking through
+their ticks. The web probe of stage 111 now runs the whole handshake from
+the browser and echoes a fragmented message.
+
+### A server is the headless game plus sockets; a listen server is a flag
+
+Stage 113. Two ways to host, one session type underneath.
+
+- **Host and join from a game**: `voltra_net::host(&HostOptions)` opens a
+  UDP socket for native players and a WebSocket listener for browser ones
+  (`MultiTransport`; either may be `None`, port `0` picks a free one) and
+  hosts on both; `voltra_net::join("udp://host:port" | "ws://host:port")`
+  makes the transport the address names (in a browser, `ws://`/`wss://`
+  through `BrowserWebSocket`; hosting there is `SessionError::Unsupported`).
+  `tick.net.host(&options)` and `tick.net.join(address, config)` are the
+  same from a tick; `host_on`/`join_on` keep the hand-built-transport seam.
+  `Endpoint::local_addrs` names every address a host is reached at.
+- **Listen server** (`HostOptions::listen`): the hosting game plays as
+  `PeerId::SERVER`. Its own player *joins* — a `Connected(PeerId::SERVER)`
+  is the first event, a `Disconnected(SERVER, Left)` comes when the
+  session stops — so one code
+  path ("on `Connected(peer)`, spawn a player for `peer`") serves every
+  player, the host's included. Unity's Netcode raises its client-connected
+  callback for the host's own client for the same reason; Godot's
+  `peer_connected` is not emitted for the host, which a Godot game then
+  spawns by hand. `players()` lists the host first, then clients.
+- **Dedicated server** (`voltra-server`, a library and a binary): `Server`
+  wraps stage M1's `Headless` — the game minus its window — hosts it, and
+  steps it one frame per tick at a fixed rate (`ServerOptions::tick_rate`,
+  60 by default, the physics step's); each tick is the network received,
+  the game's ticks, the fixed steps, the network flushed. `run` paces on
+  the wall clock with `Pacer`, catching up at most five ticks after a
+  stall rather than bursting every client with a second's worth. Joins and
+  leaves are logged and in `Server::events`; `kick`, `clients`,
+  `addresses`, `shut_down` (every client told `Shutdown`). The binary runs
+  a scene with no game code — `voltra-server [SCENE] --asset-root DIR
+  --udp PORT|off --ws PORT|off --tick HZ --max-clients N --protocol N
+  --seconds N --port-file FILE`; a game with its own server logic builds
+  its own binary on `Server::open(game_app, scene, options)`, as it builds
+  its player, and its ticks run there unchanged (Unreal's dedicated server
+  target and Godot's headless export are the same idea).
+
+Pinned by `voltra-server/tests/session.rs`: a server on UDP and WebSockets,
+a client joining by `udp://` and one by `ws://` (as a browser would); both
+joins seen, one client leaving (`Closed` at the server, `Left` at the
+client) and the other kicked (`Kicked` at both); and the binary itself
+started on `sandbox.ron` with its ports written to a file and a client
+joining it. `voltra-core/tests/net.rs`: a listen server's own player
+joining first, a client by address after it, `players()` listing both,
+and `stop` ending them with the client told `Shutdown`. Unit tests of
+`Pacer` and the binary's arguments. `voltra-net/src/session.rs`: server
+addresses parsed by scheme.
 
 ### wgpu 30 API notes
 
@@ -6018,3 +6235,25 @@ Both differ from most training data and from every tutorial written against
 | Ids | `GamepadId` → `usize::from(id)`; stable for a pad while connected, reused by UUID on reconnect |
 | Errors | `Gilrs::new()` returns `Error::NotImplemented(dummy)` on unsupported platforms — usable, but we just skip pads |
 | Filters | default filters apply a small stick dead zone and axis-to-button thresholds before we see values |
+
+### `tungstenite` 0.30 notes
+
+| Thing | 0.30.0 |
+| --- | --- |
+| `WebSocketConfig` | `#[non_exhaustive]`: build it from `default()` with the setters (`max_message_size(Some(n))`, `max_frame_size`, `write_buffer_size`, `max_write_buffer_size`, `read_buffer_size`); `max_write_buffer_size` must exceed `write_buffer_size` or it panics |
+| Defaults | 64 MiB messages, 16 MiB frames, unlimited write buffer: far too trusting for a game server — set all three |
+| Non-blocking accept | `accept_with_config(stream, Some(config))` on a non-blocking stream returns `Err(HandshakeError::Interrupted(mid))`; keep `mid` and call `mid.handshake()` again later. Types: `handshake::{MidHandshake, HandshakeError}`, `handshake::server::{ServerHandshake, NoCallback}` |
+| Client over our own stream | `client::client_with_config(url, stream, config)`; `&str`/`String` are `IntoClientRequest` without the `url` feature |
+| `send` | write + flush. `Err(Io(WouldBlock))` means the frame **is** buffered — flush later, do not resend. `Err(WriteBufferFull(msg))` means it was not |
+| `read` | `Err(Io(WouldBlock))` when nothing complete is in; partial frames are kept inside. Pings are answered on the next read/write/flush |
+| `Message::Binary` | holds a `bytes::Bytes`; `Message::binary(vec)` builds one |
+| Over-long message | `Err(Capacity(..))` from `read`: treat as the end of that stream |
+
+### `postcard` 1.2 notes
+
+| Thing | 1.2.0 |
+| --- | --- |
+| Features | `default` pulls `heapless`; `default-features = false, features = ["alloc"]` is enough for `to_allocvec` |
+| Decode | `from_bytes` ignores trailing bytes; `take_from_bytes` returns them — check they are empty for "one message is one value" |
+| Untrusted lengths | a sequence's `size_hint` is `None` when its claimed length exceeds the bytes left, so serde preallocates nothing for a lying length |
+| `Error` | `#[non_exhaustive]`, `Clone + Eq`; `DeserializeBadEncoding` is the generic "not well encoded" |
