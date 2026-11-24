@@ -55,7 +55,13 @@ cargo xtask dist --manifest platformer.build.ron   # a game with its own code
 cargo xtask new-game my-game                      # start a game of your own: games/my-game
 cargo xtask dist --web          # the same build for the browser (docs/WEB.md)
 cargo xtask guide               # run the guide's checked commands, as CI does
+cargo xtask pack-atlas <folder>                   # its PNGs into one sheet + .atlas.ron (--trim, --out)
+cargo xtask bench               # time the hot paths in release (--compare FILE: check for regressions)
 cargo run -p breakout           # a sample game (also: dodge, voltra-platformer)
+cargo run -p arena -- --host                      # the networked sample: host a match (UDP 7777, WS 7778)
+cargo run -p arena -- --join udp://127.0.0.1:7777 # ... and join it from another terminal
+cargo run -p arena --bin arena-server -- --asset-root games/arena/assets  # its dedicated server
+cargo run -p voltra-server -- scenes/sandbox.ron  # serve any scene headless to clients (--help)
 cargo run -p voltra-mcp -- --project .             # MCP server for an AI client (docs/MCP.md)
 cargo run -p voltra-editor -- --bridge             # editor an MCP client can drive live
 cargo build --workspace         # build everything
@@ -250,21 +256,30 @@ Voltra-Engine/
 │   ├── voltra-jobs/      # worker pool, scoped jobs that borrow — std only
 │   ├── voltra-profile/   # where a frame's time goes: scopes, counters — std only
 │   ├── voltra-assets/    # handles, paths, the texture cache, hot reload
-│   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
+│   ├── voltra-render/    # GPU layer: passes, render targets, egui backend  (owns wgpu)
+│   ├── voltra-audio/     # mixer, buses and effects, streaming, the device  (owns cpal, symphonia)
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
 │   ├── voltra-physics/   # rigid bodies, integration, contact detection
 │   ├── voltra-nav/       # navigation grids baked from colliders, A* paths
+│   ├── voltra-net/       # datagram transports (UDP, WebSocket) and connections
+│   ├── voltra-replication/ # snapshots and deltas to clients, interpolation, prediction
 │   ├── voltra-bridge/    # commands to a running editor over a loopback socket
 │   ├── voltra-mcp/       # binary: the MCP server, a project's tools for an AI
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
 │   ├── voltra-editor/    # binary: the editor and its panels
 │   ├── voltra-player/    # binary: runs a scene, or the build beside it
-│   └── xtask/            # `cargo xtask dist`: packages a build
+│   ├── voltra-server/    # binary: a scene headless at a fixed tick, hosted for clients
+│   ├── voltra-bench/     # benchmarks of the hot paths and the regression check
+│   ├── voltra-testkit/   # headless GPU scaffolding for the integration tests
+│   └── xtask/            # `cargo xtask …`: dist, new-game, pack-atlas, bench, guide
 ├── games/
-│   └── platformer/       # sample game crate: the editor loads it, its binary ships it
+│   ├── platformer/       # sample game crate: the editor loads it, its binary ships it
+│   ├── breakout/, dodge/ # two more: physics events; timers, tweens, sensors
+│   └── arena/            # networked sample: a listen or dedicated server, native and web
 └── docs/
     ├── ARCHITECTURE.md   # layering, crate graph, planned crates
-    └── CONVENTIONS.md    # naming, file/folder rules, code style
+    ├── CONVENTIONS.md    # naming, file/folder rules, code style, benchmarks
+    └── guide/            # the user guide, from install to a shipped game
 ```
 
 The workspace root is a *virtual manifest* — it has no `src/`, so no crate is

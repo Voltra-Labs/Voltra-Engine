@@ -43,6 +43,11 @@ cargo xtask dist                                            # package build.ron 
 cargo xtask dist --web                                      # the same for the browser (docs/WEB.md)
 cargo xtask new-game my-game                                # a game crate in games/ (docs/ARCHITECTURE.md, stage 78)
 cargo xtask guide                                           # run docs/guide's <!-- ci --> blocks, as CI does
+cargo xtask pack-atlas <folder>                             # PNGs into one sheet + .atlas.ron (stage 95)
+cargo xtask bench [--compare FILE]                          # benchmarks in release; regression check (stage 107)
+cargo run -p voltra-server -- scenes/sandbox.ron            # a scene served headless (UDP 7777, WS 7778)
+cargo run -p arena -- --host                                # networked sample; --join udp://HOST:7777 to join
+cargo run -p arena --bin arena-server -- --asset-root games/arena/assets  # its dedicated server
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings       # must be clean
@@ -63,13 +68,18 @@ crates/
   voltra-render/     GPU layer: device, surface, passes     — owns wgpu
   voltra-audio/      mixer, decoding, output device         — owns cpal+symphonia
   voltra-core/       platform layer: event loop, window     — owns winit
+  voltra-net/        datagram transports, connections       — owns tungstenite
+  voltra-replication/  snapshots/deltas, interpolation, prediction
   voltra-editor/     the editor binary
   voltra-player/     the player binary: runs a scene, no editor linked
+  voltra-server/     the dedicated-server binary + the library a game's server uses
+  voltra-bench/      benchmarks of the hot paths, the regression comparer
   xtask/             repo tasks (`cargo xtask dist`), not shipped
 games/
   platformer/        sample game crate: a library the editor loads, a binary that ships
                      (`cargo xtask new-game` makes more, from crates/xtask/template/)
   breakout/, dodge/  two more sample games (physics events; timers, tweens, sensors)
+  arena/             networked sample: client binary + `arena-server`, native and web
 docs/                ARCHITECTURE.md, CONVENTIONS.md, MCP.md, WEB.md,
                      guide/ (the user guide; its <!-- ci --> blocks run in CI)
 ```

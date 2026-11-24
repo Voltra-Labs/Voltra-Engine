@@ -104,6 +104,19 @@ The server on its own, for a few seconds (`--seconds`), on free ports:
 cargo run -p arena --bin arena-server -- --asset-root games/arena/assets --udp 0 --ws 0 --seconds 2
 ```
 
+The arena's server is `voltra-server`'s command line with the arena's game
+in it (`games/arena/src/bin/server.rs`, a few lines). `voltra-server`
+itself serves any scene with no game code — the same flags, `--help` for
+the rest (`--tick`, `--max-clients`, `--protocol`, `--bind`):
+
+<!-- ci -->
+```sh
+cargo run -p voltra-server -- scenes/sandbox.ron --udp 0 --ws 0 --seconds 2
+```
+
+Without `--udp`/`--ws` it listens on 7777 and 7778, and without
+`--seconds` it runs until stopped.
+
 At a desk: `cargo run -p arena -- --host` in one terminal and `cargo run -p
 arena -- --join udp://127.0.0.1:7777` in another. Or in the editor, without
 a second machine or window: open the arena (`cargo run -p voltra-editor --
@@ -116,3 +129,6 @@ traffic, frame by frame.
 
 A web build of the arena joins a server from its page's address:
 `index.html?join=ws://HOST:7778`.
+
+A server can stream a big world around every player it hosts, and its
+clients stream the same scenery: [chapter 10](10-big-worlds.md).
