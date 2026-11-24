@@ -9,7 +9,7 @@ use tungstenite::handshake::server::{NoCallback, ServerHandshake};
 use tungstenite::handshake::{HandshakeError, MidHandshake};
 use tungstenite::WebSocket;
 
-use super::{config, prepare, pump, write, Pumped, HANDSHAKE_TIMEOUT};
+use super::{config, prepare, pump, write, Pumped, CLOSE_TIMEOUT, HANDSHAKE_TIMEOUT};
 use crate::transport::{check_size, Datagram, Transport, TransportError};
 use crate::Address;
 
@@ -53,6 +53,9 @@ pub struct WebSocketServer {
     now: Duration,
     handshakes: Vec<(Handshake, SocketAddr, Duration)>,
     streams: HashMap<SocketAddr, WebSocket<TcpStream>>,
+    /// Streams this end closed, kept until the peer answers the close
+    /// frame or [`CLOSE_TIMEOUT`] passes; see [`Transport::close`].
+    closing: Vec<(WebSocket<TcpStream>, Duration)>,
     inbox: VecDeque<Datagram>,
     closed: VecDeque<Address>,
 }
@@ -76,6 +79,7 @@ impl WebSocketServer {
             now: Duration::ZERO,
             handshakes: Vec::new(),
             streams: HashMap::new(),
+            closing: Vec::new(),
             inbox: VecDeque::new(),
             closed: VecDeque::new(),
         })
@@ -105,7 +109,8 @@ impl WebSocketServer {
                 }
             };
             if self.handshakes.len() >= self.limits.max_handshakes
-                || self.streams.len() + self.handshakes.len() >= self.limits.max_streams
+                || self.streams.len() + self.handshakes.len() + self.closing.len()
+                    >= self.limits.max_streams
             {
                 log::warn!("refused a websocket connection from {from}: at the limit");
                 continue;
@@ -142,6 +147,32 @@ impl WebSocketServer {
         }
     }
 
+    /// Drives every stream this end closed toward its end: what the peer
+    /// still sends is read and dropped, the close frame flushed, and the
+    /// stream let go once the peer has answered it — or the deadline passed.
+    fn finish_closing(&mut self) {
+        let now = self.now;
+        self.closing.retain_mut(|(socket, since)| {
+            if now.saturating_sub(*since) > CLOSE_TIMEOUT {
+                return false;
+            }
+            loop {
+                match socket.read() {
+                    Ok(_) => {}
+                    Err(tungstenite::Error::Io(e)) if e.kind() == io::ErrorKind::WouldBlock => {
+                        break;
+                    }
+                    // The close handshake is done, or the stream is gone.
+                    Err(_) => return false,
+                }
+            }
+            !matches!(
+                socket.flush(),
+                Err(e) if !matches!(&e, tungstenite::Error::Io(io) if io.kind() == io::ErrorKind::WouldBlock)
+            )
+        });
+    }
+
     fn open(&mut self, from: SocketAddr, socket: WebSocket<TcpStream>) {
         log::debug!("websocket open from {from}");
         // A second stream from the same socket address means the first is
@@ -157,6 +188,7 @@ impl Transport for WebSocketServer {
         self.now = now;
         self.accept();
         self.finish_handshakes();
+        self.finish_closing();
         let mut ended = Vec::new();
         for (&from, socket) in &mut self.streams {
             let room = self.limits.max_inbox.saturating_sub(self.inbox.len());
@@ -205,10 +237,16 @@ impl Transport for WebSocketServer {
     fn close(&mut self, peer: Address) {
         if let Address::WebSocket(addr) = peer {
             if let Some(mut socket) = self.streams.remove(&addr) {
-                // Best effort: the close frame is queued and flushed if the
-                // stream takes it now; the drop closes the TCP stream anyway.
+                // Not dropped here: closing a TCP stream with the peer's
+                // bytes still unread makes the OS answer with a reset, and
+                // Windows then discards what the peer had not read yet —
+                // the datagram saying why it was let go among it. So the
+                // close frame goes out after everything queued, and the
+                // stream is kept, its input drained, until the peer answers
+                // (the WebSocket close handshake) or `CLOSE_TIMEOUT` passes.
                 let _ = socket.close(None);
                 let _ = socket.flush();
+                self.closing.push((socket, self.now));
             }
         }
     }

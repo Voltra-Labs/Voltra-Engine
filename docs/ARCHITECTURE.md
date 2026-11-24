@@ -7874,6 +7874,7 @@ Both differ from most training data and from every tutorial written against
 | `read` | `Err(Io(WouldBlock))` when nothing complete is in; partial frames are kept inside. Pings are answered on the next read/write/flush |
 | `Message::Binary` | holds a `bytes::Bytes`; `Message::binary(vec)` builds one |
 | Over-long message | `Err(Capacity(..))` from `read`: treat as the end of that stream |
+| Closing a stream | `close(None)` only queues the close frame. Dropping the `TcpStream` with the peer's bytes unread makes the OS send a reset, and **Windows discards what the peer had not read yet** (Linux keeps it) — a kick's reason lost. `WebSocketServer::close` keeps the stream, draining its input, until the peer answers the close or `CLOSE_TIMEOUT` (2 s); pinned by `tests/sockets.rs` on the Windows CI job |
 
 ### `postcard` 1.2 notes
 

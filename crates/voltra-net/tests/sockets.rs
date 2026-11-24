@@ -72,3 +72,59 @@ fn a_udp_client_and_a_websocket_client_join_one_server() {
     assert_eq!(heard, vec![b"udp".to_vec(), b"ws".to_vec()]);
     assert_eq!(answered, [true, true]);
 }
+
+/// A stream the server closes while the client's datagrams are still
+/// unread on it: the server's last datagram must reach the client before
+/// the close. Dropping the TCP stream at once would answer the unread
+/// bytes with a reset, and Windows then discards what the client had not
+/// read yet — a kick's reason among it.
+#[test]
+fn the_last_datagram_before_a_close_reaches_the_peer() {
+    use voltra_net::Transport;
+
+    let mut server = WebSocketServer::bind("127.0.0.1:0").expect("listens");
+    let mut client = WebSocketClient::connect(server.local_socket());
+    let to_server = client.server();
+    let start = Instant::now();
+
+    // Open, and learn the client's address from its first datagram.
+    let mut peer = None;
+    while peer.is_none() {
+        assert!(start.elapsed() < Duration::from_secs(5), "never opened");
+        let now = start.elapsed();
+        client.update(now).expect("client");
+        let _ = client.send(to_server, b"hello");
+        server.update(now).expect("server");
+        while let Some(datagram) = server.recv().expect("recv") {
+            peer = Some(datagram.from);
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let peer = peer.expect("heard");
+
+    // Bytes the server will never read before it closes.
+    let filler = vec![7u8; 1000];
+    for _ in 0..200 {
+        let _ = client.send(to_server, &filler);
+    }
+    client.update(start.elapsed()).expect("flushes");
+    std::thread::sleep(Duration::from_millis(50));
+
+    server.send(peer, b"bye").expect("queues");
+    server.close(peer);
+
+    let mut heard_bye = false;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while !heard_bye && Instant::now() < deadline {
+        let now = start.elapsed();
+        server.update(now).expect("server");
+        if client.update(now).is_err() {
+            // A closed transport still hands over what arrived first.
+        }
+        while let Ok(Some(datagram)) = client.recv() {
+            heard_bye |= datagram.payload == b"bye";
+        }
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(heard_bye, "the datagram sent before the close arrived");
+}

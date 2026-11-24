@@ -112,5 +112,9 @@ fn prepare(stream: &TcpStream) -> io::Result<()> {
     stream.set_nonblocking(true)
 }
 
+/// How long a stream this end closed is kept for the peer to answer the
+/// close frame before it is dropped regardless.
+const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+
 /// How long a half-open handshake, either side, may take.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
