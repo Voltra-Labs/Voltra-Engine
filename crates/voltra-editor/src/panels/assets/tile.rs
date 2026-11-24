@@ -26,6 +26,21 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
             if response.clicked() {
                 editor.assets.go(Some(entry.path.clone()));
             }
+            // The texture packer, on the folder of loose sprites it packs.
+            response.context_menu(|ui| {
+                for (label, trim) in [
+                    ("Pack into atlas", false),
+                    ("Pack into atlas, trimmed", true),
+                ] {
+                    if ui.button(label).clicked() {
+                        match crate::pack_atlas::pack(frame, &entry.path, trim) {
+                            Ok(_) => editor.assets.refresh(),
+                            Err(e) => log::error!("packing {}: {e}", entry.path.as_str()),
+                        }
+                        ui.close();
+                    }
+                }
+            });
         }
         EntryKind::Texture => texture_tile(ui, frame, entry, &response),
         EntryKind::Atlas => atlas_tile(ui, frame, entry, &response),

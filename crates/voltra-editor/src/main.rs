@@ -12,6 +12,7 @@ mod gizmo;
 mod instance;
 mod joints;
 mod marquee;
+mod pack_atlas;
 mod paint;
 mod panels;
 mod picking;

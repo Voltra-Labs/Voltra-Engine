@@ -7,10 +7,12 @@ use crate::path::AssetPath;
 mod file;
 mod frame;
 mod grid;
+mod meta;
 
-pub use file::{AtlasError, AtlasFile};
+pub use file::{AtlasError, AtlasFile, FrameEntry};
 pub use frame::Frame;
 pub use grid::Grid;
+pub use meta::{FrameMeta, Trim};
 
 /// The suffix that marks a RON file as a slicing: `hero.atlas.ron`.
 ///
@@ -36,21 +38,54 @@ pub fn is_atlas(name: &str) -> bool {
 /// [`Atlas::texture`] is a *hint* for authoring — the sheet this slicing was
 /// cut from, so the editor can assign both in one drag. Nothing at draw time
 /// reads it; the sprite names its own texture, as it always has.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Atlas {
     sheet: UVec2,
     frames: Vec<Frame>,
+    /// One per frame, always: the constructors and [`Atlas::push`] keep
+    /// the two the same length.
+    meta: Vec<FrameMeta>,
     texture: Option<AssetPath>,
 }
 
 impl Atlas {
     /// A slicing of a `sheet`-sized image into `frames`.
     pub fn new(sheet: UVec2, frames: Vec<Frame>) -> Self {
+        let meta = vec![FrameMeta::default(); frames.len()];
         Self {
             sheet,
             frames,
+            meta,
             texture: None,
         }
+    }
+
+    /// Adds `frame`, described by `meta`, after the last one. Returns its
+    /// index.
+    pub fn push(&mut self, frame: Frame, meta: FrameMeta) -> u32 {
+        self.frames.push(frame);
+        self.meta.push(meta);
+        (self.frames.len() - 1) as u32
+    }
+
+    /// What frame `index` carries besides its rectangle, or `None` past the
+    /// last one.
+    pub fn meta(&self, index: u32) -> Option<&FrameMeta> {
+        self.meta.get(index as usize)
+    }
+
+    /// The name of frame `index`, if it has one.
+    pub fn name(&self, index: u32) -> Option<&str> {
+        self.meta(index)?.name.as_deref()
+    }
+
+    /// The index of the first frame called `name`: how a game or a tool
+    /// that knows a frame by name finds the index a sprite draws by.
+    pub fn index_of(&self, name: &str) -> Option<u32> {
+        self.meta
+            .iter()
+            .position(|meta| meta.name.as_deref() == Some(name))
+            .map(|index| index as u32)
     }
 
     /// A slicing of the sheet `grid` describes.

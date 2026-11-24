@@ -5544,6 +5544,70 @@ Stage 87, version 0.1: a base is solid when someone else can use it.
 - **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
   The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
 
+### A folder packs into one sheet; a region keeps its index by its name
+
+Stage 95. `voltra_assets::packer`, run by `cargo xtask pack-atlas <folder>`
+and by the editor (the asset browser's "Pack into atlas" on a folder, and
+the bridge's `PackAtlas`): every PNG under a folder, at any depth, into one
+sheet and the `.atlas.ron` that cuts it — `sprites/hero/` to
+`sprites/hero.png` and `sprites/hero.atlas.ron` beside it. One packer
+behind both, so a sheet packed from either is the same sheet.
+
+- **Max-rects, best short side fit, biggest first** (`packer/maxrects.rs`,
+  Jylänki 2010): what TexturePacker, libGDX's packer and Unity's sprite
+  packer build on. Never rotated — no sprite reads a rotation flag, and a
+  turned region would need its UVs turned back. The sheet is the smallest
+  power-of-two pair that fits (squarer and wider first), up to
+  `--max-size` (4096: WebGL2's guaranteed `MAX_TEXTURE_SIZE`).
+- **Padding and extruded edges** (`--padding 2 --extrude 1`): each picture
+  is copied with its outermost texels repeated outward, then the padding
+  is left transparent. Padding alone swaps a neighbour's pixels for
+  transparency at a bilinear edge, which still darkens it; extrusion makes
+  the half-texel overreach read the edge itself.
+- **Trimming** (`--trim`): transparent borders cut off, and the cut
+  recorded per frame as `trim: (offset, source)` — TexturePacker's
+  `spriteSourceSize`/`sourceSize` — so the frame draws where it was in the
+  whole picture. A picture with nothing in it keeps one texel rather than
+  becoming a zero-area frame.
+- **Names, and indices that hold.** A region is named after its file's
+  path under the folder, without the extension (`walk/0`). A sprite still
+  names its frame by *index* (stage 22), so a re-pack orders regions by the
+  atlas it replaces (`packer/order.rs`): its names keep their indices, new
+  files come after, and a file that is gone keeps its slot as an empty
+  frame — what still names it draws the missing-frame checker rather than
+  whichever region slid into its place — unless it was last, when nothing
+  can shift and it is dropped. Pivots set since (stage 96) are kept by name
+  too. An atlas at the output path that will not read stops the pack: its
+  names are what would have been kept. Unity keeps sprite references by
+  GUID inside one texture's meta for the same reason; an index plus a name
+  is the smallest change to our format that does the same.
+- **The format, version 2.** An explicit frame may carry `name`, `trim` and
+  `pivot`, each left out when absent, so a plain frame is written as in
+  version 1 and version 1 files read unchanged. At run time they are
+  `FrameMeta`, one per frame beside `Atlas::frames` (`Frame` itself stays
+  `Copy` geometry). `Atlas::index_of(name)` finds a frame by name. A trim
+  the frame does not fit in is dropped with a warning; a pivot outside
+  `0..1` is clamped.
+- **Drawing in place.** `sprite::quad` gains a `centre`: a trimmed or
+  pivoted frame's quad is its part of the whole picture, sized by the
+  usual rule (pixels-per-unit, or the unit square), placed so the pivot —
+  the centre by default — is on the origin. Batching, picking and shadow
+  silhouettes all go through `Quad::corners`/`contains`, so they agree. A
+  mirrored sprite mirrors about the origin, so a pivot at the feet stays at
+  the feet. UI images and tiles keep using the frame's rectangle as is.
+
+Pinned by `packer/tests.rs` (every region is its picture again, trimmed or
+not; regions padded apart and extruded; the smallest sheet; too big
+refused; a re-pack keeps indices and pivots by name and empties a gone
+file's slot; the sheet inside its own folder is not re-packed; an
+unreadable previous atlas left alone), `atlas/tests.rs` (version 1 reads;
+names, trims and pivots round-trip), `sprite/quad.rs` (a trimmed frame
+where it was; a pivot on the origin; mirrored about it) and
+`voltra-scene/tests/headless_packed_atlas.rs`: the sample sprites and a
+bordered badge packed trimmed and drawn through the sprite batch beside
+the loose files, one texel to a pixel — every pixel identical, with nearest
+and with linear filtering.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -18,6 +18,7 @@ pub mod handle;
 pub mod material;
 pub mod materials;
 pub mod pack;
+pub mod packer;
 pub mod path;
 pub mod placeholder;
 pub mod root;
@@ -27,7 +28,7 @@ pub mod store;
 pub mod textures;
 pub mod watch;
 
-pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, Grid};
+pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, FrameEntry, FrameMeta, Grid, Trim};
 pub use atlases::Atlases;
 pub use browse::{Entry, EntryKind};
 pub use clips::Clips;

@@ -1,4 +1,5 @@
 use super::*;
+use voltra_render::glam::Vec2;
 
 #[test]
 fn a_grid_cuts_in_reading_order() {
@@ -82,7 +83,7 @@ fn explicit_frames_are_appended_to_the_grid() {
         sheet: Some(UVec2::new(64, 32)),
         texture: None,
         grid: Some(Grid::new(UVec2::splat(16), 2, 1)),
-        frames: vec![Frame::new(0, 16, 64, 16)],
+        frames: vec![Frame::new(0, 16, 64, 16).into()],
     };
 
     let atlas = file.into_atlas().expect("both forms in one file");
@@ -114,7 +115,7 @@ fn explicit_frames_without_a_sheet_are_refused() {
         sheet: None,
         texture: None,
         grid: None,
-        frames: vec![Frame::new(0, 0, 8, 8)],
+        frames: vec![Frame::new(0, 0, 8, 8).into()],
     };
 
     assert!(matches!(file.into_atlas(), Err(AtlasError::NoSheet)));
@@ -163,4 +164,74 @@ fn an_escaping_texture_hint_is_refused() {
     };
 
     assert!(matches!(file.into_atlas(), Err(AtlasError::Texture(_))));
+}
+
+#[test]
+fn a_version_1_file_still_reads() {
+    let text = "(version: 1, sheet: Some((32, 16)), frames: [(x: 0, y: 0, width: 16, height: 16)])";
+
+    let atlas = ron::from_str::<AtlasFile>(text)
+        .expect("valid RON")
+        .into_atlas()
+        .expect("a version 1 slicing");
+
+    assert_eq!(atlas.frame(0), Some(Frame::new(0, 0, 16, 16)));
+    assert_eq!(atlas.meta(0), Some(&FrameMeta::default()));
+}
+
+#[test]
+fn names_trims_and_pivots_round_trip_through_the_file() {
+    let mut atlas = Atlas::new(UVec2::new(64, 32), Vec::new());
+    atlas.push(Frame::new(0, 0, 8, 8), FrameMeta::named("plain"));
+    atlas.push(
+        Frame::new(8, 0, 6, 4),
+        FrameMeta {
+            name: Some("walk/0".into()),
+            trim: Some(Trim {
+                offset: UVec2::new(1, 2),
+                source: UVec2::new(8, 8),
+            }),
+            pivot: Some(Vec2::new(0.5, 1.0)),
+        },
+    );
+
+    let text = AtlasFile::from_atlas(&atlas).to_ron().expect("writes");
+    let back = ron::from_str::<AtlasFile>(&text)
+        .expect("reads")
+        .into_atlas()
+        .expect("a slicing");
+
+    assert_eq!(back, atlas, "{text}");
+    assert_eq!(back.index_of("walk/0"), Some(1));
+    assert_eq!(back.name(0), Some("plain"));
+    assert!(
+        !text.contains("pivot: None"),
+        "absent fields are left out:\n{text}"
+    );
+}
+
+#[test]
+fn a_trim_the_frame_does_not_fit_is_dropped() {
+    let text = "(version: 2, sheet: Some((32, 16)), frames: [(x: 0, y: 0, width: 16, height: 16, trim: Some((offset: (4, 0), source: (16, 16))))])";
+
+    let atlas = ron::from_str::<AtlasFile>(text)
+        .expect("valid RON")
+        .into_atlas()
+        .expect("still a slicing");
+
+    assert_eq!(atlas.meta(0).and_then(|meta| meta.trim), None);
+}
+
+#[test]
+fn a_pivot_outside_the_picture_is_clamped_into_it() {
+    let meta = FrameMeta {
+        pivot: Some(Vec2::new(2.0, f32::NAN)),
+        ..FrameMeta::default()
+    };
+    assert_eq!(meta.pivot_or_centre(), Vec2::splat(0.5));
+    let meta = FrameMeta {
+        pivot: Some(Vec2::new(2.0, -1.0)),
+        ..FrameMeta::default()
+    };
+    assert_eq!(meta.pivot_or_centre(), Vec2::new(1.0, 0.0));
 }

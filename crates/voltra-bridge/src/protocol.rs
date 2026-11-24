@@ -173,6 +173,16 @@ pub enum Command {
         #[serde(default)]
         text: Option<String>,
     },
+    /// Packs every PNG under the folder `folder` (an asset path) into
+    /// `<folder>.png` and `<folder>.atlas.ron` beside it, as the asset
+    /// browser's "Pack into atlas" does.
+    PackAtlas {
+        /// The folder of loose pictures, as an asset path.
+        folder: String,
+        /// Cut transparent borders off first.
+        #[serde(default)]
+        trim: bool,
+    },
     /// The last `frames` recorded frames, summarised; `record` first starts
     /// or stops recording.
     Profile {

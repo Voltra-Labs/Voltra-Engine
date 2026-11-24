@@ -230,6 +230,18 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }
             Ok(json!({ "holding": action, "frames": frames }))
         }
+        Command::PackAtlas { folder, trim } => {
+            let folder = voltra_assets::AssetPath::new(folder).map_err(|e| e.to_string())?;
+            let (atlas, report) = crate::pack_atlas::pack(frame, &folder, *trim)?;
+            editor.assets.refresh();
+            Ok(json!({
+                "atlas": atlas.as_str(),
+                "sheet": report.texture.as_ref().map(|path| path.as_str()),
+                "regions": report.regions,
+                "size": [report.size.x, report.size.y],
+                "gone": report.gone,
+            }))
+        }
         Command::Profile { frames, record } => {
             if let Some(record) = record {
                 voltra_profile::set_enabled(*record);
