@@ -12,8 +12,10 @@ pub mod collision;
 pub mod gpu;
 pub mod mesh;
 pub mod obstacles;
+mod particle;
 pub mod rng;
 pub mod simulate;
+mod simulation;
 
 use voltra_assets::{AssetPath, Handle, Textures};
 use voltra_render::glam::Vec2;
@@ -21,9 +23,9 @@ use voltra_render::Texture;
 
 pub use collision::ParticleCollision;
 pub use obstacles::Obstacles;
+pub use particle::{Particle, Particles};
 pub use simulate::advance;
-
-use rng::Rng;
+pub use simulation::Simulation;
 
 /// The most particles one emitter may hold, whatever its file says.
 pub const MAX_PARTICLES: u32 = 10_000;
@@ -209,65 +211,6 @@ impl ParticleEmitter {
         self.texture_handle = path.as_ref().map(|path| textures.load(device, queue, path));
         self.texture = path;
     }
-}
-
-/// Where an emitter's particles are stepped and drawn from.
-///
-/// The CPU is the default and the reference: exact counts, no device
-/// needed, every particle readable. The GPU takes the per-particle work —
-/// tens of thousands cost what a handful do — with the same parameters and
-/// look; the CPU still decides how many are born and when. An adapter
-/// without compute shaders runs a GPU emitter on the CPU instead.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum Simulation {
-    #[default]
-    /// Simulated on the CPU, one particle at a time.
-    Cpu,
-    /// Simulated by a compute shader on the GPU.
-    Gpu,
-}
-
-impl Simulation {
-    /// Whether it is simulated on the CPU.
-    pub fn is_cpu(&self) -> bool {
-        *self == Self::Cpu
-    }
-}
-
-/// One particle.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Particle {
-    /// In world space for a world-space emitter, in the emitter's space
-    /// otherwise.
-    pub position: Vec2,
-    /// Units per second, in the space `position` is in.
-    pub velocity: Vec2,
-    /// Seconds since it was born.
-    pub age: f32,
-    /// Seconds it lives; it dies when `age` reaches it.
-    pub lifetime: f32,
-}
-
-impl Particle {
-    /// How far through its life, `0` at birth to `1` at death.
-    pub fn progress(&self) -> f32 {
-        if self.lifetime > 0.0 {
-            (self.age / self.lifetime).clamp(0.0, 1.0)
-        } else {
-            1.0
-        }
-    }
-}
-
-/// An emitter's live particles, the share of a particle the rate owes, the
-/// bursts waiting and the generator picking every random value.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct Particles {
-    pub(crate) particles: Vec<Particle>,
-    pub(crate) owed: f32,
-    pub(crate) burst: u32,
-    pub(crate) rng: Option<Rng>,
-    pub(crate) gpu: gpu::GpuPlan,
 }
 
 #[cfg(test)]
