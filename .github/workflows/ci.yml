@@ -185,3 +185,87 @@ jobs:
           cargo xtask new-game ci-game
           cargo test -p ci-game
           cargo clippy -p ci-game --all-targets -- -D warnings
+
+  # The benchmark suite (crates/voltra-bench, docs/ARCHITECTURE.md stage
+  # 107), run on the base and on this commit in the same job, on the same
+  # runner, three rounds interleaved so a slow minute of the machine falls
+  # on both. Each side's best run is compared; a benchmark slower than its
+  # threshold (set from measured noise) fails the job. A base from before
+  # the suite existed has nothing to compare with: the head still runs.
+  bench:
+    name: benchmarks (regression check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The base's commit, for its own copy of the suite.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: bench
+      # The engine links ALSA and udev; the GPU benchmarks draw on a
+      # software Vulkan driver (lavapipe), as the headless tests do.
+      - name: ALSA, udev and a software Vulkan driver
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config libvulkan1 mesa-vulkan-drivers
+      # A pull request against its merge base; a push against the commit
+      # it moved the branch from.
+      - name: The base
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            base=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          else
+            base="${{ github.event.before }}"
+            git cat-file -e "$base^{commit}" 2>/dev/null || base=$(git rev-parse HEAD~1)
+          fi
+          echo "base: $base"
+          git worktree add --detach ../base "$base"
+          if [ -d ../base/crates/voltra-bench ]; then suite=yes; else suite=no; fi
+          echo "suite=$suite" >> "$GITHUB_OUTPUT"
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+      # One target directory: the dependencies build once, and each side's
+      # binary is copied out before the other's replaces it.
+      - name: Both suites, in release
+        run: |
+          mkdir -p bench-out
+          if [ "${{ steps.base.outputs.suite }}" = yes ]; then
+            cargo build --release -p voltra-bench --manifest-path ../base/Cargo.toml --target-dir target
+            cp target/release/voltra-bench bench-out/voltra-bench-base
+          fi
+          cargo build --release -p voltra-bench --target-dir target
+          cp target/release/voltra-bench bench-out/voltra-bench-head
+      - name: Base and head, interleaved
+        run: |
+          for round in 1 2 3; do
+            if [ -x bench-out/voltra-bench-base ]; then
+              bench-out/voltra-bench-base run --out "bench-out/base-$round.json"
+            fi
+            bench-out/voltra-bench-head run --out "bench-out/head-$round.json"
+          done
+      - name: Compare
+        run: |
+          # The head's own run-to-run spread, for reading the verdict.
+          bench-out/voltra-bench-head noise bench-out/head-*.json
+          if [ ! -x bench-out/voltra-bench-base ]; then
+            echo "::notice::the base (${{ steps.base.outputs.sha }}) has no benchmark suite to compare with"
+            exit 0
+          fi
+          status=0
+          bench-out/voltra-bench-head compare \
+            --base bench-out/base-1.json --base bench-out/base-2.json --base bench-out/base-3.json \
+            --head bench-out/head-1.json --head bench-out/head-2.json --head bench-out/head-3.json \
+            || status=$?
+          # 2: the reports do not compare (the JSON format changed).
+          if [ "$status" -eq 2 ]; then
+            echo "::warning::the base's benchmark results do not compare with the head's"
+            exit 0
+          fi
+          exit "$status"
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmarks
+          path: bench-out/*.json
+          if-no-files-found: ignore

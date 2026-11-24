@@ -7343,6 +7343,154 @@ rigid; the GPU mesh drops bad weights and broken triangles; **painted
 weights saved to a scene file and loaded back unchanged**),
 `skinned::{generate, weights}` and `voltra-render` `skinning::mesh`
 (sanitising, the uniform's layout).
+### Benchmarks are an in-house harness, compared base against head in one CI job
+
+Stage 107. `crates/voltra-bench`: the hot paths timed headless, the results
+written as JSON, and a comparer that fails CI when one slows past its
+threshold. Nothing was optimized: the numbers below are what stage 108
+starts from.
+
+**The suite** (`suite/*.rs`, one file a group). Every benchmark builds its
+own world in code, not from a scene file someone may edit, so its number
+moves only when the code it times does:
+
+| Benchmark | Times |
+| --- | --- |
+| `batch/sprites/{10k,50k,100k}` | `SpriteBatch::rebuild` of N sprites in a grid, all in view, over 8 textures — the draw path's per-frame build |
+| `batch/upload/100k` | `SpriteBatch::upload`: the 100k-quad mesh's buffers made on the device (lavapipe) — the step into `voltra-render` |
+| `tilemap/mesh/256x256` | `tilemap::mesh::push`: a 65 536-tile layer meshed from nothing |
+| `tilemap/cached/256x256` | the same layer through `TileMeshCache`, nothing changed: a steady frame |
+| `physics/step/1k-bodies` | 50 columns of 20 boxes, every body awake and touching; 10 steps from placement, reported per step |
+| `physics/pile/settle-210` | a 20-row pyramid, 120 steps (2 s) from placement, per step |
+| `ui/layout/1k-elements` | `UiLayout::from_world` on a column of 50 row stacks of 19 cells |
+| `text/layout/{paragraph-1k,labels-100}` | `Font::layout`: 1 000 characters wrapped at 400 px; 100 HUD labels |
+| `scene/parse/{250,500}-entities`, `scene/load/250-entities` | `ron::from_str::<SceneFile>`, and that plus `from_scene_file` |
+| `frame/headless/sandbox-640x360` | `Headless::screenshot` of `sandbox.ron`: record, submit, lavapipe, read back |
+
+GPU benchmarks are recorded as skipped, and never compared, where there is
+no adapter. The older timing examples (`voltra-scene`'s `batch_stress`,
+`voltra-physics`'s `stress`) stay as exploratory tools; the suite is what
+is compared. Scenes are small (250 and 500 entities) because a large one
+takes seconds to parse — see the budgets.
+
+**Harness, not `criterion`.** `criterion` is a leaf library and allowed, but
+what CI needs from it is what it does least well: its results are an
+undocumented tree under `target/criterion`, its baselines live there too
+(a base built in another checkout has to be pointed at the same
+directory), and its change test reports "within noise threshold" from one
+global setting rather than a threshold per benchmark. The part we need is
+small (`harness.rs`, `stats.rs`): warm up for 300 ms, doubling the
+iterations while one run is shorter than a sample; size a sample to 25 ms
+by the *wall* clock, setup included (a nanosecond routine behind a
+millisecond setup would otherwise ask for millions of setups per sample);
+take 21 samples; keep the median and the median absolute deviation, which
+one preempted sample cannot drag the way it drags a mean and a standard
+deviation. `iter` times a routine that needs nothing fresh; `iter_batched`
+makes each iteration's input before the clock starts and drops each output
+after it stops (a physics world stepped cannot be stepped from the same
+place again). Unity's Performance Testing package is the prior art that
+fits: samples, a median, JSON out, a threshold per test against a stored
+baseline. Bevy runs `criterion` and reads regressions off a dashboard after
+merge; Godot's benchmarks run nightly in a repository of their own. Both
+inform rather than gate, which is not what was asked here.
+
+**JSON** (`report.rs`, `FORMAT` = 1): the machine (OS, arch, CPUs,
+optimized or not) and per benchmark its name, threshold, stats or the
+reason it skipped, how many runs it is the best of and their spread. A
+report of another format is refused by number, not half-read. Several runs
+combine as the **best** of them per benchmark (`Report::best_of`): what
+slows a run on a shared machine — another process, a migrated thread —
+only ever adds time, so the fastest run is the closest to what the code
+costs.
+
+**Comparer** (`compare.rs`): reports are matched by name; a benchmark
+regresses when `head > base × (1 + threshold)`, improves past the same
+margin the other way, and is unchanged in between. Added, removed and
+skipped ones are listed and never fail. Reports of two machines, or of a
+debug build, are refused (exit 2): they differ for reasons that are not the
+change. `--threshold P` overrides every benchmark's own.
+
+**CLI.** `cargo xtask bench [--save FILE] [--compare FILE]… [--threshold P]
+[--filter TEXT] [--runs N] [--quick]` builds the suite in release, runs it
+(`target/bench/latest.json` by default) and compares. It fronts the
+`voltra-bench` binary (`run`, `compare`, `noise`, `list`), which CI calls
+directly because it builds two of them.
+
+**CI** (the `bench` job): the base is the PR's merge base (for a push, the
+commit the branch moved from), checked out as a worktree. Both suites build
+in release in one target directory, so the dependencies build once, and
+run **on the same runner, interleaved three rounds** (base, head, base,
+head, …) so a slow minute of the machine lands on both sides; each side's
+best run is compared. The six JSON files are uploaded as the `benchmarks`
+artifact, which `voltra-bench noise` reads to re-measure the runner's own
+noise. A base from before the suite existed is noted and skipped; the head
+still runs. A PR that changes a benchmark's own definition is compared
+against the old definition — read its verdict with that in mind.
+
+**Noise, measured first.** `voltra-bench noise` over two sessions of 12
+runs of identical code on the development machine (4-core Xeon @ 2.3 GHz,
+shared with other builds, load average 6–8). The *spread* is one run
+against one run (slowest median over fastest); the *A/A change* is what the
+check itself sees comparing the code with itself — best of 3 interleaved
+against best of 3, the worst over every window of 6 consecutive runs.
+Taking the best of three shrinks the noise from 10–47 % to 1–20 % (the
+frame, on a rasterizer that uses every core, from 105 % to 30 %). Each
+threshold is twice the worst A/A change of either session, at least 15 %,
+rounded up to 5 (`noise::suggest`):
+
+| Benchmark | Spread | A/A | Threshold |
+| --- | --- | --- | --- |
+| `batch/sprites/10k` | 29–35 % | 9–20 % | 40 % |
+| `batch/sprites/50k` | 9–23 % | 4–10 % | 25 % |
+| `batch/sprites/100k` | 24–47 % | 9–13 % | 30 % |
+| `batch/upload/100k` | 37 % | 6–9 % | 20 % |
+| `tilemap/mesh/256x256` | 10–14 % | 2–6 % | 15 % |
+| `tilemap/cached/256x256` | 28–33 % | 12–15 % | 30 % |
+| `physics/step/1k-bodies` | 19–32 % | 2–5 % | 15 % |
+| `physics/pile/settle-210` | 15–17 % | 2–7 % | 15 % |
+| `ui/layout/1k-elements` | 19–28 % | 2–4 % | 15 % |
+| `text/layout/paragraph-1k` | 21–24 % | 4–6 % | 15 % |
+| `text/layout/labels-100` | 27–28 % | 3–10 % | 25 % |
+| `scene/parse/250-entities` | 14–28 % | 1–7 % | 15 % |
+| `scene/parse/500-entities` | 14–17 % | 4–8 % | 20 % |
+| `scene/load/250-entities` | 15–23 % | 3–5 % | 15 % |
+| `frame/headless/sandbox-640x360` | 105–111 % | 29–30 % | 65 % |
+
+A hosted runner is another machine; its noise is in every run's artifact,
+and a threshold that proves too tight or too loose there is re-set from
+`voltra-bench noise` over those files, not guessed.
+
+**Budgets** — the targets stage 108 works toward, on this machine's CPU
+(lavapipe for the GPU rows). "Now" is the best of the second session's 12
+runs:
+
+| Benchmark | Now | Budget | Why that number |
+| --- | --- | --- | --- |
+| `batch/sprites/100k` | 11.5 ms | 4 ms | 100k sprites at 60 fps leaves 16.7 ms for everything, and the batch may take a quarter. Expanding quads on the CPU will not get there: instancing (a record per sprite, corners in the shader) is the likely route |
+| `batch/sprites/10k` | 1.35 ms | 0.4 ms | the same share of a frame for a typical level |
+| `batch/upload/100k` | 8.2 ms | 2 ms | a fresh buffer pair every frame today; a persistent buffer written with `write_buffer` (the batch's own doc names it) |
+| `tilemap/mesh/256x256` | 2.4 ms | 2 ms | an edit rebuilds one chunk, a full rebuild happens on load: nearly met |
+| `tilemap/cached/256x256` | 0.73 ms | 0.5 ms | 65k cached tiles copied a frame; instanced tiles would skip the copy |
+| `physics/step/1k-bodies` | 0.75 ms | 2 ms | met. The plan's "2k active bodies under 4 ms" is this budget doubled |
+| `physics/pile/settle-210` | 0.42 ms | 1 ms | met |
+| `ui/layout/1k-elements` | 0.15 ms | 0.25 ms | met |
+| `text/layout/paragraph-1k` | 23 µs | 50 µs | met; laid out on every frame it shows |
+| `text/layout/labels-100` | 69 µs | 100 µs | met; a HUD's worth every frame, which cached layouts would make free |
+| `scene/parse/250-entities` | 97 ms | 5 ms | **quadratic**: 500 entities take 4×, 1 000 take 1.5 s, 2 000 take 6 s. `ron` rescans the rest of the input for every untyped number (`ron` 0.12 notes). Budget: linear, `parse/500` at most 2.2 × `parse/250` |
+| `scene/parse/500-entities` | 375 ms | 10 ms | as above; stage 109's regions need a 10k-entity level in well under a second |
+| `scene/load/250-entities` | 97 ms | 10 ms | the parse is nearly all of it today |
+| `frame/headless/sandbox-640x360` | 2.5 ms | 8 ms | met on a software rasterizer. 100k sprites at 60 fps on the reference GPU needs a windowed run, which CI cannot make: stage 108 measures it by hand |
+
+Pinned by `compare/tests.rs` (the same numbers pass; past the threshold
+regresses and within it does not; faster is no failure; `--threshold`
+overrides; added, removed and skipped never fail; another machine or a
+debug build is refused; and **a deliberately slowed function** — the same
+sum through three times the work, measured by the real harness — tripping
+the check), `report.rs` tests (JSON round trip, another format refused by
+number, the best of runs and its spread, skips), `stats.rs`, `harness.rs`
+(setup is not timed, the per-step divisor), `noise.rs` (spread, the
+interleaved A/A, the suggestion) and `suite.rs` (unique names; every CPU
+benchmark runs once). In CI as the `bench` job.
 
 ### wgpu 30 API notes
 
@@ -7506,3 +7654,9 @@ Both differ from most training data and from every tutorial written against
 | Decode | `from_bytes` ignores trailing bytes; `take_from_bytes` returns them — check they are empty for "one message is one value" |
 | Untrusted lengths | a sequence's `size_hint` is `None` when its claimed length exceeds the bytes left, so serde preallocates nothing for a lying length |
 | `Error` | `#[non_exhaustive]`, `Clone + Eq`; `DeserializeBadEncoding` is the generic "not well encoded" |
+
+### `ron` 0.12 notes
+
+| Thing | 0.12.2 |
+| --- | --- |
+| Untyped numbers are quadratic | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
