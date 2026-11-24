@@ -4,9 +4,8 @@
 //! the swapchain, an offscreen texture for a headless test, and — later — the
 //! editor viewport.
 
-use std::ops::Range;
-
-use crate::mesh::Mesh;
+use crate::mesh::{Mesh, Primitives};
+use crate::pipeline::SpritePipeline;
 
 /// Records a clear followed by all of `mesh`, if there is one.
 ///
@@ -20,11 +19,12 @@ use crate::mesh::Mesh;
 /// showing through when the scene is empty.
 ///
 /// `camera` is bound to group 0 and `texture` to group 1; the pipeline layout
-/// and the shader both expect them there.
+/// and the shader both expect them there. The mesh's triangles draw first,
+/// then its quads, each through its half of `pipeline`.
 pub fn draw_mesh(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
-    pipeline: &wgpu::RenderPipeline,
+    pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
     texture: &wgpu::BindGroup,
     mesh: Option<&Mesh>,
@@ -51,14 +51,20 @@ pub fn draw_mesh(
         return;
     };
 
-    pass.set_pipeline(pipeline);
+    pass.set_pipeline(&pipeline.triangles);
     pass.set_bind_group(0, camera, &[]);
     pass.set_bind_group(1, texture, &[]);
     mesh.draw(&mut pass);
+    if mesh.quad_count() > 0 {
+        pass.set_pipeline(&pipeline.quads);
+        pass.set_bind_group(0, camera, &[]);
+        pass.set_bind_group(1, texture, &[]);
+        mesh.draw_quads(&mut pass, 0..mesh.quad_count());
+    }
 }
 
-/// One draw call within a [`draw_mesh_batches`] pass: an index range bound
-/// against its own texture.
+/// One draw call within a [`draw_mesh_batches`] pass: a range of triangles
+/// or quads bound against its own texture.
 ///
 /// Carries `&wgpu::BindGroup` rather than any asset type — `voltra-render`
 /// does not know what a texture cache is, only that group 1 needs something
@@ -75,8 +81,9 @@ pub struct MeshDraw<'a> {
     /// [`LayerPass`](crate::light_layers::LayerPass)). The colour pass
     /// ignores it.
     pub light_layers: u32,
-    /// The vertex-index range to draw.
-    pub indices: Range<u32>,
+    /// What to draw: a range of the mesh's triangle indices or of its quad
+    /// instances.
+    pub primitives: Primitives,
     /// The material the range is drawn with, or `None` for the sprite
     /// pipeline the pass was handed.
     pub material: Option<MaterialDraw<'a>>,
@@ -86,8 +93,8 @@ pub struct MeshDraw<'a> {
 /// are in the frame's uniform buffer.
 #[derive(Clone, Copy)]
 pub struct MaterialDraw<'a> {
-    /// The pipeline the range is drawn with.
-    pub pipeline: &'a wgpu::RenderPipeline,
+    /// The pipelines the range is drawn with.
+    pub pipeline: &'a SpritePipeline,
     /// The frame's uniform blocks, bound at group 2.
     pub uniforms: &'a wgpu::BindGroup,
     /// This range's block in it.
@@ -98,12 +105,12 @@ pub struct MaterialDraw<'a> {
 /// once and a range on another rebinds what changed.
 pub(crate) struct Binder<'p> {
     bound: Option<*const wgpu::RenderPipeline>,
-    default: &'p wgpu::RenderPipeline,
+    default: &'p SpritePipeline,
     camera: &'p wgpu::BindGroup,
 }
 
 impl<'p> Binder<'p> {
-    pub(crate) fn new(default: &'p wgpu::RenderPipeline, camera: &'p wgpu::BindGroup) -> Self {
+    pub(crate) fn new(default: &'p SpritePipeline, camera: &'p wgpu::BindGroup) -> Self {
         Self {
             bound: None,
             default,
@@ -112,9 +119,13 @@ impl<'p> Binder<'p> {
     }
 
     /// Binds what `range` is drawn with: its material's pipeline and block,
-    /// or the default pipeline; then its texture.
+    /// or the default pipeline — the half for its primitives; then its
+    /// texture.
     pub(crate) fn bind(&mut self, pass: &mut wgpu::RenderPass<'_>, range: &MeshDraw<'_>) {
-        let pipeline = range.material.map_or(self.default, |m| m.pipeline);
+        let pipeline = range
+            .material
+            .map_or(self.default, |m| m.pipeline)
+            .for_primitives(&range.primitives);
         let pointer: *const wgpu::RenderPipeline = pipeline;
         if self.bound != Some(pointer) {
             pass.set_pipeline(pipeline);
@@ -136,8 +147,8 @@ impl<'p> Binder<'p> {
 /// Records a clear, then one draw per entry of `draws`, each against its own
 /// bind group but sharing the pipeline, camera and mesh buffers.
 ///
-/// `camera` is bound to group 0 once; `draws[i].texture` is (re)bound to
-/// group 1 before `mesh.draw_range(draws[i].indices)`. Splitting sprites into
+/// `camera` is bound to group 0 with each pipeline; `draws[i].texture` is
+/// (re)bound to group 1 before `draws[i].primitives` are drawn. Splitting sprites into
 /// contiguous same-texture runs is the caller's job — this only walks
 /// whatever ranges it is handed, in order, so painter's order survives.
 ///
@@ -146,7 +157,7 @@ impl<'p> Binder<'p> {
 pub fn draw_mesh_batches(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
-    pipeline: &wgpu::RenderPipeline,
+    pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
     mesh: Option<&Mesh>,
     draws: &[MeshDraw<'_>],
@@ -171,7 +182,7 @@ pub fn draw_mesh_batches(
 pub fn draw_mesh_batches_over(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
-    pipeline: &wgpu::RenderPipeline,
+    pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
     mesh: Option<&Mesh>,
     draws: &[MeshDraw<'_>],
@@ -193,7 +204,7 @@ pub fn draw_mesh_batches_over(
 fn record_batches(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
-    pipeline: &wgpu::RenderPipeline,
+    pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
     mesh: Option<&Mesh>,
     draws: &[MeshDraw<'_>],
@@ -226,7 +237,7 @@ fn record_batches(
     let mut binder = Binder::new(pipeline, camera);
     for draw in draws {
         binder.bind(&mut pass, draw);
-        mesh.draw_range(&mut pass, draw.indices.clone());
+        mesh.draw_primitives(&mut pass, &draw.primitives);
     }
 }
 

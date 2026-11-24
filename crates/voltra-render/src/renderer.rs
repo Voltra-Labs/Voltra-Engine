@@ -30,7 +30,7 @@ pub use composite::Placed;
 /// Drives one frame at a time on top of a [`GpuContext`].
 pub struct Renderer {
     ctx: GpuContext,
-    flat_color: wgpu::RenderPipeline,
+    flat_color: crate::pipeline::SpritePipeline,
     camera_binding: CameraBinding,
     /// The screen-space UI's projection, in its own buffer so it and the
     /// world camera can both be written before one submit.

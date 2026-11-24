@@ -1,9 +1,10 @@
-//! Sprite batching: a world of quads into vertices, indices and ranges, and
-//! the upload that hands them to the renderer.
+//! Sprite batching: a world of quads into instances and ranges, and the
+//! upload that hands them to the renderer.
 
 use voltra_assets::Handle;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
+use voltra_render::MeshBuffers;
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{Sprite, SpriteBatch, TileMeshCache, Transform};
 
@@ -66,10 +67,13 @@ fn sprites(count: usize) -> World {
     world
 }
 
-/// 100k quads' vertex and index buffers created on the device: the step
-/// from the batch to `voltra-render`.
+/// 100k quads written to the device as the draw path writes them: into
+/// buffers kept from the frame before (`SpriteBatch::upload_into`), then
+/// submitted, as a frame's submission carries the writes. Stage 107 timed
+/// fresh buffers made every frame (`SpriteBatch::upload`), which the draw
+/// path no longer does (stage 108).
 fn upload(config: &crate::harness::Config) -> Outcome {
-    let Some((device, _queue)) = voltra_testkit::headless_device() else {
+    let Some((device, queue)) = voltra_testkit::headless_device() else {
         return Outcome::Skipped("no GPU adapter".to_owned());
     };
     let mut batch = SpriteBatch::default();
@@ -78,15 +82,19 @@ fn upload(config: &crate::harness::Config) -> Outcome {
         Sheets::default(),
         &mut TileMeshCache::default(),
     );
+    let mut buffers = MeshBuffers::default();
     measure(
         config,
         1,
         iter(|| {
-            let mesh = batch.upload(&device);
-            drop(mesh);
-            // Lets the device free what was dropped, as a frame's
-            // submission would; without it buffers pile up unfreed.
+            let drawn = batch
+                .upload_into(&device, &queue, &mut buffers)
+                .map(|mesh| mesh.quad_count());
+            queue.submit([]);
+            // Lets the device free the writes' staging, as a frame's
+            // submission would; without it they pile up unfreed.
             let _ = device.poll(voltra_render::wgpu::PollType::Poll);
+            drawn
         }),
     )
     .into()

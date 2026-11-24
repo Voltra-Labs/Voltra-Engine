@@ -1,8 +1,8 @@
-//! Turning a world full of sprites into vertex and index data.
+//! Turning a world full of sprites into quad instances and triangles.
 
 use voltra_assets::Handle;
 use voltra_render::glam::{Mat3, Vec2};
-use voltra_render::{Texture, Vertex};
+use voltra_render::{MeshBuffers, Primitives, QuadInstance, Texture, Vertex};
 
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
@@ -10,18 +10,18 @@ use crate::sprite::Sprite;
 use crate::text::{shape, Text};
 
 pub use material_use::MaterialUse;
+pub(crate) use placed::{culled, instance, placed_corners, unchecked};
 
 pub use skinned_draw::SkinnedDraw;
 pub use surface::Surface;
 pub use triangles::{MeshVertex, TriangleMesh};
 
-/// Corners per quad. Where they land is [`quad`]'s question, not this one's.
-pub(crate) const CORNERS_PER_QUAD: usize = 4;
-
-/// Two triangles over those four corners.
+/// Two triangles over a quad's four corners, for a quad drawn as triangles
+/// (one that is no parallelogram, which an instance cannot draw).
 pub(crate) const QUAD_INDICES: [u32; 6] = [0, 1, 2, 0, 2, 3];
 
-/// A contiguous run of one texture's sprites within [`SpriteBatch::indices`].
+/// A contiguous run of one surface's quads within [`SpriteBatch::quads`],
+/// or of its triangles within [`SpriteBatch::indices`].
 ///
 /// Painter's order wins over batching: sprites are never reordered to grow a
 /// run, so a run only ever covers sprites that were already adjacent in draw
@@ -35,8 +35,10 @@ pub struct SpriteRange {
     pub normal: Option<Handle<Texture>>,
     /// The light layers of what the run draws. Part of what splits a run.
     pub light_layers: u32,
-    /// Index range into [`SpriteBatch::indices`] (and thus the uploaded mesh).
-    pub indices: std::ops::Range<u32>,
+    /// What the run draws: a range of [`SpriteBatch::quads`] or of
+    /// [`SpriteBatch::indices`] (and thus of the uploaded mesh's). One kind
+    /// a run: the two draw through different pipelines.
+    pub primitives: Primitives,
     /// The material the run draws through, an index into
     /// [`SpriteBatch::materials`]; `None` for the plain sprite shader. Part
     /// of what splits a run.
@@ -58,20 +60,29 @@ pub struct GpuEmitterDraw {
     pub before: usize,
 }
 
-/// Vertex and index data for every sprite in a world.
+/// Quad instances, vertices and indices for everything a world draws.
 ///
 /// Built on the CPU each frame. Kept as plain `Vec`s rather than GPU buffers
 /// so it can be produced and asserted on without a device.
+///
+/// A quad — a sprite, a tile, a glyph, a CPU particle, a piece of the
+/// interface — is one [`QuadInstance`], its corners made by the vertex
+/// shader: 64 bytes rather than four vertices and six indices' 152, which
+/// is most of what building and uploading 100k sprites cost (stage 108).
+/// Triangle meshes — lines, polygons, trails — stay vertices and indices.
 #[derive(Debug, Default, Clone)]
 pub struct SpriteBatch {
     /// The view quads are culled against, from the [`Sheets`] the batch was
     /// built with. `None` keeps every quad.
     visible: Option<(Vec2, Vec2)>,
-    /// Four corners per sprite, in draw order.
+    /// One instance per quad, in draw order.
+    pub quads: Vec<QuadInstance>,
+    /// The corners of triangle meshes, in draw order.
     pub vertices: Vec<Vertex>,
-    /// Triangle indices into `vertices`, six per sprite.
+    /// Triangle indices into `vertices`, three a triangle.
     pub indices: Vec<u32>,
-    /// Draw-order runs of same-texture sprites, covering all of `indices`.
+    /// Draw-order runs of same-surface quads or triangles, covering all of
+    /// `quads` and `indices`.
     ///
     /// Split only where the texture actually changes — a run never merges two
     /// sprites that draw order keeps apart, even if they share a texture.
@@ -88,6 +99,12 @@ pub struct SpriteBatch {
     /// Every material and set of uniform values a range draws through,
     /// once each.
     pub materials: Vec<MaterialUse>,
+    /// The world's matrices as last composed, kept so the next build
+    /// composes into the same storage.
+    transforms: crate::hierarchy::WorldTransforms,
+    /// How many drawables the last build sorted: the next one's list is
+    /// made that large up front.
+    drawn_hint: usize,
 }
 
 impl SpriteBatch {
@@ -110,11 +127,11 @@ impl SpriteBatch {
         // about where a sprite's corners are is a click that misses the pixels
         // it lands on, and nothing reports it.
         let quad = quad(sprite, sheets);
-        if let Some(vertices) = placed(self.visible, matrix, quad.corners(), quad.uvs, sprite.color)
-        {
+        let placed = unchecked(matrix, quad.corners(), quad.uvs, sprite.color);
+        if let Some(placed) = culled(self.visible, placed) {
             let material = self.material(sprite.material.as_ref(), sheets);
             self.append_quad(
-                vertices,
+                placed,
                 Surface {
                     texture: quad.texture,
                     normal: sprite.normal_handle,
@@ -174,31 +191,64 @@ impl SpriteBatch {
         color: [f32; 4],
         surface: Surface,
     ) {
-        if let Some(vertices) = placed(self.visible, matrix, corners, uvs, color) {
-            self.append_quad(vertices, surface);
+        match instance(matrix, corners, uvs, color) {
+            Some(quad) => {
+                if let Some(quad) = culled(self.visible, quad) {
+                    self.append_quad(quad, surface);
+                }
+            }
+            // Four corners no instance can draw: two triangles, culled as
+            // drawn, like any mesh.
+            None => {
+                if let Some(vertices) = placed_corners(self.visible, matrix, corners, uvs, color) {
+                    self.append_corners(vertices, surface);
+                }
+            }
         }
     }
 
-    /// Appends a quad already placed and culled by [`placed`].
-    pub(crate) fn append_quad(&mut self, vertices: [Vertex; 4], surface: Surface) {
+    /// [`push_quad_on`](Self::push_quad_on) for corners and UVs known to be
+    /// parallelograms — a tile's, a rectangle sampling a rectangle of its
+    /// sheet however the tile is turned — without asking.
+    pub(crate) fn push_rect_on(
+        &mut self,
+        matrix: Mat3,
+        corners: [Vec2; 4],
+        uvs: [[f32; 2]; 4],
+        color: [f32; 4],
+        surface: Surface,
+    ) {
+        if let Some(quad) = culled(self.visible, unchecked(matrix, corners, uvs, color)) {
+            self.append_quad(quad, surface);
+        }
+    }
+
+    /// Appends an instance already placed and culled.
+    pub(crate) fn append_quad(&mut self, quad: QuadInstance, surface: Surface) {
+        let at = self.quads.len() as u32;
+        self.quads.push(quad);
+        self.extend_ranges(surface, Primitives::Quads(at..at + 1));
+    }
+
+    /// Appends four corners as two triangles.
+    fn append_corners(&mut self, vertices: [Vertex; 4], surface: Surface) {
         // Every quad's indices are relative to its own first vertex; without
-        // this offset each sprite would redraw the first one. `u32` because a
-        // batch holds every sprite in the world, not one object's geometry.
+        // this offset each one would redraw the first. `u32` because a
+        // batch holds a world, not one object's geometry.
         let base = self.vertices.len() as u32;
         self.vertices.extend_from_slice(&vertices);
-
         let start = self.indices.len() as u32;
         self.indices
             .extend(QUAD_INDICES.iter().map(|offset| base + offset));
         let end = self.indices.len() as u32;
-
-        self.extend_ranges(surface, start..end);
+        self.extend_ranges(surface, Primitives::Triangles(start..end));
     }
 
-    /// Adds `indices` drawn with `surface` to the last range when it has the
-    /// same one, or as a range of its own. Never across a GPU emitter, which
+    /// Adds `primitives` drawn with `surface` to the last range when it has
+    /// the same surface and draws the same kind, ending where these start;
+    /// as a range of its own otherwise. Never across a GPU emitter, which
     /// must draw between the two.
-    pub(crate) fn extend_ranges(&mut self, surface: Surface, indices: std::ops::Range<u32>) {
+    pub(crate) fn extend_ranges(&mut self, surface: Surface, primitives: Primitives) {
         let Surface {
             texture,
             normal,
@@ -206,24 +256,32 @@ impl SpriteBatch {
             material,
         } = surface;
         let sealed = self.sealed == Some(self.ranges.len());
-        match self.ranges.last_mut() {
-            Some(range)
-                if range.texture == texture
-                    && range.normal == normal
-                    && range.light_layers == light_layers
-                    && range.material == material
-                    && !sealed =>
-            {
-                range.indices.end = indices.end;
+        if let Some(range) = self.ranges.last_mut() {
+            let same = range.texture == texture
+                && range.normal == normal
+                && range.light_layers == light_layers
+                && range.material == material
+                && !sealed;
+            if same {
+                match (&mut range.primitives, &primitives) {
+                    (Primitives::Quads(run), Primitives::Quads(next))
+                    | (Primitives::Triangles(run), Primitives::Triangles(next))
+                        if run.end == next.start =>
+                    {
+                        run.end = next.end;
+                        return;
+                    }
+                    _ => {}
+                }
             }
-            _ => self.ranges.push(SpriteRange {
-                texture,
-                normal,
-                light_layers,
-                indices,
-                material,
-            }),
         }
+        self.ranges.push(SpriteRange {
+            texture,
+            normal,
+            light_layers,
+            primitives,
+            material,
+        });
     }
 
     /// Puts a GPU emitter's draw here in painter's order.
@@ -242,69 +300,58 @@ impl SpriteBatch {
         self.sealed = Some(self.ranges.len());
     }
 
-    /// How many sprite quads the batch holds.
+    /// How many quads the batch holds as instances.
     pub fn sprite_count(&self) -> usize {
-        self.vertices.len() / CORNERS_PER_QUAD
+        self.quads.len()
     }
 
-    /// Uploads the batch, or `None` when there is nothing to draw.
-    ///
-    /// Allocates fresh buffers every call. A persistent growable buffer
-    /// written with `Queue::write_buffer` is the obvious next step, and worth
-    /// doing once a frame's sprite count justifies it.
+    /// Uploads the batch into fresh buffers, or `None` when there is
+    /// nothing to draw. For a one-off draw — a screenshot, a test; a draw
+    /// path building a batch every frame writes it into kept buffers with
+    /// [`upload_into`](Self::upload_into) instead.
     pub fn upload(&self, device: &voltra_render::wgpu::Device) -> Option<voltra_render::Mesh> {
         if self.is_empty() {
             return None;
         }
-        Some(voltra_render::Mesh::indexed(
+        Some(voltra_render::Mesh::batch(
             device,
             "sprite-batch",
             &self.vertices,
             &self.indices,
+            &self.quads,
         ))
     }
 
-    /// No quads. A batch of nothing but GPU emitters is empty and still
-    /// draws them.
-    pub fn is_empty(&self) -> bool {
-        self.vertices.is_empty()
+    /// The batch written into `buffers`, kept from last frame and grown
+    /// when too small, or `None` when there is nothing to draw: no buffer
+    /// made or destroyed on a steady frame.
+    pub fn upload_into<'b>(
+        &self,
+        device: &voltra_render::wgpu::Device,
+        queue: &voltra_render::wgpu::Queue,
+        buffers: &'b mut MeshBuffers,
+    ) -> Option<&'b voltra_render::Mesh> {
+        buffers.write(device, queue, &self.vertices, &self.indices, &self.quads)
     }
-}
 
-/// A quad's four vertices through `matrix`, or `None` when it lies wholly
-/// outside `visible`.
-///
-/// Culled on the corners as they will be drawn, so a rotated, scaled,
-/// parented or parallax-displaced quad is tested where it really is.
-pub(crate) fn placed(
-    visible: Option<(Vec2, Vec2)>,
-    matrix: Mat3,
-    corners: [Vec2; 4],
-    uvs: [[f32; 2]; 4],
-    color: [f32; 4],
-) -> Option<[Vertex; 4]> {
-    let world = corners.map(|corner| matrix.transform_point2(corner));
-    let view = Sheets {
-        visible,
-        ..Sheets::default()
-    };
-    let min = world.iter().copied().fold(Vec2::INFINITY, Vec2::min);
-    let max = world.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);
-    if !view.sees(min, max) {
-        return None;
+    /// No quads and no triangles. A batch of nothing but GPU emitters is
+    /// empty and still draws them.
+    pub fn is_empty(&self) -> bool {
+        self.quads.is_empty() && self.indices.is_empty()
     }
-    let mut corner = 0;
-    Some(world.map(|at| {
-        let vertex = Vertex::new([at.x, at.y], color, uvs[corner]);
-        corner += 1;
-        vertex
-    }))
+
+    /// Every quad's four corners as vertices, in draw order: what the
+    /// vertex shader makes of [`quads`](Self::quads), for asserting on.
+    pub fn quad_vertices(&self) -> Vec<Vertex> {
+        self.quads.iter().flat_map(QuadInstance::corners).collect()
+    }
 }
 
 mod build;
 #[cfg(test)]
 mod cull_tests;
 mod material_use;
+mod placed;
 mod skinned_draw;
 mod surface;
 #[cfg(test)]

@@ -163,7 +163,7 @@ impl Headless {
                     },
                     normal: None,
                     light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                    indices: range.indices.clone(),
+                    primitives: range.primitives.clone(),
                     material: None,
                 })
                 .collect();
@@ -192,6 +192,7 @@ impl Headless {
             silhouettes: app.silhouettes.as_mut(),
             sorting_layers: &app.sorting_layers,
             batch: &mut app.frame_batch,
+            buffers: &mut app.batch_buffers,
             tile_meshes: &mut app.tile_meshes,
             gpu_rings: &app.gpu_rings,
             skins: &app.skinned_meshes,

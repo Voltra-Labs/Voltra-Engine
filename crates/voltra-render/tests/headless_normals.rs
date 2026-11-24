@@ -86,7 +86,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
         texture: &white,
         normal: map.as_ref(),
         light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-        indices: 0..6,
+        primitives: voltra_render::Primitives::Triangles(0..6),
         material: None,
     })];
 
@@ -97,7 +97,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
         texture: &white,
         normal: None,
         light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-        indices: 0..6,
+        primitives: voltra_render::Primitives::Triangles(0..6),
         material: None,
     }];
     pass::draw_mesh_batches(

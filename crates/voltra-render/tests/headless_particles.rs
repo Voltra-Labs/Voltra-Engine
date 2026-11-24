@@ -211,7 +211,7 @@ fn particles_draw_between_the_sprites_around_them() {
             texture: &white,
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: 0..6,
+            primitives: voltra_render::Primitives::Triangles(0..6),
             material: None,
         }),
         SceneDraw::Particles {
@@ -223,7 +223,7 @@ fn particles_draw_between_the_sprites_around_them() {
             texture: &white,
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: 6..12,
+            primitives: voltra_render::Primitives::Triangles(6..12),
             material: None,
         }),
     ];
@@ -314,7 +314,7 @@ fn particles_are_drawn_into_the_light_layers_on_their_emitter_s() {
             texture: &white,
             normal: None,
             light_layers: 0b1,
-            indices: 0..6,
+            primitives: voltra_render::Primitives::Triangles(0..6),
             material: None,
         }),
         SceneDraw::Particles {

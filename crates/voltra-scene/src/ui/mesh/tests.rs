@@ -64,10 +64,13 @@ fn flat(batch: &SpriteBatch) -> Vec<(Vec2, Vec2)> {
         .iter()
         .filter(|range| range.texture.is_none())
         .flat_map(|range| {
-            let first = range.indices.start as usize / 6;
-            let last = range.indices.end as usize / 6;
-            (first..last).map(|quad| {
-                let corners = &batch.vertices[quad * 4..quad * 4 + 4];
+            let voltra_render::Primitives::Quads(quads) = range.primitives.clone() else {
+                panic!("the interface draws quads");
+            };
+            let vertices = batch.quad_vertices();
+            quads.map(move |quad| {
+                let quad = quad as usize;
+                let corners = &vertices[quad * 4..quad * 4 + 4];
                 let min = corners.iter().fold(Vec2::splat(f32::INFINITY), |m, v| {
                     m.min(Vec2::from(v.position))
                 });
@@ -95,7 +98,7 @@ fn a_focused_field_draws_a_caret_after_its_text_and_an_unfocused_one_none() {
     let (min, max) = carets[0];
     assert!(max.x - min.x >= 1.0 && max.x - min.x <= 2.0, "a thin bar");
     let glyphs_end = focused
-        .vertices
+        .quad_vertices()
         .iter()
         .map(|v| v.position[0])
         .fold(f32::NEG_INFINITY, f32::max);
@@ -134,7 +137,7 @@ fn a_long_text_scrolls_to_its_caret_and_is_cut_to_the_box() {
     let name = field(&mut world, 60.0, "A rather long name to type");
     let batch = drawn(&mut world, &mut fonts, Some(name));
     assert!(world.get::<UiTextField>(name).expect("a field").scroll > 0.0);
-    for v in &batch.vertices {
+    for v in &batch.quad_vertices() {
         assert!(
             (100.0..=160.0).contains(&v.position[0]),
             "inside the box: {v:?}"
@@ -158,5 +161,5 @@ fn the_placeholder_is_fainter() {
         .placeholder = "Name".to_owned();
     let batch = drawn(&mut world, &mut fonts, None);
     assert_eq!(batch.sprite_count(), 4);
-    assert!(batch.vertices.iter().all(|v| v.color[3] == 0.5));
+    assert!(batch.quad_vertices().iter().all(|v| v.color[3] == 0.5));
 }

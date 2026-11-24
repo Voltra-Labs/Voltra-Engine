@@ -84,7 +84,7 @@ pub(super) fn scene_draws<'a>(
                     .filter(|&handle| !textures.is_broken(handle))
                     .map(|handle| textures.raw_bind_group(handle)),
                 light_layers: range.light_layers,
-                indices: range.indices.clone(),
+                primitives: range.primitives.clone(),
                 material: range
                     .material
                     .and_then(|index| bank.and_then(|bank| bank.draw(index))),

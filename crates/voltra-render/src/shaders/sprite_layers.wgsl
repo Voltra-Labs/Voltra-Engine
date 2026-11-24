@@ -6,7 +6,8 @@
 // cleared to puts the background on every layer. Texels the colour leaves
 // less than half covered are skipped, as in `sprite_normals.wgsl`.
 //
-// Vertex layout is `Vertex::LAYOUT`; group 0 `CameraBinding`, group 1
+// Vertex layout is `Vertex::LAYOUT` (`vs_layers`) or a quad instance
+// (`vs_layers_quad`, `quad.wgsl`); group 0 `CameraBinding`, group 1
 // `texture::bind_group_layout` (the colour, for its coverage), group 2 the
 // range's layers. Read back by `lights.wgsl`.
 
@@ -42,13 +43,23 @@ struct VertexOutput {
     @location(1) alpha: f32,
 }
 
+fn vertex(position: vec2<f32>, color: vec4<f32>, uv: vec2<f32>) -> VertexOutput {
+    var out: VertexOutput;
+    out.clip_position = camera.view_proj * vec4<f32>(position, 0.0, 1.0);
+    out.uv = uv;
+    out.alpha = color.a;
+    return out;
+}
+
 @vertex
 fn vs_layers(in: VertexInput) -> VertexOutput {
-    var out: VertexOutput;
-    out.clip_position = camera.view_proj * vec4<f32>(in.position, 0.0, 1.0);
-    out.uv = in.uv;
-    out.alpha = in.color.a;
-    return out;
+    return vertex(in.position, in.color, in.uv);
+}
+
+@vertex
+fn vs_layers_quad(@builtin(vertex_index) index: u32, quad: QuadInput) -> VertexOutput {
+    let corner = quad_corner(quad, index);
+    return vertex(corner.position, corner.color, corner.uv);
 }
 
 @fragment

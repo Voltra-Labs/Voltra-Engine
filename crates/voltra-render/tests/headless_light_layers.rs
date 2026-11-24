@@ -64,7 +64,7 @@ fn lit_by(lamp: Option<u32>, globals: Vec<GlobalLight>, left: u32) -> Option<Vec
         texture: &white,
         normal: None,
         light_layers,
-        indices,
+        primitives: voltra_render::Primitives::Triangles(indices),
         material: None,
     };
     let mesh_draws = [range(0..6, left), range(6..12, 2)];

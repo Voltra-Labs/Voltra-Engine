@@ -98,7 +98,7 @@ impl Renderer {
                 texture: group,
                 normal: None,
                 light_layers: crate::DEFAULT_LIGHT_LAYERS,
-                indices: (i as u32 * 6)..(i as u32 * 6 + 6),
+                primitives: crate::mesh::Primitives::Triangles((i as u32 * 6)..(i as u32 * 6 + 6)),
                 material: None,
             })
             .collect();

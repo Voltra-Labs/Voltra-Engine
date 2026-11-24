@@ -1,9 +1,14 @@
-//! Vertex and index buffers.
+//! Vertex, index and quad-instance buffers.
 
 use std::ops::Range;
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
+
+pub use crate::quad::QuadInstance;
+pub use buffers::MeshBuffers;
+
+mod buffers;
 
 /// A single vertex of 2D geometry.
 ///
@@ -42,13 +47,47 @@ impl Vertex {
     }
 }
 
-/// Geometry uploaded to the GPU, drawn either directly or through indices.
+/// What one draw of a [`Mesh`] covers: a range of its triangle indices, or
+/// a range of its quad instances.
+///
+/// One kind a draw, because the two go through different pipelines (the
+/// quads' vertex stage makes their corners; see
+/// [`SpritePipeline`](crate::pipeline::SpritePipeline)).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Primitives {
+    /// Indices into the mesh's index buffer, three a triangle.
+    Triangles(Range<u32>),
+    /// Instances of the mesh's quad buffer, one a quad.
+    Quads(Range<u32>),
+}
+
+impl Primitives {
+    /// Whether the range covers nothing.
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Triangles(range) | Self::Quads(range) => range.is_empty(),
+        }
+    }
+
+    /// Whether these are quads.
+    pub fn is_quads(&self) -> bool {
+        matches!(self, Self::Quads(_))
+    }
+}
+
+/// Geometry uploaded to the GPU: triangles, drawn directly or through
+/// indices, and quads drawn as instances ([`QuadInstance`]).
 pub struct Mesh {
-    vertices: wgpu::Buffer,
+    /// `None` when the mesh is quads alone.
+    vertices: Option<wgpu::Buffer>,
     /// `None` means a non-indexed draw.
     indices: Option<wgpu::Buffer>,
     /// Vertex count for a direct draw, index count for an indexed one.
     count: u32,
+    /// `None` when the mesh has no quads.
+    quads: Option<wgpu::Buffer>,
+    /// Quads in `quads`.
+    quad_count: u32,
 }
 
 /// Destroys the buffers rather than leaving them to the drop: on the web a
@@ -57,24 +96,35 @@ pub struct Mesh {
 /// buffers alone, and is dropped after the frame that drew it is submitted.
 impl Drop for Mesh {
     fn drop(&mut self) {
-        self.vertices.destroy();
-        if let Some(indices) = &self.indices {
-            indices.destroy();
+        for buffer in [&self.vertices, &self.indices, &self.quads]
+            .into_iter()
+            .flatten()
+        {
+            buffer.destroy();
         }
     }
 }
 
 impl Mesh {
+    /// A mesh of nothing, which [`MeshBuffers`] fills.
+    fn empty() -> Self {
+        Self {
+            vertices: None,
+            indices: None,
+            count: 0,
+            quads: None,
+            quad_count: 0,
+        }
+    }
+
     /// Uploads vertices for a direct (non-indexed) draw.
     pub fn new<V: Pod>(device: &wgpu::Device, label: &str, vertices: &[V]) -> Self {
         Self {
-            vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            }),
+            vertices: Some(init(device, label, vertices, wgpu::BufferUsages::VERTEX)),
             indices: None,
             count: vertices.len() as u32,
+            quads: None,
+            quad_count: 0,
         }
     }
 
@@ -98,26 +148,37 @@ impl Mesh {
         vertices: &[V],
         indices: &[u32],
     ) -> Self {
+        Self::batch(device, label, vertices, indices, &[])
+    }
+
+    /// Uploads a sprite batch's geometry: indexed triangles and quad
+    /// instances, either of which may be empty (and is then not made).
+    pub fn batch<V: Pod>(
+        device: &wgpu::Device,
+        label: &str,
+        vertices: &[V],
+        indices: &[u32],
+        quads: &[QuadInstance],
+    ) -> Self {
+        let triangles = !indices.is_empty();
         Self {
-            vertices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: bytemuck::cast_slice(vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            }),
-            indices: Some(
-                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some(label),
-                    contents: bytemuck::cast_slice(indices),
-                    usage: wgpu::BufferUsages::INDEX,
-                }),
-            ),
+            vertices: triangles.then(|| init(device, label, vertices, wgpu::BufferUsages::VERTEX)),
+            indices: triangles.then(|| init(device, label, indices, wgpu::BufferUsages::INDEX)),
             count: indices.len() as u32,
+            quads: (!quads.is_empty())
+                .then(|| init(device, label, quads, wgpu::BufferUsages::VERTEX)),
+            quad_count: quads.len() as u32,
         }
     }
 
-    /// Binds this mesh and issues its draw call into an open pass.
+    /// Binds this mesh's triangles and issues their draw call into an open
+    /// pass. Quads are drawn through [`draw_quads`](Self::draw_quads), with
+    /// a pipeline of their own.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
-        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        let Some(vertices) = &self.vertices else {
+            return;
+        };
+        pass.set_vertex_buffer(0, vertices.slice(..));
         match &self.indices {
             Some(indices) => {
                 pass.set_index_buffer(indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -136,13 +197,38 @@ impl Mesh {
     /// themselves, so a mismatch here is a caller bug, not a runtime case to
     /// recover from.
     pub fn draw_range(&self, pass: &mut wgpu::RenderPass<'_>, indices: Range<u32>) {
-        let index_buffer = self
-            .indices
-            .as_ref()
-            .expect("draw_range requires an indexed mesh");
-        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        let (Some(vertices), Some(index_buffer)) = (&self.vertices, &self.indices) else {
+            panic!("draw_range requires an indexed mesh");
+        };
+        pass.set_vertex_buffer(0, vertices.slice(..));
         pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         pass.draw_indexed(indices, 0, 0..1);
+    }
+
+    /// Binds this mesh's quads and draws the instances in `quads`, six
+    /// vertices each, through a pipeline whose vertex stage makes the
+    /// corners ([`QuadInstance::LAYOUT`] in slot 0). Panics if the mesh has
+    /// no quads, for the reason [`draw_range`](Self::draw_range) does.
+    ///
+    /// The range is the draw's first instance and count. WebGL2 has no base
+    /// instance; wgpu's GL backend offsets the instance buffer's binding
+    /// instead, so the same call serves every backend.
+    pub fn draw_quads(&self, pass: &mut wgpu::RenderPass<'_>, quads: Range<u32>) {
+        let buffer = self
+            .quads
+            .as_ref()
+            .expect("draw_quads requires a mesh with quads");
+        pass.set_vertex_buffer(0, buffer.slice(..));
+        pass.draw(0..QuadInstance::VERTICES, quads);
+    }
+
+    /// [`draw_range`](Self::draw_range) or [`draw_quads`](Self::draw_quads),
+    /// as `primitives` says.
+    pub fn draw_primitives(&self, pass: &mut wgpu::RenderPass<'_>, primitives: &Primitives) {
+        match primitives {
+            Primitives::Triangles(indices) => self.draw_range(pass, indices.clone()),
+            Primitives::Quads(quads) => self.draw_quads(pass, quads.clone()),
+        }
     }
 
     /// Vertex count for a direct draw, index count for an indexed one.
@@ -150,10 +236,29 @@ impl Mesh {
         self.count
     }
 
+    /// Quad instances the mesh holds.
+    pub fn quad_count(&self) -> u32 {
+        self.quad_count
+    }
+
     /// Whether the mesh draws through an index buffer.
     pub fn is_indexed(&self) -> bool {
         self.indices.is_some()
     }
+}
+
+/// A buffer of `usage` holding `contents`.
+fn init<T: Pod>(
+    device: &wgpu::Device,
+    label: &str,
+    contents: &[T],
+    usage: wgpu::BufferUsages,
+) -> wgpu::Buffer {
+    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some(label),
+        contents: bytemuck::cast_slice(contents),
+        usage,
+    })
 }
 
 /// The built-in triangle, wound counter-clockwise in clip space.

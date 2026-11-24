@@ -100,7 +100,7 @@ fn render_batch(
             },
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: range.indices.clone(),
+            primitives: range.primitives.clone(),
             material: None,
         })
         .collect();

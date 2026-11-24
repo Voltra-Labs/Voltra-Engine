@@ -2,6 +2,7 @@ use super::*;
 use crate::transform::Transform;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
+use voltra_render::Primitives;
 
 /// The geometry a world produces with no sheets loaded, which is what a
 /// sprite that names neither an atlas nor a region draws.
@@ -22,6 +23,7 @@ fn world_with(sprites: &[(Transform, Sprite)]) -> World {
 #[test]
 fn an_empty_world_produces_no_geometry() {
     let batch = batch_of(&World::new());
+    assert!(batch.quads.is_empty());
     assert!(batch.vertices.is_empty());
     assert!(batch.indices.is_empty());
     assert_eq!(batch.sprite_count(), 0);
@@ -40,8 +42,8 @@ fn an_entity_without_a_sprite_is_skipped() {
 fn one_sprite_becomes_a_quad() {
     let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
 
-    assert_eq!(batch.vertices.len(), 4);
-    assert_eq!(batch.indices.len(), 6);
+    assert_eq!(batch.quads.len(), 1);
+    assert!(batch.vertices.is_empty() && batch.indices.is_empty());
     assert_eq!(batch.sprite_count(), 1);
 }
 
@@ -49,8 +51,16 @@ fn one_sprite_becomes_a_quad() {
 fn an_untransformed_sprite_spans_one_unit_around_the_origin() {
     let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
 
-    let xs: Vec<f32> = batch.vertices.iter().map(|v| v.position[0]).collect();
-    let ys: Vec<f32> = batch.vertices.iter().map(|v| v.position[1]).collect();
+    let xs: Vec<f32> = batch
+        .quad_vertices()
+        .iter()
+        .map(|v| v.position[0])
+        .collect();
+    let ys: Vec<f32> = batch
+        .quad_vertices()
+        .iter()
+        .map(|v| v.position[1])
+        .collect();
 
     // Centred, not corner-anchored: rotation and scale should act about
     // the sprite's middle.
@@ -65,7 +75,7 @@ fn the_transform_moves_the_quad() {
         Sprite::default(),
     )]));
 
-    for v in &batch.vertices {
+    for v in &batch.quad_vertices() {
         assert!(
             v.position[0] >= 9.0,
             "quad should sit around x=10, got {v:?}"
@@ -80,7 +90,11 @@ fn scale_grows_the_quad() {
         Sprite::default(),
     )]));
 
-    let xs: Vec<f32> = batch.vertices.iter().map(|v| v.position[0]).collect();
+    let xs: Vec<f32> = batch
+        .quad_vertices()
+        .iter()
+        .map(|v| v.position[0])
+        .collect();
     assert!(xs.contains(&-2.0) && xs.contains(&2.0));
 }
 
@@ -89,7 +103,7 @@ fn the_sprite_colour_reaches_every_vertex() {
     let sprite = Sprite::new([0.25, 0.5, 0.75, 1.0]);
     let batch = batch_of(&world_with(&[(Transform::default(), sprite)]));
 
-    for v in &batch.vertices {
+    for v in &batch.quad_vertices() {
         assert_eq!(v.color, [0.25, 0.5, 0.75, 1.0]);
     }
 }
@@ -99,7 +113,7 @@ fn the_sprite_alpha_reaches_the_vertex_too() {
     // Dropped before stage 34; a translucent sprite now draws translucent.
     let sprite = Sprite::new([1.0, 1.0, 1.0, 0.4]);
     let batch = batch_of(&world_with(&[(Transform::default(), sprite)]));
-    assert!(batch.vertices.iter().all(|v| v.color[3] == 0.4));
+    assert!(batch.quad_vertices().iter().all(|v| v.color[3] == 0.4));
 }
 
 #[test]
@@ -107,15 +121,15 @@ fn uvs_cover_the_whole_texture_with_v_pointing_down() {
     let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
 
     let top = batch
-        .vertices
-        .iter()
+        .quad_vertices()
+        .into_iter()
         .find(|v| v.position[1] > 0.0)
         .expect("a quad has a top edge");
     assert_eq!(top.uv[1], 0.0, "the top of the quad samples the top row");
 }
 
 #[test]
-fn a_second_sprite_gets_its_own_index_range() {
+fn a_second_sprite_gets_its_own_instance() {
     let batch = batch_of(&world_with(&[
         (Transform::default(), Sprite::default()),
         (
@@ -124,29 +138,29 @@ fn a_second_sprite_gets_its_own_index_range() {
         ),
     ]));
 
-    assert_eq!(batch.vertices.len(), 8);
-    assert_eq!(batch.indices.len(), 12);
-
-    // Forgetting to offset the second quad's indices makes every sprite
-    // after the first draw on top of the first one.
-    let second = &batch.indices[6..];
+    assert_eq!(batch.quads.len(), 2);
+    // Drawing every sprite where the first one is would look like one.
     assert!(
-        second.iter().all(|&i| i >= 4),
-        "second quad must index its own vertices, got {second:?}"
+        batch.quads[1].origin[0] >= 4.0,
+        "the second quad must be where its own sprite is, got {:?}",
+        batch.quads[1]
     );
     assert_eq!(batch.sprite_count(), 2);
 }
 
 #[test]
-fn indices_never_point_past_the_vertices() {
+fn ranges_never_point_past_the_quads() {
     let batch = batch_of(&world_with(&[
         (Transform::default(), Sprite::default()),
         (Transform::default(), Sprite::default()),
         (Transform::default(), Sprite::default()),
     ]));
 
-    let count = batch.vertices.len() as u32;
-    assert!(batch.indices.iter().all(|&i| i < count));
+    let count = batch.quads.len() as u32;
+    assert!(batch.ranges.iter().all(|range| match &range.primitives {
+        Primitives::Quads(quads) => quads.end <= count,
+        Primitives::Triangles(_) => false,
+    }));
 }
 
 /// Spawns each sprite and hands back the handles, so a test can despawn a
@@ -174,7 +188,7 @@ fn world_returning_entities(sprites: &[(Transform, Sprite)]) -> (World, Vec<volt
 /// incidental to draw order.
 fn draw_order(batch: &SpriteBatch) -> Vec<f32> {
     batch
-        .vertices
+        .quad_vertices()
         .chunks(4)
         .map(|quad| quad.iter().map(|v| v.position[0]).sum::<f32>() / 4.0)
         .collect()
@@ -305,7 +319,7 @@ fn push_alone_merges_contiguous_same_handles_into_one_range() {
             texture: Some(a),
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: 0..12,
+            primitives: Primitives::Quads(0..2),
             material: None,
         }]
     );
@@ -339,21 +353,21 @@ fn push_alone_splits_a_range_when_the_handle_changes() {
                 texture: Some(a),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                indices: 0..6,
+                primitives: Primitives::Quads(0..1),
                 material: None,
             },
             SpriteRange {
                 texture: Some(b),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                indices: 6..12,
+                primitives: Primitives::Quads(1..2),
                 material: None,
             },
             SpriteRange {
                 texture: Some(a),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                indices: 12..18,
+                primitives: Primitives::Quads(2..3),
                 material: None,
             },
         ]
@@ -382,14 +396,14 @@ fn push_alone_keeps_none_and_some_in_separate_ranges() {
                 texture: None,
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                indices: 0..6,
+                primitives: Primitives::Quads(0..1),
                 material: None,
             },
             SpriteRange {
                 texture: Some(a),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                indices: 6..12,
+                primitives: Primitives::Quads(1..2),
                 material: None,
             },
         ]
@@ -438,14 +452,14 @@ fn draw_order_still_follows_sort_order() {
                 texture: Some(low),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                indices: 0..6,
+                primitives: Primitives::Quads(0..1),
                 material: None,
             },
             SpriteRange {
                 texture: Some(high),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                indices: 6..12,
+                primitives: Primitives::Quads(1..2),
                 material: None,
             },
         ],
@@ -469,7 +483,7 @@ fn from_world_builds_one_range_for_untextured_sprites() {
             texture: None,
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: 0..12,
+            primitives: Primitives::Quads(0..2),
             material: None,
         }]
     );
@@ -497,21 +511,12 @@ fn a_batch_past_sixty_five_thousand_vertices_still_indexes_its_own_quads() {
         );
     }
 
-    let last = batch
-        .indices
-        .last()
-        .copied()
-        .expect("a pushed batch has indices");
-    assert!(
-        last > u16::MAX as u32,
-        "the last index wrapped: got {last}, expected past {}",
-        u16::MAX
+    assert_eq!(batch.quads.len() as u32, SPRITES);
+    assert_eq!(
+        batch.ranges.last().map(|range| range.primitives.clone()),
+        Some(Primitives::Quads(0..SPRITES)),
+        "one run over every instance, none of them wrapped"
     );
-    assert_eq!(batch.vertices.len() as u32, SPRITES * 4);
-    assert!(batch
-        .indices
-        .iter()
-        .all(|&i| i < batch.vertices.len() as u32));
 }
 
 #[test]
@@ -533,11 +538,15 @@ fn a_different_normal_map_splits_a_run_and_the_same_one_keeps_it() {
     let runs: Vec<_> = batch
         .ranges
         .iter()
-        .map(|r| (r.normal, r.indices.clone()))
+        .map(|r| (r.normal, r.primitives.clone()))
         .collect();
     assert_eq!(
         runs,
-        vec![(Some(bumps), 0..12), (Some(other), 12..18), (None, 18..24)]
+        vec![
+            (Some(bumps), Primitives::Quads(0..2)),
+            (Some(other), Primitives::Quads(2..3)),
+            (None, Primitives::Quads(3..4))
+        ]
     );
 }
 

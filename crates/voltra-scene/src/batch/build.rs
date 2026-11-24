@@ -5,7 +5,6 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
 use super::{SpriteBatch, Surface};
-use crate::hierarchy::WorldTransforms;
 use crate::line2d::Line2D;
 use crate::particles::{self, ParticleEmitter};
 use crate::polygon2d::Polygon2D;
@@ -29,7 +28,7 @@ enum Drawn<'a> {
     Skinned(&'a SkinnedSprite),
 }
 
-impl Drawn<'_> {
+impl<'a> Drawn<'a> {
     fn sort_order(&self) -> i32 {
         match self {
             Self::Sprite(sprite) => sprite.sort_order,
@@ -43,7 +42,7 @@ impl Drawn<'_> {
         }
     }
 
-    fn sorting_layer(&self) -> &str {
+    fn sorting_layer(&self) -> &'a str {
         match self {
             Self::Sprite(sprite) => &sprite.sorting_layer,
             Self::Tilemap(map) => &map.sorting_layer,
@@ -94,79 +93,79 @@ impl SpriteBatch {
     }
 
     /// Empties the batch and builds `sheets`' frame of `world` into it.
-    fn fill(&mut self, world: &World, sheets: Sheets<'_>, mut tiles: Option<&mut TileMeshCache>) {
+    fn fill<'a>(
+        &mut self,
+        world: &'a World,
+        sheets: Sheets<'_>,
+        mut tiles: Option<&mut TileMeshCache>,
+    ) {
         // Sprites and tilemap layers in one list, because they share one draw
         // order: a layer behind the player and one in front of it are both
         // just a `sort_order` relative to the player's sprite.
-        let drawn: Vec<(Entity, Drawn<'_>)> = world
-            .query2::<Transform, Sprite>()
-            .map(|(entity, _, sprite)| (entity, Drawn::Sprite(sprite)))
-            .chain(
-                world
-                    .query2::<Transform, Tilemap>()
-                    .map(|(entity, _, map)| (entity, Drawn::Tilemap(map))),
-            )
-            .chain(
-                world
-                    .query2::<Transform, Text>()
-                    .map(|(entity, _, text)| (entity, Drawn::Text(text))),
-            )
-            .chain(
-                world
-                    .query2::<Transform, ParticleEmitter>()
-                    .map(|(entity, _, emitter)| (entity, Drawn::Particles(emitter))),
-            )
-            .chain(
-                world
-                    .query2::<Transform, Line2D>()
-                    .map(|(entity, _, line)| (entity, Drawn::Line(line))),
-            )
-            .chain(
-                world
-                    .query2::<Transform, Polygon2D>()
-                    .map(|(entity, _, polygon)| (entity, Drawn::Polygon(polygon))),
-            )
-            .chain(
-                world
-                    .query2::<Transform, Trail2D>()
-                    .map(|(entity, _, trail)| (entity, Drawn::Trail(trail))),
-            )
-            .chain(
-                world
-                    .query2::<Transform, SkinnedSprite>()
-                    .map(|(entity, _, skinned)| (entity, Drawn::Skinned(skinned))),
-            )
-            // A `UiRect` puts an entity on the screen instead: the
-            // screen-space pass draws it, and drawing it here too would put a
-            // second copy in the world at its stale transform.
-            .filter(|(entity, _)| !crate::ui::is_ui(world, *entity))
-            .collect();
+        // A `UiRect` puts an entity on the screen instead: the screen-space
+        // pass draws it, and drawing it here too would put a second copy in
+        // the world at its stale transform. Asked of each entity only in a
+        // world that has any.
+        let any_ui = world.query::<crate::UiRect>().next().is_some();
         // Keyed once per entity, not once per comparison: a key names its
         // sorting layer, and looking a name up in the project's list on each
         // of the n·log n comparisons was most of a large scene's batch.
-        let mut keyed: Vec<_> = drawn
-            .into_iter()
-            .map(|(entity, drawn)| {
-                let key = draw_key(
-                    entity,
-                    sheets.rank(drawn.sorting_layer()),
-                    drawn.sort_order(),
-                );
-                (key, entity, drawn)
-            })
-            .collect();
-        keyed.sort_unstable_by_key(|(key, _, _)| *key);
-        let drawn: Vec<(Entity, Drawn<'_>)> = keyed
-            .into_iter()
-            .map(|(_, entity, drawn)| (entity, drawn))
-            .collect();
+        // Neighbours mostly share a layer, so the last one's rank is kept.
+        let mut last_rank: Option<(&str, i32)> = None;
+        let mut drawn: Vec<(_, Entity, Drawn<'_>)> = Vec::with_capacity(self.drawn_hint);
+        let mut add = |entity: Entity, item: Drawn<'a>| {
+            if any_ui && crate::ui::is_ui(world, entity) {
+                return;
+            }
+            let layer = item.sorting_layer();
+            let rank = match last_rank {
+                Some((name, rank)) if name == layer => rank,
+                _ => {
+                    let rank = sheets.rank(layer);
+                    last_rank = Some((layer, rank));
+                    rank
+                }
+            };
+            drawn.push((draw_key(entity, rank, item.sort_order()), entity, item));
+        };
+        // One plain loop per kind rather than one iterator chained through
+        // eight: the chain's every step asked each level whether it was
+        // done, which cost more than the sprites it carried (stage 108).
+        for (entity, _, sprite) in world.query2::<Transform, Sprite>() {
+            add(entity, Drawn::Sprite(sprite));
+        }
+        for (entity, _, map) in world.query2::<Transform, Tilemap>() {
+            add(entity, Drawn::Tilemap(map));
+        }
+        for (entity, _, text) in world.query2::<Transform, Text>() {
+            add(entity, Drawn::Text(text));
+        }
+        for (entity, _, emitter) in world.query2::<Transform, ParticleEmitter>() {
+            add(entity, Drawn::Particles(emitter));
+        }
+        for (entity, _, line) in world.query2::<Transform, Line2D>() {
+            add(entity, Drawn::Line(line));
+        }
+        for (entity, _, polygon) in world.query2::<Transform, Polygon2D>() {
+            add(entity, Drawn::Polygon(polygon));
+        }
+        for (entity, _, trail) in world.query2::<Transform, Trail2D>() {
+            add(entity, Drawn::Trail(trail));
+        }
+        for (entity, _, skinned) in world.query2::<Transform, SkinnedSprite>() {
+            add(entity, Drawn::Skinned(skinned));
+        }
+        drawn.sort_unstable_by_key(|(key, _, _)| *key);
+        self.drawn_hint = drawn.len();
 
         // Composed once for the whole world rather than walked per sprite: a
         // deep tree would otherwise cost one matrix chain per descendant, every
         // frame.
-        let transforms = WorldTransforms::seen_from(world, sheets.camera);
+        let mut transforms = std::mem::take(&mut self.transforms);
+        transforms.recompose_seen_from(world, sheets.camera);
 
         self.visible = sheets.visible;
+        self.quads.clear();
         self.vertices.clear();
         self.indices.clear();
         self.ranges.clear();
@@ -182,15 +181,23 @@ impl SpriteBatch {
         if let Some(tiles) = tiles.as_deref_mut() {
             tiles.begin();
         }
-        for &(entity, ref drawn) in &drawn {
+        for &(_, entity, ref drawn) in &drawn {
             let matrix = transforms.matrix(entity);
-            let copies = if repeating {
-                crate::parallax::copies_of(world, entity, matrix, sheets.visible)
+            // A repeating layer's copies, each moved by its offset; once,
+            // where it is, otherwise — without a list made per entity.
+            let repeats;
+            let copies: &[voltra_render::glam::Vec2] = if repeating {
+                repeats = crate::parallax::copies_of(world, entity, matrix, sheets.visible);
+                &repeats
             } else {
-                vec![voltra_render::glam::Vec2::ZERO]
+                &[voltra_render::glam::Vec2::ZERO]
             };
-            for (copy, offset) in copies.into_iter().enumerate() {
-                let matrix = Mat3::from_translation(offset) * matrix;
+            for (copy, &offset) in copies.iter().enumerate() {
+                let matrix = if repeating {
+                    Mat3::from_translation(offset) * matrix
+                } else {
+                    matrix
+                };
                 match drawn {
                     Drawn::Sprite(sprite) => batch.push(matrix, sprite, sheets),
                     Drawn::Tilemap(map) => match tiles.as_deref_mut() {
@@ -258,5 +265,6 @@ impl SpriteBatch {
         if let Some(tiles) = tiles {
             tiles.finish();
         }
+        batch.transforms = transforms;
     }
 }

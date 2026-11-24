@@ -14,7 +14,8 @@
 // extra in its vertices: red follows the image's +u, green its up (-v, as
 // image rows run down), blue points out of the screen. OpenGL's convention.
 //
-// Vertex layout is `Vertex::LAYOUT`; group 0 `CameraBinding`, groups 1 and
+// Vertex layout is `Vertex::LAYOUT` (`vs_normals`) or a quad instance
+// (`vs_normals_quad`, `quad.wgsl`); group 0 `CameraBinding`, groups 1 and
 // 2 `texture::bind_group_layout` (the colour, then the normal map through
 // its linear view). Read back by `lights.wgsl`.
 
@@ -48,14 +49,24 @@ struct VertexOutput {
     @location(2) alpha: f32,
 }
 
+fn vertex(position: vec2<f32>, color: vec4<f32>, uv: vec2<f32>) -> VertexOutput {
+    var out: VertexOutput;
+    out.clip_position = camera.view_proj * vec4<f32>(position, 0.0, 1.0);
+    out.uv = uv;
+    out.world = position;
+    out.alpha = color.a;
+    return out;
+}
+
 @vertex
 fn vs_normals(in: VertexInput) -> VertexOutput {
-    var out: VertexOutput;
-    out.clip_position = camera.view_proj * vec4<f32>(in.position, 0.0, 1.0);
-    out.uv = in.uv;
-    out.world = in.position;
-    out.alpha = in.color.a;
-    return out;
+    return vertex(in.position, in.color, in.uv);
+}
+
+@vertex
+fn vs_normals_quad(@builtin(vertex_index) index: u32, quad: QuadInput) -> VertexOutput {
+    let corner = quad_corner(quad, index);
+    return vertex(corner.position, corner.color, corner.uv);
 }
 
 @fragment
