@@ -24,13 +24,14 @@ const TEMPLATE: [(&str, &str); 7] = [
     ),
 ];
 
-/// The engine's own assets a game starts with: the input map and sorting
-/// layers the loop reads by convention, the default font and its licence,
-/// a texture for the player, and the options screen
+/// The engine's own assets a game starts with: the input map, sorting
+/// layers and audio buses the loop reads by convention, the default font and
+/// its licence, a texture for the player, and the options screen
 /// (`voltra_core::options`) to open from a menu.
-const COPIED: [&str; 6] = [
+const COPIED: [&str; 7] = [
     "default.input.ron",
     "default.layers.ron",
+    "default.buses.ron",
     "fonts/Ubuntu-Light.ttf",
     "fonts/UFL.txt",
     "sprites/checker.png",

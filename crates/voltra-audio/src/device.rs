@@ -12,10 +12,10 @@ use std::sync::mpsc::{Receiver, Sender};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
 
-use crate::clip::Clip;
 use crate::command::Command;
 use crate::error::AudioError;
 use crate::mixer::Mixer;
+use crate::retired::Retired;
 
 /// A running output stream and the shape it runs at.
 ///
@@ -35,7 +35,7 @@ impl Output {
     ///
     /// Finished clips are sent back through `retired` so their memory is freed
     /// on the thread that asked for them rather than inside the callback.
-    pub fn open(commands: Receiver<Command>, retired: Sender<Clip>) -> Result<Self, AudioError> {
+    pub fn open(commands: Receiver<Command>, retired: Sender<Retired>) -> Result<Self, AudioError> {
         let host = cpal::default_host();
         let device = host.default_output_device().ok_or(AudioError::NoDevice)?;
         let supported = float_config(&device)?;

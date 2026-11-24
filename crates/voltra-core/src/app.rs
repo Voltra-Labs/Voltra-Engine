@@ -3,6 +3,7 @@
 mod animation;
 mod audio;
 mod builder;
+mod bus_layout;
 mod camera_rig;
 mod draw;
 mod framing;
@@ -61,6 +62,7 @@ use crate::input::{ActionMap, Input};
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
+pub use bus_layout::{parse_bus_layout, DEFAULT_BUS_LAYOUT};
 pub use input_map::DEFAULT_INPUT_MAP;
 pub use scenes::SceneLoad;
 pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
@@ -437,15 +439,16 @@ impl App {
         // whose renderer is not up yet still hears the edit.
         let mut images = Vec::with_capacity(changed.len());
         for path in changed {
+            // A sound reaches its own clip and every clip a settings file
+            // makes of it.
             let reloaded = match self.clips.as_mut() {
-                Some(clips) => match clips.reload(&path) {
-                    true => clips.by_path_handle(&path),
-                    false => None,
-                },
-                None => None,
+                Some(clips) => clips.reload(&path),
+                None => Vec::new(),
             };
-            if let Some(clip) = reloaded {
-                self.scene_audio.restart(&self.world, clip, &mut self.audio);
+            if !reloaded.is_empty() {
+                for clip in reloaded {
+                    self.scene_audio.restart(&self.world, clip, &mut self.audio);
+                }
                 continue;
             }
             // A clip is read by its players next frame, a machine by its
@@ -474,6 +477,9 @@ impl App {
                 continue;
             }
             if self.reload_sorting_layers(&path) {
+                continue;
+            }
+            if self.reload_bus_layout(&path) {
                 continue;
             }
             // A face needs no device either: its atlas starts over and is

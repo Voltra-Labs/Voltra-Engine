@@ -15,8 +15,10 @@
 //! [`Clip`]s, [`VoiceId`]s and [`PlayParams`].
 //!
 //! The layering inside is the same rule again: [`mixer`], [`voice`],
-//! [`ramp`] and [`limiter`] are pure arithmetic with no thread and no device, [`device`] is the thin shell
-//! that owns the `cpal` stream, and [`audio`] is the seam the engine holds.
+//! [`ramp`] and [`limiter`] are pure arithmetic with no thread and no device,
+//! [`device`] is the thin shell that owns the `cpal` stream, [`stream`] decodes
+//! long clips off the device's thread, and [`audio`] is the seam the engine
+//! holds.
 
 #![warn(missing_docs)]
 
@@ -26,23 +28,33 @@ pub mod clip;
 pub mod command;
 pub mod decode;
 pub mod device;
+pub mod effect;
 pub mod error;
+pub mod layout;
 pub mod limiter;
 pub mod mixer;
 pub mod params;
 pub mod ramp;
+pub mod retired;
 pub mod spatial;
+pub mod stream;
+#[cfg(test)]
+mod testing;
 pub mod voice;
 
 pub use audio::Audio;
 pub use bus::{BusId, Buses, DEFAULT_BUSES, MAX_BUSES};
 pub use clip::Clip;
 pub use command::Command;
-pub use decode::{decode, decode_bytes};
+pub use decode::{decode, decode_bytes, probe};
 pub use device::Output;
+pub use effect::{Effect, EffectDesc, Param, MAX_DELAY, MAX_EFFECTS};
 pub use error::AudioError;
+pub use layout::{check_layout, BusSettings};
 pub use limiter::Limiter;
-pub use mixer::{Mixer, DEFAULT_CAPACITY};
+pub use mixer::{Mixer, BLOCK, DEFAULT_CAPACITY};
 pub use params::PlayParams;
-pub use ramp::Ramp;
+pub use ramp::{Curve, Ramp};
+pub use retired::Retired;
+pub use stream::{StreamInfo, StreamSource};
 pub use voice::{Voice, VoiceId, SMOOTHING};

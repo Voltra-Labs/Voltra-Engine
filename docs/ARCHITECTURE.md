@@ -5724,6 +5724,180 @@ window; a volume slider setting its bus) and the platformer's
 `tests/options.rs`: Escape, Options, jump rebound to J, Back, Escape —
 then a new headless session with the same player folder, where J jumps
 and Space does not; and the level standing still under the pause menu.
+### A long clip is streamed by its settings file, and music cross-fades at equal power
+
+Stage 104. Before it every clip decoded whole at load (`clip.rs`): fine for a
+coin, 23 MB a minute for 48 kHz stereo music.
+
+**Where `stream` is decided: on the asset.** Unity makes it an `AudioClip`
+import setting (Load Type: Streaming), Godot an `.import` setting of the
+Ogg stream (with `loop` and `loop_offset` beside it), FMOD a flag when the
+sound is created — all three on the sound, none on the thing playing it.
+The `AudioSource` was the alternative and was rejected: two sources naming
+one file would disagree about how it is stored, and a tick playing a handle
+has no source at all. This engine has no import sidecars, so the settings
+are an asset of their own, `*.clip.ron`, named wherever a sound is:
+
+```ron
+(version: 1, file: "audio/theme.ogg", stream: true, loop_start: 4.0, loop_end: Some(62.5))
+```
+
+`Clips::load` follows it to the sound — `stream: true` probes only the
+header (`decode::probe`), otherwise decodes whole as before — and applies the
+loop points either way (`Clip::with_loop`; a looping voice plays the intro
+once, then `loop_start..loop_end`). A plain `.wav`/`.ogg` named directly is
+what it always was. `is_clip` accepts the suffix, so the watcher, the asset
+browser and a drop on the viewport treat it as a sound; editing the `.ogg`
+reloads every settings clip naming it (`Clips::reload` now answers every
+handle that changed).
+
+**One `Clip` type, two representations**, Unity's shape: resident samples
+or an `Arc<StreamSource>` (a path natively; the pack's bytes where one is
+mounted, which on the web is always). Everything that plays a clip plays
+either.
+
+**Who decodes.** Each voice of a streamed clip gets its own `StreamDecoder`,
+made and primed with 100 ms on the calling thread at `Audio::play`, feeding
+a fixed `ring` of one second of samples (`stream::BUFFER`; 384 KB at 48 kHz
+stereo). The ring is single-producer single-consumer over `AtomicU32` slots,
+no `unsafe`, no lock, nothing allocated after it is made; the voice's
+`StreamReader` keeps the two frames it interpolates between and pulls the
+next as the cursor crosses one. The device callback only copies out of it.
+Natively a `voltra-stream` thread (`Streamer`) tops every ring up every
+5 ms, asleep on a channel when nothing streams. `wasm32-unknown-unknown`
+has no threads, so there the same `Pump` runs from `Audio::end_frame` once
+a frame — the second of buffer covers a slow frame many times over. A
+decoder that falls behind leaves silence, not a skip, and the count is
+logged from the decoder's side (the callback cannot log). A stopped voice's
+feed is retired to the main thread like its clip (`Retired`); its ring's
+`closed` flag ends the decoder. Only the first two channels are queued —
+all the mixer reads.
+
+**Loop points are the decoder's job**, so the voice never sees a seam. At
+`loop_end` (or the file's end) it seeks to 4096 frames before `loop_start`
+with `SeekMode::Accurate`, resets the decoder and drops frames by packet
+timestamp until `loop_start`: exact for WAV, and for Vorbis whose first
+packet after a reset is silenced. A container that cannot seek is opened
+again and decoded through. A loop that keeps turning back with nothing in
+it (a header longer than the file) ends the stream rather than spinning.
+
+**`tick.audio.play_music(handle, fade)`** makes a clip the music: looping,
+on the `music` bus, cross-fading from the last one. `Ramp` gained a
+`Curve`; `EqualPower` fades along `from·cos θ + to·sin θ`, so the outgoing
+cosine and incoming sine have squared gains summing to one at every frame —
+two linear halves are each −6 dB at the middle, a dip anyone hears.
+`Command::Play/Fade/Stop` carry the curve. Naming the track already playing
+keeps it (`Clip::same`, by pointer), so a tick may name its area's music
+every frame. `stop_music`, `play_music_with` for other params.
+
+Pinned by `stream/tests.rs` (every frame in order then the end; intro then
+loop, with and without a loop end; one second of ring and no more; primed
+before the voice starts; a dropped feed ends the decoder; the thread fills
+it; an empty loop ends), `stream/ring.rs` (order, wrap, all-or-nothing
+frames, two threads), `tests/streaming_memory.rs` (a counting allocator: a
+three-minute 16 kHz stereo WAV — 23 MB resident — plays start to end
+through the mixer with a 237 KB peak, asserted under 2 MB, and no silent
+block), `mixer/tests.rs` (an equal-power cross-fade's two voices hold
+`L² + R²` at one, ±0.1 %, every frame), `ramp.rs`, `audio/tests.rs` (the
+commands a cross-fade sends; the same track kept), `clips/tests.rs` and
+`clips/settings.rs` (streamed from disk or from a pack, resident with a
+loop, broken settings silent, edits of either file reaching the clip).
+
+### Buses carry effects in order, laid out by `default.buses.ron`
+
+Stage 105. `bus.rs` said buses feeding buses would wait for "an effect to put
+on a node"; now there are effects, and routing stays one level deep — every
+bus feeds the master — because inserts on a bus need no graph.
+
+**Inserts, then the fader**, a desk's channel strip and Unity's, Godot's and
+Wwise's shape: a bus's voices are summed into the bus's own block, its
+chain runs first to last, then its volume, then it joins the master; the
+master's chain and volume run on the sum, then the limiter. Before this
+stage each voice multiplied a copy of its bus's ramp and there were no
+per-bus buffers; now the mixer works in `BLOCK`s of 256 frames with one
+preallocated block per bus (32 × 256 × channels floats), so any buffer
+length a host asks for is handled without growing anything. A bus is run
+only when a voice is on it or it has effects — a delay's echoes and a
+reverb's tail outlive the last voice — and a reverb's tail follows its
+bus's fader.
+
+**The effects** (`effect/`), each on the first two channels:
+
+- `LowPass` / `HighPass`: an RBJ-cookbook biquad (Web Audio's
+  `BiquadFilterNode` formulas), transposed direct form II, 12 dB/octave,
+  cutoff clamped to 10 Hz..0.49·rate. Coefficients recomputed every 16
+  frames while the cutoff or Q ramps.
+- `Delay`: a line per side, `MAX_DELAY` (2 s) long whatever the time, so a
+  time moved from a tick never allocates; fractional read (a moving time
+  bends pitch like tape, no click); feedback capped at 0.95; `mix` is a
+  dry/wet cross-fade.
+- `Reverb`: Freeverb — 8 lowpass-feedback combs and 4 all-passes a side,
+  Jezar's tunings scaled from 44.1 kHz to the device rate, 23-sample stereo
+  spread; `room_size`, `damping`, `width`, `mix`.
+- `Duck { by, depth, threshold, attack, release }`: the bus pulled to
+  `1 − depth` while `by` is above `threshold`, along straight lines in gain,
+  so it is fully down exactly `attack` after `by` sounds. Every bus's level
+  (its voices' peak times its volume) is measured after all voices are
+  summed and before any chain runs, so a duck hears its trigger in the same
+  block whatever the bus order — no lag and no ordering rule. Activity is
+  per block (5 ms at 48 kHz).
+
+**Built on the main thread.** `EffectDesc` (serde) is the effect as a file
+or a tick says it; `Effect::build` makes the running one at the device rate
+on the calling thread, delay lines and combs included, and
+`Command::SetBusEffects` sends the finished chain, at most `MAX_EFFECTS`
+(8). The replaced chain comes back as `Retired::Effects` and is freed in
+`end_frame`. `Audio` mirrors each bus's descriptions — for a settings
+screen, and so a device opened late gets them (`replay_bus_effects`). An
+effect with a `NaN` or negative number is left off with a warning; a merely
+large one is clamped where used.
+
+**Rampable from a tick like a volume**: `tick.audio.set_bus_param(bus,
+effect, Param::Cutoff, 4000.0, over)` slides the effect at that index
+(`Command::SetBusParam`, a `Ramp` per parameter; a duck's numbers move
+along its own attack and release). It answers `false` for an effect or a
+parameter that is not there, so a typo is told. `set_bus_effects` replaces
+a chain; `voltra_core::effect` re-exports the types for a game.
+
+**Where bus config lives: `default.buses.ron`**, a new project file
+beside `default.layers.ron` (version 1), Godot's `default_bus_layout.tres`
+in shape — stage 23b had only code, because there was no settings file yet:
+
+```ron
+(version: 1, buses: [
+    (name: "music", volume: 0.8, effects: [Duck(by: "dialogue", depth: 0.7)]),
+    (name: "sfx", effects: [Reverb(room_size: 0.6, mix: 0.25)]),
+])
+```
+
+`parse_bus_layout` checks it (version, a name twice, a bus ducked by itself,
+effect numbers); `App` reads it at startup and on hot reload
+(`app/bus_layout.rs`) and `Audio::apply_layout` applies it *additively*:
+buses are registered by name and never renumbered, so voices already
+playing stay on their bus and a table from `with_buses` keeps working; a bus
+the previous layout set and the new one drops goes back to unity with no
+effects. The editor's Project Settings gets an "Audio buses" tab (the same
+check-then-save RON editor as the other files; the bridge's `settings` takes
+`buses`), the asset browser lists it as `BusLayout`, and `new-game` copies
+the shipped file.
+
+Pinned by `effect/tests.rs`, all offline through the mixer at 48 kHz: a
+1 kHz low-pass passes 200 Hz within 0.5 dB, is −3 dB ± 0.5 at the cutoff and
+below −30 dB at 8 kHz (high-pass mirrored at 125 Hz); a cutoff ramped from
+200 Hz to 18 kHz opens on a 4 kHz tone; a 0.25 s delay's echo peaks at
+exactly frame 12 000 at half, the fed-back one at 24 000 at a quarter, with
+silence between; a reverb's impulse tail falls over 40 dB in two seconds
+and a bigger room rings over ten times longer; the tail follows the fader;
+a 0.75-deep duck is at 0.625 half way through its 50 ms attack, at a quarter
+exactly at its end, holds, and returns along its 200 ms release from the
+first block the trigger is silent; effects on one bus leave another alone; a
+replaced chain is retired. `tests/realtime_alloc.rs` counts allocations
+around 200 renders with resident and streamed voices, every effect, a
+moving parameter and a buffer that is not a whole number of blocks: zero.
+`audio/tests.rs` (built and sent whole, the mirror, refused params,
+layouts applied and undone), `layout.rs`, `app/bus_layout.rs` (the
+conventional file, a broken one changing nothing, a reload, the shipped
+file reads) and `project_settings.rs` (saved, refused when it would not mix).
 
 ### wgpu 30 API notes
 
@@ -5818,6 +5992,10 @@ Both differ from most training data and from every tutorial written against
 | End of stream | `next_packet()` returns `Ok(None)`; it is not an `IoError` of kind `UnexpectedEof` any more |
 | Samples out | `decoded.copy_to_vec_interleaved(&mut vec)` **resizes** its destination, so decode into a scratch `Vec` and extend from it |
 | `AudioSpec` | not `Copy`; read `rate()` and `channels().count()` rather than storing the spec |
+| Seeking | `reader.seek(SeekMode::Accurate, SeekTo::Timestamp { ts: Timestamp::new(i64), track_id })` lands at or *before* the target; call `decoder.reset()` after it. `Timestamp`/`Duration` are newtypes (`.get()`), not bare integers |
+| Packet timing | `packet.pts` is the presentation time of the packet's first *valid* frame; decoders trim encoder delay and padding themselves (`trim_start`/`trim_end`). WAV and Vorbis use a time base of one over the rate, so `pts` is a frame index |
+| Vorbis after a reset | with gapless on (the default) the first packet decodes to nothing, so seek a little early and drop frames by `pts` |
+| In-memory source | `io::Cursor<T>` is a `MediaSource` for any `T: AsRef<[u8]> + Send + Sync`, so `Cursor<Arc<[u8]>>` streams shared bytes without a copy per reader |
 | Web | Without the `wasm-bindgen` feature cpal on `wasm32-unknown-unknown` has only the null host (no device). With it, the WebAudio host makes an `AudioContext` per stream and schedules buffers on timers; `play()` is `ctx.resume()`, which a browser honours only during a user gesture. `audioworklet` needs atomics (threads) |
 
 ### `fontdue` 0.9 notes

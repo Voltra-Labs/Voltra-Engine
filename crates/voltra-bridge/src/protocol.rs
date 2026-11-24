@@ -164,10 +164,10 @@ pub enum Command {
         #[serde(default)]
         last: Option<usize>,
     },
-    /// A project settings file — `input`, `layers` or `build` — read, or,
+    /// A project settings file — `input`, `layers`, `buses` or `build` — read, or,
     /// with `text`, checked and saved as the Project Settings window saves.
     Settings {
-        /// Which file: `input`, `layers` or `build`.
+        /// Which file: `input`, `layers`, `buses` or `build`.
         file: String,
         /// New contents to check and save; none reads the file instead.
         #[serde(default)]

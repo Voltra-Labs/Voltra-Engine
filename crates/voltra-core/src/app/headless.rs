@@ -80,6 +80,7 @@ impl Headless {
         app.silhouettes = Some(voltra_assets::Silhouettes::new(root.clone()));
         app.load_input_map(&root);
         app.load_sorting_layers(&root);
+        app.load_bus_layout(&root);
         let mut fonts = Fonts::new(root.clone());
         voltra_scene::text::resolve_fonts(&mut app.world, &mut fonts);
         app.fonts = Some(fonts);

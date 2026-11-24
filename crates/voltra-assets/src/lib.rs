@@ -30,7 +30,7 @@ pub mod watch;
 pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, Grid};
 pub use atlases::Atlases;
 pub use browse::{Entry, EntryKind};
-pub use clips::Clips;
+pub use clips::{ClipSettings, Clips, CLIP_SETTINGS_VERSION};
 pub use error::AssetError;
 pub use fonts::{Font, Fonts, DEFAULT_FONT};
 pub use handle::Handle;

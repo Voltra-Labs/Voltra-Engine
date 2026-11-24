@@ -1,12 +1,14 @@
 //! The named tracks a sound can be played on, and the table of their names.
 //!
-//! A bus is a group with one volume: turn the music down, mute the effects,
-//! duck everything under a cutscene. Every engine has them and every engine
-//! keeps the names somewhere different — Unity in an `AudioMixer` asset,
-//! Godot in `default_bus_layout.tres`, Unreal in `SoundClass` assets, Wwise in
-//! the authoring tool. This engine has no project settings file, so the names
-//! live in code: [`Buses::default`] is master, music, sfx and ui, and a game
-//! that wants a different set hands [`Audio::with_buses`] its own.
+//! A bus is a group with one volume and a chain of [effects](crate::effect):
+//! turn the music down, mute the effects, duck everything under a cutscene.
+//! Every engine has them and every engine keeps the names somewhere
+//! different — Unity in an `AudioMixer` asset, Godot in
+//! `default_bus_layout.tres`, Unreal in `SoundClass` assets, Wwise in the
+//! authoring tool. Here [`Buses::default`] is master, music, sfx and ui; a
+//! game hands [`Audio::with_buses`](crate::Audio::with_buses) its own, and a project's
+//! `default.buses.ron` adds to the table and sets each bus's volume and
+//! effects ([`Audio::apply_layout`](crate::Audio::apply_layout)).
 //!
 //! **The name is what a scene file stores, and the [`BusId`] is what the mixer
 //! sees.** A `.ron` file saying `bus: "music"` still means music after a bus
@@ -17,8 +19,8 @@
 //! Routing is one level deep, which is Godot's shape: every bus feeds the
 //! master, and a voice on the master feeds it directly. Buses feeding other
 //! buses is a graph, and a graph wants a topology to validate and a cycle
-//! check to fail; it is worth building when there is an effect to put on an
-//! intermediate node, and there is not one yet.
+//! check to fail; effects need none of it, since each bus runs its own
+//! chain before it joins the master.
 
 /// Which bus a voice is heard on.
 ///

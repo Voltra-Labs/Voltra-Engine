@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use voltra_assets::{Clips, Handle};
-use voltra_audio::{Audio, BusId, Clip, PlayParams, VoiceId};
+use voltra_audio::{Audio, BusId, Clip, EffectDesc, Param, PlayParams, VoiceId};
 
 /// The sound half of a [`Tick`](super::Tick).
 ///
@@ -59,6 +59,48 @@ impl<'a> TickAudio<'a> {
         }
     }
 
+    /// Makes `clip` the music, cross-fading from the track already playing
+    /// over `fade` — equal-power curves, so the mix does not dip at the
+    /// middle — and returns its voice.
+    ///
+    /// Looping, on the `music` bus. Asking for the track already playing
+    /// leaves it playing, so a tick may name its area's music every frame.
+    /// A long track wants a `*.clip.ron` with `stream: true`, so its samples
+    /// are decoded while it plays rather than held resident; the settings
+    /// file is also where its loop points go.
+    pub fn play_music(&mut self, clip: Handle<Clip>, fade: Duration) -> VoiceId {
+        let params = PlayParams {
+            looping: true,
+            bus: self.audio.bus("music"),
+            ..Default::default()
+        };
+        self.play_music_with(clip, params, fade)
+    }
+
+    /// [`play_music`](Self::play_music) with the volume, pitch, loop and bus
+    /// the caller chose.
+    pub fn play_music_with(
+        &mut self,
+        clip: Handle<Clip>,
+        params: PlayParams,
+        fade: Duration,
+    ) -> VoiceId {
+        match self.clips.and_then(|clips| clips.try_get(clip)) {
+            Some(clip) => self.audio.play_music(clip, params, fade),
+            None => self.audio.play_music(&Clip::silent(), params, fade),
+        }
+    }
+
+    /// Fades the music out over `fade` and forgets it.
+    pub fn stop_music(&mut self, fade: Duration) {
+        self.audio.stop_music(fade);
+    }
+
+    /// The voice the music is playing on, if any.
+    pub fn music(&self) -> Option<VoiceId> {
+        self.audio.music()
+    }
+
     /// Ends one voice now — how a looping sound a tick started is stopped.
     pub fn stop(&mut self, voice: VoiceId) {
         self.audio.stop(voice);
@@ -95,6 +137,36 @@ impl<'a> TickAudio<'a> {
     /// The volume `bus` was last set to.
     pub fn bus_volume(&self, bus: BusId) -> f32 {
         self.audio.bus_volume(bus)
+    }
+
+    /// Slides `param` of the effect at `effect` on `bus` to `value` over
+    /// `over` — a low-pass opening as the player surfaces, a reverb growing
+    /// as they walk into a cave. The bus's effects come from the project's
+    /// `default.buses.ron` or from [`set_bus_effects`](Self::set_bus_effects);
+    /// `effect` counts from zero along that chain.
+    ///
+    /// `false`, changing nothing, for an effect that is not there or a
+    /// parameter it does not have.
+    pub fn set_bus_param(
+        &mut self,
+        bus: BusId,
+        effect: usize,
+        param: Param,
+        value: f32,
+        over: Duration,
+    ) -> bool {
+        self.audio.set_bus_param(bus, effect, param, value, over)
+    }
+
+    /// Replaces `bus`'s effects, first to last — a level that sounds under
+    /// water, a radio that crackles in. Built now, so not every frame.
+    pub fn set_bus_effects(&mut self, bus: BusId, effects: Vec<EffectDesc>) {
+        self.audio.set_bus_effects(bus, effects);
+    }
+
+    /// The effects on `bus`, with every number a tick moved since.
+    pub fn bus_effects(&self, bus: BusId) -> &[EffectDesc] {
+        self.audio.bus_effects(bus)
     }
 
     /// Ends every voice, including the ones the scene's own sources started.
@@ -186,5 +258,26 @@ mod tests {
         let new = tick.play_fading_in(Handle::forge(0, 0), PlayParams::default(), over);
 
         assert_ne!(old, new);
+    }
+
+    #[test]
+    fn music_named_every_frame_starts_once_and_another_track_replaces_it() {
+        let root = scratch_root();
+        let mut clips = Clips::new(&root);
+        let calm = clips.load(&AssetPath::new("calm.wav").expect("valid"));
+        let storm = clips.load(&AssetPath::new("storm.wav").expect("valid"));
+        let mut audio = Audio::silent();
+        let mut tick = TickAudio::new(&mut audio, Some(&clips));
+        let fade = Duration::from_secs(2);
+
+        let first = tick.play_music(calm, fade);
+        let again = tick.play_music(calm, fade);
+        let next = tick.play_music(storm, fade);
+
+        assert_eq!(first, again, "the same track keeps playing");
+        assert_ne!(next, first, "a new one cross-fades in");
+        assert_eq!(tick.music(), Some(next));
+        tick.stop_music(fade);
+        assert_eq!(tick.music(), None);
     }
 }

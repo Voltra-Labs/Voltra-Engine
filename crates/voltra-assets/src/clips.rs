@@ -1,14 +1,20 @@
 //! Sounds, keyed by the path a scene file names them with.
 
+mod settings;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use voltra_audio::{decode_bytes, AudioError, Clip};
+use voltra_audio::{decode_bytes, probe, AudioError, Clip, StreamSource};
 
 use crate::error::AssetError;
 use crate::handle::Handle;
 use crate::path::AssetPath;
 use crate::store::Assets;
+use crate::watch::is_clip_settings;
+
+pub use settings::{ClipSettings, VERSION as CLIP_SETTINGS_VERSION};
 
 /// Loads clips from an asset root and hands out shared handles to them.
 ///
@@ -18,6 +24,11 @@ use crate::store::Assets;
 /// differently would be three things to remember. It needs no GPU and no
 /// audio device: decoding is arithmetic over a file, which is what keeps every
 /// test of it headless.
+///
+/// A path is a sound (`.wav`, `.ogg`), decoded whole and resident, or a
+/// clip's settings (`*.clip.ron`, [`ClipSettings`]), which name a sound and
+/// say whether it is streamed and where it loops. A streamed clip costs its
+/// header here; its samples are decoded by each voice that plays it.
 ///
 /// Hot reload swaps the clip under a stable handle, and needs no message to
 /// the audio thread because nothing is swapped *under* it: a [`Clip`] is an
@@ -31,6 +42,9 @@ pub struct Clips {
     root: PathBuf,
     store: Assets<Clip>,
     by_path: HashMap<AssetPath, Handle<Clip>>,
+    /// Which settings files name each sound, so an edit to the sound reaches
+    /// the clips made from it.
+    named_by: HashMap<AssetPath, Vec<AssetPath>>,
     silent: Handle<Clip>,
 }
 
@@ -43,11 +57,12 @@ impl Clips {
             root: root.into(),
             store,
             by_path: HashMap::new(),
+            named_by: HashMap::new(),
             silent,
         }
     }
 
-    /// The handle for `path`, decoding it if this is the first time.
+    /// The handle for `path`, loading it if this is the first time.
     ///
     /// Infallible, the way texture and atlas loading are: a scene naming a
     /// sound that will not decode must still open. A failure logs once and
@@ -59,13 +74,9 @@ impl Clips {
             return *handle;
         }
 
-        let handle = match decode_file(&self.root.join(path.as_str())) {
+        let handle = match self.read(path) {
             Ok(clip) => self.store.insert(clip),
-            Err(source) => {
-                let error = AssetError::Audio {
-                    path: self.root.join(path.as_str()),
-                    source: Box::new(source),
-                };
+            Err(error) => {
                 log::warn!("{error}; it will play nothing");
                 // Its own slot rather than the shared silent one, for the same
                 // reason `Textures` gives each broken path its own placeholder:
@@ -79,38 +90,42 @@ impl Clips {
         handle
     }
 
-    /// Decodes `path` again and swaps it in under the handle it already has.
+    /// Loads `path` again and swaps it in under the handle it already has,
+    /// answering every handle whose clip changed.
     ///
-    /// `false`, changing nothing, for a path nobody loaded — the watcher sees
-    /// every sound in the tree, and decoding one no scene uses would be a
-    /// waste — and for a file that will not decode. The second keeps the
-    /// previous samples rather than going silent: an editor saving a file
-    /// leaves it briefly truncated, and degrading to nothing on every save
-    /// would be worse than hearing the old take for one more moment.
-    pub fn reload(&mut self, path: &AssetPath) -> bool {
-        let Some(&handle) = self.by_path.get(path) else {
-            return false;
-        };
+    /// That is the path's own, if it was loaded, and every settings file's
+    /// that names it — an edited `.ogg` reaches the streamed clip made from
+    /// it. Nothing for a path nobody loaded or named — the watcher sees every
+    /// sound in the tree, and decoding one no scene uses would be a waste —
+    /// and nothing for a file that will not load. The second keeps the
+    /// previous clip rather than going silent: an editor saving a file leaves
+    /// it briefly truncated, and degrading to nothing on every save would be
+    /// worse than hearing the old take for one more moment.
+    pub fn reload(&mut self, path: &AssetPath) -> Vec<Handle<Clip>> {
+        let mut changed = Vec::new();
+        let mut paths = vec![path.clone()];
+        paths.extend(self.named_by.get(path).cloned().unwrap_or_default());
 
-        let clip = match decode_file(&self.root.join(path.as_str())) {
-            Ok(clip) => clip,
-            Err(source) => {
-                let error = AssetError::Audio {
-                    path: self.root.join(path.as_str()),
-                    source: Box::new(source),
-                };
-                log::warn!("{error}; keeping the previously loaded clip");
-                return false;
-            }
-        };
-
-        let slot = self
-            .store
-            .get_mut(handle)
-            .expect("Clips never removes, so every handle it issued resolves");
-        *slot = clip;
-        log::info!("reloaded {}", path.as_str());
-        true
+        for path in paths {
+            let Some(&handle) = self.by_path.get(&path) else {
+                continue;
+            };
+            let clip = match self.read(&path) {
+                Ok(clip) => clip,
+                Err(error) => {
+                    log::warn!("{error}; keeping the previously loaded clip");
+                    continue;
+                }
+            };
+            let slot = self
+                .store
+                .get_mut(handle)
+                .expect("Clips never removes, so every handle it issued resolves");
+            *slot = clip;
+            log::info!("reloaded {}", path.as_str());
+            changed.push(handle);
+        }
+        changed
     }
 
     /// The handle `path` is cached to, if it has ever been loaded.
@@ -154,200 +169,77 @@ impl Clips {
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }
+
+    /// The clip `path` describes: a sound decoded, or a settings file
+    /// followed to its sound.
+    fn read(&mut self, path: &AssetPath) -> Result<Clip, AssetError> {
+        if !is_clip_settings(path.as_str()) {
+            return decode_file(&self.root.join(path.as_str()));
+        }
+
+        let full = self.root.join(path.as_str());
+        let text = crate::fs::read_to_string(&full).map_err(|source| AssetError::Read {
+            path: full.clone(),
+            source,
+        })?;
+        let settings = ClipSettings::parse(&text).map_err(|reason| AssetError::ClipSettings {
+            path: full.clone(),
+            reason,
+        })?;
+
+        // Recorded before the sound is read, so a sound that is missing now
+        // still reaches this clip when it arrives.
+        let users = self.named_by.entry(settings.file.clone()).or_default();
+        if !users.contains(path) {
+            users.push(path.clone());
+        }
+
+        let sound = self.root.join(settings.file.as_str());
+        let clip = if settings.stream {
+            stream_file(&sound)?
+        } else {
+            decode_file(&sound)?
+        };
+        let (start, end) = settings.loop_frames(clip.rate());
+        Ok(clip.with_loop(start, end))
+    }
 }
 
 /// Decodes the file at `full`, read through [`crate::fs`] so a mounted
 /// pack serves it as the disk would.
-fn decode_file(full: &Path) -> Result<Clip, AudioError> {
-    let bytes = crate::fs::read(full).map_err(|source| AudioError::Read {
+fn decode_file(full: &Path) -> Result<Clip, AssetError> {
+    let bytes = crate::fs::read(full).map_err(|source| AssetError::Read {
         path: full.to_owned(),
         source,
     })?;
-    decode_bytes(bytes, full)
+    decode_bytes(bytes, full).map_err(|source| audio_error(full, source))
+}
+
+/// A streamed clip over the file at `full`: opened from the disk by each
+/// voice natively, or served from the pack's bytes where one is mounted —
+/// which, on the web, is always.
+fn stream_file(full: &Path) -> Result<Clip, AssetError> {
+    let source = if crate::fs::is_packed(full) {
+        let bytes = crate::fs::read(full).map_err(|source| AssetError::Read {
+            path: full.to_owned(),
+            source,
+        })?;
+        StreamSource::Bytes {
+            path: full.to_owned(),
+            bytes: Arc::from(bytes),
+        }
+    } else {
+        StreamSource::File(full.to_owned())
+    };
+    probe(source).map_err(|source| audio_error(full, source))
+}
+
+fn audio_error(full: &Path, source: AudioError) -> AssetError {
+    AssetError::Audio {
+        path: full.to_owned(),
+        source: Box::new(source),
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use voltra_testkit::scratch_root;
-
-    fn path(raw: &str) -> AssetPath {
-        AssetPath::new(raw).expect("a valid asset path")
-    }
-
-    /// A 16-bit mono PCM WAV of `frames` samples at 8 kHz.
-    ///
-    /// Hand-written for the reason `voltra-audio`'s decoder tests give: a
-    /// fixture produced by an encoder would test the encoder.
-    fn wav(frames: u32) -> Vec<u8> {
-        let data_len = frames * 2;
-        let mut file = Vec::new();
-        file.extend_from_slice(b"RIFF");
-        file.extend_from_slice(&(36 + data_len).to_le_bytes());
-        file.extend_from_slice(b"WAVE");
-        file.extend_from_slice(b"fmt ");
-        file.extend_from_slice(&16u32.to_le_bytes());
-        file.extend_from_slice(&1u16.to_le_bytes());
-        file.extend_from_slice(&1u16.to_le_bytes());
-        file.extend_from_slice(&8_000u32.to_le_bytes());
-        file.extend_from_slice(&16_000u32.to_le_bytes());
-        file.extend_from_slice(&2u16.to_le_bytes());
-        file.extend_from_slice(&16u16.to_le_bytes());
-        file.extend_from_slice(b"data");
-        file.extend_from_slice(&data_len.to_le_bytes());
-        file.extend_from_slice(&vec![0u8; data_len as usize]);
-        file
-    }
-
-    #[test]
-    fn a_file_becomes_a_clip() {
-        let root = scratch_root();
-        std::fs::write(root.join("coin.wav"), wav(16)).expect("the fixture writes");
-        let mut clips = Clips::new(&root);
-
-        let handle = clips.load(&path("coin.wav"));
-
-        let clip = clips.get(handle);
-        assert_eq!(clip.frames(), 16);
-        assert_eq!(clip.rate(), 8_000);
-    }
-
-    #[test]
-    fn one_path_is_decoded_once() {
-        // The whole point of the store: a scene with fifty coins holds one
-        // buffer, not fifty.
-        let root = scratch_root();
-        std::fs::write(root.join("coin.wav"), wav(16)).expect("the fixture writes");
-        let mut clips = Clips::new(&root);
-
-        let first = clips.load(&path("coin.wav"));
-        let before = clips.len();
-        let second = clips.load(&path("coin.wav"));
-
-        assert_eq!(first, second);
-        assert_eq!(clips.len(), before, "the second load stored nothing");
-    }
-
-    #[test]
-    fn a_file_that_is_not_there_is_silence_rather_than_a_panic() {
-        let root = scratch_root();
-        let mut clips = Clips::new(&root);
-
-        let handle = clips.load(&path("nowhere.wav"));
-
-        assert!(clips.get(handle).is_empty());
-        assert_ne!(handle, clips.silent(), "and it gets its own slot to repair");
-    }
-
-    #[test]
-    fn a_file_that_will_not_decode_is_the_same_answer() {
-        let root = scratch_root();
-        std::fs::write(root.join("bad.wav"), "not a wav at all").expect("the fixture writes");
-        let mut clips = Clips::new(&root);
-
-        let handle = clips.load(&path("bad.wav"));
-
-        assert!(clips.get(handle).is_empty());
-    }
-
-    #[test]
-    fn two_broken_paths_do_not_share_a_slot() {
-        // Repairing one of them must not mean overwriting the clip the other
-        // is also playing.
-        let root = scratch_root();
-        let mut clips = Clips::new(&root);
-
-        let first = clips.load(&path("one.wav"));
-        let second = clips.load(&path("two.wav"));
-
-        assert_ne!(first, second);
-    }
-
-    #[test]
-    fn a_path_that_was_loaded_can_be_looked_up_again() {
-        let root = scratch_root();
-        std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
-        let mut clips = Clips::new(&root);
-
-        let handle = clips.load(&path("coin.wav"));
-
-        assert_eq!(clips.by_path_handle(&path("coin.wav")), Some(handle));
-        assert_eq!(clips.by_path_handle(&path("other.wav")), None);
-    }
-
-    #[test]
-    fn a_reload_swaps_the_samples_under_the_same_handle() {
-        let root = scratch_root();
-        std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
-        let mut clips = Clips::new(&root);
-        let handle = clips.load(&path("coin.wav"));
-        let playing = clips.get(handle).clone();
-
-        std::fs::write(root.join("coin.wav"), wav(32)).expect("the edit writes");
-        assert!(clips.reload(&path("coin.wav")));
-
-        assert_eq!(clips.get(handle).frames(), 32);
-        assert_eq!(
-            playing.frames(),
-            4,
-            "a voice already playing keeps its take"
-        );
-    }
-
-    #[test]
-    fn a_broken_file_is_repaired_by_a_reload() {
-        // The reason each broken path gets its own slot.
-        let root = scratch_root();
-        let mut clips = Clips::new(&root);
-        let handle = clips.load(&path("late.wav"));
-        assert!(clips.get(handle).is_empty());
-
-        std::fs::write(root.join("late.wav"), wav(8)).expect("the file arrives");
-        assert!(clips.reload(&path("late.wav")));
-
-        assert_eq!(clips.get(handle).frames(), 8);
-        assert!(
-            clips.get(clips.silent()).is_empty(),
-            "the shared silence is untouched"
-        );
-    }
-
-    #[test]
-    fn a_reload_that_will_not_decode_keeps_the_old_samples() {
-        // An editor mid-save leaves the file truncated.
-        let root = scratch_root();
-        std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
-        let mut clips = Clips::new(&root);
-        let handle = clips.load(&path("coin.wav"));
-
-        std::fs::write(root.join("coin.wav"), "RIFF").expect("the truncation writes");
-
-        assert!(!clips.reload(&path("coin.wav")));
-        assert_eq!(clips.get(handle).frames(), 4);
-    }
-
-    #[test]
-    fn reloading_a_path_nobody_loaded_does_nothing() {
-        let root = scratch_root();
-        std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
-        let mut clips = Clips::new(&root);
-
-        assert!(!clips.reload(&path("coin.wav")));
-        assert_eq!(clips.len(), 1);
-    }
-
-    #[test]
-    fn a_new_store_holds_only_silence() {
-        let clips = Clips::new(scratch_root());
-        assert_eq!(clips.len(), 1);
-        assert!(clips.get(clips.silent()).is_empty());
-    }
-
-    #[test]
-    fn a_handle_from_another_store_does_not_resolve() {
-        let a = Clips::new(scratch_root());
-        let b = Clips::new(scratch_root());
-        assert!(b.try_get(a.silent()).is_some(), "slot zero exists in both");
-        assert!(b.try_get(Handle::forge(9, 0)).is_none());
-    }
-}
+mod tests;

@@ -1,6 +1,6 @@
-//! The Project Settings window: the input map, the sorting layers and the
-//! build manifest, edited as the RON files they are and saved only when
-//! they read.
+//! The Project Settings window: the input map, the sorting layers, the audio
+//! buses and the build manifest, edited as the RON files they are and saved
+//! only when they read.
 
 use std::collections::HashMap;
 

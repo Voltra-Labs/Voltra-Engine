@@ -18,8 +18,8 @@ use crate::atlas::is_atlas;
 use crate::error::AssetError;
 use crate::path::AssetPath;
 use crate::watch::{
-    is_animation, is_animator, is_clip, is_font, is_input_map, is_scene, is_sorting_layers,
-    is_texture,
+    is_animation, is_animator, is_bus_layout, is_clip, is_font, is_input_map, is_scene,
+    is_sorting_layers, is_texture,
 };
 
 /// What one row of a listing is.
@@ -37,7 +37,8 @@ pub enum EntryKind {
     /// A file named `*.atlas.ron`: a slicing of one of those.
     Atlas,
     /// A file with an extension in
-    /// [`CLIP_EXTENSIONS`](crate::watch::CLIP_EXTENSIONS): a sound.
+    /// [`CLIP_EXTENSIONS`](crate::watch::CLIP_EXTENSIONS): a sound, or a
+    /// clip's settings (`*.clip.ron`) naming one.
     Clip,
     /// A file with an extension in
     /// [`FONT_EXTENSIONS`](crate::watch::FONT_EXTENSIONS): a face a `Text`
@@ -49,6 +50,9 @@ pub enum EntryKind {
     /// A file [`is_sorting_layers`](crate::watch::is_sorting_layers)
     /// accepts: the project's draw-order bands. Listed, not placed.
     SortingLayers,
+    /// A file [`is_bus_layout`](crate::watch::is_bus_layout) accepts: the
+    /// project's audio buses and their effects. Listed, not placed.
+    BusLayout,
     /// A file [`is_animation`](crate::watch::is_animation) accepts: keyed
     /// property tracks an `AnimationPlayer` plays — dragged onto its field,
     /// not into the scene.
@@ -163,6 +167,8 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::InputMap
         } else if is_sorting_layers(&name) {
             EntryKind::SortingLayers
+        } else if is_bus_layout(&name) {
+            EntryKind::BusLayout
         } else if is_animation(&name) {
             EntryKind::Animation
         } else if is_animator(&name) {
@@ -289,6 +295,8 @@ mod atlas_tests {
         std::fs::write(root.join("default.layers.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("bob.anim.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("hero.animator.ron"), "").expect("the fixture writes");
+        std::fs::write(root.join("theme.clip.ron"), "").expect("the fixture writes");
+        std::fs::write(root.join("default.buses.ron"), "").expect("the fixture writes");
 
         let entries = list(&root, None).expect("the root lists");
 
@@ -304,6 +312,12 @@ mod atlas_tests {
         assert_eq!(kind("default.layers.ron"), Some(EntryKind::SortingLayers));
         assert_eq!(kind("bob.anim.ron"), Some(EntryKind::Animation));
         assert_eq!(kind("hero.animator.ron"), Some(EntryKind::Animator));
+        assert_eq!(
+            kind("theme.clip.ron"),
+            Some(EntryKind::Clip),
+            "a clip's settings"
+        );
+        assert_eq!(kind("default.buses.ron"), Some(EntryKind::BusLayout));
         assert_eq!(
             kind("demo.ron"),
             Some(EntryKind::Scene),
