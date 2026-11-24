@@ -13,6 +13,7 @@ pub mod headless;
 mod input_map;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
+mod net_counters;
 mod particles;
 mod prefab_sync;
 mod scene_draws;
@@ -26,6 +27,7 @@ mod tick;
 mod tick_audio;
 mod tick_controls;
 pub mod tick_net;
+mod tick_replication;
 mod tick_time;
 mod ui_frame;
 mod ui_input;
@@ -65,6 +67,7 @@ use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 pub use bus_layout::{parse_bus_layout, DEFAULT_BUS_LAYOUT};
 pub use input_map::DEFAULT_INPUT_MAP;
+pub use net_counters::NET_COUNTERS;
 pub use scenes::SceneLoad;
 pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
 pub use tick::Tick;
@@ -378,6 +381,9 @@ impl App {
         drop(input);
         // Before the tick, so it reads this frame's messages and events.
         self.receive_net(delta);
+        // Before the tick too, which reads what the server sent: spawned,
+        // despawned and changed.
+        self.receive_replication();
         // Before the tick, so it reads this frame's finished tweens and
         // fired timers, as it reads this frame's clicks.
         self.step_tweens_and_timers(delta);
@@ -425,6 +431,10 @@ impl App {
         // Last: a scene change despawns what the ticks and steps were holding,
         // so it waits until they have let go.
         self.apply_scene_requests();
+        // After every step: the snapshot is the world as the frame left it,
+        // and a remote entity is drawn where the clock says, whatever the
+        // physics did to it.
+        self.send_replication(delta);
         // What every tick of the frame queued goes out together.
         self.flush_net();
     }

@@ -231,6 +231,16 @@ impl Headless {
         self.app.net_mut()
     }
 
+    /// Spawns the prefab at `path` into the running game, as a tick's
+    /// `spawn` does — what a test or a server sets a match up with.
+    pub fn spawn(
+        &mut self,
+        path: &AssetPath,
+        at: &voltra_scene::Transform,
+    ) -> Result<voltra_scene::Instance, SceneError> {
+        self.app.spawn(path, at)
+    }
+
     /// The world.
     pub fn world(&self) -> &World {
         &self.app.world

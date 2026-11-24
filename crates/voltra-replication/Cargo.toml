@@ -1,0 +1,19 @@
+[package]
+name = "voltra-replication"
+description = "Replication for the Voltra engine: the server's world sent to its clients as snapshots and deltas, interpolated, and predicted for the local player."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+voltra-assets.workspace = true
+voltra-ecs.workspace = true
+voltra-net.workspace = true
+voltra-scene.workspace = true
+log.workspace = true
+serde.workspace = true
+postcard.workspace = true
+
+[dev-dependencies]
+voltra-render.workspace = true

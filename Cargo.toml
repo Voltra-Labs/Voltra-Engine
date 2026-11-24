@@ -23,6 +23,7 @@ voltra-physics = { path = "crates/voltra-physics" }
 voltra-profile = { path = "crates/voltra-profile" }
 voltra-player = { path = "crates/voltra-player" }
 voltra-render = { path = "crates/voltra-render" }
+voltra-replication = { path = "crates/voltra-replication" }
 voltra-scene = { path = "crates/voltra-scene" }
 voltra-testkit = { path = "crates/voltra-testkit" }
 

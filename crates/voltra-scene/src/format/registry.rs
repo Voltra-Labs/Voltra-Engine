@@ -14,8 +14,10 @@ use voltra_ecs::{Entity, World};
 
 mod entry;
 mod registration;
+mod replicate;
 
 pub use registration::{ComponentInfo, Registration};
+pub use replicate::{ReplicateError, ReplicatedComponent};
 
 use entry::Entry;
 
@@ -54,7 +56,16 @@ impl ComponentRegistry {
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register::<Name>("Name").with_template();
-        registry.register::<Transform>("Transform").with_template();
+        // Replicated by default: where a networked thing is, is what every
+        // networked game sends, and remote copies are drawn between
+        // snapshots rather than snapped to each.
+        registry
+            .register::<Transform>("Transform")
+            .with_template()
+            .replicated_interpolated();
+        registry
+            .register::<crate::Replicated>(crate::Replicated::NAME)
+            .with_template();
         // Stored as the parent's `SceneId`; the live `Entity` is resolved after
         // the whole file is in, by `hierarchy::resolve_parents`.
         registry.register::<Parent>("Parent");
@@ -166,6 +177,8 @@ impl ComponentRegistry {
             },
             refs: None,
             template: None,
+            type_id: std::any::TypeId::of::<T>(),
+            replicate: None,
         });
         Registration::new(
             self.entries

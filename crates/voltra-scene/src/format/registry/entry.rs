@@ -59,4 +59,11 @@ pub(super) struct Entry {
     /// for structure (a parent link, a prefab part) a tool must not make
     /// up.
     pub(super) template: Option<TemplateFn>,
+    /// The type itself, so [`ComponentRegistry::replicate`] can find the
+    /// entry a `T` was registered under.
+    ///
+    /// [`ComponentRegistry::replicate`]: super::ComponentRegistry::replicate
+    pub(super) type_id: std::any::TypeId,
+    /// For a type the server sends its clients; `None` for every other.
+    pub(super) replicate: Option<super::replicate::ReplicateFns>,
 }

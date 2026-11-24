@@ -37,6 +37,11 @@ impl<'r, T> Registration<'r, T> {
             _type: std::marker::PhantomData,
         }
     }
+
+    /// Makes the type replicated, through `fns`.
+    pub(super) fn set_replicate(&mut self, fns: super::replicate::ReplicateFns) {
+        self.entry.replicate = Some(fns);
+    }
 }
 
 impl<T> Registration<'_, T>

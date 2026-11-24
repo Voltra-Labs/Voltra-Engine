@@ -20,7 +20,7 @@ pub mod window;
 pub use app::headless::{Headless, HeadlessError, Screenshot, ScreenshotError};
 pub use app::{
     parse_bus_layout, parse_sorting_layers, App, Net, SceneLoad, Tick, UiFrame, DEFAULT_BUS_LAYOUT,
-    DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS,
+    DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS, NET_COUNTERS,
 };
 pub use game::Game;
 pub use input::{
@@ -46,10 +46,12 @@ pub use voltra_nav as nav;
 // The network a game hosts or joins through `Tick::net`: its transports,
 // channels, peers and events, named without a second dependency.
 pub use voltra_net as net;
+// What the server sends its clients, and the prediction a game steps.
 pub use voltra_physics::{
     character, move_and_slide, query, CollisionEvent, Contact, QueryFilter, RayHit, ShapeHit,
     Slide, Touch,
 };
+pub use voltra_replication as replication;
 
 // A game plays a sound through `Tick::audio` and has to be able to name what
 // it hands over and what comes back. Re-exported for the reason the physics

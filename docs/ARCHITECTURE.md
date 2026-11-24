@@ -91,9 +91,10 @@ version bump is a one-line change.
 | `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport`, `Endpoint`, `NetConfig`, `ChannelKind`, `ChannelId`, `PeerId`, `NetEvent`, `DisconnectReason`, `Message` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
 | `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs — and a running editor, through the bridge — for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
-| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
+| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session and its replication | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
+| `voltra-replication` | The server's world sent to its clients: snapshots and deltas within a per-client budget, interpolation of remote entities, prediction of the owned one | `ReplicationServer`, `ReplicationClient`, `ReplicationConfig`, `Timeline`, `Prediction`, `NetOwner` |
 | `voltra-server` | A dedicated server: a scene headless at a fixed tick, hosted over UDP and WebSockets; a library a game's own server binary is built on | `Server`, `ServerOptions`, `Pacer` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
@@ -6115,6 +6116,93 @@ joining first, a client by address after it, `players()` listing both,
 and `stop` ending them with the client told `Shutdown`. Unit tests of
 `Pacer` and the binary's arguments. `voltra-net/src/session.rs`: server
 addresses parsed by scheme.
+
+### The server sends what each client has not acknowledged, most important first
+
+Stage 114. A new crate, `voltra-replication`, between `voltra-net`'s
+connections and the scene; `voltra-core` drives it from the loop and
+`tick.net` (`app/tick_replication.rs`).
+
+- **What is replicated** is chosen twice. A *type* opts in at registration:
+  `registry.replicate::<T>()` (or `.replicated()` on the `register` chain),
+  `replicate_interpolated::<T>()` for one drawn between snapshots
+  (`Interpolate`, stage 115); `Transform` is, by default. An *entity* opts
+  in with the `Replicated` component (`priority`, default 1). Unreal's
+  `UPROPERTY(Replicated)` plus `bReplicates`, Bevy replicon's
+  `replicate::<C>()` plus `Replicated`, Unity's `NetworkObject` — the same
+  two switches. The registry keeps the wire conversions beside the RON ones
+  (`format/registry/replicate.rs`): `postcard`, so a `Transform` is 20
+  bytes, not the 50 of its RON. The server sends the component *names*
+  once per client (the schema, reliable); snapshots number them by that
+  list, and a client maps by name, logging a type it does not replicate.
+- **Server authority.** Nothing a client sends changes a replicated
+  component on the server: its say is its acknowledgements and its
+  inputs (stage 116). The game moves its entities on the server; the
+  loop sends the world as the frame left it, after the fixed steps.
+- **Snapshots and deltas.** One snapshot per server tick (a fixed step;
+  `snapshot_interval` to thin them) per client, unreliable-sequenced on a
+  channel of replication's own (`ReplicationChannels`: three channels put
+  after the game's by `ReplicationConfig::net_config`, which `tick.net`'s
+  `host`/`join` apply once `enable_replication` / `App::with_replication`
+  turned it on; a session made without them is refused by replication
+  with an error, and the handshake's fingerprint refuses a client whose
+  layout differs). Per client and entity the server keeps the value
+  acknowledged and the value last sent, per component, and sends a
+  component when the current value differs from *either*: the first is
+  "a delta against the last acknowledged snapshot" (a lost change is sent
+  again because it was never acknowledged), the second covers a value
+  gone back to the acknowledged one while another was in flight. Values
+  travel whole, so a client applies each update on its own with no
+  baseline of its own — Quake 3's per-snapshot baselines would need the
+  client to keep every snapshot it acknowledged; Unreal's per-connection
+  shadow state, resent on a NAK, is this rule seen from the other side.
+  The client reports which snapshots arrived as the newest tick and 64
+  bits before it, every frame, on its own channel.
+- **Spawn and despawn.** An entity's first update carries its spawn — its
+  `SceneId`, the prefab it came from (`PrefabInstance`) and its owner
+  (`NetOwner`) — until a snapshot carrying it is acknowledged. The client
+  adopts an entity with that id if its own copy of the level has one, or
+  spawns the prefab (the sprite and the children that only draw, as
+  Godot's `MultiplayerSpawner` spawns by scene path and Unity by prefab
+  hash), or a bare entity; a replicated part of that prefab is despawned
+  locally, since it comes in a spawn of its own. Its assets are resolved
+  by the loop like a tick's spawns. A despawn is in every snapshot until
+  one carrying it is acknowledged, then forgotten; ids (`NetId`, a `u32`
+  varint) are never reused in a session, and the sequenced channel drops
+  any older snapshot, so a despawned entity is never brought back. The
+  first *complete* snapshot (see below) also despawns the replicated
+  entities of the client's level the server never had (one it despawned
+  before the client joined) — once only, since a replicated entity spawned
+  on the client later races the server's spawn of the same.
+- **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
+  datagram with room for its header, 60 KB/s at 60 Hz) bounds each
+  client's snapshot. Due entities are taken by banked priority — each
+  snapshot an entity waits, its `priority` is added to its bank; sent, it
+  starts again from zero (Gaffer On Games' priority accumulator; Unreal's
+  `NetPriority` times the time since last sent) — and encoded one by one
+  until the next does not fit; a smaller one after it still may. A single
+  update larger than the whole budget goes alone, with a warning, rather
+  than starve. A snapshot that held everything due says so (`complete`).
+  No interest management: every client is sent every replicated entity.
+- **Untrusted input.** A snapshot or client message that will not decode
+  is dropped whole; a client's lists are cut at 64; a component value that
+  will not decode changes nothing. A client whose game despawned a
+  replicated entity asks for it whole again (`resync`).
+
+Pinned by `voltra-core/tests/replication.rs`: a server and two clients
+over 20 % loss, 30–50 ms latency and 2 % duplication — a level entity
+adopted (not doubled) and a client-only one removed, 20 entities spawned,
+moved for two seconds, seven despawned and three spawned, and both
+clients' replicated entities and transforms equal to the server's,
+exactly; 301 moving entities under a 600-byte budget, every snapshot at
+or under it and every frame's bytes within a datagram's header of it, the
+priority-40 entity kept closer than the crowd, and all of them through
+once they rest; a prefab-spawned entity spawned from its prefab on the
+client (its child too) and despawned with it. Unit tests of the snapshot
+wire format (written in parts, read whole; junk), the ack bits, the
+delta rule (`server/view.rs`), the input queue, the registry's
+replication (a `Transform` is 20 bytes; junk and trailing bytes change
+nothing; an unregistered type is refused) and `Interpolate`.
 
 ### wgpu 30 API notes
 

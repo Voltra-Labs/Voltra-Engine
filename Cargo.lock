@@ -3895,6 +3895,7 @@ dependencies = [
  "voltra-physics",
  "voltra-profile",
  "voltra-render",
+ "voltra-replication",
  "voltra-scene",
  "voltra-testkit",
  "wasm-bindgen",
@@ -4042,11 +4043,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-replication"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "postcard",
+ "serde",
+ "voltra-assets",
+ "voltra-ecs",
+ "voltra-net",
+ "voltra-render",
+ "voltra-scene",
+]
+
+[[package]]
 name = "voltra-scene"
 version = "0.1.0"
 dependencies = [
  "image",
  "log",
+ "postcard",
  "ron",
  "serde",
  "uuid",
