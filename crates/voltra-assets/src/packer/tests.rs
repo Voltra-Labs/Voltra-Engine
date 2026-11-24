@@ -255,6 +255,22 @@ fn a_folder_packs_beside_itself_and_loads_as_an_atlas() {
 }
 
 #[test]
+fn an_atlas_packed_into_a_new_folder_still_names_its_sheet() {
+    let root = scratch_root();
+    let folder = root.join("loose");
+    write(&folder.join("a.png"), &picture("a", 4, 4, 0));
+    let atlas = root.join("packed/new/loose.atlas.ron");
+
+    let report = pack_folder(&folder, &atlas, Some(&root), &PackOptions::default())
+        .expect("the pack writes");
+
+    assert_eq!(
+        report.texture.as_ref().map(AssetPath::as_str),
+        Some("packed/new/loose.png")
+    );
+}
+
+#[test]
 fn an_unreadable_previous_atlas_is_left_alone() {
     let root = scratch_root();
     let folder = root.join("pieces");

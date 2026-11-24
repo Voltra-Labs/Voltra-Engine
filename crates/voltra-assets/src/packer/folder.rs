@@ -122,6 +122,11 @@ pub fn pack_folder(
     let pictures = read_folder(folder, &sheet_file)?;
     let mut packed = pack(pictures, previous.as_ref(), options)?;
 
+    // Made before the hint is worked out: the hint compares real paths,
+    // and a folder that does not exist yet has none.
+    if let Some(parent) = atlas.parent().filter(|p| !p.as_os_str().is_empty()) {
+        std::fs::create_dir_all(parent).map_err(|e| PackError::Io(parent.to_path_buf(), e))?;
+    }
     let texture = root.and_then(|root| hint(root, &sheet_file));
     if let Some(texture) = &texture {
         packed.atlas = packed.atlas.with_texture(texture.clone());
@@ -130,9 +135,6 @@ pub fn pack_folder(
         log::warn!("region {gone:?} has no file any more; its index is kept, empty");
     }
 
-    if let Some(parent) = atlas.parent().filter(|p| !p.as_os_str().is_empty()) {
-        std::fs::create_dir_all(parent).map_err(|e| PackError::Io(parent.to_path_buf(), e))?;
-    }
     packed
         .sheet
         .save_with_format(&sheet_file, image::ImageFormat::Png)
