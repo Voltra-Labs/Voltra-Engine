@@ -48,6 +48,7 @@ pub mod skinned;
 pub mod sorting;
 pub mod sprite;
 pub mod sprite_material;
+pub mod streaming_anchor;
 pub mod text;
 pub mod tilemap;
 pub mod timer;
@@ -56,6 +57,7 @@ pub mod transform;
 pub mod triangulate;
 pub mod tween;
 pub mod ui;
+pub mod world_regions;
 
 pub use animation::SpriteAnimation;
 pub use animator::{Animator, StateMachine, StateMachines};
@@ -96,6 +98,7 @@ pub use skinned::SkinnedSprite;
 pub use sorting::SortingLayers;
 pub use sprite::{draw_key, Sprite};
 pub use sprite_material::SpriteMaterial;
+pub use streaming_anchor::StreamingAnchor;
 pub use text::{Align, Text};
 pub use tilemap::{Tile, TileMeshCache, Tilemap};
 pub use timer::{TimerId, Timers};
@@ -106,3 +109,4 @@ pub use ui::{
     UiButton, UiControls, UiDropdown, UiHidden, UiLayout, UiOwnStyle, UiRect, UiScroll, UiSlice,
     UiSlider, UiSliderPart, UiStack, UiTab, UiTabs, UiTextField, UiTheme, UiToggle, UiTooltip,
 };
+pub use world_regions::{Region, WorldRegions, WorldRegionsError};

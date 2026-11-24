@@ -11,6 +11,11 @@
 //! queued jobs, so a pool of `n` workers runs `n + 1` jobs at once, and a
 //! job that opens a scope of its own cannot deadlock the pool.
 //!
+//! Work that spans frames — a region of a big world read and parsed while
+//! the game plays — is [`JobPool::submit`]ted instead: it returns a
+//! [`Task`] at once, polled each frame for its result, and only workers
+//! run it, so no frame's own scope waits behind it.
+//!
 //! **On the web** (`wasm32`) there are no threads: the pool has no workers
 //! and a job runs the moment it is spawned, so the bounds are
 //! [`MaybeSend`]/[`MaybeSync`] — `Send`/`Sync` natively, nothing there.
@@ -44,7 +49,9 @@ mod job;
 mod maybe;
 mod pool;
 mod scope;
+mod task;
 
 pub use maybe::{MaybeSend, MaybeSync};
 pub use pool::JobPool;
 pub use scope::Scope;
+pub use task::Task;

@@ -35,6 +35,7 @@ use crate::{
 ///
 /// Registration is explicit. A type that is not registered is not persisted,
 /// which is a property worth choosing rather than inheriting.
+#[derive(Clone)]
 pub struct ComponentRegistry {
     entries: Vec<Entry>,
 }
@@ -143,6 +144,9 @@ impl ComponentRegistry {
             .with_template();
         registry
             .register::<Persistent>("Persistent")
+            .with_template();
+        registry
+            .register::<crate::StreamingAnchor>(crate::StreamingAnchor::NAME)
             .with_template();
         registry.register::<Parallax>("Parallax").with_template();
         registry
