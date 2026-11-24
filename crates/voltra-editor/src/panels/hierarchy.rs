@@ -6,6 +6,10 @@
 //! hierarchy reparents: drop onto a row to become its child, drop below the
 //! tree to become a root. The drop is applied *after* the tree is drawn — a
 //! reparent while walking the links would change the list being walked.
+//!
+//! The search box over it filters the tree to what matches — by name, and
+//! by component with `t:` (see [`crate::search`]) — keeping each match's
+//! parents, dimmed, so it is shown where it lives.
 
 use std::collections::HashSet;
 
@@ -15,10 +19,12 @@ use voltra_core::egui::{
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_scene::hierarchy::{self, HierarchyError};
-use voltra_scene::{Name, SceneId};
+use voltra_scene::SceneId;
 
 use crate::drag;
 use crate::editor::Editor;
+use crate::search::hierarchy::{filter, label, HierarchyFilter};
+use crate::search::Query;
 use crate::selection::Click;
 
 mod reparent;
@@ -42,6 +48,8 @@ struct Walk {
     order: Vec<Entity>,
     request: Option<Reparent>,
     click: Option<(Entity, Click)>,
+    /// What a search left to show; `None` shows everything.
+    filter: Option<HierarchyFilter>,
 }
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
@@ -49,6 +57,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         .default_size(200.0)
         .show(ui, |ui| {
             ui.heading("Hierarchy");
+            ui.add(
+                egui::TextEdit::singleline(&mut editor.hierarchy_search)
+                    .hint_text("search: name, t:Sprite…")
+                    .desired_width(f32::INFINITY),
+            )
+            .on_hover_text("words in the name, and t: a component every match has");
             ui.separator();
 
             // Predicate is identity, not appearance — the same rule `Clear`
@@ -65,6 +79,25 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             }
 
             let mut walk = Walk::default();
+            let query = Query::parse(&editor.hierarchy_search);
+            if !query.is_empty() {
+                let found = filter(frame.world, &editor.registry, &query);
+                if !found.unknown.is_empty() {
+                    ui.label(
+                        RichText::new(format!(
+                            "no component is called {}",
+                            found.unknown.join(", ")
+                        ))
+                        .color(ui.visuals().error_fg_color),
+                    );
+                    return;
+                }
+                if found.matched.is_empty() {
+                    ui.label(RichText::new("no entity matches").italics().weak());
+                    return;
+                }
+                walk.filter = Some(found);
+            }
 
             // The whole tree is one drop zone, so releasing over the empty
             // space below the last row unparents. A row that took the payload
@@ -129,6 +162,15 @@ fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity
     if !walk.drawn.insert(entity) {
         return;
     }
+    // Under a search, a row is drawn if it matches or holds a match; a
+    // holder alone is dimmed, so the matches are what reads.
+    let text = match &walk.filter {
+        Some(found) if !found.shown.contains(&entity) => return,
+        Some(found) if !found.matched.contains(&entity) => {
+            RichText::new(label(frame.world, entity)).weak()
+        }
+        _ => RichText::new(label(frame.world, entity)),
+    };
     walk.order.push(entity);
 
     let selected = editor.selection.contains(entity);
@@ -139,9 +181,7 @@ fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity
     // the entity became almost impossible to select. `dnd_set_drag_payload`
     // publishes the payload on `drag_started` instead, so both gestures live on
     // one response and neither has to win a race with the other.
-    let response = ui
-        .selectable_label(selected, label(frame.world, entity))
-        .interact(Sense::drag());
+    let response = ui.selectable_label(selected, text).interact(Sense::drag());
 
     response.dnd_set_drag_payload(entity);
     if response.dragged() {
@@ -194,16 +234,6 @@ fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity
             row(editor, ui, frame, child, walk);
         }
     });
-}
-
-/// What a row calls this entity.
-fn label(world: &World, entity: Entity) -> String {
-    match world.get::<Name>(entity) {
-        Some(name) if !name.as_str().is_empty() => name.as_str().to_owned(),
-        // Unnamed, or named the empty string mid-rename. The index is what the
-        // inspector shows too, so the two panels agree.
-        _ => format!("Entity {}", entity.index()),
-    }
 }
 
 /// Scene entities the walk from the roots never reached.

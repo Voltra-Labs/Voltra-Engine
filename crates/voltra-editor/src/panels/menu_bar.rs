@@ -88,7 +88,14 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     scene_dialogs::save(editor, frame);
                     ui.close();
                 }
-                if ui.add(item("Save As…", "Ctrl+Shift+S")).clicked() {
+                if ui
+                    .add_enabled(
+                        !editor.prefab_mode.is_active(),
+                        item("Save As…", "Ctrl+Shift+S"),
+                    )
+                    .on_disabled_hover_text("a prefab is saved to its own file: Save writes it")
+                    .clicked()
+                {
                     scene_dialogs::show_save_as(editor, None);
                     ui.close();
                 }

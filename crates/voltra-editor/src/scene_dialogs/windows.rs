@@ -32,6 +32,10 @@ fn unsaved(editor: &mut Editor, ctx: &Context, frame: &mut UiFrame<'_>, then: Th
         Then::New => "making a new scene".to_owned(),
         Then::Open(path) => format!("opening {}", path.as_str()),
         Then::Quit => "closing".to_owned(),
+        Then::Back => format!(
+            "returning to {}",
+            editor.prefab_mode.returns_to().unwrap_or("the scene")
+        ),
     };
     let question = format!("Save changes to {} before {doing}?", editor.document.name());
     let error = editor.dialogs.unsaved_error.clone();

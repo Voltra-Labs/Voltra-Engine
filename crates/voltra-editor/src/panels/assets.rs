@@ -19,6 +19,7 @@ use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
 
 use crate::editor::Editor;
+use crate::search::{assets as search, Query};
 
 mod tile;
 
@@ -54,6 +55,14 @@ pub struct AssetBrowser {
     /// under the browser leaves an empty panel, and an empty panel that means
     /// "gone" must not look like an empty panel that means "nothing here".
     error: Option<String>,
+    /// What the search box holds. While it asks for something, the panel
+    /// shows what matches under the whole root instead of the folder.
+    search: String,
+    /// Every entry under the root, read for the search on the same
+    /// schedule as the listing, and only while there is one.
+    everything: Vec<Entry>,
+    /// When `everything` was read; `None` forces a walk.
+    walked: Option<Instant>,
 }
 
 impl AssetBrowser {
@@ -67,12 +76,32 @@ impl AssetBrowser {
     /// ages out: the editor just wrote a file the author expects to see.
     pub(crate) fn refresh(&mut self) {
         self.scanned = None;
+        self.walked = None;
     }
 
-    /// Moves to `dir` and reads it on the next frame.
+    /// Moves to `dir` and reads it on the next frame. Ends a search: a
+    /// folder picked out of the results is somewhere to look, not a match.
     pub(super) fn go(&mut self, dir: Option<AssetPath>) {
         self.dir = dir;
         self.scanned = None;
+        self.search.clear();
+    }
+
+    /// Puts `text` in the search box, as typing it does.
+    pub(crate) fn set_search(&mut self, text: &str) {
+        text.clone_into(&mut self.search);
+    }
+
+    /// What the search box asks for, matched against the whole root —
+    /// walked again first when the last walk is old enough to distrust, as
+    /// the listing is.
+    pub(crate) fn search_results(&mut self, root: &std::path::Path) -> search::AssetMatches {
+        let fresh = self.walked.is_some_and(|at| at.elapsed() < RESCAN);
+        if !fresh {
+            self.walked = Some(Instant::now());
+            self.everything = search::walk(root);
+        }
+        search::matching(&self.everything, &Query::parse(&self.search))
     }
 
     /// Reads the directory if the listing is old enough to distrust.
@@ -109,8 +138,24 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             ui.horizontal(|ui| {
                 ui.heading("Assets");
                 breadcrumb(&mut editor.assets, ui);
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut editor.assets.search)
+                            .hint_text("search: name, t:texture…")
+                            .desired_width(180.0),
+                    )
+                    .on_hover_text(
+                        "words in the name, and t: a kind — texture, atlas, sound, font, \
+                         scene, prefab, material, animation, animator, folder…",
+                    );
+                });
             });
             ui.separator();
+
+            if !Query::parse(&editor.assets.search).is_empty() {
+                results(editor, ui, frame);
+                return;
+            }
 
             if let Some(error) = editor.assets.error.clone() {
                 ui.label(RichText::new(error).color(ui.visuals().error_fg_color));
@@ -133,6 +178,32 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 });
             });
         });
+}
+
+/// What a search found under the whole root, as tiles, or why nothing.
+fn results(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
+    let found = editor.assets.search_results(frame.textures.root());
+    if !found.unknown.is_empty() {
+        ui.label(
+            RichText::new(format!(
+                "no kind of asset is called {}",
+                found.unknown.join(", ")
+            ))
+            .color(ui.visuals().error_fg_color),
+        );
+        return;
+    }
+    if found.entries.is_empty() {
+        ui.label(RichText::new("no asset matches").italics().weak());
+        return;
+    }
+    egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            for entry in &found.entries {
+                tile(editor, ui, frame, entry);
+            }
+        });
+    });
 }
 
 /// The path bar: the root, then one button per component of the current

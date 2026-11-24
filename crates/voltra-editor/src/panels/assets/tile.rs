@@ -7,6 +7,8 @@ use voltra_core::UiFrame;
 use crate::drag;
 use crate::editor::Editor;
 
+mod scene;
+
 /// Side of a tile's picture, in points.
 const TILE: f32 = 64.0;
 
@@ -85,18 +87,15 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
             "FSM",
             ui.visuals().widgets.active.bg_fill,
         ),
-        EntryKind::Scene => {
-            scene_tile(ui, entry, &response);
-            // Unity's and Godot's gesture: a double-click opens the scene,
-            // through "save changes?" like every other way to Open.
-            if response.double_clicked() {
-                crate::scene_dialogs::request(
-                    editor,
-                    frame,
-                    crate::scene_dialogs::Then::Open(entry.path.clone()),
-                );
-            }
-        }
+        EntryKind::Scene => scene::tile(editor, ui, frame, entry, &response),
+        // Dragged onto a sprite's material field.
+        EntryKind::Material => badge_tile(
+            ui,
+            entry,
+            &response,
+            "MAT",
+            ui.visuals().widgets.hovered.bg_fill,
+        ),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
         EntryKind::Other => paint_block(ui, rect, ui.visuals().faint_bg_color),
@@ -233,24 +232,14 @@ fn settings_tile(ui: &mut Ui, rect: Rect, kind: &str) {
     );
 }
 
-/// A scene tile: a block with a word on it, and the same drag. Dropped on the
-/// viewport, a scene is spawned as a prefab; double-clicked, it is opened.
-///
-/// A colour of its own rather than the sound's, so a folder holding both reads
-/// at a glance. Not a rendered thumbnail: that would mean spawning every scene
-/// on screen into a world of its own to draw it.
-fn scene_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
-    badge_tile(
-        ui,
-        entry,
-        response,
-        "SCENE",
-        ui.visuals().widgets.active.bg_fill,
-    );
-}
-
 /// A tile that is a coloured block with `text` on it, armed as a drag.
-fn badge_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response, text: &str, fill: Color32) {
+pub(super) fn badge_tile(
+    ui: &mut Ui,
+    entry: &Entry,
+    response: &egui::Response,
+    text: &str,
+    fill: Color32,
+) {
     paint_block(ui, response.rect, fill);
     let rect = picture(response.rect);
     ui.painter().text(

@@ -14,11 +14,23 @@ use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::undo::SceneView;
 
+/// The file name a prefab is given, by the engine's own convention: Create
+/// prefab writes one, and a double-click edits one in prefab mode.
+///
+/// Any scene can be instanced — a prefab is a scene file — so this is a
+/// name, not a kind of file: it says what its author meant it for.
+pub(crate) const PREFAB_SUFFIX: &str = ".prefab.ron";
+
+/// Whether `name` is named as a prefab.
+pub(crate) fn is_prefab_name(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(PREFAB_SUFFIX)
+}
+
 /// What a selection with no name, or one made only of characters a file name
 /// cannot hold, is written as.
 const FALLBACK: &str = "Prefab";
 
-/// How many `name N.ron` siblings are tried before giving up on a free name.
+/// How many `name N.prefab.ron` siblings are tried before giving up on a free name.
 ///
 /// A folder with a thousand copies of one prefab is something an author
 /// should be told about, not one the editor should quietly add to.
@@ -27,7 +39,9 @@ const MAX_SUFFIX: u32 = 1000;
 /// Writes the selection and its descendants to the browser's folder as a
 /// prefab, then links the selection to it, as one undo entry.
 ///
-/// Named after the selection, with a number appended when that file exists:
+/// Named after the selection, `<name>.prefab.ron` — the name that says a
+/// scene file is meant to be instanced, and that a double-click edits in
+/// prefab mode — with a number appended when that file exists:
 /// Unity's answer, and the one that cannot overwrite somebody's prefab with a
 /// menu click. The undo takes the link back off; the file stays, the way a
 /// Unity prefab asset outlives an undone Create — an undo that deleted files
@@ -86,7 +100,7 @@ pub(crate) fn create_from_selection(editor: &mut Editor, frame: &mut UiFrame<'_>
     editor.history.commit(view);
 }
 
-/// The first of `dir/name.ron`, `dir/name 1.ron`, `dir/name 2.ron`, … that
+/// The first of `dir/name.prefab.ron`, `dir/name 1.prefab.ron`, … that
 /// `exists` says is free, or `None` after [`MAX_SUFFIX`] tries.
 fn free_path(
     dir: Option<&AssetPath>,
@@ -96,8 +110,8 @@ fn free_path(
     let stem = file_stem(name);
     (0..=MAX_SUFFIX).find_map(|n| {
         let file = match n {
-            0 => format!("{stem}.ron"),
-            n => format!("{stem} {n}.ron"),
+            0 => format!("{stem}{PREFAB_SUFFIX}"),
+            n => format!("{stem} {n}{PREFAB_SUFFIX}"),
         };
         let raw = match dir {
             Some(dir) => format!("{}/{file}", dir.as_str()),
@@ -145,16 +159,16 @@ mod tests {
     fn a_free_name_is_used_as_it_is() {
         let found = free_path(Some(&path("prefabs")), "coin", |_| false);
 
-        assert_eq!(found, Some(path("prefabs/coin.ron")));
+        assert_eq!(found, Some(path("prefabs/coin.prefab.ron")));
     }
 
     #[test]
     fn a_taken_name_gets_the_first_free_number() {
-        let taken = [path("coin.ron"), path("coin 1.ron")];
+        let taken = [path("coin.prefab.ron"), path("coin 1.prefab.ron")];
 
         let found = free_path(None, "coin", |p| taken.contains(p));
 
-        assert_eq!(found, Some(path("coin 2.ron")));
+        assert_eq!(found, Some(path("coin 2.prefab.ron")));
     }
 
     #[test]

@@ -292,6 +292,41 @@ pub enum Command {
         #[serde(default)]
         record: Option<bool>,
     },
+    /// Opens a prefab on its own, over the open scene, as the asset
+    /// browser's "Edit as prefab" does: the file at `path`, or the one the
+    /// instance `entity` is part of — one of the two. Every edit then lands
+    /// in the prefab, with an undo history of its own; `save` writes its
+    /// file, and `prefab_close` returns.
+    PrefabOpen {
+        /// The prefab's asset path.
+        #[serde(default)]
+        path: Option<String>,
+        /// An entity of an instance, by id or path, whose prefab to open.
+        #[serde(default)]
+        entity: Option<String>,
+    },
+    /// Returns from the prefab being edited to the document it was opened
+    /// from, whose instances follow the prefab as last saved. Refused over
+    /// unsaved changes to the prefab unless `discard_changes`.
+    PrefabClose {
+        /// Return even over unsaved changes, dropping them.
+        #[serde(default)]
+        discard_changes: bool,
+    },
+    /// Puts `query` in the hierarchy's search box — words a name holds,
+    /// `t:Component` for a component every match has — and answers the
+    /// entities it matches and the rows kept to show where they are.
+    HierarchySearch {
+        /// What to search for; empty clears the search.
+        query: String,
+    },
+    /// Puts `query` in the asset browser's search box — words a file name
+    /// holds, `t:kind` for a kind (texture, sound, scene, prefab, atlas,
+    /// material…) — and answers what matches under the whole asset root.
+    AssetSearch {
+        /// What to search for; empty clears the search.
+        query: String,
+    },
 }
 
 impl Command {

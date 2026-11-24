@@ -90,6 +90,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 views(editor, ui, frame);
             });
         });
+        // A second row in prefab mode: where the author is, and the way
+        // back. Inside this panel rather than one of its own, which would
+        // shift the ids of every panel after it on the frame it came and
+        // went.
+        super::prefab_bar::show(editor, ui, frame);
     });
 }
 

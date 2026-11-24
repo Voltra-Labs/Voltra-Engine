@@ -16,6 +16,7 @@ pub use find::find;
 
 use crate::atlas::is_atlas;
 use crate::error::AssetError;
+use crate::material::is_material;
 use crate::path::AssetPath;
 use crate::watch::{
     is_animation, is_animator, is_bus_layout, is_clip, is_font, is_input_map, is_scene,
@@ -60,6 +61,9 @@ pub enum EntryKind {
     /// A file [`is_animator`](crate::watch::is_animator) accepts: a state
     /// machine an `Animator` runs — dragged onto its field.
     Animator,
+    /// A file [`is_material`](crate::material::is_material) accepts: a
+    /// shader and its parameters, dragged onto a sprite's material field.
+    Material,
     /// A file [`is_scene`](crate::watch::is_scene) accepts: a scene, which is
     /// also what a prefab is, so every one of them can be dropped in.
     Scene,
@@ -173,6 +177,9 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::Animation
         } else if is_animator(&name) {
             EntryKind::Animator
+        } else if is_material(&name) {
+            // Before scenes: `is_scene` takes any other `.ron`.
+            EntryKind::Material
         } else if is_scene(&name) {
             // After `Atlas`, which is a `.ron` too; `is_scene` refuses one
             // anyway, and the order says so without having to read it.
@@ -297,6 +304,7 @@ mod atlas_tests {
         std::fs::write(root.join("hero.animator.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("theme.clip.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("default.buses.ron"), "").expect("the fixture writes");
+        std::fs::write(root.join("flash.material.ron"), "").expect("the fixture writes");
 
         let entries = list(&root, None).expect("the root lists");
 
@@ -318,6 +326,7 @@ mod atlas_tests {
             "a clip's settings"
         );
         assert_eq!(kind("default.buses.ron"), Some(EntryKind::BusLayout));
+        assert_eq!(kind("flash.material.ron"), Some(EntryKind::Material));
         assert_eq!(
             kind("demo.ron"),
             Some(EntryKind::Scene),

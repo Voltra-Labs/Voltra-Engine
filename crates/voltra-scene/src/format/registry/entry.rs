@@ -28,6 +28,10 @@ pub(super) type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::er
 /// reports success.
 pub(super) type RemoveFn = fn(&mut World, Entity);
 
+/// Whether an entity has a registered type, without writing it out: what a
+/// search by component asks of every entity in a scene, every frame.
+pub(super) type HasFn = fn(&World, Entity) -> bool;
+
 /// A registered type's round trip: a stored value read as the type and
 /// written back, for comparing values whatever text they were stored as.
 pub(super) type NormalizeFn = fn(&RawValue) -> Result<Box<RawValue>, SceneError>;
@@ -52,6 +56,7 @@ pub(super) struct Entry {
     pub(super) save: SaveFn,
     pub(super) load: LoadFn,
     pub(super) remove: RemoveFn,
+    pub(super) has: HasFn,
     pub(super) normalize: NormalizeFn,
     /// For a type naming other entities by id; `None` for every other.
     pub(super) refs: Option<(RemapFn, RewriteFn)>,

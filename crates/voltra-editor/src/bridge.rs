@@ -10,8 +10,11 @@
 
 mod atlas;
 mod edits;
+mod prefab_mode;
 mod read;
+mod search;
 mod tiles;
+mod unsaved;
 
 use base64::Engine;
 use serde_json::{json, Value};
@@ -22,6 +25,7 @@ use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::scene_file;
 use crate::selection::Selection;
+use unsaved::{keep_unsaved, not_in_prefab_mode};
 
 /// Applies and answers whatever arrived since last frame.
 pub(crate) fn serve(editor: &mut Editor, frame: &mut UiFrame<'_>) {
@@ -46,6 +50,9 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             "entities": frame.world.query::<voltra_scene::SceneId>().count(),
             "undo": editor.history.undo_label(),
             "redo": editor.history.redo_label(),
+            // The documents a prefab is open over, the scene first; empty
+            // outside prefab mode.
+            "prefab_trail": editor.prefab_mode.trail().collect::<Vec<_>>(),
         })),
         Command::Read => read::entities(frame.world, &editor.registry),
         Command::Snap {
@@ -184,6 +191,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             discard_changes,
         } => {
             let path = scene_file::scene_path(path)?;
+            not_in_prefab_mode(editor)?;
             keep_unsaved(editor, *discard_changes)?;
             scene_file::open(editor, frame, &path)?;
             Ok(json!({
@@ -192,6 +200,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }))
         }
         Command::New { discard_changes } => {
+            not_in_prefab_mode(editor)?;
             keep_unsaved(editor, *discard_changes)?;
             scene_file::new_scene(editor, frame);
             Ok(json!({ "new": true }))
@@ -255,6 +264,12 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
                 "gone": report.gone,
             }))
         }
+        Command::PrefabOpen { .. } | Command::PrefabClose { .. } => {
+            prefab_mode::apply(editor, frame, command)
+        }
+        Command::HierarchySearch { .. } | Command::AssetSearch { .. } => {
+            search::apply(editor, frame, command)
+        }
         Command::Profile { frames, record } => {
             if let Some(record) = record {
                 voltra_profile::set_enabled(*record);
@@ -276,17 +291,4 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }))
         }
     }
-}
-
-/// Refuses to let unsaved changes go unless the caller said to: the person
-/// at the editor may be in the middle of them, and an AI must not throw
-/// their work away by accident.
-fn keep_unsaved(editor: &Editor, discard_changes: bool) -> Result<(), String> {
-    if editor.document.is_dirty(&editor.history) && !discard_changes {
-        return Err(format!(
-            "{} has unsaved changes: save it first, or pass discard_changes to drop them",
-            editor.document.name()
-        ));
-    }
-    Ok(())
 }

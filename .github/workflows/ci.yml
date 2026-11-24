@@ -160,6 +160,14 @@ jobs:
         if: runner.os == 'Linux'
         run: xvfb-run -a cargo test -p voltra-editor --test authoring -- --ignored
 
+      # Prefab mode and the searches through the same bridge: a prefab
+      # opened from an instance, edited with its own undo, saved, and the
+      # instances in the scene following it; the hierarchy and the assets
+      # searched by name and by type (crates/voltra-editor/tests/prefab_mode.rs).
+      - name: Prefab mode and search through the bridge
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test -p voltra-editor --test prefab_mode -- --ignored
+
       # A game made from the template builds natively, lints clean, and its
       # library loads and plays as the editor loads it (its tests/plugin.rs).
       # Linux only, like the lints: the template is the same on both.

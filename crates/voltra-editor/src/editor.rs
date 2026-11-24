@@ -94,6 +94,11 @@ pub struct Editor {
     pub(crate) atlas_editor: panels::atlas_editor::AtlasEditorWindow,
     /// The project's game, loaded from its library; see [`crate::game`].
     pub(crate) game: crate::game::GameHost,
+    /// The scenes set aside while a prefab is edited on its own; see
+    /// [`crate::prefab_mode`].
+    pub(crate) prefab_mode: crate::prefab_mode::PrefabMode,
+    /// What the hierarchy's search box holds; see [`crate::search`].
+    pub(crate) hierarchy_search: String,
 }
 
 impl Editor {

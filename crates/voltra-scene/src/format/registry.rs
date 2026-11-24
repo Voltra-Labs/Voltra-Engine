@@ -160,6 +160,7 @@ impl ComponentRegistry {
             remove: |world, entity| {
                 world.remove::<T>(entity);
             },
+            has: |world, entity| world.get::<T>(entity).is_some(),
             normalize: |value| {
                 let component: T = value.into_rust().map_err(SceneError::Parse)?;
                 RawValue::from_rust(&component).map_err(SceneError::Serialize)
@@ -294,6 +295,14 @@ impl ComponentRegistry {
             },
             other => other,
         }))
+    }
+
+    /// Whether `entity` has the component registered as `name`, or `None`
+    /// for an unregistered name. Asks the world, writing nothing out — what
+    /// the editor's `t:` search runs over every entity.
+    pub fn has(&self, world: &World, entity: Entity, name: &str) -> Option<bool> {
+        let entry = self.entries.iter().find(|e| e.name == name)?;
+        Some((entry.has)(world, entity))
     }
 
     /// Takes `name` off `entity`, returning whether the name was registered.

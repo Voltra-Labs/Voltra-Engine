@@ -6321,6 +6321,102 @@ merged full run, empty nothing; a shape change rebuilds; values by cell),
 `voltra-physics/tests/tile_slopes.rs`: a `CharacterBody2D` walked up a
 gentle slope of two tiles onto a platform, and up the same slope mirrored.
 
+### A prefab is edited on its own while the scene waits; search is Unity's `t:`
+
+Stage 106. Two editor gaps: a prefab could only be changed through an
+instance (edit it, Apply), and neither the hierarchy nor the asset browser
+could be searched.
+
+**Prefab mode** (`prefab_mode.rs`, `prefab_mode/swap.rs`). Opened from the
+asset browser (a double-click on a `*.prefab.ron`, or "Edit as prefab" on
+any scene tile's menu), from an instance's inspector ("Edit prefab"), or
+the bridge. The prior art splits two ways: Unity's Prefab Mode opens the
+asset as a temporary scene, alone or "in context" over the dimmed level,
+with a breadcrumb back; Godot opens the instanced scene in a tab of its
+own; Unreal opens a Blueprint editor. We have one world and one viewport,
+and nothing to dim with, so it is Unity's isolation mode:
+
+- **The scene is set aside whole**: its world written to a `SceneFile`
+  (play's snapshot, same rule: what has a `SceneId`), its
+  `SceneDocument`, `History`, selection and camera parked on a stack. The
+  prefab's file is read into the emptied world, and the prefabs nested in
+  it synced. A file that will not read puts the scene straight back.
+- **The prefab is a document like a scene**: every tool, the bridge's
+  edits and Save work on it unchanged. Save writes its file (refusing,
+  as `prefab::write` does, a file that would contain itself — one drag
+  away in this mode; now checked on every save, of a scene too) and
+  reloads it in the `Prefabs` store at once rather than waiting for the
+  watcher. Save As is not offered, Unity's rule: instances name the file.
+- **Back** puts the scene back from its snapshot, reloads the prefab,
+  and `sync_all`s — stage 64's sync, so instances follow the prefab as
+  last saved, but for what each overrides. The sync is not an undo entry,
+  as at Open or a hot reload. Unsaved prefab changes are asked about
+  through stage 72's "save changes?" (`Then::Back`); a New, Open or Quit
+  asked for in prefab mode leaves level by level, each document asked
+  about in turn, since the scene set aside has unsaved changes of its own.
+  The bridge refuses Open and New there instead (`prefab_close` first).
+- **History per document**: the parked `History` comes back as it was,
+  position and all, so the scene's `*` and Ctrl+Z are where they were and
+  an undo in the prefab never reaches the scene. Swapping the world
+  mid-frame would read as an edit to the watcher, so the outgoing history
+  closes its frame first and the incoming one is told to record nothing
+  this frame (`History::skip_frame`).
+- **Nested**: an instance inside the open prefab opens in turn; the
+  toolbar's second row shows the trail (`level.ron › coin.prefab.ron ›
+  gem.prefab.ron`) and Back returns one level. A path already on the
+  stack is refused.
+- **Deferred from panels**: a button asks (`PrefabMode::request_*`) and
+  `scene_dialogs::show` acts at the start of the next frame — an inspector
+  still drawing the entity must not have the world replaced under it.
+- **`*.prefab.ron`** names a prefab: Create prefab from selection now
+  writes `<name>.prefab.ron` (stage 90's options screen already used the
+  name). Any scene can still be instanced; the suffix says what its
+  author meant it for, which picks the double-click and `t:prefab`.
+
+**Search** (`search.rs`, `search/{hierarchy,assets}.rs`). Unity's syntax,
+which its Hierarchy and Project windows share: words a name holds (case
+aside, every word), `t:` a type. Godot filters by name only; `t:Camera`
+is what finds every camera in a large scene.
+
+- **Hierarchy**: `t:` is a registered component name (case aside); every
+  `t:` must hold, so `t:Sprite t:Collider` narrows. A match's ancestors
+  stay, dimmed — Godot's tree keeps the path; Unity flattens and loses
+  where a match lives. Asking each entity for a component through
+  `save_one` would write it out (a tilemap's chunks, per frame), so the
+  registry gains `ComponentRegistry::has`, a `world.get::<T>` per type.
+- **Assets**: the whole root, not the open folder (Unity's and Unreal's
+  search), walked on the listing's one-second schedule while a search is
+  up. `t:` is a kind — texture, atlas, sound, font, scene, prefab,
+  material, animation, animator, input, layers, buses, folder, with the
+  obvious aliases — and any of them may hold, since a file is one kind.
+  `.material.ron` files are now their own `EntryKind::Material` (they
+  were listed as scenes). A folder picked from the results is opened and
+  the search ends.
+- An unknown `t:` says so in the panel (and is an error on the bridge)
+  rather than showing an empty list with no reason.
+
+**Bridge**: `PrefabOpen { path | entity }`, `PrefabClose {
+discard_changes }`, `HierarchySearch { query }` (matches and the parents
+kept) and `AssetSearch { query }`; `Status` gains `prefab_trail`.
+
+**Not yet**: Unity's "in context" mode (the level drawn dimmed behind the
+prefab); a variant (a prefab of a prefab with overrides); searching by a
+component's field values.
+
+Pinned by `prefab_mode/swap.rs` tests (a prefab saved in its mode
+reaching the scene, an override kept; a prefab dropped into itself found
+before saving; a broken prefab leaving the scene to come back), `search`
+tests (words and types, the parents kept, `t:` narrowing, kinds and their
+aliases across folders), `History::skip_frame`'s test, the registry's
+`has`, and `voltra-editor/tests/prefab_mode.rs`: the editor under Xvfb, a
+level of two coin instances (one overriding its colour) searched by name
+and by component, the assets by name and kind; the coin opened from an
+instance, edited, undone, redone, given a child, refused a Save As and a
+Back over unsaved changes, saved; back in the level its history and `*`
+as they were, the plain instance green with the new child, the overriding
+one still blue; then an edit dropped on the way back reaching nothing.
+In CI beside the authoring test.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -6399,6 +6495,7 @@ Same problem, same rule: read the source, not a tutorial.
 | Strokes | `Painter::rect_stroke(rect, radius, stroke, StrokeKind)` takes a `StrokeKind` (`Inside`, `Middle`, `Outside`) |
 | `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before |
 | Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
+| Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes
 

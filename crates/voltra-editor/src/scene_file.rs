@@ -43,6 +43,9 @@ pub(crate) fn file_of(frame: &UiFrame<'_>, path: &AssetPath) -> PathBuf {
 pub(crate) fn new_scene(editor: &mut Editor, frame: &mut UiFrame<'_>) {
     // Silently: a new scene replaces the world the snapshot belongs to.
     editor.stop_play(frame);
+    // Every caller leaves prefab mode first; one that did not loses the
+    // scenes set aside, and is told.
+    editor.prefab_mode.abandon();
     // Identity, not appearance, decides what belongs to the scene — the
     // rule `save` uses — so what is left is exactly what was never saved.
     let all: Vec<Entity> = frame.world.query::<SceneId>().map(|(e, _)| e).collect();
@@ -82,6 +85,9 @@ pub(crate) fn open(
     let file = file_of(frame, path);
     voltra_scene::format::load(&file, &editor.registry, frame.world)
         .map_err(|e| format!("could not open {}: {e}", path.as_str()))?;
+    // As for a new scene: the world the scenes set aside belong under is
+    // going.
+    editor.prefab_mode.abandon();
     for entity in previous {
         frame.world.despawn(entity);
     }
@@ -119,6 +125,23 @@ pub(crate) fn save_as(
     if editor.stop_play(frame) {
         log::info!("stopped play so the saved scene is the authored one");
     }
+    if editor.prefab_mode.is_active() && editor.document.path() != Some(&path) {
+        return Err(format!(
+            "{} is a prefab, saved to its own file: Save writes it, and it cannot be saved as {}",
+            editor.document.name(),
+            path.as_str()
+        ));
+    }
+    // A file holding an instance of itself — a prefab dropped into its own
+    // mode, a level dropped into itself — is refused, as `prefab::write`
+    // refuses one.
+    if let Some(through) = crate::prefab_mode::cycle_through(frame.world, frame.prefabs, &path) {
+        return Err(format!(
+            "{} would contain itself, through the instance of {}: nothing saved",
+            path.as_str(),
+            through.as_str()
+        ));
+    }
     let file = file_of(frame, &path);
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent)
@@ -126,6 +149,9 @@ pub(crate) fn save_as(
     }
     voltra_scene::format::save(frame.world, &editor.registry, &file)
         .map_err(|e| format!("could not save {}: {e}", path.as_str()))?;
+    // Anything that spawns it next — a drop, a tick, prefab mode's way back
+    // — gets what was just written, not what the watcher has yet to see.
+    frame.prefabs.reload(&path);
     editor.document.saved(path, &editor.history);
     Ok(())
 }

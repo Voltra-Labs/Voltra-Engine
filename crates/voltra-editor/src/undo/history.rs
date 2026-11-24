@@ -236,6 +236,18 @@ impl History {
         self.watched.clear();
     }
 
+    /// Records nothing at the end of this frame, and forgets what it
+    /// watched: the scene was replaced under it wholesale — set aside for a
+    /// prefab, or brought back — so comparing the frame's start with its
+    /// end would record the swap as an edit. The entries are kept; the next
+    /// frame's [`History::watch`] starts afresh.
+    pub fn skip_frame(&mut self) {
+        self.watched.clear();
+        self.open = None;
+        self.claim = None;
+        self.recorded_this_frame = true;
+    }
+
     /// How many entries can be undone.
     ///
     /// The UI asks [`History::is_empty`] and [`History::undo_label`]; the count

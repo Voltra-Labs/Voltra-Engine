@@ -117,6 +117,19 @@ fn remove_one_is_false_for_an_unregistered_name() {
 }
 
 #[test]
+fn has_asks_the_world_by_name() {
+    let (world, entity) = world_with_one_sprite();
+    let registry = ComponentRegistry::with_defaults();
+    assert_eq!(registry.has(&world, entity, "Sprite"), Some(true));
+    assert_eq!(registry.has(&world, entity, "Collider"), Some(false));
+    assert_eq!(
+        registry.has(&world, entity, "Physics"),
+        None,
+        "unregistered"
+    );
+}
+
+#[test]
 fn removing_a_component_the_entity_lacks_is_not_an_error() {
     // The postcondition is "the entity does not have one", and it already
     // held. A caller making an entity match a record hits this for every
