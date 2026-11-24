@@ -5809,6 +5809,62 @@ and `office ffi` drawn headless and matched against
 letters drawn joined against the same letters kept apart by zero-width
 non-joiners.
 
+### Lines break at UAX #14 opportunities and read in bidi order; arrows move visually
+
+Stage 92. Hebrew inside English reads right to left without turning the
+English around, a Japanese paragraph wraps between its characters, and a
+text field's arrows go the way they point.
+
+- **Bidi is per paragraph and per line** (the layout's steps 1 and 5,
+  stage 91): `ParagraphBidiInfo` with the direction found from the first
+  strong character (UAX #9 P2–P3), levels per byte; runs never cross a
+  level change, and each line's glyphs are put in visual order by
+  `reorder_visual` over their levels after `reordered_levels` has applied
+  L1 to that line. HarfBuzz returns a right-to-left run in visual order;
+  we keep shaped glyphs in logical order (reversed) so the line breaker
+  sees the text's order, and the reorder turns them back — a multi-glyph
+  cluster keeps HarfBuzz's own glyph order through both reversals.
+- **Alignment stays physical.** `Align::Left` is the left edge in a
+  right-to-left paragraph too, as Godot's `HORIZONTAL_ALIGNMENT_LEFT` and
+  Unity's `TextAlignment.Left` are; a start/end alignment is a later,
+  additive choice.
+- **Line breaking is UAX #14** (`unicode-linebreak`): a line may end only
+  at an opportunity — after a space, between two ideographs, after a hyphen
+  — and not before `。` or after `「`. Greedy as before (Godot's and
+  Unity's), measured on whole clusters, so a ligature or a conjunct never
+  splits; trailing white space hangs and is dropped at a wrap; a word wider
+  than the line still breaks between clusters; a mandatory break inside a
+  paragraph (U+2028) breaks it. With no width only the mandatory breaks
+  apply and nothing is dropped, so a field's trailing space keeps its stop.
+- **Caret stops** (`TextLayout::carets`): one before every character of
+  the string, in its order, and one after each paragraph's last — at the
+  character's leading edge: its left in left-to-right text, its right in
+  right-to-left. A cluster's width is shared among its characters, so
+  `ffi` has stops inside its one glyph, as browsers give it.
+  `shape::caret_stops_at` hands the first line's to the text field.
+- **The text field moves visually**: `UiTextField::take_measured` measures
+  its text as each arrow finds it, and Left/Right step to the next caret
+  stop by x (`text_field/visual.rs`), so in a mixed line the right arrow
+  walks right on screen, backward through the Hebrew word. Word steps,
+  Home and End stay logical, as a browser's `<input>` and Godot's
+  `LineEdit` have them; Unity's `InputField` moves logically everywhere,
+  which sends the caret the wrong way in Hebrew. Without a font to measure
+  with, the arrows stay logical. Where two logical positions share an x (a
+  run boundary) they are visited one after the other. A selection over a
+  run boundary is drawn as one band between its ends' stops: right for one
+  direction, approximate for mixed (a browser draws one band per run).
+
+Pinned by `fonts/bidi_tests.rs` (Hebrew inside English in visual order and
+the English kept; English inside a Hebrew paragraph on its left; digits in
+Arabic left to right; mixed caret stops, the Hebrew's from its right end; a
+Japanese paragraph wrapped within its width with nothing dropped; `。` never
+starting a line; a hyphen as a break; a wrapped right-to-left paragraph
+keeping its first word on the first line), `text_field/visual.rs` (steps in
+LTR, RTL and a mixed line; stops that do not fit move nothing) and
+`text_field/tests.rs` (`in_visual_order`: the right arrow walks a real
+`ab שלום` field through every position, x never decreasing, back through
+the Hebrew; the left arrow walks it back; no font, logical).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -352,3 +352,6 @@ mod tests;
 
 #[cfg(test)]
 mod shaping_tests;
+
+#[cfg(test)]
+mod bidi_tests;

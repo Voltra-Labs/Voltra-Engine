@@ -17,6 +17,7 @@ use super::toggle::UiToggle;
 use super::UiRect;
 use crate::hierarchy;
 use crate::sprite::Sprite;
+use crate::text::Text;
 
 pub use focus::is_control;
 
@@ -175,9 +176,15 @@ impl UiControls {
 
         self.navigate(world, layout, input.navigation);
         if let Some(field) = self.editing(world) {
+            // Measured as the field's text is drawn, so the arrows step in
+            // visual order through mixed-direction text.
+            let style = world.get::<Text>(field).cloned();
+            let measure = |content: &str| -> Option<Vec<f32>> {
+                view::stops(style.as_ref()?, content, fonts?)
+            };
             let edited = world
                 .get_mut::<UiTextField>(field)
-                .map(|f| f.take(&input.text))
+                .map(|f| f.take_measured(&input.text, &measure))
                 .unwrap_or_default();
             self.mark(field, edited.changed, edited.submitted);
         }

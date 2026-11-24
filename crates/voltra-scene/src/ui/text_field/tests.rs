@@ -155,3 +155,81 @@ fn enter_submits() {
     });
     assert!(edited.submitted && !edited.changed);
 }
+
+mod in_visual_order {
+    use super::*;
+    use crate::text::Text;
+    use voltra_assets::{AssetPath, Fonts, DEFAULT_FONT};
+    use voltra_testkit::{copy_workspace_asset, scratch_root, NOTO_HEBREW};
+
+    fn fonts() -> Fonts {
+        let root = scratch_root();
+        copy_workspace_asset(&root, DEFAULT_FONT);
+        copy_workspace_asset(&root, NOTO_HEBREW);
+        let mut fonts = Fonts::new(root);
+        fonts.set_fallbacks(&[AssetPath::new(NOTO_HEBREW).expect("a path")]);
+        fonts
+    }
+
+    fn style(fonts: &Fonts) -> Text {
+        Text {
+            size: 20.0,
+            font_handle: Some(fonts.default_font()),
+            ..Text::new("")
+        }
+    }
+
+    fn press(field: &mut UiTextField, edit: Edit, fonts: &Fonts, style: &Text) {
+        let measure = |content: &str| view::stops(style, content, fonts);
+        field.take_measured(
+            &TextInput {
+                keys: vec![key(edit)],
+                ..TextInput::default()
+            },
+            &measure,
+        );
+    }
+
+    #[test]
+    fn the_right_arrow_walks_a_mixed_line_rightward_on_screen() {
+        let fonts = fonts();
+        let style = style(&fonts);
+        let mut field = UiTextField::with_text("ab שלום");
+        field.place_caret(0, false);
+        let stops = view::stops(&style, &field.text, &fonts).expect("measured");
+
+        let mut visited = vec![field.caret];
+        for _ in 0..20 {
+            press(&mut field, Edit::Right, &fonts, &style);
+            if visited.last() == Some(&field.caret) {
+                break;
+            }
+            visited.push(field.caret);
+        }
+        let xs: Vec<f32> = visited.iter().map(|i| stops[*i]).collect();
+        assert!(xs.windows(2).all(|w| w[1] >= w[0]), "{visited:?} at {xs:?}");
+        assert_eq!(visited.len(), stops.len(), "every position: {visited:?}");
+        // Inside the Hebrew word, a right arrow moves back through it.
+        assert!(visited.windows(2).any(|w| w[1] < w[0]), "{visited:?}");
+
+        // And the left arrow walks it back.
+        for _ in 0..20 {
+            press(&mut field, Edit::Left, &fonts, &style);
+        }
+        assert_eq!(stops[field.caret], xs[0]);
+    }
+
+    #[test]
+    fn without_a_font_the_arrows_stay_logical() {
+        let mut field = UiTextField::with_text("שלום");
+        field.place_caret(0, false);
+        field.take_measured(
+            &TextInput {
+                keys: vec![key(Edit::Right)],
+                ..TextInput::default()
+            },
+            &|_| None,
+        );
+        assert_eq!(field.caret, 1);
+    }
+}
