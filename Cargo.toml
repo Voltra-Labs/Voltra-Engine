@@ -35,7 +35,7 @@ bytemuck = { version = "1.25.2", features = ["derive"] }
 glam = { version = "0.33.3", features = ["bytemuck", "serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 # Scene files are authoring artefacts: read in a pull request, merged in git.
-ron = "0.12.2"
+ron = "0.12.3"
 # The MCP server (`voltra-mcp`): the official Rust SDK over stdio, its async
 # runtime, and what tool arguments and answers are made of.
 rmcp = { version = "3.11.0", default-features = false, features = ["server", "macros", "transport-io"] }
