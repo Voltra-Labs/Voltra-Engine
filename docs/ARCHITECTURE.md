@@ -7357,13 +7357,14 @@ moves only when the code it times does:
 | Benchmark | Times |
 | --- | --- |
 | `batch/sprites/{10k,50k,100k}` | `SpriteBatch::rebuild` of N sprites in a grid, all in view, over 8 textures — the draw path's per-frame build |
-| `batch/upload/100k` | `SpriteBatch::upload`: the 100k-quad mesh's buffers made on the device (lavapipe) — the step into `voltra-render` |
+| `batch/upload/100k` | the 100k-quad batch written to the device (lavapipe) as the draw path writes it — since stage 108 into kept buffers (`SpriteBatch::upload_into`) and submitted; stage 107 timed fresh buffers (`SpriteBatch::upload`) |
 | `tilemap/mesh/256x256` | `tilemap::mesh::push`: a 65 536-tile layer meshed from nothing |
 | `tilemap/cached/256x256` | the same layer through `TileMeshCache`, nothing changed: a steady frame |
 | `physics/step/1k-bodies` | 50 columns of 20 boxes, every body awake and touching; 10 steps from placement, reported per step |
 | `physics/pile/settle-210` | a 20-row pyramid, 120 steps (2 s) from placement, per step |
 | `ui/layout/1k-elements` | `UiLayout::from_world` on a column of 50 row stacks of 19 cells |
-| `text/layout/{paragraph-1k,labels-100}` | `Font::layout`: 1 000 characters wrapped at 400 px; 100 HUD labels |
+| `text/layout/{paragraph-1k,labels-100}` | `Fonts::layout_uncached`: 1 000 characters shaped and wrapped at 400 px; 100 HUD labels — what a changed text costs |
+| `text/layout/{paragraph-1k,labels-100}-cached` | the same through `Fonts::layout`'s cache, warm (stage 108) — what a frame showing the same text again costs |
 | `scene/parse/{250,500}-entities`, `scene/load/250-entities` | `ron::from_str::<SceneFile>`, and that plus `from_scene_file` |
 | `frame/headless/sandbox-640x360` | `Headless::screenshot` of `sandbox.ron`: record, submit, lavapipe, read back |
 
@@ -7460,26 +7461,31 @@ A hosted runner is another machine; its noise is in every run's artifact,
 and a threshold that proves too tight or too loose there is re-set from
 `voltra-bench noise` over those files, not guessed.
 
-**Budgets** — the targets stage 108 works toward, on this machine's CPU
-(lavapipe for the GPU rows). "Now" is the best of the second session's 12
-runs:
+**Budgets** — the targets stage 108 worked toward, on this machine's CPU
+(lavapipe for the GPU rows). "107" is the best of stage 107's second
+session; "108" is the best of three runs after stage 108 (see "Sprites are
+drawn as instanced quads" below for what changed each number). The text
+rows were re-set in stage 108: stage 91's shaped layouts replaced the
+glyph-by-glyph layout the first budgets were written against.
 
-| Benchmark | Now | Budget | Why that number |
-| --- | --- | --- | --- |
-| `batch/sprites/100k` | 11.5 ms | 4 ms | 100k sprites at 60 fps leaves 16.7 ms for everything, and the batch may take a quarter. Expanding quads on the CPU will not get there: instancing (a record per sprite, corners in the shader) is the likely route |
-| `batch/sprites/10k` | 1.35 ms | 0.4 ms | the same share of a frame for a typical level |
-| `batch/upload/100k` | 8.2 ms | 2 ms | a fresh buffer pair every frame today; a persistent buffer written with `write_buffer` (the batch's own doc names it) |
-| `tilemap/mesh/256x256` | 2.4 ms | 2 ms | an edit rebuilds one chunk, a full rebuild happens on load: nearly met |
-| `tilemap/cached/256x256` | 0.73 ms | 0.5 ms | 65k cached tiles copied a frame; instanced tiles would skip the copy |
-| `physics/step/1k-bodies` | 0.75 ms | 2 ms | met. The plan's "2k active bodies under 4 ms" is this budget doubled |
-| `physics/pile/settle-210` | 0.42 ms | 1 ms | met |
-| `ui/layout/1k-elements` | 0.15 ms | 0.25 ms | met |
-| `text/layout/paragraph-1k` | 23 µs | 50 µs | met; laid out on every frame it shows |
-| `text/layout/labels-100` | 69 µs | 100 µs | met; a HUD's worth every frame, which cached layouts would make free |
-| `scene/parse/250-entities` | 97 ms | 5 ms | **quadratic**: 500 entities take 4×, 1 000 take 1.5 s, 2 000 take 6 s. `ron` rescans the rest of the input for every untyped number (`ron` 0.12 notes). Budget: linear, `parse/500` at most 2.2 × `parse/250` |
-| `scene/parse/500-entities` | 375 ms | 10 ms | as above; stage 109's regions need a 10k-entity level in well under a second |
-| `scene/load/250-entities` | 97 ms | 10 ms | the parse is nearly all of it today |
-| `frame/headless/sandbox-640x360` | 2.5 ms | 8 ms | met on a software rasterizer. 100k sprites at 60 fps on the reference GPU needs a windowed run, which CI cannot make: stage 108 measures it by hand |
+| Benchmark | 107 | 108 | Budget | Why that number |
+| --- | --- | --- | --- | --- |
+| `batch/sprites/100k` | 11.5 ms | 6.3 ms | 4 ms | **not met.** 100k sprites at 60 fps leaves 16.7 ms for everything, and the batch may take a quarter. What is left is memory: 100k sprites' components read, matrices composed and instances written, ~60 ns a sprite on this 2.3 GHz shared Xeon. The next step is building the batch on the job pool in chunks (the sorted list splits cleanly; `Sheets` and the ECS storages are not `Sync` yet) |
+| `batch/sprites/10k` | 1.35 ms | 0.57 ms | 0.4 ms | not met, for the same reason at a tenth of the size |
+| `batch/upload/100k` | 8.2 ms | 0.64 ms | 2 ms | met: kept buffers written with `write_buffer`, and 64 bytes a quad rather than 152 |
+| `tilemap/mesh/256x256` | 2.4 ms | 1.5 ms | 2 ms | met; an edit rebuilds one chunk, a full rebuild happens on load |
+| `tilemap/cached/256x256` | 0.73 ms | 0.31 ms | 0.5 ms | met: 65k cached tiles copied a frame as instances, no indices |
+| `physics/step/1k-bodies` | 0.75 ms | 0.54 ms | 2 ms | met. The plan's "2k active bodies under 4 ms" is this budget doubled |
+| `physics/pile/settle-210` | 0.42 ms | 0.33 ms | 1 ms | met |
+| `ui/layout/1k-elements` | 0.15 ms | 0.10 ms | 0.25 ms | met (stages 88–106 had taken it to 0.30 ms) |
+| `text/layout/paragraph-1k` | 349 µs | 325 µs | 500 µs | met. Shaping a changed paragraph once: 3 % of a frame, paid on the frame it changes |
+| `text/layout/labels-100` | 1.5 ms | 0.77 ms | 1 ms | met. Every label of a HUD changing in one frame is the worst case; a timer or a score changes one or two |
+| `text/layout/paragraph-1k-cached` | — | 0.28 µs | 5 µs | met; laid out on every frame it shows |
+| `text/layout/labels-100-cached` | — | 7.9 µs | 25 µs | met; a HUD's worth every frame |
+| `scene/parse/250-entities` | 97 ms | 3.4 ms | 5 ms | met, and **linear**: `parse/500` is 1.95 × `parse/250` (budget: at most 2.2 ×) |
+| `scene/parse/500-entities` | 375 ms | 6.6 ms | 10 ms | met; stage 109's regions need a 10k-entity level in well under a second (~130 ms at this rate) |
+| `scene/load/250-entities` | 97 ms | 4.5 ms | 10 ms | met |
+| `frame/headless/sandbox-640x360` | 2.5 ms | 2.3 ms | 8 ms | met on a software rasterizer. 100k sprites at 60 fps on the reference GPU needs a windowed run on that GPU; see stage 108's hand measurement |
 
 Pinned by `compare/tests.rs` (the same numbers pass; past the threshold
 regresses and within it does not; faster is no failure; `--threshold`
@@ -7491,6 +7497,102 @@ number, the best of runs and its spread, skips), `stats.rs`, `harness.rs`
 (setup is not timed, the per-step divisor), `noise.rs` (spread, the
 interleaved A/A, the suggestion) and `suite.rs` (unique names; every CPU
 benchmark runs once). In CI as the `bench` job.
+
+### Sprites are drawn as instanced quads, and every speed-up is a measured one
+
+Stage 108. Stage 107's budgets met where the numbers allowed, each change
+kept only when `cargo xtask bench --compare` showed it (best of three runs a
+side, the same shared machine, one session: `before` is merge-107 plus the
+text fix, `after` is this stage). The budgets table above has the result.
+
+**Quads are instances.** A `SpriteBatch` quad — sprite, tile, glyph, CPU
+particle, interface piece — is one `QuadInstance` (`voltra-render/quad.rs`):
+corner 0, the two edges leaving it, the same three for the UVs, and a
+colour, 64 bytes. The vertex stage makes the six corners from
+`@builtin(vertex_index)` (`shaders/quad.wgsl`, prepended to every
+sprite-batch shader). A quad was four `Vertex`es and six indices, 152 bytes
+written per sprite per frame and uploaded. Any 2D affine transform keeps a
+rectangle a parallelogram, so nothing is lost: turned, sheared, flipped,
+parented, a tile turned a quarter (an affine UV map). Corners some caller
+made up that are no parallelogram are drawn as two triangles instead
+(`batch/placed.rs`), so `push_quad` still takes any four corners. Lines,
+polygons and trails stay indexed triangles. Bevy draws its sprites as
+instances since 0.13 for the same reason, and Godot 4's canvas renderer
+batches rects into per-instance arrays; Unity's dynamic batching expands
+on the CPU, which is what we measured as too slow.
+
+- A `SpriteRange` (and `MeshDraw`) now draws `Primitives::Quads(range)` or
+  `Primitives::Triangles(range)`, one kind a range; a run never grows across
+  a change of kind, keeping painter's order exactly.
+- Each sprite-batch shader has two vertex entry points over one fragment
+  stage, built as a `SpritePipeline` pair (`pipeline/sprite.rs`): the flat
+  colour pipeline, the light-layer and normal passes, and every material —
+  `material::compose` puts the quad stage in the prelude, so material
+  sources are unchanged. Light layers and normal maps read the same
+  corners.
+- WebGL2: instancing and `gl_VertexID` are core; a draw's first instance is
+  emulated by wgpu's GL backend, which offsets the instance buffer's binding
+  (`wgpu-hal` `gles/command.rs`, `prepare_draw`). Both Playwright tests
+  (`first-frame.mjs`, `materials.mjs`) pass on WebGPU and WebGL2.
+
+**Kept buffers.** `MeshBuffers` (`mesh/buffers.rs`) holds the batch's three
+GPU buffers from frame to frame, rewritten with `Queue::write_buffer`, grown
+to the next power of two and cut back below a quarter use. The window and
+viewport paths write the world's batch into it (`SpriteBatch::upload_into`);
+one-off draws (screenshots of camera shots, tests) keep `upload`. Bevy's
+`RawBufferVec` and Godot's canvas buffers are the same idea. Several writes
+before one submit would overwrite each other, which is why the camera-shot
+path, which submits per shot, keeps fresh buffers.
+
+**What each change bought** (100k sprites unless named; best of 3):
+
+| Change | Before → after |
+| --- | --- |
+| Instances + kept buffers | `batch/upload/100k` 8.9 → 1.0 ms; `tilemap/cached` 0.72 → 0.31 ms; `batch/sprites/100k` *slower*, 14.7 → 17.9 ms: the parallelogram check per quad and an enum of 132 bytes moved per push, until the next rows |
+| Sprite and tile quads built without the parallelogram check (rectangles by construction), the batch's list built by plain loops instead of an eight-deep iterator chain, the last sorting layer's rank kept, no list allocated per entity for parallax copies | sprites 17.9 → 9.6 ms (probe) |
+| `Transform::matrix` skips `sin_cos` for an unturned transform (the same bits: sin ±0 = ±0, cos 0 = 1; pinned by a test) and `WorldTransforms` reuses its storage and the queried transform | transforms 3.5 → 0.9 ms of it |
+| The ECS keys its storages by `TypeId` with `FastHasher`, not SipHash — every `get` and `query` hashed one | sprites → 6.0 ms; `physics/step` 0.77 → 0.55 ms, `physics/pile` 0.44 → 0.35 ms, `ui/layout` 0.30 → 0.23 ms for free |
+| `UiLayout` maps on `FastHasher`; an element its stack already placed skips the hidden-ancestor walk | `ui/layout` 0.23 → 0.10 ms |
+| `ron` 0.12.2 → 0.12.3 | `scene/parse/250` 96 → 3.4 ms, `parse/500` 377 → 6.6 ms (linear), `scene/load` 97 → 4.5 ms |
+| A font's `rustybuzz::Face` kept with its bytes (`self_cell`) instead of made per layout, and shape plans kept per face, direction, script and language | `text/layout/labels-100` 1.54 → 0.77 ms; `paragraph-1k` 347 → 325 µs |
+| A `query2` that returns early when no entity holds the second type | no change measured: not kept |
+
+**Scenes: an upgrade, not a parser of our own.** `ron` 0.12.3 (released a
+month before this stage) bounds `next_bytes_is_float`'s search for `..` to
+the number's own characters. The other options were worse: parsing
+components typed would need the registry at parse time and still read
+unknown components raw; a pre-pass handing the parser per-component slices
+leaves one large component (a tilemap) quadratic. The file format and the
+`RawValue` round trip are unchanged; 0.12.3 also trims non-comment
+whitespace around a nested `RawValue` on read, which only makes a re-saved
+file's unknown components stop gaining blank space. The public load API is
+untouched (stage 109 builds on it).
+
+**Text.** Stage 91's shaped layouts made both text rows ten times their
+budgets, which were written for the old layout. Shaping is now cheaper per
+call (above) and the budgets say what each case costs: a changed text pays
+the uncached row once, and every frame after pays the cached row — a hash
+and a compare. The new `-cached` rows' thresholds (25 %) are a first guess,
+to be re-set from `voltra-bench noise` once CI has runs of them.
+
+**100k sprites at 60 fps, by hand.** This machine has no GPU, so the claim
+on the reference GPU stays unmeasured. What could be measured, headless on
+lavapipe (a CPU rasterizer on the same 4 shared cores), 100k unit sprites
+all in view through `Headless::screenshot`: 47 ms a frame at 320×180,
+56 ms at 1280×720 (10k sprites: 5 ms and 11 ms; none: 0.7 ms and 5.5 ms).
+The CPU's share of it — batch 6.3 ms plus upload 0.6 ms — is under half a
+60 fps frame; the rest is lavapipe running the vertex and fragment stages
+in software. A windowed run on the reference GPU is still owed.
+
+Pinned by `voltra-render`'s `quad.rs` tests (layout matches the struct,
+corners round-trip, a turned tile's UVs, a kite refused) and
+`tests/headless_quads.rs` (an instance draws what its two triangles draw,
+texels and all; quads and triangles keep painter's order between them;
+kept buffers grow, are reused, shrink, and draw the last write), the scene
+batch, cull, material, tilemap-cache (cached and fresh are the same
+instances) and `placed.rs` tests, `transform.rs`'s bit-for-bit test, every
+headless screenshot test of `voltra-scene` and `voltra-render`, and the two
+Playwright tests on both backends.
 
 ### wgpu 30 API notes
 
@@ -7531,6 +7633,8 @@ Verified against the crate source, not from memory:
 | GL `VIEW_FORMATS` | The GL backend (WebGL2 included) never sets `DownlevelFlags::VIEW_FORMATS`; a texture declaring `view_formats` fails validation there |
 | Device lost | `device.set_device_lost_callback(callback)`, a `Fn(DeviceLostReason, String)`; natively it fires only on loss or an explicit `destroy`, not on drop |
 | Headless Chromium | WebGPU canvases need `--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=vulkan --enable-unsafe-swiftshader`; on ANGLE's GL path the swap chain's shared image cannot be made and the device is lost on the first present |
+| Instanced draws on GL | `draw(vertices, first..end)` with a non-zero first instance works on WebGL2, which has no base instance: `wgpu-hal`'s GLES backend rebinds each instance-stepped buffer at `offset + first_instance * stride` (`gles/command.rs`, `prepare_draw`). `@builtin(vertex_index)` is GLSL ES 3.0's `gl_VertexID` |
+| `Queue::write_buffer` ordering | Writes land before the next `submit`'s commands and after every earlier submit's: two writes to one buffer before one submit leave only the second for every draw of that submit |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7
@@ -7659,4 +7763,5 @@ Both differ from most training data and from every tutorial written against
 
 | Thing | 0.12.2 |
 | --- | --- |
-| Untyped numbers are quadratic | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
+| Untyped numbers are quadratic (**fixed in 0.12.3**, which the workspace pins since stage 108: the search is bounded to the number's own characters) | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
+| `RawValue` whitespace (0.12.3) | Non-comment whitespace around a nested `RawValue` is trimmed when it is read, so a pretty-printed file read and written again no longer grows blank space around unknown components |
