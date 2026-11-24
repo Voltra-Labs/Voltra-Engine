@@ -7,6 +7,7 @@
 
 mod dist;
 mod files;
+mod guide;
 mod new_game;
 mod pack;
 mod web;
@@ -31,7 +32,10 @@ Tasks:
   new-game NAME [--title TITLE]
         Make games/NAME: a game crate the editor loads and plays, with its
         build.ron, a first scene and a test that loads it as the editor
-        does";
+        does
+  guide
+        Run the user guide's checked commands (docs/guide), in order, as
+        someone following it from a clean checkout would";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -39,6 +43,7 @@ fn main() -> ExitCode {
         Some("dist") => dist_command(args),
         Some("pack") => pack_command(args),
         Some("new-game") => new_game_command(args),
+        Some("guide") => guide::run(&workspace_root()),
         Some("-h" | "--help") | None => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;

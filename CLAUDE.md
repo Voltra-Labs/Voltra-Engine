@@ -42,6 +42,7 @@ cargo test -p voltra-platformer --test hot_reload -- --ignored  # hot reload end
 cargo xtask dist                                            # package build.ron into dist/
 cargo xtask dist --web                                      # the same for the browser (docs/WEB.md)
 cargo xtask new-game my-game                                # a game crate in games/ (docs/ARCHITECTURE.md, stage 78)
+cargo xtask guide                                           # run docs/guide's <!-- ci --> blocks, as CI does
 cargo build --workspace
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings       # must be clean
@@ -68,7 +69,9 @@ crates/
 games/
   platformer/        sample game crate: a library the editor loads, a binary that ships
                      (`cargo xtask new-game` makes more, from crates/xtask/template/)
-docs/                ARCHITECTURE.md, CONVENTIONS.md, MCP.md, WEB.md
+  breakout/, dodge/  two more sample games (physics events; timers, tweens, sensors)
+docs/                ARCHITECTURE.md, CONVENTIONS.md, MCP.md, WEB.md,
+                     guide/ (the user guide; its <!-- ci --> blocks run in CI)
 ```
 
 ## Hard rules
@@ -88,6 +91,8 @@ docs/                ARCHITECTURE.md, CONVENTIONS.md, MCP.md, WEB.md
   from the planned list in ARCHITECTURE.md.
 - No `unwrap()` outside tests. `expect("why this cannot fail")` when the
   invariant is real. Log via `log`, never `println!`.
+- Every public item has a doc comment: each library crate sets
+  `#![warn(missing_docs)]`, so clippy `-D warnings` fails on one missing.
 - **One concept per file, one responsibility per folder.** Split a module into
   a directory around ~300 lines or a second concept; prefer `foo.rs` + `foo/`
   over `foo/mod.rs`. If describing a file needs "and", it is two files. Do not

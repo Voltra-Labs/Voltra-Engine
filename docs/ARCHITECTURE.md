@@ -5511,6 +5511,39 @@ web on a touch screen, a finger held and slid right on its stick through
 Chromium's touch input, and the walker walking right — on WebGPU and
 WebGL2, in CI.
 
+### The guide is checked by running it; every public item is documented
+
+Stage 87, version 0.1: a base is solid when someone else can use it.
+
+- **`docs/guide/`**: seven chapters — install, a first scene, a first game
+  crate, physics, UI, audio, export — written for someone who has not read
+  this file. A shell block right under a `<!-- ci -->` line is a checked
+  step: `cargo xtask guide` (`crates/xtask/src/guide.rs`) runs every such
+  block, chapter by chapter in file order, with `bash -e` from the
+  workspace root, and fails on the first that does. CI runs it in the web
+  job (it needs the wasm target and `wasm-bindgen`): a game made with
+  `new-game`, tested, and built with `dist --web` into a folder whose page,
+  wasm and pack are checked to exist. Rust's doctests were the alternative
+  and were rejected — the steps are shell, not Rust, and a guide's prose
+  around them should read as a guide, not as a crate's API docs. Blocks
+  without the mark (launching the editor, `apt-get`, a local server) are
+  for the reader only: they need a display, root or a forever-running
+  process. A guide that drifts from the tree now fails the build, which is
+  the only thing that keeps one honest.
+- **`#![warn(missing_docs)]`** on every library crate, with clippy's
+  `-D warnings` making it an error: every public type, field, variant and
+  function says what it is. The generated game's template carries it too,
+  so a game started from it begins documented.
+- **Two more sample games**, each a `new-game` crate grown, each with a
+  headless `tests/level.rs` that plays it: `breakout` (a no-gravity ball
+  with a bounce of one, bricks taken on `Touch::Began`, the paddle tilting
+  the rebound, a lost ball served again) and `dodge` (rocks spawned by a
+  timer that quickens, kinematic sensors, a tween fading the player out
+  when hit). With the platformer they cover physics events, characters,
+  timers, tweens and the HUD — what the guide points at for "more".
+- **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
+  The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

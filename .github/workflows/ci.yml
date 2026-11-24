@@ -87,11 +87,10 @@ jobs:
         run: node crates/voltra-player/web/test/materials.mjs
       - name: The platformer walked by a finger on its on-screen stick
         run: node crates/voltra-player/web/test/touch.mjs
-      - name: A generated game, built for the web
-        run: |
-          cargo xtask new-game ci-game
-          cargo xtask dist --web --manifest games/ci-game/build.ron --out target/ci-dist
-          test -f "target/ci-dist/Ci Game-web/game_bg.wasm"
+      # The guide's checked blocks (docs/guide): a game made, tested and
+      # built for the web, as a reader following it would.
+      - name: The guide, followed
+        run: cargo xtask guide
 
   check:
     # One name for both, though Windows skips clippy: required checks are
