@@ -333,6 +333,7 @@ impl<'a> UiFrame<'a> {
         )
     }
 
+    /// The sprite sheets the world is drawn with: atlases, textures and fonts, seen from the camera.
     pub fn sheets(&self) -> Sheets<'_> {
         Sheets::new(self.atlases, self.textures)
             .with_fonts(self.fonts)

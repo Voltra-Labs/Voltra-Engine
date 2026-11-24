@@ -10,11 +10,17 @@ use std::fmt;
 /// this build claims to understand it.
 #[derive(Debug)]
 pub enum SceneError {
+    /// The file could not be read or written.
     Io(std::io::Error),
+    /// The text is not valid RON for a scene.
     Parse(ron::error::SpannedError),
+    /// The scene could not be turned into RON.
     Serialize(ron::Error),
+    /// The file was written by a newer engine than this one.
     UnsupportedVersion {
+        /// The version the file declares.
         found: u32,
+        /// The newest version this build reads.
         supported: u32,
     },
     /// A registered component whose stored data does not fit its type.
@@ -23,7 +29,9 @@ pub enum SceneError {
     /// mine, do not touch"; this means "mine, and broken", and swallowing it
     /// would silently drop data on the next save.
     Component {
+        /// The component's registered name.
         name: String,
+        /// Why its data did not fit.
         source: ron::Error,
     },
 }

@@ -85,6 +85,7 @@ impl Typing {
         &self.input
     }
 
+    /// Whether shift is held.
     pub fn shift(&self) -> bool {
         self.shift
     }

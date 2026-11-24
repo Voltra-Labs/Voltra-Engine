@@ -68,6 +68,8 @@ pub use ui_frame::UiFrame;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
 
+/// The application: the window, the world and the frame loop that runs
+/// the game's callbacks each frame.
 #[derive(Default)]
 pub struct App {
     config: WindowConfig,
@@ -244,6 +246,8 @@ pub struct App {
 const DEFAULT_GRAVITY: Vec2 = Vec2::new(0.0, -9.81);
 
 impl App {
+    /// An app opening a window as `config` describes, saving under a
+    /// directory named after its title until told otherwise.
     pub fn new(config: WindowConfig) -> Self {
         Self {
             // Named after the window until the game says otherwise: the
@@ -263,6 +267,7 @@ impl App {
         self.simulation.set_running(simulating);
     }
 
+    /// Whether the physics steps run each frame.
     pub fn is_simulating(&self) -> bool {
         self.simulation.is_running()
     }

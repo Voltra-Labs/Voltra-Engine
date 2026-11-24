@@ -36,6 +36,7 @@ pub struct BloomSettings {
 }
 
 impl BloomSettings {
+    /// Bloom switched off: zero intensity, with the other settings at their defaults.
     pub const OFF: Self = Self {
         intensity: 0.0,
         threshold: 0.8,
@@ -101,6 +102,7 @@ pub struct BloomPass {
 }
 
 impl BloomPass {
+    /// Builds the prefilter, downsample and upsample pipelines on `device`.
     pub fn new(device: &wgpu::Device) -> Self {
         let module = shader::create_module(device, "bloom", shader::BLOOM);
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {

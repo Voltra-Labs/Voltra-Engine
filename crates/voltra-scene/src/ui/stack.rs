@@ -21,8 +21,11 @@ pub enum Direction {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Align {
     #[default]
+    /// At the start of the axis.
     Start,
+    /// Centred on the axis.
     Center,
+    /// At the end of the axis.
     End,
     /// Across the stack only: as wide as it is. Along it, the same as
     /// `Start` — a child's length is its own.
@@ -45,6 +48,7 @@ pub enum Align {
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiStack {
     #[serde(default)]
+    /// Which way the children run.
     pub direction: Direction,
     /// Points between one child and the next.
     #[serde(default)]

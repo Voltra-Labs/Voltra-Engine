@@ -20,6 +20,7 @@ pub struct EguiLayer {
 }
 
 impl EguiLayer {
+    /// A layer drawing into targets of `format` on `device`, taking input from `window`.
     pub fn new(window: &Window, device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let ctx = Context::default();
         let state = egui_winit::State::new(
@@ -104,6 +105,7 @@ impl EguiLayer {
         self.backend.update_view(device, id, view, filter);
     }
 
+    /// The egui context.
     pub fn context(&self) -> &Context {
         &self.ctx
     }

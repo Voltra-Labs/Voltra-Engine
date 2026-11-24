@@ -38,6 +38,7 @@ impl UiTextField {
         self.caret.min(self.anchor)..self.caret.max(self.anchor)
     }
 
+    /// The selected text; empty when nothing is selected.
     pub fn selected(&self) -> &str {
         let range = self.selection();
         &self.text[self.byte_at(range.start)..self.byte_at(range.end)]

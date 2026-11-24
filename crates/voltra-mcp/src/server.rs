@@ -27,6 +27,7 @@ pub struct VoltraMcp {
 }
 
 impl VoltraMcp {
+    /// A server for `project`, its `editor_*` tools reaching the editor bridge on its default port.
     pub fn new(project: Project) -> Self {
         Self::with_editor_port(project, voltra_bridge::DEFAULT_PORT)
     }
@@ -45,6 +46,7 @@ impl VoltraMcp {
         }
     }
 
+    /// The project this server works in.
     pub fn project(&self) -> &Project {
         &self.project
     }

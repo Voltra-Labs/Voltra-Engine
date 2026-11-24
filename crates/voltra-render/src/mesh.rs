@@ -13,6 +13,7 @@ use wgpu::util::DeviceExt;
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct Vertex {
+    /// Where it is, in the space of the camera drawing it.
     pub position: [f32; 2],
     /// Multiplied with the texture, alpha included: an alpha below one
     /// fades the texel, which is how a sprite turns translucent and a
@@ -31,6 +32,7 @@ impl Vertex {
         attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
     };
 
+    /// A vertex from its position, colour and texture coordinates.
     pub const fn new(position: [f32; 2], color: [f32; 4], uv: [f32; 2]) -> Self {
         Self {
             position,
@@ -148,6 +150,7 @@ impl Mesh {
         self.count
     }
 
+    /// Whether the mesh draws through an index buffer.
     pub fn is_indexed(&self) -> bool {
         self.indices.is_some()
     }

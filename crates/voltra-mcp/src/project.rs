@@ -45,10 +45,12 @@ impl Project {
         Self { root, assets }
     }
 
+    /// The project's root directory.
     pub fn root(&self) -> &Path {
         &self.root
     }
 
+    /// The project's asset directory.
     pub fn assets(&self) -> &Path {
         &self.assets
     }

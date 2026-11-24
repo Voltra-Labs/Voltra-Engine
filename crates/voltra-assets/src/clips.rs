@@ -145,10 +145,12 @@ impl Clips {
         &self.root
     }
 
+    /// How many clips are stored.
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    /// Whether no clip is stored.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

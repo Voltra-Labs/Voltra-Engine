@@ -15,6 +15,7 @@ use std::hash::{BuildHasherDefault, Hasher};
 /// key moves the high bits a hash table indexes by.
 const SEED: u64 = 0x51_7c_c1_b7_27_22_0a_95;
 
+/// A multiply-rotate hasher; see the module docs.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct FastHasher(u64);
 
@@ -54,7 +55,9 @@ impl Hasher for FastHasher {
     }
 }
 
+/// A `HashMap` hashed with [`FastHasher`].
 pub type FastMap<K, V> = HashMap<K, V, BuildHasherDefault<FastHasher>>;
+/// A `HashSet` hashed with [`FastHasher`].
 pub type FastSet<K> = HashSet<K, BuildHasherDefault<FastHasher>>;
 
 #[cfg(test)]

@@ -85,6 +85,7 @@ pub struct Input {
 }
 
 impl Input {
+    /// An input with nothing held, no actions bound and a zero-sized screen.
     pub fn new() -> Self {
         Self::default()
     }
@@ -107,6 +108,7 @@ impl Input {
         }
     }
 
+    /// Folds a mouse button transition into the state.
     pub fn on_mouse_button(&mut self, button: MouseButton, pressed: bool) {
         if pressed {
             self.buttons_pressed.insert(button);
@@ -117,6 +119,7 @@ impl Input {
         }
     }
 
+    /// Records the cursor at `position`; the first one is not reported as movement.
     pub fn on_cursor_moved(&mut self, position: Vec2) {
         self.cursor = position;
         if let Some(last) = self.last_cursor {
@@ -125,6 +128,7 @@ impl Input {
         self.last_cursor = Some(position);
     }
 
+    /// Adds `lines` of scroll to this frame's total.
     pub fn on_scroll(&mut self, lines: f32) {
         self.scroll_delta += lines;
     }
@@ -202,6 +206,7 @@ impl Input {
         self.screen = size.max(Vec2::ZERO);
     }
 
+    /// The window's size in physical pixels, as last set.
     pub fn screen(&self) -> Vec2 {
         self.screen
     }
@@ -293,26 +298,32 @@ impl Input {
 
     // --- queries ------------------------------------------------------------
 
+    /// Whether `code` is held.
     pub fn is_key_down(&self, code: KeyCode) -> bool {
         self.keys_held.contains(&code)
     }
 
+    /// Whether `code` went down this frame; key repeat does not count.
     pub fn was_key_pressed(&self, code: KeyCode) -> bool {
         self.keys_pressed.contains(&code)
     }
 
+    /// Whether `code` went up this frame.
     pub fn was_key_released(&self, code: KeyCode) -> bool {
         self.keys_released.contains(&code)
     }
 
+    /// Whether `button` is held.
     pub fn is_mouse_button_down(&self, button: MouseButton) -> bool {
         self.buttons_held.contains(&button)
     }
 
+    /// Whether `button` went down this frame.
     pub fn was_mouse_button_pressed(&self, button: MouseButton) -> bool {
         self.buttons_pressed.contains(&button)
     }
 
+    /// Whether `button` went up this frame.
     pub fn was_mouse_button_released(&self, button: MouseButton) -> bool {
         self.buttons_released.contains(&button)
     }

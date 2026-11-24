@@ -38,6 +38,7 @@ pub struct ComponentRegistry {
 }
 
 impl ComponentRegistry {
+    /// An empty registry, with no component registered.
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
@@ -217,6 +218,7 @@ impl ComponentRegistry {
         })
     }
 
+    /// The registered component names, in registration order.
     pub fn names(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.entries.iter().map(|e| e.name)
     }

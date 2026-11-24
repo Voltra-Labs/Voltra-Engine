@@ -77,6 +77,7 @@ impl SpriteAnimation {
         }
     }
 
+    /// Sets whether the clip wraps to its first frame after the last.
     pub fn with_looping(mut self, looping: bool) -> Self {
         self.looping = looping;
         self

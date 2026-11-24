@@ -29,6 +29,7 @@ pub struct Pads {
 }
 
 impl Pads {
+    /// Folds a button transition on `pad` into the state. A press or release counts for the frame only if no pad held the button before, or holds it after.
     pub fn on_button(&mut self, pad: u32, button: PadButton, pressed: bool) {
         if pressed {
             if !self.is_down(button) {
@@ -60,6 +61,7 @@ impl Pads {
         }
     }
 
+    /// Sets `axis` of `pad` to `value`, clamped to -1 to 1; a value that is not finite counts as 0.
     pub fn on_axis(&mut self, pad: u32, axis: PadAxis, value: f32) {
         let value = if value.is_finite() {
             value.clamp(-1.0, 1.0)
@@ -89,6 +91,7 @@ impl Pads {
         self.axes.retain(|(p, _), _| !matches(p));
     }
 
+    /// Ends the frame: forgets this frame's presses and releases.
     pub fn end_frame(&mut self) {
         self.pressed.clear();
         self.released.clear();
@@ -100,10 +103,12 @@ impl Pads {
         self.held.iter().any(|(_, b)| *b == button)
     }
 
+    /// Whether any pad pressed `button` this frame.
     pub fn was_pressed(&self, button: PadButton) -> bool {
         self.pressed.contains(&button)
     }
 
+    /// Whether any pad released `button` this frame.
     pub fn was_released(&self, button: PadButton) -> bool {
         self.released.contains(&button)
     }

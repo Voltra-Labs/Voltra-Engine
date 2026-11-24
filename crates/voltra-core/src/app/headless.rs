@@ -204,14 +204,17 @@ impl Headless {
         driven
     }
 
+    /// The world.
     pub fn world(&self) -> &World {
         &self.app.world
     }
 
+    /// The world, mutably.
     pub fn world_mut(&mut self) -> &mut World {
         &mut self.app.world
     }
 
+    /// The registry of components scene files can name.
     pub fn registry(&self) -> &ComponentRegistry {
         &self.app.registry
     }

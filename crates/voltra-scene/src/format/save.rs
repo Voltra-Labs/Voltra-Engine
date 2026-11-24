@@ -21,7 +21,9 @@ pub const VERSION: u32 = 1;
 /// A scene as it appears on disk.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SceneFile {
+    /// The format version the file was written in.
     pub version: u32,
+    /// Every entity, in the order they were saved.
     pub entities: Vec<EntityRecord>,
 }
 
@@ -38,7 +40,9 @@ pub struct SceneFile {
 /// it verbatim, so a component's own field order and shape survive untouched.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct EntityRecord {
+    /// The entity's stable id in the file.
     pub id: SceneId,
+    /// Each component's RON text, by registered name.
     pub components: BTreeMap<String, Box<RawValue>>,
 }
 

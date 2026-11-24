@@ -15,6 +15,7 @@ pub struct StateMachine {
     /// The state it starts in, by name; empty is the first.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub start: String,
+    /// The states the machine can be in.
     pub states: Vec<State>,
     /// Tried in order; the first whose conditions hold is taken.
     pub transitions: Vec<Transition>,
@@ -23,6 +24,7 @@ pub struct StateMachine {
 /// A named value a game sets and the transitions read.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Parameter {
+    /// The name transitions and the game refer to it by.
     pub name: String,
     /// Its kind, and the value it starts at.
     pub value: ParamValue,
@@ -31,7 +33,9 @@ pub struct Parameter {
 /// A parameter's value.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum ParamValue {
+    /// A number, tested with greater-than and less-than.
     Float(f32),
+    /// A flag, tested for true or false.
     Bool(bool),
     /// Set by a game, and spent by the transition it lets through — a jump
     /// pressed, a hit taken. Unity's trigger.
@@ -48,6 +52,7 @@ impl ParamValue {
 /// One state: a clip, played at a speed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct State {
+    /// The name transitions refer to it by.
     pub name: String,
     /// The `.anim.ron` it plays — looping or not as the clip says.
     pub clip: AssetPath,
@@ -70,6 +75,7 @@ pub struct Transition {
     /// The state it leaves, by name; `None` leaves any state but `to`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from: Option<String>,
+    /// The state it enters, by name.
     pub to: String,
     /// All must hold. None at all, with no `exit_time`, moves at once.
     #[serde(default)]

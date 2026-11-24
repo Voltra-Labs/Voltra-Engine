@@ -45,6 +45,7 @@ pub struct SpriteRange {
 /// are the renderer's; the batch only knows when to draw them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GpuEmitterDraw {
+    /// The emitter's entity.
     pub entity: voltra_ecs::Entity,
     /// `None` draws against the renderer's white bind group.
     pub texture: Option<Handle<Texture>>,
@@ -64,7 +65,9 @@ pub struct SpriteBatch {
     /// The view quads are culled against, from the [`Sheets`] the batch was
     /// built with. `None` keeps every quad.
     visible: Option<(Vec2, Vec2)>,
+    /// Four corners per sprite, in draw order.
     pub vertices: Vec<Vertex>,
+    /// Triangle indices into `vertices`, six per sprite.
     pub indices: Vec<u32>,
     /// Draw-order runs of same-texture sprites, covering all of `indices`.
     ///
@@ -229,6 +232,7 @@ impl SpriteBatch {
         });
     }
 
+    /// How many sprite quads the batch holds.
     pub fn sprite_count(&self) -> usize {
         self.vertices.len() / CORNERS_PER_QUAD
     }

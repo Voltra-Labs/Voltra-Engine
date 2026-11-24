@@ -53,7 +53,9 @@ pub struct FollowState {
 /// A rectangle in the world.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct FollowBounds {
+    /// The corner with the smallest x and y, in world units.
     pub min: Vec2,
+    /// The corner with the largest x and y, in world units.
     pub max: Vec2,
 }
 

@@ -8,9 +8,11 @@ use voltra_render::glam::{Affine2, Mat3, Vec2};
 /// sixteen, and the camera promotes it on the way to the shader.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Transform {
+    /// Where the entity is, in world units.
     pub translation: Vec2,
     /// Counter-clockwise, in radians.
     pub rotation: f32,
+    /// Per axis; `1` leaves the size.
     pub scale: Vec2,
 }
 
@@ -27,6 +29,7 @@ impl Default for Transform {
 }
 
 impl Transform {
+    /// A transform at `translation`, unrotated and unscaled.
     pub fn from_translation(translation: Vec2) -> Self {
         Self {
             translation,
@@ -34,11 +37,13 @@ impl Transform {
         }
     }
 
+    /// Sets the scale.
     pub fn with_scale(mut self, scale: Vec2) -> Self {
         self.scale = scale;
         self
     }
 
+    /// Sets the rotation, in radians counter-clockwise.
     pub fn with_rotation(mut self, radians: f32) -> Self {
         self.rotation = radians;
         self

@@ -25,6 +25,7 @@ pub(crate) mod view;
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiTextField {
     #[serde(default)]
+    /// What the field holds.
     pub text: String,
     /// Shown while the text is empty.
     #[serde(default)]
@@ -77,6 +78,7 @@ impl Default for UiTextField {
 /// Text an IME is composing, shown at the caret until it commits.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Preedit {
+    /// The text being composed.
     pub text: String,
     /// The IME's own cursor in it, as byte offsets, or `None` to hide it.
     pub cursor: Option<(usize, usize)>,
@@ -85,6 +87,7 @@ pub struct Preedit {
 /// One editing key, as the window reported it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EditKey {
+    /// What the key does.
     pub edit: Edit,
     /// Shift held: move the caret and keep the selection's other end.
     pub extend: bool,
@@ -93,6 +96,7 @@ pub struct EditKey {
 }
 
 impl EditKey {
+    /// A key doing `edit`, with no modifier held.
     pub fn plain(edit: Edit) -> Self {
         Self {
             edit,
@@ -103,13 +107,21 @@ impl EditKey {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// What an editing key does.
 pub enum Edit {
+    /// Moves the caret one place left.
     Left,
+    /// Moves the caret one place right.
     Right,
+    /// Moves the caret to the start of the text.
     Home,
+    /// Moves the caret to the end of the text.
     End,
+    /// Deletes the selection, or what is before the caret.
     Backspace,
+    /// Deletes the selection, or what is after the caret.
     Delete,
+    /// Selects the whole text.
     SelectAll,
     /// Enter: the text is done.
     Submit,
@@ -128,6 +140,7 @@ pub struct TextInput {
 }
 
 impl TextInput {
+    /// Whether nothing was typed, pressed or composed.
     pub fn is_empty(&self) -> bool {
         self.typed.is_empty() && self.keys.is_empty() && self.preedit.is_none()
     }

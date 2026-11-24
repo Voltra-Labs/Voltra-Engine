@@ -5,6 +5,8 @@
 //! it. Sits below `voltra-scene` and above `voltra-render`, and reaches wgpu
 //! only through `voltra_render::wgpu`.
 
+#![warn(missing_docs)]
+
 pub mod atlas;
 pub mod atlases;
 pub mod browse;

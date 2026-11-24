@@ -20,15 +20,19 @@ pub const TABLE_VERSION: u32 = 1;
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StringTable {
+    /// The format version, at most [`TABLE_VERSION`].
     pub version: u32,
     #[serde(default)]
+    /// The text for each key, such as `menu.play`.
     pub strings: HashMap<String, String>,
 }
 
 /// Why a table did not read.
 #[derive(Debug)]
 pub enum TableError {
+    /// The file could not be read.
     Io(std::io::Error),
+    /// The file is not valid RON for a table.
     Parse(ron::error::SpannedError),
     /// Written by a newer engine.
     Version(u32),
@@ -53,6 +57,7 @@ impl StringTable {
         Self::parse(&text)
     }
 
+    /// Reads a table from RON `text`.
     pub fn parse(text: &str) -> Result<Self, TableError> {
         let table: Self = ron::from_str(text).map_err(TableError::Parse)?;
         if table.version > TABLE_VERSION {

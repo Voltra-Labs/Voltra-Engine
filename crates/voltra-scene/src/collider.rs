@@ -28,9 +28,12 @@ pub enum Collider {
     /// when the transform is, and a name that says otherwise is the kind of
     /// lie that outlives the code it came from.
     Box {
+        /// Half the width and height, before the transform's scale.
         half_extents: Vec2,
     },
+    /// A circle around the transform's origin.
     Circle {
+        /// Before the transform's scale, which applies its larger axis.
         radius: f32,
     },
     /// A rectangle with half-circle ends, upright along the entity's y:
@@ -43,7 +46,9 @@ pub enum Collider {
     /// wide: below `radius` it is a circle. The radius scales with the
     /// transform's x, the height with its y.
     Capsule {
+        /// Half the whole height, caps included, before the transform's y scale.
         half_height: f32,
+        /// Of the half-circle ends, before the transform's x scale.
         radius: f32,
     },
     /// A convex polygon of up to eight points, around the transform's origin,
@@ -52,6 +57,7 @@ pub enum Collider {
     /// The body's mass sits at the transform's origin whatever the points, so
     /// a dynamic polygon is drawn around it; a static one can sit anywhere.
     Polygon {
+        /// The corners, convex, around the transform's origin.
         points: ConvexPolygon,
         /// How far the surface stands off the points: zero is sharp corners.
         /// Scales with the larger axis of the transform, as a circle does.

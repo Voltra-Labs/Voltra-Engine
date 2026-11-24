@@ -29,7 +29,9 @@ pub enum BodyType {
 /// — is `0.0` instead of a branch repeated at each of them.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct RigidBody {
+    /// How the body moves, if at all.
     pub body_type: BodyType,
+    /// World units per second.
     pub velocity: Vec2,
     /// Radians per second, counter-clockwise.
     pub angular_velocity: f32,

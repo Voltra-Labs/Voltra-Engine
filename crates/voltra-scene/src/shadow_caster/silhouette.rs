@@ -16,7 +16,9 @@ use crate::Sprite;
 /// quad is resolved against, and the traced outlines.
 #[derive(Clone, Copy)]
 pub struct SpriteShapes<'a> {
+    /// The sheets a sprite's quad is resolved against.
     pub sheets: Sheets<'a>,
+    /// The traced outlines.
     pub silhouettes: &'a Silhouettes,
 }
 

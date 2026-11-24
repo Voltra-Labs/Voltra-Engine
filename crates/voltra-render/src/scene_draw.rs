@@ -12,9 +12,13 @@ use crate::pass::{Binder, MeshDraw};
 /// sorting layer and `sort_order` put it — painter's order does not care
 /// which pipeline a draw takes.
 pub enum SceneDraw<'a> {
+    /// A range of the sprite mesh.
     Mesh(MeshDraw<'a>),
+    /// A GPU particle emitter, drawn instanced.
     Particles {
+        /// The emitter's particle buffer.
         particles: &'a GpuParticles,
+        /// The texture its particles are drawn with.
         texture: &'a wgpu::BindGroup,
         /// The light layers its particles are on, as a mesh range's are.
         light_layers: u32,

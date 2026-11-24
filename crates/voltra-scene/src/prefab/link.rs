@@ -18,6 +18,7 @@ use crate::scene_id::SceneId;
 /// this file: see [`super::sync`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrefabInstance {
+    /// The prefab file the instance was spawned from.
     pub source: AssetPath,
     /// Records of the prefab this instance has deleted from itself: a sync
     /// does not spawn them back. By the prefab's own ids. Not written when
@@ -31,6 +32,7 @@ impl PrefabInstance {
     /// reads one out of a file without spawning it has to agree with.
     pub const NAME: &'static str = "PrefabInstance";
 
+    /// An instance of `source` with nothing removed.
     pub fn new(source: AssetPath) -> Self {
         Self {
             source,

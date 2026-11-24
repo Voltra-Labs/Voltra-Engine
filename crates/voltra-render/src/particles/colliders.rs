@@ -11,12 +11,18 @@ use glam::Vec2;
 pub enum ParticleCollider {
     /// A box centred on `center`, turned `rotation` radians.
     Box {
+        /// World position of the centre.
         center: Vec2,
+        /// Radians the box is turned.
         rotation: f32,
+        /// Half its width and half its height, before it is turned.
         half_extents: Vec2,
     },
+    /// A circle centred on `center`.
     Circle {
+        /// World position of the centre.
         center: Vec2,
+        /// Radius, in world units.
         radius: f32,
     },
 }

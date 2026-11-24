@@ -182,10 +182,12 @@ impl UiLayout {
         (sort_order, self.depth(entity), entity.index())
     }
 
+    /// How many elements have a resolved rectangle.
     pub fn len(&self) -> usize {
         self.resolved.len()
     }
 
+    /// Whether no element has a resolved rectangle.
     pub fn is_empty(&self) -> bool {
         self.resolved.is_empty()
     }

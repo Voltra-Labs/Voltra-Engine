@@ -17,6 +17,7 @@ pub struct AssetWatcher {
 }
 
 impl AssetWatcher {
+    /// Refuses: a browser has no file system to watch.
     pub fn new(root: &Path) -> Result<Self, AssetError> {
         Err(AssetError::Read {
             path: root.to_path_buf(),

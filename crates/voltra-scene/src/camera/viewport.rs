@@ -5,9 +5,13 @@
 /// Unity's `Camera.rect`, with y down as the screen's is.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Viewport {
+    /// Left edge, as a fraction of the window's width, `0` to `1`.
     pub x: f32,
+    /// Top edge, as a fraction of the window's height, `0` to `1`; y down.
     pub y: f32,
+    /// Width, as a fraction of the window's width, `0` to `1`.
     pub width: f32,
+    /// Height, as a fraction of the window's height, `0` to `1`.
     pub height: f32,
 }
 
@@ -26,6 +30,7 @@ impl Viewport {
         height: 1.0,
     };
 
+    /// Whether it covers the whole window.
     pub fn is_full(&self) -> bool {
         *self == Self::FULL
     }
@@ -37,6 +42,7 @@ impl Viewport {
         width: 0.5,
         height: 1.0,
     };
+    /// The right half of the window.
     pub const RIGHT: Self = Self {
         x: 0.5,
         y: 0.0,

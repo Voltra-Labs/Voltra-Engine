@@ -27,6 +27,7 @@ pub const ABI: u32 = 1;
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Stamp {
+    /// The plugin protocol version, [`ABI`].
     pub abi: u32,
     /// `1` for a build with debug assertions — a dev profile — and `0` for
     /// one without.
@@ -112,14 +113,31 @@ impl fmt::Debug for Stamp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mismatch {
     /// Another version of the plugin protocol.
-    Protocol { library: u32, host: u32 },
+    Protocol {
+        /// The library's protocol version.
+        library: u32,
+        /// The host's protocol version.
+        host: u32,
+    },
     /// Another compiler.
-    Compiler { library: String, host: String },
+    Compiler {
+        /// The compiler that built the library.
+        library: String,
+        /// The compiler that built the host.
+        host: String,
+    },
     /// Another version of the engine.
-    Engine { library: String, host: String },
+    Engine {
+        /// The engine version the library was built against.
+        library: String,
+        /// The host's engine version.
+        host: String,
+    },
     /// A release build in a debug host, or the other way round.
     Profile {
+        /// Whether the library has debug assertions.
         library_debug: bool,
+        /// Whether the host has debug assertions.
         host_debug: bool,
     },
     /// The same compiler and profile, but the engine's types are not the

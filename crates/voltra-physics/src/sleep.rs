@@ -87,6 +87,7 @@ pub struct Sleep {
 }
 
 impl Sleep {
+    /// Whether `entity` is asleep.
     pub fn is_asleep(&self, entity: Entity) -> bool {
         self.bodies
             .get(&entity)

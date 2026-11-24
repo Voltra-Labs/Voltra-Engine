@@ -26,8 +26,10 @@ pub struct UiScroll {
     #[serde(default)]
     pub offset: Vec2,
     #[serde(default = "yes")]
+    /// Whether it scrolls up and down.
     pub vertical: bool,
     #[serde(default)]
+    /// Whether it scrolls left and right.
     pub horizontal: bool,
     /// Points scrolled per wheel line.
     #[serde(default = "line")]

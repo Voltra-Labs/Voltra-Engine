@@ -27,9 +27,13 @@ pub enum Command {
     /// Start `clip` as a new voice under `id`, rising from silence over
     /// `fade_in` — zero starts it at full level.
     Play {
+        /// The id the new voice is known by.
         id: VoiceId,
+        /// The sound to play.
         clip: Clip,
+        /// Volume, pitch, pan, looping and the bus it plays on.
         params: PlayParams,
+        /// How long the rise from silence takes.
         fade_in: Duration,
     },
     /// Move a voice that is already playing. Ignored if it has finished.
@@ -38,28 +42,49 @@ pub enum Command {
     /// Smoothed over [`SMOOTHING`](crate::voice::SMOOTHING), because this is
     /// sent every frame for a moving source and a frame is long enough for a
     /// step to click.
-    SetGain { id: VoiceId, volume: f32, pan: f32 },
+    SetGain {
+        /// The voice to move.
+        id: VoiceId,
+        /// The new volume, as a linear multiplier.
+        volume: f32,
+        /// The new pan: `-1.0` left, `0.0` centre, `1.0` right.
+        pan: f32,
+    },
     /// Slide a voice's fader to `volume` over `over`. Ignored if it has
     /// finished.
     ///
     /// A multiplier on top of whatever [`SetGain`](Self::SetGain) says, so a
     /// fade on a moving source is not undone by the next frame's position.
     Fade {
+        /// The voice to fade.
         id: VoiceId,
+        /// The multiplier to slide to.
         volume: f32,
+        /// How long the slide takes.
         over: Duration,
     },
     /// End one voice, fading it to silence over `over` first. Ignored if it
     /// has finished.
-    Stop { id: VoiceId, over: Duration },
+    Stop {
+        /// The voice to end.
+        id: VoiceId,
+        /// How long the fade to silence takes.
+        over: Duration,
+    },
     /// End every voice the same way: what an editor's Stop button and a scene
     /// change both want, and the only way to end voices whose ids the caller
     /// has lost.
-    StopAll { over: Duration },
+    StopAll {
+        /// How long the fade to silence takes.
+        over: Duration,
+    },
     /// Slide one bus's volume to `volume` over `over`.
     SetBusVolume {
+        /// The bus to move.
         bus: BusId,
+        /// The volume to slide to, as a linear multiplier.
         volume: f32,
+        /// How long the slide takes.
         over: Duration,
     },
 }

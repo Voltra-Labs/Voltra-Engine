@@ -15,6 +15,8 @@
 //! [`CoinCounter`](components::CoinCounter). `A`/`D` or the arrows walk,
 //! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump.
 
+#![warn(missing_docs)]
+
 use voltra_assets::AssetPath;
 use voltra_core::{Binding, Game, KeyCode, Tick, Touch};
 use voltra_ecs::Entity;

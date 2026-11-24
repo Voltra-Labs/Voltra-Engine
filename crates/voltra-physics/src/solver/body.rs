@@ -19,7 +19,9 @@ use voltra_scene::{BodyType, Collider, RigidBody, Transform};
 /// One body as the solver sees it.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SolverBody {
+    /// The entity the body belongs to.
     pub entity: Entity,
+    /// Linear velocity, in world units per second.
     pub velocity: Vec2,
     /// How far this body has moved since the step began. Applied to the
     /// `Transform` once, at scatter, so a contact's separation can be tracked
@@ -46,9 +48,13 @@ pub struct SolverBody {
     /// `inverse_mass` gives zero: a locked, immovable or collider-less body
     /// does not turn.
     pub inverse_inertia: f32,
+    /// How the body moves: static, kinematic or dynamic.
     pub body_type: BodyType,
+    /// Multiplier on the world's gravity for this body.
     pub gravity_scale: f32,
+    /// How quickly linear velocity decays.
     pub linear_damping: f32,
+    /// How quickly angular velocity decays.
     pub angular_damping: f32,
 }
 
@@ -188,26 +194,32 @@ impl SolverBodies {
         }
     }
 
+    /// The index of `entity`'s body, if it has one.
     pub fn index_of(&self, entity: Entity) -> Option<usize> {
         self.index.get(&entity).copied()
     }
 
+    /// The body at `index`.
     pub fn get(&self, index: usize) -> &SolverBody {
         &self.bodies[index]
     }
 
+    /// The body at `index`, mutably.
     pub fn get_mut(&mut self, index: usize) -> &mut SolverBody {
         &mut self.bodies[index]
     }
 
+    /// How many bodies there are.
     pub fn len(&self) -> usize {
         self.bodies.len()
     }
 
+    /// Whether there are no bodies.
     pub fn is_empty(&self) -> bool {
         self.bodies.is_empty()
     }
 
+    /// Every body, mutably, in index order.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut SolverBody> {
         self.bodies.iter_mut()
     }

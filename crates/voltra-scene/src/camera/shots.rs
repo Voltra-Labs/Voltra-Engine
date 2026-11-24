@@ -11,7 +11,9 @@ use crate::hierarchy::world_matrix;
 /// One camera's part of a frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Shot {
+    /// The camera's entity.
     pub entity: Entity,
+    /// The camera component.
     pub camera: Camera,
     /// Where it is in the world.
     pub position: Vec2,

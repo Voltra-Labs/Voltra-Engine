@@ -8,8 +8,11 @@ use crate::recorder::Frame;
 /// Milliseconds over a run of frames.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Stat {
+    /// The mean.
     pub avg: f64,
+    /// The least.
     pub min: f64,
+    /// The most.
     pub max: f64,
 }
 
@@ -18,7 +21,9 @@ pub struct Stat {
 pub struct ScopeStat {
     /// The names from the top down, `/`-joined: `frame/physics/solve`.
     pub path: String,
+    /// The scope's own name, the last part of `path`.
     pub name: &'static str,
+    /// How many scopes are open around it: 0 at the top.
     pub depth: u16,
     /// Times it ran per frame, on average over the run.
     pub calls: f64,
@@ -31,18 +36,24 @@ pub struct ScopeStat {
 /// A counter over a run of frames.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CounterStat {
+    /// The counter's name.
     pub name: &'static str,
+    /// Its mean over the frames that set it.
     pub avg: f64,
+    /// Its highest value.
     pub max: f64,
+    /// Its value in the last frame that set it.
     pub last: f64,
 }
 
 /// A GPU pass over a run of frames.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GpuStat {
+    /// The pass's name.
     pub name: &'static str,
     /// Milliseconds per run of the pass.
     pub avg: f64,
+    /// Milliseconds of its slowest run.
     pub max: f64,
     /// How many timings came back: GPU timings arrive late and in bursts,
     /// so this need not match the frames.
@@ -52,11 +63,13 @@ pub struct GpuStat {
 /// What [`crate::summary`] answers.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Summary {
+    /// How many frames the run holds.
     pub frames: usize,
     /// Each frame, end to end.
     pub frame: Stat,
     /// In tree order: a scope, then what ran inside it.
     pub scopes: Vec<ScopeStat>,
+    /// Each counter that was set, in the order first seen.
     pub counters: Vec<CounterStat>,
     /// Each GPU pass, in the order they first came back; empty where the
     /// adapter cannot time passes or nothing drew.

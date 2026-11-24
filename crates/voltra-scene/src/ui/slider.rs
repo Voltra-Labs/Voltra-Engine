@@ -17,16 +17,20 @@ use super::stack::Direction;
 /// column runs bottom to top, as values rise.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiSlider {
+    /// The current value, from `min` to `max`.
     pub value: f32,
     #[serde(default)]
+    /// The lowest value.
     pub min: f32,
     #[serde(default = "one")]
+    /// The highest value.
     pub max: f32,
     /// What the value snaps to, from `min`; `0` for none. The navigation
     /// moves by one step, or by a twentieth of the range without one.
     #[serde(default)]
     pub step: f32,
     #[serde(default = "row")]
+    /// Which way it runs.
     pub direction: Direction,
 }
 

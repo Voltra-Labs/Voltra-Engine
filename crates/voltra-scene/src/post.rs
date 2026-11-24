@@ -13,10 +13,15 @@ use crate::camera::{self, Camera};
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct PostProcess {
+    /// Multiplies every colour; `1` leaves it.
     pub exposure: f32,
+    /// Around a linear middle grey; `1` leaves it, `0` is flat grey.
     pub contrast: f32,
+    /// `1` leaves colour, `0` is greyscale, above `1` is more vivid.
     pub saturation: f32,
+    /// Multiplies each channel; white leaves it.
     pub tint: [f32; 3],
+    /// How far the corners darken, `0` to `1`.
     pub vignette: f32,
     /// Glow around what is bright. Off by default.
     pub bloom: Bloom,
@@ -27,9 +32,13 @@ pub struct PostProcess {
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(default)]
 pub struct Bloom {
+    /// How strongly the glow is added; `0` is off.
     pub intensity: f32,
+    /// Linear brightness where bloom begins.
     pub threshold: f32,
+    /// How gradually it begins, `0` (a hard edge) to `1`.
     pub softness: f32,
+    /// How far each upsample reaches, in texels of its source; larger is a wider, softer glow.
     pub radius: f32,
 }
 
@@ -51,6 +60,7 @@ impl From<BloomSettings> for Bloom {
 }
 
 impl Bloom {
+    /// These values as the renderer's [`BloomSettings`].
     pub fn settings(&self) -> BloomSettings {
         BloomSettings {
             intensity: self.intensity,

@@ -18,6 +18,8 @@
 //! [`ramp`] and [`limiter`] are pure arithmetic with no thread and no device, [`device`] is the thin shell
 //! that owns the `cpal` stream, and [`audio`] is the seam the engine holds.
 
+#![warn(missing_docs)]
+
 pub mod audio;
 pub mod bus;
 pub mod clip;

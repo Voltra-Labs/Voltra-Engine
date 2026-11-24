@@ -4,6 +4,8 @@
 //! `voltra-render`, which knows nothing about entities. Dependencies point
 //! down into both and never back up.
 
+#![warn(missing_docs)]
+
 pub mod animation;
 pub mod animator;
 pub mod audio_listener;

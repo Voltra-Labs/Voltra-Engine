@@ -22,9 +22,13 @@ pub struct Touch {
 /// What a platform said happened to a finger.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TouchPhase {
+    /// A finger went down.
     Started,
+    /// A finger moved.
     Moved,
+    /// A finger lifted.
     Ended,
+    /// The platform took a finger away without it lifting.
     Cancelled,
 }
 

@@ -3,6 +3,8 @@
 //! Everything GPU-side lives in `voltra-render`; this crate is the only place
 //! allowed to depend on `winit`.
 
+#![warn(missing_docs)]
+
 pub mod app;
 pub mod game;
 pub mod input;

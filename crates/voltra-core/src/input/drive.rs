@@ -73,6 +73,7 @@ impl HeldActions {
         });
     }
 
+    /// Whether nothing is being held.
     pub fn is_empty(&self) -> bool {
         self.held.is_empty()
     }

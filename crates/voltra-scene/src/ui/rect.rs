@@ -5,11 +5,14 @@ use voltra_render::glam::Vec2;
 /// An axis-aligned box in screen space, in points, origin top-left, y down.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Rect {
+    /// The top-left corner, in points.
     pub min: Vec2,
+    /// The bottom-right corner, in points.
     pub max: Vec2,
 }
 
 impl Rect {
+    /// A rect from corner `min` to corner `max`.
     pub fn new(min: Vec2, max: Vec2) -> Self {
         Self { min, max }
     }
@@ -19,10 +22,12 @@ impl Rect {
         Self::new(Vec2::ZERO, size.max(Vec2::ZERO))
     }
 
+    /// Width and height, in points.
     pub fn size(&self) -> Vec2 {
         self.max - self.min
     }
 
+    /// The middle of the rect, in points.
     pub fn center(&self) -> Vec2 {
         (self.min + self.max) * 0.5
     }
@@ -71,9 +76,13 @@ impl Rect {
 /// `Transform`, if any, is ignored.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiRect {
+    /// Where in the parent the box's top-left corner is anchored: `(0, 0)` is the parent's top-left, `(1, 1)` its bottom-right.
     pub anchor_min: Vec2,
+    /// Where in the parent the box's bottom-right corner is anchored, as `anchor_min`.
     pub anchor_max: Vec2,
+    /// Points added to the top-left corner after anchoring.
     pub offset_min: Vec2,
+    /// Points added to the bottom-right corner after anchoring.
     pub offset_max: Vec2,
     /// Where it goes among the children of a [`UiStack`](super::UiStack):
     /// lower first, ties by entity index. Ignored anywhere else; `0`, the

@@ -30,6 +30,8 @@
 //! past roughly a hundred to one squeeze the lighter body out sideways rather
 //! than holding it, which is the ordinary limit of an impulse solver.
 
+#![warn(missing_docs)]
+
 pub mod broad;
 pub mod character;
 pub mod clock;

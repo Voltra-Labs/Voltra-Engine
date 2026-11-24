@@ -12,9 +12,11 @@ const KEPT: usize = 4096;
 /// One line that was logged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogLine {
+    /// How severe it is.
     pub level: Level,
     /// The module that logged it.
     pub target: String,
+    /// The formatted message.
     pub message: String,
 }
 

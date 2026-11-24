@@ -12,8 +12,11 @@ use crate::SpriteMaterial;
 /// `revision`, and the block of uniforms uploaded for this frame.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MaterialUse {
+    /// The material the draw uses.
     pub material: Handle<Material>,
+    /// The material's revision when the use was built; a newer one needs a new pipeline.
     pub revision: u64,
+    /// The uniform block uploaded for the draw, laid out as the shader reads it.
     pub block: [u8; BLOCK_SIZE],
 }
 

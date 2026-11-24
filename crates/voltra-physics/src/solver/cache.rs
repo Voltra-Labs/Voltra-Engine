@@ -34,7 +34,9 @@ use voltra_ecs::Entity;
 /// What one contact accumulated over a step.
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct CachedImpulse {
+    /// Impulse accumulated along the contact normal.
     pub normal: f32,
+    /// Impulse accumulated along the friction tangent.
     pub tangent: f32,
 }
 
@@ -101,6 +103,7 @@ impl ImpulseCache {
         self.current.len()
     }
 
+    /// Whether no impulse is cached.
     pub fn is_empty(&self) -> bool {
         self.current.is_empty()
     }

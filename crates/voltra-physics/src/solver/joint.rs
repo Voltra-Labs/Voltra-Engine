@@ -100,6 +100,7 @@ fn spin(w: f32, r: Vec2) -> Vec2 {
 pub struct JointEnds {
     /// The entity carrying the joint.
     pub owner: Entity,
+    /// The first body the joint joins.
     pub a: Entity,
     /// `None` for the world.
     pub b: Option<Entity>,

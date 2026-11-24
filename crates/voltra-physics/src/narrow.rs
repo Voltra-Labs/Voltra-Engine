@@ -133,12 +133,16 @@ impl Manifold {
 /// One overlap between two entities.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Contact {
+    /// One entity of the overlap.
     pub a: Entity,
+    /// The other entity.
     pub b: Entity,
+    /// Where and how deeply they overlap.
     pub manifold: Manifold,
 }
 
 impl Contact {
+    /// A contact between `a` and `b` described by `manifold`.
     pub fn new(a: Entity, b: Entity, manifold: Manifold) -> Self {
         Self { a, b, manifold }
     }
@@ -148,6 +152,7 @@ impl Contact {
         self.manifold.normal
     }
 
+    /// The contact points of the manifold.
     pub fn points(&self) -> &[ManifoldPoint] {
         self.manifold.points()
     }

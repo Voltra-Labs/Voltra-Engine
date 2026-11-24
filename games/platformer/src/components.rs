@@ -12,6 +12,7 @@ pub struct Walker;
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Coin {
+    /// What it adds to the coin counter.
     pub value: u32,
 }
 

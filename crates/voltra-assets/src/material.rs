@@ -38,10 +38,12 @@ pub fn is_material(name: &str) -> bool {
 /// The uniforms' values are the defaults a sprite's own override.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaterialFile {
+    /// The file format version.
     pub version: u32,
     /// The fragment shader's path from the asset root. A plain string, as
     /// a person writes it; checked as a path when the file is read.
     pub shader: String,
+    /// Default values by uniform name; a sprite's own values override them.
     #[serde(default)]
     pub uniforms: BTreeMap<String, Uniform>,
 }
@@ -55,11 +57,14 @@ pub struct Material {
     pub shader: Option<AssetPath>,
     /// The composed WGSL, empty when there is an error.
     pub source: String,
+    /// How the uniforms are laid out in the block, or `None` when the material cannot be drawn with.
     pub layout: Option<Layout>,
+    /// The values the uniforms take where a sprite sets none.
     pub defaults: BTreeMap<String, Uniform>,
     /// Bumped by the store whenever this material changes: what a pipeline
     /// built from an earlier one compares to know it is stale.
     pub revision: u64,
+    /// Why the material cannot be drawn with, or `None` when it can.
     pub error: Option<String>,
 }
 

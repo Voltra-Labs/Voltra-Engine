@@ -12,15 +12,20 @@ use super::{Tile, Tilemap};
 /// The side bits of a cell's neighbourhood mask. Cell `y` grows **up**, as
 /// the layer's space does.
 pub const NORTH: usize = 1;
+/// The east neighbour's bit, `x + 1`.
 pub const EAST: usize = 2;
+/// The south neighbour's bit, `y - 1`.
 pub const SOUTH: usize = 4;
+/// The west neighbour's bit, `x - 1`.
 pub const WEST: usize = 8;
 
 /// A set of frames that join up: `frames[mask]` is the frame for a cell
 /// whose same-terrain neighbours are the sides set in `mask`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Terrain {
+    /// What the terrain is called.
     pub name: String,
+    /// The frame for each of the sixteen side masks, indexed by mask.
     pub frames: [u32; 16],
     /// The 47-tile "blob" set, which also looks at the diagonals: inner
     /// corners, the lake with an inlet. Empty keeps the sixteen-frame sides
@@ -35,8 +40,11 @@ pub const BLOB_FRAMES: usize = 47;
 
 /// The diagonal bits of the eight-neighbour mask, above the side bits.
 pub const NORTH_EAST: usize = 16;
+/// The south-east diagonal's bit.
 pub const SOUTH_EAST: usize = 32;
+/// The south-west diagonal's bit.
 pub const SOUTH_WEST: usize = 64;
+/// The north-west diagonal's bit.
 pub const NORTH_WEST: usize = 128;
 
 /// An eight-neighbour mask with every corner whose two sides are not both

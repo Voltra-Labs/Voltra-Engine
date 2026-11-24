@@ -49,6 +49,7 @@ impl EguiBackend {
         self.set_view(device, id, view, filter);
     }
 
+    /// Forgets an id registered by [`Self::register_view`].
     pub fn free_view(&mut self, id: TextureId) {
         self.textures.remove(&id);
     }

@@ -25,7 +25,9 @@ pub use focus::is_control;
 pub struct Pointer {
     /// `None` when the cursor is outside the window or unknown.
     pub position: Option<Vec2>,
+    /// Whether the primary button went down this frame.
     pub went_down: bool,
+    /// Whether the primary button came up this frame.
     pub went_up: bool,
     /// Wheel lines this frame: positive is up, and right.
     pub scroll: Vec2,
@@ -45,7 +47,9 @@ pub struct Navigation {
 /// Everything the controls are told in one frame.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct UiInput {
+    /// The pointer's position and buttons.
     pub pointer: Pointer,
+    /// Keyboard and gamepad navigation.
     pub navigation: Navigation,
     /// Typing, for the focused text field.
     pub text: TextInput,
@@ -90,10 +94,12 @@ impl UiControls {
         self.submitted.contains(&control)
     }
 
+    /// Whether the pointer is over `control`.
     pub fn hovered(&self, control: Entity) -> bool {
         self.hovered == Some(control)
     }
 
+    /// The control holding the focus, if any.
     pub fn focused(&self) -> Option<Entity> {
         self.focused
     }

@@ -26,6 +26,7 @@ pub struct Materials {
 }
 
 impl Materials {
+    /// An empty set that resolves paths against `root`.
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
             root: root.into(),
@@ -109,22 +110,27 @@ impl Materials {
         Ok((file, shader_path, fragment))
     }
 
+    /// The material `handle` addresses, if it is current.
     pub fn get(&self, handle: Handle<Material>) -> Option<&Material> {
         self.store.get(handle)
     }
 
+    /// The handle of the material loaded from `path`, if there is one.
     pub fn by_path_handle(&self, path: &AssetPath) -> Option<Handle<Material>> {
         self.by_path.get(path).copied()
     }
 
+    /// The directory every asset path is resolved against.
     pub fn root(&self) -> &Path {
         &self.root
     }
 
+    /// How many materials are stored.
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    /// Whether no material is stored.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

@@ -25,8 +25,11 @@ pub fn is_render_texture(name: &str) -> bool {
 /// ```
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RenderTextureFile {
+    /// The file format version.
     pub version: u32,
+    /// Width, in pixels.
     pub width: u32,
+    /// Height, in pixels.
     pub height: u32,
     /// Blocky when scaled: a minimap of pixel art.
     #[serde(default)]
@@ -36,7 +39,9 @@ pub struct RenderTextureFile {
 /// The two targets a camera draws a render texture through: the scene, and
 /// the graded picture sprites sample.
 pub struct RenderTexture {
+    /// Where the camera draws the scene, before grading.
     pub scene: RenderTarget,
+    /// The graded picture that sprites sample.
     pub picture: RenderTarget,
 }
 

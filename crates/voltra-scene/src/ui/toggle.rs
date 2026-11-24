@@ -13,6 +13,7 @@ use super::button::ButtonFrames;
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiToggle {
     #[serde(default)]
+    /// Whether it is on.
     pub on: bool,
     /// Multiplied into the button's colour while on.
     #[serde(default = "green")]

@@ -40,6 +40,7 @@ const TOUCH: f32 = 1e-5;
 /// The first collider a moved shape meets.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ShapeHit {
+    /// The entity whose collider was met.
     pub entity: Entity,
     /// How much of the motion is free: `0` touches at once, `1` at the end.
     pub fraction: f32,

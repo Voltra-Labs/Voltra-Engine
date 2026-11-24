@@ -12,8 +12,11 @@ use super::atlas::GlyphKey;
 /// the line's left end along its baseline.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlacedGlyph {
+    /// Which glyph, at what size.
     pub key: GlyphKey,
+    /// Pen position along the line's baseline, in pixels from the line's left end.
     pub pen: f32,
+    /// Zero-based index of the line it is on.
     pub line: usize,
 }
 
@@ -21,6 +24,7 @@ pub struct PlacedGlyph {
 /// [`line_height`](Self::line_height) apart.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextLayout {
+    /// The glyphs, each placed on its line.
     pub glyphs: Vec<PlacedGlyph>,
     /// Each line's advance width, in pixels. One entry per line, even an
     /// empty one, so a trailing `\n` still counts as a line.

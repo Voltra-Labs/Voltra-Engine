@@ -29,6 +29,7 @@ use crate::watch::{
 /// here and this engine cannot draw it", which is Unity's answer too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
+    /// A directory, which can be opened.
     Directory,
     /// A file with an extension in
     /// [`TEXTURE_EXTENSIONS`](crate::watch::TEXTURE_EXTENSIONS).
@@ -69,6 +70,7 @@ pub struct Entry {
     pub name: String,
     /// Where it is, relative to the asset root.
     pub path: AssetPath,
+    /// What kind of entry it is.
     pub kind: EntryKind,
 }
 

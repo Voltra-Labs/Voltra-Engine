@@ -2,6 +2,8 @@
 //! reads too, and where the web pack goes. Everything that opens a window is in
 //! the binary.
 
+#![warn(missing_docs)]
+
 pub mod manifest;
 
 pub use manifest::{Manifest, ManifestError, MANIFEST_FILE};

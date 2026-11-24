@@ -16,6 +16,7 @@ struct Progress {
 /// The one slot this game uses.
 const SLOT: &str = "quicksave";
 
+/// Keeps the walker's position and the coin count in the save slot; logs and keeps nothing if the walker has no transform or the write fails.
 pub fn save(tick: &mut Tick<'_>, walker: Entity, coins: u32) {
     let Some(at) = tick.world.get::<Transform>(walker).map(|t| t.translation) else {
         return;

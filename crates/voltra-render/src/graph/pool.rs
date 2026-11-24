@@ -7,9 +7,13 @@ use crate::texture::Filter;
 /// a texture when their uses do not overlap.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TextureDesc {
+    /// Names the texture in GPU debug tools.
     pub label: &'static str,
+    /// Width, in texels.
     pub width: u32,
+    /// Height, in texels.
     pub height: u32,
+    /// Texel format.
     pub format: wgpu::TextureFormat,
 }
 
@@ -48,6 +52,7 @@ impl TexturePool {
         self.entries.len()
     }
 
+    /// Whether no texture is held.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

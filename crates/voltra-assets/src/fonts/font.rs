@@ -25,6 +25,7 @@ pub struct Font {
 }
 
 impl Font {
+    /// A font over `face`; `None` is a font that draws nothing.
     pub fn new(face: Option<fontdue::Font>) -> Self {
         Self {
             face,
@@ -33,10 +34,12 @@ impl Font {
         }
     }
 
+    /// The parsed face, or `None` when the file was missing or unreadable.
     pub fn face(&self) -> Option<&fontdue::Font> {
         self.face.as_ref()
     }
 
+    /// The glyphs rasterized so far.
     pub fn atlas(&self) -> &GlyphAtlas {
         &self.atlas
     }

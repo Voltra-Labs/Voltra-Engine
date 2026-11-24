@@ -116,8 +116,10 @@ impl Camera {
     /// whatever `view` hands it, so these exist to say what the field means,
     /// and so a UI can stop a drag at the wall rather than at infinity.
     pub const MIN_SIZE: f32 = 1.0 / Camera2D::MAX_ZOOM;
+    /// The largest [`Self::size`] the camera's zoom limit allows.
     pub const MAX_SIZE: f32 = 1.0 / Camera2D::MIN_ZOOM;
 
+    /// A camera with `size` and every other field at its default.
     pub fn new(size: f32) -> Self {
         Self {
             size,
@@ -125,6 +127,7 @@ impl Camera {
         }
     }
 
+    /// Sets the draw order among cameras; see [`Camera::priority`].
     pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
         self

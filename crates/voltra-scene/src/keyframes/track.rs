@@ -11,6 +11,7 @@ use super::value::Value;
 pub struct Key {
     /// Seconds from the clip's start.
     pub time: f32,
+    /// What the property is at `time`.
     pub value: Value,
     /// The shape of the segment from this key to the next. Linear when not
     /// written.
@@ -19,6 +20,7 @@ pub struct Key {
 }
 
 impl Key {
+    /// A key at `time` holding `value`, eased linearly.
     pub fn new(time: f32, value: Value) -> Self {
         Self {
             time,
@@ -27,6 +29,7 @@ impl Key {
         }
     }
 
+    /// Sets the shape of the segment from this key to the next.
     pub fn with_ease(mut self, ease: Ease) -> Self {
         self.ease = ease;
         self
@@ -41,6 +44,7 @@ pub struct Track {
     /// player's own.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub target: String,
+    /// Which property it drives.
     pub property: Property,
     /// Sorted by time; a clip's load sorts them.
     #[serde(default)]
@@ -52,6 +56,7 @@ pub struct Track {
 pub const SAME_TIME: f32 = 1e-4;
 
 impl Track {
+    /// A track on `target` with no keys.
     pub fn new(target: impl Into<String>, property: Property) -> Self {
         Self {
             target: target.into(),

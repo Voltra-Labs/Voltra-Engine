@@ -12,7 +12,9 @@ use crate::protocol::{Command, Request, Response};
 /// A request waiting for the editor's frame, and the way back to whoever
 /// sent it.
 pub struct Pending {
+    /// The id of the request, which its answer carries.
     pub id: u64,
+    /// What it asks the editor to do.
     pub command: Command,
     reply: Sender<Response>,
 }

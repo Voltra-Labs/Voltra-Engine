@@ -192,10 +192,12 @@ impl Fonts {
         &self.root
     }
 
+    /// How many fonts are stored.
     pub fn len(&self) -> usize {
         self.store.len()
     }
 
+    /// Whether no font is stored.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

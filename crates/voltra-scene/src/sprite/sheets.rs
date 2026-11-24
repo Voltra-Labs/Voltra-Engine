@@ -18,7 +18,9 @@ use voltra_render::Texture;
 /// their geometry headless.
 #[derive(Clone, Copy, Default)]
 pub struct Sheets<'a> {
+    /// The slicings frame indices are resolved against.
     pub atlases: Option<&'a Atlases>,
+    /// The textures' sizes, for turning pixels into UVs.
     pub textures: Option<&'a dyn TextureSizes>,
     /// The faces and glyph atlases a [`Text`](crate::Text) draws from.
     /// Absent draws and picks no text at all.

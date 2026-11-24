@@ -105,6 +105,7 @@ impl Textures {
         self.filter = filter;
     }
 
+    /// The filter images are loaded with.
     pub fn filter(&self) -> Filter {
         self.filter
     }
@@ -315,6 +316,7 @@ impl Textures {
         self.store.len()
     }
 
+    /// Whether no texture is stored.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }

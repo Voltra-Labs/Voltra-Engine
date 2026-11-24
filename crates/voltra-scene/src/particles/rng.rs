@@ -5,6 +5,7 @@
 //! what an emitter does. Not for anything that needs to be unpredictable.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// A xorshift generator seeded by a `u64`.
 pub struct Rng(u64);
 
 impl Rng {
@@ -14,6 +15,7 @@ impl Rng {
         Self(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1)
     }
 
+    /// The next 64 random bits.
     pub fn next_u64(&mut self) -> u64 {
         let mut x = self.0;
         x ^= x >> 12;

@@ -18,6 +18,7 @@ pub struct GlyphQuad {
     /// Top-left, bottom-left, bottom-right, top-right, as the batch takes
     /// them.
     pub corners: [Vec2; 4],
+    /// Texture coordinates for each corner, in the same order.
     pub uvs: [[f32; 2]; 4],
 }
 
@@ -26,7 +27,9 @@ pub struct GlyphQuad {
 /// the last line's descent.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Bounds {
+    /// The corner with the smallest x and y.
     pub min: Vec2,
+    /// The corner with the largest x and y.
     pub max: Vec2,
 }
 

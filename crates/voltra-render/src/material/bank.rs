@@ -12,7 +12,9 @@ pub struct MaterialRequest<'a> {
     /// Unique to one read of one material: a changed material is a new
     /// revision, and so a new pipeline.
     pub revision: u64,
+    /// The material's composed WGSL source.
     pub source: &'a str,
+    /// This use's uniform block, as the shader reads it.
     pub block: [u8; BLOCK_SIZE],
 }
 
@@ -43,6 +45,7 @@ struct Cached {
 const KEEP_FRAMES: u64 = 600;
 
 impl MaterialBank {
+    /// An empty bank on `device`.
     pub fn new(device: &wgpu::Device) -> Self {
         let layout = uniform_layout(device);
         let uniforms = MaterialUniforms::new(device, &layout);
@@ -115,6 +118,7 @@ impl MaterialBank {
         self.pipelines.len()
     }
 
+    /// Whether no pipeline is held.
     pub fn is_empty(&self) -> bool {
         self.pipelines.is_empty()
     }

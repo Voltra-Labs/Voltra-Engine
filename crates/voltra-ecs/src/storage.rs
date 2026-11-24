@@ -29,6 +29,7 @@ impl<T> Default for SparseSet<T> {
 }
 
 impl<T> SparseSet<T> {
+    /// An empty storage.
     pub fn new() -> Self {
         Self::default()
     }
@@ -56,10 +57,12 @@ impl<T> SparseSet<T> {
         None
     }
 
+    /// The component of `entity`, if it has one.
     pub fn get(&self, entity: Entity) -> Option<&T> {
         self.slot_of(entity).map(|slot| &self.dense[slot])
     }
 
+    /// The component of `entity`, mutably, if it has one.
     pub fn get_mut(&mut self, entity: Entity) -> Option<&mut T> {
         self.slot_of(entity).map(|slot| &mut self.dense[slot])
     }
@@ -82,14 +85,17 @@ impl<T> SparseSet<T> {
         Some(value)
     }
 
+    /// Whether `entity` has a component here.
     pub fn contains(&self, entity: Entity) -> bool {
         self.slot_of(entity).is_some()
     }
 
+    /// How many components are stored.
     pub fn len(&self) -> usize {
         self.dense.len()
     }
 
+    /// Whether no component is stored.
     pub fn is_empty(&self) -> bool {
         self.dense.is_empty()
     }
@@ -99,6 +105,7 @@ impl<T> SparseSet<T> {
         self.entities.iter().copied().zip(self.dense.iter())
     }
 
+    /// Iterates every `(entity, component)` pair in dense order, the components mutably.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (Entity, &mut T)> {
         self.entities.iter().copied().zip(self.dense.iter_mut())
     }

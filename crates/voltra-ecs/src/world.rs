@@ -39,10 +39,12 @@ pub struct World {
 }
 
 impl World {
+    /// An empty world.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Allocates a live entity with no components.
     pub fn spawn(&mut self) -> Entity {
         self.entities.spawn()
     }
@@ -78,10 +80,12 @@ impl World {
         self.storages.clear();
     }
 
+    /// Whether `entity` is live.
     pub fn is_alive(&self, entity: Entity) -> bool {
         self.entities.is_alive(entity)
     }
 
+    /// How many entities are live.
     pub fn entity_count(&self) -> usize {
         self.entities.len()
     }
@@ -125,14 +129,17 @@ impl World {
             .insert(entity, component)
     }
 
+    /// The `T` of `entity`, if it has one.
     pub fn get<T: 'static>(&self, entity: Entity) -> Option<&T> {
         self.storage::<T>()?.get(entity)
     }
 
+    /// The `T` of `entity`, mutably, if it has one.
     pub fn get_mut<T: 'static>(&mut self, entity: Entity) -> Option<&mut T> {
         self.storage_mut::<T>()?.get_mut(entity)
     }
 
+    /// Removes `entity`'s `T`, returning it.
     pub fn remove<T: 'static>(&mut self, entity: Entity) -> Option<T> {
         self.storage_mut::<T>()?.remove(entity)
     }
@@ -147,6 +154,7 @@ impl World {
         self.storage::<T>().into_iter().flat_map(SparseSet::iter)
     }
 
+    /// Every entity holding a `T`, in dense order, the components mutably.
     pub fn query_mut<T: 'static>(&mut self) -> impl Iterator<Item = (Entity, &mut T)> {
         self.storage_mut::<T>()
             .into_iter()

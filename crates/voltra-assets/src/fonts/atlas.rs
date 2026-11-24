@@ -23,7 +23,9 @@ pub const PADDING: u32 = 1;
 /// per em.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GlyphKey {
+    /// The glyph's index in the face.
     pub glyph: u16,
+    /// Raster size, in pixels per em.
     pub px: u32,
 }
 
@@ -32,24 +34,33 @@ pub struct GlyphKey {
 /// baseline.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct GlyphMetrics {
+    /// Pixels from the pen to the bitmap's left edge.
     pub xmin: i32,
+    /// Pixels from the baseline to the bitmap's bottom edge.
     pub ymin: i32,
+    /// Bitmap width, in pixels.
     pub width: u32,
+    /// Bitmap height, in pixels.
     pub height: u32,
 }
 
 /// A region of the atlas, in texels, top-left origin.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GlyphRect {
+    /// Left edge, in texels.
     pub x: u32,
+    /// Top edge, in texels.
     pub y: u32,
+    /// Width, in texels.
     pub width: u32,
+    /// Height, in texels.
     pub height: u32,
 }
 
 /// What the atlas knows about one glyph.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Glyph {
+    /// Where its bitmap sits relative to the pen.
     pub metrics: GlyphMetrics,
     /// `None` for a glyph with no ink (a space) and for one refused as too
     /// large: either way there is nothing to draw, and the advance is still
@@ -106,6 +117,7 @@ impl GlyphAtlas {
         self.glyphs.get(&key)
     }
 
+    /// Whether `key` has been inserted.
     pub fn contains(&self, key: GlyphKey) -> bool {
         self.glyphs.contains_key(&key)
     }
@@ -235,6 +247,7 @@ impl GlyphAtlas {
         self.dirty
     }
 
+    /// Records that the image has been uploaded, so [`is_dirty`](Self::is_dirty) reads false.
     pub fn mark_clean(&mut self) {
         self.dirty = false;
     }
@@ -244,6 +257,7 @@ impl GlyphAtlas {
         self.glyphs.len()
     }
 
+    /// Whether no glyph is stored.
     pub fn is_empty(&self) -> bool {
         self.glyphs.is_empty()
     }

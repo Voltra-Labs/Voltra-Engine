@@ -174,10 +174,12 @@ impl Tweens {
         self.finished.contains(&tween)
     }
 
+    /// How many tweens are running or waiting.
     pub fn len(&self) -> usize {
         self.running.len()
     }
 
+    /// Whether no tween is running or waiting.
     pub fn is_empty(&self) -> bool {
         self.running.is_empty()
     }

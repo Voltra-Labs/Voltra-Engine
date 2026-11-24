@@ -10,7 +10,9 @@ use crate::target::RenderTarget;
 /// One camera's finished picture, and the rectangle of the output it goes
 /// in, in the output's pixels from its top-left.
 pub struct Placed<'a> {
+    /// The camera's finished picture.
     pub picture: &'a RenderTarget,
+    /// Where it goes, as `[x, y, width, height]` in the output's pixels.
     pub rect: [f32; 4],
 }
 

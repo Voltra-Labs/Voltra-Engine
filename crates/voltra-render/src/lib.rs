@@ -4,6 +4,8 @@
 //! *nothing* about windowing: callers hand it anything that converts into a
 //! [`wgpu::SurfaceTarget`], which keeps `winit` out of the render layer.
 
+#![warn(missing_docs)]
+
 pub mod bloom;
 pub mod camera;
 pub mod context;

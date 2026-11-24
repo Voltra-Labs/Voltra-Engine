@@ -9,15 +9,22 @@
 //! It depends on `voltra-render` for `wgpu`, like every other non-render
 //! crate, and declares no `wgpu` of its own.
 
+#![warn(missing_docs)]
+
 use std::path::{Path, PathBuf};
 
 use voltra_render::wgpu;
 
+/// One pixel read back from a texture, as 8-bit channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Rgba {
+    /// Red.
     pub r: u8,
+    /// Green.
     pub g: u8,
+    /// Blue.
     pub b: u8,
+    /// Alpha.
     pub a: u8,
 }
 
@@ -31,6 +38,7 @@ impl Rgba {
     }
 }
 
+/// The colour the test scenes clear to, in linear values.
 pub const CLEAR: wgpu::Color = wgpu::Color {
     r: 0.1,
     g: 0.1,

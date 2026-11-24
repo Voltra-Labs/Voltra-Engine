@@ -2,10 +2,14 @@
 
 use winit::window::WindowAttributes;
 
+/// How the window opens.
 #[derive(Debug, Clone)]
 pub struct WindowConfig {
+    /// The window title; also names the game's default save directory.
     pub title: String,
+    /// Inner width in logical pixels.
     pub width: u32,
+    /// Inner height in logical pixels.
     pub height: u32,
 }
 

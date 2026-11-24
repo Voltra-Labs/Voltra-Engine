@@ -37,10 +37,12 @@ pub struct Entities {
 }
 
 impl Entities {
+    /// An allocator with no entities.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Allocates a live entity, reusing a freed slot under a new generation if there is one.
     pub fn spawn(&mut self) -> Entity {
         self.live_count += 1;
 
@@ -78,6 +80,7 @@ impl Entities {
         true
     }
 
+    /// Whether `entity` is live: its slot is in use and the generation matches.
     pub fn is_alive(&self, entity: Entity) -> bool {
         let slot = entity.index as usize;
         self.alive.get(slot).copied().unwrap_or(false)
@@ -89,6 +92,7 @@ impl Entities {
         self.live_count
     }
 
+    /// Whether no entity is live.
     pub fn is_empty(&self) -> bool {
         self.live_count == 0
     }

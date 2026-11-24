@@ -11,9 +11,13 @@ use super::rect::Rect;
 /// padding and a 9-slice's borders, so they are one type.
 #[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Edges {
+    /// Width on the left, in points.
     pub left: f32,
+    /// Width on the top, in points.
     pub top: f32,
+    /// Width on the right, in points.
     pub right: f32,
+    /// Width on the bottom, in points.
     pub bottom: f32,
 }
 

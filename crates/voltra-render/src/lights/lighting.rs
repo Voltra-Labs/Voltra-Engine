@@ -34,6 +34,7 @@ pub struct PointLight {
     pub position: Vec2,
     /// Linear colour, multiplied by `intensity`.
     pub color: [f32; 3],
+    /// Multiplier on `color`.
     pub intensity: f32,
     /// World units from the centre to where it gives nothing.
     pub radius: f32,
@@ -160,6 +161,7 @@ pub struct Lighting {
     /// The light everything gets, linear. `None` is unlit: the frame is the
     /// scene as drawn and no lighting pass runs.
     pub ambient: Option<[f32; 3]>,
+    /// The lights shining from a point.
     pub lights: Vec<PointLight>,
     /// Lights with no place, added onto the ambient for the pixels of
     /// their layers.

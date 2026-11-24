@@ -145,6 +145,7 @@ pub struct MaterialUniforms {
 }
 
 impl MaterialUniforms {
+    /// A uniform buffer on `device` and its bind group against `layout`.
     pub fn new(device: &wgpu::Device, layout: &wgpu::BindGroupLayout) -> Self {
         let align = device.limits().min_uniform_buffer_offset_alignment as usize;
         let stride = BLOCK_SIZE.next_multiple_of(align.max(1));
@@ -208,6 +209,7 @@ impl MaterialUniforms {
             .collect()
     }
 
+    /// The bind group over the frame's uniform blocks.
     pub fn bind_group(&self) -> &wgpu::BindGroup {
         &self.bind_group
     }

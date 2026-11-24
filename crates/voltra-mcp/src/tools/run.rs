@@ -30,11 +30,17 @@ pub struct HeldAction {
 /// What to run, and what to bring back.
 #[derive(Debug, Clone)]
 pub struct RunRequest {
+    /// The scene to run, as an asset path.
     pub scene: String,
+    /// How many frames to run.
     pub frames: u32,
+    /// Seconds each frame advances.
     pub delta: f32,
+    /// Actions pressed and let go on their frames.
     pub inputs: Vec<HeldAction>,
+    /// Entities to report in full, by name or reference; empty sums up where each named entity ended up.
     pub report: Vec<String>,
+    /// Width and height in pixels of the screenshot to take at the end, if any.
     pub screenshot: Option<(u32, u32)>,
     /// Whether to time the run's frames, scope by scope.
     pub profile: bool,
@@ -43,7 +49,9 @@ pub struct RunRequest {
 /// What came of a run: the report, and the screenshot as PNG bytes.
 #[derive(Debug, Clone)]
 pub struct RunOutcome {
+    /// The run as JSON: scene, frames, entities, unbound actions, log, screenshot status and profile.
     pub report: Value,
+    /// The screenshot, PNG encoded, when one was asked for.
     pub png: Option<Vec<u8>>,
 }
 

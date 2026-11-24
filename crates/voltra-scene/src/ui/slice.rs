@@ -55,7 +55,9 @@ impl Default for UiSlice {
 /// bottom-left, bottom-right, top-right.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Piece {
+    /// The piece's corners, in points.
     pub corners: [Vec2; 4],
+    /// The texture coordinates of each corner.
     pub uvs: [[f32; 2]; 4],
 }
 
@@ -64,9 +66,13 @@ pub struct Piece {
 /// in them), and whether it is mirrored on each axis.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Image {
+    /// The image's size, in texels.
     pub texels: UVec2,
+    /// The texture coordinates it samples, flips included.
     pub uvs: [[f32; 2]; 4],
+    /// Whether it is mirrored left to right.
     pub flip_x: bool,
+    /// Whether it is mirrored top to bottom.
     pub flip_y: bool,
 }
 

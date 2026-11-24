@@ -12,20 +12,30 @@ use std::path::PathBuf;
 /// they disable audio and leave the app running.
 #[derive(Debug)]
 pub enum AudioError {
+    /// A file that could not be read.
     Read {
+        /// The file.
         path: PathBuf,
+        /// The underlying I/O error.
         source: std::io::Error,
     },
     /// Boxed because `symphonia`'s error carries an `io::Error` and a string,
     /// and inlining it widens every `Result` in the crate — `clippy`'s
     /// `result_large_err`.
     Decode {
+        /// The file.
         path: PathBuf,
+        /// What `symphonia` reported.
         source: Box<symphonia::core::errors::Error>,
     },
     /// A file that decoded but describes nothing playable: no audio track, no
     /// codec parameters, no channels, or a zero sample rate.
-    Unsupported { path: PathBuf, reason: &'static str },
+    Unsupported {
+        /// The file.
+        path: PathBuf,
+        /// What is missing from it.
+        reason: &'static str,
+    },
     /// The host has no output device at all — a headless CI runner, a machine
     /// with the sound card disabled.
     NoDevice,

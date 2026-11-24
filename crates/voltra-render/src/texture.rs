@@ -14,9 +14,13 @@ pub enum TextureError {
     Decode(image::ImageError),
     /// The pixel data does not match the stated dimensions.
     SizeMismatch {
+        /// The number of bytes expected.
         expected: usize,
+        /// The number of bytes given.
         actual: usize,
+        /// The stated width, in pixels.
         width: u32,
+        /// The stated height, in pixels.
         height: u32,
     },
 }
@@ -247,10 +251,12 @@ impl Texture {
         }
     }
 
+    /// Width, in texels.
     pub fn width(&self) -> u32 {
         self.width
     }
 
+    /// Height, in texels.
     pub fn height(&self) -> u32 {
         self.height
     }

@@ -29,6 +29,7 @@ pub struct PostSettings {
 }
 
 impl PostSettings {
+    /// Settings that leave the picture unchanged.
     pub const NEUTRAL: Self = Self {
         exposure: 1.0,
         contrast: 1.0,

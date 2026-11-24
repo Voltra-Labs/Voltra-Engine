@@ -14,11 +14,13 @@ pub const HISTORY: usize = 600;
 /// A timed scope.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Span {
+    /// The scope's name.
     pub name: &'static str,
     /// How many scopes were open around it: 0 at the top.
     pub depth: u16,
     /// When it opened, from the frame's start.
     pub start: Duration,
+    /// How long it stayed open.
     pub duration: Duration,
 }
 
@@ -68,6 +70,7 @@ impl Default for Recorder {
 }
 
 impl Recorder {
+    /// Whether frames are being recorded.
     pub fn is_enabled(&self) -> bool {
         self.enabled
     }

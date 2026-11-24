@@ -16,9 +16,13 @@ use winit::keyboard::KeyCode;
 /// one player.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Binding {
+    /// A physical key.
     Key(KeyCode),
+    /// A mouse button.
     Mouse(MouseButton),
+    /// A gamepad button.
     Pad(PadButton),
+    /// One direction of a gamepad stick axis.
     PadAxis(PadAxis, Direction),
     /// A finger that went down in a part of the screen: held, or dragged
     /// one way — a virtual stick. `Touch(BottomLeft, Right)` walks right
@@ -33,11 +37,15 @@ pub enum Binding {
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
 pub enum TouchZone {
+    /// Anywhere on the screen.
     Anywhere,
+    /// The left half of the screen.
     LeftHalf,
+    /// The right half of the screen.
     RightHalf,
     /// The left half of the bottom half: where a left thumb rests.
     BottomLeft,
+    /// The right half of the bottom half: where a right thumb rests.
     BottomRight,
 }
 
@@ -77,10 +85,15 @@ impl TouchZone {
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
 pub enum TouchDir {
+    /// Held, wherever the finger is.
     Hold,
+    /// Dragged left of where it went down.
     Left,
+    /// Dragged right of where it went down.
     Right,
+    /// Dragged up from where it went down.
     Up,
+    /// Dragged down from where it went down.
     Down,
 }
 
@@ -113,24 +126,39 @@ impl TouchDir {
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
 pub enum PadButton {
+    /// The bottom face button: A on an Xbox pad, Cross on a PlayStation one.
     South,
+    /// The right face button: B on an Xbox pad, Circle on a PlayStation one.
     East,
+    /// The left face button: X on an Xbox pad, Square on a PlayStation one.
     West,
+    /// The top face button: Y on an Xbox pad, Triangle on a PlayStation one.
     North,
+    /// The left shoulder button.
     LeftBumper,
+    /// The right shoulder button.
     RightBumper,
     /// Analog on most pads: its value is the action's strength.
     LeftTrigger,
+    /// The right trigger; analog on most pads.
     RightTrigger,
+    /// The back or select button.
     Select,
+    /// The start or menu button.
     Start,
+    /// The centre logo button: Guide, Home.
     Mode,
     /// Clicking the stick in.
     LeftStick,
+    /// Clicking the right stick in.
     RightStick,
+    /// D-pad up.
     DPadUp,
+    /// D-pad down.
     DPadDown,
+    /// D-pad left.
     DPadLeft,
+    /// D-pad right.
     DPadRight,
 }
 
@@ -140,9 +168,13 @@ pub enum PadButton {
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
 pub enum PadAxis {
+    /// The left stick, left to right.
     LeftStickX,
+    /// The left stick, down to up.
     LeftStickY,
+    /// The right stick, left to right.
     RightStickX,
+    /// The right stick, down to up.
     RightStickY,
 }
 
@@ -152,7 +184,9 @@ pub enum PadAxis {
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
 pub enum Direction {
+    /// The axis pushed towards +1.
     Positive,
+    /// The axis pushed towards -1.
     Negative,
 }
 

@@ -75,6 +75,7 @@ impl Timers {
         id
     }
 
+    /// Stops `timer` if it is still pending.
     pub fn cancel(&mut self, timer: TimerId) {
         self.pending.retain(|t| t.id != timer);
     }
@@ -103,10 +104,12 @@ impl Timers {
         self.pending.iter().find(|t| t.id == timer).map(|t| t.left)
     }
 
+    /// How many timers are pending.
     pub fn len(&self) -> usize {
         self.pending.len()
     }
 
+    /// Whether no timer is pending.
     pub fn is_empty(&self) -> bool {
         self.pending.is_empty()
     }

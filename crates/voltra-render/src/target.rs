@@ -22,6 +22,7 @@ pub struct RenderTarget {
 }
 
 impl RenderTarget {
+    /// A target of `width` by `height` texels in `format`, sampled with `filter`.
     pub fn new(
         device: &wgpu::Device,
         label: &str,
@@ -86,6 +87,7 @@ impl RenderTarget {
         true
     }
 
+    /// The underlying texture.
     pub fn texture(&self) -> &wgpu::Texture {
         &self.texture
     }
@@ -105,14 +107,17 @@ impl RenderTarget {
         &self.raw_view
     }
 
+    /// The texel format.
     pub fn format(&self) -> wgpu::TextureFormat {
         self.format
     }
 
+    /// Width, in texels.
     pub fn width(&self) -> u32 {
         self.width
     }
 
+    /// Height, in texels.
     pub fn height(&self) -> u32 {
         self.height
     }

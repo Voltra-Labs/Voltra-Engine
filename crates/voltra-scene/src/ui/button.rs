@@ -16,11 +16,13 @@ use crate::sprite::Sprite;
 /// tint is what this engine's quads already have.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiButton {
+    /// The colour at rest, RGBA.
     pub normal: [f32; 4],
     /// Under the pointer, or holding the focus.
     pub hovered: [f32; 4],
     /// Held down.
     pub pressed: [f32; 4],
+    /// The colour while disabled, RGBA.
     pub disabled_color: [f32; 4],
     /// Takes no click and no focus.
     #[serde(default)]
@@ -39,9 +41,13 @@ pub struct UiButton {
 /// the frame is the one thing a state changes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ButtonFrames {
+    /// The frame at rest.
     pub normal: u32,
+    /// The frame under the pointer, or holding the focus.
     pub hovered: u32,
+    /// The frame while held down.
     pub pressed: u32,
+    /// The frame while disabled.
     pub disabled: u32,
 }
 
@@ -74,9 +80,13 @@ impl Default for UiButton {
 /// What a button shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
+    /// At rest.
     Normal,
+    /// Under the pointer, or holding the focus.
     Hovered,
+    /// Held down.
     Pressed,
+    /// Taking no click and no focus.
     Disabled,
 }
 

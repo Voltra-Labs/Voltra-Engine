@@ -17,6 +17,7 @@ pub struct AnimationClip {
     /// Whether the end wraps to the start. Off, the player stops on the
     /// last frame: a door that opens, a hit flash.
     pub looping: bool,
+    /// The properties it animates, one track each.
     pub tracks: Vec<Track>,
 }
 

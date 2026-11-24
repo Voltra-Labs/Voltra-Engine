@@ -18,14 +18,22 @@ const MAX_LINES: usize = 150;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CargoJob {
     /// `cargo build`, of one package or the workspace.
-    Build { package: Option<String> },
+    Build {
+        /// The package to build; absent builds the workspace.
+        package: Option<String>,
+    },
     /// `cargo test`, of one package or the workspace, filtered by name.
     Test {
+        /// The package to test; absent tests the workspace.
         package: Option<String>,
+        /// Only the tests whose name contains this.
         filter: Option<String>,
     },
     /// `cargo xtask dist`, with the build manifest named or `build.ron`.
-    Dist { manifest: Option<String> },
+    Dist {
+        /// The manifest to package; absent uses `build.ron`.
+        manifest: Option<String>,
+    },
 }
 
 /// Whether `name` is a cargo package name: letters, digits, `-` and `_`,

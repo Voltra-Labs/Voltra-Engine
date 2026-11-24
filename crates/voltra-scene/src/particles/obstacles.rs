@@ -63,6 +63,7 @@ impl Obstacles {
         Self { all }
     }
 
+    /// Whether there are no obstacles.
     pub fn is_empty(&self) -> bool {
         self.all.is_empty()
     }

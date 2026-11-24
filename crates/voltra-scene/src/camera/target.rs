@@ -17,6 +17,7 @@ use voltra_render::Texture;
 /// texture while drawing into it is not allowed.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct CameraTarget {
+    /// The render texture the camera draws into, by path.
     pub texture: AssetPath,
     /// What `texture` resolves to in this session's textures. Never
     /// written.
@@ -32,6 +33,7 @@ impl Default for CameraTarget {
 }
 
 impl CameraTarget {
+    /// A target drawing into `texture`, not yet resolved.
     pub fn new(texture: AssetPath) -> Self {
         Self {
             texture,

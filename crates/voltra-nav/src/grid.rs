@@ -50,10 +50,12 @@ impl NavGrid {
         self
     }
 
+    /// The world position of the grid's bottom-left corner.
     pub fn origin(&self) -> Vec2 {
         self.origin
     }
 
+    /// The side of a cell, in world units.
     pub fn cell_size(&self) -> f32 {
         self.cell
     }
@@ -78,6 +80,7 @@ impl NavGrid {
         self.origin + (cell.as_vec2() + Vec2::splat(0.5)) * self.cell
     }
 
+    /// Whether `cell` is on the grid, blocked or not.
     pub fn contains(&self, cell: IVec2) -> bool {
         cell.x >= 0 && cell.y >= 0 && cell.x < self.size.x && cell.y < self.size.y
     }

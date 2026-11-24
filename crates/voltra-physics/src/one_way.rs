@@ -79,6 +79,7 @@ impl OneWayPasses {
         self.passing.len()
     }
 
+    /// Whether no pair is passing through.
     pub fn is_empty(&self) -> bool {
         self.passing.is_empty()
     }

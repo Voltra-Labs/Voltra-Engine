@@ -63,6 +63,7 @@ impl App {
         self
     }
 
+    /// Keeps saves in `dir` instead of the per-game default.
     pub fn with_save_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.saves = crate::saves::Saves::in_dir(dir);
         self

@@ -13,6 +13,7 @@ use std::thread::JoinHandle;
 /// How a build ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BuildOutcome {
+    /// It built.
     Built,
     /// It did not build: cargo's output, from which [`summary`] picks the
     /// errors.

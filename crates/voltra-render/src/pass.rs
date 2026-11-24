@@ -65,6 +65,7 @@ pub fn draw_mesh(
 /// bindable. Building the bind group from a path or a `Handle` is the
 /// caller's job.
 pub struct MeshDraw<'a> {
+    /// The texture the range is drawn with, bound at group 1.
     pub texture: &'a wgpu::BindGroup,
     /// The range's normal map, bound through its linear view, for the
     /// normals pass (see [`NormalPass`](crate::normals::NormalPass)); `None`
@@ -74,6 +75,7 @@ pub struct MeshDraw<'a> {
     /// [`LayerPass`](crate::light_layers::LayerPass)). The colour pass
     /// ignores it.
     pub light_layers: u32,
+    /// The vertex-index range to draw.
     pub indices: Range<u32>,
     /// The material the range is drawn with, or `None` for the sprite
     /// pipeline the pass was handed.
@@ -84,6 +86,7 @@ pub struct MeshDraw<'a> {
 /// are in the frame's uniform buffer.
 #[derive(Clone, Copy)]
 pub struct MaterialDraw<'a> {
+    /// The pipeline the range is drawn with.
     pub pipeline: &'a wgpu::RenderPipeline,
     /// The frame's uniform blocks, bound at group 2.
     pub uniforms: &'a wgpu::BindGroup,

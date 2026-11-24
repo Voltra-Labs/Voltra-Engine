@@ -10,6 +10,7 @@ use crate::geometry::Hull;
 /// Where a ray met a collider.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RayHit {
+    /// The entity whose collider was hit.
     pub entity: Entity,
     /// Where the ray met the surface, in world space.
     pub point: Vec2,

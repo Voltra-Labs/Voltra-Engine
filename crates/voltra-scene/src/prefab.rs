@@ -96,6 +96,7 @@ impl Prefab {
         self.file.as_ref().map_or(0, |file| file.entities.len())
     }
 
+    /// Whether the prefab holds no entities.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }

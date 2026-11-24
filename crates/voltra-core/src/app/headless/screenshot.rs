@@ -16,8 +16,11 @@ use crate::app::ui_frame::resolve_world_textures;
 /// shows them (sRGB).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Screenshot {
+    /// Width in pixels.
     pub width: u32,
+    /// Height in pixels.
     pub height: u32,
+    /// Pixels, four bytes each (red, green, blue, alpha), row by row, `width * height * 4` bytes.
     pub rgba: Vec<u8>,
 }
 

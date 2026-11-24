@@ -73,6 +73,7 @@ pub struct Text {
     /// Multiplied with the glyphs' coverage, which is white.
     pub color: [f32; 4],
     #[serde(default)]
+    /// Which end of each line sits on the origin.
     pub align: Align,
     /// Draw order among sprites and tilemap layers. See
     /// [`Sprite::sort_order`](crate::Sprite::sort_order).
@@ -138,6 +139,7 @@ impl Text {
     /// atlas's own limit.
     pub const MAX_PIXELS_PER_EM: u32 = 512;
 
+    /// A text of `content` with every other field at its default.
     pub fn new(content: impl Into<String>) -> Self {
         Self {
             content: content.into(),

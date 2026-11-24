@@ -53,18 +53,27 @@ pub enum LoadError {
     Missing(PathBuf),
     /// The copy it is loaded from could not be made.
     Copy {
+        /// The library that was to be copied.
         path: PathBuf,
+        /// Why the copy failed.
         error: std::io::Error,
     },
     /// The platform's loader refused it.
     Open {
+        /// The library that was refused.
         path: PathBuf,
+        /// The loader's error.
         error: libloading::Error,
     },
     /// It exports no stamp: not a game library, or one from before them.
     NotAGame(PathBuf),
     /// Built in a way this host cannot trust; see [`Mismatch`].
-    Refused { path: PathBuf, mismatch: Mismatch },
+    Refused {
+        /// The library that was refused.
+        path: PathBuf,
+        /// Why.
+        mismatch: Mismatch,
+    },
 }
 
 impl fmt::Display for LoadError {
@@ -151,6 +160,7 @@ impl GameLibrary {
         &self.path
     }
 
+    /// What built the library.
     pub fn stamp(&self) -> &Stamp {
         &self.stamp
     }

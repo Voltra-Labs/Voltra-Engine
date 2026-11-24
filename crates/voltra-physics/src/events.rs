@@ -14,7 +14,9 @@ use voltra_ecs::Entity;
 /// [`PhysicsWorld::contacts`]: crate::PhysicsWorld::contacts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Touch {
+    /// The pair started touching during the step.
     Began,
+    /// The pair stopped touching during the step.
     Ended,
 }
 
@@ -24,8 +26,11 @@ pub enum Touch {
 /// the other without worrying which side of the pair it is on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CollisionEvent {
+    /// The lower entity of the pair.
     pub a: Entity,
+    /// The higher entity of the pair.
     pub b: Entity,
+    /// Whether the pair began or ended touching.
     pub touch: Touch,
     /// Whether either side of the pair is a sensor, and so was detected rather
     /// than solved. A game that only wants pickups reads this; one that only
@@ -64,6 +69,7 @@ pub struct Touching {
 }
 
 impl Touching {
+    /// An empty set.
     pub fn new() -> Self {
         Self::default()
     }
@@ -124,6 +130,7 @@ impl Touching {
         self.pairs.len()
     }
 
+    /// Whether no pair is touching.
     pub fn is_empty(&self) -> bool {
         self.pairs.is_empty()
     }
