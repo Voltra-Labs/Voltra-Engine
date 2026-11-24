@@ -57,6 +57,10 @@ pub struct CoinCounter {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct SaveButton;
 
+/// The button that goes fullscreen and back, as F11 does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+pub struct FullscreenButton;
+
 /// Names every component above, each with its default as the template the
 /// editor's "Add component" starts from.
 pub fn register(registry: &mut ComponentRegistry) {
@@ -68,5 +72,8 @@ pub fn register(registry: &mut ComponentRegistry) {
         .with_template();
     registry
         .register::<SaveButton>("SaveButton")
+        .with_template();
+    registry
+        .register::<FullscreenButton>("FullscreenButton")
         .with_template();
 }

@@ -226,6 +226,26 @@
             },
         ),
         (
+            id: "01a20a00-0000-7000-8000-00000000f001",
+            components: {
+                "FullscreenButton": (),
+                "Name": "Fullscreen button",
+                "Persistent": (),
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(134.0,68.0),offset_max:(264.0,102.0)),
+            },
+        ),
+        (
+            id: "01a20a00-0000-7000-8000-00000000f002",
+            components: {
+                "Name": "Fullscreen label",
+                "Parent": "01a20a00-0000-7000-8000-00000000f001",
+                "Text": (content:"Fullscreen",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:0),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
             id: "01a20a00-0000-7000-8000-00000000c001",
             components: {
                 "Name": "Touch stick",

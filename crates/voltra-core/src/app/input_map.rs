@@ -28,6 +28,7 @@ impl App {
     /// file named by [`App::with_input_map`] still replaces it if it is
     /// edited while running.
     pub fn with_actions(mut self, map: ActionMap) -> Self {
+        self.default_actions = map.clone();
         self.actions = map;
         self.actions_from_code = true;
         self
@@ -36,6 +37,34 @@ impl App {
     /// The game's actions, as the frame reads them.
     pub fn actions(&self) -> &ActionMap {
         &self.actions
+    }
+
+    /// The game's actions as it ships them, before the player's saved
+    /// controls are laid over.
+    pub fn default_actions(&self) -> &ActionMap {
+        &self.default_actions
+    }
+
+    /// Sets the actions to the game's own, then lays the player's saved
+    /// controls over them ([`ActionMap::load_player`]): what every start
+    /// and every reload of the map ends with, so a rebound key survives
+    /// both. No folder (a test's `App::default`) is no saved controls; a
+    /// file that will not read is a warning, and the game's own bindings
+    /// stand.
+    fn use_actions(&mut self, map: ActionMap) {
+        self.actions = map.clone();
+        self.default_actions = map;
+        if self.saves.dir().is_none() {
+            return;
+        }
+        match ActionMap::load_player(&self.saves) {
+            Ok(Some(overrides)) => {
+                let changed = self.actions.apply_overrides(&overrides);
+                log::info!("the player's controls: {changed} actions rebound");
+            }
+            Ok(None) => {}
+            Err(e) => log::warn!("{e}; using the game's own bindings"),
+        }
     }
 
     /// The path the map is read from: the one named, or the convention.
@@ -59,6 +88,8 @@ impl App {
     /// with no actions rather than not at all.
     pub(super) fn load_input_map(&mut self, root: &Path) {
         if self.actions_from_code && self.input_map_path.is_none() {
+            let map = self.default_actions.clone();
+            self.use_actions(map);
             return;
         }
         let path = self.input_map();
@@ -68,6 +99,7 @@ impl App {
                 "no {} under the asset root; no input actions",
                 path.as_str()
             );
+            self.use_actions(ActionMap::new());
             return;
         }
         match ActionMap::load(&full) {
@@ -77,7 +109,7 @@ impl App {
                     path.as_str(),
                     map.actions.len()
                 );
-                self.actions = map;
+                self.use_actions(map);
             }
             Err(e) => log::warn!("{e}; running with no input actions"),
         }
@@ -87,15 +119,16 @@ impl App {
     /// whether or not it parsed — a broken save keeps the bindings already
     /// loaded.
     ///
-    /// A reload replaces bindings rebound at runtime: the file is what the
-    /// developer is editing, and it wins.
+    /// A reload replaces bindings rebound at runtime and not yet saved: the
+    /// file is what the developer is editing, and it wins — over everything
+    /// but the player's saved controls, which are laid over it again.
     pub(super) fn reload_input_map(&mut self, path: &AssetPath) -> bool {
         if *path != self.input_map() {
             return false;
         }
         match ActionMap::load(&self.asset_root().join(path.as_str())) {
             Ok(map) => {
-                self.actions = map;
+                self.use_actions(map);
                 log::info!("reloaded {}", path.as_str());
             }
             Err(e) => log::warn!("{e}; keeping the previous input map"),
@@ -197,6 +230,8 @@ mod tests {
             "ui_left",
             "ui_right",
             "ui_accept",
+            "ui_cancel",
+            "pause",
         ] {
             assert!(!map.bindings(action).is_empty(), "{action} is bound");
         }

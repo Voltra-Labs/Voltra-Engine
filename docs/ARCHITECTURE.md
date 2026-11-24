@@ -2668,8 +2668,8 @@ whether to trust it.
   start over from silently. Versioning the type is the game's (a field in
   `T`), since only it knows what changed.
 - **Synchronous**, from `tick.saves`: a save is small and a checkpoint wants
-  it on disk before anything else can go wrong. `Saves::path_of` also gives
-  `ActionMap::save` a home beside the slots.
+  it on disk before anything else can go wrong. The player's other files
+  (rebound controls, options) live beside the slots — stage 88.
 - The platformer saves its coin count and the walker's position on F5 and
   restores them on F9.
 
@@ -5544,6 +5544,187 @@ Stage 87, version 0.1: a base is solid when someone else can use it.
 - **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
   The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
 
+### Rebound controls are saved through the saves storage
+
+Stage 88. A player's rebound keys survive a restart on every platform, the
+web included: before, `ActionMap::save` wrote through `std::fs`, which a
+browser does not have, while `Saves` already reached `localStorage`.
+
+- **One storage seam** (`voltra-core/src/storage.rs`, with `native.rs` and
+  `web.rs` moved there from `saves/`): write whole (a temporary and a
+  rename; one `localStorage` set), size, read, remove, list — by full
+  path, so the folder rules stay in `saves::dir`. Three callers: save
+  slots, the player's other files, and `ActionMap::save(path)`, which a
+  tool uses to write the project's own map (kept for that; the editor's
+  Project Settings writes text through its own atomic write).
+- **The player's files beside the slots**: `Saves::write_text` /
+  `read_text` / `remove_file` / `save_file::<T>` / `load_file::<T>`, under
+  the slot rules made for a file name — `[A-Za-z0-9._-]`, no leading dot,
+  at most 96 bytes, reads bounded at 16 MiB. One folder for everything a
+  player owns, so `VOLTRA_SAVE_DIR` moves all of it; a file not named
+  `*.save.ron` is never listed as a slot.
+- **Only what changed is kept** — Unity's binding overrides
+  (`SaveBindingOverridesAsJson`), not Godot's whole `InputMap`: the App
+  keeps the game's own map (`default_actions`: its file, or the map handed
+  to `with_actions`), `ActionMap::overrides(defaults)` is the actions that
+  differ, each whole, and `apply_overrides` lays them over the game's map,
+  skipping actions the game no longer has. A whole map saved would freeze
+  every default at the version the player first rebound in; a new action
+  or a changed default must still reach them. The file
+  (`controls.input.ron`, `PLAYER_CONTROLS`) is an input map of the current
+  version, so it reads like one; with nothing changed it is removed.
+- **From a tick**: `tick.save_controls()`, `tick.reset_controls()`,
+  `tick.default_controls()`. **At start, and after every reload of the
+  map**, the loop lays the saved controls over it (`App::use_actions`):
+  natively in `finish_resume`, headless in `Headless::new`, on the web
+  under `/<game>/saves/controls.input.ron`. A hot reload still discards
+  unsaved runtime rebinds — the file is what the developer edits — but not
+  saved ones. No folder (`App::default`) is no saved controls; a file that
+  will not read is a warning and the game's own bindings stand.
+- The platformer's F1-then-a-key rebinding of jump now saves.
+
+Pinned by `saves/files.rs` (a file beside the slots, not a slot; a value
+round trip; names that would leave the folder refused), `input/player.rs`
+(only what changed; overrides skip actions the game lost; a round trip
+through a temporary user folder; a broken file an error),
+`app/tick_controls.rs` (a key rebound and saved in one headless session
+drives jump in the next, and the old key does not; a reset saved leaves no
+file) and `crates/voltra-player/web/test/rebind.mjs`: the platformer built
+for the web, jump rebound to J, the key read back from `localStorage`, the
+page reloaded, and J jumps the walker while Space does not — on WebGPU and
+WebGL2, in CI.
+
+### A game's window requests are carried out between frames
+
+Stage 89. `tick.window` (`voltra-core/src/window/game_window.rs`,
+`GameWindow`): how the window fills the screen (`Fullscreen::Windowed`,
+`Borderless`, `Exclusive(VideoMode)`), its inner size, vsync, and the
+monitors with their modes (`monitors()`, `monitor()`, `modes()`,
+`Monitor::resolutions`, `best_mode`) — plain values in `window/display.rs`
+a game can list, compare and save.
+
+- **Requests, like scene changes**: `set_fullscreen`, `set_size`,
+  `set_vsync` are kept until the frame is over and carried out after the
+  present, before the next frame is asked for — Godot's
+  `DisplayServer.window_set_mode` and Unity's `Screen.SetResolution` defer
+  the same way, and for the same reason: a window resized inside the frame
+  would resize the surface being drawn into. The last request of a kind
+  wins. Reads (`fullscreen()`, `size()`, `vsync()`) are the window as the
+  loop last saw it, so the frame after a request reads it granted.
+- **One seam** (`window/seam.rs`, `WindowSeam`): what the loop needs of a
+  window — abilities, what is shown, monitors, and the three changes. The
+  real one is winit's window plus the renderer (`app/window_seam.rs`), the
+  only place the requests meet the platform; a headless session has a
+  pretend window that grants everything (`app/headless/window.rs`); tests
+  drive the app's ticks against a fake (`window/fake.rs`) that writes down
+  each call.
+- **Fullscreen first, then the size**: a windowed size asked while
+  fullscreen is kept and applied when the window is windowed again, so an
+  options screen can set both in either order. Exclusive takes the window's
+  monitor's mode that matches exactly, else the size at its highest
+  refresh, else borderless (with a warning) — Wayland has none, nor the
+  web. A zero size is refused.
+- **Vsync is the surface's present mode**, in `voltra-render`
+  (`GpuContext::set_vsync` / `Renderer::set_vsync`, reconfiguring the
+  surface): on is `Fifo`, which every surface has and which a context now
+  starts with (before, the default config took the adapter's first listed
+  mode); off is `AutoNoVsync` (immediate, else mailbox, else FIFO), so it
+  can never fail. The platform layer asks; winit never meets wgpu.
+- **The state is read every frame** before the ticks (`refresh_shown`):
+  a platform can change it with no event — a browser granting fullscreen
+  to a canvas already the size of the page sends no resize, and Escape
+  leaves fullscreen behind the game's back. Monitors are re-read on start,
+  resize, move and scale change, and after each request.
+- **In the editor the requests are dropped**, logged once a frame they
+  arrive: the editor's window is not the game's (Unity's
+  `Screen.SetResolution` does nothing in its editor either).
+- **On the web**: fullscreen is the canvas through the Fullscreen API
+  (winit 0.30 calls `requestFullscreen` at once), which the browser grants
+  only with transient activation — a key, click or touch in the last few
+  seconds, which a tick reacting to one has; exclusive is borderless; the
+  size is the page's and vsync the browser's (`abilities()` says so, and
+  the requests are logged and dropped); no monitors are listed.
+- The platformer goes fullscreen and back on F11 or its HUD's Fullscreen
+  button.
+
+Pinned by `window/display.rs` (resolutions listed once, largest first; the
+best mode for a size), `window/game_window/tests.rs` (nothing until the
+frame is over; exclusive and its fallback; a size kept while fullscreen and
+applied on leaving; a size and vsync; a zero size refused; a page takes
+only fullscreen; the editor drops them), `app/window_seam.rs` (every request
+from a tick reaching the fake window between frames, each frame reading
+what the last asked; the editor's window untouched),
+`voltra-render/tests/headless_vsync.rs` (vsync on from the start, off and
+on by asking), the platformer's `tests/level.rs` (F11 headless) and
+`crates/voltra-player/web/test/fullscreen.mjs`: the platformer built for the
+web, its Fullscreen button clicked, the canvas the page's fullscreen
+element, clicked again and it is not — on WebGPU and WebGL2, in CI.
+
+### The options screen is a prefab the engine's code fills by name
+
+Stage 90. `assets/prefabs/options.prefab.ron` and `voltra_core::options`:
+a display row (windowed, fullscreen, exclusive where the monitor has
+modes), a resolution slider, a vsync toggle, one volume slider per bus,
+a scrolling list with one row per action to rebind, Reset controls and
+Back — built from stage 80's controls only (stage 94 brings dropdowns,
+tabs and a theme, and restyles it).
+
+- **A prefab, not an engine-drawn dialog** — the shape of Unity's and
+  Godot's sample options menus: a scene the game instances, a script
+  behind it. `OptionsScreen::open(tick, &OptionsConfig)` spawns it,
+  unlinks it from its file (a prefab sync must not put back the texts it
+  writes), finds each part by its `Name` and fills the lists by stamping
+  the prefab's own `Volume row` and `Binding row` once per bus and action
+  with the new `Tick::duplicate` (the editor's duplicate: a prefab
+  fragment spawned again, unlinked), then removes the templates and sizes a
+  fixed list to its rows. Restyle anything, keep the names; a part
+  missing is a warning and that row is left out. `update(tick)` each frame
+  answers `Outcome::Open` or `Closed`; `close` saves and despawns.
+- **Every change applies as it is made** — `tick.window` (from the next
+  frame), the bus volume, the action map — **and is kept on close**:
+  the controls through `tick.save_controls()` (stage 88's overrides), the
+  rest as `Settings` (`options.settings.ron` beside the slots: fullscreen,
+  windowed size, vsync, volume by bus; versioned, every field defaulted).
+  `Settings::apply_saved(tick)` puts the display and volumes back from a
+  game's `start`; the loop already laid the controls over the map. The
+  screen opens on the game as it runs (the window's real state, the live
+  volumes) plus the windowed size kept — F11 since the last save shows.
+- **Rebinding**: a row clicked waits ("press a key… (Esc cancels)"); the
+  next control pressed becomes the action's first binding *of its kind*
+  (`ActionMap::assign`: keyboard and mouse, or gamepad — a row shows one of
+  each, `Jump: Space / Pad South`), read from the frame after the click so
+  the accept that started it is not taken. Unlike `rebind`, `assign`
+  takes the control off no other action: binding jump to the key that
+  walks would silently unbind walking. The clash is shown instead, on
+  both rows and in a clash colour (`ActionMap::conflicts`, among the
+  listed actions), for the player to resolve — Unity's rebinding sample
+  and Godot's projects do the same. The cancel action is `ui_cancel`
+  (Escape, a pad's East), new in the default map with `pause` (Escape,
+  Start); it cannot be bound from the screen. `Binding` is `Display` now
+  (`J`, `Up`, `Mouse Left`, `Pad South`).
+- **Resolutions** are the window's monitor's modes, else the common 16:9
+  sizes that fit on it, plus the size it starts at — smallest first, so
+  the slider's right is bigger; none on the web ("set by the page"), where
+  vsync reads "the browser's".
+- The platformer pauses on Escape (`menu.rs`, `assets/prefabs/
+  pause.prefab.ron`): Resume, Options; Back returns to the pause menu. The
+  walker stands still under it. `cargo xtask new-game` copies the options
+  prefab into a new game.
+
+Pinned by `options/settings.rs` (a round trip; another version refused;
+missing fields defaulted), `options/screen/labels.rs` (names as words; a
+row with both kinds and its clash), `options/screen/display.rs` (modes,
+else the common sizes; the display mode going round; no exclusive without
+modes), `input/rebinding.rs` (assign by kind, no repeats, a clash kept and
+reported), `input/label.rs`, `options/screen/tests.rs` (the shipped prefab
+opened headless: a volume per bus and a row per action, the templates
+gone; a rebound key shown, a clash coloured, Back saving both files;
+Escape cancelling a rebind before closing; the display rows reaching the
+window; a volume slider setting its bus) and the platformer's
+`tests/options.rs`: Escape, Options, jump rebound to J, Back, Escape —
+then a new headless session with the same player folder, where J jumps
+and Space does not; and the level standing still under the pause menu.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5568,6 +5749,7 @@ Verified against the crate source, not from memory:
 | Compute pass | `begin_compute_pass(&ComputePassDescriptor { label, timestamp_writes })`; `dispatch_workgroups(x, y, z)` |
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
 | Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
+| Present mode | `get_default_config` takes the adapter's *first* listed present mode, not `Fifo`; set it. `PresentMode::AutoVsync` / `AutoNoVsync` fall back on their own (`AutoNoVsync`: immediate, mailbox, FIFO); the explicit modes fail `configure` when unsupported. Change it by setting `config.present_mode` and calling `surface.configure` again |
 | D3D12 / FXC | A WGSL loop that writes a vector component by a **runtime index** (`v[i] = …`) fails pipeline creation: FXC must unroll it and cannot (`X3511`). Write the components out. Windows CI hits this; reproduce locally with `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc cargo test` |
 | Data textures | A normal map must be sampled through a non-sRGB view (`Texture::raw_view`, `Textures::raw_bind_group`); the sRGB view decodes it as colour. The view format must be listed in `view_formats` at creation, which `Texture::from_rgba8` does — except on GL, which cannot, where it uploads a second `Rgba8Unorm` copy |
 | `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
@@ -5597,6 +5779,7 @@ rather than trusting a tutorial.
 | Run | `EventLoopExtWebSys::spawn_app(app)` returns at once; `run_app` throws to unwind |
 | Canvas | `WindowAttributesExtWebSys::with_append(true)` appends it to `<body>`; focusable (tabindex) by default |
 | Size | A requested inner size is written into the canvas's **style** and pins it; leave it out and size the canvas in CSS — a `ResizeObserver` sends `Resized` |
+| Fullscreen | `Window::set_fullscreen(Some(Borderless(_) or Exclusive(_)))` both call the canvas's `requestFullscreen()` at once (`web_sys/fullscreen.rs`), its rejection swallowed: it works only with transient activation, a few seconds after a trusted key, click or touch — a request made at the end of the frame that saw one is in time. `fullscreen()` answers `Borderless(None)` or `None` from `document.fullscreenElement`; a canvas already the page's size sends no `Resized` on entering, so poll it. `MonitorHandle::video_modes` is always empty |
 | Proxy | `EventLoop::create_proxy` only (not on `ActiveEventLoop`); the web proxy is an `mpsc::Sender<T>` plus a wake, so `T` need not be `Send` |
 
 ### egui 0.35 API notes

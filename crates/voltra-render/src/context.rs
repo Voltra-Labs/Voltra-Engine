@@ -88,6 +88,10 @@ impl GpuContext {
             .get_default_config(&adapter, width.max(1), height.max(1))
             .expect("surface not supported by adapter");
         let format = srgb_format(&surface.get_capabilities(&adapter).formats, &mut config);
+        // Said rather than left to the default config, which takes the
+        // first mode the adapter lists: vsync on, the one mode every
+        // surface has, so `vsync()` is true from the first frame.
+        config.present_mode = present_mode(true);
         surface.configure(&device, &config);
         let downlevel = adapter.get_downlevel_capabilities().flags;
 
@@ -197,6 +201,31 @@ impl GpuContext {
         })
     }
 
+    /// Whether frames wait for the display's refresh: the surface's present
+    /// mode. Off is wgpu's `AutoNoVsync` — immediate, else mailbox, else
+    /// the vsync every surface has — so asking can never fail; it answers
+    /// what was asked, not which of the three the driver gave. A browser
+    /// paces frames itself whatever the mode.
+    pub fn vsync(&self) -> bool {
+        !matches!(
+            self.config.present_mode,
+            wgpu::PresentMode::AutoNoVsync
+                | wgpu::PresentMode::Immediate
+                | wgpu::PresentMode::Mailbox
+        )
+    }
+
+    /// Turns vsync on or off by reconfiguring the surface with the matching
+    /// present mode — see [`vsync`](Self::vsync). Asking for what it already
+    /// is does nothing.
+    pub fn set_vsync(&mut self, on: bool) {
+        if self.vsync() == on {
+            return;
+        }
+        self.config.present_mode = present_mode(on);
+        self.reconfigure();
+    }
+
     /// A zero-sized surface is invalid, so a minimised window is a no-op.
     pub fn resize(&mut self, width: u32, height: u32) {
         if width == 0 || height == 0 {
@@ -242,6 +271,16 @@ impl GpuContext {
     /// Presents a frame from [`Self::acquire`] to the window.
     pub fn present(&self, frame: wgpu::SurfaceTexture) {
         self.queue.present(frame);
+    }
+}
+
+/// The present mode for vsync `on`: FIFO, which every surface supports, or
+/// the first of immediate, mailbox and FIFO the surface has.
+fn present_mode(on: bool) -> wgpu::PresentMode {
+    if on {
+        wgpu::PresentMode::Fifo
+    } else {
+        wgpu::PresentMode::AutoNoVsync
     }
 }
 

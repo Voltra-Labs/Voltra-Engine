@@ -64,11 +64,10 @@ pub struct Tick<'a> {
     /// A field like the rest, but not a bare `&mut Audio`: playing takes a
     /// handle, and resolving one takes the store — see [`TickAudio`].
     pub audio: TickAudio<'a>,
-    /// Reached through [`Tick::prefab`] and [`Tick::spawn`], which keep the
-    /// three in step: a spawn that was not queued would never be resolved.
     /// The game's input map, to rebind from — "press a key for jump" is
     /// [`Input::pressed_binding`] into [`ActionMap::rebind`]. A change is
-    /// read from the next frame on; [`ActionMap::save`] keeps it.
+    /// read from the next frame on; [`save_controls`](Self::save_controls)
+    /// keeps it for the player's next run, on every platform.
     pub actions: &'a mut ActionMap,
     /// The game's save slots. Reads and writes happen on the spot: a save is
     /// a small file, and a game saving at a checkpoint wants it written
@@ -89,6 +88,14 @@ pub struct Tick<'a> {
     /// this frame, what is hovered and focused, and where to move the
     /// focus.
     pub ui: &'a mut voltra_scene::UiControls,
+    /// The window: fullscreen, its size, vsync and the monitors' modes,
+    /// read as the loop last saw them and changed from the next frame on.
+    pub window: &'a mut crate::window::GameWindow,
+    /// The actions as the game ships them, which a save keeps the
+    /// difference from.
+    pub(super) default_actions: &'a ActionMap,
+    // Reached through `Tick::prefab` and `Tick::spawn`, which keep the
+    // three in step: a spawn that was not queued would never be resolved.
     pub(super) scenes: &'a mut super::scenes::Scenes,
     pub(super) prefabs: &'a mut Prefabs,
     pub(super) registry: &'a ComponentRegistry,
@@ -144,12 +151,14 @@ impl App {
                 world: &mut self.world,
                 input: &self.input,
                 actions: &mut self.actions,
+                default_actions: &self.default_actions,
                 scenes: &mut self.scenes,
                 saves: &self.saves,
                 locale: &mut self.locale,
                 tweens: &mut self.tweens,
                 timers: &mut self.timers,
                 ui: &mut self.ui_controls,
+                window: &mut self.game_window,
                 delta,
                 contacts: self.physics_world.contacts(),
                 events,

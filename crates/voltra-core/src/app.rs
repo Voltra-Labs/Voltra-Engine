@@ -23,12 +23,14 @@ mod startup;
 mod thumbnails;
 mod tick;
 mod tick_audio;
+mod tick_controls;
 mod tick_time;
 mod ui_frame;
 mod ui_input;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod window_requests;
+mod window_seam;
 
 #[cfg(not(target_arch = "wasm32"))]
 use native as platform;
@@ -175,6 +177,10 @@ pub struct App {
     gamepads: Option<gamepads::Gamepads>,
     /// The game's named actions, re-evaluated into `input` every frame.
     actions: ActionMap,
+    /// The actions as the game ships them — its map file, or the map handed
+    /// to `with_actions` — before the player's own controls are laid over:
+    /// what a rebound control is saved as a difference from.
+    default_actions: ActionMap,
     /// The map file named by `with_input_map`; `None` reads the convention.
     input_map_path: Option<AssetPath>,
     /// Whether `actions` was handed in by `with_actions`, which the
@@ -232,6 +238,8 @@ pub struct App {
     held_actions: crate::input::HeldActions,
     /// The title and close the UI asked for this frame.
     window_requests: window_requests::WindowRequests,
+    /// The window as the game's ticks see it, and what they asked of it.
+    game_window: crate::window::GameWindow,
     /// The renderer a browser is still building, and the page's gesture;
     /// see `app/web.rs`.
     #[cfg(target_arch = "wasm32")]
@@ -571,8 +579,16 @@ impl ApplicationHandler for App {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.resize(size.width, size.height);
                 }
+                // A resize is also how fullscreen arriving, or leaving by
+                // the platform's own key, shows.
+                self.refresh_game_window();
+            }
+            WindowEvent::Moved(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                // Another monitor, other modes.
+                self.refresh_game_window();
             }
             WindowEvent::RedrawRequested => {
+                self.refresh_game_window_shown();
                 self.update();
 
                 if self.ui.is_some() {
@@ -583,6 +599,11 @@ impl ApplicationHandler for App {
 
                 // Must come after everything that reads input this frame.
                 self.input.end_frame();
+
+                // Between this frame and the next, as the scene changes
+                // were: fullscreen, size and vsync change on a window that
+                // is not being drawn into.
+                self.apply_game_window();
 
                 // A close the UI agreed to, or asked for itself.
                 if self.window_requests.should_exit() {

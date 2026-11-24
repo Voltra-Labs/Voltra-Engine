@@ -9,8 +9,10 @@ pub mod app;
 pub mod game;
 pub mod input;
 pub mod logging;
+pub mod options;
 pub mod saves;
 pub mod start;
+mod storage;
 pub mod time;
 pub mod ui;
 pub mod window;
@@ -27,7 +29,7 @@ pub use saves::{SaveError, Saves};
 pub use start::when_assets_ready;
 pub use time::{Clock, Timestep};
 pub use ui::EguiLayer;
-pub use window::WindowConfig;
+pub use window::{Fullscreen, GameWindow, Monitor, VideoMode, WindowConfig};
 
 // Re-exported so downstream crates can name keys without adding their own
 // `winit` dependency — the same reason `voltra-render` re-exports `wgpu`.

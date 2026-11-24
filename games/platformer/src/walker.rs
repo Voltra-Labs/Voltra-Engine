@@ -36,7 +36,8 @@ pub fn find(world: &World) -> Option<Entity> {
 /// character, not a crate, and a walker that slides to a halt is a physics
 /// body pretending to be one.
 pub fn steer(tick: &mut Tick<'_>, walker: Entity, jump: bool) {
-    // Actions, from `assets/default.input.ron`: rebinding the keys is an
+    // Actions, from `assets/default.input.ron` and the player's own
+    // controls laid over it: rebinding the keys for everyone is an
     // edit to that file, picked up while the game runs.
     let direction = tick.input.action_axis("move_left", "move_right");
     let jumped = jump && is_grounded(tick, walker);
@@ -69,6 +70,15 @@ fn is_grounded(tick: &Tick<'_>, entity: Entity) -> bool {
         query::ray(tick.world, foot, Vec2::NEG_Y, reach, filter)
             .is_some_and(|hit| hit.normal.y > GROUND_NORMAL)
     })
+}
+
+/// Stops the walker walking: under a menu. It still falls, as a paused
+/// game's character lands rather than hangs in the air.
+pub fn halt(world: &mut World, walker: Entity) {
+    if let Some(body) = world.get_mut::<RigidBody>(walker) {
+        body.velocity.x = 0.0;
+        body.velocity.y = body.velocity.y.min(0.0);
+    }
 }
 
 /// Puts the walker at `at`, standing still: after a load or a level change.

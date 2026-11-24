@@ -1,0 +1,63 @@
+// The platformer's pause menu: Escape or Start opens it over the level.
+(
+    version: 1,
+    entities: [
+        (
+            id: "01a2b100-0000-7000-8000-000000000001",
+            components: {
+                "Name": "Pause",
+                "Persistent": (),
+                "Sprite": (color:(0.06,0.07,0.1,0.96),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.5,0.5),anchor_max:(0.5,0.5),offset_min:(-150.0,-95.0),offset_max:(150.0,95.0)),
+                "UiStack": (direction:Column,spacing:10.0,padding:(left:16.0,top:16.0,right:16.0,bottom:16.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b100-0000-7000-8000-000000000002",
+            components: {
+                "Name": "Pause title",
+                "Parent": "01a2b100-0000-7000-8000-000000000001",
+                "Text": (content:"Paused",font:None,size:26.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,32.0)),
+            },
+        ),
+        (
+            id: "01a2b100-0000-7000-8000-000000000003",
+            components: {
+                "Name": "Resume button",
+                "Parent": "01a2b100-0000-7000-8000-000000000001",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,40.0),slot:1),
+            },
+        ),
+        (
+            id: "01a2b100-0000-7000-8000-000000000004",
+            components: {
+                "Name": "Resume label",
+                "Parent": "01a2b100-0000-7000-8000-000000000003",
+                "Text": (content:"Resume",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2b100-0000-7000-8000-000000000005",
+            components: {
+                "Name": "Options button",
+                "Parent": "01a2b100-0000-7000-8000-000000000001",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,40.0),slot:2),
+            },
+        ),
+        (
+            id: "01a2b100-0000-7000-8000-000000000006",
+            components: {
+                "Name": "Options label",
+                "Parent": "01a2b100-0000-7000-8000-000000000005",
+                "Text": (content:"Options",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+    ],
+)

@@ -200,6 +200,19 @@ impl Renderer {
         &self.ctx
     }
 
+    /// Whether frames wait for the display's refresh; see
+    /// [`GpuContext::vsync`].
+    pub fn vsync(&self) -> bool {
+        self.ctx.vsync()
+    }
+
+    /// Turns vsync on or off: the surface's present mode, reconfigured.
+    /// What an options screen's toggle asks for, through the platform layer,
+    /// which owns no surface of its own.
+    pub fn set_vsync(&mut self, on: bool) {
+        self.ctx.set_vsync(on);
+    }
+
     /// The layout of group 0, the camera, every sprite pipeline binds:
     /// what a material pipeline is made against.
     pub fn camera_layout(&self) -> &wgpu::BindGroupLayout {
