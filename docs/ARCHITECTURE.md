@@ -5673,6 +5673,70 @@ selection plays, a deselected one is cleared, a finished one-shot kept),
 `curve_edit` (the axis grows to the highest key), `flipbook_edit` (the frame
 list's parsing), `particles::presets` (a preset keeps where it draws).
 
+### Lines, polygons and trails are triangles in the sprite batch, widened and cut on the CPU
+
+Stage 101. Three components, each turned into a `batch::TriangleMesh` every
+frame and appended by `SpriteBatch::push_triangles` — the quad path's runs,
+culling and painter's order for geometry that is not a quad — so they are
+lit (light layers, the light map), sorted (`sort_order`, sorting layer) and
+batched like sprites, with no pipeline of their own.
+
+- **`Line2D`** (Godot's `Line2D`, Unity's `LineRenderer`): points in the
+  entity's space, `closed`, `width` × an optional `width_curve` along its
+  length (the stage-99 `Curve`), colour, `joint` (`Miter` with a
+  `miter_limit` in half-widths, default 2 as Godot's sharp limit; `Bevel`;
+  `Round`), `begin_cap` / `end_cap` (`Butt`, `Square`, `Round`), a texture
+  `Stretch`ed once or `Tile`d every width. `line2d::stroke` widens it: one
+  quad strip per segment, cut where the width curve is sampled (32 pieces a
+  line) and where a tile ends; the outer side of each corner gets the
+  joint; caps at an open line's ends. **Tiling is cut on the CPU**, each
+  tile its own `u` 0..1, because the sprites' sampler clamps — a repeating
+  sampler would be a second texture bind group for every texture, and would
+  not work for a frame of an atlas. The inner side of a corner overlaps
+  (a translucent line is denser there), as Godot's simple mode does; an
+  exact inner join is the miter's mirror and can come when it shows.
+- **`Polygon2D`**: an outline in the entity's space, either way round,
+  concave allowed, filled by `triangulate::triangulate` — ear clipping
+  (Eberly), repeats and collinear corners dropped first, O(n²) for authored
+  sizes; a self-crossing outline has no ears left at some point, and the
+  rest is fanned and warned about rather than dropped. A texture is
+  stretched over the outline's bounds (the same clamped sampler; Godot's
+  repeat would need the second bind group above).
+- **`Trail2D`** (Unity's `TrailRenderer`): while the world runs, its
+  entity's world position is dropped as a point each `min_distance`, every
+  point ages, one past `lifetime` (or beyond `max_points`) goes. Drawn in
+  the world (identity matrix, once, not per parallax copy) from where the
+  entity is now through the points, by the same stroke — width and colour
+  by *age* (the stroke's `t` along the length mapped back to an age), round
+  joints and a round head; without a curve it tapers to nothing, without a
+  gradient its colour fades to clear. The points are `#[serde(skip)]` state.
+  Advanced with the particles in `App::advance_particles`, under the same
+  simulation gate.
+- **Editor**: inspector sections (`shapes2d.rs`) with every field, the
+  width curve through the particle editor's curve widget; **Edit points**
+  uses stage 55's polygon handles — `ShapeEdit` now edits any of an entity's
+  point lists (`shape_edit::Points::{Caster, Line, Polygon}`), the drag,
+  add-at-midpoint and right-click-remove and the one-entry-per-drag rule
+  unchanged. *Scene ▸ Spawn line / polygon / trail*. Registered with
+  templates, so the bridge and the MCP server can add them by name.
+
+Not done: picking a line or polygon by clicking its pixels (select it in
+the hierarchy), an exact inner join, a repeating texture on a polygon, a
+trail's texture tiled.
+
+Pinned by `voltra-core/tests/lines.rs` (headless screenshots: each joint
+covers its corner as it should — the miter its point, the bevel not, the
+round between; each cap past an end; a ten-point star filled with its
+notches empty; a line over and under a sprite by sort order; a trail
+behind a kinematic body moving at three units a second, bright behind it,
+fading, nothing past its lifetime or ahead), `line2d/tests.rs` (the same
+geometry by point-in-triangle, the miter limit, the width curve, tiled `u`
+within 0..1 ending on 1, a closed outline, nothing from too few or broken
+points, round trips), `triangulate` (an L both ways round, a star, repeats
+and collinear corners, a bow tie still drawn), `trail2d`, `polygon2d`,
+`batch::triangles` and `shape_edit` (a line's and a polygon's points as
+targets).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

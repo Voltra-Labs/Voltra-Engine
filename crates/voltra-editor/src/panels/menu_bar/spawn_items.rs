@@ -81,6 +81,20 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         });
         ui.close();
     }
+    for (label, name, make) in [
+        (
+            "Spawn line",
+            "Line",
+            spawn::line as fn(&mut UiFrame<'_>, &str, Vec2) -> voltra_ecs::Entity,
+        ),
+        ("Spawn polygon", "Polygon", spawn::polygon),
+        ("Spawn trail", "Trail", spawn::trail),
+    ] {
+        if ui.button(label).clicked() {
+            spawn::record(editor, frame, label, |frame| make(frame, name, Vec2::ZERO));
+            ui.close();
+        }
+    }
     if ui.button("Spawn light").clicked() {
         spawn::record(editor, frame, "Spawn light", |frame| {
             spawn::light(frame, "Light", Vec2::ZERO)

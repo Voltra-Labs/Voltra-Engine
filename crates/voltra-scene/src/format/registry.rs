@@ -135,6 +135,13 @@ impl ComponentRegistry {
         registry
             .register::<ShadowCaster2D>("ShadowCaster2D")
             .with_template();
+        registry.register::<crate::Line2D>("Line2D").with_template();
+        registry
+            .register::<crate::Polygon2D>("Polygon2D")
+            .with_template();
+        registry
+            .register::<crate::Trail2D>("Trail2D")
+            .with_template();
         registry
     }
 

@@ -21,6 +21,9 @@ impl App {
                 hierarchy::despawn_recursive(&mut self.world, entity);
             }
         }
+        // Trails are the same kind of thing — a picture of motion, made as
+        // the world runs — and age with it.
+        voltra_scene::trail2d::advance(&mut self.world, delta);
     }
 }
 

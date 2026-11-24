@@ -25,6 +25,15 @@ pub(super) fn show_for(
     if let Some(emitter) = world.get_mut::<ParticleEmitter>(entity) {
         claim = claim.or(show(ui, "particles", &mut emitter.sorting_layer, layers));
     }
+    if let Some(line) = world.get_mut::<voltra_scene::Line2D>(entity) {
+        claim = claim.or(show(ui, "line", &mut line.sorting_layer, layers));
+    }
+    if let Some(polygon) = world.get_mut::<voltra_scene::Polygon2D>(entity) {
+        claim = claim.or(show(ui, "polygon", &mut polygon.sorting_layer, layers));
+    }
+    if let Some(trail) = world.get_mut::<voltra_scene::Trail2D>(entity) {
+        claim = claim.or(show(ui, "trail", &mut trail.sorting_layer, layers));
+    }
     claim
 }
 

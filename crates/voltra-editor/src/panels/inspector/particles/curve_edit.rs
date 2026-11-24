@@ -19,7 +19,7 @@ const GRAB: f32 = 8.0;
 
 /// Draws `curve` and its selected key's fields; `Some` while it is being
 /// changed. `salt` separates two curves of one entity.
-pub(super) fn show(ui: &mut Ui, salt: &str, curve: &mut Curve, top: f32) -> Option<&'static str> {
+pub(crate) fn show(ui: &mut Ui, salt: &str, curve: &mut Curve, top: f32) -> Option<&'static str> {
     let id = ui.id().with(salt);
     let drag_id = id.with("drag");
     let selected_id = id.with("selected");

@@ -13,6 +13,8 @@ mod gradient_edit;
 mod looks;
 mod preview;
 
+pub(super) use curve_edit::show as curve;
+
 use voltra_assets::{Atlases, Textures};
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_render::particles::MAX_GPU_PARTICLES;

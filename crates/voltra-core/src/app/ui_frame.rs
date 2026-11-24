@@ -414,6 +414,18 @@ pub(super) fn resolve_world_textures(
         let path = light.cookie.clone();
         light.set_cookie(path, textures, device, queue);
     }
+    for (_, line) in world.query_mut::<voltra_scene::Line2D>() {
+        let path = line.texture.clone();
+        line.set_texture(path, textures, device, queue);
+    }
+    for (_, polygon) in world.query_mut::<voltra_scene::Polygon2D>() {
+        let path = polygon.texture.clone();
+        polygon.set_texture(path, textures, device, queue);
+    }
+    for (_, trail) in world.query_mut::<voltra_scene::Trail2D>() {
+        let path = trail.texture.clone();
+        trail.set_texture(path, textures, device, queue);
+    }
 }
 
 /// Re-resolves every [`AudioSource`]'s clip handle from its path.

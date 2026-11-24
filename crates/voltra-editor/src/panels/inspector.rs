@@ -25,6 +25,7 @@ mod particles;
 mod path_field;
 mod prefab;
 mod shadow_caster;
+mod shapes2d;
 mod sorting_layer;
 mod sprite;
 mod sprite_material;
@@ -185,6 +186,48 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         particles::Stores {
                             textures: frame.textures,
                             atlases: frame.atlases,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
+                }
+                if let Some(line) = frame.world.get_mut::<voltra_scene::Line2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(shapes2d::line(
+                        ui,
+                        line,
+                        shapes2d::Context {
+                            entity,
+                            shape: &mut editor.shape,
+                            textures: frame.textures,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
+                }
+                if let Some(polygon) = frame.world.get_mut::<voltra_scene::Polygon2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(shapes2d::polygon(
+                        ui,
+                        polygon,
+                        shapes2d::Context {
+                            entity,
+                            shape: &mut editor.shape,
+                            textures: frame.textures,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
+                }
+                if let Some(trail) = frame.world.get_mut::<voltra_scene::Trail2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(shapes2d::trail(
+                        ui,
+                        trail,
+                        shapes2d::Context {
+                            entity,
+                            shape: &mut editor.shape,
+                            textures: frame.textures,
                             device: frame.device,
                             queue: frame.queue,
                         },

@@ -12,6 +12,7 @@ use crate::text::{shape, Text};
 pub use material_use::MaterialUse;
 
 pub use surface::Surface;
+pub use triangles::{MeshVertex, TriangleMesh};
 
 /// Corners per quad. Where they land is [`quad`]'s question, not this one's.
 pub(crate) const CORNERS_PER_QUAD: usize = 4;
@@ -298,6 +299,7 @@ mod material_use;
 mod surface;
 #[cfg(test)]
 mod tests;
+mod triangles;
 
 #[cfg(test)]
 mod material_tests;

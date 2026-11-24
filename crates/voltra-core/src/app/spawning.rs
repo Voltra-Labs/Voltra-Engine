@@ -131,6 +131,25 @@ pub(super) fn resolve_entity(
         let path = light.cookie.clone();
         light.set_cookie(path, textures, device, queue);
     }
+    if let (Some(line), Some((textures, device, queue))) =
+        (world.get_mut::<voltra_scene::Line2D>(entity), gpu.as_mut())
+    {
+        let path = line.texture.clone();
+        line.set_texture(path, textures, device, queue);
+    }
+    if let (Some(polygon), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::Polygon2D>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = polygon.texture.clone();
+        polygon.set_texture(path, textures, device, queue);
+    }
+    if let (Some(trail), Some((textures, device, queue))) =
+        (world.get_mut::<voltra_scene::Trail2D>(entity), gpu.as_mut())
+    {
+        let path = trail.texture.clone();
+        trail.set_texture(path, textures, device, queue);
+    }
     if let (Some(text), Some(fonts)) = (world.get_mut::<Text>(entity), fonts) {
         let path = text.font.clone();
         text.set_font(path, fonts);
