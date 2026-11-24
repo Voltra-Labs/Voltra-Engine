@@ -165,7 +165,7 @@ fn push_text(mut target: Target<'_>, rect: Rect, text: &Text, sheets: Sheets<'_>
     let matrix = Mat3::from_translation(origin) * Mat3::from_scale(Vec2::new(scale, -scale));
     for glyph in quads {
         let corners = glyph.corners.map(|c| matrix.transform_point2(c));
-        target.push(corners, glyph.uvs, text.color, Some(texture));
+        target.push(corners, glyph.uvs, glyph.color, Some(texture));
     }
 }
 

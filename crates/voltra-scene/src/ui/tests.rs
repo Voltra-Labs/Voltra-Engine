@@ -29,7 +29,7 @@ fn fonts() -> Fonts {
 fn ready(world: &mut World, fonts: &mut Fonts, scale: f32) {
     resolve_fonts(world, fonts);
     prepare(world, fonts, scale);
-    fonts.forge_texture(fonts.default_font(), Handle::forge(7, 0));
+    fonts.forge_texture(Handle::forge(7, 0));
 }
 
 fn sheets(fonts: &Fonts) -> Sheets<'_> {
@@ -191,11 +191,13 @@ fn a_ui_text_prepares_glyphs_at_its_screen_size_not_pixels_per_em() {
     let font = fonts.try_get(fonts.default_font()).expect("resolves");
     let face = font.face().expect("a face");
     let key = voltra_assets::fonts::GlyphKey {
+        font: fonts.default_font().index(),
         glyph: face.lookup_glyph_index('H'),
         px: 30,
+        embolden: false,
     };
-    assert!(font.atlas().contains(key));
-    assert_eq!(font.atlas().len(), 1, "and not at 48 as well");
+    assert!(fonts.atlas().contains(key));
+    assert_eq!(fonts.atlas().len(), 1, "and not at 48 as well");
 }
 
 #[test]

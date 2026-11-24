@@ -152,5 +152,8 @@ impl App {
         };
         self.locale = voltra_scene::Locale::open(root, language);
         self.locale.localize(&mut self.world);
+        if let Some(fonts) = self.fonts.as_mut() {
+            self.locale.apply_fonts(fonts);
+        }
     }
 }

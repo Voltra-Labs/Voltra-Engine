@@ -1,5 +1,6 @@
 //! The text component: a string drawn in the world with a font.
 
+pub mod paragraph;
 pub mod shape;
 
 use voltra_assets::{AssetPath, Font, Fonts, Handle};
@@ -195,15 +196,14 @@ pub fn resolve_fonts(world: &mut World, fonts: &mut Fonts) {
 /// on-screen size, [`ui_px`] at `ui_scale` physical pixels per point.
 pub fn prepare(world: &World, fonts: &mut Fonts, ui_scale: f32) {
     for (entity, text) in world.query::<Text>() {
-        let Some(handle) = text.font_handle else {
-            continue;
-        };
         let px = if world.get::<UiRect>(entity).is_some() {
             ui_px(text, ui_scale)
         } else {
             text.px()
         };
-        fonts.prepare(handle, &text.content, px);
+        if let Some(layout) = shape::wrapped(text, fonts, px) {
+            fonts.rasterize(&layout);
+        }
     }
 }
 

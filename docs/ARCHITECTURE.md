@@ -2383,6 +2383,9 @@ tiles in 38, auto-tiling in 39–40, the mesh cache in 44.)
 
 ### Text is quads in the sprite batch, from one glyph atlas per font
 
+(Stage 91 replaced the per-character layout and the atlas per font: see
+"Text is shaped by run, and a missing glyph falls back to the next font".)
+
 Stage 26a. A `Text` (content, optional font path, `size` in entity units,
 `pixels_per_em` raster resolution, colour, `Align`, `sort_order`) is drawn in
 world space by the sprite pipeline: one quad per inked glyph, pushed into the
@@ -5243,7 +5246,8 @@ language, switched while the game runs.
 - **`Text::key`**: a string-table key, Godot's auto-translate and Unity's
   localized string. The **`Locale`** (`voltra-scene`) holds the current
   language and its table, `locale/<language>.ron`
-  (`(version: 1, strings: {key: string})`, read through the asset funnel,
+  (`(version: 1, strings: {key: string})` — version 2 adds `fonts`, stage
+  91 — read through the asset funnel,
   so the web bundle carries it), and writes each keyed text's string into
   its `content` every frame — after the tick, so a language switched or a
   text spawned shows the next draw, in the editor as in the game. A key
@@ -5725,6 +5729,86 @@ window; a volume slider setting its bus) and the platformer's
 then a new headless session with the same player folder, where J jumps
 and Space does not; and the level standing still under the pause menu.
 
+### Text is shaped by run, and a missing glyph falls back to the next font
+
+Stage 91. Arabic joins and reads right to left, Devanagari moves its vowel
+signs and builds conjuncts, `ffi` is one ligature — before this every
+character was one `fontdue` glyph, placed by kerning alone, from one font
+with one fallback (the default face for a file that would not parse).
+
+- **A layout is the HarfBuzz pipeline, in `voltra_assets::fonts`.** Per
+  paragraph (split at `\n`): bidi levels (`unicode-bidi`,
+  `ParagraphBidiInfo`), runs of one span × one level × one script
+  (`itemize.rs`; Common and Inherited characters join the script before
+  them, as `hb-ot-shape` expects its caller to do), each run shaped by
+  `rustybuzz` (`shape.rs`), lines cut (`breaks.rs`), each line reordered
+  visually and placed (`place.rs`). Chrome, Godot's `TextServerAdvanced` and
+  cosmic-text are the same steps in the same order; we write the glue
+  because the glue is where our spans, our atlas and our caret live.
+  `rustybuzz` because it is HarfBuzz's algorithm in pure Rust — a leaf
+  crate, no C toolchain for the web build (`harfrust` is its successor, not
+  yet what the plan named; the swap is local to `shape.rs`).
+- **Glyph ids, not characters.** `GlyphKey { font, glyph, px, embolden }`:
+  shaping turns three characters into one ligature and one letter into one
+  of four joined forms, none of which a `char` names. `fontdue` still
+  rasterizes — by id (`rasterize_indexed`), which works because
+  `FontSettings::load_substitutions` (on by default) loads every glyph a
+  GSUB lookup can produce, not just those `cmap` reaches.
+- **One atlas for every font**, in `Fonts` rather than one per `Font`: a line
+  falling back from Latin to Arabic, or a rich text switching fonts, draws
+  from one texture, so it stays one batch range. A reload clears the whole
+  atlas (rare, editor-time) rather than evicting one font's glyphs.
+- **The fallback chain**: the text's font, then the current language's
+  fonts, then the default. Each stretch of clusters a font has no glyph for
+  is reshaped with the next — whole stretches, so the next font sees words
+  to join; a stretch no later font maps keeps the first font's missing
+  box, so the gap shows in the text's own face. Browsers and Godot fall back
+  per cluster the same way; Unity's TextMeshPro per character, which breaks
+  Arabic joining across the seam.
+- **Fonts per language, in the string table** (`TABLE_VERSION` 2):
+  `(version: 2, fonts: ["fonts/NotoSansArabic-Regular.ttf"], strings: {…})`;
+  a version 1 file reads as one naming none. Plain path strings, as a
+  translator writes them. `Locale::apply_fonts` makes them
+  `Fonts::set_fallbacks` after every `localize` (a comparison when nothing
+  changed), so a language switched from a tick takes its fonts with it.
+- **Layouts are cached** by (string, spans, wrap) behind a mutex in `Fonts`,
+  so `&Fonts` — what the draw and the pick hold — can ask: the prepare, the
+  draw and the pick of a frame share one layout, and an unchanged text is
+  not reshaped next frame. Cleared on a reload or a new chain; started over
+  at 4096 entries, so a timer's new string every frame does not grow it.
+- **Lines of mixed faces**: each line is as tall as its tallest face at its
+  size; baselines are the gap below one line's lowest descent to the next's
+  highest ascent plus the larger line gap — a face's own line height when
+  every line is one face, so Latin layout is unchanged (every stage-26 and
+  stage-81 layout test still passes). `TextLayout::baselines` carries them.
+- **Faux bold** (`embolden.rs`, used by stage 93's `[b]`): coverage dilated
+  by `px / 24` pixels right and up, the advance widened as much —
+  FreeType's `FT_Outline_Embolden` grows the outline, we have only the
+  bitmap.
+- **Fonts shipped**: Noto Sans Arabic, Devanagari and Hebrew (the full
+  files from `notofonts.github.io`, about 500 KB together) with their OFL
+  licences beside them in `assets/fonts/`. No CJK face: Noto Sans JP is
+  several megabytes; a CJK string draws the text font's missing boxes until
+  a game ships one and names it in its table.
+
+Rejected: **`cosmic-text`** — a whole text engine with its own font
+database, cache and editor; the plan keeps the engine pieces ours and the
+leaves borrowed. **One atlas per font, kept** — a fallback in the middle of
+a line would split its batch.
+
+Pinned by `fonts/shaping_tests.rs` (`ffi` one glyph with four caret stops;
+Arabic in joined forms, right to left, its first stop on the right; the
+Devanagari i sign before its consonant in one cluster; a missing glyph from
+the next font and the rest in the text's; what no font has is the text
+font's box; kerning kept; a layout made once and again for a new chain;
+faux bold wider and thicker; each glyph rasterized from its own font),
+`locale/tests.rs` (a version 2 table's fonts, a version 1's none, applied as
+the chain) and `voltra-scene/tests/headless_shaping.rs`: Arabic, Devanagari
+and `office ffi` drawn headless and matched against
+`tests/references/*.png` (`VOLTRA_BLESS=1` rewrites them), and Arabic
+letters drawn joined against the same letters kept apart by zero-width
+non-joiners.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5830,6 +5914,20 @@ Both differ from most training data and from every tutorial written against
 | `Metrics` | `xmin`/`ymin` are the bitmap's bottom-left from the pen on the baseline, y up |
 | Errors | `Font::from_bytes` fails with a `&'static str`, not an error type |
 | `Font` | `Clone`, not `Debug` |
+| Glyph ids | `from_bytes` loads every glyph `cmap` reaches **and**, with `FontSettings::load_substitutions` (default `true`), every glyph a GSUB single/multiple/alternate/ligature/reverse-chain lookup produces — so ids a shaper hands out rasterize; an id it never loaded rasterizes empty |
+| Data | `from_bytes` copies the bytes; the shaper keeps its own `Arc<[u8]>` beside it |
+
+### `rustybuzz` 0.20, `unicode-bidi` 0.3, `unicode-linebreak` 0.1 notes
+
+| Thing | Version notes |
+| --- | --- |
+| Face | `rustybuzz::Face::from_slice(&bytes, 0) -> Option<Face<'_>>` borrows the bytes, so it is made per layout, not stored; it derefs to `ttf_parser::Face` (`glyph_index(char)`) |
+| Buffer | `UnicodeBuffer::add(char, cluster)` — our clusters are byte offsets into the whole string; `set_pre_context` / `set_post_context` (5 chars) for joining across a run edge, the post context **after** the `add`s (`add` clears it) |
+| Shape | `rustybuzz::shape(&face, &[], buffer) -> GlyphBuffer`; `glyph_infos()[i].glyph_id` (u32, ≤ u16::MAX), `.cluster`; `glyph_positions()` in font units — scale by `px / units_per_em()` |
+| Direction | a right-to-left buffer comes back in **visual** order (clusters descending); we reverse to logical and let the bidi reorder turn it back |
+| Script | `Script::from_iso15924_tag(ttf_parser::Tag::from_bytes(b"Arab"))`; `unicode_script::Script::short_name()` gives the tag |
+| Bidi | `ParagraphBidiInfo::new(text, None)` (auto direction): `levels` per **byte**, `reordered_levels(line)` applies L1 to a line, `reorder_visual(&levels)` gives visual indices — usable on glyph levels as well as characters |
+| Line breaks | `unicode_linebreak::linebreaks(s)` yields `(byte, Allowed \| Mandatory)`: a line may end *before* that byte; the end of the text is always `Mandatory` |
 
 ### `gilrs` 0.11 notes
 

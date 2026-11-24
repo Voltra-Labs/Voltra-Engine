@@ -107,13 +107,7 @@ fn lines(session: &Headless, line: Entity) -> Vec<f32> {
     let width = text.max_width.map(|w| w.min(rect.size().x));
     let px = ui_px(text, 1.0);
     let fonts = session.fonts().expect("fonts");
-    let font = text
-        .font_handle
-        .and_then(|h| fonts.try_get(h))
-        .expect("the default face");
-    let layout = font
-        .layout(&text.content, px, text.wrap_at(px, width))
-        .expect("a face");
+    let layout = voltra_scene::text::shape::layout_at(text, fonts, px, width).expect("a face");
     let per_px = text.size / px as f32;
     layout.line_widths.iter().map(|w| w * per_px).collect()
 }

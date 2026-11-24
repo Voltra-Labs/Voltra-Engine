@@ -1,47 +1,114 @@
-//! Placing a string's glyphs along baselines, in raster pixels.
+//! A string's glyphs placed along baselines, in raster pixels.
 //!
-//! Ours rather than `fontdue::layout::Layout`: that one applies no kerning,
-//! aligns only inside a `max_width` box, and works in a y-down/y-up mode
-//! switch. What a world-space label needs is smaller — pens along lines split
-//! at `\n`, kerned, with each line's width so the caller can align about its
-//! own origin.
+//! Ours rather than `fontdue::layout::Layout`, which applies no shaping,
+//! aligns only inside a `max_width` box and knows one direction. Each
+//! paragraph (split at `\n`) goes through the steps every text engine has —
+//! HarfBuzz's own users (Chrome, Godot's `TextServerAdvanced`, cosmic-text)
+//! in the same order:
+//!
+//! 1. bidi levels (UAX #9, `unicode-bidi`);
+//! 2. runs of one span, one level, one script ([`itemize`](super::itemize));
+//! 3. each run shaped, the fallback chain filling missing glyphs
+//!    ([`shape`](super::shape));
+//! 4. lines cut at UAX #14 opportunities ([`breaks`](super::breaks));
+//! 5. each line's glyphs reordered visually by level, and placed
+//!    ([`place`](super::place)).
+
+use std::hash::{Hash, Hasher};
+
+use unicode_bidi::ParagraphBidiInfo;
 
 use super::atlas::GlyphKey;
+use super::breaks;
+use super::itemize;
+use super::place::{self, LineBox, Paragraph};
+use super::shape::{shape_run, Faces};
+use super::span::Span;
+use crate::fonts::Fonts;
 
-/// One glyph placed on a line: the pen position it starts at, in pixels from
-/// the line's left end along its baseline.
+/// One glyph placed on a line, in visual order.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PlacedGlyph {
-    /// Which glyph, at what size.
+    /// Which glyph, of which font, at what size.
     pub key: GlyphKey,
-    /// Pen position along the line's baseline, in pixels from the line's left end.
+    /// Where its origin is along the line's baseline, in pixels from the
+    /// line's left end: the pen, plus the shaper's offset (a mark sits over
+    /// its base this way).
+    pub pen: f32,
+    /// Its origin's height above the baseline, in pixels: the shaper's
+    /// vertical offset, zero for most glyphs.
+    pub rise: f32,
+    /// Zero-based index of the line it is on.
+    pub line: usize,
+    /// The [`tag`](super::RunStyle::tag) of the span it was set in.
+    pub tag: u32,
+    /// The first byte of the characters it was shaped from.
+    pub cluster: usize,
+}
+
+/// An inline box placed on a line — an icon in rich text.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PlacedObject {
+    /// The [`tag`](super::RunStyle::tag) of its span.
+    pub tag: u32,
+    /// Its left edge along the baseline, in pixels from the line's left end.
     pub pen: f32,
     /// Zero-based index of the line it is on.
     pub line: usize,
+    /// Its size, in pixels; it stands on the baseline.
+    pub width: f32,
+    /// Height above the baseline, in pixels.
+    pub height: f32,
 }
 
-/// A laid-out string. Lines run downward from the first baseline, one
-/// [`line_height`](Self::line_height) apart.
+/// Where a caret stands before one character, or after a paragraph's last.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CaretStop {
+    /// The byte it stands before, in the laid-out string.
+    pub byte: usize,
+    /// Its x, in pixels from the line's left end.
+    pub x: f32,
+    /// The line it is on.
+    pub line: usize,
+}
+
+/// A laid-out string. Lines run downward from the first baseline.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TextLayout {
-    /// The glyphs, each placed on its line.
+    /// The glyphs, each placed on its line, left to right.
     pub glyphs: Vec<PlacedGlyph>,
+    /// The inline boxes, each placed on its line.
+    pub objects: Vec<PlacedObject>,
     /// Each line's advance width, in pixels. One entry per line, even an
     /// empty one, so a trailing `\n` still counts as a line.
     pub line_widths: Vec<f32>,
-    /// Baseline to baseline, in pixels.
+    /// Each line's baseline, in pixels below the first one: `0.0` first.
+    /// Lines of one face and size are [`line_height`](Self::line_height)
+    /// apart; a line with a taller font or a larger `[size]` is further.
+    pub baselines: Vec<f32>,
+    /// The first line's baseline-to-baseline height, in pixels.
     pub line_height: f32,
-    /// Baseline to the top of the tallest glyph the face declares, in pixels.
+    /// The first line's baseline to the top of its tallest face's glyphs,
+    /// in pixels.
     pub ascent: f32,
-    /// Baseline to the bottom of the lowest glyph the face declares, in
-    /// pixels. Negative: below the baseline is down.
+    /// The last line's baseline to the bottom of its lowest face's glyphs,
+    /// in pixels. Negative: below the baseline is down.
     pub descent: f32,
+    /// Where a caret may stand: before every character, in the string's
+    /// order, and after each paragraph's last. Right to left text puts the
+    /// stop of a character on its right.
+    pub carets: Vec<CaretStop>,
 }
 
 impl TextLayout {
     /// The widest line, in pixels.
     pub fn width(&self) -> f32 {
         self.line_widths.iter().copied().fold(0.0, f32::max)
+    }
+
+    /// The last line's baseline, in pixels below the first.
+    pub fn last_baseline(&self) -> f32 {
+        self.baselines.last().copied().unwrap_or(0.0)
     }
 }
 
@@ -64,33 +131,23 @@ impl Default for Wrap {
     }
 }
 
-/// One character to place: its glyph, its advance, the kerning it takes
-/// from the character before it, and whether a line may break at it.
-struct Item {
-    key: GlyphKey,
-    advance: f32,
-    kern: f32,
-    space: bool,
+impl Eq for Wrap {}
+
+impl Hash for Wrap {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.max_width.map(f32::to_bits).hash(state);
+        self.line_spacing.to_bits().hash(state);
+    }
 }
 
-/// Lays `content` out in `face` at `px` pixels per em, breaking at `\n`
-/// and, with a width, between words.
+/// Lays out `text`, set as `spans` say, broken as `wrap` says. `None` when
+/// no font of the first span's chain has a face.
 ///
-/// Control characters other than `\n` are skipped rather than drawn as the
-/// face's missing-glyph box: a `\r` from a Windows clipboard is not content.
-///
-/// Wrapping is greedy, as Godot's and Unity's are: as many words as fit, a
-/// break at the last space before the one that does not, the spaces at the
-/// break dropped. A word wider than the whole line is broken between
-/// characters rather than left sticking out. A width that is not a positive
-/// number wraps nothing.
-pub fn layout(face: &fontdue::Font, content: &str, px: u32, wrap: Wrap) -> TextLayout {
-    let size = px as f32;
-    let (ascent, descent, line_height) = match face.horizontal_line_metrics(size) {
-        Some(m) => (m.ascent, m.descent, m.new_line_size),
-        // A face with no horizontal metrics still lays out: one em per line.
-        None => (size, 0.0, size),
-    };
+/// A width that is not a positive number wraps nothing; a spacing that is
+/// not one is 1.
+pub(crate) fn layout(fonts: &Fonts, text: &str, spans: &[Span], wrap: Wrap) -> Option<TextLayout> {
+    let first = spans.first()?;
+    fonts.first_loaded(first.style.font)?;
     let spacing = if wrap.line_spacing.is_finite() && wrap.line_spacing > 0.0 {
         wrap.line_spacing
     } else {
@@ -98,98 +155,72 @@ pub fn layout(face: &fontdue::Font, content: &str, px: u32, wrap: Wrap) -> TextL
     };
     let max_width = wrap.max_width.filter(|w| w.is_finite() && *w > 0.0);
 
-    let mut out = TextLayout {
-        glyphs: Vec::new(),
-        line_widths: Vec::new(),
-        line_height: line_height * spacing,
-        ascent,
-        descent,
-    };
+    let lookup = |handle| fonts.try_get(handle);
+    let mut faces = Faces::new(&lookup);
+    let mut out = TextLayout::default();
+    let mut boxes: Vec<LineBox> = Vec::new();
 
-    for paragraph in content.split('\n') {
-        let mut items = Vec::new();
-        let mut previous: Option<u16> = None;
-        for character in paragraph.chars().filter(|c| !c.is_control()) {
-            let glyph = face.lookup_glyph_index(character);
-            let kern = previous
-                .and_then(|left| face.horizontal_kern_indexed(left, glyph, size))
-                .unwrap_or(0.0);
-            items.push(Item {
-                key: GlyphKey { glyph, px },
-                advance: face.metrics_indexed(glyph, size).advance_width,
-                kern,
-                space: character.is_whitespace(),
-            });
-            previous = Some(glyph);
-        }
-        for range in breaks(&items, max_width) {
-            let line = out.line_widths.len();
-            let mut pen = 0.0;
-            for (i, item) in items[range.clone()].iter().enumerate() {
-                if i > 0 {
-                    pen += item.kern;
-                }
-                out.glyphs.push(PlacedGlyph {
-                    key: item.key,
-                    pen,
-                    line,
-                });
-                pen += item.advance;
-            }
-            out.line_widths.push(pen);
-        }
-    }
-    out
-}
-
-/// The items of each line, greedily. Always at least one line, empty for
-/// an empty paragraph.
-fn breaks(items: &[Item], max_width: Option<f32>) -> Vec<std::ops::Range<usize>> {
-    let Some(max) = max_width else {
-        return std::iter::once(0..items.len()).collect();
-    };
-    let mut lines = Vec::new();
-    let mut start = 0;
-    loop {
-        let mut width = 0.0;
-        let mut last_space = None;
-        let mut i = start;
-        while i < items.len() {
-            let item = &items[i];
-            let step = item.advance + if i > start { item.kern } else { 0.0 };
-            // Spaces never break the width: they are dropped at a break.
-            if !item.space && i > start && width + step > max {
-                break;
-            }
-            if item.space {
-                last_space = Some(i);
-            }
-            width += step;
-            i += 1;
-        }
-        if i == items.len() {
-            lines.push(start..trim(items, start, i));
-            return lines;
-        }
-        let end = match last_space {
-            Some(space) if space > start => space,
-            _ => i,
+    let mut base = 0;
+    for paragraph in text.split('\n') {
+        let bidi = ParagraphBidiInfo::new(paragraph, None);
+        let runs = itemize::runs(paragraph, base, spans, &bidi.levels);
+        let shaped: Vec<_> = runs
+            .iter()
+            .flat_map(|run| {
+                let chain = fonts.chain(spans[run.span].style.font);
+                shape_run(&mut faces, text, run, spans, &chain)
+            })
+            .collect();
+        let end = base + paragraph.len();
+        let clusters = breaks::clusters(text, &shaped, end);
+        let lines = breaks::lines(paragraph, base, &clusters, max_width);
+        let para = Paragraph {
+            text,
+            base,
+            bidi: &bidi,
+            shaped: &shaped,
+            clusters: &clusters,
+            spans,
         };
-        lines.push(start..trim(items, start, end));
-        start = end;
-        while start < items.len() && items[start].space {
-            start += 1;
+        for (k, line) in lines.iter().enumerate() {
+            let start = if k == 0 {
+                base
+            } else {
+                clusters.get(line.start).map_or(end, |c| c.bytes.start)
+            };
+            let stop = lines
+                .get(k + 1)
+                .and_then(|next| clusters.get(next.start))
+                .map_or(end, |c| c.bytes.start);
+            let last = k + 1 == lines.len();
+            boxes.push(place::line(
+                fonts,
+                &para,
+                line.clone(),
+                start..stop,
+                last,
+                &mut out,
+            ));
         }
-        if start == items.len() {
-            return lines;
-        }
+        base = end + 1;
     }
-}
 
-/// `end` moved back over trailing spaces, but not past `start`.
-fn trim(items: &[Item], start: usize, mut end: usize) -> usize {
-    while end > start && items[end - 1].space {
-        end -= 1;
+    // Baselines: the gap below one line's lowest descent to the next's
+    // highest ascent, plus the larger line gap of the two — a face's own
+    // line height when every line is one face and size.
+    let mut baseline = 0.0;
+    for (i, line) in boxes.iter().enumerate() {
+        if i > 0 {
+            let above = &boxes[i - 1];
+            let gap = above.gap().max(line.gap());
+            baseline += (-above.descent + line.ascent + gap) * spacing;
+        }
+        out.baselines.push(baseline);
     }
-    end
+    if let (Some(first), Some(last)) = (boxes.first(), boxes.last()) {
+        out.line_height = first.height * spacing;
+        out.ascent = first.ascent;
+        out.descent = last.descent;
+    }
+    Some(out)
 }

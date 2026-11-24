@@ -1,4 +1,6 @@
-//! One font's rasterized glyphs, packed into one RGBA8 image.
+//! Every font's rasterized glyphs, packed into one RGBA8 image: one
+//! texture, so a line falling back from one font to another — or a rich
+//! text switching fonts — still draws from one texture.
 
 use std::collections::HashMap;
 
@@ -10,7 +12,7 @@ pub const INITIAL_SIDE: u32 = 256;
 
 /// Side the atlas never grows past, in texels: the smallest
 /// `max_texture_dimension_2d` wgpu guarantees on every backend is 8192, and
-/// half of that keeps one font's atlas at 64 MiB in the worst case.
+/// half of that keeps the atlas at 64 MiB in the worst case.
 pub const MAX_SIDE: u32 = 4096;
 
 /// Transparent texels left right of and below every glyph.
@@ -19,14 +21,24 @@ pub const MAX_SIDE: u32 = 4096;
 /// gap that half texel is the neighbouring glyph's ink.
 pub const PADDING: u32 = 1;
 
-/// A glyph at one raster size: which glyph of the face, at how many pixels
-/// per em.
+/// A glyph at one raster size: which font, which glyph of its face, at how
+/// many pixels per em, thickened or not.
+///
+/// By glyph id, not `char`: shaping turns `ffi` into one ligature glyph and
+/// an Arabic letter into one of four joined forms, none of which a
+/// character names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GlyphKey {
+    /// The font's slot, [`Handle::index`](crate::Handle::index) of its
+    /// handle: one atlas holds every font's glyphs.
+    pub font: u32,
     /// The glyph's index in the face.
     pub glyph: u16,
     /// Raster size, in pixels per em.
     pub px: u32,
+    /// Faux bold: the coverage dilated, for a `[b]` in a family with no
+    /// bold file.
+    pub embolden: bool,
 }
 
 /// Where a rasterized glyph's bitmap sits relative to the pen, in pixels,
@@ -232,6 +244,17 @@ impl GlyphAtlas {
         Some(rect_at(x, y, metrics))
     }
 
+    /// Forgets every glyph, keeping the image's size: a reloaded font's
+    /// glyph ids may now name other shapes. The next prepare rasterizes
+    /// again what is still drawn.
+    pub fn clear(&mut self) {
+        self.shelves = Shelves::new(self.side, self.side);
+        self.glyphs.clear();
+        self.order.clear();
+        self.pixels = blank(self.side);
+        self.dirty = true;
+    }
+
     /// Width and height of the image, in texels. Always square.
     pub fn side(&self) -> u32 {
         self.side
@@ -304,7 +327,12 @@ mod tests {
     use super::*;
 
     fn key(glyph: u16, px: u32) -> GlyphKey {
-        GlyphKey { glyph, px }
+        GlyphKey {
+            font: 0,
+            glyph,
+            px,
+            embolden: false,
+        }
     }
 
     fn square(side: u32) -> (GlyphMetrics, Vec<u8>) {

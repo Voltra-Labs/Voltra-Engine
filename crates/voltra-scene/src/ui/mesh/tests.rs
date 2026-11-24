@@ -47,7 +47,7 @@ fn drawn(world: &mut World, fonts: &mut Fonts, focus: Option<Entity>) -> SpriteB
     let layout = UiLayout::from_world(world, SCREEN);
     controls.update(world, &layout, Some(fonts), &UiInput::default());
     prepare(world, fonts, 1.0);
-    fonts.forge_texture(fonts.default_font(), Handle::forge(7, 0));
+    fonts.forge_texture(Handle::forge(7, 0));
     let sheets = Sheets {
         fonts: Some(fonts),
         ..Sheets::default()

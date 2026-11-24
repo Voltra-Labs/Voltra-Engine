@@ -1,110 +1,129 @@
-//! One loaded font: its face, the glyphs rasterized from it, and the texture
-//! they were uploaded into.
+//! One loaded font: the file's bytes, which the shaper reads, and the face
+//! `fontdue` parsed from them, which rasterizes.
 
 use std::fmt;
+use std::sync::Arc;
 
-use voltra_render::Texture;
+use super::atlas::GlyphMetrics;
+use super::embolden;
 
-use super::atlas::{GlyphAtlas, GlyphKey, GlyphMetrics};
-use super::layout::{layout, TextLayout, Wrap};
-use crate::handle::Handle;
-
-/// A face plus its glyph atlas.
+/// A font file, parsed.
+///
+/// Two readers of the same bytes: `rustybuzz` shapes a run into glyph ids
+/// and positions (its face borrows the bytes, so one is made per layout —
+/// cheap, the tables are parsed lazily), and `fontdue` rasterizes those ids.
+/// Both index glyphs the way the file does, so an id one hands out the other
+/// draws.
 ///
 /// The face is optional: a path that would not parse, in a project whose
 /// default font is missing too, still gets a slot — so a later fix to the
 /// file can fill it under the handle every `Text` already holds — but it
 /// draws nothing until then.
+#[derive(Clone)]
 pub struct Font {
-    face: Option<fontdue::Font>,
-    atlas: GlyphAtlas,
-    /// The GPU copy of `atlas`, once [`Fonts::upload`](crate::Fonts::upload)
-    /// has made one. Stable across growths and reloads, for the same reason
-    /// every other handle in this crate is.
-    texture: Option<Handle<Texture>>,
+    face: Option<Face>,
+}
+
+/// The parsed file.
+#[derive(Clone)]
+struct Face {
+    bytes: Arc<[u8]>,
+    raster: fontdue::Font,
+}
+
+/// Baseline-relative heights of a face at one size, in pixels.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct LineMetrics {
+    /// Baseline to the top of the tallest glyph the face declares.
+    pub ascent: f32,
+    /// Baseline to the bottom of the lowest glyph the face declares;
+    /// negative, below the baseline being down.
+    pub descent: f32,
+    /// Baseline to baseline, line gap included.
+    pub line_height: f32,
 }
 
 impl Font {
-    /// A font over `face`; `None` is a font that draws nothing.
-    pub fn new(face: Option<fontdue::Font>) -> Self {
-        Self {
-            face,
-            atlas: GlyphAtlas::default(),
-            texture: None,
+    /// A font over the file `bytes`, or one that draws nothing when they
+    /// are not a font `fontdue` reads.
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, &'static str> {
+        let bytes: Arc<[u8]> = bytes.into();
+        let raster = fontdue::Font::from_bytes(&*bytes, fontdue::FontSettings::default())?;
+        if rustybuzz::Face::from_slice(&bytes, 0).is_none() {
+            return Err("the shaper cannot read its tables");
         }
+        Ok(Self {
+            face: Some(Face { bytes, raster }),
+        })
     }
 
-    /// The parsed face, or `None` when the file was missing or unreadable.
+    /// A font with no face: draws nothing, lays nothing out.
+    pub fn empty() -> Self {
+        Self { face: None }
+    }
+
+    /// The rasterizing face, or `None` when the file was missing or
+    /// unreadable.
     pub fn face(&self) -> Option<&fontdue::Font> {
-        self.face.as_ref()
+        self.face.as_ref().map(|face| &face.raster)
     }
 
-    /// The glyphs rasterized so far.
-    pub fn atlas(&self) -> &GlyphAtlas {
-        &self.atlas
+    /// Whether it has a face to shape and draw with.
+    pub fn is_loaded(&self) -> bool {
+        self.face.is_some()
     }
 
-    pub(crate) fn atlas_mut(&mut self) -> &mut GlyphAtlas {
-        &mut self.atlas
+    /// A shaping face over the file's bytes, borrowed for one layout.
+    pub(crate) fn shaper(&self) -> Option<rustybuzz::Face<'_>> {
+        rustybuzz::Face::from_slice(&self.face.as_ref()?.bytes, 0)
     }
 
-    /// The texture the atlas is drawn from, or `None` before its first
-    /// upload.
-    pub fn texture(&self) -> Option<Handle<Texture>> {
-        self.texture
+    /// Ascent, descent and line height at `px` pixels per em. A face with
+    /// no horizontal metrics is one em per line; no face, nothing.
+    pub fn line_metrics(&self, px: u32) -> Option<LineMetrics> {
+        let face = self.face()?;
+        let size = px as f32;
+        Some(match face.horizontal_line_metrics(size) {
+            Some(m) => LineMetrics {
+                ascent: m.ascent,
+                descent: m.descent,
+                line_height: m.new_line_size,
+            },
+            None => LineMetrics {
+                ascent: size,
+                descent: 0.0,
+                line_height: size,
+            },
+        })
     }
 
-    pub(crate) fn set_texture(&mut self, texture: Handle<Texture>) {
-        self.texture = Some(texture);
-    }
-
-    /// `content` laid out at `px` pixels per em, broken as `wrap` says, or
-    /// `None` with no face.
-    pub fn layout(&self, content: &str, px: u32, wrap: Wrap) -> Option<TextLayout> {
-        Some(layout(self.face.as_ref()?, content, px, wrap))
-    }
-
-    /// Rasterizes every glyph of `content` at `px` the atlas does not hold.
-    ///
-    /// Separate from drawing because the atlas may grow and repack while
-    /// glyphs are added, which moves every glyph already in it: UVs computed
-    /// before the last insertion of the frame would be wrong.
-    pub fn prepare(&mut self, content: &str, px: u32) {
-        let Some(face) = self.face.as_ref() else {
-            return;
+    /// Glyph `glyph`'s coverage at `px`, thickened when `embolden` — the
+    /// bold a family with no bold file gets. `None` with no face.
+    pub fn rasterize(
+        &self,
+        glyph: u16,
+        px: u32,
+        embolden: bool,
+    ) -> Option<(GlyphMetrics, Vec<u8>)> {
+        let (metrics, coverage) = self.face()?.rasterize_indexed(glyph, px as f32);
+        let metrics = GlyphMetrics {
+            xmin: metrics.xmin,
+            ymin: metrics.ymin,
+            width: metrics.width as u32,
+            height: metrics.height as u32,
         };
-        for character in content.chars().filter(|c| !c.is_control()) {
-            let glyph = face.lookup_glyph_index(character);
-            let key = GlyphKey { glyph, px };
-            if self.atlas.contains(key) {
-                continue;
-            }
-            let (metrics, coverage) = face.rasterize_indexed(glyph, px as f32);
-            let metrics = GlyphMetrics {
-                xmin: metrics.xmin,
-                ymin: metrics.ymin,
-                width: metrics.width as u32,
-                height: metrics.height as u32,
-            };
-            self.atlas.insert(key, metrics, coverage);
-        }
-    }
-
-    /// Swaps in a re-read face. Every glyph index may now mean another
-    /// shape, so the atlas starts over; the texture handle is kept and
-    /// refilled on the next upload.
-    pub(crate) fn replace_face(&mut self, face: fontdue::Font) {
-        self.face = Some(face);
-        self.atlas = GlyphAtlas::default();
+        Some(if embolden {
+            embolden::thicken(metrics, &coverage, embolden::strength(px))
+        } else {
+            (metrics, coverage)
+        })
     }
 }
 
 impl fmt::Debug for Font {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Font")
-            .field("face", &self.face.as_ref().and_then(|face| face.name()))
-            .field("glyphs", &self.atlas.len())
-            .field("texture", &self.texture)
+            .field("face", &self.face().and_then(|face| face.name()))
             .finish()
     }
 }

@@ -84,6 +84,17 @@ gilrs = "0.11.2"
 # Rasterizes and lays out glyphs for `Text`. A leaf crate: parses the font,
 # hands back coverage bitmaps; the atlas and the draw are ours.
 fontdue = "0.9.5"
+# Shapes text runs before `fontdue` rasterizes them by glyph id: kerning,
+# ligatures, combining marks, complex scripts. A HarfBuzz port in pure Rust;
+# a leaf crate, the runs and the fallback chain are ours (`fonts/shape.rs`).
+rustybuzz = "0.20.1"
+# Splits a run where its script changes, so each run shapes with one script.
+unicode-script = "0.5.9"
+# The Unicode bidirectional algorithm (UAX #9): embedding levels and the
+# visual order of a line's runs.
+unicode-bidi = "0.3.18"
+# Line break opportunities (UAX #14), so CJK wraps between characters.
+unicode-linebreak = "0.1.5"
 # Opens a game's dynamic library so the editor can run its code. A leaf
 # crate over dlopen/LoadLibrary; what is loaded, and when it is trusted, is
 # ours (`voltra-core/src/game/library.rs`).

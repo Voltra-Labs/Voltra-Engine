@@ -33,7 +33,9 @@ fn a_missing_default_is_a_faceless_slot_not_a_panic() {
     let fonts = Fonts::new(scratch_root());
     let font = fonts.try_get(fonts.default_font()).expect("still resolves");
     assert!(font.face().is_none());
-    assert!(font.layout("hi", 32, Wrap::default()).is_none());
+    assert!(fonts
+        .layout_plain(fonts.default_font(), "hi", 32, Wrap::default())
+        .is_none());
 }
 
 #[test]
@@ -99,7 +101,7 @@ fn a_reload_that_fails_keeps_the_face_and_its_glyphs() {
     assert!(!fonts.reload(&path(DEFAULT_FONT)));
     let font = fonts.try_get(handle).expect("resolves");
     assert!(font.face().is_some());
-    assert_eq!(font.atlas().len(), 1);
+    assert_eq!(fonts.atlas().len(), 1);
 }
 
 #[test]
@@ -110,7 +112,7 @@ fn a_successful_reload_starts_the_atlas_over() {
     fonts.prepare(handle, "AB", 32);
 
     assert!(fonts.reload(&path(DEFAULT_FONT)));
-    assert!(fonts.try_get(handle).expect("resolves").atlas().is_empty());
+    assert!(fonts.atlas().is_empty());
 }
 
 #[test]
@@ -130,12 +132,12 @@ fn prepare_rasterizes_each_glyph_once_per_size() {
 
     fonts.prepare(handle, "aab", 32);
     fonts.prepare(handle, "ab", 32);
-    let atlas = fonts.try_get(handle).expect("resolves").atlas();
+    let atlas = fonts.atlas();
     assert_eq!(atlas.len(), 2);
     assert!(atlas.is_dirty());
 
     fonts.prepare(handle, "a", 48);
-    assert_eq!(fonts.try_get(handle).expect("resolves").atlas().len(), 3);
+    assert_eq!(fonts.atlas().len(), 3);
 }
 
 #[test]
@@ -144,17 +146,16 @@ fn a_glyph_with_ink_gets_a_rect_and_a_space_does_not() {
     let handle = fonts.default_font();
     fonts.prepare(handle, "A ", 32);
 
-    let font = fonts.try_get(handle).expect("resolves");
-    let a = GlyphKey {
-        glyph: face(&fonts, handle).lookup_glyph_index('A'),
+    let key = |glyph| GlyphKey {
+        font: handle.index(),
+        glyph,
         px: 32,
+        embolden: false,
     };
-    let space = GlyphKey {
-        glyph: face(&fonts, handle).lookup_glyph_index(' '),
-        px: 32,
-    };
-    assert!(font.atlas().get(a).and_then(|g| g.rect).is_some());
-    assert_eq!(font.atlas().get(space).and_then(|g| g.rect), None);
+    let a = key(face(&fonts, handle).lookup_glyph_index('A'));
+    let space = key(face(&fonts, handle).lookup_glyph_index(' '));
+    assert!(fonts.atlas().get(a).and_then(|g| g.rect).is_some());
+    assert_eq!(fonts.atlas().get(space).and_then(|g| g.rect), None);
 }
 
 mod layout {
@@ -166,10 +167,10 @@ mod layout {
 
     fn wrapped(content: &str, wrap: Wrap) -> TextLayout {
         let fonts = Fonts::new(root_with_default());
-        fonts
-            .try_get(fonts.default_font())
-            .and_then(|font| font.layout(content, 32, wrap))
-            .expect("a face")
+        let layout = fonts
+            .layout_plain(fonts.default_font(), content, 32, wrap)
+            .expect("a face");
+        (*layout).clone()
     }
 
     fn width(max: f32) -> Wrap {

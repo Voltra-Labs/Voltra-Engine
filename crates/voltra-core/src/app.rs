@@ -379,6 +379,9 @@ impl App {
         // After the tick, which may have switched the language or spawned a
         // keyed text, and before anything draws one.
         self.locale.localize(&mut self.world);
+        if let Some(fonts) = self.fonts.as_mut() {
+            self.locale.apply_fonts(fonts);
+        }
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.
         self.resolve_spawned();

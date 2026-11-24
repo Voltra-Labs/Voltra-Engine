@@ -130,7 +130,7 @@ impl SpriteBatch {
         };
         let surface = Surface::textured(Some(texture)).on(text.light_layers);
         for quad in quads {
-            self.push_quad_on(matrix, quad.corners, quad.uvs, text.color, surface);
+            self.push_quad_on(matrix, quad.corners, quad.uvs, quad.color, surface);
         }
     }
 
