@@ -5705,6 +5705,51 @@ stamped, undone in one step and redone; a ring drawn in one stroke and
 its inside filled, the ring and the outside left; the eyedropper picking
 a tile and adding no undo entry; a picked tile turned and painted turned.
 
+### A tile collides with its frame's shape and carries values a game reads
+
+Stage 98. `Tilemap::tile_data`, by frame beside `animations` and
+`terrains`: a frame's collision shape and a map of custom values —
+Godot's TileSet physics and custom data layers, Tiled's tile properties.
+
+- **Shapes** (`tilemap/tile_data.rs`): `Full` (the default, so every layer
+  saved before collides as it did), `Empty` (walked through on a solid
+  layer — a ladder, a doorway), `Half(side)`, `Slope { left, right }` (a
+  floor from one height to another, in `0..=1` of the cell: `(0, 1)` is
+  45°, `(0, 0.5)` and `(0.5, 1)` the two tiles of a gentle slope) and
+  `Polygon` (any outline, colliding as its convex hull of up to eight
+  points). A shape is drawn upright and turned with its tile, so one
+  slope frame mirrored is the slope going the other way, and a turned half
+  tile is the other half.
+- **Generated colliders** (stage 25's `sync_colliders`): full tiles merge
+  into boxes as before; every other shaped tile is one static convex
+  polygon of its own, centred on its cell; empty adds nothing. Merging
+  slopes would need concave outlines the physics does not have, and a
+  slope is rarely more than a few tiles; the seam between a slope and the
+  boxes beside it is what a character's `step_height` already walks over.
+  A shape changed without a cell changing rebuilds too: the shapes are
+  hashed into what a layer's colliders were built from.
+- **Custom values** are RON literals — `{"ladder": true, "damage": 5}` —
+  read by cell with `Tilemap::custom_at(cell, key)`, or by a point in the
+  world with `tilemap::query::custom_under(world, point, key)`, which goes
+  through each layer's transform. Kept on the layer, not in the atlas:
+  that is where everything else a frame means to a layer (animations,
+  terrains) already lives, and the collider sync needs nothing but the
+  world.
+- **The editor**: the inspector's "Tile N" section edits the picked tile's
+  frame — a shape from a list, its heights, side or points, and named
+  values of four kinds — undoable as any inspector edit.
+- **The platformer** has a hill (`sprites/ramps.png`, a gentle slope up,
+  across and down the mirrored slope) and a ladder right of the ledge,
+  both tiles of one layer; `ladder.rs` reads `ladder` under the walker and
+  climbs with up and down, gravity off while on it.
+
+Pinned by `tile_data.rs` (a mirrored slope, a turned half tile, values
+read as RON literals), `colliders_tests.rs` (a slope a polygon beside the
+merged full run, empty nothing; a shape change rebuilds; values by cell),
+`query.rs`, the platformer's `ladder.rs`, and
+`voltra-physics/tests/tile_slopes.rs`: a `CharacterBody2D` walked up a
+gentle slope of two tiles onto a platform, and up the same slope mirrored.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

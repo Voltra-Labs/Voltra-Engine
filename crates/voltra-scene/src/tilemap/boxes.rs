@@ -34,8 +34,10 @@ impl CellRect {
     }
 }
 
-/// Boxes covering every filled cell of `map` exactly once, bottom row first
-/// and left to right within a row.
+/// Boxes covering every cell of `map` whose tile is [full](super::TileShape::Full)
+/// exactly once, bottom row first and left to right within a row. Tiles of
+/// other shapes are left to [`sync_colliders`](super::sync_colliders), one
+/// polygon each.
 pub fn solid_boxes(map: &Tilemap) -> Vec<CellRect> {
     let rows = rows(map);
 
@@ -79,8 +81,10 @@ pub fn solid_boxes(map: &Tilemap) -> Vec<CellRect> {
 /// Every row's filled columns, sorted, rows in ascending order.
 fn rows(map: &Tilemap) -> BTreeMap<i32, Vec<i32>> {
     let mut rows: BTreeMap<i32, Vec<i32>> = BTreeMap::new();
-    for (cell, _) in map.tiles() {
-        rows.entry(cell.y).or_default().push(cell.x);
+    for (cell, tile) in map.tiles() {
+        if map.shape_of(tile.frame).is_full() {
+            rows.entry(cell.y).or_default().push(cell.x);
+        }
     }
     for columns in rows.values_mut() {
         columns.sort_unstable();

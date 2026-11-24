@@ -13,6 +13,13 @@
 //! derived data, rebuilt from the layer, the way a mesh is. The layer is the
 //! thing authored and undone, and its colliders follow.
 //!
+//! **Full tiles merge; other shapes are a polygon each** (stage 98). A tile
+//! whose frame has a [`TileShape`](super::TileShape) other than full — a half
+//! tile, a slope, a custom outline — is one static convex polygon of its own,
+//! turned as its tile is drawn; full tiles merge into boxes as before; an
+//! empty shape adds nothing. Merging slopes would need a concave outline the
+//! physics does not have, and a slope is rarely more than a few tiles.
+//!
 //! **Rebuilt when stale, checked every frame.** What a layer's colliders were
 //! built from is kept on them; [`sync_colliders`] compares it with the layer
 //! as it is now and rebuilds the layer whose inputs moved — a cell, the tile
@@ -22,11 +29,13 @@
 //! [`SceneId`]: crate::SceneId
 
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
 use super::{solid_boxes, Tilemap};
+use crate::collider::ConvexPolygon;
 use crate::hierarchy::world_matrix;
 use crate::{Collider, CollisionLayers, PhysicsMaterial, RigidBody, Sensor, Transform};
 
@@ -45,6 +54,9 @@ pub struct TileCollider {
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct Inputs {
     revision: u64,
+    /// The frames' shapes, hashed: a shape changed in the inspector moves
+    /// no cell, so the revision alone would miss it.
+    shapes: u64,
     tile_size: Vec2,
     world: Mat3,
     layers: Option<CollisionLayers>,
@@ -56,6 +68,7 @@ impl Inputs {
     fn of(world: &World, layer: Entity, map: &Tilemap) -> Self {
         Self {
             revision: map.revision().get(),
+            shapes: shapes_hash(map),
             tile_size: map.tile_size,
             world: world_matrix(world, layer),
             layers: world.get::<CollisionLayers>(layer).copied(),
@@ -110,7 +123,23 @@ pub fn sync_colliders(world: &mut World) {
     }
 }
 
-/// Spawns `layer`'s boxes, built from `inputs`.
+/// A hash of every frame's shape — what the colliders are cut by besides
+/// the cells.
+fn shapes_hash(map: &Tilemap) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for (frame, data) in &map.tile_data {
+        if data.shape.is_full() {
+            continue;
+        }
+        frame.hash(&mut hasher);
+        // Through its text: `TileShape` holds floats, which do not hash, and
+        // the shapes of a layer are a handful of short strings.
+        format!("{:?}", data.shape).hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Spawns `layer`'s colliders, built from `inputs`.
 fn build(world: &mut World, layer: Entity, inputs: Inputs) {
     let Some(map) = world.get::<Tilemap>(layer) else {
         return;
@@ -120,27 +149,29 @@ fn build(world: &mut World, layer: Entity, inputs: Inputs) {
     if inputs.tile_size.x == 0.0 || inputs.tile_size.y == 0.0 {
         return;
     }
-    let boxes = solid_boxes(map);
+    let mut shapes: Vec<(Vec2, Collider)> = solid_boxes(map)
+        .into_iter()
+        .map(|cells| {
+            let min = cells.min.as_vec2() * inputs.tile_size;
+            let max = cells.max.as_vec2() * inputs.tile_size;
+            let half_extents = ((max - min) * 0.5).abs();
+            ((min + max) * 0.5, Collider::Box { half_extents })
+        })
+        .collect();
+    shapes.extend(polygons(map, inputs.tile_size));
 
-    for cells in boxes {
-        let min = cells.min.as_vec2() * inputs.tile_size;
-        let max = cells.max.as_vec2() * inputs.tile_size;
-        // The layer's own frame, with the box's centre carried through it: the
-        // box turns and scales with the layer, and its half extents stay in the
-        // layer's units for the transform's scale to apply, as any collider's
-        // do.
+    for (centre, collider) in shapes {
+        // The layer's own frame, with the shape's centre carried through it:
+        // the shape turns and scales with the layer, and its extents stay in
+        // the layer's units for the transform's scale to apply, as any
+        // collider's do.
         let mut transform = Transform::from_matrix(inputs.world);
-        transform.translation = inputs.world.transform_point2((min + max) * 0.5);
+        transform.translation = inputs.world.transform_point2(centre);
 
         let entity = world.spawn();
         world.insert(entity, transform);
         world.insert(entity, RigidBody::new_static());
-        world.insert(
-            entity,
-            Collider::Box {
-                half_extents: ((max - min) * 0.5).abs(),
-            },
-        );
+        world.insert(entity, collider);
         if let Some(layers) = inputs.layers {
             world.insert(entity, layers);
         }
@@ -158,4 +189,42 @@ fn build(world: &mut World, layer: Entity, inputs: Inputs) {
             },
         );
     }
+}
+
+/// One polygon per tile whose shape is neither full nor empty, centred on
+/// its cell, in the layer's units. An outline that is not a convex polygon
+/// of at most eight points is skipped with a warning naming its frame.
+fn polygons(map: &Tilemap, tile_size: Vec2) -> Vec<(Vec2, Collider)> {
+    let mut out = Vec::new();
+    let mut warned = Vec::new();
+    for (cell, tile) in map.tiles() {
+        let shape = map.shape_of(tile.frame);
+        if shape.is_full() {
+            continue;
+        }
+        let Some(outline) = shape.outline_for(tile) else {
+            continue;
+        };
+        let centre = (cell.as_vec2() + Vec2::splat(0.5)) * tile_size;
+        let points: Vec<Vec2> = outline
+            .iter()
+            .map(|p| (*p - Vec2::splat(0.5)) * tile_size)
+            .collect();
+        match ConvexPolygon::new(&points) {
+            Ok(points) => out.push((
+                centre,
+                Collider::Polygon {
+                    points,
+                    radius: 0.0,
+                },
+            )),
+            Err(e) => {
+                if !warned.contains(&tile.frame) {
+                    warned.push(tile.frame);
+                    log::warn!("tile frame {}'s shape is not a collider: {e}", tile.frame);
+                }
+            }
+        }
+    }
+    out
 }

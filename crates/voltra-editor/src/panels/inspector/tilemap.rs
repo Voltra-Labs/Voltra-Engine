@@ -7,6 +7,7 @@
 mod animations;
 mod palette;
 mod terrains;
+mod tile_data;
 
 pub(super) use palette::Palette;
 
@@ -112,6 +113,8 @@ pub(super) fn show(
     }
     ui.separator();
     claim = claim.or(terrains::show(ui, map, paint));
+    ui.separator();
+    claim = claim.or(tile_data::show(ui, map, paint));
     ui.separator();
     claim = claim.or(animations::show(ui, map));
     claim = claim.or(super::light_layers::show(
