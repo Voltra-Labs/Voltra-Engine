@@ -27,6 +27,7 @@ mod prefab;
 mod shadow_caster;
 mod shapes2d;
 mod skeleton;
+mod skinned;
 mod sorting_layer;
 mod sprite;
 mod sprite_material;
@@ -234,6 +235,18 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         },
                     ));
                 }
+                claim = claim.or(skinned::show(
+                    ui,
+                    frame.world,
+                    skinned::Context {
+                        entity,
+                        paint: &mut editor.weight_paint,
+                        textures: frame.textures,
+                        silhouettes: frame.silhouettes.as_deref_mut(),
+                        device: frame.device,
+                        queue: frame.queue,
+                    },
+                ));
                 let asked = skeleton::show(ui, frame.world, entity);
                 claim = claim.or(asked.claim);
                 if asked.child_bone {

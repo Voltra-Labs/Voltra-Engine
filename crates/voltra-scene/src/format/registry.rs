@@ -150,6 +150,9 @@ impl ComponentRegistry {
             .register::<crate::TwoBoneIk>("TwoBoneIk")
             .with_template();
         registry
+            .register::<crate::SkinnedSprite>("SkinnedSprite")
+            .with_template();
+        registry
     }
 
     /// Adds a component type under `name`, which is what appears in the file.

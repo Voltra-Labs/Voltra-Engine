@@ -66,6 +66,8 @@ pub struct Renderer {
     gpu_timer: crate::gpu_timer::GpuTimer,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
     particles: Option<ParticlePipelines>,
+    /// Draws sprite meshes deformed by bones; every adapter can.
+    skin: crate::skinning::SkinPipeline,
     /// Where the world is drawn before the post pass on the window path,
     /// sized to the surface; made on the first frame.
     frame_target: Option<RenderTarget>,
@@ -149,6 +151,12 @@ impl Renderer {
             log::warn!("this adapter has no compute shaders; GPU particles run on the CPU");
             None
         };
+        let skin = crate::skinning::SkinPipeline::new(
+            ctx.device(),
+            ctx.format(),
+            camera_binding.layout(),
+            &texture_layout,
+        );
         let layers = LayerPass::new(
             ctx.device(),
             camera_binding.layout(),
@@ -182,6 +190,7 @@ impl Renderer {
             transients: TexturePool::default(),
             gpu_timer,
             particles,
+            skin,
             frame_target: None,
             viewport_binding,
             camera,
@@ -220,6 +229,11 @@ impl Renderer {
     /// them — the caller's cue to simulate on the CPU.
     pub fn particle_pipelines(&self) -> Option<&ParticlePipelines> {
         self.particles.as_ref()
+    }
+
+    /// The pipeline skinned meshes are made against and drawn through.
+    pub fn skin_pipeline(&self) -> &crate::skinning::SkinPipeline {
+        &self.skin
     }
 
     /// Steps every emitter in `steps` and sets how each is drawn, in one

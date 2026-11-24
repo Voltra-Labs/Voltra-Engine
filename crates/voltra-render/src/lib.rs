@@ -27,6 +27,7 @@ pub mod readback;
 pub mod renderer;
 pub mod scene_draw;
 pub mod shader;
+pub mod skinning;
 pub mod target;
 pub mod texture;
 
@@ -53,6 +54,7 @@ pub use post::{PostPass, PostSettings};
 pub use readback::read_rgba8;
 pub use renderer::{Layer, Placed, Renderer};
 pub use scene_draw::SceneDraw;
+pub use skinning::{SkinPipeline, SkinVertex, SkinnedMesh};
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};
 

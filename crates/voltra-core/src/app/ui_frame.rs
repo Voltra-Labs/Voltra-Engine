@@ -426,6 +426,10 @@ pub(super) fn resolve_world_textures(
         let path = trail.texture.clone();
         trail.set_texture(path, textures, device, queue);
     }
+    for (_, skinned) in world.query_mut::<voltra_scene::SkinnedSprite>() {
+        let path = skinned.texture.clone();
+        skinned.set_texture(path, textures, device, queue);
+    }
 }
 
 /// Re-resolves every [`AudioSource`]'s clip handle from its path.

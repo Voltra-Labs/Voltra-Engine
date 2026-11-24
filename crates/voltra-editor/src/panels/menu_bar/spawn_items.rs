@@ -89,6 +89,11 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         ),
         ("Spawn polygon", "Polygon", spawn::polygon),
         ("Spawn trail", "Trail", spawn::trail),
+        (
+            "Spawn skinned sprite",
+            "Skinned sprite",
+            spawn::skinned_sprite,
+        ),
     ] {
         if ui.button(label).clicked() {
             spawn::record(editor, frame, label, |frame| make(frame, name, Vec2::ZERO));

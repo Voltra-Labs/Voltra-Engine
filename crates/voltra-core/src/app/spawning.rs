@@ -150,6 +150,13 @@ pub(super) fn resolve_entity(
         let path = trail.texture.clone();
         trail.set_texture(path, textures, device, queue);
     }
+    if let (Some(skinned), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::SkinnedSprite>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = skinned.texture.clone();
+        skinned.set_texture(path, textures, device, queue);
+    }
     if let (Some(text), Some(fonts)) = (world.get_mut::<Text>(entity), fonts) {
         let path = text.font.clone();
         text.set_font(path, fonts);

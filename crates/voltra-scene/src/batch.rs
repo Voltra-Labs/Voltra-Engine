@@ -11,6 +11,7 @@ use crate::text::{shape, Text};
 
 pub use material_use::MaterialUse;
 
+pub use skinned_draw::SkinnedDraw;
 pub use surface::Surface;
 pub use triangles::{MeshVertex, TriangleMesh};
 
@@ -78,6 +79,12 @@ pub struct SpriteBatch {
     /// GPU particle emitters, each drawn just before the range at its
     /// `before` index — where its sort key put it among the quads.
     pub gpu_emitters: Vec<GpuEmitterDraw>,
+    /// Skinned meshes, placed among the ranges and the emitters the same
+    /// way; see [`SkinnedDraw`].
+    pub skinned: Vec<SkinnedDraw>,
+    /// The range count when a draw of another pipeline (a GPU emitter, a
+    /// skinned mesh) was last put in: no range may grow across it.
+    sealed: Option<usize>,
     /// Every material and set of uniform values a range draws through,
     /// once each.
     pub materials: Vec<MaterialUse>,
@@ -194,10 +201,7 @@ impl SpriteBatch {
             light_layers,
             material,
         } = surface;
-        let sealed = self
-            .gpu_emitters
-            .last()
-            .is_some_and(|emitter| emitter.before == self.ranges.len());
+        let sealed = self.sealed == Some(self.ranges.len());
         match self.ranges.last_mut() {
             Some(range)
                 if range.texture == texture
@@ -231,6 +235,7 @@ impl SpriteBatch {
             light_layers,
             before: self.ranges.len(),
         });
+        self.sealed = Some(self.ranges.len());
     }
 
     /// How many sprite quads the batch holds.
@@ -296,6 +301,7 @@ mod build;
 #[cfg(test)]
 mod cull_tests;
 mod material_use;
+mod skinned_draw;
 mod surface;
 #[cfg(test)]
 mod tests;

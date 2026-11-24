@@ -5800,6 +5800,85 @@ strides more than 0.4 units and is back after the one-second loop, each
 sprite riding its bone; the hand on the IK goal within 1e-3 every frame;
 the picture changes as it walks).
 
+### A skinned sprite stores its mesh and weights; the GPU blends its bones
+
+Stage 103. **`SkinnedSprite`** (`voltra_scene::skinned`) is a sprite cut
+into a mesh whose vertices are held by bones — Unity's `SpriteSkin` over a
+sprite mesh, Godot's `Polygon2D` bound to a `Skeleton2D`. The component
+holds everything the file needs: texture, tint, `pixels_per_unit`, the
+bones **by path from the skeleton root** (as clip tracks and IK targets
+name entities, so prefab copies bind to their own), and the `SkinMesh` —
+each vertex's bind-pose position, texture point and up to four
+`(bone, weight)` pairs, plus the triangles. So painted weights are scene
+data and round-trip through the file like any field.
+
+- **Mesh from the outline** (`skinned::generate`): the texture's traced
+  silhouette (stage 59's `Silhouettes`, the largest loop) in the entity's
+  units (centred, texels ÷ ppu, as a sprite of it is drawn), cut on a grid
+  (a quarter of the narrow side, at most 48 cells a side) with each cell's
+  piece clipped (Sutherland–Hodgman) and ear-clipped (stage 101's
+  `triangulate`); vertices on cell edges are shared, so the mesh has no
+  T-junctions to crack open. A grid stands in for the interior points
+  Unity's tessellator adds, without a constrained Delaunay triangulator.
+- **Weights**: `weights::automatic` — each vertex held by its nearest bones
+  (rest-pose segments in the mesh's space, `pose::bone_segments`) by
+  `1/d²`, among those within three times the nearest's distance, at most
+  four, normalised: a vertex on a bone is that bone's, a joint is shared,
+  a shoulder does not follow the hand. `weights::paint` /
+  `paint_vertex` — a soft brush adding or taking one bone's weight, then
+  renormalising and keeping the four strongest.
+- **Pose** (`skinned::pose`): per bone `world(bone) · rest(bone)⁻¹ ·
+  rest(mesh)`, with `rest(x)` the chain of rest poses (`Bone2D::rest`, a
+  plain transform for a non-bone) from the skeleton root — at rest every
+  bone's matrix is the mesh's own. A bone path that names nothing, or a
+  rest that cannot be inverted, holds its vertices rigidly with the mesh;
+  a vertex held by nothing is the mesh's own (`RIGID_SLOT`). `deformed`
+  computes the same blend on the CPU for the batch's cull box and the
+  editor's weight dots.
+- **GPU** (`voltra_render::skinning`): `SkinnedMesh` — a vertex buffer of
+  `SkinVertex { position, uv, bones: [u32; 4], weights: [f32; 4] }`
+  (sanitised: indices clamped, weights finite and summing to one), an index
+  buffer, and a uniform block of a tint plus 64 + 1 bone matrices (two
+  `vec4`s each, 2 KiB), rewritten each frame; `skinned.wgsl` blends the
+  four terms written out (no runtime vector index, for FXC). A **uniform
+  array** rather than a storage buffer, so it runs on WebGL2 too — no
+  fallback path needed; 64 bones is more than a 2D character has. Linear
+  blend skinning; dual quaternions would fix the candy-wrapper twist that
+  2D limbs rarely show.
+- **Painter's order**: the batch records a `SkinnedDraw` where the sort key
+  falls (with how many GPU emitters came first, so an emitter and a mesh at
+  the same place keep their order) and seals the range before it, as GPU
+  emitters do (`SpriteBatch::sealed` now covers both); `scene_draws`
+  merges them into `SceneDraw::Skinned`, drawn by `draw_scene` through the
+  renderer's `SkinPipeline` (shared by clone into the app's
+  `SkinnedMeshes`, which re-uploads a mesh when its vertices or weights
+  change and poses every mesh before each drawn frame, the window's and a
+  headless screenshot's).
+- **Editor**: the inspector's section — texture, ppu, tint, *Use the
+  skeleton's bones*, *Generate mesh* (trace + grid + automatic weights),
+  *Auto weights*, and **Paint weights**: a viewport mode (`weight_paint.rs`,
+  as the shape editor is) where a drag adds the chosen bone's weight under a
+  soft round brush on the mesh *as posed*, Shift takes it away, each vertex
+  drawn as a dot from blue to red by that bone's weight; one undo entry a
+  stroke. *Scene ▸ Spawn skinned sprite*.
+
+Not done: skinned meshes in the light-layer and normal-map passes (lit as
+if on every layer, flat); a skinned mesh repeated by parallax (drawn once);
+picking one by its pixels; editing the mesh's vertices by hand.
+
+Pinned by `voltra-core/tests/skinned.rs` (headless: an arm whose mesh is
+traced from a 32 × 64 texture with cut corners and weighted automatically
+hangs straight at rest; with the lower bone turned a quarter, the hand lands
+a unit to the right of the elbow, nothing hangs below, and the outside of
+the bend — where two hinged cut-out rectangles cover nothing — is filled
+out most of the way to its apex, further than a hard-weighted mesh),
+`skinned/tests.rs` (at rest every bone matrix is the mesh's own; a turned
+lower bone carries the hand and shares the elbow; a missing bone holds
+rigid; the GPU mesh drops bad weights and broken triangles; **painted
+weights saved to a scene file and loaded back unchanged**),
+`skinned::{generate, weights}` and `voltra-render` `skinning::mesh`
+(sanitising, the uniform's layout).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5830,6 +5909,7 @@ Verified against the crate source, not from memory:
 | Headless tests | `headless_device()` needs an adapter; in a Linux container without a GPU, `apt-get install mesa-vulkan-drivers` (lavapipe) makes the GPU tests run instead of skipping |
 | WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |
 | Float data textures | `Rgba32Float` is not filterable without `Features::FLOAT32_FILTERABLE`: bind it as `TextureSampleType::Float { filterable: false }` and read it with `textureLoad` (vertex and compute stages alike); `write_texture` rows need no 256-byte alignment |
+| Integer vertex attributes | `VertexFormat::Uint32x4` reaches WGSL as `@location(n) x: vec4<u32>`; a uniform `array<Struct, N>` may be indexed by such a value in the vertex stage (clamp it — an out-of-range uniform index is undefined on some backends) |
 | Web backends | `wgpu::util::new_instance_with_webgpu_detection(desc).await` drops `BROWSER_WEBGPU` when the browser has no working WebGPU, so the `webgl` feature's GL backend serves; detection must happen before the instance exists |
 | Web canvas formats | A WebGPU canvas offers `bgra8unorm` / `rgba8unorm` / `rgba16float`, never sRGB: configure the linear format with its sRGB variant in `view_formats` and draw through that view |
 | Web buffers | `Drop` for a web `Buffer`/`Texture` is a no-op — the browser frees it when the JS wrapper is collected. Call `destroy()` on anything made per frame (after the submit) |

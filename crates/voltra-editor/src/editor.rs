@@ -92,6 +92,8 @@ pub struct Editor {
     pub(crate) game: crate::game::GameHost,
     /// The selected emitter, played while authoring.
     pub(crate) particle_preview: crate::particle_preview::ParticlePreview,
+    /// The skinned sprite whose weights the viewport is painting, if any.
+    pub(crate) weight_paint: crate::weight_paint::WeightPaint,
 }
 
 impl Editor {

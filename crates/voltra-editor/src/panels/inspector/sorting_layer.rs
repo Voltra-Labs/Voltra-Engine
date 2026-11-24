@@ -34,6 +34,9 @@ pub(super) fn show_for(
     if let Some(trail) = world.get_mut::<voltra_scene::Trail2D>(entity) {
         claim = claim.or(show(ui, "trail", &mut trail.sorting_layer, layers));
     }
+    if let Some(skinned) = world.get_mut::<voltra_scene::SkinnedSprite>(entity) {
+        claim = claim.or(show(ui, "skinned", &mut skinned.sorting_layer, layers));
+    }
     claim
 }
 

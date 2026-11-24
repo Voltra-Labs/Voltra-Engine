@@ -27,6 +27,8 @@ pub(in crate::app) struct WorldDraw<'a> {
     pub batch: &'a mut SpriteBatch,
     pub tile_meshes: &'a mut TileMeshCache,
     pub gpu_rings: &'a GpuParticleRings,
+    /// The renderer's half of every skinned sprite.
+    pub skins: &'a crate::app::skinned_meshes::SkinnedMeshes,
     /// The materials sprites name, and what they are drawn with.
     pub materials: Option<&'a voltra_assets::Materials>,
     pub material_bank: &'a mut Option<voltra_render::material::MaterialBank>,
@@ -76,7 +78,7 @@ impl WorldDraw<'_> {
             self.batch,
             self.textures,
             &white,
-            self.gpu_rings,
+            (self.gpu_rings, self.skins),
             bank,
             None,
         );

@@ -29,6 +29,7 @@ mod timeline;
 mod tool;
 mod undo;
 mod view;
+mod weight_paint;
 
 use editor::Editor;
 use voltra_assets::AssetPath;

@@ -96,6 +96,22 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 editor.paint.set_tool(None);
             }
 
+            // While a skinned sprite's weights are painted, the brush has the
+            // pointer, as a caster's handles do below.
+            if let Some(skinned) = editor
+                .weight_paint
+                .target(frame.world, editor.selection.primary())
+            {
+                editor.gizmo.cancel_drag();
+                editor.marquee.cancel();
+                if let Some(label) = editor.weight_paint.update(ui, &scene, frame, skinned) {
+                    editor.history.claim(label);
+                }
+                editor.camera.navigate(ui, &scene, frame.camera);
+                editor.weight_paint.draw(&scene, frame, skinned);
+                return;
+            }
+
             // While a caster's shape is edited, its handles have the pointer,
             // as a painted layer does below.
             if let Some(caster) = editor.shape.target(frame.world, editor.selection.primary()) {

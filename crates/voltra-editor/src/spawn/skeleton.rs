@@ -23,6 +23,19 @@ pub(crate) fn skeleton(
     (vec![root, bone], Some(bone))
 }
 
+/// An empty skinned sprite at `at`: give it a texture, hang it under a
+/// skeleton, then *Generate mesh* in the inspector.
+pub(crate) fn skinned_sprite(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
+    let entity = frame.world.spawn();
+    frame.world.insert(entity, SceneId::new());
+    frame.world.insert(entity, Name::new(name));
+    frame.world.insert(entity, Transform::from_translation(at));
+    frame
+        .world
+        .insert(entity, voltra_scene::SkinnedSprite::default());
+    entity
+}
+
 /// A bone hung at `parent`'s tip, carrying on in its direction.
 pub(crate) fn child_bone(frame: &mut UiFrame<'_>, parent: Entity) -> Entity {
     let length = frame.world.get::<Bone2D>(parent).map_or(0.5, |b| b.length);

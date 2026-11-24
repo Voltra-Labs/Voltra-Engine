@@ -21,6 +21,7 @@ impl App {
     pub(super) fn redraw_without_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.update_skinned_meshes();
         self.resolve_materials();
         let (Some(renderer), Some(textures), Some(atlases), Some(fonts)) = (
             self.renderer.as_mut(),
@@ -64,6 +65,7 @@ impl App {
                 batch: &mut self.frame_batch,
                 tile_meshes: &mut self.tile_meshes,
                 gpu_rings: &self.gpu_rings,
+                skins: &self.skinned_meshes,
                 materials: self.materials.as_ref(),
                 material_bank: &mut self.material_bank,
                 pool: &mut self.camera_pool,
@@ -114,8 +116,14 @@ impl App {
             &batch,
             self.materials.as_ref(),
         );
-        let draws =
-            super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings, bank, None);
+        let draws = super::scene_draws::scene_draws(
+            &batch,
+            textures,
+            &white,
+            (&self.gpu_rings, &self.skinned_meshes),
+            bank,
+            None,
+        );
 
         let config = renderer.context().config();
         let hud = ui_batch(&self.world, sheets, config.width, config.height, scale);
@@ -144,6 +152,7 @@ impl App {
     pub(super) fn redraw_with_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.update_skinned_meshes();
         self.resolve_materials();
         let (
             Some(renderer),
@@ -216,6 +225,7 @@ impl App {
                 batch: &mut self.frame_batch,
                 tile_meshes: &mut self.tile_meshes,
                 gpu_rings: &self.gpu_rings,
+                skins: &self.skinned_meshes,
                 materials: self.materials.as_ref(),
                 material_bank: &mut self.material_bank,
                 pool: &mut self.camera_pool,
@@ -235,6 +245,7 @@ impl App {
             batch: &mut self.frame_batch,
             tile_meshes: &mut self.tile_meshes,
             gpu_rings: &self.gpu_rings,
+            skins: &self.skinned_meshes,
             materials: self.materials.as_ref(),
             material_bank: &mut self.material_bank,
             elapsed: self.elapsed,

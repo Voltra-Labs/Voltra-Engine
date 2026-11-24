@@ -7,16 +7,18 @@ use voltra_render::{wgpu, MeshDraw, Renderer, SceneDraw};
 use voltra_scene::SpriteBatch;
 
 use super::gpu_particles::GpuParticleRings;
+use super::skinned_meshes::SkinnedMeshes;
 
-/// `batch`'s ranges and GPU emitters, in painter's order.
+/// `batch`'s ranges, GPU emitters and skinned meshes, in painter's order.
 ///
 /// An emitter without a ring — made on the next step, or never on an
-/// adapter without compute — is left out rather than drawn from nothing.
+/// adapter without compute — is left out rather than drawn from nothing;
+/// so is a skinned sprite with no mesh to draw.
 pub(super) fn scene_draws<'a>(
     batch: &SpriteBatch,
     textures: &'a Textures,
     white: &'a wgpu::BindGroup,
-    rings: &'a GpuParticleRings,
+    (rings, skins): (&'a GpuParticleRings, &'a SkinnedMeshes),
     bank: Option<&'a MaterialBank>,
     skip: Option<voltra_assets::Handle<voltra_render::Texture>>,
 ) -> Vec<SceneDraw<'a>> {
@@ -24,16 +26,48 @@ pub(super) fn scene_draws<'a>(
         Some(handle) => textures.bind_group(handle),
         None => white,
     };
-    let mut emitters = batch.gpu_emitters.iter().peekable();
-    let mut draws = Vec::with_capacity(batch.ranges.len() + batch.gpu_emitters.len());
+    let mut emitters = batch.gpu_emitters.iter().enumerate().peekable();
+    let mut skinned = batch.skinned.iter().peekable();
+    let mut draws =
+        Vec::with_capacity(batch.ranges.len() + batch.gpu_emitters.len() + batch.skinned.len());
     for index in 0..=batch.ranges.len() {
-        while let Some(emitter) = emitters.next_if(|emitter| emitter.before <= index) {
-            if let Some(particles) = rings.get(emitter.entity) {
-                draws.push(SceneDraw::Particles {
-                    particles,
-                    texture: bind(emitter.texture),
-                    light_layers: emitter.light_layers,
-                });
+        // The emitters and skinned meshes due here, in the order the batch
+        // met them: a skinned mesh after as many emitters as it says.
+        loop {
+            let emitter_due = emitters
+                .peek()
+                .filter(|(_, e)| e.before <= index)
+                .map(|(n, _)| *n);
+            let skin_due = skinned
+                .peek()
+                .filter(|s| s.before <= index)
+                .map(|s| s.after_emitters);
+            match (emitter_due, skin_due) {
+                (Some(n), Some(after)) if after <= n => {}
+                (Some(_), _) => {
+                    if let Some((_, emitter)) = emitters.next() {
+                        if let Some(particles) = rings.get(emitter.entity) {
+                            draws.push(SceneDraw::Particles {
+                                particles,
+                                texture: bind(emitter.texture),
+                                light_layers: emitter.light_layers,
+                            });
+                        }
+                    }
+                    continue;
+                }
+                (None, Some(_)) => {}
+                (None, None) => break,
+            }
+            if let Some(draw) = skinned.next() {
+                if let Some((mesh, pipeline)) = skins.get(draw.entity) {
+                    draws.push(SceneDraw::Skinned {
+                        mesh,
+                        pipeline,
+                        texture: bind(draw.texture),
+                        light_layers: draw.light_layers,
+                    });
+                }
             }
         }
         if let Some(range) = batch
