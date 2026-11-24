@@ -18,6 +18,7 @@ const DOWN: &str = "ui_down";
 const LEFT: &str = "ui_left";
 const RIGHT: &str = "ui_right";
 const ACCEPT: &str = "ui_accept";
+const CANCEL: &str = "ui_cancel";
 
 impl App {
     /// Updates hover, press, click, focus and typing before the tick reads
@@ -27,7 +28,7 @@ impl App {
     /// panel, and its HUD is something being authored, not played — clicking
     /// it selects, it does not press. With no window yet there is no screen
     /// to lay the controls out on, unless a headless run gave one.
-    pub(super) fn update_ui_controls(&mut self) {
+    pub(super) fn update_ui_controls(&mut self, delta: f32) {
         if self.ui.is_some() {
             return;
         }
@@ -53,6 +54,7 @@ impl App {
             pointer: pointer_of(&self.input, scale),
             navigation: navigation_of(&self.input, &self.actions),
             text: self.input.typing().text().clone(),
+            delta,
         };
         self.ui_controls
             .update(&mut self.world, &layout, self.fonts.as_ref(), &input);
@@ -122,6 +124,7 @@ pub(super) fn navigation_of(input: &Input, actions: &ActionMap) -> Navigation {
     Navigation {
         direction: (direction != Vec2::ZERO).then_some(direction),
         accept: pressed(ACCEPT),
+        cancel: pressed(CANCEL),
     }
 }
 

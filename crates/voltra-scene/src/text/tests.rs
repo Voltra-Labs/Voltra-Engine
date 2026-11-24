@@ -173,11 +173,7 @@ fn prepare_rasterizes_what_the_world_holds() {
 
     prepare(&world, &mut fonts, 1.0);
 
-    let atlas = fonts
-        .try_get(fonts.default_font())
-        .expect("resolves")
-        .atlas();
-    assert_eq!(atlas.len(), 2);
+    assert_eq!(fonts.atlas().len(), 2);
 }
 
 mod in_the_world {
@@ -194,7 +190,7 @@ mod in_the_world {
         resolve_fonts(world, fonts);
         prepare(world, fonts, 1.0);
         // A texture handle from nowhere: the batch only compares it.
-        fonts.forge_texture(fonts.default_font(), Handle::forge(7, 0));
+        fonts.forge_texture(Handle::forge(7, 0));
     }
 
     #[test]

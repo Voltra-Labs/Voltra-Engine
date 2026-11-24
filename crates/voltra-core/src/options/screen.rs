@@ -14,10 +14,11 @@ use std::time::Duration;
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
 use voltra_scene::{hierarchy, PrefabInstance, PrefabPart, Text, Transform};
-use voltra_scene::{UiSlider, UiToggle};
+use voltra_scene::{UiButton, UiDropdown, UiSlider, UiToggle};
 
 use super::settings::Settings;
 use crate::app::Tick;
+use crate::window::Fullscreen;
 use rows::{Parts, Row};
 
 /// The action that backs out: Escape, or a pad's East, in the default map.
@@ -54,10 +55,10 @@ struct VolumeRow {
 #[derive(Debug)]
 pub struct OptionsScreen {
     root: Entity,
+    /// A dropdown of [`modes`](Self::modes).
     display_mode: Option<Entity>,
-    display_label: Option<Entity>,
+    /// A dropdown of [`resolutions`](Self::resolutions).
     resolution: Option<Entity>,
-    resolution_label: Option<Entity>,
     vsync: Option<Entity>,
     vsync_label: Option<Entity>,
     reset: Option<Entity>,
@@ -65,6 +66,8 @@ pub struct OptionsScreen {
     volumes: Vec<VolumeRow>,
     bindings: Vec<BindingRow>,
     resolutions: Vec<(u32, u32)>,
+    /// The display modes offered, at the chosen size.
+    modes: Vec<Fullscreen>,
     settings: Settings,
     /// The row whose action takes the next control pressed.
     waiting: Option<usize>,
@@ -103,6 +106,7 @@ impl OptionsScreen {
             .windowed_size
             .unwrap_or_else(|| tick.window.windowed_size());
         let resolutions = display::resolutions(tick.window, size);
+        let modes = display::modes(tick.window, size);
 
         let buses = config
             .buses
@@ -156,9 +160,7 @@ impl OptionsScreen {
         let screen = Self {
             root,
             display_mode: parts.get("Display mode"),
-            display_label: parts.get("Display mode label"),
             resolution: parts.get("Resolution"),
-            resolution_label: parts.get("Resolution label"),
             vsync: parts.get("VSync"),
             vsync_label: parts.get("VSync label"),
             reset: parts.get("Reset controls"),
@@ -166,10 +168,11 @@ impl OptionsScreen {
             volumes,
             bindings,
             resolutions,
+            modes,
             settings,
             waiting: None,
         };
-        screen.set_resolution_slider(tick, size);
+        screen.fill_dropdowns(tick);
         screen.show_everything(tick);
         tick.ui.focus(screen.display_mode.or(screen.back));
         Ok(screen)
@@ -197,18 +200,23 @@ impl OptionsScreen {
             self.take_binding(tick, row);
             return Outcome::Open;
         }
-        if clicked(tick, self.back) || tick.input.action(CANCEL).pressed() {
+        // A cancel the controls spent closing a dropdown's list, or one
+        // pressed while a list is open, is not the screen's.
+        let cancel = tick.input.action(CANCEL).pressed()
+            && !tick.ui.cancelled()
+            && tick.ui.open_list().is_none();
+        if clicked(tick, self.back) || cancel {
             self.close(tick);
             return Outcome::Closed;
         }
-        if clicked(tick, self.display_mode) {
-            let size = self.chosen_size(tick);
-            self.settings.fullscreen =
-                display::next_mode(tick.window, self.settings.fullscreen, size);
-            tick.window.set_fullscreen(self.settings.fullscreen);
+        if let Some(index) = picked(tick, self.display_mode) {
+            if let Some(&mode) = self.modes.get(index) {
+                self.settings.fullscreen = mode;
+                tick.window.set_fullscreen(mode);
+            }
         }
-        if self.resolution.is_some_and(|e| tick.ui.changed(e)) {
-            self.pick_resolution(tick);
+        if let Some(index) = picked(tick, self.resolution) {
+            self.pick_resolution(tick, index);
         }
         if let Some(toggle) = self.vsync.filter(|&e| tick.ui.changed(e)) {
             if tick.window.abilities().vsync {
@@ -290,11 +298,7 @@ impl OptionsScreen {
             .unwrap_or_else(|| tick.window.windowed_size())
     }
 
-    fn pick_resolution(&mut self, tick: &mut Tick<'_>) {
-        let Some(slider) = self.resolution.and_then(|e| tick.world.get::<UiSlider>(e)) else {
-            return;
-        };
-        let index = slider.value.round().max(0.0) as usize;
+    fn pick_resolution(&mut self, tick: &mut Tick<'_>, index: usize) {
         let Some(&size) = self.resolutions.get(index) else {
             return;
         };
@@ -304,27 +308,43 @@ impl OptionsScreen {
             self.settings.fullscreen = mode;
             tick.window.set_fullscreen(mode);
         }
+        // The exclusive mode offered is the one at the new size.
+        self.modes = display::modes(tick.window, size);
+        self.fill_dropdowns(tick);
     }
 
-    /// The resolution slider over the list, at `size`.
-    fn set_resolution_slider(&self, tick: &mut Tick<'_>, size: (u32, u32)) {
-        let Some(slider) = self
-            .resolution
-            .and_then(|e| tick.world.get_mut::<UiSlider>(e))
-        else {
+    /// The dropdowns' lists: the modes and the sizes, as words. Where the
+    /// size is not the game's (the web) the resolution row says so and
+    /// takes no clicks.
+    fn fill_dropdowns(&self, tick: &mut Tick<'_>) {
+        let world = &mut *tick.world;
+        if let Some(dropdown) = self
+            .display_mode
+            .and_then(|e| world.get_mut::<UiDropdown>(e))
+        {
+            dropdown.options = self.modes.iter().map(|&m| labels::mode(m)).collect();
+        }
+        let Some(row) = self.resolution else {
             return;
         };
-        let last = self.resolutions.len().saturating_sub(1) as f32;
-        slider.min = 0.0;
-        slider.max = last;
-        slider.step = 1.0;
-        let at = self
-            .resolutions
-            .iter()
-            .position(|&s| s == size)
-            .unwrap_or(0);
-        slider.value = at as f32;
+        let fixed = self.resolutions.is_empty();
+        if let Some(dropdown) = world.get_mut::<UiDropdown>(row) {
+            dropdown.options = if fixed {
+                vec![labels::SIZE_SET_BY_PAGE.to_owned()]
+            } else {
+                self.resolutions.iter().map(|&s| labels::size(s)).collect()
+            };
+        }
+        if let Some(button) = world.get_mut::<UiButton>(row) {
+            button.disabled = fixed;
+        }
     }
+}
+
+/// The option the dropdown `control` was set to this frame, if it was.
+fn picked(tick: &Tick<'_>, control: Option<Entity>) -> Option<usize> {
+    let control = control.filter(|&e| tick.ui.changed(e))?;
+    tick.world.get::<UiDropdown>(control).map(|d| d.selected)
 }
 
 /// Whether `control`, if the screen has it, was clicked this frame.

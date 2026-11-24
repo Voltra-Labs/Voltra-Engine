@@ -24,6 +24,51 @@ fn tables() -> PathBuf {
 }
 
 #[test]
+fn a_version_2_table_names_its_fonts_and_a_version_1_names_none() {
+    let root = tables();
+    std::fs::write(
+        root.join(LOCALE_DIR).join("ar.ron"),
+        r#"(version: 2, fonts: ["fonts/NotoSansArabic-Regular.ttf"], strings: {"greet": "مرحبا"})"#,
+    )
+    .expect("the table");
+    let mut locale = Locale::open(&root, "en");
+    assert!(locale.fonts().is_empty(), "version 1: no fonts");
+    assert!(locale.set_language("ar"));
+    assert_eq!(locale.text("greet"), "مرحبا");
+    assert_eq!(
+        locale.fonts(),
+        [AssetPath::new("fonts/NotoSansArabic-Regular.ttf").expect("a path")]
+    );
+    assert!(locale.set_language("en"));
+    assert!(
+        locale.fonts().is_empty(),
+        "a switch drops the last table's fonts"
+    );
+}
+
+#[test]
+fn applied_fonts_become_the_fallback_chain() {
+    let root = tables();
+    std::fs::write(
+        root.join(LOCALE_DIR).join("ar.ron"),
+        r#"(version: 2, fonts: ["fonts/NotoSansArabic-Regular.ttf"])"#,
+    )
+    .expect("the table");
+    voltra_testkit::copy_workspace_asset(&root, voltra_testkit::NOTO_ARABIC);
+    let mut fonts = Fonts::new(&root);
+    let locale = Locale::open(&root, "ar");
+    locale.apply_fonts(&mut fonts);
+    assert_eq!(fonts.fallbacks().len(), 1);
+    let arabic = fonts
+        .by_path_handle(&AssetPath::new(voltra_testkit::NOTO_ARABIC).expect("a path"))
+        .expect("loaded");
+    assert_eq!(
+        fonts.chain(fonts.default_font()),
+        vec![fonts.default_font(), arabic]
+    );
+}
+
+#[test]
 fn a_key_reads_in_the_current_language() {
     let mut locale = Locale::open(tables(), "en");
     assert_eq!(locale.text("greet"), "Hello");

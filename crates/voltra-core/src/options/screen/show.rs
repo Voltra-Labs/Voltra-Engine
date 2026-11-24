@@ -2,27 +2,32 @@
 //! and the action map now are — once a frame, so a change made anywhere,
 //! a reset or a reload of the map, shows.
 
-use voltra_scene::{Text, UiSlider, UiToggle};
+use voltra_scene::{Text, UiDropdown, UiSlider, UiToggle};
 
 use super::rows::say;
-use super::{labels, OptionsScreen, CLASH_COLOR};
+use super::{display, labels, OptionsScreen, CLASH_COLOR};
 use crate::app::Tick;
 
 impl OptionsScreen {
     /// Every label and value as the settings and the map now are.
     pub(super) fn show_everything(&self, tick: &mut Tick<'_>) {
+        let size = self.chosen_size(tick);
         let world = &mut *tick.world;
-        say(
-            world,
-            self.display_label,
-            &labels::display(self.settings.fullscreen),
-        );
-        let size = (!self.resolutions.is_empty()).then(|| {
-            self.settings
-                .windowed_size
-                .unwrap_or_else(|| tick.window.windowed_size())
-        });
-        say(world, self.resolution_label, &labels::resolution(size));
+        let mode = display::index_of(&self.modes, self.settings.fullscreen);
+        if let Some(dropdown) = self
+            .display_mode
+            .and_then(|e| world.get_mut::<UiDropdown>(e))
+        {
+            dropdown.selected = mode;
+        }
+        let at = self
+            .resolutions
+            .iter()
+            .position(|&s| s == size)
+            .unwrap_or(0);
+        if let Some(dropdown) = self.resolution.and_then(|e| world.get_mut::<UiDropdown>(e)) {
+            dropdown.selected = at;
+        }
         let can_vsync = tick.window.abilities().vsync;
         let vsync = self.settings.vsync || !can_vsync;
         if let Some(toggle) = self.vsync.and_then(|e| world.get_mut::<UiToggle>(e)) {

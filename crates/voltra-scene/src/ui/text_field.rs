@@ -2,6 +2,7 @@
 
 mod edit;
 pub(crate) mod view;
+mod visual;
 
 /// A one-line text box: click it, or move the focus to it, and type.
 ///

@@ -2387,6 +2387,9 @@ tiles in 38, auto-tiling in 39–40, the mesh cache in 44.)
 
 ### Text is quads in the sprite batch, from one glyph atlas per font
 
+(Stage 91 replaced the per-character layout and the atlas per font: see
+"Text is shaped by run, and a missing glyph falls back to the next font".)
+
 Stage 26a. A `Text` (content, optional font path, `size` in entity units,
 `pixels_per_em` raster resolution, colour, `Align`, `sort_order`) is drawn in
 world space by the sprite pipeline: one quad per inked glyph, pushed into the
@@ -5247,7 +5250,8 @@ language, switched while the game runs.
 - **`Text::key`**: a string-table key, Godot's auto-translate and Unity's
   localized string. The **`Locale`** (`voltra-scene`) holds the current
   language and its table, `locale/<language>.ron`
-  (`(version: 1, strings: {key: string})`, read through the asset funnel,
+  (`(version: 1, strings: {key: string})` — version 2 adds `fonts`, stage
+  91 — read through the asset funnel,
   so the web bundle carries it), and writes each keyed text's string into
   its `content` every frame — after the tick, so a language switched or a
   text spawned shows the next draw, in the editor as in the game. A key
@@ -6417,6 +6421,297 @@ as they were, the plain instance green with the new child, the overriding
 one still blue; then an edit dropped on the way back reaching nothing.
 In CI beside the authoring test.
 
+### Text is shaped by run, and a missing glyph falls back to the next font
+
+Stage 91. Arabic joins and reads right to left, Devanagari moves its vowel
+signs and builds conjuncts, `ffi` is one ligature — before this every
+character was one `fontdue` glyph, placed by kerning alone, from one font
+with one fallback (the default face for a file that would not parse).
+
+- **A layout is the HarfBuzz pipeline, in `voltra_assets::fonts`.** Per
+  paragraph (split at `\n`): bidi levels (`unicode-bidi`,
+  `ParagraphBidiInfo`), runs of one span × one level × one script
+  (`itemize.rs`; Common and Inherited characters join the script before
+  them, as `hb-ot-shape` expects its caller to do), each run shaped by
+  `rustybuzz` (`shape.rs`), lines cut (`breaks.rs`), each line reordered
+  visually and placed (`place.rs`). Chrome, Godot's `TextServerAdvanced` and
+  cosmic-text are the same steps in the same order; we write the glue
+  because the glue is where our spans, our atlas and our caret live.
+  `rustybuzz` because it is HarfBuzz's algorithm in pure Rust — a leaf
+  crate, no C toolchain for the web build (`harfrust` is its successor, not
+  yet what the plan named; the swap is local to `shape.rs`).
+- **Glyph ids, not characters.** `GlyphKey { font, glyph, px, embolden }`:
+  shaping turns three characters into one ligature and one letter into one
+  of four joined forms, none of which a `char` names. `fontdue` still
+  rasterizes — by id (`rasterize_indexed`), which works because
+  `FontSettings::load_substitutions` (on by default) loads every glyph a
+  GSUB lookup can produce, not just those `cmap` reaches.
+- **One atlas for every font**, in `Fonts` rather than one per `Font`: a line
+  falling back from Latin to Arabic, or a rich text switching fonts, draws
+  from one texture, so it stays one batch range. A reload clears the whole
+  atlas (rare, editor-time) rather than evicting one font's glyphs.
+- **The fallback chain**: the text's font, then the current language's
+  fonts, then the default. Each stretch of clusters a font has no glyph for
+  is reshaped with the next — whole stretches, so the next font sees words
+  to join; a stretch no later font maps keeps the first font's missing
+  box, so the gap shows in the text's own face. Browsers and Godot fall back
+  per cluster the same way; Unity's TextMeshPro per character, which breaks
+  Arabic joining across the seam.
+- **Fonts per language, in the string table** (`TABLE_VERSION` 2):
+  `(version: 2, fonts: ["fonts/NotoSansArabic-Regular.ttf"], strings: {…})`;
+  a version 1 file reads as one naming none. Plain path strings, as a
+  translator writes them. `Locale::apply_fonts` makes them
+  `Fonts::set_fallbacks` after every `localize` (a comparison when nothing
+  changed), so a language switched from a tick takes its fonts with it.
+- **Layouts are cached** by (string, spans, wrap) behind a mutex in `Fonts`,
+  so `&Fonts` — what the draw and the pick hold — can ask: the prepare, the
+  draw and the pick of a frame share one layout, and an unchanged text is
+  not reshaped next frame. Cleared on a reload or a new chain; started over
+  at 4096 entries, so a timer's new string every frame does not grow it.
+- **Lines of mixed faces**: each line is as tall as its tallest face at its
+  size; baselines are the gap below one line's lowest descent to the next's
+  highest ascent plus the larger line gap — a face's own line height when
+  every line is one face, so Latin layout is unchanged (every stage-26 and
+  stage-81 layout test still passes). `TextLayout::baselines` carries them.
+- **Faux bold** (`embolden.rs`, used by stage 93's `[b]`): coverage dilated
+  by `px / 24` pixels right and up, the advance widened as much —
+  FreeType's `FT_Outline_Embolden` grows the outline, we have only the
+  bitmap.
+- **Fonts shipped**: Noto Sans Arabic, Devanagari and Hebrew (the full
+  files from `notofonts.github.io`, about 500 KB together) with their OFL
+  licences beside them in `assets/fonts/`. No CJK face: Noto Sans JP is
+  several megabytes; a CJK string draws the text font's missing boxes until
+  a game ships one and names it in its table.
+
+Rejected: **`cosmic-text`** — a whole text engine with its own font
+database, cache and editor; the plan keeps the engine pieces ours and the
+leaves borrowed. **One atlas per font, kept** — a fallback in the middle of
+a line would split its batch.
+
+Pinned by `fonts/shaping_tests.rs` (`ffi` one glyph with four caret stops;
+Arabic in joined forms, right to left, its first stop on the right; the
+Devanagari i sign before its consonant in one cluster; a missing glyph from
+the next font and the rest in the text's; what no font has is the text
+font's box; kerning kept; a layout made once and again for a new chain;
+faux bold wider and thicker; each glyph rasterized from its own font),
+`locale/tests.rs` (a version 2 table's fonts, a version 1's none, applied as
+the chain) and `voltra-scene/tests/headless_shaping.rs`: Arabic, Devanagari
+and `office ffi` drawn headless and matched against
+`tests/references/*.png` (`VOLTRA_BLESS=1` rewrites them), and Arabic
+letters drawn joined against the same letters kept apart by zero-width
+non-joiners.
+
+### Lines break at UAX #14 opportunities and read in bidi order; arrows move visually
+
+Stage 92. Hebrew inside English reads right to left without turning the
+English around, a Japanese paragraph wraps between its characters, and a
+text field's arrows go the way they point.
+
+- **Bidi is per paragraph and per line** (the layout's steps 1 and 5,
+  stage 91): `ParagraphBidiInfo` with the direction found from the first
+  strong character (UAX #9 P2–P3), levels per byte; runs never cross a
+  level change, and each line's glyphs are put in visual order by
+  `reorder_visual` over their levels after `reordered_levels` has applied
+  L1 to that line. HarfBuzz returns a right-to-left run in visual order;
+  we keep shaped glyphs in logical order (reversed) so the line breaker
+  sees the text's order, and the reorder turns them back — a multi-glyph
+  cluster keeps HarfBuzz's own glyph order through both reversals.
+- **Alignment stays physical.** `Align::Left` is the left edge in a
+  right-to-left paragraph too, as Godot's `HORIZONTAL_ALIGNMENT_LEFT` and
+  Unity's `TextAlignment.Left` are; a start/end alignment is a later,
+  additive choice.
+- **Line breaking is UAX #14** (`unicode-linebreak`): a line may end only
+  at an opportunity — after a space, between two ideographs, after a hyphen
+  — and not before `。` or after `「`. Greedy as before (Godot's and
+  Unity's), measured on whole clusters, so a ligature or a conjunct never
+  splits; trailing white space hangs and is dropped at a wrap; a word wider
+  than the line still breaks between clusters; a mandatory break inside a
+  paragraph (U+2028) breaks it. With no width only the mandatory breaks
+  apply and nothing is dropped, so a field's trailing space keeps its stop.
+- **Caret stops** (`TextLayout::carets`): one before every character of
+  the string, in its order, and one after each paragraph's last — at the
+  character's leading edge: its left in left-to-right text, its right in
+  right-to-left. A cluster's width is shared among its characters, so
+  `ffi` has stops inside its one glyph, as browsers give it.
+  `shape::caret_stops_at` hands the first line's to the text field.
+- **The text field moves visually**: `UiTextField::take_measured` measures
+  its text as each arrow finds it, and Left/Right step to the next caret
+  stop by x (`text_field/visual.rs`), so in a mixed line the right arrow
+  walks right on screen, backward through the Hebrew word. Word steps,
+  Home and End stay logical, as a browser's `<input>` and Godot's
+  `LineEdit` have them; Unity's `InputField` moves logically everywhere,
+  which sends the caret the wrong way in Hebrew. Without a font to measure
+  with, the arrows stay logical. Where two logical positions share an x (a
+  run boundary) they are visited one after the other. A selection over a
+  run boundary is drawn as one band between its ends' stops: right for one
+  direction, approximate for mixed (a browser draws one band per run).
+
+Pinned by `fonts/bidi_tests.rs` (Hebrew inside English in visual order and
+the English kept; English inside a Hebrew paragraph on its left; digits in
+Arabic left to right; mixed caret stops, the Hebrew's from its right end; a
+Japanese paragraph wrapped within its width with nothing dropped; `。` never
+starting a line; a hyphen as a break; a wrapped right-to-left paragraph
+keeping its first word on the first line), `text_field/visual.rs` (steps in
+LTR, RTL and a mixed line; stops that do not fit move nothing) and
+`text_field/tests.rs` (`in_visual_order`: the right arrow walks a real
+`ab שלום` field through every position, x never decreasing, back through
+the Hebrew; the left arrow walks it back; no font, logical).
+
+### Rich text is inline tags parsed into spans the layout sets as one paragraph
+
+Stage 93. A dialogue line can colour a name, embolden a warning, enlarge a
+number and put a coin beside it, and a translated string can do the same.
+
+- **Markup** (`text/markup.rs`): BBCode-like, Godot's `RichTextLabel` and
+  TextMeshPro's shape — `[b]`, `[color=#f00]` (`#rgb`, `#rgba`,
+  `#rrggbb`, `#rrggbbaa`, a few names), `[size=24]` (the em height in the
+  text's own units), `[font=fonts/x.ttf]`, and `[icon=…]`, which closes
+  nothing. Tags close in any order (each run's style is recomputed from the
+  tags still open, so `[b][color]…[/b]…[/color]` does what it says). `[[`
+  is a literal `[`. An unknown tag, a value that does not read, or a close
+  with nothing open is shown as written — the typo is seen where it is —
+  and logged once per spelling for the session.
+- **Spans, one paragraph** (`text/paragraph.rs`): the parsed runs become
+  stage 91's `Span`s, each with its font, raster size (`px × size /
+  text.size`), faux bold or not, and a tag back to its style; the layout
+  shapes, bidi-orders and wraps them as one paragraph, so a style crosses
+  a line break, a run of another size makes its line taller, and a
+  `[font=…]` still falls back to the language's fonts. Colour is not in
+  the span — it changes no glyph — the draw looks it up by the glyph's tag:
+  a run's colour replaces the text's, with the text's alpha multiplied in,
+  so fading a text fades every colour in it.
+- **Bold**: `Text::bold_font`, the family's bold file, sets a `[b]` run;
+  with none — and for a `[b]` inside a `[font=…]`, whose family we do not
+  know — faux bold (stage 91's dilation, the advance widened to match).
+  Godot's `FontVariation` embolden and TextMeshPro's "bold" weight are the
+  same fallback; a font *family* asset naming regular/bold/italic files is
+  the general version, deferred until a stage needs italics too.
+- **Icons**: `[icon=sprites/ui.atlas.ron/3]` is frame 3 of an atlas, drawn
+  from the texture the atlas names; `[icon=sprites/coin.png]` is a whole
+  image. Atlases are named by frame index — named regions do not exist yet.
+  The icon stands on the baseline in a box as tall as its font's ascent,
+  as wide as the picture's aspect makes it, and carries an object
+  replacement character (U+FFFC) in the parsed string, which bidi and line
+  breaking treat as one neutral object. `text::icons::resolve_world` loads
+  what the tags name — every frame before the draw, a scan for `[icon=`
+  when nothing changed, since a language switch can bring an icon — into
+  `Text::icons` (never saved); an icon that does not resolve is logged and
+  keeps its room but draws nothing. The batch and the UI mesh push icon
+  quads with their own texture beside the glyphs'.
+- **`Text::rich`** (on by default, not written when on): off shows the
+  brackets. A text field's text is never rich — what was typed, brackets
+  and all — however its `Text` is set; the field draws, measures and
+  rasterizes it plain.
+- **Strings from the locale table** are contents like any other, so they
+  may carry markup.
+- Inspector: *rich text*, *bold font*.
+
+Rejected: **HTML-like tags** (TextMeshPro's `<b>`) — square brackets need
+no escaping in RON strings and are what Godot users write; **a separate
+`RichText` component** (Godot's `Label` vs `RichTextLabel`) — one text type
+whose plain case costs one scan for `[` keeps every caller (pick, bounds,
+UI, locale) on one path.
+
+Pinned by `text/markup/tests.rs` (tags out, styled runs; nesting closed in
+any order; colours in four spellings and names; unknown tags, bad values
+and stray closes shown; an icon as one object character; `[[`; a font
+path), `text/rich_tests.rs` (plain is one span; `[size]`, `[b]` and
+`[font]` set their spans; a bold file instead of faux bold; rich off shows
+brackets; a run's colour and the text's alpha on the glyphs; a coloured run
+on two lines of a wrap; an icon's em box with the next letter after it; a
+keyed string's markup) and `voltra-scene/tests/headless_rich_text.rs`: a
+red word, a larger green one and an atlas coin on one line, matched against
+`tests/references/rich_text_line.png`, and a green run still green on the
+line it wraps onto.
+
+### Dropdowns, tooltips and tabs share the focus; a theme is written into controls once
+
+Stage 94. The control set gets the three pieces every options screen
+wants, and one file restyles all of them.
+
+- **`UiDropdown`** turns the `UiButton` beside it into a dropdown, as
+  `UiToggle` turns one into a checkbox (Godot's `OptionButton` is a
+  `Button` too): the box keeps the button's hover, press, focus and
+  colours, the entity's `Text` is the style and shows the chosen option.
+  A click, or accept on the focus, opens the list; while it is open
+  (`UiControls::open_list`) the list has the input — the pointer
+  highlights and a click picks, up and down move the highlight (the
+  window scrolls past `max_visible`), accept picks, cancel or a click
+  outside closes it unchanged. A pick that changes the choice is a
+  change, as a slider's move is. `Navigation` gained `cancel`
+  (`ui_cancel`), and `UiControls::cancelled` says a cancel was spent
+  closing a list, so a screen backing out on the same key does not.
+- **The list is drawn by the UI pass, not spawned** (`ui/overlay.rs`,
+  `ui/mesh/overlay.rs`): after every element, unmasked, under the box —
+  over it where there is more room above. Unity's `Dropdown` instantiates
+  a template under a top-level canvas and Godot opens a `PopupMenu`
+  window; both need a layer above everything. Drawing it last is that
+  layer with nothing to sort and nothing left in a saved scene. The
+  prepare rasterizes the overlay's texts beside the world's.
+- **`UiTooltip`** on any element: under the pointer — or on anything
+  under it, a label over a row — for `delay` seconds, or while it holds
+  the focus (a pad player gets them too, which Godot's mouse-only tooltip
+  does not), it shows in a box under the element, kept on the screen.
+  `UiInput::delta` counts the delay. Its text may be keyed (`key`, read by
+  the `Locale`) and is rich text.
+- **`UiTabs` and `UiTab`**: a tab button names its page (`page`, a
+  `Name` under the same container); the container's `current` page shows
+  and the others are `UiHidden`. Godot's `TabContainer` pairs titles with
+  children by order and draws its own bar; naming lets the bar be laid
+  out like any other stack, and the options screen already finds its
+  parts by name. A tab with a `UiToggle` is drawn selected while its page
+  shows. Clicking one reports the container as changed.
+- **`UiHidden`** — a new marker, needed by tabs and useful alone: a hidden
+  element and its subtree are not laid out, so not drawn, picked or
+  focused, and take no room in a stack. Godot's `visible`, Unity's
+  `SetActive`: the entities stay, values and all.
+- **`UiTheme`, a `.theme.ron`** (`assets/ui/dark.theme.ron`,
+  `light.theme.ron`): font, text colour, button colours by state, a
+  selected tint, panel, field, slider, dropdown-list and tooltip colours,
+  9-slice skins (texture + borders) for buttons, panels and fields,
+  spacing and padding. Every section optional (`implicit_some`). Set with
+  `UiControls::set_theme` or `tick.set_theme("ui/light.theme.ron")`. It is
+  written into each element **once** — when the element first appears,
+  and again to all when the theme changes — rather than consulted every
+  frame, so code colouring a label afterwards (a clash in the controls
+  list) stands; Godot resolves theme items at draw time instead, which
+  would need every component's colour to be optional, a file-format break
+  for every scene. "Controls that set none of their own" is spelled
+  `UiOwnStyle`: an element marked so is passed over. A skin's texture and
+  a font are left as paths for the loop (`App::resolve_restyled`) to load,
+  since that needs the GPU. With no theme set nothing changes, so every
+  existing scene draws as before.
+- **The options screen** uses all three: tabs for Display, Audio and
+  Controls (the hidden pages start `UiHidden` in the prefab, so the editor
+  shows one page too), dropdowns for the display mode (windowed,
+  fullscreen, exclusive where the monitor has modes) and the resolution
+  (disabled, "Set by the page", on the web), a tooltip on every row,
+  stamped rows included. Escape closes an open list before the screen.
+- Registered with templates: `UiDropdown`, `UiTooltip`, `UiTabs`, `UiTab`,
+  `UiHidden`, `UiOwnStyle`. Inspectors for each (hidden and own-style as
+  checkboxes on every UI element); Spawn menu: *HUD dropdown*, *HUD tabs*.
+
+Pinned by `ui/dropdown.rs` (the list under, or over near the bottom; rows
+under the pointer; the highlight kept on the list and scrolling it; no
+options never opens), `ui/tabs.rs` (one page, the first by default; nested
+containers apart), `ui/controls/tests/popups.rs` (a click opens and an item
+click picks; keys open, move and pick, cancel closes and is reported, then
+down moves the focus again; a click outside closes unchanged; the open
+list's boxes and items over everything; a tooltip after its delay under
+the pointer, gone when it leaves, shown on focus; a tab click shows its page
+and lays the other out of the screen; a hidden child takes no room),
+`ui/theme/tests.rs` (**a theme swapped and every control restyled** —
+button colours and skin, labels' colour and font, toggle and tab tints,
+slider track and handle, field box and selection, dropdown list, tooltip,
+panel and stack spacing — and the own-styled one not; a colour set after
+the theme stands; a late element themed on its first frame; the shipped
+themes read; a newer version refused), `options/screen/tests.rs` (tabs,
+dropdowns reaching the window, Escape on an open list) and
+`games/platformer/tests/options.rs` (now through the Controls tab), and
+`voltra-scene/tests/headless_overlay.rs`: in pixels, an open list over a
+panel sorted above everything, its highlighted item, and a tooltip under
+its element.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -6531,6 +6826,20 @@ Both differ from most training data and from every tutorial written against
 | `Metrics` | `xmin`/`ymin` are the bitmap's bottom-left from the pen on the baseline, y up |
 | Errors | `Font::from_bytes` fails with a `&'static str`, not an error type |
 | `Font` | `Clone`, not `Debug` |
+| Glyph ids | `from_bytes` loads every glyph `cmap` reaches **and**, with `FontSettings::load_substitutions` (default `true`), every glyph a GSUB single/multiple/alternate/ligature/reverse-chain lookup produces — so ids a shaper hands out rasterize; an id it never loaded rasterizes empty |
+| Data | `from_bytes` copies the bytes; the shaper keeps its own `Arc<[u8]>` beside it |
+
+### `rustybuzz` 0.20, `unicode-bidi` 0.3, `unicode-linebreak` 0.1 notes
+
+| Thing | Version notes |
+| --- | --- |
+| Face | `rustybuzz::Face::from_slice(&bytes, 0) -> Option<Face<'_>>` borrows the bytes, so it is made per layout, not stored; it derefs to `ttf_parser::Face` (`glyph_index(char)`) |
+| Buffer | `UnicodeBuffer::add(char, cluster)` — our clusters are byte offsets into the whole string; `set_pre_context` / `set_post_context` (5 chars) for joining across a run edge, the post context **after** the `add`s (`add` clears it) |
+| Shape | `rustybuzz::shape(&face, &[], buffer) -> GlyphBuffer`; `glyph_infos()[i].glyph_id` (u32, ≤ u16::MAX), `.cluster`; `glyph_positions()` in font units — scale by `px / units_per_em()` |
+| Direction | a right-to-left buffer comes back in **visual** order (clusters descending); we reverse to logical and let the bidi reorder turn it back |
+| Script | `Script::from_iso15924_tag(ttf_parser::Tag::from_bytes(b"Arab"))`; `unicode_script::Script::short_name()` gives the tag |
+| Bidi | `ParagraphBidiInfo::new(text, None)` (auto direction): `levels` per **byte**, `reordered_levels(line)` applies L1 to a line, `reorder_visual(&levels)` gives visual indices — usable on glyph levels as well as characters |
+| Line breaks | `unicode_linebreak::linebreaks(s)` yields `(byte, Allowed \| Mandatory)`: a line may end *before* that byte; the end of the text is always `Mandatory` |
 
 ### `gilrs` 0.11 notes
 

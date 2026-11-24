@@ -1,5 +1,5 @@
 //! The options screen from the pause menu, played headless: Escape, Options,
-//! jump rebound to J, Back — and in the next session, with the same player
+//! the Controls tab, jump rebound to J, Back — and in the next session, with the same player
 //! folder, J jumps and Space does not.
 
 use std::path::Path;
@@ -98,6 +98,8 @@ fn jump_rebound_in_the_options_is_jump_in_the_next_session() {
             "the options screen is open"
         );
 
+        // The controls are on their own tab.
+        press(&mut first, "Controls tab");
         press(&mut first, "Binding: jump");
         tap(&mut first, KeyCode::KeyJ);
         let row = named(first.world(), "Binding: jump");

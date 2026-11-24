@@ -94,6 +94,7 @@ impl Headless {
         let (width, height) = (width.max(1), height.max(1));
         self.ensure_renderer(width, height)?;
         self.app.resolve_materials();
+        self.app.resolve_text_icons();
         let app = &mut self.app;
         let (
             Some(renderer),

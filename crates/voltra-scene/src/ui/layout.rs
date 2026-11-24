@@ -36,6 +36,8 @@ pub struct UiLayout {
     resolved: HashMap<Entity, Placed>,
     /// For each scroll, the box its content covers, as laid out.
     content: HashMap<Entity, Rect>,
+    /// The screen it was laid out on.
+    screen: Rect,
 }
 
 impl UiLayout {
@@ -46,8 +48,15 @@ impl UiLayout {
     /// is the screen.
     pub fn from_world(world: &World, screen: Vec2) -> Self {
         let screen = Rect::screen(screen);
-        let mut layout = Self::default();
+        let mut layout = Self {
+            screen,
+            ..Self::default()
+        };
         for (entity, _) in world.query::<UiRect>() {
+            // A hidden element and all under it are not laid out at all.
+            if super::hidden::is_hidden(world, entity) {
+                continue;
+            }
             layout.resolve(world, entity, screen);
         }
         layout
@@ -136,6 +145,12 @@ impl UiLayout {
                 .or_insert(placed.rect);
         }
         self.resolved.insert(entity, placed);
+    }
+
+    /// The screen it was laid out on, in points: where a dropdown's list
+    /// and a tooltip are kept.
+    pub fn screen(&self) -> Rect {
+        self.screen
     }
 
     /// The box `entity` occupies, or `None` if it has no `UiRect`.

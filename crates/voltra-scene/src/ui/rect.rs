@@ -3,7 +3,7 @@
 use voltra_render::glam::Vec2;
 
 /// An axis-aligned box in screen space, in points, origin top-left, y down.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Rect {
     /// The top-left corner, in points.
     pub min: Vec2,

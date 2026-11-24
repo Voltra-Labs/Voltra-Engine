@@ -15,6 +15,7 @@ mod input_map;
 mod native;
 mod particles;
 mod prefab_sync;
+mod restyle;
 mod scene_draws;
 mod scenes;
 mod simulation;
@@ -26,6 +27,7 @@ mod tick;
 mod tick_audio;
 mod tick_controls;
 pub mod tick_net;
+mod tick_theme;
 mod tick_time;
 mod ui_frame;
 mod ui_input;
@@ -374,7 +376,9 @@ impl App {
         self.input.update_actions(&self.actions);
         // After the actions, which navigate the focus, and before the tick,
         // which reads this frame's clicks.
-        self.update_ui_controls();
+        self.update_ui_controls(delta);
+        // A theme the controls just applied may name skins and fonts.
+        self.resolve_restyled();
         drop(input);
         // Before the tick, so it reads this frame's messages and events.
         self.receive_net(delta);
@@ -388,6 +392,9 @@ impl App {
         // After the tick, which may have switched the language or spawned a
         // keyed text, and before anything draws one.
         self.locale.localize(&mut self.world);
+        if let Some(fonts) = self.fonts.as_mut() {
+            self.locale.apply_fonts(fonts);
+        }
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.
         self.resolve_spawned();

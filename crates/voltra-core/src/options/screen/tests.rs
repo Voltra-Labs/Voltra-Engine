@@ -86,6 +86,29 @@ fn press(h: &mut Harness, name: &str) {
     tap(&mut h.session, KeyCode::Enter);
 }
 
+/// What the control called `name` shows on itself: a dropdown's choice.
+fn shown(world: &World, name: &str) -> String {
+    world
+        .get::<Text>(named(world, name))
+        .map(|t| t.content.clone())
+        .unwrap_or_else(|| panic!("{name:?} has no text of its own"))
+}
+
+/// Opens the dropdown called `name`, moves its highlight `steps` down (up
+/// when negative) and picks it.
+fn choose(h: &mut Harness, name: &str, steps: i32) {
+    press(h, name);
+    let key = if steps < 0 {
+        KeyCode::ArrowUp
+    } else {
+        KeyCode::ArrowDown
+    };
+    for _ in 0..steps.unsigned_abs() {
+        tap(&mut h.session, key);
+    }
+    tap(&mut h.session, KeyCode::Enter);
+}
+
 #[test]
 fn the_screen_lists_a_volume_per_bus_and_a_row_per_action() {
     let h = harness(&voltra_testkit::scratch_root());
@@ -101,14 +124,47 @@ fn the_screen_lists_a_volume_per_bus_and_a_row_per_action() {
             .all(|(_, n)| n.as_str() != "Volume row" && n.as_str() != "Binding row"),
         "the templates are gone"
     );
-    assert_eq!(label(world, "Display mode"), "Display: Windowed");
-    assert_eq!(label(world, "Resolution"), "Resolution: 1280 × 720");
+    assert_eq!(shown(world, "Display mode"), "Windowed");
+    assert_eq!(shown(world, "Resolution"), "1280 × 720");
+    assert!(
+        world
+            .get::<voltra_scene::UiTooltip>(named(world, "Binding: jump"))
+            .is_some(),
+        "every stamped row keeps the template's tooltip"
+    );
+}
+
+#[test]
+fn the_tabs_show_one_page_at_a_time() {
+    let mut h = harness(&voltra_testkit::scratch_root());
+    let hidden = |h: &Harness, name: &str| {
+        let world = h.session.world();
+        world
+            .get::<voltra_scene::UiHidden>(named(world, name))
+            .is_some()
+    };
+    assert!(!hidden(&h, "Display"));
+    assert!(hidden(&h, "Audio") && hidden(&h, "Controls"));
+    press(&mut h, "Audio tab");
+    assert!(hidden(&h, "Display") && hidden(&h, "Controls"));
+    assert!(!hidden(&h, "Audio"));
+}
+
+#[test]
+fn escape_closes_an_open_list_before_the_screen() {
+    let mut h = harness(&voltra_testkit::scratch_root());
+    press(&mut h, "Display mode");
+    assert!(h.session.ui().open_list().is_some(), "the list is open");
+    tap(&mut h.session, KeyCode::Escape);
+    assert!(h.session.ui().open_list().is_none());
+    assert!(h.screen.borrow().is_some(), "the screen is still open");
 }
 
 #[test]
 fn a_rebound_key_is_shown_used_and_kept() {
     let dir = voltra_testkit::scratch_root();
     let mut h = harness(&dir);
+    press(&mut h, "Controls tab");
     press(&mut h, "Binding: jump");
     assert!(label(h.session.world(), "Binding: jump").contains("press a key"));
     tap(&mut h.session, KeyCode::KeyJ);
@@ -145,6 +201,7 @@ fn a_rebound_key_is_shown_used_and_kept() {
 #[test]
 fn cancel_backs_out_of_a_rebind_then_out_of_the_screen() {
     let mut h = harness(&voltra_testkit::scratch_root());
+    press(&mut h, "Controls tab");
     press(&mut h, "Binding: jump");
     tap(&mut h.session, KeyCode::Escape);
     assert_eq!(
@@ -159,27 +216,24 @@ fn cancel_backs_out_of_a_rebind_then_out_of_the_screen() {
 #[test]
 fn the_display_rows_reach_the_window() {
     let mut h = harness(&voltra_testkit::scratch_root());
-    press(&mut h, "Display mode");
+    choose(&mut h, "Display mode", 1);
     assert_eq!(h.session.window().fullscreen(), Fullscreen::Borderless);
-    assert_eq!(
-        label(h.session.world(), "Display mode"),
-        "Display: Fullscreen"
-    );
-    press(&mut h, "Display mode");
-    assert_eq!(
-        h.session.window().fullscreen(),
-        Fullscreen::Windowed,
-        "no modes headless, so no exclusive"
-    );
+    assert_eq!(shown(h.session.world(), "Display mode"), "Fullscreen");
+    let options = h
+        .session
+        .world()
+        .get::<voltra_scene::UiDropdown>(named(h.session.world(), "Display mode"))
+        .map(|d| d.options.len());
+    assert_eq!(options, Some(2), "no modes headless, so no exclusive");
+    choose(&mut h, "Display mode", -1);
+    assert_eq!(h.session.window().fullscreen(), Fullscreen::Windowed);
 
     press(&mut h, "VSync");
     assert!(!h.session.window().vsync());
     assert_eq!(label(h.session.world(), "VSync"), "VSync: off");
 
-    // The resolution row, stepped one size down the list by the keyboard.
-    let row = named(h.session.world(), "Resolution");
-    h.session.focus(Some(row));
-    tap(&mut h.session, KeyCode::ArrowRight);
+    // The resolution dropdown, one size down its list by the keyboard.
+    choose(&mut h, "Resolution", 1);
     let size = h.session.window().size();
     assert_ne!(size, (1280, 720));
     let screen = h.screen.borrow();
@@ -191,6 +245,7 @@ fn the_display_rows_reach_the_window() {
 #[test]
 fn a_volume_slider_sets_its_bus() {
     let mut h = harness(&voltra_testkit::scratch_root());
+    press(&mut h, "Audio tab");
     let slider = named(h.session.world(), "Volume: music");
     h.session.focus(Some(slider));
     tap(&mut h.session, KeyCode::ArrowLeft);

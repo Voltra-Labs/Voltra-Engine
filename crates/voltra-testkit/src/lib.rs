@@ -210,6 +210,27 @@ pub fn copy_bundled_font(root: &Path, relative: &str) {
     std::fs::copy(BUNDLED_FONT, target).expect("the bundled font copies");
 }
 
+/// The Noto faces the workspace ships beside the default, by asset path:
+/// what shaping and fallback tests lay Arabic, Devanagari and Hebrew out in.
+pub const NOTO_ARABIC: &str = "fonts/NotoSansArabic-Regular.ttf";
+/// See [`NOTO_ARABIC`].
+pub const NOTO_DEVANAGARI: &str = "fonts/NotoSansDevanagari-Regular.ttf";
+/// See [`NOTO_ARABIC`].
+pub const NOTO_HEBREW: &str = "fonts/NotoSansHebrew-Regular.ttf";
+
+/// Copies the workspace's own `assets/<relative>` to `root/<relative>`,
+/// creating its directory.
+pub fn copy_workspace_asset(root: &Path, relative: &str) {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets")
+        .join(relative);
+    let target = root.join(relative);
+    if let Some(parent) = target.parent() {
+        std::fs::create_dir_all(parent).expect("the asset's directory writes");
+    }
+    std::fs::copy(&source, target).unwrap_or_else(|e| panic!("{} copies: {e}", source.display()));
+}
+
 /// Writes a real PNG of `width` x `height` in one flat colour at `root/name`.
 ///
 /// Tests that tell two textures apart by what comes back need their own

@@ -37,18 +37,25 @@ pub(super) fn resolutions(window: &GameWindow, current: (u32, u32)) -> Vec<(u32,
     sizes
 }
 
-/// The mode after `now`: windowed, fullscreen, then exclusive at `size`
-/// where the monitor can switch to it, and round again.
-pub(super) fn next_mode(window: &GameWindow, now: Fullscreen, size: (u32, u32)) -> Fullscreen {
+/// The display modes the dropdown offers: windowed, fullscreen, and
+/// exclusive at `size` where the monitor can switch to it.
+pub(super) fn modes(window: &GameWindow, size: (u32, u32)) -> Vec<Fullscreen> {
     let exclusive = window.monitor().and_then(|m| {
         m.best_mode(size.0, size.1)
             .or_else(|| m.modes.first().copied())
     });
-    match (now, exclusive) {
-        (Fullscreen::Windowed, _) => Fullscreen::Borderless,
-        (Fullscreen::Borderless, Some(mode)) => Fullscreen::Exclusive(mode),
-        _ => Fullscreen::Windowed,
-    }
+    let mut modes = vec![Fullscreen::Windowed, Fullscreen::Borderless];
+    modes.extend(exclusive.map(Fullscreen::Exclusive));
+    modes
+}
+
+/// Where `now` is among `modes`: an exclusive mode matches the exclusive
+/// entry whatever its size, as the dropdown has one.
+pub(super) fn index_of(modes: &[Fullscreen], now: Fullscreen) -> usize {
+    modes
+        .iter()
+        .position(|m| std::mem::discriminant(m) == std::mem::discriminant(&now))
+        .unwrap_or(0)
 }
 
 /// The exclusive mode at `size`, when the window is exclusive: a new size
@@ -106,23 +113,20 @@ mod tests {
     }
 
     #[test]
-    fn the_display_mode_goes_round() {
+    fn the_display_modes_offered() {
         let desktop = window(&FakeWindow::desktop());
         let size = (1280, 720);
-        let mut mode = Fullscreen::Windowed;
-        let mut seen = Vec::new();
-        for _ in 0..3 {
-            mode = next_mode(&desktop, mode, size);
-            seen.push(mode);
-        }
+        let modes = modes(&desktop, size);
         assert_eq!(
-            seen,
+            modes,
             vec![
+                Fullscreen::Windowed,
                 Fullscreen::Borderless,
                 Fullscreen::Exclusive(HD),
-                Fullscreen::Windowed
             ]
         );
+        assert_eq!(index_of(&modes, Fullscreen::Exclusive(FULL_HD)), 2);
+        assert_eq!(index_of(&modes, Fullscreen::Borderless), 1);
         assert_eq!(
             exclusive_at(&desktop, Fullscreen::Exclusive(HD), (1920, 1080)),
             Some(Fullscreen::Exclusive(FULL_HD))
@@ -130,8 +134,8 @@ mod tests {
 
         let page = window(&FakeWindow::browser());
         assert_eq!(
-            next_mode(&page, Fullscreen::Borderless, size),
-            Fullscreen::Windowed,
+            super::modes(&page, size).len(),
+            2,
             "no exclusive without modes"
         );
     }

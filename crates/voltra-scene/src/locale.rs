@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use voltra_assets::AssetPath;
+use voltra_assets::{AssetPath, Fonts};
 use voltra_ecs::World;
 
 pub use table::{StringTable, TableError};
@@ -33,6 +33,8 @@ pub struct Locale {
     root: Option<PathBuf>,
     language: String,
     strings: HashMap<String, String>,
+    /// The current table's fallback fonts.
+    fonts: Vec<AssetPath>,
     /// Keys already warned about in this language.
     missing: RefCell<HashSet<String>>,
 }
@@ -59,6 +61,7 @@ impl Locale {
     pub fn set_language(&mut self, language: &str) -> bool {
         self.language = language.to_owned();
         self.strings.clear();
+        self.fonts.clear();
         self.missing.borrow_mut().clear();
         self.read()
     }
@@ -93,6 +96,17 @@ impl Locale {
                     table.strings.len()
                 );
                 self.strings = table.strings;
+                self.fonts = table
+                    .fonts
+                    .iter()
+                    .filter_map(|raw| match AssetPath::new(raw) {
+                        Ok(path) => Some(path),
+                        Err(e) => {
+                            log::warn!("{} names the font {raw:?}: {e}", self.language);
+                            None
+                        }
+                    })
+                    .collect();
                 true
             }
             Err(error) => {
@@ -117,6 +131,19 @@ impl Locale {
         key
     }
 
+    /// The fonts the current language's table names, tried after a text's
+    /// own font for the glyphs it lacks.
+    pub fn fonts(&self) -> &[AssetPath] {
+        &self.fonts
+    }
+
+    /// Makes the current language's [`fonts`](Self::fonts) the fallback
+    /// chain of `fonts`. Every frame, after [`localize`](Self::localize):
+    /// unchanged, it costs a comparison.
+    pub fn apply_fonts(&self, fonts: &mut Fonts) {
+        fonts.set_fallbacks(&self.fonts);
+    }
+
     /// Writes into every keyed [`Text`] its string in the current language.
     /// Every frame: a text spawned, a key edited, a language switched or a
     /// table reloaded is the next frame's content.
@@ -128,6 +155,15 @@ impl Locale {
             let string = self.text(key);
             if text.content != string {
                 text.content = string.to_owned();
+            }
+        }
+        for (_, tooltip) in world.query_mut::<crate::UiTooltip>() {
+            let Some(key) = tooltip.key.as_deref() else {
+                continue;
+            };
+            let string = self.text(key);
+            if tooltip.text != string {
+                tooltip.text = string.to_owned();
             }
         }
     }

@@ -12,6 +12,10 @@ voltra-render.workspace = true
 voltra-jobs.workspace = true
 log.workspace = true
 fontdue.workspace = true
+rustybuzz.workspace = true
+unicode-script.workspace = true
+unicode-bidi.workspace = true
+unicode-linebreak.workspace = true
 # Atlas files are authoring artefacts, read in a pull request, like scenes.
 ron.workspace = true
 serde.workspace = true
