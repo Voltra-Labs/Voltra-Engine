@@ -33,13 +33,16 @@ mod tilemap;
 mod transform;
 mod ui_button;
 mod ui_controls;
+mod ui_dropdown;
 mod ui_rect;
 mod ui_scroll;
 mod ui_slice;
 mod ui_slider;
 mod ui_stack;
+mod ui_tabs;
 mod ui_text_field;
 mod ui_toggle;
+mod ui_tooltip;
 
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;

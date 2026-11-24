@@ -5,32 +5,44 @@
 //! keyboard/gamepad focus. An image is a `Sprite` on a `UiRect` — a
 //! texture, a region or an atlas frame, tinted — drawn whole or, with a
 //! [`UiSlice`], as a 9-slice; a [`UiStack`] lays its children out in a row
-//! or a column.
+//! or a column. Stage 94 added [`UiDropdown`], [`UiTooltip`], [`UiTabs`]
+//! and a [`UiTheme`] the controls take.
 
 pub mod button;
 pub mod controls;
+pub mod dropdown;
 pub mod edges;
+pub mod hidden;
 pub mod layout;
 pub mod mesh;
+pub mod overlay;
 pub mod rect;
 pub mod scroll;
 pub mod slice;
 pub mod slider;
 pub mod stack;
+pub mod tabs;
 pub mod text_field;
+pub mod theme;
 pub mod toggle;
+pub mod tooltip;
 
 pub use button::{ButtonFrames, UiButton};
 pub use controls::{Navigation, Pointer, UiControls, UiInput};
+pub use dropdown::UiDropdown;
 pub use edges::Edges;
+pub use hidden::UiHidden;
 pub use layout::UiLayout;
 pub use rect::{Rect, UiRect};
 pub use scroll::UiScroll;
 pub use slice::UiSlice;
 pub use slider::{UiSlider, UiSliderPart};
 pub use stack::UiStack;
+pub use tabs::{UiTab, UiTabs};
 pub use text_field::{TextInput, UiTextField};
+pub use theme::{UiOwnStyle, UiTheme};
 pub use toggle::UiToggle;
+pub use tooltip::UiTooltip;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;

@@ -157,6 +157,15 @@ impl Locale {
                 text.content = string.to_owned();
             }
         }
+        for (_, tooltip) in world.query_mut::<crate::UiTooltip>() {
+            let Some(key) = tooltip.key.as_deref() else {
+                continue;
+            };
+            let string = self.text(key);
+            if tooltip.text != string {
+                tooltip.text = string.to_owned();
+            }
+        }
     }
 }
 

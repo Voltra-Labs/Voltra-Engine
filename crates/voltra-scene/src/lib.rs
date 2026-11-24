@@ -84,6 +84,6 @@ pub use timer::{TimerId, Timers};
 pub use transform::Transform;
 pub use tween::{TweenId, Tweens};
 pub use ui::{
-    UiButton, UiControls, UiLayout, UiRect, UiScroll, UiSlice, UiSlider, UiSliderPart, UiStack,
-    UiTextField, UiToggle,
+    UiButton, UiControls, UiDropdown, UiHidden, UiLayout, UiOwnStyle, UiRect, UiScroll, UiSlice,
+    UiSlider, UiSliderPart, UiStack, UiTab, UiTabs, UiTextField, UiTheme, UiToggle, UiTooltip,
 };

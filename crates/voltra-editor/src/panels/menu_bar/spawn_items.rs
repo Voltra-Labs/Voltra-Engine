@@ -69,6 +69,18 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         });
         ui.close();
     }
+    if ui.button("Spawn HUD dropdown").clicked() {
+        spawn::record(editor, frame, "Spawn HUD dropdown", |frame| {
+            spawn::hud_dropdown(frame, "HUD dropdown")
+        });
+        ui.close();
+    }
+    if ui.button("Spawn HUD tabs").clicked() {
+        spawn::record_all(editor, frame, "Spawn HUD tabs", |frame, _| {
+            spawn::hud_tabs(frame, "HUD tabs")
+        });
+        ui.close();
+    }
     if ui.button("Spawn HUD scroll list").clicked() {
         spawn::record(editor, frame, "Spawn HUD scroll list", |frame| {
             spawn::hud_scroll_list(frame, "HUD scroll list")

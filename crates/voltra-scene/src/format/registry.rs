@@ -117,6 +117,20 @@ impl ComponentRegistry {
             .register::<UiTextField>("UiTextField")
             .with_template();
         registry
+            .register::<crate::UiDropdown>("UiDropdown")
+            .with_template();
+        registry
+            .register::<crate::UiTooltip>("UiTooltip")
+            .with_template();
+        registry.register::<crate::UiTabs>("UiTabs").with_template();
+        registry.register::<crate::UiTab>("UiTab").with_template();
+        registry
+            .register::<crate::UiHidden>("UiHidden")
+            .with_template();
+        registry
+            .register::<crate::UiOwnStyle>("UiOwnStyle")
+            .with_template();
+        registry
             .register::<Persistent>("Persistent")
             .with_template();
         registry.register::<Parallax>("Parallax").with_template();

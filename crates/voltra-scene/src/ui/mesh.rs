@@ -15,6 +15,7 @@ use crate::text::{shape, ui_px, Text};
 
 mod clip;
 mod field;
+mod overlay;
 
 /// Draw order, then sprite (0) before text (1) on one entity.
 type ElementKey = (i32, u32, u32, u8);
@@ -77,6 +78,8 @@ pub fn batch(world: &World, sheets: Sheets<'_>, layout: &UiLayout, scale: f32) -
             },
         }
     }
+    // Over everything, unmasked: open lists, then tooltips.
+    overlay::push(&mut batch, world, sheets, layout, scale);
     batch
 }
 

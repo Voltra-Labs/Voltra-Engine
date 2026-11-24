@@ -13,6 +13,7 @@ fn input(pointer: Pointer, navigation: Navigation, text: TextInput) -> UiInput {
         pointer,
         navigation,
         text,
+        delta: 0.0,
     }
 }
 
@@ -33,6 +34,7 @@ fn nav(x: f32, y: f32) -> Navigation {
     Navigation {
         direction: Some(Vec2::new(x, y)),
         accept: false,
+        cancel: false,
     }
 }
 

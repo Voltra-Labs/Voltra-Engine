@@ -5932,6 +5932,94 @@ red word, a larger green one and an atlas coin on one line, matched against
 `tests/references/rich_text_line.png`, and a green run still green on the
 line it wraps onto.
 
+### Dropdowns, tooltips and tabs share the focus; a theme is written into controls once
+
+Stage 94. The control set gets the three pieces every options screen
+wants, and one file restyles all of them.
+
+- **`UiDropdown`** turns the `UiButton` beside it into a dropdown, as
+  `UiToggle` turns one into a checkbox (Godot's `OptionButton` is a
+  `Button` too): the box keeps the button's hover, press, focus and
+  colours, the entity's `Text` is the style and shows the chosen option.
+  A click, or accept on the focus, opens the list; while it is open
+  (`UiControls::open_list`) the list has the input — the pointer
+  highlights and a click picks, up and down move the highlight (the
+  window scrolls past `max_visible`), accept picks, cancel or a click
+  outside closes it unchanged. A pick that changes the choice is a
+  change, as a slider's move is. `Navigation` gained `cancel`
+  (`ui_cancel`), and `UiControls::cancelled` says a cancel was spent
+  closing a list, so a screen backing out on the same key does not.
+- **The list is drawn by the UI pass, not spawned** (`ui/overlay.rs`,
+  `ui/mesh/overlay.rs`): after every element, unmasked, under the box —
+  over it where there is more room above. Unity's `Dropdown` instantiates
+  a template under a top-level canvas and Godot opens a `PopupMenu`
+  window; both need a layer above everything. Drawing it last is that
+  layer with nothing to sort and nothing left in a saved scene. The
+  prepare rasterizes the overlay's texts beside the world's.
+- **`UiTooltip`** on any element: under the pointer — or on anything
+  under it, a label over a row — for `delay` seconds, or while it holds
+  the focus (a pad player gets them too, which Godot's mouse-only tooltip
+  does not), it shows in a box under the element, kept on the screen.
+  `UiInput::delta` counts the delay. Its text may be keyed (`key`, read by
+  the `Locale`) and is rich text.
+- **`UiTabs` and `UiTab`**: a tab button names its page (`page`, a
+  `Name` under the same container); the container's `current` page shows
+  and the others are `UiHidden`. Godot's `TabContainer` pairs titles with
+  children by order and draws its own bar; naming lets the bar be laid
+  out like any other stack, and the options screen already finds its
+  parts by name. A tab with a `UiToggle` is drawn selected while its page
+  shows. Clicking one reports the container as changed.
+- **`UiHidden`** — a new marker, needed by tabs and useful alone: a hidden
+  element and its subtree are not laid out, so not drawn, picked or
+  focused, and take no room in a stack. Godot's `visible`, Unity's
+  `SetActive`: the entities stay, values and all.
+- **`UiTheme`, a `.theme.ron`** (`assets/ui/dark.theme.ron`,
+  `light.theme.ron`): font, text colour, button colours by state, a
+  selected tint, panel, field, slider, dropdown-list and tooltip colours,
+  9-slice skins (texture + borders) for buttons, panels and fields,
+  spacing and padding. Every section optional (`implicit_some`). Set with
+  `UiControls::set_theme` or `tick.set_theme("ui/light.theme.ron")`. It is
+  written into each element **once** — when the element first appears,
+  and again to all when the theme changes — rather than consulted every
+  frame, so code colouring a label afterwards (a clash in the controls
+  list) stands; Godot resolves theme items at draw time instead, which
+  would need every component's colour to be optional, a file-format break
+  for every scene. "Controls that set none of their own" is spelled
+  `UiOwnStyle`: an element marked so is passed over. A skin's texture and
+  a font are left as paths for the loop (`App::resolve_restyled`) to load,
+  since that needs the GPU. With no theme set nothing changes, so every
+  existing scene draws as before.
+- **The options screen** uses all three: tabs for Display, Audio and
+  Controls (the hidden pages start `UiHidden` in the prefab, so the editor
+  shows one page too), dropdowns for the display mode (windowed,
+  fullscreen, exclusive where the monitor has modes) and the resolution
+  (disabled, "Set by the page", on the web), a tooltip on every row,
+  stamped rows included. Escape closes an open list before the screen.
+- Registered with templates: `UiDropdown`, `UiTooltip`, `UiTabs`, `UiTab`,
+  `UiHidden`, `UiOwnStyle`. Inspectors for each (hidden and own-style as
+  checkboxes on every UI element); Spawn menu: *HUD dropdown*, *HUD tabs*.
+
+Pinned by `ui/dropdown.rs` (the list under, or over near the bottom; rows
+under the pointer; the highlight kept on the list and scrolling it; no
+options never opens), `ui/tabs.rs` (one page, the first by default; nested
+containers apart), `ui/controls/tests/popups.rs` (a click opens and an item
+click picks; keys open, move and pick, cancel closes and is reported, then
+down moves the focus again; a click outside closes unchanged; the open
+list's boxes and items over everything; a tooltip after its delay under
+the pointer, gone when it leaves, shown on focus; a tab click shows its page
+and lays the other out of the screen; a hidden child takes no room),
+`ui/theme/tests.rs` (**a theme swapped and every control restyled** —
+button colours and skin, labels' colour and font, toggle and tab tints,
+slider track and handle, field box and selection, dropdown list, tooltip,
+panel and stack spacing — and the own-styled one not; a colour set after
+the theme stands; a late element themed on its first frame; the shipped
+themes read; a newer version refused), `options/screen/tests.rs` (tabs,
+dropdowns reaching the window, Escape on an open list) and
+`games/platformer/tests/options.rs` (now through the Controls tab), and
+`voltra-scene/tests/headless_overlay.rs`: in pixels, an open list over a
+panel sorted above everything, its highlighted item, and a tooltip under
+its element.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -13,12 +13,13 @@ pub(super) fn humanize(name: &str) -> String {
     }
 }
 
-pub(super) fn display(mode: Fullscreen) -> String {
+/// A display mode as the dropdown lists it.
+pub(super) fn mode(mode: Fullscreen) -> String {
     match mode {
-        Fullscreen::Windowed => "Display: Windowed".to_owned(),
-        Fullscreen::Borderless => "Display: Fullscreen".to_owned(),
+        Fullscreen::Windowed => "Windowed".to_owned(),
+        Fullscreen::Borderless => "Fullscreen".to_owned(),
         Fullscreen::Exclusive(mode) => format!(
-            "Display: Exclusive {} × {} at {:.0} Hz",
+            "Exclusive {} × {} at {:.0} Hz",
             mode.width,
             mode.height,
             mode.refresh_hz()
@@ -26,12 +27,13 @@ pub(super) fn display(mode: Fullscreen) -> String {
     }
 }
 
-pub(super) fn resolution(size: Option<(u32, u32)>) -> String {
-    match size {
-        Some((width, height)) => format!("Resolution: {width} × {height}"),
-        None => "Resolution: set by the page".to_owned(),
-    }
+/// A window size as the dropdown lists it.
+pub(super) fn size((width, height): (u32, u32)) -> String {
+    format!("{width} × {height}")
 }
+
+/// What the resolution dropdown says where the size is not the game's.
+pub(super) const SIZE_SET_BY_PAGE: &str = "Set by the page";
 
 pub(super) fn vsync(on: bool, can_change: bool) -> String {
     match (can_change, on) {

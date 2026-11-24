@@ -191,6 +191,12 @@ impl Headless {
         self.app.ui_controls.focus(control);
     }
 
+    /// The controls as the last frame left them: focus, an open list, the
+    /// theme.
+    pub fn ui(&self) -> &voltra_scene::UiControls {
+        &self.app.ui_controls
+    }
+
     /// Frames run so far.
     pub fn frames(&self) -> u64 {
         self.frames

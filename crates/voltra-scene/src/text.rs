@@ -245,6 +245,13 @@ pub fn prepare(world: &World, fonts: &mut Fonts, ui_scale: f32) {
             fonts.rasterize(&layout);
         }
     }
+    // What the UI draws over its elements: open lists, shown tooltips.
+    for text in crate::ui::overlay::texts(world, fonts) {
+        paragraph::load_fonts(&text, fonts);
+        if let Some(layout) = shape::wrapped(&text, fonts, ui_px(&text, ui_scale)) {
+            fonts.rasterize(&layout);
+        }
+    }
 }
 
 /// The raster size of a text drawn in a [`UiRect`]: its `size` in points at

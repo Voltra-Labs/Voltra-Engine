@@ -14,6 +14,7 @@ mod input_map;
 mod native;
 mod particles;
 mod prefab_sync;
+mod restyle;
 mod scene_draws;
 mod scenes;
 mod simulation;
@@ -24,6 +25,7 @@ mod thumbnails;
 mod tick;
 mod tick_audio;
 mod tick_controls;
+mod tick_theme;
 mod tick_time;
 mod ui_frame;
 mod ui_input;
@@ -367,7 +369,9 @@ impl App {
         self.input.update_actions(&self.actions);
         // After the actions, which navigate the focus, and before the tick,
         // which reads this frame's clicks.
-        self.update_ui_controls();
+        self.update_ui_controls(delta);
+        // A theme the controls just applied may name skins and fonts.
+        self.resolve_restyled();
         drop(input);
         // Before the tick, so it reads this frame's finished tweens and
         // fired timers, as it reads this frame's clicks.

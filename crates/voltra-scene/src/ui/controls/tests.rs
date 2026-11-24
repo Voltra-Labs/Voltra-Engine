@@ -157,6 +157,7 @@ fn navigation_starts_top_left_and_moves_to_the_nearest_ahead() {
     let go = |dir: Vec2| Navigation {
         direction: Some(dir),
         accept: false,
+        cancel: false,
     };
 
     frame(&mut world, &mut state, Pointer::default(), go(Vec2::Y));
@@ -187,6 +188,7 @@ fn accept_clicks_the_focused_button() {
     let accept = Navigation {
         direction: None,
         accept: true,
+        cancel: false,
     };
     frame(&mut world, &mut state, Pointer::default(), accept);
     assert!(state.clicked(ok));
@@ -250,4 +252,5 @@ fn a_button_without_frames_leaves_the_frame_alone() {
     assert_eq!(world.get::<Sprite>(ok).expect("a sprite").frame, 3);
 }
 
+mod popups;
 mod widgets;
