@@ -3,7 +3,7 @@
 use std::time::Duration;
 
 use voltra_assets::{Clips, Handle};
-use voltra_audio::{Audio, BusId, Clip, PlayParams, VoiceId};
+use voltra_audio::{Audio, BusId, Clip, EffectDesc, Param, PlayParams, VoiceId};
 
 /// The sound half of a [`Tick`](super::Tick).
 ///
@@ -131,6 +131,36 @@ impl<'a> TickAudio<'a> {
     /// The volume `bus` was last set to.
     pub fn bus_volume(&self, bus: BusId) -> f32 {
         self.audio.bus_volume(bus)
+    }
+
+    /// Slides `param` of the effect at `effect` on `bus` to `value` over
+    /// `over` — a low-pass opening as the player surfaces, a reverb growing
+    /// as they walk into a cave. The bus's effects come from the project's
+    /// `default.buses.ron` or from [`set_bus_effects`](Self::set_bus_effects);
+    /// `effect` counts from zero along that chain.
+    ///
+    /// `false`, changing nothing, for an effect that is not there or a
+    /// parameter it does not have.
+    pub fn set_bus_param(
+        &mut self,
+        bus: BusId,
+        effect: usize,
+        param: Param,
+        value: f32,
+        over: Duration,
+    ) -> bool {
+        self.audio.set_bus_param(bus, effect, param, value, over)
+    }
+
+    /// Replaces `bus`'s effects, first to last — a level that sounds under
+    /// water, a radio that crackles in. Built now, so not every frame.
+    pub fn set_bus_effects(&mut self, bus: BusId, effects: Vec<EffectDesc>) {
+        self.audio.set_bus_effects(bus, effects);
+    }
+
+    /// The effects on `bus`, with every number a tick moved since.
+    pub fn bus_effects(&self, bus: BusId) -> &[EffectDesc] {
+        self.audio.bus_effects(bus)
     }
 
     /// Ends every voice, including the ones the scene's own sources started.

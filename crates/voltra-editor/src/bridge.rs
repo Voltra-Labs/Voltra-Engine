@@ -99,7 +99,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
         }
         Command::Settings { file, text } => {
             let which = crate::project_settings::SettingsFile::named(file)
-                .ok_or_else(|| format!("{file:?} is not input, layers or build"))?;
+                .ok_or_else(|| format!("{file:?} is not input, layers, buses or build"))?;
             let assets = frame.textures.root().to_path_buf();
             match text {
                 Some(text) => {

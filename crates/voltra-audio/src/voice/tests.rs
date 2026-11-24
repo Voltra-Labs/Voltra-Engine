@@ -25,7 +25,7 @@ fn left() -> PlayParams {
 
 fn mix(voice: &mut Voice, frames: usize, channels: usize) -> Vec<f32> {
     let mut out = vec![0.0; frames * channels];
-    voice.mix(&mut out, channels, Ramp::new(1.0));
+    voice.mix(&mut out, channels);
     out
 }
 
@@ -41,7 +41,7 @@ fn a_voice_adds_into_the_buffer_rather_than_replacing_it() {
     // What makes a mixer a mixer: two voices in one buffer.
     let mut voice = voice(vec![0.25, 0.25], 1, left());
     let mut out = vec![1.0, 0.0, 1.0, 0.0];
-    voice.mix(&mut out, 2, Ramp::new(1.0));
+    voice.mix(&mut out, 2);
     assert_eq!(out, vec![1.25, 0.0, 1.25, 0.0]);
 }
 
@@ -181,7 +181,7 @@ fn moving_a_voice_changes_its_gains_without_restarting_it() {
 fn a_zero_channel_buffer_is_ignored_rather_than_dividing_by_zero() {
     let mut voice = voice(vec![1.0], 1, left());
     let mut out = Vec::new();
-    voice.mix(&mut out, 0, Ramp::new(1.0));
+    voice.mix(&mut out, 0);
 }
 
 /// A voice at 1 kHz over a constant clip, so fades are a few frames long
@@ -239,14 +239,6 @@ fn a_gain_change_slides_rather_than_steps() {
 
     assert!(out[0] > 0.9, "it jumped: {}", out[0]);
     assert_eq!(out[30], 0.0, "and it arrives");
-}
-
-#[test]
-fn the_bus_gain_multiplies_the_voice() {
-    let mut voice = slow(left(), Duration::ZERO);
-    let mut out = vec![0.0; 2];
-    voice.mix(&mut out, 2, Ramp::new(0.5));
-    assert_eq!(out[0], 0.5);
 }
 
 #[test]

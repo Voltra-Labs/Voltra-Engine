@@ -1,5 +1,7 @@
 //! What the engine holds to make a sound.
 
+mod effects;
+
 use std::fmt;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
@@ -8,6 +10,7 @@ use crate::bus::{BusId, Buses, MAX_BUSES};
 use crate::clip::Clip;
 use crate::command::Command;
 use crate::device::Output;
+use crate::effect::EffectDesc;
 use crate::params::PlayParams;
 use crate::ramp::Curve;
 use crate::retired::Retired;
@@ -17,7 +20,10 @@ use crate::voice::{VoiceId, SMOOTHING};
 /// The game's end of the audio thread.
 ///
 /// One per app. Every method is a message posted to the mixer and returns
-/// immediately; nothing here blocks, allocates a buffer, or touches a sample.
+/// immediately; nothing here blocks or touches a sample. The two that do real
+/// work do it here so the audio thread does not: a streamed clip's decoder is
+/// opened and primed by [`play`](Self::play), and a bus's effects are built,
+/// delay lines and all, by [`set_bus_effects`](Self::set_bus_effects).
 ///
 /// **A silent `Audio` is a working `Audio`.** When there is no output device —
 /// a CI runner, a machine with the sound card disabled, a laptop with
@@ -51,6 +57,12 @@ pub struct Audio {
     /// The track [`play_music`](Self::play_music) last started, and its
     /// voice: what the next one cross-fades from.
     music: Option<(VoiceId, Clip)>,
+    /// Each bus's effects as last described, by [`BusId::index`]: the main
+    /// thread's copy, for a settings screen and for a device opened late.
+    bus_effects: Vec<Vec<EffectDesc>>,
+    /// The buses the last [`apply_layout`](Self::apply_layout) set, so the
+    /// next one can put back any it no longer lists.
+    layout: Vec<BusId>,
 }
 
 impl Audio {
@@ -76,14 +88,22 @@ impl Audio {
             bus_volumes: [1.0; MAX_BUSES],
             streamer: Streamer::new(),
             music: None,
+            bus_effects: vec![Vec::new(); MAX_BUSES],
+            layout: Vec::new(),
         }
     }
 
     /// The same `Audio` with `buses` as its table instead of
-    /// [`Buses::default`], every one at unity.
+    /// [`Buses::default`], every one at unity and with no effects.
     pub fn with_buses(mut self, buses: Buses) -> Self {
         self.buses = buses;
         self.bus_volumes = [1.0; MAX_BUSES];
+        for index in 0..MAX_BUSES {
+            if !self.bus_effects[index].is_empty() {
+                self.set_bus_effects(BusId::from_index(index), Vec::new());
+            }
+        }
+        self.layout.clear();
         for index in 0..MAX_BUSES {
             self.send(Command::SetBusVolume {
                 bus: BusId::from_index(index),
@@ -115,6 +135,7 @@ impl Audio {
                 self.retired = Some(retire_receiver);
                 self.output = Some(output);
                 self.replay_bus_volumes();
+                self.replay_bus_effects();
             }
             Err(e) => log::warn!("{e}; the game will run without sound"),
         }

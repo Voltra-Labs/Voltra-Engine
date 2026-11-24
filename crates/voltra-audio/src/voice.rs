@@ -228,13 +228,9 @@ impl Voice {
 
     /// Adds this voice into `out`, which holds `channels` samples per frame.
     ///
-    /// Adds rather than writes: the mixer clears the buffer once and every
-    /// voice sums into it, which is what mixing is.
-    ///
-    /// `bus` is a copy of the bus's ramp as the buffer starts. Every voice on
-    /// the bus steps its own copy frame by frame, so all of them hear the same
-    /// fade at the same frame, and the mixer advances the real one once
-    /// afterwards. That is per-bus gain without a per-bus buffer to sum into.
+    /// Adds rather than writes: the mixer clears its bus's block once and
+    /// every voice on the bus sums into it, which is what mixing is. The
+    /// bus's effects and gain are the mixer's, applied to the sum.
     ///
     /// Channel mapping, and the reason it is this and not a matrix: a mono
     /// clip is panned into the two channels, a stereo one keeps its sides, and
@@ -242,7 +238,7 @@ impl Voice {
     /// rest are left alone — surround is a speaker layout with its own
     /// vocabulary, not two channels copied around, and this engine has no way
     /// to author a position in it.
-    pub fn mix(&mut self, out: &mut [f32], channels: usize, mut bus: Ramp) {
+    pub fn mix(&mut self, out: &mut [f32], channels: usize) {
         if channels == 0 || self.is_finished() {
             return;
         }
@@ -255,7 +251,7 @@ impl Voice {
                 return;
             }
 
-            let level = self.fader.tick() * bus.tick();
+            let level = self.fader.tick();
             let gain_left = self.left.tick() * level;
             let gain_right = self.right.tick() * level;
             let (left, right) = match &self.stream {

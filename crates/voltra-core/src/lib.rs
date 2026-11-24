@@ -17,7 +17,8 @@ pub mod window;
 
 pub use app::headless::{Headless, HeadlessError, Screenshot, ScreenshotError};
 pub use app::{
-    parse_sorting_layers, App, SceneLoad, Tick, UiFrame, DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS,
+    parse_bus_layout, parse_sorting_layers, App, SceneLoad, Tick, UiFrame, DEFAULT_BUS_LAYOUT,
+    DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS,
 };
 pub use game::Game;
 pub use input::{
@@ -49,7 +50,9 @@ pub use voltra_physics::{
 // it hands over and what comes back. Re-exported for the reason the physics
 // types above are: one dependency for a game that wants a coin to make a
 // noise, not two.
-pub use voltra_audio::{Audio, BusId, Buses, Clip, PlayParams, VoiceId};
+pub use voltra_audio::{
+    effect, Audio, BusId, BusSettings, Buses, Clip, EffectDesc, PlayParams, VoiceId,
+};
 // A game spawns prefabs through `Tick::spawn` and gets back an `Instance`.
 pub use voltra_scene::{Instance, Prefab};
 

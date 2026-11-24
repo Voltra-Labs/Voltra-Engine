@@ -1,4 +1,6 @@
 use super::*;
+use crate::effect::{EffectDesc, Param};
+use crate::layout::BusSettings;
 
 #[test]
 fn a_silent_audio_accepts_everything() {
@@ -268,4 +270,116 @@ fn a_streamed_clip_that_will_not_open_plays_nothing_rather_than_failing() {
     audio.play(&unopenable(), PlayParams::default());
     assert_eq!(receiver.try_iter().count(), 0);
     assert!(!audio.is_silent(), "the rest of the sound carries on");
+}
+
+fn low_pass(cutoff: f32) -> EffectDesc {
+    EffectDesc::LowPass { cutoff, q: 0.7 }
+}
+
+#[test]
+fn bus_effects_are_built_here_and_sent_whole() {
+    let (mut audio, receiver) = wired();
+    let music = audio.bus("music");
+
+    audio.set_bus_effects(music, vec![low_pass(800.0)]);
+
+    assert_eq!(audio.bus_effects(music), &[low_pass(800.0)]);
+    assert!(matches!(
+        receiver.try_recv(),
+        Ok(Command::SetBusEffects { bus, effects }) if bus == music && effects.len() == 1
+    ));
+}
+
+#[test]
+fn an_effect_whose_numbers_mean_nothing_is_left_off_and_the_rest_kept() {
+    let mut audio = Audio::silent();
+    let music = audio.bus("music");
+    audio.set_bus_effects(music, vec![low_pass(f32::NAN), low_pass(500.0)]);
+    assert_eq!(audio.bus_effects(music), &[low_pass(500.0)]);
+}
+
+#[test]
+fn a_parameter_moved_from_a_tick_is_mirrored_and_sent() {
+    let (mut audio, receiver) = wired();
+    let music = audio.bus("music");
+    audio.set_bus_effects(music, vec![low_pass(800.0)]);
+    receiver.try_iter().for_each(drop);
+
+    let over = Duration::from_millis(300);
+    assert!(audio.set_bus_param(music, 0, Param::Cutoff, 4_000.0, over));
+
+    assert_eq!(audio.bus_effects(music), &[low_pass(4_000.0)]);
+    assert!(matches!(
+        receiver.try_recv(),
+        Ok(Command::SetBusParam { effect: 0, param: Param::Cutoff, value, .. }) if value == 4_000.0
+    ));
+}
+
+#[test]
+fn a_parameter_that_is_not_there_is_refused_and_sends_nothing() {
+    let (mut audio, receiver) = wired();
+    let music = audio.bus("music");
+    audio.set_bus_effects(music, vec![low_pass(800.0)]);
+    receiver.try_iter().for_each(drop);
+
+    assert!(!audio.set_bus_param(music, 0, Param::Feedback, 0.5, Duration::ZERO));
+    assert!(!audio.set_bus_param(music, 3, Param::Cutoff, 100.0, Duration::ZERO));
+    assert_eq!(receiver.try_iter().count(), 0);
+}
+
+#[test]
+fn effects_set_while_silent_are_handed_to_a_device_opened_later() {
+    let mut audio = Audio::silent();
+    let music = audio.bus("music");
+    audio.set_bus_effects(music, vec![low_pass(800.0)]);
+
+    let (sender, receiver) = channel();
+    audio.commands = Some(sender);
+    audio.replay_bus_effects();
+
+    assert!(matches!(
+        receiver.try_recv(),
+        Ok(Command::SetBusEffects { bus, .. }) if bus == music
+    ));
+}
+
+fn settings(name: &str, volume: f32, effects: Vec<EffectDesc>) -> BusSettings {
+    BusSettings {
+        name: name.to_owned(),
+        volume,
+        effects,
+    }
+}
+
+#[test]
+fn a_layout_registers_its_buses_and_sets_their_volumes_and_effects() {
+    let mut audio = Audio::silent();
+
+    audio.apply_layout(&[
+        settings("music", 0.8, vec![low_pass(900.0)]),
+        settings("dialogue", 1.0, Vec::new()),
+    ]);
+
+    let music = audio.buses().find("music").expect("a default bus");
+    let dialogue = audio.buses().find("dialogue").expect("registered");
+    assert_eq!(audio.bus_volume(music), 0.8);
+    assert_eq!(audio.bus_effects(music), &[low_pass(900.0)]);
+    assert_eq!(audio.bus_volume(dialogue), 1.0);
+}
+
+#[test]
+fn a_bus_a_new_layout_drops_goes_back_to_unity_and_no_effects() {
+    let mut audio = Audio::silent();
+    audio.apply_layout(&[settings("music", 0.5, vec![low_pass(900.0)])]);
+    let music = audio.buses().find("music").expect("there");
+
+    audio.apply_layout(&[settings("sfx", 0.7, Vec::new())]);
+
+    assert_eq!(audio.bus_volume(music), 1.0);
+    assert!(audio.bus_effects(music).is_empty());
+    assert_eq!(
+        audio.buses().find("music"),
+        Some(music),
+        "it keeps its id for the voices on it"
+    );
 }

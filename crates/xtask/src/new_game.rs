@@ -24,12 +24,13 @@ const TEMPLATE: [(&str, &str); 7] = [
     ),
 ];
 
-/// The engine's own assets a game starts with: the input map and sorting
-/// layers the loop reads by convention, the default font and its licence,
-/// and a texture for the player.
-const COPIED: [&str; 5] = [
+/// The engine's own assets a game starts with: the input map, sorting
+/// layers and audio buses the loop reads by convention, the default font and
+/// its licence, and a texture for the player.
+const COPIED: [&str; 6] = [
     "default.input.ron",
     "default.layers.ron",
+    "default.buses.ron",
     "fonts/Ubuntu-Light.ttf",
     "fonts/UFL.txt",
     "sprites/checker.png",

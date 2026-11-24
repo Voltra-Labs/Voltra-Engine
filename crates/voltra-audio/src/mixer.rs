@@ -8,9 +8,13 @@
 //! arithmetic with no thread, no device and no clock, so every rule it obeys
 //! is a test that runs on a build machine with no sound card.
 //!
-//! The signal path, in order: each voice's own gains and fader, its bus's
-//! gain, the sum, the master's gain, and the [`Limiter`]. Every gain on that
-//! path is a [`Ramp`], so nothing the game says can step a waveform.
+//! The signal path, in order: each voice's own gains and fader, summed into
+//! its bus; the bus's effects, first to last, then its gain; every bus summed
+//! into the master with the voices played on it directly; the master's
+//! effects and gain; and the [`Limiter`]. Every gain on that path is a
+//! [`Ramp`], so nothing the game says can step a waveform.
+
+mod render;
 
 use std::sync::mpsc::Sender;
 use std::time::Duration;
@@ -18,6 +22,7 @@ use std::time::Duration;
 use crate::bus::{BusId, MAX_BUSES};
 use crate::clip::Clip;
 use crate::command::Command;
+use crate::effect::{Effect, MAX_EFFECTS};
 use crate::limiter::Limiter;
 use crate::params::PlayParams;
 use crate::ramp::{Curve, Ramp};
@@ -33,6 +38,15 @@ use crate::voice::{frames, Voice, VoiceId};
 /// next to the buffer's own cost. `Mixer::with_capacity` is there for the
 /// caller that knows better.
 pub const DEFAULT_CAPACITY: usize = 64;
+
+/// How many frames the mixer works through at a time.
+///
+/// Each bus is summed into a block of its own before its effects run, and
+/// the blocks are allocated once, when the mixer is made: a device may hand
+/// the callback any length of buffer, and the mixer works through it this
+/// much at a time rather than growing anything. 256 frames is 5 ms at
+/// 48 kHz; a bus's level, which a duck listens to, is measured per block.
+pub const BLOCK: usize = 256;
 
 /// Every voice currently sounding, and the buffer arithmetic that mixes them.
 ///
@@ -59,6 +73,12 @@ pub struct Mixer {
     /// would be an allocation inside the callback. Thirty-two ramps is half a
     /// kilobyte.
     buses: [Ramp; MAX_BUSES],
+    /// Each bus's effects, in order, by [`BusId::index`].
+    chains: [Vec<Effect>; MAX_BUSES],
+    /// One [`BLOCK`] of samples per bus, end to end; the master's is first.
+    scratch: Vec<f32>,
+    /// Each bus's peak level in the block being mixed, for a duck to read.
+    levels: [f32; MAX_BUSES],
     limiter: Limiter,
 }
 
@@ -72,19 +92,23 @@ impl Mixer {
     /// [`DEFAULT_CAPACITY`].
     pub fn with_capacity(rate: u32, channels: u16, capacity: usize) -> Self {
         let capacity = capacity.max(1);
+        let channels = channels.max(1);
         Self {
             voices: Vec::with_capacity(capacity),
             rate: rate.max(1),
-            channels: channels.max(1),
+            channels,
             capacity,
             retired: None,
             buses: [Ramp::new(1.0); MAX_BUSES],
+            chains: std::array::from_fn(|_| Vec::new()),
+            scratch: vec![0.0; MAX_BUSES * BLOCK * usize::from(channels)],
+            levels: [0.0; MAX_BUSES],
             limiter: Limiter::new(rate.max(1)),
         }
     }
 
-    /// Sends finished voices' clips and feeds to `retired` instead of
-    /// dropping them here.
+    /// Sends finished voices' clips and feeds, and replaced effect chains, to
+    /// `retired` instead of dropping them here.
     ///
     /// See [`Retired`]: freeing the samples is the one unbounded piece of
     /// work a callback would otherwise do.
@@ -111,6 +135,17 @@ impl Mixer {
     /// The gain `bus` is at right now, or `1.0` for an id past the table.
     pub fn bus_volume(&self, bus: BusId) -> f32 {
         self.buses.get(bus.index()).map_or(1.0, Ramp::value)
+    }
+
+    /// The effects on `bus`, in order.
+    pub fn bus_effects(&self, bus: BusId) -> &[Effect] {
+        self.chains.get(bus.index()).map_or(&[], Vec::as_slice)
+    }
+
+    /// The peak level `bus` reached in the last block mixed, after its volume
+    /// and before its effects: what a duck listening to it hears.
+    pub fn bus_level(&self, bus: BusId) -> f32 {
+        self.levels.get(bus.index()).copied().unwrap_or(0.0)
     }
 
     /// Carries out one message from the game.
@@ -154,6 +189,31 @@ impl Mixer {
                     ramp.set(volume, frames);
                 }
             }
+            Command::SetBusEffects { bus, mut effects } => {
+                let Some(chain) = self.chains.get_mut(bus.index()) else {
+                    return;
+                };
+                // `Audio` caps the chain; this is for a hand-built command.
+                effects.truncate(MAX_EFFECTS);
+                std::mem::swap(chain, &mut effects);
+                self.retire_effects(effects);
+            }
+            Command::SetBusParam {
+                bus,
+                effect,
+                param,
+                value,
+                over,
+            } => {
+                let frames = frames(over, self.rate);
+                if let Some(effect) = self
+                    .chains
+                    .get_mut(bus.index())
+                    .and_then(|chain| chain.get_mut(effect))
+                {
+                    effect.set(param, value, frames);
+                }
+            }
         }
     }
 
@@ -164,40 +224,11 @@ impl Mixer {
     /// would play the previous buffer again under silence.
     pub fn render(&mut self, out: &mut [f32]) {
         out.fill(0.0);
-
         let channels = usize::from(self.channels);
-        let frames = u32::try_from(out.len() / channels).unwrap_or(u32::MAX);
-
-        for voice in &mut self.voices {
-            // A voice on the master feeds the sum directly: the master's gain
-            // is applied once, below, to everything.
-            let bus = match voice.bus() {
-                BusId::MASTER => Ramp::new(1.0),
-                bus => self
-                    .buses
-                    .get(bus.index())
-                    .copied()
-                    .unwrap_or(Ramp::new(1.0)),
-            };
-            voice.mix(out, channels, bus);
+        for block in out.chunks_mut(BLOCK * channels) {
+            self.render_block(block);
         }
-
-        // Every bus advances whether anything was routed into it or not, so a
-        // fade on a bus that fell silent still arrives on time.
-        for bus in &mut self.buses[1..] {
-            bus.advance(frames);
-        }
-
-        let master = &mut self.buses[BusId::MASTER.index()];
-        for frame in out.chunks_mut(channels) {
-            let gain = master.tick();
-            for sample in frame {
-                *sample *= gain;
-            }
-        }
-
         self.limiter.process(out, channels);
-
         self.remove(|voice| voice.is_finished());
     }
 
@@ -271,6 +302,17 @@ impl Mixer {
         let retired = voice.into_retired();
         if let Some(channel) = self.retired.as_ref() {
             let _ = channel.send(retired);
+        }
+    }
+
+    /// Hands a replaced chain to whoever is dropping things: its delay
+    /// lines are the largest buffers the mixer holds.
+    fn retire_effects(&mut self, effects: Vec<Effect>) {
+        if effects.is_empty() {
+            return;
+        }
+        if let Some(channel) = self.retired.as_ref() {
+            let _ = channel.send(Retired::Effects(effects));
         }
     }
 }

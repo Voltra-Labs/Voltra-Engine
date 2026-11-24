@@ -5623,6 +5623,102 @@ commands a cross-fade sends; the same track kept), `clips/tests.rs` and
 `clips/settings.rs` (streamed from disk or from a pack, resident with a
 loop, broken settings silent, edits of either file reaching the clip).
 
+### Buses carry effects in order, laid out by `default.buses.ron`
+
+Stage 105. `bus.rs` said buses feeding buses would wait for "an effect to put
+on a node"; now there are effects, and routing stays one level deep — every
+bus feeds the master — because inserts on a bus need no graph.
+
+**Inserts, then the fader**, a desk's channel strip and Unity's, Godot's and
+Wwise's shape: a bus's voices are summed into the bus's own block, its
+chain runs first to last, then its volume, then it joins the master; the
+master's chain and volume run on the sum, then the limiter. Before this
+stage each voice multiplied a copy of its bus's ramp and there were no
+per-bus buffers; now the mixer works in `BLOCK`s of 256 frames with one
+preallocated block per bus (32 × 256 × channels floats), so any buffer
+length a host asks for is handled without growing anything. A bus is run
+only when a voice is on it or it has effects — a delay's echoes and a
+reverb's tail outlive the last voice — and a reverb's tail follows its
+bus's fader.
+
+**The effects** (`effect/`), each on the first two channels:
+
+- `LowPass` / `HighPass`: an RBJ-cookbook biquad (Web Audio's
+  `BiquadFilterNode` formulas), transposed direct form II, 12 dB/octave,
+  cutoff clamped to 10 Hz..0.49·rate. Coefficients recomputed every 16
+  frames while the cutoff or Q ramps.
+- `Delay`: a line per side, `MAX_DELAY` (2 s) long whatever the time, so a
+  time moved from a tick never allocates; fractional read (a moving time
+  bends pitch like tape, no click); feedback capped at 0.95; `mix` is a
+  dry/wet cross-fade.
+- `Reverb`: Freeverb — 8 lowpass-feedback combs and 4 all-passes a side,
+  Jezar's tunings scaled from 44.1 kHz to the device rate, 23-sample stereo
+  spread; `room_size`, `damping`, `width`, `mix`.
+- `Duck { by, depth, threshold, attack, release }`: the bus pulled to
+  `1 − depth` while `by` is above `threshold`, along straight lines in gain,
+  so it is fully down exactly `attack` after `by` sounds. Every bus's level
+  (its voices' peak times its volume) is measured after all voices are
+  summed and before any chain runs, so a duck hears its trigger in the same
+  block whatever the bus order — no lag and no ordering rule. Activity is
+  per block (5 ms at 48 kHz).
+
+**Built on the main thread.** `EffectDesc` (serde) is the effect as a file
+or a tick says it; `Effect::build` makes the running one at the device rate
+on the calling thread, delay lines and combs included, and
+`Command::SetBusEffects` sends the finished chain, at most `MAX_EFFECTS`
+(8). The replaced chain comes back as `Retired::Effects` and is freed in
+`end_frame`. `Audio` mirrors each bus's descriptions — for a settings
+screen, and so a device opened late gets them (`replay_bus_effects`). An
+effect with a `NaN` or negative number is left off with a warning; a merely
+large one is clamped where used.
+
+**Rampable from a tick like a volume**: `tick.audio.set_bus_param(bus,
+effect, Param::Cutoff, 4000.0, over)` slides the effect at that index
+(`Command::SetBusParam`, a `Ramp` per parameter; a duck's numbers move
+along its own attack and release). It answers `false` for an effect or a
+parameter that is not there, so a typo is told. `set_bus_effects` replaces
+a chain; `voltra_core::effect` re-exports the types for a game.
+
+**Where bus config lives: `default.buses.ron`**, a new project file
+beside `default.layers.ron` (version 1), Godot's `default_bus_layout.tres`
+in shape — stage 23b had only code, because there was no settings file yet:
+
+```ron
+(version: 1, buses: [
+    (name: "music", volume: 0.8, effects: [Duck(by: "dialogue", depth: 0.7)]),
+    (name: "sfx", effects: [Reverb(room_size: 0.6, mix: 0.25)]),
+])
+```
+
+`parse_bus_layout` checks it (version, a name twice, a bus ducked by itself,
+effect numbers); `App` reads it at startup and on hot reload
+(`app/bus_layout.rs`) and `Audio::apply_layout` applies it *additively*:
+buses are registered by name and never renumbered, so voices already
+playing stay on their bus and a table from `with_buses` keeps working; a bus
+the previous layout set and the new one drops goes back to unity with no
+effects. The editor's Project Settings gets an "Audio buses" tab (the same
+check-then-save RON editor as the other files; the bridge's `settings` takes
+`buses`), the asset browser lists it as `BusLayout`, and `new-game` copies
+the shipped file.
+
+Pinned by `effect/tests.rs`, all offline through the mixer at 48 kHz: a
+1 kHz low-pass passes 200 Hz within 0.5 dB, is −3 dB ± 0.5 at the cutoff and
+below −30 dB at 8 kHz (high-pass mirrored at 125 Hz); a cutoff ramped from
+200 Hz to 18 kHz opens on a 4 kHz tone; a 0.25 s delay's echo peaks at
+exactly frame 12 000 at half, the fed-back one at 24 000 at a quarter, with
+silence between; a reverb's impulse tail falls over 40 dB in two seconds
+and a bigger room rings over ten times longer; the tail follows the fader;
+a 0.75-deep duck is at 0.625 half way through its 50 ms attack, at a quarter
+exactly at its end, holds, and returns along its 200 ms release from the
+first block the trigger is silent; effects on one bus leave another alone; a
+replaced chain is retired. `tests/realtime_alloc.rs` counts allocations
+around 200 renders with resident and streamed voices, every effect, a
+moving parameter and a buffer that is not a whole number of blocks: zero.
+`audio/tests.rs` (built and sent whole, the mirror, refused params,
+layouts applied and undone), `layout.rs`, `app/bus_layout.rs` (the
+conventional file, a broken one changing nothing, a reload, the shipped
+file reads) and `project_settings.rs` (saved, refused when it would not mix).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

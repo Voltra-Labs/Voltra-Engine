@@ -80,6 +80,11 @@ pub fn is_sorting_layers(name: &str) -> bool {
     name.to_ascii_lowercase().ends_with(".layers.ron")
 }
 
+/// Whether a file name is a project's bus layout: `*.buses.ron`.
+pub fn is_bus_layout(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".buses.ron")
+}
+
 /// Whether a file name is a property-animation clip: `*.anim.ron`.
 pub fn is_animation(name: &str) -> bool {
     name.to_ascii_lowercase().ends_with(".anim.ron")
@@ -102,6 +107,7 @@ pub fn is_scene(name: &str) -> bool {
         && !is_clip_settings(name)
         && !is_input_map(name)
         && !is_sorting_layers(name)
+        && !is_bus_layout(name)
         && !is_animation(name)
         && !is_animator(name)
 }

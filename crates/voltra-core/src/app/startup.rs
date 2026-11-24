@@ -65,6 +65,7 @@ impl App {
 
         self.load_input_map(&asset_root);
         self.load_sorting_layers(&asset_root);
+        self.load_bus_layout(&asset_root);
         self.gamepads = gamepads::Gamepads::connect();
 
         // And the legible part: a text in a world populated before `run`

@@ -1,6 +1,7 @@
 //! What the audio thread hands back to be freed somewhere else.
 
 use crate::clip::Clip;
+use crate::effect::Effect;
 use crate::stream::Feed;
 
 /// Everything the mixer lets go of that could be the last reference to a
@@ -19,6 +20,9 @@ pub enum Retired {
         /// The feed it read, for a streamed clip.
         feed: Option<Feed>,
     },
+    /// A bus's effect chain that a new one replaced: delay lines and a
+    /// room's combs, the largest buffers the mixer holds.
+    Effects(Vec<Effect>),
 }
 
 impl Retired {
@@ -26,6 +30,7 @@ impl Retired {
     pub fn clip(&self) -> Option<&Clip> {
         match self {
             Self::Voice { clip, .. } => Some(clip),
+            Self::Effects(_) => None,
         }
     }
 }

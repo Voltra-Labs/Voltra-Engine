@@ -3,6 +3,7 @@
 mod animation;
 mod audio;
 mod builder;
+mod bus_layout;
 mod camera_rig;
 mod draw;
 mod framing;
@@ -59,6 +60,7 @@ use crate::input::{ActionMap, Input};
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
+pub use bus_layout::{parse_bus_layout, DEFAULT_BUS_LAYOUT};
 pub use input_map::DEFAULT_INPUT_MAP;
 pub use scenes::SceneLoad;
 pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
@@ -467,6 +469,9 @@ impl App {
                 continue;
             }
             if self.reload_sorting_layers(&path) {
+                continue;
+            }
+            if self.reload_bus_layout(&path) {
                 continue;
             }
             // A face needs no device either: its atlas starts over and is

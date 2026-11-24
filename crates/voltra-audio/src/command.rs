@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use crate::bus::BusId;
 use crate::clip::Clip;
+use crate::effect::{Effect, Param};
 use crate::params::PlayParams;
 use crate::ramp::Curve;
 use crate::stream::Feed;
@@ -98,6 +99,28 @@ pub enum Command {
         bus: BusId,
         /// The volume to slide to, as a linear multiplier.
         volume: f32,
+        /// How long the slide takes.
+        over: Duration,
+    },
+    /// Replace one bus's effects with `effects`, built on the main thread.
+    /// The chain it replaces comes back through the retirement channel.
+    SetBusEffects {
+        /// The bus to change.
+        bus: BusId,
+        /// Its new chain, first to last.
+        effects: Vec<Effect>,
+    },
+    /// Move one number on one effect of one bus to `value` over `over`.
+    /// Ignored for an effect that is not there or a parameter it lacks.
+    SetBusParam {
+        /// The bus the effect is on.
+        bus: BusId,
+        /// Which effect, counting from zero in the chain.
+        effect: usize,
+        /// Which of its numbers.
+        param: Param,
+        /// The value to head for.
+        value: f32,
         /// How long the slide takes.
         over: Duration,
     },
