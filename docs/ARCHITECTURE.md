@@ -5594,6 +5594,72 @@ for the web, jump rebound to J, the key read back from `localStorage`, the
 page reloaded, and J jumps the walker while Space does not — on WebGPU and
 WebGL2, in CI.
 
+### A game's window requests are carried out between frames
+
+Stage 89. `tick.window` (`voltra-core/src/window/game_window.rs`,
+`GameWindow`): how the window fills the screen (`Fullscreen::Windowed`,
+`Borderless`, `Exclusive(VideoMode)`), its inner size, vsync, and the
+monitors with their modes (`monitors()`, `monitor()`, `modes()`,
+`Monitor::resolutions`, `best_mode`) — plain values in `window/display.rs`
+a game can list, compare and save.
+
+- **Requests, like scene changes**: `set_fullscreen`, `set_size`,
+  `set_vsync` are kept until the frame is over and carried out after the
+  present, before the next frame is asked for — Godot's
+  `DisplayServer.window_set_mode` and Unity's `Screen.SetResolution` defer
+  the same way, and for the same reason: a window resized inside the frame
+  would resize the surface being drawn into. The last request of a kind
+  wins. Reads (`fullscreen()`, `size()`, `vsync()`) are the window as the
+  loop last saw it, so the frame after a request reads it granted.
+- **One seam** (`window/seam.rs`, `WindowSeam`): what the loop needs of a
+  window — abilities, what is shown, monitors, and the three changes. The
+  real one is winit's window plus the renderer (`app/window_seam.rs`), the
+  only place the requests meet the platform; a headless session has a
+  pretend window that grants everything (`app/headless/window.rs`); tests
+  drive the app's ticks against a fake (`window/fake.rs`) that writes down
+  each call.
+- **Fullscreen first, then the size**: a windowed size asked while
+  fullscreen is kept and applied when the window is windowed again, so an
+  options screen can set both in either order. Exclusive takes the window's
+  monitor's mode that matches exactly, else the size at its highest
+  refresh, else borderless (with a warning) — Wayland has none, nor the
+  web. A zero size is refused.
+- **Vsync is the surface's present mode**, in `voltra-render`
+  (`GpuContext::set_vsync` / `Renderer::set_vsync`, reconfiguring the
+  surface): on is `Fifo`, which every surface has and which a context now
+  starts with (before, the default config took the adapter's first listed
+  mode); off is `AutoNoVsync` (immediate, else mailbox, else FIFO), so it
+  can never fail. The platform layer asks; winit never meets wgpu.
+- **The state is read every frame** before the ticks (`refresh_shown`):
+  a platform can change it with no event — a browser granting fullscreen
+  to a canvas already the size of the page sends no resize, and Escape
+  leaves fullscreen behind the game's back. Monitors are re-read on start,
+  resize, move and scale change, and after each request.
+- **In the editor the requests are dropped**, logged once a frame they
+  arrive: the editor's window is not the game's (Unity's
+  `Screen.SetResolution` does nothing in its editor either).
+- **On the web**: fullscreen is the canvas through the Fullscreen API
+  (winit 0.30 calls `requestFullscreen` at once), which the browser grants
+  only with transient activation — a key, click or touch in the last few
+  seconds, which a tick reacting to one has; exclusive is borderless; the
+  size is the page's and vsync the browser's (`abilities()` says so, and
+  the requests are logged and dropped); no monitors are listed.
+- The platformer goes fullscreen and back on F11 or its HUD's Fullscreen
+  button.
+
+Pinned by `window/display.rs` (resolutions listed once, largest first; the
+best mode for a size), `window/game_window/tests.rs` (nothing until the
+frame is over; exclusive and its fallback; a size kept while fullscreen and
+applied on leaving; a size and vsync; a zero size refused; a page takes
+only fullscreen; the editor drops them), `app/window_seam.rs` (every request
+from a tick reaching the fake window between frames, each frame reading
+what the last asked; the editor's window untouched),
+`voltra-render/tests/headless_vsync.rs` (vsync on from the start, off and
+on by asking), the platformer's `tests/level.rs` (F11 headless) and
+`crates/voltra-player/web/test/fullscreen.mjs`: the platformer built for the
+web, its Fullscreen button clicked, the canvas the page's fullscreen
+element, clicked again and it is not — on WebGPU and WebGL2, in CI.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5618,6 +5684,7 @@ Verified against the crate source, not from memory:
 | Compute pass | `begin_compute_pass(&ComputePassDescriptor { label, timestamp_writes })`; `dispatch_workgroups(x, y, z)` |
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
 | Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
+| Present mode | `get_default_config` takes the adapter's *first* listed present mode, not `Fifo`; set it. `PresentMode::AutoVsync` / `AutoNoVsync` fall back on their own (`AutoNoVsync`: immediate, mailbox, FIFO); the explicit modes fail `configure` when unsupported. Change it by setting `config.present_mode` and calling `surface.configure` again |
 | D3D12 / FXC | A WGSL loop that writes a vector component by a **runtime index** (`v[i] = …`) fails pipeline creation: FXC must unroll it and cannot (`X3511`). Write the components out. Windows CI hits this; reproduce locally with `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc cargo test` |
 | Data textures | A normal map must be sampled through a non-sRGB view (`Texture::raw_view`, `Textures::raw_bind_group`); the sRGB view decodes it as colour. The view format must be listed in `view_formats` at creation, which `Texture::from_rgba8` does — except on GL, which cannot, where it uploads a second `Rgba8Unorm` copy |
 | `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
@@ -5647,6 +5714,7 @@ rather than trusting a tutorial.
 | Run | `EventLoopExtWebSys::spawn_app(app)` returns at once; `run_app` throws to unwind |
 | Canvas | `WindowAttributesExtWebSys::with_append(true)` appends it to `<body>`; focusable (tabindex) by default |
 | Size | A requested inner size is written into the canvas's **style** and pins it; leave it out and size the canvas in CSS — a `ResizeObserver` sends `Resized` |
+| Fullscreen | `Window::set_fullscreen(Some(Borderless(_) or Exclusive(_)))` both call the canvas's `requestFullscreen()` at once (`web_sys/fullscreen.rs`), its rejection swallowed: it works only with transient activation, a few seconds after a trusted key, click or touch — a request made at the end of the frame that saw one is in time. `fullscreen()` answers `Borderless(None)` or `None` from `document.fullscreenElement`; a canvas already the page's size sends no `Resized` on entering, so poll it. `MonitorHandle::video_modes` is always empty |
 | Proxy | `EventLoop::create_proxy` only (not on `ActiveEventLoop`); the web proxy is an `mpsc::Sender<T>` plus a wake, so `T` need not be `Send` |
 
 ### egui 0.35 API notes

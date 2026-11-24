@@ -14,7 +14,8 @@
 //! [`Coin`](components::Coin), the [`Goal`](components::Goal) and the
 //! [`CoinCounter`](components::CoinCounter). `A`/`D` or the arrows walk,
 //! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump — and
-//! keeps it for the next run.
+//! keeps it for the next run — and F11 (or the HUD's button) goes
+//! fullscreen and back.
 
 #![warn(missing_docs)]
 
@@ -27,6 +28,7 @@ use voltra_scene::ComponentRegistry;
 pub mod camera;
 pub mod coins;
 pub mod components;
+pub mod display;
 pub mod progress;
 pub mod walker;
 
@@ -88,6 +90,9 @@ impl Game for Platformer {
             progress::save(tick, walker, taken);
             // Let go of the focus a click gave it, or the pad's South —
             // jump — would press it again on the next jump.
+            tick.ui.focus(None);
+        } else if display::asked(tick) {
+            display::toggle(tick);
             tick.ui.focus(None);
         } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F9)) {
             if let Some(loaded) = progress::load(tick, walker) {

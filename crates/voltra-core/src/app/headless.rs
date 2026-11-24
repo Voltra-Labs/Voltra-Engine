@@ -22,6 +22,8 @@ use super::App;
 /// An [`App`] stepped by hand, with no window.
 pub struct Headless {
     app: App,
+    /// What `tick.window`'s requests are carried out on.
+    window: window::PretendWindow,
     frames: u64,
     /// What the engine logged since the session last handed its lines out.
     logs: crate::logging::LogCapture,
@@ -86,8 +88,11 @@ impl Headless {
         let mut clips = Clips::new(root.clone());
         resolve_world_clips(&mut app.world, &mut clips);
         app.clips = Some(clips);
+        let window = window::PretendWindow::new(PRETEND_SIZE);
+        app.game_window.refresh(&window);
         Self {
             app,
+            window,
             frames: 0,
             logs: crate::logging::capture(),
         }
@@ -122,6 +127,7 @@ impl Headless {
             let _frame = voltra_profile::scope("update");
             self.app.advance(delta);
             self.app.input.end_frame();
+            self.app.carry_out_window_requests(&mut self.window);
             self.frames += 1;
         }
     }
@@ -139,7 +145,15 @@ impl Headless {
     /// the keys, a pad and typing. Without one the controls are left alone.
     pub fn with_screen(mut self, size: voltra_render::glam::Vec2) -> Self {
         self.app.headless_screen = Some(size);
+        self.window = window::PretendWindow::new((size.x.max(0.0) as u32, size.y.max(0.0) as u32));
+        self.app.game_window.refresh(&self.window);
         self
+    }
+
+    /// The window as the game's ticks see it: what their requests left it
+    /// as, granted the way a desktop window grants them.
+    pub fn window(&self) -> &crate::window::GameWindow {
+        &self.app.game_window
     }
 
     /// The input the next frame reads: drive the mouse, the keys, a pad and
@@ -290,6 +304,10 @@ impl Headless {
 }
 
 mod screenshot;
+mod window;
+
+/// The size a headless window pretends to be when no screen was given.
+const PRETEND_SIZE: (u32, u32) = (1280, 720);
 
 pub use screenshot::{Screenshot, ScreenshotError};
 

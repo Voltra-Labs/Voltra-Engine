@@ -128,6 +128,7 @@ impl App {
 
         self.renderer = Some(renderer);
         self.textures = Some(textures);
+        self.refresh_game_window();
 
         // Device creation takes long enough to produce a huge first delta;
         // restarting the clock here keeps frame one honest.

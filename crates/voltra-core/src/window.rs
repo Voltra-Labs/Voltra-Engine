@@ -1,4 +1,16 @@
-//! Window description, kept separate from the event loop that consumes it.
+//! The window: how it opens ([`WindowConfig`]), and what a game may change
+//! of it while it runs ([`GameWindow`], `tick.window`) — kept separate from
+//! the event loop that consumes both.
+
+pub mod display;
+#[cfg(test)]
+pub(crate) mod fake;
+pub mod game_window;
+pub(crate) mod seam;
+
+pub use display::{Fullscreen, Monitor, VideoMode};
+pub use game_window::GameWindow;
+pub use seam::Abilities;
 
 use winit::window::WindowAttributes;
 

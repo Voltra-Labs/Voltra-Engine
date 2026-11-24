@@ -88,6 +88,9 @@ pub struct Tick<'a> {
     /// this frame, what is hovered and focused, and where to move the
     /// focus.
     pub ui: &'a mut voltra_scene::UiControls,
+    /// The window: fullscreen, its size, vsync and the monitors' modes,
+    /// read as the loop last saw them and changed from the next frame on.
+    pub window: &'a mut crate::window::GameWindow,
     /// The actions as the game ships them, which a save keeps the
     /// difference from.
     pub(super) default_actions: &'a ActionMap,
@@ -155,6 +158,7 @@ impl App {
                 tweens: &mut self.tweens,
                 timers: &mut self.timers,
                 ui: &mut self.ui_controls,
+                window: &mut self.game_window,
                 delta,
                 contacts: self.physics_world.contacts(),
                 events,
