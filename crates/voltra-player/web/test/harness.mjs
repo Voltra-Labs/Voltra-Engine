@@ -203,7 +203,7 @@ export function encode(linear) {
 }
 
 /// For each of `colours` (name → sRGB triple), how many pixels of a fresh
-/// screenshot are within 6 of it, and the mean x of those pixels. Decoded in
+/// screenshot are within 6 of it, and the mean x and y of those pixels. Decoded in
 /// the page itself, which already has a PNG decoder.
 export async function measure(page, colours) {
   const png = await page.screenshot();
@@ -215,7 +215,7 @@ export async function measure(page, colours) {
     const context = canvas.getContext("2d");
     context.drawImage(image, 0, 0);
     const pixels = context.getImageData(0, 0, image.width, image.height).data;
-    const found = Object.fromEntries(Object.keys(colours).map((name) => [name, { count: 0, x: 0 }]));
+    const found = Object.fromEntries(Object.keys(colours).map((name) => [name, { count: 0, x: 0, y: 0 }]));
     for (let i = 0; i < pixels.length; i += 4) {
       for (const [name, [r, g, b]] of Object.entries(colours)) {
         const near = Math.abs(pixels[i] - r) <= 6 && Math.abs(pixels[i + 1] - g) <= 6
@@ -223,11 +223,13 @@ export async function measure(page, colours) {
         if (near) {
           found[name].count += 1;
           found[name].x += (i / 4) % image.width;
+          found[name].y += Math.floor(i / 4 / image.width);
         }
       }
     }
     for (const entry of Object.values(found)) {
       entry.x = entry.count > 0 ? Math.round(entry.x / entry.count) : null;
+      entry.y = entry.count > 0 ? Math.round(entry.y / entry.count) : null;
     }
     return found;
   }, { data: png.toString("base64"), colours });

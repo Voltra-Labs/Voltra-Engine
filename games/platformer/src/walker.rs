@@ -36,7 +36,8 @@ pub fn find(world: &World) -> Option<Entity> {
 /// character, not a crate, and a walker that slides to a halt is a physics
 /// body pretending to be one.
 pub fn steer(tick: &mut Tick<'_>, walker: Entity, jump: bool) {
-    // Actions, from `assets/default.input.ron`: rebinding the keys is an
+    // Actions, from `assets/default.input.ron` and the player's own
+    // controls laid over it: rebinding the keys for everyone is an
     // edit to that file, picked up while the game runs.
     let direction = tick.input.action_axis("move_left", "move_right");
     let jumped = jump && is_grounded(tick, walker);

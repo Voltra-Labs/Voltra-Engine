@@ -13,7 +13,8 @@
 //! [`Walker`](components::Walker) the keys move, every
 //! [`Coin`](components::Coin), the [`Goal`](components::Goal) and the
 //! [`CoinCounter`](components::CoinCounter). `A`/`D` or the arrows walk,
-//! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump.
+//! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump — and
+//! keeps it for the next run.
 
 #![warn(missing_docs)]
 
@@ -72,6 +73,11 @@ impl Game for Platformer {
             if let Some(binding) = tick.input.pressed_binding() {
                 tick.actions.rebind("jump", 0, binding);
                 log::info!("jump is now {binding:?}");
+                // Kept for the next run, in the player's folder — or the
+                // page's storage, in a browser.
+                if let Err(e) = tick.save_controls() {
+                    log::error!("could not keep the new jump: {e}");
+                }
                 self.rebinding = false;
             }
         } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F1)) {

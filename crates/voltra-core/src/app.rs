@@ -23,6 +23,7 @@ mod startup;
 mod thumbnails;
 mod tick;
 mod tick_audio;
+mod tick_controls;
 mod tick_time;
 mod ui_frame;
 mod ui_input;
@@ -175,6 +176,10 @@ pub struct App {
     gamepads: Option<gamepads::Gamepads>,
     /// The game's named actions, re-evaluated into `input` every frame.
     actions: ActionMap,
+    /// The actions as the game ships them — its map file, or the map handed
+    /// to `with_actions` — before the player's own controls are laid over:
+    /// what a rebound control is saved as a difference from.
+    default_actions: ActionMap,
     /// The map file named by `with_input_map`; `None` reads the convention.
     input_map_path: Option<AssetPath>,
     /// Whether `actions` was handed in by `with_actions`, which the

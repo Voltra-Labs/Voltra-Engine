@@ -2668,8 +2668,8 @@ whether to trust it.
   start over from silently. Versioning the type is the game's (a field in
   `T`), since only it knows what changed.
 - **Synchronous**, from `tick.saves`: a save is small and a checkpoint wants
-  it on disk before anything else can go wrong. `Saves::path_of` also gives
-  `ActionMap::save` a home beside the slots.
+  it on disk before anything else can go wrong. The player's other files
+  (rebound controls, options) live beside the slots — stage 88.
 - The platformer saves its coin count and the walker's position on F5 and
   restores them on F9.
 
@@ -5543,6 +5543,56 @@ Stage 87, version 0.1: a base is solid when someone else can use it.
   timers, tweens and the HUD — what the guide points at for "more".
 - **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
   The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
+
+### Rebound controls are saved through the saves storage
+
+Stage 88. A player's rebound keys survive a restart on every platform, the
+web included: before, `ActionMap::save` wrote through `std::fs`, which a
+browser does not have, while `Saves` already reached `localStorage`.
+
+- **One storage seam** (`voltra-core/src/storage.rs`, with `native.rs` and
+  `web.rs` moved there from `saves/`): write whole (a temporary and a
+  rename; one `localStorage` set), size, read, remove, list — by full
+  path, so the folder rules stay in `saves::dir`. Three callers: save
+  slots, the player's other files, and `ActionMap::save(path)`, which a
+  tool uses to write the project's own map (kept for that; the editor's
+  Project Settings writes text through its own atomic write).
+- **The player's files beside the slots**: `Saves::write_text` /
+  `read_text` / `remove_file` / `save_file::<T>` / `load_file::<T>`, under
+  the slot rules made for a file name — `[A-Za-z0-9._-]`, no leading dot,
+  at most 96 bytes, reads bounded at 16 MiB. One folder for everything a
+  player owns, so `VOLTRA_SAVE_DIR` moves all of it; a file not named
+  `*.save.ron` is never listed as a slot.
+- **Only what changed is kept** — Unity's binding overrides
+  (`SaveBindingOverridesAsJson`), not Godot's whole `InputMap`: the App
+  keeps the game's own map (`default_actions`: its file, or the map handed
+  to `with_actions`), `ActionMap::overrides(defaults)` is the actions that
+  differ, each whole, and `apply_overrides` lays them over the game's map,
+  skipping actions the game no longer has. A whole map saved would freeze
+  every default at the version the player first rebound in; a new action
+  or a changed default must still reach them. The file
+  (`controls.input.ron`, `PLAYER_CONTROLS`) is an input map of the current
+  version, so it reads like one; with nothing changed it is removed.
+- **From a tick**: `tick.save_controls()`, `tick.reset_controls()`,
+  `tick.default_controls()`. **At start, and after every reload of the
+  map**, the loop lays the saved controls over it (`App::use_actions`):
+  natively in `finish_resume`, headless in `Headless::new`, on the web
+  under `/<game>/saves/controls.input.ron`. A hot reload still discards
+  unsaved runtime rebinds — the file is what the developer edits — but not
+  saved ones. No folder (`App::default`) is no saved controls; a file that
+  will not read is a warning and the game's own bindings stand.
+- The platformer's F1-then-a-key rebinding of jump now saves.
+
+Pinned by `saves/files.rs` (a file beside the slots, not a slot; a value
+round trip; names that would leave the folder refused), `input/player.rs`
+(only what changed; overrides skip actions the game lost; a round trip
+through a temporary user folder; a broken file an error),
+`app/tick_controls.rs` (a key rebound and saved in one headless session
+drives jump in the next, and the old key does not; a reset saved leaves no
+file) and `crates/voltra-player/web/test/rebind.mjs`: the platformer built
+for the web, jump rebound to J, the key read back from `localStorage`, the
+page reloaded, and J jumps the walker while Space does not — on WebGPU and
+WebGL2, in CI.
 
 ### wgpu 30 API notes
 
