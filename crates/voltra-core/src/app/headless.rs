@@ -27,6 +27,8 @@ pub struct Headless {
     frames: u64,
     /// What the engine logged since the session last handed its lines out.
     logs: crate::logging::LogCapture,
+    /// Whether a frame ends the profiler's frame, as a run of its own does.
+    profiled: bool,
 }
 
 /// Why a headless edit could not be made.
@@ -96,6 +98,7 @@ impl Headless {
             window,
             frames: 0,
             logs: crate::logging::capture(),
+            profiled: true,
         }
     }
 
@@ -123,9 +126,11 @@ impl Headless {
         };
         for _ in 0..frames {
             // A frame is a step here: what a profile of a headless run reads.
-            voltra_profile::end_frame();
-            voltra_profile::count("entities", self.app.world.entity_count() as f64);
-            let _frame = voltra_profile::scope("update");
+            let _frame = self.profiled.then(|| {
+                voltra_profile::end_frame();
+                voltra_profile::count("entities", self.app.world.entity_count() as f64);
+                voltra_profile::scope("update")
+            });
             self.app.advance(delta);
             self.app.input.end_frame();
             self.app.carry_out_window_requests(&mut self.window);
@@ -229,6 +234,22 @@ impl Headless {
     /// step.
     pub fn net_mut(&mut self) -> &mut crate::Net {
         self.app.net_mut()
+    }
+
+    /// Whether its frames simulate — the ticks and the physics — or only
+    /// keep the network and the clocks going, as a paused editor's do.
+    pub fn set_simulating(&mut self, simulating: bool) {
+        self.app.set_simulating(simulating);
+    }
+
+    /// A session stepped inside another's frame — an editor's in-process
+    /// client: its steps neither end the profiler's frame nor set its
+    /// counters (the net counters stay the host's), though their scopes
+    /// still nest in the frame that steps them.
+    pub fn unprofiled(mut self) -> Self {
+        self.profiled = false;
+        self.app.net.set_counted(false);
+        self
     }
 
     /// Spawns the prefab at `path` into the running game, as a tick's

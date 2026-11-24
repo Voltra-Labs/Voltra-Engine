@@ -12,6 +12,7 @@ mod gizmo;
 mod instance;
 mod joints;
 mod marquee;
+mod netplay;
 mod paint;
 mod panels;
 mod picking;

@@ -115,6 +115,9 @@ pub struct UiFrame<'a> {
     pub registry: &'a mut voltra_scene::ComponentRegistry,
     /// The game the turns run; see [`UiFrame::set_game`].
     pub(super) game: &'a mut Option<crate::game::Running>,
+    /// The network session, which the editor hosts its in-process clients
+    /// on when it plays with them.
+    pub net: &'a mut crate::Net,
 }
 
 impl<'a> UiFrame<'a> {

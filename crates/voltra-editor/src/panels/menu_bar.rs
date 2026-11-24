@@ -225,6 +225,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     editor.profiler.open();
                     ui.close();
                 }
+                if ui.button("Network").clicked() {
+                    editor.netplay.open = true;
+                    ui.close();
+                }
                 if ui.button("Console").clicked() {
                     editor.console.open = true;
                     ui.close();

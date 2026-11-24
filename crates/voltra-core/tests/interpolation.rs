@@ -26,6 +26,7 @@ fn jittery(seed: u64, network: &MemoryNetwork) -> Conditioned<voltra_core::net::
             jitter: Duration::from_millis(50),
             loss: 0.05,
             duplicate: 0.0,
+            bandwidth: 0,
         },
         seed,
     )

@@ -59,7 +59,7 @@ pub use address::Address;
 pub use channel::{
     ChannelId, ChannelKind, DEFAULT_CHANNELS, FRAGMENT_SIZE, MAX_CHANNELS, RELIABLE_WINDOW,
 };
-pub use conditions::{ConditionStats, Conditioned, LinkConditions};
+pub use conditions::{ConditionStats, Conditioned, LinkConditions, LinkControl};
 pub use config::{NetConfig, MAX_MESSAGE_LIMIT, PROTOCOL_VERSION};
 pub use connection::ConnectionStats;
 pub use endpoint::{Endpoint, SendError};

@@ -22,6 +22,7 @@ fn lossy() -> LinkConditions {
         jitter: Duration::from_millis(20),
         loss: 0.2,
         duplicate: 0.02,
+        bandwidth: 0,
     }
 }
 

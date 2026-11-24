@@ -36,6 +36,8 @@ pub struct Net {
     pub(super) replication_refused: bool,
     /// The connection totals the last frame's counters were taken from.
     pub(super) counted: voltra_net::ConnectionStats,
+    /// Whether the profiler's net counters are left alone.
+    pub(super) uncounted: bool,
     /// The session's clock: the sum of the frames' deltas, so a headless
     /// run is as deterministic as its steps.
     now: Duration,

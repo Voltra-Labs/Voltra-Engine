@@ -6310,6 +6310,58 @@ the server makes alone is corrected to: the client ends where the server
 put it. Unit tests of the input queue (each input once, in order; a flood
 cut to the newest; oversized ones dropped).
 
+### The editor plays a listen server and its clients in one process, over links it conditions
+
+Stage 117. `Window ▸ Network` (`panels/network.rs`) sets how many clients
+Play starts (up to three, beside the host) and how bad every link is;
+`crate::netplay` runs them.
+
+- **One process.** With clients asked for, Play hosts the editor's own
+  world as a listen server — its game plays the host, in the viewport —
+  and starts each client as the game run `Headless` on the scene as Play
+  found it (the editor's registry, a fresh game from the loaded library),
+  joined over an in-memory network; Stop ends them with the session.
+  Unity's Multiplayer Play Mode and Godot's "run multiple instances" start
+  each client as a process with a window; worlds in the editor's own
+  process are stepped in its frame (by the server's clock, paused with
+  it), their state is there to show and to read through the bridge, and
+  the link is one the editor owns at both ends. What they lack is a
+  picture: the renderer draws the editor's one world, so the window draws
+  each client as a map of its replicated entities over the server's —
+  a client lagging or missing one shows as a dot apart. A client per
+  window (a player process joining over UDP) is not done.
+- **Conditions** are `Conditioned` on every link, the server's and each
+  client's, so a bad link is bad both ways. `LinkConditions` gained a
+  bandwidth cap (bytes a second: a datagram waits for the ones before it,
+  and is dropped once that wait passes a second, as a router's queue
+  drops; counted as `throttled`), and `Conditioned` keeps its conditions
+  behind a shared `LinkControl`, so the window turns them live after the
+  transports went into their endpoints. Unity's Network Simulator
+  (latency, jitter, loss) and Chrome's throttling (bandwidth) are the
+  model.
+- **Net stats in the profiler**: every frame a session sets `net rtt ms`
+  (the largest round trip), `net bytes out`/`in` and `net packets
+  out`/`in` (this frame's, the connections' running totals differenced,
+  so a counter's average is the rate) and `net peers` —
+  `voltra_core::NET_COUNTERS`. A session stepped inside another's frame
+  (`Headless::unprofiled`, the editor's clients) neither ends the
+  profiler's frame nor sets the counters, which stay the host's.
+  `UiFrame::net` reaches the session from the editor.
+- **Bridge**: `net_play` (clients, latency, jitter, loss, bandwidth; a
+  field left out is kept, a value out of range refused) answers the
+  session — its settings, the server's connections, each client's id,
+  connection, replicated entities, snapshots and interpolation delay. The
+  counters read back through `profile`. No MCP tool wraps it yet.
+
+Pinned by `voltra-editor/tests/netplay.rs` (ignored; CI's bridge step runs
+it under Xvfb): the editor on a scene with one replicated box, two clients
+at 100 ms each way; both join and replicate the box, the server's round
+trips read 180–400 ms, `profile`'s `net rtt ms` likewise, `net peers` 2,
+bytes and packets both ways; an out-of-range setting refused; Stop ends
+the clients. Unit tests of the bandwidth cap (a 10 KB/s link carries ten
+1000-byte datagrams a second and drops past a second of queue) and of a
+`LinkControl` changing a link from outside.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

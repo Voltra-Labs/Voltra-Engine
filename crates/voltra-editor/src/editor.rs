@@ -90,6 +90,7 @@ pub struct Editor {
     pub(crate) settings: panels::project_settings::ProjectSettingsWindow,
     /// The project's game, loaded from its library; see [`crate::game`].
     pub(crate) game: crate::game::GameHost,
+    pub(crate) netplay: crate::netplay::NetPlay,
 }
 
 impl Editor {
@@ -137,6 +138,8 @@ impl Editor {
 
         // After the watch and the keys, before any panel: what a tool asked
         // for is in place before the frame draws.
+        // The clients follow the server's frame, before the bridge reads them.
+        crate::netplay::step(self, frame);
         crate::bridge::serve(self, frame);
         // After the edits of the frame so far, so the title's `*` and a
         // close request see them; its windows are modal, over everything.
@@ -161,6 +164,7 @@ impl Editor {
         panels::viewport::show(self, ui, frame);
         // Floating windows, over the docked panels.
         panels::profiler::show(self, ui, frame);
+        panels::network::show(self, ui, frame);
         panels::console::show(self, ui);
         let assets = frame.textures.root().to_path_buf();
         panels::project_settings::show(self, ui, &assets);
@@ -239,6 +243,7 @@ impl Editor {
         );
         if from_editing && self.play.state() == PlayState::Playing {
             frame.set_game(self.game.new_game());
+            crate::netplay::begin(self, frame);
         }
     }
 
@@ -263,7 +268,9 @@ impl Editor {
         if self.play.state() == PlayState::Editing {
             return false;
         }
-        // The game first: it belongs to the session the restore discards.
+        // The clients and the game first: they belong to the session the
+        // restore discards.
+        crate::netplay::end(self, frame);
         frame.set_game(None);
         self.play.stop(
             PlayContext {

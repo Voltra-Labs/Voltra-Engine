@@ -289,6 +289,7 @@ impl App {
             window: &mut self.window_requests,
             registry: &mut self.registry,
             game: &mut self.game,
+            net: &mut self.net,
         };
         {
             let _ui = voltra_profile::scope("ui");

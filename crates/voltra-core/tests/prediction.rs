@@ -40,6 +40,7 @@ fn slow(seed: u64, network: &MemoryNetwork) -> Conditioned<voltra_core::net::Mem
             jitter: Duration::ZERO,
             loss: 0.0,
             duplicate: 0.0,
+            bandwidth: 0,
         },
         seed,
     )

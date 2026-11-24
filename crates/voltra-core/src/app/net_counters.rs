@@ -22,6 +22,13 @@ pub const NET_COUNTERS: [&str; 6] = [
 ];
 
 impl Net {
+    /// Whether this session's traffic sets the profiler's counters: on by
+    /// default, off for a session stepped inside another's frame, whose
+    /// counters it would overwrite.
+    pub fn set_counted(&mut self, counted: bool) {
+        self.uncounted = !counted;
+    }
+
     /// Every connection's totals summed, the largest round trip, and how
     /// many peers.
     pub fn totals(&self) -> (ConnectionStats, usize) {
@@ -44,6 +51,9 @@ impl Net {
 
     /// Sets this frame's counters. Nothing without a session.
     pub(super) fn count(&mut self) {
+        if self.uncounted {
+            return;
+        }
         if self.endpoint.is_none() {
             self.counted = ConnectionStats::default();
             return;
