@@ -49,6 +49,13 @@ impl App {
 
     /// Keeps the save slots in `dir` instead of the per-user folder: a
     /// portable build, or a test.
+    /// The language the game starts in: the table `locale/<language>.ron`
+    /// it reads keyed texts from. English (`en`) when not given.
+    pub fn with_language(mut self, language: &str) -> Self {
+        self.language = language.to_owned();
+        self
+    }
+
     pub fn with_save_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.saves = crate::saves::Saves::in_dir(dir);
         self

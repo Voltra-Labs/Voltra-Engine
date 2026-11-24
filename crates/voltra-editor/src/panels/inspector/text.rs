@@ -21,15 +21,18 @@ pub(super) fn show(
     ui.label(RichText::new("Text").strong());
 
     // Multiline, and claimed while focused: one entry for a sentence typed,
-    // not one per keystroke.
+    // not one per keystroke. A keyed text's content is its language's
+    // string, written every frame: shown, not edited.
     let mut claim = active(
-        &ui.add(
+        &ui.add_enabled(
+            text.key.is_none(),
             TextEdit::multiline(&mut text.content)
                 .desired_rows(2)
                 .desired_width(f32::INFINITY),
         ),
         "Edit text",
     );
+    claim = claim.or(key(ui, text));
 
     egui::Grid::new("text").num_columns(2).show(ui, |ui| {
         ui.label("size").on_hover_text(if on_screen {
@@ -56,6 +59,8 @@ pub(super) fn show(
             ));
             ui.end_row();
         }
+
+        claim = claim.or(wrap(ui, text, on_screen));
 
         ui.label("colour");
         // A popup, as the sprite's colour is: see `sprite::show` for why the
@@ -110,4 +115,67 @@ pub(super) fn show(
         "its glyphs are lit only by lights sharing one of these",
         &mut text.light_layers,
     ))
+}
+
+/// The string-table key the content comes from, or none.
+fn key(ui: &mut Ui, text: &mut Text) -> Option<&'static str> {
+    let mut claim = None;
+    ui.horizontal(|ui| {
+        let mut keyed = text.key.is_some();
+        if ui
+            .checkbox(&mut keyed, "translated")
+            .on_hover_text("the content is the current language's string for a key in locale/")
+            .changed()
+        {
+            text.key = keyed.then(|| text.content.clone());
+            claim = Some("Translate text");
+        }
+        if let Some(key) = &mut text.key {
+            claim = claim.or(active(
+                &ui.add(TextEdit::singleline(key).hint_text("key")),
+                "Edit text key",
+            ));
+        }
+    });
+    claim
+}
+
+/// Wrapping: on or off, the width, and the spacing between lines.
+fn wrap(ui: &mut Ui, text: &mut Text, on_screen: bool) -> Option<&'static str> {
+    let mut claim = None;
+    ui.label("wrap").on_hover_text(if on_screen {
+        "break lines between words at this width in points; the rect's width caps it"
+    } else {
+        "break lines between words at this width, in entity units"
+    });
+    ui.horizontal(|ui| {
+        let mut wraps = text.max_width.is_some();
+        if ui.checkbox(&mut wraps, "").changed() {
+            let width = if on_screen {
+                10_000.0
+            } else {
+                text.size * 10.0
+            };
+            text.max_width = wraps.then_some(width);
+            claim = Some("Wrap text");
+        }
+        if let Some(width) = &mut text.max_width {
+            claim = claim.or(active(
+                &ui.add(DragValue::new(width).speed(0.05).range(0.01..=f32::MAX)),
+                "Set wrap width",
+            ));
+        }
+    });
+    ui.end_row();
+    ui.label("line spacing");
+    claim = claim.or(active(
+        &ui.add(
+            DragValue::new(&mut text.line_spacing)
+                .speed(0.01)
+                .range(0.1..=10.0),
+        ),
+        "Set line spacing",
+    ));
+    ui.end_row();
+    claim
 }

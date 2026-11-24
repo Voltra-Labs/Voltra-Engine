@@ -366,6 +366,7 @@ privileged and plain `cargo build` covers everything.
 | 78 | `cargo xtask new-game`: a game crate to play, edit in the editor and package | done |
 | 79 | UI images: 9-slice panels, image buttons, rows and columns | done |
 | 80 | UI controls: slider, toggle, text field with IME, scrolling lists | done |
+| 81 | Text wrapping and localization: string tables per language | done |
 
 ## Contributing
 

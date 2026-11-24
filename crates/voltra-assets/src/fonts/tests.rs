@@ -33,7 +33,7 @@ fn a_missing_default_is_a_faceless_slot_not_a_panic() {
     let fonts = Fonts::new(scratch_root());
     let font = fonts.try_get(fonts.default_font()).expect("still resolves");
     assert!(font.face().is_none());
-    assert!(font.layout("hi", 32).is_none());
+    assert!(font.layout("hi", 32, Wrap::default()).is_none());
 }
 
 #[test]
@@ -161,11 +161,78 @@ mod layout {
     use super::*;
 
     fn laid(content: &str) -> TextLayout {
+        wrapped(content, Wrap::default())
+    }
+
+    fn wrapped(content: &str, wrap: Wrap) -> TextLayout {
         let fonts = Fonts::new(root_with_default());
         fonts
             .try_get(fonts.default_font())
-            .and_then(|font| font.layout(content, 32))
+            .and_then(|font| font.layout(content, 32, wrap))
             .expect("a face")
+    }
+
+    fn width(max: f32) -> Wrap {
+        Wrap {
+            max_width: Some(max),
+            ..Wrap::default()
+        }
+    }
+
+    #[test]
+    fn words_past_the_width_start_a_new_line() {
+        let one = laid("the cat sat");
+        let narrow = wrapped("the cat sat", width(one.width() * 0.75));
+        assert_eq!(narrow.line_widths.len(), 2);
+        // "the cat" and "sat": the space at the break is dropped.
+        let first: usize = narrow.glyphs.iter().filter(|g| g.line == 0).count();
+        assert_eq!(first, 7);
+        assert!(narrow.line_widths.iter().all(|w| *w <= one.width() * 0.75));
+        assert_eq!(narrow.glyphs.iter().filter(|g| g.line == 1).count(), 3);
+        assert_eq!(
+            narrow.glyphs.iter().find(|g| g.line == 1).map(|g| g.pen),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn a_word_wider_than_the_line_breaks_between_characters() {
+        let word = laid("abcdefgh");
+        let narrow = wrapped("abcdefgh", width(word.width() / 3.0));
+        assert!(narrow.line_widths.len() >= 3);
+        assert_eq!(narrow.glyphs.len(), 8, "every character still drawn");
+        assert!(narrow
+            .line_widths
+            .iter()
+            .all(|w| *w <= word.width() / 3.0 + 0.01));
+    }
+
+    #[test]
+    fn newlines_still_break_and_a_wide_width_changes_nothing() {
+        let plain = laid("one\ntwo three");
+        assert_eq!(wrapped("one\ntwo three", width(10_000.0)), plain);
+        assert_eq!(plain.line_widths.len(), 2);
+    }
+
+    #[test]
+    fn line_spacing_spreads_the_lines() {
+        let plain = laid("a\nb");
+        let spread = wrapped(
+            "a\nb",
+            Wrap {
+                line_spacing: 1.5,
+                ..Wrap::default()
+            },
+        );
+        assert!((spread.line_height - plain.line_height * 1.5).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_width_that_is_no_number_wraps_nothing() {
+        let plain = laid("a b c");
+        assert_eq!(wrapped("a b c", width(f32::NAN)), plain);
+        assert_eq!(wrapped("a b c", width(0.0)), plain);
+        assert_eq!(wrapped("", width(5.0)).line_widths.len(), 1);
     }
 
     #[test]

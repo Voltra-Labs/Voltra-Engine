@@ -150,10 +150,12 @@ fn push_text(mut target: Target<'_>, rect: Rect, text: &Text, sheets: Sheets<'_>
         return;
     };
     let px = ui_px(text, scale);
-    let Some(bounds) = shape::bounds_at(text, fonts, px) else {
+    // A rect wraps its text at its own width when the text wraps at all.
+    let width = text.max_width.map(|w| w.min(rect.size().x));
+    let Some(bounds) = shape::bounds_at(text, fonts, px, width) else {
         return;
     };
-    let (quads, Some(texture)) = shape::glyphs_at(text, fonts, px) else {
+    let (quads, Some(texture)) = shape::glyphs_at(text, fonts, px, width) else {
         return;
     };
     let x = super::text_field::view::aligned_x(rect, text.align);

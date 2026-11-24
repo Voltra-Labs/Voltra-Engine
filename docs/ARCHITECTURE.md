@@ -5224,6 +5224,58 @@ scrolling to the focus) and by a pad (D-pad and South). Checked by hand:
 the player under Xvfb with `xdotool` — real X11 clicks, typing,
 Backspace, Shift+Home, the toggle, the slider and the wheel.
 
+### Text wraps at a width; keyed texts read the current language's table
+
+Stage 81. A dialogue box whose words wrap to it, in the player's
+language, switched while the game runs.
+
+- **Wrapping is the layout's** (`voltra_assets::fonts::layout`, with a
+  `Wrap { max_width, line_spacing }` in pixels): greedy, as Godot's and
+  Unity's are — as many words as fit, a break at the last space before
+  the one that does not, the spaces at the break dropped; a word wider
+  than the line breaks between characters rather than sticking out; `\n`
+  still breaks. Line spacing scales the face's line height. Draw, pick and
+  bounds all go through it, so a wrapped text is picked where it is drawn.
+- **`Text::max_width`** (entity units; points on screen) and
+  `line_spacing` — neither written when unset. In a `UiRect` the rect's
+  width caps the wrap, so a large `max_width` means "wrap to the rect", as
+  Godot's `autowrap` on a `Label`. A text field never wraps: one line.
+- **`Text::key`**: a string-table key, Godot's auto-translate and Unity's
+  localized string. The **`Locale`** (`voltra-scene`) holds the current
+  language and its table, `locale/<language>.ron`
+  (`(version: 1, strings: {key: string})`, read through the asset funnel,
+  so the web bundle carries it), and writes each keyed text's string into
+  its `content` every frame — after the tick, so a language switched or a
+  text spawned shows the next draw, in the editor as in the game. A key
+  the table lacks, or a language with no table, shows the key, logged
+  once per key and language: a missing string is seen where it is
+  missing. A saved table is read again while the game runs.
+- **Where it is reached**: `App::with_language` (English otherwise),
+  `tick.locale.set_language("es")`, `tick.locale.text(key)` for strings a
+  game builds in code, `Headless::set_language`. Language names are file
+  names: letters, digits, `-` and `_`.
+- Inspector: *translated* with its key (the content then shown, not
+  edited), *wrap* with its width, *line spacing*.
+
+Rejected: **gettext / Fluent** — plural rules and arguments are worth
+having, but a key-to-string table is what this stage's texts need, and
+Fluent's syntax would be a second format beside RON; a string with
+placeholders can be filled by the game from `text(key)` until a stage
+needs more. **One file for all languages** (Godot's CSV) — one file per
+language is what a translator is handed, and a language added is a file
+added.
+
+Pinned by `fonts/tests.rs` (words past the width break, the space at the
+break dropped; a long word between characters; newlines and a wide width
+unchanged; line spacing; bad widths wrap nothing), `locale/tests.rs`
+(keys in the current language, a missing string and a missing table
+showing keys, keyed texts following the language and plain ones not, a
+saved table read again, a newer table refused) and
+`voltra-core/tests/dialogue.rs`: a dialogue box wrapped to 240 points,
+clicked from English to Spanish by a button the game's tick answers —
+the line re-wrapped within the box, a speaker name missing in Spanish
+showing its key — and back from code.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

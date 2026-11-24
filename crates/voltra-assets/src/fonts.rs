@@ -18,7 +18,7 @@ use crate::textures::Textures;
 
 pub use atlas::{Glyph, GlyphAtlas, GlyphKey, GlyphMetrics, GlyphRect};
 pub use font::Font;
-pub use layout::{PlacedGlyph, TextLayout};
+pub use layout::{PlacedGlyph, TextLayout, Wrap};
 
 /// The font a `Text` naming none draws with, relative to the asset root.
 ///

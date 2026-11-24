@@ -33,7 +33,7 @@ pub(super) fn push(
         let px = ui_px(text, scale);
         Some((
             shape::caret_stops_at(text, fonts, px)?,
-            shape::bounds_at(text, fonts, px)?,
+            shape::bounds_at(text, fonts, px, None)?,
         ))
     });
     let origin = aligned_x(rect, text.align) - scroll;

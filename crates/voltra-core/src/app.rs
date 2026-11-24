@@ -142,6 +142,11 @@ pub struct App {
     ui_controls: voltra_scene::UiControls,
     /// Whether the window takes IME input: while a text field is focused.
     ime_allowed: bool,
+    /// The language the game starts in, before the locale is opened; empty
+    /// for English.
+    language: String,
+    /// The current language and its strings.
+    pub(crate) locale: voltra_scene::Locale,
     /// The screen a windowless run lays its UI out on, in points, if it
     /// has one: what lets a headless test press its controls.
     headless_screen: Option<voltra_render::glam::Vec2>,
@@ -331,6 +336,9 @@ impl App {
             let _tick = voltra_profile::scope("tick");
             self.run_update(delta);
         }
+        // After the tick, which may have switched the language or spawned a
+        // keyed text, and before anything draws one.
+        self.locale.localize(&mut self.world);
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.
         self.resolve_spawned();
@@ -407,6 +415,10 @@ impl App {
             }
             // A prefab's instances take the edit, but for what they override.
             if self.reload_prefab(&path) {
+                continue;
+            }
+            // Strings land in their texts next frame.
+            if self.locale.reload(&path) {
                 continue;
             }
             // Nor do the bindings.

@@ -43,7 +43,23 @@ impl Align {
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Text {
     /// What is drawn. `\n` starts a new line.
+    ///
+    /// With a [`key`](Self::key), the current language's string for it,
+    /// written here by the [`Locale`](crate::Locale) each frame.
     pub content: String,
+    /// The string-table key the content comes from, if it is translated:
+    /// Godot's auto-translate, Unity's localized string. `None` — the
+    /// default, and not written — draws `content` as it is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    /// Lines wider than this break between words, in entity units — points
+    /// on the screen, where the rect's own width caps it too. `None` — the
+    /// default, and not written — breaks only at `\n`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_width: Option<f32>,
+    /// Baseline to baseline, as a share of the face's line height.
+    #[serde(default = "one", skip_serializing_if = "is_one")]
+    pub line_spacing: f32,
     /// The face, by path relative to the asset root. `None` draws with
     /// [`DEFAULT_FONT`](voltra_assets::DEFAULT_FONT).
     #[serde(default)]
@@ -85,10 +101,21 @@ pub struct Text {
     pub font_handle: Option<Handle<Font>>,
 }
 
+fn one() -> f32 {
+    1.0
+}
+
+fn is_one(value: &f32) -> bool {
+    *value == 1.0
+}
+
 impl Default for Text {
     fn default() -> Self {
         Self {
             content: "Text".to_owned(),
+            key: None,
+            max_width: None,
+            line_spacing: 1.0,
             font: None,
             size: 1.0,
             pixels_per_em: Self::DEFAULT_PIXELS_PER_EM,
@@ -123,6 +150,21 @@ impl Text {
     /// inspector cannot divide by it.
     pub fn px(&self) -> u32 {
         self.pixels_per_em.clamp(1, Self::MAX_PIXELS_PER_EM)
+    }
+
+    /// How its lines break at `px` raster pixels per em, wrapping at
+    /// `width` entity units — its own [`max_width`](Self::max_width), or a
+    /// narrower one a rect imposes.
+    pub fn wrap_at(&self, px: u32, width: Option<f32>) -> voltra_assets::fonts::Wrap {
+        let per_unit = if self.size.is_finite() && self.size > 0.0 {
+            px as f32 / self.size
+        } else {
+            0.0
+        };
+        voltra_assets::fonts::Wrap {
+            max_width: width.map(|w| w * per_unit),
+            line_spacing: self.line_spacing,
+        }
     }
 
     /// Points the text at `path` (or the default font) and resolves it.

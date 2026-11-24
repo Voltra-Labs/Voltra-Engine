@@ -81,6 +81,7 @@ impl Headless {
         let mut fonts = Fonts::new(root.clone());
         voltra_scene::text::resolve_fonts(&mut app.world, &mut fonts);
         app.fonts = Some(fonts);
+        app.open_locale(&root);
         let mut clips = Clips::new(root.clone());
         resolve_world_clips(&mut app.world, &mut clips);
         app.clips = Some(clips);
@@ -151,6 +152,23 @@ impl Headless {
     /// submitted, and what has the focus.
     pub fn controls(&self) -> &voltra_scene::UiControls {
         &self.app.ui_controls
+    }
+
+    /// The faces the world's texts resolved to: what measures a text's
+    /// lines without drawing it.
+    pub fn fonts(&self) -> Option<&Fonts> {
+        self.app.fonts.as_ref()
+    }
+
+    /// The current language and its strings.
+    pub fn locale(&self) -> &voltra_scene::Locale {
+        &self.app.locale
+    }
+
+    /// Switches the language, as a game's options screen does; the texts
+    /// take it on the next frame. Answers whether its table was read.
+    pub fn set_language(&mut self, language: &str) -> bool {
+        self.app.locale.set_language(language)
     }
 
     /// Moves the focus to `control`, as a menu opening does.

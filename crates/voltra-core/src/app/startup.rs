@@ -70,6 +70,7 @@ impl App {
         let mut fonts = Fonts::new(asset_root.clone());
         voltra_scene::text::resolve_fonts(&mut self.world, &mut fonts);
         self.fonts = Some(fonts);
+        self.open_locale(&asset_root);
 
         // The audible third of the same problem: a source in a world populated
         // before `run` has never met a `Clips` either.
@@ -133,5 +134,19 @@ impl App {
         window.request_redraw();
         #[cfg(target_arch = "wasm32")]
         super::web::started(&window);
+    }
+}
+
+impl App {
+    /// Opens the string tables under `root` in the language the game was
+    /// built to start in.
+    pub(super) fn open_locale(&mut self, root: &std::path::Path) {
+        let language = if self.language.is_empty() {
+            "en"
+        } else {
+            self.language.as_str()
+        };
+        self.locale = voltra_scene::Locale::open(root, language);
+        self.locale.localize(&mut self.world);
     }
 }

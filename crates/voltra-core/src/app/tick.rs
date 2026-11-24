@@ -74,6 +74,10 @@ pub struct Tick<'a> {
     /// a small file, and a game saving at a checkpoint wants it written
     /// before anything else can go wrong.
     pub saves: &'a crate::saves::Saves,
+    /// The current language and its strings: switch it with
+    /// `set_language`, read a string built in code with `text`. Texts
+    /// naming a key follow it from the next frame.
+    pub locale: &'a mut voltra_scene::Locale,
     /// The screen-space controls: what was clicked, changed or submitted
     /// this frame, what is hovered and focused, and where to move the
     /// focus.
@@ -135,6 +139,7 @@ impl App {
                 actions: &mut self.actions,
                 scenes: &mut self.scenes,
                 saves: &self.saves,
+                locale: &mut self.locale,
                 ui: &mut self.ui_controls,
                 delta,
                 contacts: self.physics_world.contacts(),

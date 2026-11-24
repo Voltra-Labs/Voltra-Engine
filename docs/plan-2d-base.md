@@ -7,7 +7,7 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–80 and W1–W4 (README roadmap): batched, lit and post-processed
+Stages 1–81 and W1–W4 (README roadmap): batched, lit and post-processed
 rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
 continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
@@ -16,7 +16,6 @@ server; a profiler.
 
 What a game still cannot do, found by reading the tree (not guessed):
 
-- wrap a line of text, or ship it in a second language;
 - tween a value from code, or wait on a timer;
 - give one sprite its own shader;
 - draw through two cameras at once, or into a texture;
@@ -49,16 +48,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 81 — Text: wrapping and localization
-
-**Scope.** `Text::max_width` with word wrapping and line spacing; string
-tables per language (`locale/<lang>.ron`, keys to strings) read through the
-asset funnel, a current language, and `Text` naming a key instead of a
-literal; fallback to the key when a string is missing, logged once.
-
-**Done when** a wrapped, translated dialogue box switches language at run
-time in a test.
 
 ## 82 — Tweens and timers
 
