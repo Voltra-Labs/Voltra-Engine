@@ -143,6 +143,14 @@ jobs:
           sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers libxkbcommon-x11-0
           xvfb-run -a cargo test -p voltra-editor --test bridge -- --ignored
 
+      # The authoring windows through the same bridge: the texture packer,
+      # the Atlas Editor slicing, renaming and saving a sheet (diffed against
+      # the file expected), and the tilemap tools
+      # (crates/voltra-editor/tests/authoring.rs). The packages installed above.
+      - name: The authoring windows through the bridge
+        if: runner.os == 'Linux'
+        run: xvfb-run -a cargo test -p voltra-editor --test authoring -- --ignored
+
       # A game made from the template builds natively, lints clean, and its
       # library loads and plays as the editor loads it (its tests/plugin.rs).
       # Linux only, like the lints: the template is the same on both.

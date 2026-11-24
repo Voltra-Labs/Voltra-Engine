@@ -233,6 +233,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     editor.settings.open();
                     ui.close();
                 }
+                if ui.button("Atlas Editor").clicked() {
+                    editor.atlas_editor.open = true;
+                    ui.close();
+                }
             });
 
             ui.separator();

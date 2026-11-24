@@ -1,3 +1,4 @@
+mod atlas_doc;
 mod bridge;
 mod camera;
 mod clipboard;

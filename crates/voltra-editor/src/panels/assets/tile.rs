@@ -42,8 +42,27 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
                 }
             });
         }
-        EntryKind::Texture => texture_tile(ui, frame, entry, &response),
-        EntryKind::Atlas => atlas_tile(ui, frame, entry, &response),
+        EntryKind::Texture => {
+            texture_tile(ui, frame, entry, &response);
+            response.context_menu(|ui| {
+                if ui.button("Slice in Atlas Editor").clicked() {
+                    open_in_atlas_editor(editor, frame, entry);
+                    ui.close();
+                }
+            });
+        }
+        EntryKind::Atlas => {
+            atlas_tile(ui, frame, entry, &response);
+            if response.double_clicked() {
+                open_in_atlas_editor(editor, frame, entry);
+            }
+            response.context_menu(|ui| {
+                if ui.button("Edit in Atlas Editor").clicked() {
+                    open_in_atlas_editor(editor, frame, entry);
+                    ui.close();
+                }
+            });
+        }
         EntryKind::Clip => clip_tile(ui, entry, &response),
         EntryKind::Font => font_tile(ui, entry, &response),
         // Loadable, so not dimmed; nothing to place, so no drag.
@@ -83,6 +102,14 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
     }
 
     paint_name(ui, rect, &entry.name);
+}
+
+/// Opens a sheet or an atlas in the Atlas Editor, saying why not if it
+/// will not open.
+fn open_in_atlas_editor(editor: &mut Editor, frame: &mut UiFrame<'_>, entry: &Entry) {
+    if let Err(e) = editor.atlas_editor.open_path(frame, &entry.path) {
+        log::error!("the Atlas Editor cannot open {}: {e}", entry.path.as_str());
+    }
 }
 
 /// A texture tile: its own pixels, and the drag that carries its path.

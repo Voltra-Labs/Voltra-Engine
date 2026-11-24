@@ -8,6 +8,7 @@
 //! their own; play, step and stop through the toolbar's own paths; a
 //! screenshot from the viewport as this frame drew it.
 
+mod atlas;
 mod edits;
 mod read;
 
@@ -230,6 +231,13 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }
             Ok(json!({ "holding": action, "frames": frames }))
         }
+        Command::AtlasOpen { .. }
+        | Command::AtlasRead
+        | Command::AtlasSlice { .. }
+        | Command::AtlasRegion { .. }
+        | Command::AtlasUndo
+        | Command::AtlasRedo
+        | Command::AtlasSave { .. } => atlas::apply(editor, frame, command),
         Command::PackAtlas { folder, trim } => {
             let folder = voltra_assets::AssetPath::new(folder).map_err(|e| e.to_string())?;
             let (atlas, report) = crate::pack_atlas::pack(frame, &folder, *trim)?;

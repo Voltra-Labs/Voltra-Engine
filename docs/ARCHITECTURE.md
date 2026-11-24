@@ -5608,6 +5608,52 @@ bordered badge packed trimmed and drawn through the sprite batch beside
 the loose files, one texel to a pixel — every pixel identical, with nearest
 and with linear filtering.
 
+### The Atlas Editor edits the file, with an undo history of its own
+
+Stage 96. Window ▸ Atlas Editor, or an atlas or texture in the asset
+browser (double-click an atlas; "Slice in Atlas Editor" on a texture):
+a sheet shown with its regions outlined, cut by a grid (cell, offset,
+spacing — every whole cell, in reading order, named `<sheet>_<i>`) or by
+hand (Draw region, then drag), regions picked on the sheet or in the list,
+each one's name, rectangle and pivot edited (Centre and Feet buttons for
+the two pivots everyone wants), a run of regions previewed as an animation
+at a chosen rate, and Save writing the `.atlas.ron` (version 2, stage 95)
+through a temporary file, then reloaded in the session. Opening a texture
+opens the atlas beside it (`hero.png`, `hero.atlas.ron`) if there is one.
+
+- **A document, not scene state** (`atlas_doc.rs`): the regions, the sheet
+  and their history, kept apart from the scene's. The scene's history
+  watches the selected entities; an atlas is a file no entity owns, and
+  sharing the scene's entries would make a Ctrl+Z in the viewport take
+  back a rename in a window. Unity's Sprite Editor keeps its own
+  revert/apply, Godot's TileSet editor its own undo context; Ctrl+Z is
+  routed to the atlas while the pointer is over its window, and to the
+  scene everywhere else.
+- **Snapshots, settled per gesture**: each edit is a copy of the regions
+  (an atlas is at most a few hundred rectangles), recorded once nothing is
+  held and nothing is being typed — a dragged field or a typed name is one
+  entry, as a gizmo drag is one in the scene. Two hundred entries deep.
+- **Kept honest**: a region is clamped onto the sheet and refused if none
+  of it is there; a name another region has is refused (a typed one is
+  shown in red and stops Save) because `Atlas::index_of` and the packer
+  find regions by it; an atlas with no regions is not saved, since it
+  would not load. Removing a region says that the ones after it move down
+  an index — what a sprite names it by.
+- **The bridge** gains `AtlasOpen`, `AtlasRead`, `AtlasSlice`,
+  `AtlasRegion` (add, rename, move, pivot or remove), `AtlasUndo`,
+  `AtlasRedo` and `AtlasSave`, each answering the atlas as it now is, and
+  `PackAtlas` (stage 95's packer on a folder).
+
+Pinned by `atlas_doc/tests.rs` (a sheet opens empty beside its atlas; a
+grid slicing names its cells; every edit one undo entry, redo puts it back;
+a change made in place is one entry once settled; duplicate names and
+off-sheet regions refused; a saved atlas opens as it was), `slice.rs`,
+`canvas.rs`, `preview.rs`, and `voltra-editor/tests/authoring.rs`: the
+editor launched under Xvfb, a folder packed through the bridge, the coin
+sheet sliced by 16, a region renamed, a pivot set, undone and redone, a
+duplicate name refused, the file saved and compared byte for byte with the
+one expected, and opened again. In CI beside the bridge test.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5680,6 +5726,10 @@ Same problem, same rule: read the source, not a tutorial.
 | Pointer position | `Response::hover_pos` is in global screen points; subtract `response.rect.min` for widget-local ones |
 | Shortcuts | `InputState::consume_shortcut` matches modifiers *logically* — extra Shift and Alt are ignored, so `Ctrl+Z`'s pattern also accepts `Ctrl+Shift+Z`. Test the most specific one first |
 | Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |
+| Context menu | `Response::context_menu(\|ui\| …)` opens on a secondary click; close it from inside with `ui.close()` |
+| Strokes | `Painter::rect_stroke(rect, radius, stroke, StrokeKind)` takes a `StrokeKind` (`Inside`, `Middle`, `Outside`) |
+| `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before |
+| Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes
 
