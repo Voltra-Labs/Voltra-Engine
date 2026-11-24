@@ -8,6 +8,7 @@ pub mod inspector;
 pub mod menu_bar;
 pub mod profiler;
 pub mod project_settings;
+pub mod tile_palette;
 pub mod timeline;
 pub mod toolbar;
 pub mod viewport;

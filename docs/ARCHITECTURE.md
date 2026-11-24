@@ -5654,6 +5654,57 @@ sheet sliced by 16, a region renamed, a pivot set, undone and redone, a
 duplicate name refused, the file saved and compared byte for byte with the
 one expected, and opened again. In CI beside the bridge test.
 
+### The brush paints a stamp: picked off the palette or the map, turned whole
+
+Stage 97. Window ▸ Tile Palette (or "Tile Palette…" in a layer's
+inspector): the selected layer's tileset laid out as its sheet is —
+frames grouped into columns by their left edge and rows by their top
+(`paint/palette.rs`), so a grid atlas is its grid and a packed one the
+nearest grid its frames make. A click picks one tile, a drag a block.
+
+- **A stamp, not a tile** (`paint/stamp.rs`): what the brush, the
+  rectangle and the bucket paint is a block of tiles, its holes left
+  alone — Tiled's stamp, Unity's brush pick. The brush puts the block's
+  bottom-left on each cell it crosses; the rectangle and the bucket lay
+  it as a repeating pattern. `Z` turns it clockwise (Shift+`Z` the other
+  way), `X` and `Y` mirror it, Tiled's keys; buttons in the palette and
+  the inspector do the same.
+- **A tile has a third flag** (`Tile::transpose`, `tilemap/orientation.rs`):
+  Tiled's diagonal flip, bit 29 of a stored cell, applied before the two
+  mirrors. With them it makes all eight ways a square turns, so a turned
+  stamp turns its tiles' pictures too — Godot 4's `TRANSFORM_TRANSPOSE`.
+  Turning composes 2×2 signed permutation matrices and reads the three
+  flags back. The bit was unused, so every saved map reads the same; a
+  frame now goes to 2²⁹−2.
+- **The bucket** (`G`, `paint/fill.rs`): every cell four-connected to the
+  clicked one that holds what it holds — a diagonal gap is a wall, as in
+  every paint program. A map here has no edge, so a fill of empty cells
+  is kept to the box around the layer's tiles (an empty cell outside it
+  fills nothing) and to the rectangle's million-cell limit.
+- **The eyedropper is Alt** held as a stroke starts, with any tool: a
+  click picks the tile under it, turned as it is; a drag picks the block.
+  It changes no cell, so it makes no undo entry.
+- **Terrains still join up**: with a terrain chosen, the brush, the
+  rectangle and the bucket paint it and re-pick the edges (stages 39–40).
+- **One stroke, one entry, from either end**: a stroke is press, drag
+  and release (`paint/gesture.rs`), fed by the viewport's pointer or by
+  the bridge's list of cells, so a test paints exactly what a hand would.
+  The bridge gains `TilePick` (a palette block), `TileStamp` (turn and
+  mirror), `TilePaint` (a stroke of any tool, or the eyedropper, one undo
+  entry) and `TileRead`.
+
+Pinned by `stamp.rs` (a block from its bottom-left; holes; turning and
+mirroring a block and its tiles; picked off the map; the pattern),
+`orientation.rs` (four quarter turns are none; a turn is Tiled's diagonal
+and horizontal flags), `fill.rs`, `palette.rs`, `paint/tests.rs` (a 3×2
+stamp; a rectangle of a pattern; the bucket inside walls only; the bucket
+with a terrain auto-tiled; the eyedropper picks and paints nothing),
+`tilemap/mesh_tests.rs` (a turned tile's UVs) and the bridge test in
+`voltra-editor/tests/authoring.rs`: a 3×2 block picked off the palette and
+stamped, undone in one step and redone; a ring drawn in one stroke and
+its inside filled, the ring and the outside left; the eyedropper picking
+a tile and adding no undo entry; a picked tile turned and painted turned.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

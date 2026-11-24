@@ -232,6 +232,57 @@ pub enum Command {
         #[serde(default)]
         path: Option<String>,
     },
+    /// Picks the block of `layer`'s tileset from palette cell `from` to `to`
+    /// — columns and rows from the top-left, as the Tile Palette window
+    /// lays the sheet out — as the paint stamp, as a drag over it does.
+    TilePick {
+        /// The tilemap layer, by id or path.
+        layer: String,
+        /// One corner of the block, `[column, row]`.
+        from: [u32; 2],
+        /// The other corner, `[column, row]`.
+        to: [u32; 2],
+    },
+    /// Turns and mirrors the paint stamp, as `Z`, `X` and `Y` do.
+    TileStamp {
+        /// Quarter turns clockwise, as seen; negative turns the other way.
+        #[serde(default)]
+        turns: i32,
+        /// Mirror it left to right, after turning.
+        #[serde(default)]
+        flip_x: bool,
+        /// Mirror it top to bottom, after turning.
+        #[serde(default)]
+        flip_y: bool,
+    },
+    /// One stroke of a paint tool on `layer` through `cells` — pressed on the
+    /// first, released on the last — as a drag in the viewport makes it. One
+    /// undo entry.
+    TilePaint {
+        /// The tilemap layer, by id or path.
+        layer: String,
+        /// `brush`, `rectangle`, `eraser` or `fill`.
+        tool: String,
+        /// The cells the pointer goes through, `[x, y]`, `y` up.
+        cells: Vec<[i32; 2]>,
+        /// The eyedropper: picks the cells as the stamp, as Alt held does,
+        /// and paints nothing.
+        #[serde(default)]
+        pick: bool,
+        /// Paint this terrain of the layer instead of the stamp, joined up.
+        #[serde(default)]
+        terrain: Option<usize>,
+    },
+    /// The cells of `layer` from `from` to `to`, rows from the top: each a
+    /// tile, or null where the cell is empty.
+    TileRead {
+        /// The tilemap layer, by id or path.
+        layer: String,
+        /// One corner, `[x, y]`.
+        from: [i32; 2],
+        /// The other corner, `[x, y]`.
+        to: [i32; 2],
+    },
     /// The last `frames` recorded frames, summarised; `record` first starts
     /// or stops recording.
     Profile {
@@ -254,6 +305,7 @@ impl Command {
             Self::ComponentSet { .. } => "AI: set component",
             Self::ComponentRemove { .. } => "AI: remove component",
             Self::Drag { .. } => "AI: drag",
+            Self::TilePaint { .. } => "AI: paint tiles",
             _ => "AI",
         }
     }

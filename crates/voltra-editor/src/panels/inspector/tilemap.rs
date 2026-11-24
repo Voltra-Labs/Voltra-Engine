@@ -93,7 +93,11 @@ pub(super) fn show(
     claim = claim.or(normal_map(ui, map, textures, device, queue));
     claim = claim.or(atlas(ui, map, atlases));
 
-    let Palette { sheet, paint } = palette;
+    let Palette {
+        sheet,
+        paint,
+        window,
+    } = palette;
     if let Some(set) = map.atlas_handle.and_then(|handle| atlases.try_get(handle)) {
         ui.separator();
         palette::show(
@@ -102,6 +106,7 @@ pub(super) fn show(
             Palette {
                 sheet,
                 paint: &mut *paint,
+                window,
             },
         );
     }

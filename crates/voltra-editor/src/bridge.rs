@@ -11,6 +11,7 @@
 mod atlas;
 mod edits;
 mod read;
+mod tiles;
 
 use base64::Engine;
 use serde_json::{json, Value};
@@ -238,6 +239,10 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
         | Command::AtlasUndo
         | Command::AtlasRedo
         | Command::AtlasSave { .. } => atlas::apply(editor, frame, command),
+        Command::TilePick { .. }
+        | Command::TileStamp { .. }
+        | Command::TilePaint { .. }
+        | Command::TileRead { .. } => tiles::apply(editor, frame, command),
         Command::PackAtlas { folder, trim } => {
             let folder = voltra_assets::AssetPath::new(folder).map_err(|e| e.to_string())?;
             let (atlas, report) = crate::pack_atlas::pack(frame, &folder, *trim)?;

@@ -88,6 +88,8 @@ pub struct Editor {
     pub(crate) console: crate::console::Console,
     /// The Project Settings window.
     pub(crate) settings: panels::project_settings::ProjectSettingsWindow,
+    /// The Tile Palette window, which picks what the paint tools paint.
+    pub(crate) tile_palette: panels::tile_palette::TilePaletteWindow,
     /// The Atlas Editor window and the atlas it has open.
     pub(crate) atlas_editor: panels::atlas_editor::AtlasEditorWindow,
     /// The project's game, loaded from its library; see [`crate::game`].
@@ -171,6 +173,7 @@ impl Editor {
         let assets = frame.textures.root().to_path_buf();
         panels::project_settings::show(self, ui, &assets);
         panels::atlas_editor::show(self, ui, frame);
+        panels::tile_palette::show(self, ui, frame);
 
         // Last, so it sees everything every panel did.
         if editing {

@@ -1,6 +1,8 @@
 //! The editor's authoring windows driven through its bridge: the texture
-//! packer, and the Atlas Editor cutting a sheet by grid, renaming and
-//! pivoting a region, undoing, and saving the file a diff can check.
+//! packer; the Atlas Editor cutting a sheet by grid, renaming and pivoting a
+//! region, undoing, and saving the file a diff can check; and the tilemap
+//! tools — a 3×2 stamp off the palette, a flood fill of a closed area, the
+//! eyedropper — each stroke one undo entry.
 //!
 //! Launches the editor, so it needs a display and a GPU adapter; ignored by
 //! default. Under Xvfb with a software Vulkan driver:
@@ -11,7 +13,7 @@ mod common;
 
 use std::path::Path;
 
-use common::{call, launch, project};
+use common::{call, launch, project, wait_for_scene};
 use serde_json::{json, Value};
 use voltra_bridge::Command;
 
@@ -58,6 +60,7 @@ fn the_packer_and_the_atlas_editor_through_the_bridge() {
     sprite(&assets, "ground.png", "sprites/loose/tiles/ground.png");
     let (editor, mut client) = launch(&assets);
     let _ = &editor;
+    wait_for_scene(&mut client);
 
     // The packer, as the asset browser runs it.
     let packed = call(
@@ -149,4 +152,174 @@ fn the_packer_and_the_atlas_editor_through_the_bridge() {
         },
     );
     assert_eq!(names(&reopened), ["coin_0", "coin_1", "edge_on", "coin_3"]);
+}
+
+/// The frames of a `TileRead`'s rows, `None` for an empty cell.
+fn frames(answer: &Value) -> Vec<Vec<Option<u64>>> {
+    answer["rows"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|row| {
+            row.as_array()
+                .expect("a row")
+                .iter()
+                .map(|cell| cell["frame"].as_u64())
+                .collect()
+        })
+        .collect()
+}
+
+fn read(
+    client: &mut voltra_bridge::BridgeClient,
+    from: [i32; 2],
+    to: [i32; 2],
+) -> Vec<Vec<Option<u64>>> {
+    frames(&call(
+        client,
+        Command::TileRead {
+            layer: "Ground".into(),
+            from,
+            to,
+        },
+    ))
+}
+
+fn paint(
+    client: &mut voltra_bridge::BridgeClient,
+    tool: &str,
+    cells: &[[i32; 2]],
+    pick: bool,
+) -> Value {
+    call(
+        client,
+        Command::TilePaint {
+            layer: "Ground".into(),
+            tool: tool.into(),
+            cells: cells.to_vec(),
+            pick,
+            terrain: None,
+        },
+    )
+}
+
+fn pick(client: &mut voltra_bridge::BridgeClient, from: [u32; 2], to: [u32; 2]) -> Value {
+    call(
+        client,
+        Command::TilePick {
+            layer: "Ground".into(),
+            from,
+            to,
+        },
+    )
+}
+
+#[test]
+#[ignore = "launches the editor: needs a display and a GPU adapter"]
+fn the_tilemap_tools_through_the_bridge() {
+    let assets = project("tiles");
+    sprite(&assets, "ground.png", "sprites/ground.png");
+    // The ground sheet cut into 8×8 tiles: a palette 8 across and 2 down,
+    // frames 0..8 on top and 8..16 below.
+    std::fs::write(
+        assets.join("sprites/tiles.atlas.ron"),
+        r#"(version: 1, texture: Some("sprites/ground.png"), grid: Some((cell: (8, 8), columns: 8, rows: 2)))"#,
+    )
+    .expect("the tileset");
+    let (editor, mut client) = launch(&assets);
+    let _ = &editor;
+    wait_for_scene(&mut client);
+    call(
+        &mut client,
+        Command::Spawn {
+            name: Some("Ground".into()),
+            parent: None,
+            components: [(
+                "Tilemap".to_owned(),
+                r#"(tile_size:(0.5,0.5),texture:Some(Path("sprites/ground.png")),atlas:Some(Path("sprites/tiles.atlas.ron")))"#
+                    .to_owned(),
+            )]
+            .into_iter()
+            .collect(),
+        },
+    );
+
+    // A 3×2 block off the palette, stamped with its bottom-left on (0, 0).
+    let stamp = pick(&mut client, [1, 0], [3, 1]);
+    assert_eq!(stamp["size"], json!([3, 2]), "{stamp}");
+    paint(&mut client, "brush", &[[0, 0]], false);
+    assert_eq!(
+        read(&mut client, [0, 0], [2, 1]),
+        [[Some(1), Some(2), Some(3)], [Some(9), Some(10), Some(11)]]
+    );
+    let undone = call(&mut client, Command::Undo);
+    assert!(undone["undone"].is_string(), "{undone}");
+    assert_eq!(
+        read(&mut client, [0, 0], [2, 1]),
+        [[None, None, None], [None, None, None]],
+        "the stamp was one entry"
+    );
+    call(&mut client, Command::Redo);
+
+    // A closed ring of frame 0, drawn as one brush stroke, then filled.
+    pick(&mut client, [0, 0], [0, 0]);
+    paint(
+        &mut client,
+        "brush",
+        &[[10, 0], [14, 0], [14, 4], [10, 4], [10, 0]],
+        false,
+    );
+    pick(&mut client, [5, 0], [5, 0]);
+    paint(&mut client, "fill", &[[12, 2]], false);
+    let ring = Some(0);
+    let fill = Some(5);
+    assert_eq!(
+        read(&mut client, [9, 0], [15, 4]),
+        [
+            [None, ring, ring, ring, ring, ring, None],
+            [None, ring, fill, fill, fill, ring, None],
+            [None, ring, fill, fill, fill, ring, None],
+            [None, ring, fill, fill, fill, ring, None],
+            [None, ring, ring, ring, ring, ring, None],
+        ],
+        "the inside filled, the ring and the outside not"
+    );
+
+    // The eyedropper picks a tile of the stamp back off the map, painting
+    // nothing and adding no undo entry: the next undo is still the fill.
+    let picked = paint(&mut client, "brush", &[[1, 1]], true);
+    assert_eq!(picked["stroke"], Value::Null, "{picked}");
+    assert_eq!(picked["stamp"]["rows"][0][0]["frame"], 2, "{picked}");
+    call(&mut client, Command::Undo);
+    assert_eq!(
+        read(&mut client, [12, 2], [12, 2]),
+        [[None]],
+        "the fill undone"
+    );
+
+    // A picked tile turned and painted lands turned.
+    let turned = call(
+        &mut client,
+        Command::TileStamp {
+            turns: 1,
+            flip_x: false,
+            flip_y: false,
+        },
+    );
+    assert_eq!(turned["rows"][0][0]["transpose"], true, "{turned}");
+    paint(&mut client, "brush", &[[20, 20]], false);
+    let cell = call(
+        &mut client,
+        Command::TileRead {
+            layer: "Ground".into(),
+            from: [20, 20],
+            to: [20, 20],
+        },
+    );
+    assert_eq!(cell["rows"][0][0]["frame"], 2);
+    assert_eq!(cell["rows"][0][0]["transpose"], true);
+    assert_eq!(
+        cell["rows"][0][0]["flip_x"], true,
+        "a quarter turn clockwise"
+    );
 }

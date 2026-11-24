@@ -114,3 +114,23 @@ pub fn call(client: &mut BridgeClient, command: Command) -> Value {
         .call(command, WAIT)
         .unwrap_or_else(|e| panic!("the bridge refused: {e}"))
 }
+
+/// Waits until the scene the editor was started on is open — its box can be
+/// found — so what a test spawns is not swept away by the scene opening on
+/// the editor's first frame.
+pub fn wait_for_scene(client: &mut BridgeClient) {
+    let start = Instant::now();
+    while client
+        .call(
+            Command::Rename {
+                entity: "Box".to_owned(),
+                name: "Box".to_owned(),
+            },
+            WAIT,
+        )
+        .is_err()
+    {
+        assert!(start.elapsed() < WAIT, "the scene never opened");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}

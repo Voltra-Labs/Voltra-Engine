@@ -166,6 +166,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         tilemap::Palette {
                             sheet,
                             paint: &mut editor.paint,
+                            window: &mut editor.tile_palette.open,
                         },
                     ));
                 }
