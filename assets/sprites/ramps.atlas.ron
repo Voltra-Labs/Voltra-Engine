@@ -1,0 +1,9 @@
+// The platformer's hill and ladder tiles, 16x16, left to right: a low
+// ramp (up half a tile), a high ramp (the other half), dirt, a ladder.
+// Their collision shapes and the ladder flag are on the layer that uses
+// them (scenes/platformer.ron, "Hill and ladder").
+(
+    version: 1,
+    texture: Some("sprites/ramps.png"),
+    grid: Some((cell: (16, 16), columns: 4, rows: 1)),
+)

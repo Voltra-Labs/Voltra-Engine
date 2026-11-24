@@ -30,6 +30,7 @@ pub mod camera;
 pub mod coins;
 pub mod components;
 pub mod display;
+pub mod ladder;
 pub mod menu;
 pub mod progress;
 pub mod walker;
@@ -141,6 +142,7 @@ impl Game for Platformer {
         // step ago or three.
         let jump = std::mem::take(&mut self.jump);
         walker::steer(tick, walker, jump);
+        ladder::climb(tick, walker);
     }
 }
 

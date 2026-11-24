@@ -111,6 +111,7 @@ fn a_flipped_tile_swaps_its_uvs() {
             frame: 0,
             flip_x: true,
             flip_y: true,
+            transpose: false,
         }),
     );
 
@@ -254,6 +255,22 @@ fn a_frame_with_no_animation_is_unchanged_by_the_clock() {
         Sheets::new(&atlases, &Sizes).at_time(123.0),
     );
     assert_eq!(batch.vertices[0].uv[0], 0.25);
+}
+
+#[test]
+fn a_turned_tile_samples_its_frame_a_quarter_round() {
+    let (mut atlases, path) = atlases();
+    let mut map = layer(&mut atlases, &path);
+    map.set(IVec2::ZERO, Some(Tile::new(0).rotated_cw()));
+
+    let batch = mesh(&map, &atlases);
+
+    // Frame 0 is u 0..0.25, v 0..1. Turned clockwise, the cell's top-left
+    // shows what was the frame's bottom-left, and its top-right the
+    // frame's top-left.
+    assert_eq!(batch.vertices[0].uv, [0.0, 1.0], "top-left");
+    assert_eq!(batch.vertices[3].uv, [0.0, 0.0], "top-right");
+    assert_eq!(batch.vertices[2].uv, [0.25, 0.0], "bottom-right");
 }
 
 #[test]

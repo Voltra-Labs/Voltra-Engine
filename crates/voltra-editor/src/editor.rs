@@ -88,6 +88,10 @@ pub struct Editor {
     pub(crate) console: crate::console::Console,
     /// The Project Settings window.
     pub(crate) settings: panels::project_settings::ProjectSettingsWindow,
+    /// The Tile Palette window, which picks what the paint tools paint.
+    pub(crate) tile_palette: panels::tile_palette::TilePaletteWindow,
+    /// The Atlas Editor window and the atlas it has open.
+    pub(crate) atlas_editor: panels::atlas_editor::AtlasEditorWindow,
     /// The project's game, loaded from its library; see [`crate::game`].
     pub(crate) game: crate::game::GameHost,
 }
@@ -126,6 +130,10 @@ impl Editor {
             // After the watch, so an undo taken this frame is the change the
             // watcher sees rather than one it records a second time.
             match shortcut::poll(ui.ctx()) {
+                // Over the Atlas Editor, the keys are its own history's.
+                Some(action) if self.atlas_editor.has_pointer(ui.ctx()) => {
+                    self.atlas_editor.shortcut(action);
+                }
                 Some(shortcut::UndoAction::Undo) => self.undo(frame),
                 Some(shortcut::UndoAction::Redo) => self.redo(frame),
                 None => {}
@@ -164,6 +172,8 @@ impl Editor {
         panels::console::show(self, ui);
         let assets = frame.textures.root().to_path_buf();
         panels::project_settings::show(self, ui, &assets);
+        panels::atlas_editor::show(self, ui, frame);
+        panels::tile_palette::show(self, ui, frame);
 
         // Last, so it sees everything every panel did.
         if editing {

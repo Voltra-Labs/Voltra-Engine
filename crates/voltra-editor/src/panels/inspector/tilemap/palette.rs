@@ -1,4 +1,5 @@
-//! The tileset as a grid of its frames: click one to paint with it.
+//! The tileset as a strip of its frames: click one to paint with it. The
+//! Tile Palette window shows it laid out as the sheet is, for blocks.
 //!
 //! Unity's Tile Palette and Godot's TileSet panel both show the sheet cut
 //! into its tiles rather than a frame number, because "which one is the
@@ -7,8 +8,9 @@
 use voltra_assets::Atlas;
 use voltra_core::egui::{self, Color32, Rect, RichText, Sense, Stroke, Ui};
 use voltra_core::ui::TextureId;
+use voltra_scene::Tile;
 
-use crate::paint::{Paint, PaintTool};
+use crate::paint::{Paint, PaintTool, Stamp};
 
 /// Side of one tile button, in points.
 const TILE: f32 = 32.0;
@@ -21,15 +23,21 @@ pub(in crate::panels::inspector) struct Palette<'a> {
     /// The sheet's thumbnail, if it is loaded.
     pub sheet: Option<TextureId>,
     pub paint: &'a mut Paint,
+    /// Whether the Tile Palette window is up.
+    pub window: &'a mut bool,
 }
 
-/// Draws the palette and the brush's mirrors; a click picks the brush tile
+/// Draws the palette and the stamp's turns; a click picks a one-tile stamp
 /// and arms the brush if no paint tool is armed yet.
 ///
 /// Not a scene edit: the brush is editor state, so nothing here claims the
 /// history.
 pub(super) fn show(ui: &mut Ui, atlas: &Atlas, palette: Palette<'_>) {
-    let Palette { sheet, paint } = palette;
+    let Palette {
+        sheet,
+        paint,
+        window,
+    } = palette;
     ui.label(RichText::new("Palette").strong());
     if atlas.is_empty() {
         ui.label(RichText::new("the tileset has no tiles").weak());
@@ -68,7 +76,7 @@ pub(super) fn show(ui: &mut Ui, atlas: &Atlas, palette: Palette<'_>) {
                             );
                         }
                     }
-                    if paint.brush.frame == index {
+                    if paint.stamp.single_tile().is_some_and(|t| t.frame == index) {
                         ui.painter().rect_stroke(
                             rect,
                             0.0,
@@ -77,7 +85,7 @@ pub(super) fn show(ui: &mut Ui, atlas: &Atlas, palette: Palette<'_>) {
                         );
                     }
                     if response.on_hover_text(format!("tile {index}")).clicked() {
-                        paint.brush.frame = index;
+                        paint.stamp = Stamp::single(Tile::new(index));
                         if paint.tool().is_none() {
                             paint.set_tool(Some(PaintTool::Brush));
                         }
@@ -86,10 +94,13 @@ pub(super) fn show(ui: &mut Ui, atlas: &Atlas, palette: Palette<'_>) {
             });
         });
 
-    ui.horizontal(|ui| {
-        ui.label("flip");
-        ui.checkbox(&mut paint.brush.flip_x, "x");
-        ui.checkbox(&mut paint.brush.flip_y, "y");
-    });
-    ui.label(RichText::new("B brush · U rectangle · D eraser").weak());
+    crate::panels::tile_palette::turns(ui, paint);
+    if ui
+        .button("Tile Palette…")
+        .on_hover_text("the sheet laid out as it is: drag over it to pick a block")
+        .clicked()
+    {
+        *window = true;
+    }
+    ui.label(RichText::new("B brush · U rectangle · D eraser · G fill · Alt-click picks").weak());
 }

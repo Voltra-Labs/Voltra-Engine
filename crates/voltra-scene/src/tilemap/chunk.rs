@@ -22,8 +22,11 @@ pub(super) const CELLS: usize = (CHUNK * CHUNK) as usize;
 const FLIP_X: u32 = 1 << 31;
 /// Set on a stored cell whose tile is mirrored top to bottom. Tiled's bit.
 const FLIP_Y: u32 = 1 << 30;
-/// What is left of a stored cell for the frame, once the flips are off.
-const FRAME_BITS: u32 = !(FLIP_X | FLIP_Y);
+/// Set on a stored cell whose tile is transposed: Tiled's diagonal flip.
+/// Unused before stage 97, so every map saved before reads the same.
+const TRANSPOSE: u32 = 1 << 29;
+/// What is left of a stored cell for the frame, once the flags are off.
+const FRAME_BITS: u32 = !(FLIP_X | FLIP_Y | TRANSPOSE);
 
 /// Where a chunk sits, in chunks: a cell's coordinates divided by [`CHUNK`],
 /// rounded towards negative infinity so cell `-1` is in chunk `-1`, not `0`.
@@ -46,7 +49,7 @@ pub(super) fn cell_of(key: ChunkKey, index: usize) -> IVec2 {
 }
 
 /// One chunk's cells, row by row from its lowest corner, as stored: `0` for
-/// an empty cell, otherwise the frame plus one with the flips in the top two
+/// an empty cell, otherwise the frame plus one with the flags in the top three
 /// bits — Tiled's encoding, so a reader of one can read the other.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) struct Chunk {
@@ -108,6 +111,9 @@ fn encode(tile: Option<Tile>) -> u32 {
     if tile.flip_y {
         raw |= FLIP_Y;
     }
+    if tile.transpose {
+        raw |= TRANSPOSE;
+    }
     raw
 }
 
@@ -120,6 +126,7 @@ fn decode(raw: u32) -> Option<Tile> {
         frame: frame - 1,
         flip_x: raw & FLIP_X != 0,
         flip_y: raw & FLIP_Y != 0,
+        transpose: raw & TRANSPOSE != 0,
     })
 }
 

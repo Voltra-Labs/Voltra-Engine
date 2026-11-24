@@ -89,8 +89,10 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &mut Paint) -> Option<
     }
     if ui.button("Add terrain").clicked() {
         let n = map.terrains.len() + 1;
-        map.terrains
-            .push(Terrain::uniform(format!("Terrain {n}"), paint.brush.frame));
+        map.terrains.push(Terrain::uniform(
+            format!("Terrain {n}"),
+            paint.stamp.first().frame,
+        ));
         claim = Some("Add terrain");
     }
     claim

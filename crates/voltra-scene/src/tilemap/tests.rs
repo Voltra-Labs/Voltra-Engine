@@ -25,6 +25,7 @@ fn a_tile_set_is_the_tile_got() {
         frame: 7,
         flip_x: true,
         flip_y: false,
+        transpose: true,
     };
 
     assert_eq!(map.set(cell(3, 4), Some(tile)), None);
@@ -107,12 +108,13 @@ fn a_frame_too_big_to_store_leaves_the_cell_alone() {
 }
 
 #[test]
-fn the_largest_storable_frame_round_trips_with_both_flips() {
+fn the_largest_storable_frame_round_trips_with_every_flag() {
     let mut map = Tilemap::default();
     let tile = Tile {
         frame: Tile::MAX_FRAME,
         flip_x: true,
         flip_y: true,
+        transpose: true,
     };
 
     map.set(cell(0, 0), Some(tile));
@@ -160,6 +162,7 @@ fn a_map_survives_a_save_and_a_load() {
             frame: 4,
             flip_x: false,
             flip_y: true,
+            transpose: false,
         }),
     );
     map.set(cell(3, 3), Some(Tile::new(0)));

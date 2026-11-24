@@ -3,60 +3,61 @@
 //! **A mode of the viewport while a layer is selected**, Godot's shape: with a
 //! paint tool armed and a [`Tilemap`] selected, a drag paints instead of
 //! grabbing the gizmo, and a click paints instead of selecting. Unity keeps a
-//! separate Tile Palette window whose tools own the scene view the same way.
+//! separate Tile Palette window whose tools own the scene view the same way;
+//! the Tile Palette window here picks what is painted ([`stamp`]).
 //! `W`/`E`/`R` — or selecting something that is not a layer — disarms it.
+//!
+//! **What is painted is a stamp**: one tile, or a block picked off the
+//! palette or — Alt held, the eyedropper — off the map, turned with `Z`
+//! (Shift for the other way) and mirrored with `X` and `Y`, Tiled's keys.
 //!
 //! **One stroke, one undo entry.** The selection is what the history watches,
 //! and a stroke edits only the selected layer, so the stroke claims the open
 //! entry every frame it is live, exactly as a gizmo drag does.
 
 mod cell;
+pub mod fill;
+mod gesture;
 mod line;
+pub mod palette;
+pub mod stamp;
 mod stroke;
 mod tool;
 
-use voltra_core::egui::{Response, Ui};
+use voltra_core::egui::{Key, Response, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::IVec2;
 use voltra_render::LineBatch;
-use voltra_scene::{Tile, Tilemap};
+use voltra_scene::Tilemap;
 
+use gesture::Stroke;
+pub use stamp::Stamp;
 pub use tool::PaintTool;
 
 /// Outline of a cell about to be painted.
 const PAINT_COLOR: [f32; 4] = [0.35, 0.85, 1.0, 0.9];
 /// Outline of a cell about to be erased.
 const ERASE_COLOR: [f32; 4] = [1.0, 0.4, 0.35, 0.9];
+/// Outline of the cells the eyedropper is about to pick.
+const PICK_COLOR: [f32; 4] = [1.0, 0.85, 0.3, 0.9];
 /// Outline thickness, in pixels; the other overlays' width.
 const WIDTH: f32 = 1.5;
 
-/// The armed paint tool, the tile it paints, and the stroke under way.
+/// The armed paint tool, the stamp it paints, and the stroke under way.
 #[derive(Debug, Default)]
 pub struct Paint {
     tool: Option<PaintTool>,
-    /// What the brush and the rectangle write. Picked in the inspector's
-    /// palette; frame 0, unmirrored, until then.
-    pub brush: Tile,
-    /// The terrain the brush, the rectangle and the eraser paint with
-    /// instead of `brush`, if one is chosen in the inspector: cells join up
-    /// with their neighbours as they are drawn.
+    /// What the brush, the rectangle and the bucket write. Picked in the
+    /// palette or by the eyedropper; frame 0, unmirrored, until then.
+    pub stamp: Stamp,
+    /// The terrain the brush, the rectangle, the bucket and the eraser
+    /// paint with instead of the stamp, if one is chosen in the inspector:
+    /// cells join up with their neighbours as they are drawn.
     pub terrain: Option<usize>,
     stroke: Option<Stroke>,
     /// The cell under the pointer this frame, for the outline.
     hovered: Option<IVec2>,
-}
-
-/// A drag that started on a layer, and holds it until the button comes up.
-#[derive(Debug, Clone, Copy)]
-struct Stroke {
-    layer: Entity,
-    /// Carried rather than read from [`Paint::tool`] each frame, so a key
-    /// pressed mid-stroke arms the next stroke instead of changing this one —
-    /// the gizmo's rule, for the same reason.
-    tool: PaintTool,
-    anchor: IVec2,
-    last: IVec2,
 }
 
 impl Paint {
@@ -89,7 +90,10 @@ impl Paint {
             self.stroke = None;
             return None;
         };
-        let primary = ui.input(|i| i.pointer.primary_down());
+        if scene.hovered() && !ui.ctx().egui_wants_keyboard_input() {
+            self.turn_keys(ui);
+        }
+        let (primary, alt) = ui.input(|i| (i.pointer.primary_down(), i.modifiers.alt));
         // The interaction position while dragging, so a stroke keeps
         // following the pointer out past the edge of the panel.
         let pointer = scene.interact_pointer_pos().or_else(|| scene.hover_pos());
@@ -105,66 +109,50 @@ impl Paint {
             self.stroke = None;
         }
 
-        let Some(mut stroke) = self.stroke else {
+        let Some(stroke) = self.stroke else {
             if primary && scene.is_pointer_button_down_on() {
                 if let Some(cell) = under {
-                    let stroke = Stroke {
-                        layer,
-                        tool: armed,
-                        anchor: cell,
-                        last: cell,
-                    };
-                    self.apply_line(frame.world, stroke, cell);
-                    self.stroke = Some(stroke);
-                    return Some(armed.label());
+                    return self.press(frame.world, layer, armed, alt, cell);
                 }
             }
             return None;
         };
 
         if let Some(cell) = under {
-            self.apply_line(frame.world, stroke, cell);
-            stroke.last = cell;
+            if cell != stroke.last {
+                self.drag(frame.world, cell);
+            }
         }
         if primary {
-            self.stroke = Some(stroke);
+            stroke.label()
         } else {
             // Released, wherever the pointer is: the rectangle lands on the
             // last cell the pointer was over.
-            if stroke.tool == PaintTool::Rectangle {
-                if let Some(map) = frame.world.get_mut::<Tilemap>(layer) {
-                    match self.terrain_on(map) {
-                        Some(terrain) => {
-                            stroke::fill_terrain(map, stroke.anchor, stroke.last, Some(terrain));
-                        }
-                        None => {
-                            stroke::fill(map, stroke.anchor, stroke.last, Some(self.brush));
-                        }
-                    }
-                }
-            }
-            self.stroke = None;
+            self.release(frame.world)
         }
-        Some(stroke.tool.label())
     }
 
-    /// Paints or erases from the stroke's last cell to `to`, for the tools
-    /// that write as they go.
-    fn apply_line(&self, world: &mut World, stroke: Stroke, to: IVec2) {
-        let tile = match stroke.tool {
-            PaintTool::Brush => Some(self.brush),
-            PaintTool::Eraser => None,
-            PaintTool::Rectangle => return,
-        };
-        if let Some(map) = world.get_mut::<Tilemap>(stroke.layer) {
-            match self.terrain_on(map) {
-                Some(terrain) => {
-                    let terrain = tile.map(|_| terrain);
-                    stroke::line_terrain(map, stroke.last, to, terrain);
-                }
-                None => stroke::line(map, stroke.last, to, tile),
+    /// `Z` turns the stamp clockwise (Shift+`Z` the other way), `X` and `Y`
+    /// mirror it — Tiled's keys. Never with Ctrl or Cmd, which are undo's.
+    fn turn_keys(&mut self, ui: &Ui) {
+        ui.input(|i| {
+            if i.modifiers.command {
+                return;
             }
-        }
+            if i.key_pressed(Key::Z) {
+                self.stamp = if i.modifiers.shift {
+                    self.stamp.rotated_ccw()
+                } else {
+                    self.stamp.rotated_cw()
+                };
+            }
+            if i.key_pressed(Key::X) {
+                self.stamp = self.stamp.mirrored_x();
+            }
+            if i.key_pressed(Key::Y) {
+                self.stamp = self.stamp.mirrored_y();
+            }
+        });
     }
 
     /// The chosen terrain, if `map` has one at that index — a choice made on
@@ -173,24 +161,26 @@ impl Paint {
         self.terrain.filter(|&index| index < map.terrains.len())
     }
 
-    /// Outlines the cell under the pointer, or the rectangle being dragged.
+    /// Outlines what is about to change: the stamp under the pointer, the
+    /// rectangle being dragged, or what the eyedropper is about to pick.
     pub fn draw(&self, world: &World, layer: Entity, lines: &mut LineBatch) {
-        let (tool, a, b) = match self.stroke {
+        let (color, a, b) = match self.stroke {
+            Some(stroke) if stroke.picks => (PICK_COLOR, stroke.anchor, stroke.last),
             Some(stroke) if stroke.tool == PaintTool::Rectangle => {
-                (stroke.tool, stroke.anchor, stroke.last)
+                (PAINT_COLOR, stroke.anchor, stroke.last)
             }
             _ => match (self.tool, self.hovered) {
-                (Some(tool), Some(cell)) => (tool, cell, cell),
+                (Some(tool), Some(cell)) if tool.erases() => (ERASE_COLOR, cell, cell),
+                (Some(PaintTool::Brush), Some(cell)) if self.terrain.is_none() => {
+                    let size = self.stamp.size().as_ivec2();
+                    (PAINT_COLOR, cell, cell + size - IVec2::ONE)
+                }
+                (Some(_), Some(cell)) => (PAINT_COLOR, cell, cell),
                 _ => return,
             },
         };
         let Some(corners) = cell::corners(world, layer, a, b) else {
             return;
-        };
-        let color = if tool.erases() {
-            ERASE_COLOR
-        } else {
-            PAINT_COLOR
         };
         for i in 0..corners.len() {
             lines.push(corners[i], corners[(i + 1) % corners.len()], WIDTH, color);
@@ -199,39 +189,4 @@ impl Paint {
 }
 
 #[cfg(test)]
-mod tests {
-    use voltra_render::glam::Vec2;
-    use voltra_scene::Transform;
-
-    use super::*;
-
-    fn world_with_layer() -> (World, Entity, Entity) {
-        let mut world = World::new();
-        let layer = world.spawn();
-        world.insert(layer, Transform::default());
-        world.insert(layer, Tilemap::new(Vec2::ONE));
-        let sprite = world.spawn();
-        world.insert(sprite, Transform::default());
-        (world, layer, sprite)
-    }
-
-    #[test]
-    fn an_unarmed_brush_targets_nothing() {
-        let (world, layer, _) = world_with_layer();
-        assert_eq!(Paint::default().target(&world, Some(layer)), None);
-    }
-
-    #[test]
-    fn an_armed_brush_targets_the_selected_layer_only() {
-        let (mut world, layer, sprite) = world_with_layer();
-        let mut paint = Paint::default();
-        paint.set_tool(Some(PaintTool::Brush));
-
-        assert_eq!(paint.target(&world, Some(layer)), Some(layer));
-        assert_eq!(paint.target(&world, Some(sprite)), None);
-        assert_eq!(paint.target(&world, None), None);
-
-        world.despawn(layer);
-        assert_eq!(paint.target(&world, Some(layer)), None, "a despawned layer");
-    }
-}
+mod tests;

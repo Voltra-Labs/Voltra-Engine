@@ -6115,6 +6115,211 @@ joining first, a client by address after it, `players()` listing both,
 and `stop` ending them with the client told `Shutdown`. Unit tests of
 `Pacer` and the binary's arguments. `voltra-net/src/session.rs`: server
 addresses parsed by scheme.
+### A folder packs into one sheet; a region keeps its index by its name
+
+Stage 95. `voltra_assets::packer`, run by `cargo xtask pack-atlas <folder>`
+and by the editor (the asset browser's "Pack into atlas" on a folder, and
+the bridge's `PackAtlas`): every PNG under a folder, at any depth, into one
+sheet and the `.atlas.ron` that cuts it — `sprites/hero/` to
+`sprites/hero.png` and `sprites/hero.atlas.ron` beside it. One packer
+behind both, so a sheet packed from either is the same sheet.
+
+- **Max-rects, best short side fit, biggest first** (`packer/maxrects.rs`,
+  Jylänki 2010): what TexturePacker, libGDX's packer and Unity's sprite
+  packer build on. Never rotated — no sprite reads a rotation flag, and a
+  turned region would need its UVs turned back. The sheet is the smallest
+  power-of-two pair that fits (squarer and wider first), up to
+  `--max-size` (4096: WebGL2's guaranteed `MAX_TEXTURE_SIZE`).
+- **Padding and extruded edges** (`--padding 2 --extrude 1`): each picture
+  is copied with its outermost texels repeated outward, then the padding
+  is left transparent. Padding alone swaps a neighbour's pixels for
+  transparency at a bilinear edge, which still darkens it; extrusion makes
+  the half-texel overreach read the edge itself.
+- **Trimming** (`--trim`): transparent borders cut off, and the cut
+  recorded per frame as `trim: (offset, source)` — TexturePacker's
+  `spriteSourceSize`/`sourceSize` — so the frame draws where it was in the
+  whole picture. A picture with nothing in it keeps one texel rather than
+  becoming a zero-area frame.
+- **Names, and indices that hold.** A region is named after its file's
+  path under the folder, without the extension (`walk/0`). A sprite still
+  names its frame by *index* (stage 22), so a re-pack orders regions by the
+  atlas it replaces (`packer/order.rs`): its names keep their indices, new
+  files come after, and a file that is gone keeps its slot as an empty
+  frame — what still names it draws the missing-frame checker rather than
+  whichever region slid into its place — unless it was last, when nothing
+  can shift and it is dropped. Pivots set since (stage 96) are kept by name
+  too. An atlas at the output path that will not read stops the pack: its
+  names are what would have been kept. Unity keeps sprite references by
+  GUID inside one texture's meta for the same reason; an index plus a name
+  is the smallest change to our format that does the same.
+- **The format, version 2.** An explicit frame may carry `name`, `trim` and
+  `pivot`, each left out when absent, so a plain frame is written as in
+  version 1 and version 1 files read unchanged. At run time they are
+  `FrameMeta`, one per frame beside `Atlas::frames` (`Frame` itself stays
+  `Copy` geometry). `Atlas::index_of(name)` finds a frame by name. A trim
+  the frame does not fit in is dropped with a warning; a pivot outside
+  `0..1` is clamped.
+- **Drawing in place.** `sprite::quad` gains a `centre`: a trimmed or
+  pivoted frame's quad is its part of the whole picture, sized by the
+  usual rule (pixels-per-unit, or the unit square), placed so the pivot —
+  the centre by default — is on the origin. Batching, picking and shadow
+  silhouettes all go through `Quad::corners`/`contains`, so they agree. A
+  mirrored sprite mirrors about the origin, so a pivot at the feet stays at
+  the feet. UI images and tiles keep using the frame's rectangle as is.
+
+Pinned by `packer/tests.rs` (every region is its picture again, trimmed or
+not; regions padded apart and extruded; the smallest sheet; too big
+refused; a re-pack keeps indices and pivots by name and empties a gone
+file's slot; the sheet inside its own folder is not re-packed; an
+unreadable previous atlas left alone), `atlas/tests.rs` (version 1 reads;
+names, trims and pivots round-trip), `sprite/quad.rs` (a trimmed frame
+where it was; a pivot on the origin; mirrored about it) and
+`voltra-scene/tests/headless_packed_atlas.rs`: the sample sprites and a
+bordered badge packed trimmed and drawn through the sprite batch beside
+the loose files, one texel to a pixel — every pixel identical, with nearest
+and with linear filtering.
+
+### The Atlas Editor edits the file, with an undo history of its own
+
+Stage 96. Window ▸ Atlas Editor, or an atlas or texture in the asset
+browser (double-click an atlas; "Slice in Atlas Editor" on a texture):
+a sheet shown with its regions outlined, cut by a grid (cell, offset,
+spacing — every whole cell, in reading order, named `<sheet>_<i>`) or by
+hand (Draw region, then drag), regions picked on the sheet or in the list,
+each one's name, rectangle and pivot edited (Centre and Feet buttons for
+the two pivots everyone wants), a run of regions previewed as an animation
+at a chosen rate, and Save writing the `.atlas.ron` (version 2, stage 95)
+through a temporary file, then reloaded in the session. Opening a texture
+opens the atlas beside it (`hero.png`, `hero.atlas.ron`) if there is one.
+
+- **A document, not scene state** (`atlas_doc.rs`): the regions, the sheet
+  and their history, kept apart from the scene's. The scene's history
+  watches the selected entities; an atlas is a file no entity owns, and
+  sharing the scene's entries would make a Ctrl+Z in the viewport take
+  back a rename in a window. Unity's Sprite Editor keeps its own
+  revert/apply, Godot's TileSet editor its own undo context; Ctrl+Z is
+  routed to the atlas while the pointer is over its window, and to the
+  scene everywhere else.
+- **Snapshots, settled per gesture**: each edit is a copy of the regions
+  (an atlas is at most a few hundred rectangles), recorded once nothing is
+  held and nothing is being typed — a dragged field or a typed name is one
+  entry, as a gizmo drag is one in the scene. Two hundred entries deep.
+- **Kept honest**: a region is clamped onto the sheet and refused if none
+  of it is there; a name another region has is refused (a typed one is
+  shown in red and stops Save) because `Atlas::index_of` and the packer
+  find regions by it; an atlas with no regions is not saved, since it
+  would not load. Removing a region says that the ones after it move down
+  an index — what a sprite names it by.
+- **The bridge** gains `AtlasOpen`, `AtlasRead`, `AtlasSlice`,
+  `AtlasRegion` (add, rename, move, pivot or remove), `AtlasUndo`,
+  `AtlasRedo` and `AtlasSave`, each answering the atlas as it now is, and
+  `PackAtlas` (stage 95's packer on a folder).
+
+Pinned by `atlas_doc/tests.rs` (a sheet opens empty beside its atlas; a
+grid slicing names its cells; every edit one undo entry, redo puts it back;
+a change made in place is one entry once settled; duplicate names and
+off-sheet regions refused; a saved atlas opens as it was), `slice.rs`,
+`canvas.rs`, `preview.rs`, and `voltra-editor/tests/authoring.rs`: the
+editor launched under Xvfb, a folder packed through the bridge, the coin
+sheet sliced by 16, a region renamed, a pivot set, undone and redone, a
+duplicate name refused, the file saved and compared byte for byte with the
+one expected, and opened again. In CI beside the bridge test.
+
+### The brush paints a stamp: picked off the palette or the map, turned whole
+
+Stage 97. Window ▸ Tile Palette (or "Tile Palette…" in a layer's
+inspector): the selected layer's tileset laid out as its sheet is —
+frames grouped into columns by their left edge and rows by their top
+(`paint/palette.rs`), so a grid atlas is its grid and a packed one the
+nearest grid its frames make. A click picks one tile, a drag a block.
+
+- **A stamp, not a tile** (`paint/stamp.rs`): what the brush, the
+  rectangle and the bucket paint is a block of tiles, its holes left
+  alone — Tiled's stamp, Unity's brush pick. The brush puts the block's
+  bottom-left on each cell it crosses; the rectangle and the bucket lay
+  it as a repeating pattern. `Z` turns it clockwise (Shift+`Z` the other
+  way), `X` and `Y` mirror it, Tiled's keys; buttons in the palette and
+  the inspector do the same.
+- **A tile has a third flag** (`Tile::transpose`, `tilemap/orientation.rs`):
+  Tiled's diagonal flip, bit 29 of a stored cell, applied before the two
+  mirrors. With them it makes all eight ways a square turns, so a turned
+  stamp turns its tiles' pictures too — Godot 4's `TRANSFORM_TRANSPOSE`.
+  Turning composes 2×2 signed permutation matrices and reads the three
+  flags back. The bit was unused, so every saved map reads the same; a
+  frame now goes to 2²⁹−2.
+- **The bucket** (`G`, `paint/fill.rs`): every cell four-connected to the
+  clicked one that holds what it holds — a diagonal gap is a wall, as in
+  every paint program. A map here has no edge, so a fill of empty cells
+  is kept to the box around the layer's tiles (an empty cell outside it
+  fills nothing) and to the rectangle's million-cell limit.
+- **The eyedropper is Alt** held as a stroke starts, with any tool: a
+  click picks the tile under it, turned as it is; a drag picks the block.
+  It changes no cell, so it makes no undo entry.
+- **Terrains still join up**: with a terrain chosen, the brush, the
+  rectangle and the bucket paint it and re-pick the edges (stages 39–40).
+- **One stroke, one entry, from either end**: a stroke is press, drag
+  and release (`paint/gesture.rs`), fed by the viewport's pointer or by
+  the bridge's list of cells, so a test paints exactly what a hand would.
+  The bridge gains `TilePick` (a palette block), `TileStamp` (turn and
+  mirror), `TilePaint` (a stroke of any tool, or the eyedropper, one undo
+  entry) and `TileRead`.
+
+Pinned by `stamp.rs` (a block from its bottom-left; holes; turning and
+mirroring a block and its tiles; picked off the map; the pattern),
+`orientation.rs` (four quarter turns are none; a turn is Tiled's diagonal
+and horizontal flags), `fill.rs`, `palette.rs`, `paint/tests.rs` (a 3×2
+stamp; a rectangle of a pattern; the bucket inside walls only; the bucket
+with a terrain auto-tiled; the eyedropper picks and paints nothing),
+`tilemap/mesh_tests.rs` (a turned tile's UVs) and the bridge test in
+`voltra-editor/tests/authoring.rs`: a 3×2 block picked off the palette and
+stamped, undone in one step and redone; a ring drawn in one stroke and
+its inside filled, the ring and the outside left; the eyedropper picking
+a tile and adding no undo entry; a picked tile turned and painted turned.
+
+### A tile collides with its frame's shape and carries values a game reads
+
+Stage 98. `Tilemap::tile_data`, by frame beside `animations` and
+`terrains`: a frame's collision shape and a map of custom values —
+Godot's TileSet physics and custom data layers, Tiled's tile properties.
+
+- **Shapes** (`tilemap/tile_data.rs`): `Full` (the default, so every layer
+  saved before collides as it did), `Empty` (walked through on a solid
+  layer — a ladder, a doorway), `Half(side)`, `Slope { left, right }` (a
+  floor from one height to another, in `0..=1` of the cell: `(0, 1)` is
+  45°, `(0, 0.5)` and `(0.5, 1)` the two tiles of a gentle slope) and
+  `Polygon` (any outline, colliding as its convex hull of up to eight
+  points). A shape is drawn upright and turned with its tile, so one
+  slope frame mirrored is the slope going the other way, and a turned half
+  tile is the other half.
+- **Generated colliders** (stage 25's `sync_colliders`): full tiles merge
+  into boxes as before; every other shaped tile is one static convex
+  polygon of its own, centred on its cell; empty adds nothing. Merging
+  slopes would need concave outlines the physics does not have, and a
+  slope is rarely more than a few tiles; the seam between a slope and the
+  boxes beside it is what a character's `step_height` already walks over.
+  A shape changed without a cell changing rebuilds too: the shapes are
+  hashed into what a layer's colliders were built from.
+- **Custom values** are RON literals — `{"ladder": true, "damage": 5}` —
+  read by cell with `Tilemap::custom_at(cell, key)`, or by a point in the
+  world with `tilemap::query::custom_under(world, point, key)`, which goes
+  through each layer's transform. Kept on the layer, not in the atlas:
+  that is where everything else a frame means to a layer (animations,
+  terrains) already lives, and the collider sync needs nothing but the
+  world.
+- **The editor**: the inspector's "Tile N" section edits the picked tile's
+  frame — a shape from a list, its heights, side or points, and named
+  values of four kinds — undoable as any inspector edit.
+- **The platformer** has a hill (`sprites/ramps.png`, a gentle slope up,
+  across and down the mirrored slope) and a ladder right of the ledge,
+  both tiles of one layer; `ladder.rs` reads `ladder` under the walker and
+  climbs with up and down, gravity off while on it.
+
+Pinned by `tile_data.rs` (a mirrored slope, a turned half tile, values
+read as RON literals), `colliders_tests.rs` (a slope a polygon beside the
+merged full run, empty nothing; a shape change rebuilds; values by cell),
+`query.rs`, the platformer's `ladder.rs`, and
+`voltra-physics/tests/tile_slopes.rs`: a `CharacterBody2D` walked up a
+gentle slope of two tiles onto a platform, and up the same slope mirrored.
 
 ### wgpu 30 API notes
 
@@ -6190,6 +6395,10 @@ Same problem, same rule: read the source, not a tutorial.
 | Pointer position | `Response::hover_pos` is in global screen points; subtract `response.rect.min` for widget-local ones |
 | Shortcuts | `InputState::consume_shortcut` matches modifiers *logically* — extra Shift and Alt are ignored, so `Ctrl+Z`'s pattern also accepts `Ctrl+Shift+Z`. Test the most specific one first |
 | Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |
+| Context menu | `Response::context_menu(\|ui\| …)` opens on a secondary click; close it from inside with `ui.close()` |
+| Strokes | `Painter::rect_stroke(rect, radius, stroke, StrokeKind)` takes a `StrokeKind` (`Inside`, `Middle`, `Outside`) |
+| `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before |
+| Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes
 

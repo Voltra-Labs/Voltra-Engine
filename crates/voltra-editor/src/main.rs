@@ -1,3 +1,4 @@
+mod atlas_doc;
 mod bridge;
 mod camera;
 mod clipboard;
@@ -12,6 +13,7 @@ mod gizmo;
 mod instance;
 mod joints;
 mod marquee;
+mod pack_atlas;
 mod paint;
 mod panels;
 mod picking;
