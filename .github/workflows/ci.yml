@@ -135,10 +135,12 @@ jobs:
       # The editor itself, launched under Xvfb on a software Vulkan driver
       # and driven through its bridge: grid snapping, the Console's filter,
       # a project setting saved and read back (crates/voltra-editor/tests/bridge.rs).
+      # winit opens libxkbcommon-x11 at run time on X11, and the runner
+      # image does not ship it: without it the editor panics at startup.
       - name: The editor through its bridge
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers
+          sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers libxkbcommon-x11-0
           xvfb-run -a cargo test -p voltra-editor --test bridge -- --ignored
 
       # A game made from the template builds natively, lints clean, and its
