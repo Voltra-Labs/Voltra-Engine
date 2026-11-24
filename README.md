@@ -385,6 +385,28 @@ networking for 0.3 — planned in [docs/plan-0.2-0.3.md](docs/plan-0.2-0.3.md).
 | 85 | Editor comfort: grid snapping, a console, project settings | done |
 | 86 | Touch: fingers as pointers, a tap as a click, virtual sticks | done |
 | 87 | Version 0.1: a user guide checked by CI, two more sample games, every public item documented | done |
+| 88 | Rebound controls saved through the saves storage, the web included | done |
+| 89 | Window settings from a tick: fullscreen, size, vsync, monitor modes | done |
+| 90 | An options-screen prefab: display, audio, rebinding | done |
+| 91 | Shaped text: HarfBuzz runs, a fallback font chain per language | done |
+| 92 | Bidirectional text and Unicode line breaking; the caret in visual order | done |
+| 93 | Rich text: inline colour, bold, size, font and icons | done |
+| 94 | UI 3: dropdown, tooltip, tabs, swappable themes | done |
+| 95 | Texture packer: `cargo xtask pack-atlas`, trimmed regions, pivots | done |
+| 96 | Atlas editor: slice by grid or by hand, preview, undo | done |
+| 97 | Tilemap editor: palette, stamps, rotation, flood fill, eyedropper | done |
+| 98 | Tiles with their own collision shapes and custom data | done |
+| 104 | Streaming music, loop points, equal-power crossfades | done |
+| 105 | Bus effects: filters, delay, reverb, ducking; `default.buses.ron` | done |
+| 106 | Editor: prefab edit mode, search in hierarchy and assets | done |
+| 111 | `voltra-net`: UDP and WebSocket transports, the web included | done |
+| 112 | Connections, channels and typed messages | done |
+| 113 | `voltra-server`; host, join, listen servers | done |
+| 114 | Replication: replicated components, snapshots, deltas, budgets | done |
+| 115 | Interpolation of remote entities through a jitter buffer | done |
+| 116 | Prediction and reconciliation of the local player | done |
+| 117 | Network play in the editor: clients, link conditions, counters | done |
+| 118 | `games/arena`: a networked sample, native and web | done |
 
 ## Contributing
 
