@@ -1,0 +1,30 @@
+[package]
+name = "voltra-bench"
+description = "Benchmarks of the engine's hot paths, their JSON results, and the regression check that compares two runs."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# Run through `cargo xtask bench`, which builds this in release: a debug
+# build's numbers measure the compiler's settings, not the engine.
+[[bin]]
+name = "voltra-bench"
+path = "src/main.rs"
+
+[dependencies]
+voltra-assets.workspace = true
+voltra-core.workspace = true
+voltra-ecs.workspace = true
+voltra-physics.workspace = true
+voltra-render.workspace = true
+voltra-scene.workspace = true
+# The device the GPU benchmarks make, the way the headless tests make theirs.
+voltra-testkit.workspace = true
+log.workspace = true
+env_logger.workspace = true
+ron.workspace = true
+serde.workspace = true
+# The results: what CI keeps as an artifact and the comparer reads back.
+serde_json.workspace = true

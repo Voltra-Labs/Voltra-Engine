@@ -5,6 +5,7 @@
 //! builds and run identically on every platform it does. `.cargo/config.toml`
 //! holds the alias.
 
+mod bench;
 mod dist;
 mod files;
 mod guide;
@@ -45,7 +46,15 @@ Tasks:
         assets/)
   guide
         Run the user guide's checked commands (docs/guide), in order, as
-        someone following it from a clean checkout would";
+        someone following it from a clean checkout would
+  bench [--save FILE] [--compare FILE]... [--threshold P]
+        [--filter TEXT] [--runs N] [--quick]
+        Build the benchmark suite (crates/voltra-bench) in release, run
+        it and write its JSON to FILE (default: target/bench/latest.json).
+        With --compare, compare it with an earlier run (several files:
+        the best of them) and fail if a benchmark slowed past its
+        threshold, or past P percent for all of them. --runs keeps the
+        best of N runs; --quick only checks that the suite runs";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -55,6 +64,7 @@ fn main() -> ExitCode {
         Some("new-game") => new_game_command(args),
         Some("pack-atlas") => pack_atlas::run(args, &workspace_root()),
         Some("guide") => guide::run(&workspace_root()),
+        Some("bench") => bench::run(args, &workspace_root()),
         Some("-h" | "--help") | None => {
             println!("{USAGE}");
             return ExitCode::SUCCESS;

@@ -3862,6 +3862,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-bench"
+version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+ "ron",
+ "serde",
+ "serde_json",
+ "voltra-assets",
+ "voltra-core",
+ "voltra-ecs",
+ "voltra-physics",
+ "voltra-render",
+ "voltra-scene",
+ "voltra-testkit",
+]
+
+[[package]]
 name = "voltra-bridge"
 version = "0.1.0"
 dependencies = [
