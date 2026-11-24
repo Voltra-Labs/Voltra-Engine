@@ -5276,6 +5276,50 @@ clicked from English to Spanish by a button the game's tick answers —
 the line re-wrapped within the box, a speaker name missing in Spanish
 showing its key — and back from code.
 
+### Tweens and timers are asked for in the tick and asked about after
+
+Stage 82. A game moving a property to a value over time, or waiting for a
+moment, from code — what a door sliding open or a power-up wearing off
+needs, without authoring a clip.
+
+- **`Tweens`** (`voltra-scene`): `tick.tween(entity, property, to,
+  seconds, ease)` over the `keyframes::Property` list clips already
+  animate, with their `Ease`s — one code path writes a property for both.
+  `tweens.then(previous, …)` chains a tween to start when another
+  finishes, from where it left the property and with the rest of that
+  frame; `cancel` stops one and its chain; `finished(id)` is true the
+  frame it lands, exactly on its value. A second tween on the same
+  property of the same entity takes it over (the newest target wins, as
+  a retargeted move expects); a value of the wrong kind is refused,
+  logged and finished at once so a chain behind it still runs.
+- **`Timers`**: `tick.after(seconds, owner)` once, `tick.every(seconds,
+  owner)` repeating; `timers.fired(id)` the frame one comes, `times(id)`
+  how often in a long frame. Periods below a millisecond are raised to
+  one, so a long frame cannot spin.
+- **Asked about, not called back** — Godot's timers emit signals and
+  Unity's `Invoke` names a method; here the tick checks, as it checks a
+  click. A callback is the game's code held by the engine, and a game
+  library reloaded mid-play (stage 77) must leave none of its code
+  behind. Ids and values only.
+- **Gone with their entity**: a tween's entity, a timer's owner, despawned
+  — or replaced by a scene change or a reload's rebuild — drops it on the
+  next step, and the chain behind a tween with it.
+- Stepped once a frame, on the frame's delta, while the game simulates
+  (an editor authoring moves nothing), before the tick: the tick reads
+  this frame's finished tweens and fired timers.
+
+Pinned by `tween/tests.rs` (moved and landed exactly; eased; a chain
+started where the last left off with the spare time; a despawned
+entity's tween and its chain stopped, not finished; a newer tween taking
+a property over and leaving others; cancel; a wrong-kind value refused
+with its chain still running; a missing component dropped), `timer.rs`
+(once; repeating with a long frame counted; owners; a zero period
+bounded) and `voltra-core/tests/tweens.rs`: a tick fading a sprite out
+while moving it right, then up in a chained tween, a timer at 0.75 s
+despawning a second entity mid-shrink — its tween stopped and its own
+timer never firing — and a repeating beat, all on the frames they are
+due.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

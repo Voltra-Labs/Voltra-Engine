@@ -39,7 +39,9 @@ pub mod sorting;
 pub mod sprite;
 pub mod text;
 pub mod tilemap;
+pub mod timer;
 pub mod transform;
+pub mod tween;
 pub mod ui;
 
 pub use animation::SpriteAnimation;
@@ -74,7 +76,9 @@ pub use sorting::SortingLayers;
 pub use sprite::{draw_key, Sprite};
 pub use text::{Align, Text};
 pub use tilemap::{Tile, TileMeshCache, Tilemap};
+pub use timer::{TimerId, Timers};
 pub use transform::Transform;
+pub use tween::{TweenId, Tweens};
 pub use ui::{
     UiButton, UiControls, UiLayout, UiRect, UiScroll, UiSlice, UiSlider, UiSliderPart, UiStack,
     UiTextField, UiToggle,

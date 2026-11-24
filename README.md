@@ -367,6 +367,7 @@ privileged and plain `cargo build` covers everything.
 | 79 | UI images: 9-slice panels, image buttons, rows and columns | done |
 | 80 | UI controls: slider, toggle, text field with IME, scrolling lists | done |
 | 81 | Text wrapping and localization: string tables per language | done |
+| 82 | Tweens and timers from the tick, gone with their entity | done |
 
 ## Contributing
 

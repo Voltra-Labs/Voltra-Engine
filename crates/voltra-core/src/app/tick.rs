@@ -78,6 +78,13 @@ pub struct Tick<'a> {
     /// `set_language`, read a string built in code with `text`. Texts
     /// naming a key follow it from the next frame.
     pub locale: &'a mut voltra_scene::Locale,
+    /// Properties moving to values over time: start one with
+    /// [`tween`](Self::tween), chain with `tweens.then`, ask
+    /// `tweens.finished(id)`.
+    pub tweens: &'a mut voltra_scene::Tweens,
+    /// Moments to come: [`after`](Self::after) and [`every`](Self::every)
+    /// make them, `timers.fired(id)` says when one came.
+    pub timers: &'a mut voltra_scene::Timers,
     /// The screen-space controls: what was clicked, changed or submitted
     /// this frame, what is hovered and focused, and where to move the
     /// focus.
@@ -140,6 +147,8 @@ impl App {
                 scenes: &mut self.scenes,
                 saves: &self.saves,
                 locale: &mut self.locale,
+                tweens: &mut self.tweens,
+                timers: &mut self.timers,
                 ui: &mut self.ui_controls,
                 delta,
                 contacts: self.physics_world.contacts(),

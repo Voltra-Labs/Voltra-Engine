@@ -23,6 +23,7 @@ mod startup;
 mod thumbnails;
 mod tick;
 mod tick_audio;
+mod tick_time;
 mod ui_frame;
 mod ui_input;
 #[cfg(target_arch = "wasm32")]
@@ -142,6 +143,10 @@ pub struct App {
     ui_controls: voltra_scene::UiControls,
     /// Whether the window takes IME input: while a text field is focused.
     ime_allowed: bool,
+    /// Properties moving to values over time, started from the ticks.
+    pub(crate) tweens: voltra_scene::Tweens,
+    /// Moments to come, asked for from the ticks.
+    pub(crate) timers: voltra_scene::Timers,
     /// The language the game starts in, before the locale is opened; empty
     /// for English.
     language: String,
@@ -332,6 +337,9 @@ impl App {
         // which reads this frame's clicks.
         self.update_ui_controls();
         drop(input);
+        // Before the tick, so it reads this frame's finished tweens and
+        // fired timers, as it reads this frame's clicks.
+        self.step_tweens_and_timers(delta);
         {
             let _tick = voltra_profile::scope("tick");
             self.run_update(delta);

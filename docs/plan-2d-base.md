@@ -7,7 +7,7 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–81 and W1–W4 (README roadmap): batched, lit and post-processed
+Stages 1–82 and W1–W4 (README roadmap): batched, lit and post-processed
 rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
 continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
@@ -16,7 +16,6 @@ server; a profiler.
 
 What a game still cannot do, found by reading the tree (not guessed):
 
-- tween a value from code, or wait on a timer;
 - give one sprite its own shader;
 - draw through two cameras at once, or into a texture;
 - snap to a grid in the editor, read the log there, edit project settings;
@@ -48,16 +47,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 82 — Tweens and timers
-
-**Scope.** `tick.tween(entity, property, to, seconds, ease)` over the
-property paths animation clips already address, with the same eases;
-`tick.after(seconds, …)` and repeating timers; both cancelled with their
-entity.
-
-**Done when** a test fades and moves a sprite, chains two tweens and fires a
-timer, and a despawned entity's tweens stop.
 
 ## 83 — Sprite materials
 
