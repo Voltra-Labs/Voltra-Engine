@@ -8,9 +8,10 @@
 //!   draws the [`Timeline`]'s moment between two samples;
 //! - **remote**, other components: applied as they arrive;
 //! - **predicted** (the entity this client owns, once a
-//!   [`Prediction`](crate::Prediction) claims it): the server's values are
-//!   kept as a [`Correction`] for prediction to rewind to, and the world's
-//!   copy is the client's own.
+//!   [`Prediction`](crate::Prediction) claims it): the server's values of
+//!   its interpolated components are kept as a [`Correction`] for
+//!   prediction to rewind to, and the world's copy is the client's own; its
+//!   other components are applied as they arrive.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -394,9 +395,11 @@ impl ReplicationClient {
                         registry.remove_replicated(component, world, bound.entity);
                         bound.samples[index].clear();
                     }
-                    // Predicted: the world's copy is the client's own, but a
-                    // component it has never had is put on at once.
-                    Some(_) if predicted && had => {}
+                    // Predicted: its interpolated components (where it is)
+                    // are the client's own, corrected through prediction;
+                    // the rest — a score, a speed — arrive as they come, and
+                    // one it has never had is put on at once.
+                    Some(_) if predicted && had && component.interpolated => {}
                     Some(value) => {
                         if component.interpolated && !predicted {
                             bound.samples[index].push(tick, value.clone());

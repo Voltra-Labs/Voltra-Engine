@@ -6362,6 +6362,58 @@ the clients. Unit tests of the bandwidth cap (a 10 KB/s link carries ten
 1000-byte datagrams a second and drops past a second of queue) and of a
 `LinkControl` changing a link from outside.
 
+### A networked sample decides the match where the server is, and predicts only its own player
+
+Stage 118. `games/arena` (made with `cargo xtask new-game arena --title
+Arena`, then grown): two to four players race for a coin, first to five.
+One game value for every end; what it does depends on where it runs.
+
+- **Where the match is decided** — a dedicated server, a listen server, or
+  a run with no session — the rules run (`authority.rs`): a player spawned
+  from `prefabs/player.prefab.ron` per peer as it joins (`NetOwner` set;
+  the listen host's own player is the `Connected(PeerId::SERVER)` event,
+  so one path spawns all), despawned as it leaves; each player moved one
+  step by its own input (`tick.net.input`, the host's from its keys); the
+  coin taken by whoever reaches it, the round won at its target and
+  restarted after a pause. A **client** runs none of it: it predicts its
+  own player through `tick.predict` with the same `walk`, and replication
+  brings the rest — `Transform`, `Player` (speed and bounds, which `walk`
+  reads, so the replay matches), `Score`, and the scene's `Round` entity
+  (adopted by id from the level both ends loaded; the coin likewise). The
+  scores and the players' colours are drawn on every end from replicated
+  state alone (`hud.rs`).
+- **Inputs are whole numbers** (`Steer`, two `i8`): two bytes on the
+  wire, and the same direction on both ends exactly.
+- **Starting a session**: `Session::{Solo, Host, Join}` from the command
+  line (`--host`, `--join ADDR`, `--bot`) or, in a browser, the page's
+  `?join=ws://…`; a session already running — the editor's network play,
+  a dedicated server's — is left alone. The arena's `NetConfig::protocol`
+  keeps other games out at the handshake.
+- **A dedicated server binary of its own**, `arena-server`, on a seam
+  this stage added to `voltra-server`: `voltra_server::cli::main(name,
+  |args| app)` is the `voltra-server` command line and run, with the
+  game's app and a chance to set defaults (its first scene, its protocol)
+  on the parsed `args` — the way a game builds its player on `App::run`.
+  `voltra-server`'s own binary is now that call with no game. On the web
+  the server binary builds to nothing.
+- **Found by the match**: a predicted entity's non-interpolated
+  components (its score) were being held back with its position; only the
+  interpolated ones (where it is) are the client's own now, the rest apply
+  as they arrive.
+
+Pinned by `games/arena/tests/match.rs` (in `cargo test --workspace`, no
+display): `arena-server` started as a process on a free UDP port, two
+headless bot clients joining it by `udp://` and playing until a round is
+won — both see the same winner, a client, at the target, the same scores,
+the server's log saying it decided it, and a second of each client's
+inputs simulated by the server. `tests/plugin.rs` (the template's): the
+library loaded as the editor loads it, the solo player spawned and walked.
+`crates/voltra-player/web/test/arena.mjs` in CI's web job: the arena's web
+build, on WebGPU and WebGL2, joins a native `arena-server` over WebSocket
+from its page's `?join=`; the server spawns the page's player and the page
+logs that it predicts it. Guide chapter `docs/guide/08-networking.md`,
+whose checked blocks run the match test and the server for two seconds.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

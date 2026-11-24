@@ -96,6 +96,9 @@ jobs:
       # voltra-net's browser WebSocket reaching a native server (no GPU).
       - name: A page connected to a native server
         run: node crates/voltra-player/web/test/net.mjs
+      # The arena's web build joining a native arena-server over WebSocket.
+      - name: The arena in a browser, joined to its server
+        run: node crates/voltra-player/web/test/arena.mjs
       # The guide's checked blocks (docs/guide): a game made, tested and
       # built for the web, as a reader following it would.
       - name: The guide, followed

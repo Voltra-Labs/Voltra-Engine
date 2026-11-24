@@ -1,0 +1,178 @@
+//! A match end to end: the arena's dedicated server as its own process,
+//! and two headless clients — bots — joining it over UDP and playing until
+//! a round is won. Both clients must agree on the winner and the scores the
+//! server decided, and the server must have simulated each one's inputs.
+
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::time::{Duration, Instant};
+
+use arena::{Arena, Pilot, Round, Score, Session, FIRST_SCENE};
+use voltra_assets::AssetPath;
+use voltra_core::replication::{NetOwner, ReplicationConfig};
+use voltra_core::{App, Headless, WindowConfig};
+
+/// The server process, killed however the test ends.
+struct Server {
+    child: Child,
+    log: PathBuf,
+}
+
+impl Server {
+    fn log(&self) -> String {
+        std::fs::read_to_string(&self.log).unwrap_or_default()
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+fn assets() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
+}
+
+fn start_server() -> (Server, u16) {
+    let dir = std::env::temp_dir().join(format!("arena-match-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a folder");
+    let ports = dir.join("ports");
+    let _ = std::fs::remove_file(&ports);
+    let log = dir.join("server.log");
+    let child = Command::new(env!("CARGO_BIN_EXE_arena-server"))
+        .arg("--asset-root")
+        .arg(assets())
+        .args([
+            "--udp",
+            "0",
+            "--ws",
+            "off",
+            "--seconds",
+            "90",
+            "--port-file",
+        ])
+        .arg(&ports)
+        .env("RUST_LOG", "info")
+        .stdout(Stdio::null())
+        .stderr(std::fs::File::create(&log).expect("the log"))
+        .spawn()
+        .expect("the server starts");
+    let server = Server { child, log };
+    let start = Instant::now();
+    loop {
+        if let Ok(text) = std::fs::read_to_string(&ports) {
+            if let Some(port) = text
+                .lines()
+                .find_map(|line| line.strip_prefix("udp "))
+                .and_then(|p| p.trim().parse().ok())
+            {
+                return (server, port);
+            }
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(30),
+            "the server never wrote its port:\n{}",
+            server.log()
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+fn client(port: u16) -> Headless {
+    let app = App::new(WindowConfig::default())
+        .with_asset_root(assets())
+        .with_replication(ReplicationConfig::default())
+        .with_game(Arena::new(
+            Session::Join(format!("udp://127.0.0.1:{port}")),
+            Pilot::Bot,
+        ));
+    let scene = AssetPath::new(FIRST_SCENE).expect("a path");
+    Headless::open(app, &scene).expect("the scene loads")
+}
+
+fn round(game: &Headless) -> Round {
+    game.world()
+        .query::<Round>()
+        .map(|(_, round)| *round)
+        .next()
+        .expect("the round entity")
+}
+
+/// Each player's owner and score, as `game` sees them.
+fn scores(game: &Headless) -> Vec<(u32, u32)> {
+    let mut scores: Vec<(u32, u32)> = game
+        .world()
+        .query::<NetOwner>()
+        .filter_map(|(entity, owner)| Some((owner.0 .0, game.world().get::<Score>(entity)?.0)))
+        .collect();
+    scores.sort_unstable();
+    scores
+}
+
+#[test]
+fn a_server_and_two_clients_play_a_round_to_its_winner() {
+    let (server, port) = start_server();
+    let mut clients = [client(port), client(port)];
+
+    // Stepped with the wall clock: the server keeps real time.
+    let start = Instant::now();
+    let mut last = Instant::now();
+    let winner = loop {
+        std::thread::sleep(Duration::from_millis(8));
+        let delta = last.elapsed().as_secs_f32();
+        last = Instant::now();
+        for client in &mut clients {
+            client.step(1, delta);
+        }
+        if let (Some(a), Some(b)) = (round(&clients[0]).winner, round(&clients[1]).winner) {
+            assert_eq!(a, b, "both clients see one winner");
+            break a;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "no winner in a minute; scores {:?} / {:?}\nserver:\n{}",
+            scores(&clients[0]),
+            scores(&clients[1]),
+            server.log()
+        );
+    };
+
+    let ids: Vec<u32> = clients
+        .iter()
+        .map(|c| c.net().local_id().expect("joined").0)
+        .collect();
+    assert!(ids.contains(&winner), "a client won: {winner} of {ids:?}");
+    // The scores both clients see are the server's: the winner at the
+    // target, and the two the same.
+    let seen = scores(&clients[0]);
+    assert_eq!(seen.len(), 2, "two players: {seen:?}");
+    assert!(
+        seen.contains(&(winner, round(&clients[0]).target)),
+        "{seen:?}"
+    );
+    // Allow the other client's copy a few frames to land the same.
+    for _ in 0..30 {
+        std::thread::sleep(Duration::from_millis(8));
+        for client in &mut clients {
+            client.step(1, 1.0 / 60.0);
+        }
+    }
+    assert_eq!(scores(&clients[1]), scores(&clients[0]));
+    // Each client predicted its own player, and the server simulated the
+    // inputs it sent: a second of them at least.
+    for client in &clients {
+        let acked = client
+            .net()
+            .replication()
+            .and_then(|r| r.client())
+            .map(|c| c.input_ack());
+        assert!(acked > Some(60), "inputs simulated: {acked:?}");
+    }
+    assert!(
+        server.log().contains("wins round 1"),
+        "the server decided it:\n{}",
+        server.log()
+    );
+}

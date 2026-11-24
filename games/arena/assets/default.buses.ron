@@ -1,0 +1,17 @@
+// The project's audio buses: each one's volume and its effects, run first to
+// last before the volume. Every bus feeds the master. Read by the editor and
+// the game alike; hot reloaded; edited in Project Settings.
+//
+// Effects: LowPass(cutoff, q), HighPass(cutoff, q), Delay(time, feedback, mix),
+// Reverb(room_size, damping, width, mix), Duck(by, depth, threshold, attack,
+// release). Times in seconds, levels linear. For example:
+//
+//     (name: "music", effects: [Duck(by: "dialogue", depth: 0.7)]),
+(
+    version: 1,
+    buses: [
+        (name: "music"),
+        (name: "sfx"),
+        (name: "ui"),
+    ],
+)

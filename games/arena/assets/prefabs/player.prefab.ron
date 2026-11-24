@@ -1,0 +1,18 @@
+// A player: what the server spawns for each peer, and what every client
+// spawns from the same file when the server says so.
+(
+    version: 1,
+    entities: [
+        (
+            id: "01a2c000-0000-7000-8000-000000000001",
+            components: {
+                "Name": "Player",
+                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(0.8,0.8)),
+                "Sprite": (color:(0.35,0.75,1.0,1.0),sort_order:2,texture:Some(Path("sprites/checker.png"))),
+                "Player": (speed:5.0,bounds:(8.0,4.0)),
+                "Score": (0),
+                "Replicated": (priority:4.0),
+            },
+        ),
+    ],
+)

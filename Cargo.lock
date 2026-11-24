@@ -188,6 +188,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "arena"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "log",
+ "serde",
+ "voltra-assets",
+ "voltra-core",
+ "voltra-ecs",
+ "voltra-render",
+ "voltra-scene",
+ "voltra-server",
+ "web-sys",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

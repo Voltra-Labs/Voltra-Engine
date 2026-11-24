@@ -1,13 +1,15 @@
-//! The server's command line.
+//! The server's command line, which a game's own server binary shares
+//! through [`crate::cli`].
 
 use std::fmt;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::{ServerOptions, DEFAULT_TICK_RATE};
 use voltra_core::net::{HostOptions, NetConfig, DEFAULT_UDP_PORT, DEFAULT_WEBSOCKET_PORT};
-use voltra_server::{ServerOptions, DEFAULT_TICK_RATE};
 
+/// What `--help` prints.
 pub const USAGE: &str = "\
 Usage: voltra-server [OPTIONS] [SCENE]
 
@@ -38,19 +40,28 @@ pub enum Parsed {
 /// A parsed command line.
 #[derive(Debug, PartialEq)]
 pub struct Args {
+    /// The scene to run, an asset path; none runs an empty world.
     pub scene: Option<String>,
+    /// Where asset paths resolve from; none takes the default root.
     pub asset_root: Option<PathBuf>,
+    /// How to host and tick.
     pub options: ServerOptions,
+    /// Stop after this long; none runs until killed.
     pub seconds: Option<Duration>,
+    /// Where to write the ports once listening.
     pub port_file: Option<PathBuf>,
 }
 
 /// Everything a command line can get wrong.
 #[derive(Debug, PartialEq)]
 pub enum ArgError {
+    /// A flag given no value.
     MissingValue(&'static str),
+    /// A flag given a value it cannot take.
     BadValue(&'static str, String),
+    /// A second scene.
     ExtraScene(String),
+    /// A flag nobody knows.
     UnknownFlag(String),
 }
 
@@ -67,6 +78,7 @@ impl fmt::Display for ArgError {
     }
 }
 
+/// Reads a command line, the program's name left out.
 pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, ArgError> {
     let mut parsed = Args {
         scene: None,
