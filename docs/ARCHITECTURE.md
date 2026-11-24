@@ -5320,6 +5320,66 @@ despawning a second entity mid-shrink — its tween stopped and its own
 timer never firing — and a repeating beat, all on the frames they are
 due.
 
+### A sprite material is a WGSL fragment function and its uniforms
+
+Stage 83. A hit flash, an outline, a dissolve: a sprite or tile layer
+drawn through a shader of the game's own, without the engine growing a
+second sprite pass.
+
+- **The asset**: `x.material.ron` — `(version: 1, shader:
+  "materials/x.wgsl", uniforms: {"flash": Float(0.0), "tint":
+  Color((1, 1, 1, 1))})` — naming a WGSL file that defines `fn
+  fragment(in: Fragment) -> vec4<f32>`. The engine composes the whole
+  shader around it (`voltra_render::material::compose`): the sprite
+  pipeline's camera (group 0) and texture (group 1, `albedo`,
+  `albedo_sampler`), its vertex stage, `Fragment` (position, tint, UV),
+  `sprite_color(in)` — what the plain shader would draw — and `struct
+  Material` from the declared uniforms at group 2. Godot's
+  `canvas_item` shader with the vertex stage fixed; Unity's sprite
+  material. Uniform types are `f32`, `vec2` and `vec4`, laid out by
+  WGSL's uniform rules in name order, at most 256 bytes.
+- **Checked before compiled**: the composed source is parsed and
+  validated with `wgpu::naga` when the material loads, because `wgpu`
+  reports a broken shader to an error scope, asynchronously, not to its
+  caller. A material that will not read or validate is still a handle,
+  its error logged once and shown in the inspector; its sprites draw
+  plainly. Editing the `.wgsl` or the `.ron` reloads it.
+- **On the entity**: `Sprite::material` / `Tilemap::material`, a
+  `SpriteMaterial` — the path, and this entity's uniform values by name
+  (`set("flash", Uniform::Float(1.0))` from a tick; a field per uniform in
+  the inspector). The material is shared, the values are the entity's.
+- **Batching**: each distinct (material revision, uniform block) is one
+  `MaterialUse` in the batch; a range carries its index, so a run splits
+  only where the material or its values change. A scene without materials
+  batches exactly as before.
+- **Drawing**: `MaterialBank` (render) compiles each material once per
+  target format — keyed by its revision, so an edited material is a new
+  pipeline and an old one is let go after unused frames — and uploads the
+  frame's uniform blocks into one buffer, bound per range at a dynamic
+  offset (strided by the device's `min_uniform_buffer_offset_alignment`).
+  `MeshDraw::material` carries the pipeline and offset; the scene and UI
+  passes switch pipelines only between runs that differ. Normals and
+  light layers ignore materials: a material colours, lighting still
+  multiplies. Screen-space sprites draw plainly.
+
+Rejected: **a shader graph** — a node editor is a project of its own,
+and WGSL is what the engine already speaks; **materials writing the
+vertex stage** — a 2D sprite's corners are the batch's, and a vertex
+shader per material would make every material a batch of its own;
+**push constants for the uniforms** — not on WebGL2.
+
+Pinned by `material/uniforms.rs` (layout order and alignment; overrides
+of the right kind; too many or badly named uniforms refused),
+`material/compose.rs` (a material composes valid; a broken one says what
+and where), voltra-assets' `materials/tests.rs` (loaded, composed, laid
+out; a broken shader a handle with an error; the shader's edit reloads
+the material naming it), `batch/material_tests.rs` (runs split only
+where a material or its values change; no store, no materials, batched
+as before), `voltra-core/tests/materials.rs` (the shipped hit flash and
+outline drawn through the engine's own frame, natively) and
+`crates/voltra-player/web/test/materials.mjs` (the same scene, built
+with `dist --web`, on WebGPU and WebGL2, in CI).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5360,6 +5420,9 @@ Verified against the crate source, not from memory:
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7
 rather than trusting a tutorial.
+
+- `wgpu::naga` is re-exported (wgpu_core is in every build, WebGL2 included): `naga::front::wgsl::parse_str` and `naga::valid::Validator::new(ValidationFlags::all(), Capabilities::empty()).validate`, errors through `emit_to_string(source)` — synchronous shader checking, unlike `create_shader_module`, whose errors go to an error scope.
+- A uniform buffer bound with `has_dynamic_offset: true` and `min_binding_size: None` takes per-draw offsets in `set_bind_group(2, group, &[offset])`; offsets must be multiples of `limits().min_uniform_buffer_offset_alignment` (256 on most adapters, WebGL2 included).
 
 ### winit 0.30 on the web
 

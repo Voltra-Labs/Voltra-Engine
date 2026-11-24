@@ -199,6 +199,12 @@ impl Renderer {
     /// The pipeline was created with this exact layout object; a second one
     /// built from the same descriptor is a distinct type as far as wgpu's
     /// validation is concerned and will not bind against it.
+    /// The layout of group 0, the camera, every sprite pipeline binds:
+    /// what a material pipeline is made against.
+    pub fn camera_layout(&self) -> &wgpu::BindGroupLayout {
+        self.camera_binding.layout()
+    }
+
     pub fn texture_layout(&self) -> &wgpu::BindGroupLayout {
         &self.texture_layout
     }

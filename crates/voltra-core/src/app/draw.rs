@@ -20,6 +20,7 @@ impl App {
     pub(super) fn redraw_without_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.resolve_materials();
         let (Some(renderer), Some(textures), Some(atlases), Some(fonts)) = (
             self.renderer.as_mut(),
             self.textures.as_mut(),
@@ -50,6 +51,10 @@ impl App {
             .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
             .at_time(clock_seconds(self.elapsed))
             .with_layers(&self.sorting_layers);
+        let sheets = match self.materials.as_ref() {
+            Some(materials) => sheets.with_materials(materials),
+            None => sheets,
+        };
         // Into last frame's buffers, taken out for the frame and put back.
         let mut batch = std::mem::take(&mut self.frame_batch);
         batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
@@ -58,7 +63,16 @@ impl App {
         // rather than borrowed, so the borrow on `renderer` ends here instead
         // of surviving into the `&mut self` call below.
         let white = renderer.white_bind_group().clone();
-        let draws = super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings);
+        let format = renderer.context().format();
+        let bank = super::scene_draws::prepare_materials(
+            &mut self.material_bank,
+            renderer,
+            format,
+            &batch,
+            self.materials.as_ref(),
+        );
+        let draws =
+            super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings, bank);
 
         let config = renderer.context().config();
         let hud = ui_batch(&self.world, sheets, config.width, config.height, scale);
@@ -87,6 +101,7 @@ impl App {
     pub(super) fn redraw_with_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.resolve_materials();
         let (
             Some(renderer),
             Some(window),
@@ -149,6 +164,8 @@ impl App {
             batch: &mut self.frame_batch,
             tile_meshes: &mut self.tile_meshes,
             gpu_rings: &self.gpu_rings,
+            materials: self.materials.as_ref(),
+            material_bank: &mut self.material_bank,
             elapsed: self.elapsed,
             scale,
         }
@@ -173,6 +190,7 @@ impl App {
             atlases,
             silhouettes: self.silhouettes.as_mut(),
             fonts,
+            materials: self.materials.as_mut(),
             sorting_layers: &self.sorting_layers,
             clips,
             prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
@@ -226,5 +244,15 @@ impl App {
 fn record_gpu_timings(renderer: &mut Renderer) {
     for (pass, ms) in renderer.gpu_timings() {
         voltra_profile::gpu(pass, ms);
+    }
+}
+
+impl App {
+    /// Points every sprite and tile layer naming a material at it — a
+    /// spawned one, a path edited — before a draw reads them.
+    pub(super) fn resolve_materials(&mut self) {
+        if let Some(materials) = self.materials.as_mut() {
+            voltra_scene::sprite_material::resolve_world(&mut self.world, materials);
+        }
     }
 }

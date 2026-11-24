@@ -49,7 +49,8 @@ jobs:
 
   # The web builds end to end, opened in Chromium on WebGPU and on WebGL2
   # (SwiftShader, no GPU): the player's sandbox found in a screenshot, and
-  # the platformer walked into a coin by the keyboard and heard. See
+  # the platformer walked into a coin by the keyboard and heard, and the
+  # sample materials compiled and drawn by each backend. See
   # crates/voltra-player/web/test/.
   web:
     name: web player (Chromium)
@@ -82,6 +83,8 @@ jobs:
         run: node crates/voltra-player/web/test/first-frame.mjs
       - name: A game played, with sound
         run: node crates/voltra-player/web/test/play.mjs
+      - name: Sprite materials on both backends
+        run: node crates/voltra-player/web/test/materials.mjs
       - name: A generated game, built for the web
         run: |
           cargo xtask new-game ci-game

@@ -306,6 +306,7 @@ fn push_alone_merges_contiguous_same_handles_into_one_range() {
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 0..12,
+            material: None,
         }]
     );
 }
@@ -339,18 +340,21 @@ fn push_alone_splits_a_range_when_the_handle_changes() {
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 0..6,
+                material: None,
             },
             SpriteRange {
                 texture: Some(b),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 6..12,
+                material: None,
             },
             SpriteRange {
                 texture: Some(a),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 12..18,
+                material: None,
             },
         ]
     );
@@ -379,12 +383,14 @@ fn push_alone_keeps_none_and_some_in_separate_ranges() {
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 0..6,
+                material: None,
             },
             SpriteRange {
                 texture: Some(a),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 6..12,
+                material: None,
             },
         ]
     );
@@ -433,12 +439,14 @@ fn draw_order_still_follows_sort_order() {
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 0..6,
+                material: None,
             },
             SpriteRange {
                 texture: Some(high),
                 normal: None,
                 light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
                 indices: 6..12,
+                material: None,
             },
         ],
         "ranges must follow draw order, not spawn order"
@@ -462,6 +470,7 @@ fn from_world_builds_one_range_for_untextured_sprites() {
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 0..12,
+            material: None,
         }]
     );
 }

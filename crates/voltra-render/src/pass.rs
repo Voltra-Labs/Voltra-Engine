@@ -75,6 +75,59 @@ pub struct MeshDraw<'a> {
     /// ignores it.
     pub light_layers: u32,
     pub indices: Range<u32>,
+    /// The material the range is drawn with, or `None` for the sprite
+    /// pipeline the pass was handed.
+    pub material: Option<MaterialDraw<'a>>,
+}
+
+/// A range drawn through a material: its pipeline, and where its uniforms
+/// are in the frame's uniform buffer.
+#[derive(Clone, Copy)]
+pub struct MaterialDraw<'a> {
+    pub pipeline: &'a wgpu::RenderPipeline,
+    /// The frame's uniform blocks, bound at group 2.
+    pub uniforms: &'a wgpu::BindGroup,
+    /// This range's block in it.
+    pub offset: u32,
+}
+
+/// Which pipeline a pass last bound, so a run of ranges on one binds it
+/// once and a range on another rebinds what changed.
+pub(crate) struct Binder<'p> {
+    bound: Option<*const wgpu::RenderPipeline>,
+    default: &'p wgpu::RenderPipeline,
+    camera: &'p wgpu::BindGroup,
+}
+
+impl<'p> Binder<'p> {
+    pub(crate) fn new(default: &'p wgpu::RenderPipeline, camera: &'p wgpu::BindGroup) -> Self {
+        Self {
+            bound: None,
+            default,
+            camera,
+        }
+    }
+
+    /// Binds what `range` is drawn with: its material's pipeline and block,
+    /// or the default pipeline; then its texture.
+    pub(crate) fn bind(&mut self, pass: &mut wgpu::RenderPass<'_>, range: &MeshDraw<'_>) {
+        let pipeline = range.material.map_or(self.default, |m| m.pipeline);
+        let pointer: *const wgpu::RenderPipeline = pipeline;
+        if self.bound != Some(pointer) {
+            pass.set_pipeline(pipeline);
+            pass.set_bind_group(0, self.camera, &[]);
+            self.bound = Some(pointer);
+        }
+        pass.set_bind_group(1, range.texture, &[]);
+        if let Some(material) = range.material {
+            pass.set_bind_group(2, material.uniforms, &[material.offset]);
+        }
+    }
+
+    /// Something else bound a pipeline: the next range binds its own.
+    pub(crate) fn forget(&mut self) {
+        self.bound = None;
+    }
 }
 
 /// Records a clear, then one draw per entry of `draws`, each against its own
@@ -167,10 +220,9 @@ fn record_batches(
         return;
     }
 
-    pass.set_pipeline(pipeline);
-    pass.set_bind_group(0, camera, &[]);
+    let mut binder = Binder::new(pipeline, camera);
     for draw in draws {
-        pass.set_bind_group(1, draw.texture, &[]);
+        binder.bind(&mut pass, draw);
         mesh.draw_range(&mut pass, draw.indices.clone());
     }
 }

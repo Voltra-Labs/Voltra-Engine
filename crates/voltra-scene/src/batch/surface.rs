@@ -13,6 +13,10 @@ pub struct Surface {
     pub normal: Option<Handle<Texture>>,
     /// The light layers the quad is on.
     pub light_layers: u32,
+    /// The material it is drawn through: an index into
+    /// [`SpriteBatch::materials`](super::SpriteBatch::materials), or `None`
+    /// for the plain sprite shader.
+    pub material: Option<u32>,
 }
 
 impl Surface {
@@ -22,7 +26,13 @@ impl Surface {
             texture,
             normal: None,
             light_layers: DEFAULT_LIGHT_LAYERS,
+            material: None,
         }
+    }
+
+    /// The same surface through the batch's material `material`.
+    pub fn through(self, material: Option<u32>) -> Self {
+        Self { material, ..self }
     }
 
     /// The same surface on `light_layers`.

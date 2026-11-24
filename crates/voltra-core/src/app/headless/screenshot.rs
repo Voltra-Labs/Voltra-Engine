@@ -89,6 +89,7 @@ impl Headless {
     pub fn screenshot(&mut self, width: u32, height: u32) -> Result<Screenshot, ScreenshotError> {
         let (width, height) = (width.max(1), height.max(1));
         self.ensure_renderer(width, height)?;
+        self.app.resolve_materials();
         let app = &mut self.app;
         let (
             Some(renderer),
@@ -128,6 +129,8 @@ impl Headless {
             batch: &mut app.frame_batch,
             tile_meshes: &mut app.tile_meshes,
             gpu_rings: &app.gpu_rings,
+            materials: app.materials.as_ref(),
+            material_bank: &mut app.material_bank,
             elapsed: app.elapsed,
             scale: 1.0,
         }

@@ -1,0 +1,10 @@
+// The materials sample: three coins, plain, hit-flashed and outlined, in
+// scenes/materials.ron. What crates/voltra-player/web/test/materials.mjs
+// builds for the web.
+(
+    version: 1,
+    name: "Voltra Materials",
+    scene: "scenes/materials.ron",
+    window: (width: 960, height: 540),
+    assets: "assets",
+)

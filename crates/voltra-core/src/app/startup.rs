@@ -71,6 +71,7 @@ impl App {
         voltra_scene::text::resolve_fonts(&mut self.world, &mut fonts);
         self.fonts = Some(fonts);
         self.open_locale(&asset_root);
+        self.materials = Some(voltra_assets::Materials::new(asset_root.clone()));
 
         // The audible third of the same problem: a source in a world populated
         // before `run` has never met a `Clips` either.

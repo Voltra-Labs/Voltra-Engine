@@ -47,6 +47,9 @@ pub struct UiFrame<'a> {
     pub silhouettes: Option<&'a mut voltra_assets::Silhouettes>,
     /// Faces and glyph atlases, for a panel resolving a text's font.
     pub fonts: &'a mut Fonts,
+    /// Sprite materials, for a panel naming one and editing its uniforms.
+    /// `None` before the asset root is known.
+    pub materials: Option<&'a mut voltra_assets::Materials>,
     /// The project's sorting layers, for the inspector's choice and the pick.
     pub sorting_layers: &'a voltra_scene::SortingLayers,
     /// Loaded sounds, shared with the loop's own playback for the same reason

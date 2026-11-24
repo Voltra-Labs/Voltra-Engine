@@ -417,6 +417,7 @@ fn render(
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: range.indices.clone(),
+            material: None,
         })
         .collect();
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

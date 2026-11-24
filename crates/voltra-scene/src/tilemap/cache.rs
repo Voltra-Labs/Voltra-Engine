@@ -35,6 +35,15 @@ use super::chunk::{cell_of, Chunk, ChunkKey};
 use super::mesh::{corners_of, sample, surface};
 use super::Tilemap;
 use crate::batch::SpriteBatch;
+
+/// How a chunk is appended: whether it is wholly in view — copied as a
+/// world mesh — or culled quad by quad, and the batch's material for the
+/// layer.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Place {
+    pub inside: bool,
+    pub material: Option<u32>,
+}
 use crate::sprite::sheets::Sheets;
 
 /// Every tilemap layer's cached chunks, owned by whoever builds batches
@@ -188,8 +197,9 @@ impl LayerCache {
         chunk: &Chunk,
         sheets: Sheets<'_>,
         stamp: &LayerStamp,
-        inside: bool,
+        at: Place,
     ) {
+        let Place { inside, material } = at;
         let build = self.build;
         let entry = self.chunks.entry(key).or_default();
         entry.build = build;
@@ -198,7 +208,7 @@ impl LayerCache {
             entry.stamp = Some(stamp.for_chunk(entry.animated));
         }
         if inside {
-            entry.append_world(batch, matrix, map);
+            entry.append_world(batch, matrix, map, material);
         } else {
             for quad in &entry.quads {
                 batch.push_quad_on(
@@ -206,7 +216,7 @@ impl LayerCache {
                     quad.corners,
                     quad.uvs,
                     map.color,
-                    surface(map, quad.texture),
+                    surface(map, quad.texture, material),
                 );
             }
         }
@@ -234,7 +244,13 @@ impl ChunkMesh {
     /// would have written them, copied in. The surfaces are `map`'s now —
     /// its normal map and light layers are not part of the mesh, so editing
     /// them rebuilds nothing.
-    fn append_world(&mut self, batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap) {
+    fn append_world(
+        &mut self,
+        batch: &mut SpriteBatch,
+        matrix: Mat3,
+        map: &Tilemap,
+        material: Option<u32>,
+    ) {
         let color = map.color;
         let fresh = self
             .world
@@ -254,7 +270,7 @@ impl ChunkMesh {
         let mut start = first;
         for &(texture, quads) in &world.runs {
             let end = start + quads * crate::batch::QUAD_INDICES.len() as u32;
-            batch.extend_ranges(surface(map, texture), start..end);
+            batch.extend_ranges(surface(map, texture, material), start..end);
             start = end;
         }
     }

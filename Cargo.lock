@@ -3883,6 +3883,7 @@ dependencies = [
  "image",
  "log",
  "pollster",
+ "serde",
  "voltra-testkit",
  "wgpu",
 ]

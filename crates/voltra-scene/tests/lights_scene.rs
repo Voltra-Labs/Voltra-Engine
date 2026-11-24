@@ -335,6 +335,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
                 normal: range.normal.map(|handle| textures.raw_bind_group(handle)),
                 light_layers: range.light_layers,
                 indices: range.indices.clone(),
+                material: None,
             }
         })
         .collect();
@@ -346,6 +347,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
                 normal: draw.normal,
                 light_layers: draw.light_layers,
                 indices: draw.indices.clone(),
+                material: None,
             })
         })
         .collect();

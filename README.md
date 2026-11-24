@@ -368,6 +368,7 @@ privileged and plain `cargo build` covers everything.
 | 80 | UI controls: slider, toggle, text field with IME, scrolling lists | done |
 | 81 | Text wrapping and localization: string tables per language | done |
 | 82 | Tweens and timers from the tick, gone with their entity | done |
+| 83 | Sprite materials: a WGSL fragment and its uniforms, on every backend | done |
 
 ## Contributing
 

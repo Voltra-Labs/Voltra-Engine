@@ -3,7 +3,7 @@
 
 use crate::mesh::Mesh;
 use crate::particles::{GpuParticles, ParticlePipelines};
-use crate::pass::MeshDraw;
+use crate::pass::{Binder, MeshDraw};
 
 /// One draw of the world, in the order it is drawn.
 ///
@@ -58,25 +58,16 @@ pub fn draw_scene(
     });
 
     // Which pipeline is bound, so a run of ranges binds it once.
-    #[derive(PartialEq)]
-    enum Bound {
-        Nothing,
-        Sprites,
-        Particles,
-    }
-    let mut bound = Bound::Nothing;
+    let mut binder = Binder::new(sprites, camera);
+    let mut particles_bound = false;
     for draw in draws {
         match draw {
             SceneDraw::Mesh(range) => {
                 let Some(mesh) = mesh else {
                     continue;
                 };
-                if bound != Bound::Sprites {
-                    pass.set_pipeline(sprites);
-                    pass.set_bind_group(0, camera, &[]);
-                    bound = Bound::Sprites;
-                }
-                pass.set_bind_group(1, range.texture, &[]);
+                binder.bind(&mut pass, range);
+                particles_bound = false;
                 mesh.draw_range(&mut pass, range.indices.clone());
             }
             SceneDraw::Particles {
@@ -87,10 +78,11 @@ pub fn draw_scene(
                 let Some(pipelines) = particles else {
                     continue;
                 };
-                if bound != Bound::Particles {
+                if !particles_bound {
                     pass.set_pipeline(&pipelines.draw);
                     pass.set_bind_group(0, camera, &[]);
-                    bound = Bound::Particles;
+                    particles_bound = true;
+                    binder.forget();
                 }
                 pass.set_bind_group(1, *texture, &[]);
                 emitter.draw(&mut pass);

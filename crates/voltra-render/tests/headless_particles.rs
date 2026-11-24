@@ -218,6 +218,7 @@ fn particles_draw_between_the_sprites_around_them() {
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 0..6,
+            material: None,
         }),
         SceneDraw::Particles {
             particles: &particles,
@@ -229,6 +230,7 @@ fn particles_draw_between_the_sprites_around_them() {
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
             indices: 6..12,
+            material: None,
         }),
     ];
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -321,6 +323,7 @@ fn particles_are_drawn_into_the_light_layers_on_their_emitter_s() {
             normal: None,
             light_layers: 0b1,
             indices: 0..6,
+            material: None,
         }),
         SceneDraw::Particles {
             particles: &particles,

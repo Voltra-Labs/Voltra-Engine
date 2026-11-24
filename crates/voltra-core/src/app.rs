@@ -90,6 +90,10 @@ pub struct App {
     renderer: Option<Renderer>,
     textures: Option<Textures>,
     atlases: Option<Atlases>,
+    /// The materials sprites and tile layers name.
+    pub(crate) materials: Option<voltra_assets::Materials>,
+    /// The pipelines and uniforms they draw with; made with the first one.
+    material_bank: Option<voltra_render::material::MaterialBank>,
     /// Sprites' traced outlines, for shadow casters shaped by their sprite.
     /// `None` until `resumed`, for the root, like the stores around it.
     silhouettes: Option<voltra_assets::Silhouettes>,
@@ -423,6 +427,14 @@ impl App {
             }
             // A prefab's instances take the edit, but for what they override.
             if self.reload_prefab(&path) {
+                continue;
+            }
+            // A material, or a shader one names: compiled again next draw.
+            if self
+                .materials
+                .as_mut()
+                .is_some_and(|materials| materials.reload(&path))
+            {
                 continue;
             }
             // Strings land in their texts next frame.

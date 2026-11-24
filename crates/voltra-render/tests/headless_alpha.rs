@@ -53,6 +53,7 @@ fn half_alpha_red_over_black_is_half_red() {
         normal: None,
         light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
         indices: 0..6,
+        material: None,
     }];
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {

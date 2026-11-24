@@ -26,6 +26,7 @@ mod prefab;
 mod shadow_caster;
 mod sorting_layer;
 mod sprite;
+mod sprite_material;
 mod text;
 mod tilemap;
 mod transform;
@@ -138,6 +139,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         preview,
                     ));
                 }
+                if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
+                    let materials = frame.materials.as_deref_mut();
+                    claim = claim.or(sprite_material::show(ui, &mut sprite.material, materials));
+                }
                 claim = claim.or(ui_slice::show(ui, frame.world, entity));
                 if frame.world.get::<Sprite>(entity).is_some() {
                     ui.separator();
@@ -162,6 +167,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             paint: &mut editor.paint,
                         },
                     ));
+                }
+                if let Some(map) = frame.world.get_mut::<Tilemap>(entity) {
+                    let materials = frame.materials.as_deref_mut();
+                    claim = claim.or(sprite_material::show(ui, &mut map.material, materials));
                 }
                 if let Some(text) = frame.world.get_mut::<Text>(entity) {
                     ui.separator();

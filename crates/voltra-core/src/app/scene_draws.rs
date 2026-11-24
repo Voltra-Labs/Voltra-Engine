@@ -1,8 +1,9 @@
 //! The world's draw list: the batch's texture runs, with each GPU emitter's
 //! draw between them where the batch's sort put it.
 
-use voltra_assets::Textures;
-use voltra_render::{wgpu, MeshDraw, SceneDraw};
+use voltra_assets::{Materials, Textures};
+use voltra_render::material::{MaterialBank, MaterialRequest};
+use voltra_render::{wgpu, MeshDraw, Renderer, SceneDraw};
 use voltra_scene::SpriteBatch;
 
 use super::gpu_particles::GpuParticleRings;
@@ -16,6 +17,7 @@ pub(super) fn scene_draws<'a>(
     textures: &'a Textures,
     white: &'a wgpu::BindGroup,
     rings: &'a GpuParticleRings,
+    bank: Option<&'a MaterialBank>,
 ) -> Vec<SceneDraw<'a>> {
     let bind = |texture| match texture {
         Some(handle) => textures.bind_group(handle),
@@ -44,8 +46,49 @@ pub(super) fn scene_draws<'a>(
                     .map(|handle| textures.raw_bind_group(handle)),
                 light_layers: range.light_layers,
                 indices: range.indices.clone(),
+                material: range
+                    .material
+                    .and_then(|index| bank.and_then(|bank| bank.draw(index))),
             }));
         }
     }
     draws
+}
+
+/// Compiles what `batch`'s materials need for a target of `format` and
+/// uploads their uniforms, into `bank` — made on first use. A material the
+/// store cannot draw with leaves its ranges plain.
+pub(super) fn prepare_materials<'b>(
+    bank: &'b mut Option<MaterialBank>,
+    renderer: &Renderer,
+    format: wgpu::TextureFormat,
+    batch: &SpriteBatch,
+    materials: Option<&Materials>,
+) -> Option<&'b MaterialBank> {
+    if batch.materials.is_empty() {
+        return bank.as_ref();
+    }
+    let materials = materials?;
+    let device = renderer.context().device();
+    let bank = bank.get_or_insert_with(|| MaterialBank::new(device));
+    let requests: Vec<Option<MaterialRequest<'_>>> = batch
+        .materials
+        .iter()
+        .map(|used| {
+            let material = materials.get(used.material)?;
+            material.is_usable().then(|| MaterialRequest {
+                revision: used.revision,
+                source: &material.source,
+                block: used.block,
+            })
+        })
+        .collect();
+    bank.prepare(
+        device,
+        renderer.context().queue(),
+        format,
+        [renderer.camera_layout(), renderer.texture_layout()],
+        &requests,
+    );
+    Some(bank)
 }

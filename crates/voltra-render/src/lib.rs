@@ -14,6 +14,7 @@ pub mod graph;
 pub mod light_layers;
 pub mod lights;
 pub mod lines;
+pub mod material;
 pub mod mesh;
 pub mod normals;
 pub mod particles;
@@ -44,7 +45,7 @@ pub use normals::NormalPass;
 pub use particles::{
     GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse, SimStep,
 };
-pub use pass::MeshDraw;
+pub use pass::{MaterialDraw, MeshDraw};
 pub use post::{PostPass, PostSettings};
 pub use readback::read_rgba8;
 pub use renderer::{Layer, Renderer};

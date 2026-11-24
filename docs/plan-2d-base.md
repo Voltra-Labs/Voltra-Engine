@@ -7,7 +7,7 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–82 and W1–W4 (README roadmap): batched, lit and post-processed
+Stages 1–83 and W1–W4 (README roadmap): batched, lit and post-processed
 rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
 continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
@@ -16,7 +16,6 @@ server; a profiler.
 
 What a game still cannot do, found by reading the tree (not guessed):
 
-- give one sprite its own shader;
 - draw through two cameras at once, or into a texture;
 - snap to a grid in the editor, read the log there, edit project settings;
 - read a touch.
@@ -47,16 +46,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 83 — Sprite materials
-
-**Scope.** A `Material` asset: a WGSL fragment function with declared
-uniforms, compiled into a pipeline variant of the sprite pass; sprites and
-tile layers name one; uniforms set from the inspector and from ticks;
-materials break batches only where they differ.
-
-**Done when** a hit-flash and an outline material run on WebGPU, WebGL2 and
-native, and a scene without materials batches as before.
 
 ## 84 — Several cameras; drawing into a texture
 

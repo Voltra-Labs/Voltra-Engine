@@ -423,6 +423,7 @@ mod frame_tests {
             visible: None,
             time: 0.0,
             layers: None,
+            materials: None,
         };
 
         assert_eq!(

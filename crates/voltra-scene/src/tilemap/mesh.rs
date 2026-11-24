@@ -17,6 +17,7 @@ use crate::sprite::sheets::Sheets;
 /// Appends every tile of `map`, placed by `matrix`, to `batch`, with nothing
 /// kept for the next frame — a pick, a test, a one-off batch.
 pub fn push(batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap, sheets: Sheets<'_>) {
+    let material = batch.material(map.material.as_ref(), sheets);
     for (&key, chunk) in &map.chunks {
         if in_view(map, matrix, key, sheets).is_none() {
             continue;
@@ -24,7 +25,13 @@ pub fn push(batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap, sheets: Sheets
         for (index, tile) in chunk.tiles() {
             let (uvs, texture) = sample(map, tile, sheets);
             let corners = corners_of(map, cell_of(key, index));
-            batch.push_quad_on(matrix, corners, uvs, map.color, surface(map, texture));
+            batch.push_quad_on(
+                matrix,
+                corners,
+                uvs,
+                map.color,
+                surface(map, texture, material),
+            );
         }
     }
 }
@@ -40,9 +47,11 @@ pub(crate) fn push_cached(
     cache: &mut LayerCache,
 ) {
     let stamp = LayerStamp::of(map, sheets);
+    let material = batch.material(map.material.as_ref(), sheets);
     for (&key, chunk) in &map.chunks {
         if let Some(inside) = in_view(map, matrix, key, sheets) {
-            cache.push_chunk(batch, matrix, map, key, chunk, sheets, &stamp, inside);
+            let at = super::cache::Place { inside, material };
+            cache.push_chunk(batch, matrix, map, key, chunk, sheets, &stamp, at);
         }
     }
 }
@@ -94,11 +103,13 @@ pub(super) fn corners_of(map: &Tilemap, cell: IVec2) -> [Vec2; 4] {
 pub(super) fn surface(
     map: &Tilemap,
     texture: Option<voltra_assets::Handle<voltra_render::Texture>>,
+    material: Option<u32>,
 ) -> Surface {
     Surface {
         texture,
         normal: map.normal_handle.filter(|_| texture == map.texture_handle),
         light_layers: map.light_layers,
+        material,
     }
 }
 

@@ -82,6 +82,7 @@ impl Headless {
         voltra_scene::text::resolve_fonts(&mut app.world, &mut fonts);
         app.fonts = Some(fonts);
         app.open_locale(&root);
+        app.materials = Some(voltra_assets::Materials::new(root.clone()));
         let mut clips = Clips::new(root.clone());
         resolve_world_clips(&mut app.world, &mut clips);
         app.clips = Some(clips);
