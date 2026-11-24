@@ -1,9 +1,9 @@
-//! Save slots in a browser: the page's `localStorage`.
+//! A player's files in a browser: the page's `localStorage`.
 //!
 //! What Godot's and Unity's web exports do too (theirs through IndexedDB,
-//! behind a filesystem shim; a slot is text and small, so the synchronous
-//! store does). Each slot is one key, the path the folder rules give it
-//! (`/<game>/saves/<slot>.save.ron`), so two games on one origin keep apart
+//! behind a filesystem shim; a player's file is text and small, so the
+//! synchronous store does). Each file is one key, the path the folder rules
+//! give it (`/<game>/saves/<slot>.save.ron`), so two games on one origin keep apart
 //! as two folders would. A browser that refuses storage — private mode,
 //! storage turned off — is an error to the game, as a read-only disk is.
 
@@ -29,21 +29,21 @@ fn refused(what: &str, error: wasm_bindgen::JsValue) -> io::Error {
 
 /// One write: `localStorage` replaces a value whole or not at all — a full
 /// quota fails the call and leaves the old value.
-pub(super) fn write(path: &Path, text: &str) -> io::Result<()> {
+pub(crate) fn write(path: &Path, text: &str) -> io::Result<()> {
     storage()?
         .set_item(&key(path), text)
         .map_err(|e| refused("write", e))
 }
 
 /// The length of what `path` holds, in bytes, or `None` when nothing does.
-pub(super) fn size(path: &Path) -> io::Result<Option<u64>> {
+pub(crate) fn size(path: &Path) -> io::Result<Option<u64>> {
     let value = storage()?
         .get_item(&key(path))
         .map_err(|e| refused("read", e))?;
     Ok(value.map(|text| text.len() as u64))
 }
 
-pub(super) fn read(path: &Path) -> io::Result<String> {
+pub(crate) fn read(path: &Path) -> io::Result<String> {
     storage()?
         .get_item(&key(path))
         .map_err(|e| refused("read", e))?
@@ -51,7 +51,7 @@ pub(super) fn read(path: &Path) -> io::Result<String> {
 }
 
 /// Removes `path`; whether there was anything to remove.
-pub(super) fn remove(path: &Path) -> io::Result<bool> {
+pub(crate) fn remove(path: &Path) -> io::Result<bool> {
     let storage = storage()?;
     let key = key(path);
     let had = storage
@@ -66,7 +66,7 @@ pub(super) fn remove(path: &Path) -> io::Result<bool> {
 
 /// The last part of every key directly under `dir`, as a folder's file
 /// names; none when storage is unavailable.
-pub(super) fn file_names(dir: &Path) -> Vec<String> {
+pub(crate) fn file_names(dir: &Path) -> Vec<String> {
     let Ok(storage) = storage() else {
         return Vec::new();
     };

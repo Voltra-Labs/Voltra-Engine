@@ -9,15 +9,8 @@
 //! crash cannot leave half of it, and reading it back without trusting it.
 
 pub mod dir;
-#[cfg(not(target_arch = "wasm32"))]
-mod native;
-#[cfg(target_arch = "wasm32")]
-mod web;
 
-#[cfg(not(target_arch = "wasm32"))]
-use native as storage;
-#[cfg(target_arch = "wasm32")]
-use web as storage;
+use crate::storage;
 
 use std::fmt;
 use std::path::{Path, PathBuf};

@@ -11,6 +11,7 @@ pub mod input;
 pub mod logging;
 pub mod saves;
 pub mod start;
+mod storage;
 pub mod time;
 pub mod ui;
 pub mod window;
