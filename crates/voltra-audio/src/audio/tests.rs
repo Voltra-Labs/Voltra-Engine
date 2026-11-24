@@ -90,13 +90,21 @@ fn end_of_frame_drops_the_clips_the_mixer_handed_back() {
         ..Audio::silent()
     };
     sender
-        .send(Clip::new(vec![0.0; 64], 1, 8))
+        .send(Retired::Voice {
+            clip: Clip::new(vec![0.0; 64], 1, 8),
+            feed: None,
+        })
         .expect("the queue takes it");
 
     audio.end_frame();
 
     assert!(
-        sender.send(Clip::silent()).is_ok(),
+        sender
+            .send(Retired::Voice {
+                clip: Clip::silent(),
+                feed: None
+            })
+            .is_ok(),
         "the receiver should still be there for the next frame"
     );
 }
@@ -163,4 +171,101 @@ fn a_game_s_own_table_replaces_the_default_one() {
     let audio = Audio::silent().with_buses(Buses::new(["dialogue"]));
     assert_eq!(audio.buses().find("dialogue"), Some(BusId::from_index(1)));
     assert_eq!(audio.buses().find("music"), None);
+}
+
+/// An `Audio` whose commands land in the returned receiver.
+fn wired() -> (Audio, std::sync::mpsc::Receiver<Command>) {
+    let (sender, receiver) = channel();
+    let audio = Audio {
+        commands: Some(sender),
+        ..Audio::silent()
+    };
+    (audio, receiver)
+}
+
+#[test]
+fn music_cross_fades_from_the_track_already_playing() {
+    let (mut audio, receiver) = wired();
+    let first = Clip::new(vec![0.5; 8], 1, 8);
+    let second = Clip::new(vec![0.5; 8], 1, 8);
+    let fade = Duration::from_secs(2);
+
+    let one = audio.play_music(&first, PlayParams::default(), fade);
+    let two = audio.play_music(&second, PlayParams::default(), fade);
+
+    let sent: Vec<Command> = receiver.try_iter().collect();
+    assert!(matches!(
+        sent[0],
+        Command::Play { id, curve: Curve::EqualPower, fade_in, .. } if id == one && fade_in == fade
+    ));
+    assert!(matches!(
+        sent[1],
+        Command::Stop { id, curve: Curve::EqualPower, over } if id == one && over == fade
+    ));
+    assert!(matches!(
+        sent[2],
+        Command::Play { id, curve: Curve::EqualPower, .. } if id == two
+    ));
+    assert_eq!(audio.music(), Some(two));
+}
+
+#[test]
+fn the_same_music_asked_for_again_keeps_playing() {
+    // A game naming its area's track every time the player walks in.
+    let (mut audio, receiver) = wired();
+    let track = Clip::new(vec![0.5; 8], 1, 8);
+
+    let first = audio.play_music(&track, PlayParams::default(), Duration::from_secs(1));
+    let again = audio.play_music(
+        &track.clone(),
+        PlayParams::default(),
+        Duration::from_secs(1),
+    );
+
+    assert_eq!(first, again);
+    assert_eq!(receiver.try_iter().count(), 1, "one play and nothing else");
+}
+
+#[test]
+fn stopping_the_music_fades_it_and_forgets_it() {
+    let (mut audio, receiver) = wired();
+    let clip = Clip::new(vec![0.5; 8], 1, 8);
+    let voice = audio.play_music(&clip, PlayParams::default(), Duration::ZERO);
+
+    audio.stop_music(Duration::from_millis(500));
+
+    assert_eq!(audio.music(), None);
+    assert!(matches!(
+        receiver.try_iter().last(),
+        Some(Command::Stop { id, .. }) if id == voice
+    ));
+}
+
+/// A streamed clip over a file that is not there.
+fn unopenable() -> Clip {
+    let source = std::sync::Arc::new(crate::stream::StreamSource::File("/nowhere.ogg".into()));
+    Clip::streamed(
+        source,
+        crate::stream::StreamInfo {
+            channels: 2,
+            rate: 44_100,
+            frames: None,
+        },
+    )
+}
+
+#[test]
+fn a_streamed_clip_with_no_device_opens_nothing_and_still_gets_an_id() {
+    let mut audio = Audio::silent();
+    let one = audio.play(&unopenable(), PlayParams::default());
+    let two = audio.play(&unopenable(), PlayParams::default());
+    assert_ne!(one, two);
+}
+
+#[test]
+fn a_streamed_clip_that_will_not_open_plays_nothing_rather_than_failing() {
+    let (mut audio, receiver) = wired();
+    audio.play(&unopenable(), PlayParams::default());
+    assert_eq!(receiver.try_iter().count(), 0);
+    assert!(!audio.is_silent(), "the rest of the sound carries on");
 }

@@ -20,7 +20,9 @@ use crate::clip::Clip;
 use crate::command::Command;
 use crate::limiter::Limiter;
 use crate::params::PlayParams;
-use crate::ramp::Ramp;
+use crate::ramp::{Curve, Ramp};
+use crate::retired::Retired;
+use crate::stream::Feed;
 use crate::voice::{frames, Voice, VoiceId};
 
 /// How many voices may sound at once before the oldest is taken for the
@@ -45,10 +47,10 @@ pub struct Mixer {
     rate: u32,
     channels: u16,
     capacity: usize,
-    /// Where a finished voice's clip is sent to be dropped, when the caller
-    /// wired one up. `None` in tests, which drop on this thread and do not
-    /// care.
-    retired: Option<Sender<Clip>>,
+    /// Where a finished voice's clip and feed are sent to be dropped, when
+    /// the caller wired one up. `None` in tests, which drop on this thread
+    /// and do not care.
+    retired: Option<Sender<Retired>>,
     /// One gain per bus, indexed by [`BusId::index`]; the master's is slot
     /// zero and multiplies the finished sum.
     ///
@@ -81,11 +83,12 @@ impl Mixer {
         }
     }
 
-    /// Sends finished clips to `retired` instead of dropping them here.
+    /// Sends finished voices' clips and feeds to `retired` instead of
+    /// dropping them here.
     ///
-    /// See [`Voice::into_clip`]: freeing the samples is the one unbounded
-    /// piece of work a callback would otherwise do.
-    pub fn retiring_to(mut self, retired: Sender<Clip>) -> Self {
+    /// See [`Retired`]: freeing the samples is the one unbounded piece of
+    /// work a callback would otherwise do.
+    pub fn retiring_to(mut self, retired: Sender<Retired>) -> Self {
         self.retired = Some(retired);
         self
     }
@@ -121,21 +124,28 @@ impl Mixer {
             Command::Play {
                 id,
                 clip,
+                feed,
                 params,
                 fade_in,
-            } => self.play(id, clip, params, fade_in),
+                curve,
+            } => self.play(id, clip, feed, params, (fade_in, curve)),
             Command::SetGain { id, volume, pan } => {
                 if let Some(voice) = self.voice(id) {
                     voice.set_gain(volume, pan);
                 }
             }
-            Command::Fade { id, volume, over } => {
+            Command::Fade {
+                id,
+                volume,
+                over,
+                curve,
+            } => {
                 if let Some(voice) = self.voice(id) {
-                    voice.fade(volume, over);
+                    voice.fade(volume, over, curve);
                 }
             }
-            Command::Stop { id, over } => self.stop(|voice| voice.id() == id, over),
-            Command::StopAll { over } => self.stop(|_| true, over),
+            Command::Stop { id, over, curve } => self.stop(|voice| voice.id() == id, over, curve),
+            Command::StopAll { over } => self.stop(|_| true, over, Curve::Linear),
             Command::SetBusVolume { bus, volume, over } => {
                 let frames = frames(over, self.rate);
                 // An id past the table can only come from a hand-built
@@ -197,10 +207,18 @@ impl Mixer {
     }
 
     /// Starts a voice, making room first if the mixer is full.
-    fn play(&mut self, id: VoiceId, clip: Clip, params: PlayParams, fade_in: Duration) {
+    fn play(
+        &mut self,
+        id: VoiceId,
+        clip: Clip,
+        feed: Option<Feed>,
+        params: PlayParams,
+        (fade_in, curve): (Duration, Curve),
+    ) {
         self.make_room();
-        self.voices
-            .push(Voice::new(id, clip, params, self.rate, fade_in));
+        self.voices.push(Voice::start(
+            id, clip, feed, params, self.rate, fade_in, curve,
+        ));
     }
 
     /// Ends every voice matching `doomed`, fading it out over `over`.
@@ -208,13 +226,13 @@ impl Mixer {
     /// A stop shorter than one frame takes the voice out now rather than at
     /// the next render, so a caller that stopped everything sees an empty
     /// mixer straight away.
-    fn stop(&mut self, doomed: impl Fn(&Voice) -> bool, over: Duration) {
+    fn stop(&mut self, doomed: impl Fn(&Voice) -> bool, over: Duration, curve: Curve) {
         if frames(over, self.rate) == 0 {
             self.remove(doomed);
             return;
         }
         for voice in self.voices.iter_mut().filter(|voice| doomed(voice)) {
-            voice.stop(over);
+            voice.stop(over, curve);
         }
     }
 
@@ -244,15 +262,15 @@ impl Mixer {
         }
     }
 
-    /// Hands a finished voice's clip to whoever is dropping them.
+    /// Hands a finished voice's clip and feed to whoever is dropping them.
     ///
     /// A closed channel is not a failure worth reporting: it means the game
     /// has gone away and this thread is about to as well, and the clip drops
     /// here, which is exactly what would have happened anyway.
     fn retire(&mut self, voice: Voice) {
-        let clip = voice.into_clip();
-        if let Some(retired) = self.retired.as_ref() {
-            let _ = retired.send(clip);
+        let retired = voice.into_retired();
+        if let Some(channel) = self.retired.as_ref() {
+            let _ = channel.send(retired);
         }
     }
 }

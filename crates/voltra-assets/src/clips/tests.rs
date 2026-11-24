@@ -114,7 +114,7 @@ fn a_reload_swaps_the_samples_under_the_same_handle() {
     let playing = clips.get(handle).clone();
 
     std::fs::write(root.join("coin.wav"), wav(32)).expect("the edit writes");
-    assert!(clips.reload(&path("coin.wav")));
+    assert_eq!(clips.reload(&path("coin.wav")), vec![handle]);
 
     assert_eq!(clips.get(handle).frames(), 32);
     assert_eq!(
@@ -133,7 +133,7 @@ fn a_broken_file_is_repaired_by_a_reload() {
     assert!(clips.get(handle).is_empty());
 
     std::fs::write(root.join("late.wav"), wav(8)).expect("the file arrives");
-    assert!(clips.reload(&path("late.wav")));
+    assert_eq!(clips.reload(&path("late.wav")), vec![handle]);
 
     assert_eq!(clips.get(handle).frames(), 8);
     assert!(
@@ -152,7 +152,7 @@ fn a_reload_that_will_not_decode_keeps_the_old_samples() {
 
     std::fs::write(root.join("coin.wav"), "RIFF").expect("the truncation writes");
 
-    assert!(!clips.reload(&path("coin.wav")));
+    assert!(clips.reload(&path("coin.wav")).is_empty());
     assert_eq!(clips.get(handle).frames(), 4);
 }
 
@@ -162,7 +162,7 @@ fn reloading_a_path_nobody_loaded_does_nothing() {
     std::fs::write(root.join("coin.wav"), wav(4)).expect("the fixture writes");
     let mut clips = Clips::new(&root);
 
-    assert!(!clips.reload(&path("coin.wav")));
+    assert!(clips.reload(&path("coin.wav")).is_empty());
     assert_eq!(clips.len(), 1);
 }
 
@@ -179,4 +179,112 @@ fn a_handle_from_another_store_does_not_resolve() {
     let b = Clips::new(scratch_root());
     assert!(b.try_get(a.silent()).is_some(), "slot zero exists in both");
     assert!(b.try_get(Handle::forge(9, 0)).is_none());
+}
+
+/// A root holding `theme.wav` (one second at 8 kHz) and `theme.clip.ron`
+/// saying `settings` about it.
+fn root_with_settings(settings: &str) -> PathBuf {
+    let root = scratch_root();
+    std::fs::write(root.join("theme.wav"), wav(8_000)).expect("the sound writes");
+    std::fs::write(root.join("theme.clip.ron"), settings).expect("the settings write");
+    root
+}
+
+#[test]
+fn settings_that_stream_make_a_streamed_clip_from_the_file_on_disk() {
+    let root = root_with_settings(
+        r#"(version: 1, file: "theme.wav", stream: true, loop_start: 0.25, loop_end: Some(0.75))"#,
+    );
+    let mut clips = Clips::new(&root);
+
+    let handle = clips.load(&path("theme.clip.ron"));
+    let clip = clips.get(handle).clone();
+
+    assert!(clip.is_streamed());
+    assert!(clip.samples().is_empty(), "nothing decoded at load");
+    assert_eq!(clip.frames(), 8_000);
+    assert_eq!((clip.loop_start(), clip.loop_end()), (2_000, Some(6_000)));
+    assert!(matches!(
+        clip.stream_source().map(|source| &**source),
+        Some(StreamSource::File(_))
+    ));
+}
+
+#[test]
+fn settings_that_do_not_stream_decode_the_file_whole_and_keep_the_loop() {
+    let root = root_with_settings(r#"(version: 1, file: "theme.wav", loop_start: 0.5)"#);
+    let mut clips = Clips::new(&root);
+
+    let handle = clips.load(&path("theme.clip.ron"));
+    let clip = clips.get(handle).clone();
+
+    assert!(!clip.is_streamed());
+    assert_eq!(clip.samples().len(), 8_000);
+    assert_eq!((clip.loop_start(), clip.loop_end()), (4_000, None));
+}
+
+#[test]
+fn a_streamed_clip_in_a_mounted_pack_streams_from_the_pack_s_bytes() {
+    // The web's case: there is no disk to open per voice.
+    let root = scratch_root().join("packed");
+    crate::fs::mount(
+        &root,
+        [
+            ("theme.wav".to_owned(), wav(800)),
+            (
+                "theme.clip.ron".to_owned(),
+                br#"(version: 1, file: "theme.wav", stream: true)"#.to_vec(),
+            ),
+        ],
+    );
+    let mut clips = Clips::new(&root);
+
+    let handle = clips.load(&path("theme.clip.ron"));
+    let clip = clips.get(handle).clone();
+    crate::fs::unmount(&root);
+
+    assert!(clip.is_streamed());
+    assert!(matches!(
+        clip.stream_source().map(|source| &**source),
+        Some(StreamSource::Bytes { .. })
+    ));
+}
+
+#[test]
+fn broken_settings_are_silence_rather_than_a_panic() {
+    let root = root_with_settings(r#"(version: 9, file: "theme.wav")"#);
+    let mut clips = Clips::new(&root);
+
+    let handle = clips.load(&path("theme.clip.ron"));
+
+    assert!(clips.get(handle).is_empty());
+}
+
+#[test]
+fn an_edited_sound_reaches_the_clips_its_settings_make() {
+    let root = root_with_settings(r#"(version: 1, file: "theme.wav")"#);
+    let mut clips = Clips::new(&root);
+    let handle = clips.load(&path("theme.clip.ron"));
+
+    std::fs::write(root.join("theme.wav"), wav(16)).expect("the edit writes");
+    let changed = clips.reload(&path("theme.wav"));
+
+    assert_eq!(changed, vec![handle], "the sound itself was never loaded");
+    assert_eq!(clips.get(handle).frames(), 16);
+}
+
+#[test]
+fn edited_settings_are_read_again() {
+    let root = root_with_settings(r#"(version: 1, file: "theme.wav")"#);
+    let mut clips = Clips::new(&root);
+    let handle = clips.load(&path("theme.clip.ron"));
+
+    std::fs::write(
+        root.join("theme.clip.ron"),
+        r#"(version: 1, file: "theme.wav", stream: true)"#,
+    )
+    .expect("the edit writes");
+
+    assert_eq!(clips.reload(&path("theme.clip.ron")), vec![handle]);
+    assert!(clips.get(handle).is_streamed());
 }

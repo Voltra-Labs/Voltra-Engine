@@ -32,6 +32,8 @@ fn play(mixer: &mut Mixer, raw: u64, frames: usize) -> VoiceId {
         clip: tone(frames),
         params: left(),
         fade_in: Duration::ZERO,
+        feed: None,
+        curve: Curve::Linear,
     });
     id
 }
@@ -40,6 +42,7 @@ fn stop(id: VoiceId) -> Command {
     Command::Stop {
         id,
         over: Duration::ZERO,
+        curve: Curve::Linear,
     }
 }
 
@@ -73,12 +76,16 @@ fn two_voices_sum() {
         clip: Clip::new(vec![0.25, 0.25], 1, RATE),
         params: left(),
         fade_in: Duration::ZERO,
+        feed: None,
+        curve: Curve::Linear,
     });
     mixer.apply(Command::Play {
         id: id(2),
         clip: Clip::new(vec![0.5, 0.5], 1, RATE),
         params: left(),
         fade_in: Duration::ZERO,
+        feed: None,
+        curve: Curve::Linear,
     });
 
     let out = render(&mut mixer, 2);
@@ -213,7 +220,7 @@ fn a_finished_voice_hands_its_clip_back_to_be_dropped_elsewhere() {
     render(&mut mixer, 4);
 
     let returned = receiver.try_recv().expect("the clip should come back");
-    assert_eq!(returned.frames(), 2);
+    assert_eq!(returned.clip().map(Clip::frames), Some(2));
 }
 
 #[test]
@@ -255,6 +262,8 @@ fn play_on(mixer: &mut Mixer, raw: u64, bus: BusId) -> VoiceId {
         clip: tone(64),
         params: PlayParams { bus, ..left() },
         fade_in: Duration::ZERO,
+        feed: None,
+        curve: Curve::Linear,
     });
     id
 }
@@ -317,10 +326,13 @@ fn a_fading_stop_keeps_the_voice_until_it_is_silent() {
         clip: Clip::new(vec![0.5; 1_000], 1, 1_000),
         params: left(),
         fade_in: Duration::ZERO,
+        feed: None,
+        curve: Curve::Linear,
     });
     mixer.apply(Command::Stop {
         id: id(1),
         over: Duration::from_millis(4),
+        curve: Curve::Linear,
     });
     assert_eq!(mixer.voices(), 1, "a fade-out is still sounding");
 
@@ -339,6 +351,7 @@ fn a_fade_reaches_the_voice_it_names() {
         id: voice,
         volume: 0.0,
         over: Duration::ZERO,
+        curve: Curve::Linear,
     });
 
     assert_eq!(render(&mut mixer, 1), vec![0.0, 0.0]);
@@ -354,4 +367,55 @@ fn a_bus_id_past_the_table_is_ignored_rather_than_panicking() {
     play_on(&mut mixer, 1, wild);
     render(&mut mixer, 1);
     assert_eq!(mixer.bus_volume(wild), 0.5);
+}
+
+#[test]
+fn an_equal_power_cross_fade_keeps_the_sum_s_power_constant() {
+    // The outgoing track hard left, the incoming one hard right, both a
+    // constant 0.5: each side's level is then one voice's fader, and the
+    // power of the pair must not dip anywhere across the fade.
+    let mut mixer = Mixer::new(1_000, 2);
+    let constant = || Clip::new(vec![0.5; 1_000], 1, 1_000);
+    mixer.apply(Command::Play {
+        id: id(1),
+        clip: constant(),
+        feed: None,
+        params: left(),
+        fade_in: Duration::ZERO,
+        curve: Curve::Linear,
+    });
+    render(&mut mixer, 10);
+
+    let over = Duration::from_millis(200);
+    mixer.apply(Command::Stop {
+        id: id(1),
+        over,
+        curve: Curve::EqualPower,
+    });
+    mixer.apply(Command::Play {
+        id: id(2),
+        clip: constant(),
+        feed: None,
+        params: PlayParams {
+            pan: 1.0,
+            ..Default::default()
+        },
+        fade_in: over,
+        curve: Curve::EqualPower,
+    });
+
+    let out = render(&mut mixer, 250);
+    for (frame, pair) in out.chunks(2).enumerate() {
+        let power = (pair[0] / 0.5).powi(2) + (pair[1] / 0.5).powi(2);
+        assert!(
+            (power - 1.0).abs() < 1e-3,
+            "frame {frame}: {pair:?} has power {power}"
+        );
+    }
+    assert!(out[0] > 0.49 && out[1] < 0.01, "it starts on the old track");
+    assert!(
+        out[498] < 0.01 && out[499] > 0.49,
+        "and ends on the new one"
+    );
+    assert_eq!(mixer.voices(), 1, "the old voice is gone once faded");
 }

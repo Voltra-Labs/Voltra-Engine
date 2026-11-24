@@ -48,9 +48,16 @@ pub fn is_texture(name: &str) -> bool {
 /// then fail to decode every time.
 pub const CLIP_EXTENSIONS: &[&str] = &["wav", "ogg"];
 
-/// Whether a file name ends in an extension this engine can decode as a clip.
+/// Whether a file name is something [`Clips`](crate::Clips) loads: a sound
+/// in one of [`CLIP_EXTENSIONS`], or a clip's settings (`*.clip.ron`).
 pub fn is_clip(name: &str) -> bool {
-    has_extension(name, CLIP_EXTENSIONS)
+    has_extension(name, CLIP_EXTENSIONS) || is_clip_settings(name)
+}
+
+/// Whether a file name is a clip's settings: `*.clip.ron`, naming a sound and
+/// saying how to play it — streamed, and where it loops.
+pub fn is_clip_settings(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".clip.ron")
 }
 
 /// File extensions that can become a [`Font`](crate::Font), lowercase,
@@ -92,6 +99,7 @@ pub fn is_animator(name: &str) -> bool {
 pub fn is_scene(name: &str) -> bool {
     has_extension(name, &["ron"])
         && !is_atlas(name)
+        && !is_clip_settings(name)
         && !is_input_map(name)
         && !is_sorting_layers(name)
         && !is_animation(name)

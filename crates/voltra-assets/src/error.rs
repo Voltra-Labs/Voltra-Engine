@@ -63,6 +63,14 @@ pub enum AssetError {
         /// Why it does not describe a slicing.
         source: crate::atlas::AtlasError,
     },
+    /// A `*.clip.ron` that reads as RON but does not describe a clip: another
+    /// version, a file that is not a sound, a backwards loop.
+    ClipSettings {
+        /// The settings file.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: String,
+    },
     /// Bytes that are not a font `fontdue` can parse.
     ///
     /// `fontdue` reports a static message rather than an error type.
@@ -111,6 +119,9 @@ impl fmt::Display for AssetError {
             Self::Atlas { path, source } => {
                 write!(f, "{} is not a usable atlas: {source}", path.display())
             }
+            Self::ClipSettings { path, reason } => {
+                write!(f, "{} is not a usable clip: {reason}", path.display())
+            }
             Self::Font { path, message } => {
                 write!(f, "{} is not a usable font: {message}", path.display())
             }
@@ -132,7 +143,11 @@ impl std::error::Error for AssetError {
             Self::Atlas { source, .. } => Some(source),
             #[cfg(not(target_arch = "wasm32"))]
             Self::Watch { source, .. } => Some(source),
-            Self::Absolute(_) | Self::EscapesRoot(_) | Self::Empty | Self::Font { .. } => None,
+            Self::Absolute(_)
+            | Self::EscapesRoot(_)
+            | Self::Empty
+            | Self::ClipSettings { .. }
+            | Self::Font { .. } => None,
         }
     }
 }

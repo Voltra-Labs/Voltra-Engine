@@ -289,6 +289,7 @@ mod atlas_tests {
         std::fs::write(root.join("default.layers.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("bob.anim.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("hero.animator.ron"), "").expect("the fixture writes");
+        std::fs::write(root.join("theme.clip.ron"), "").expect("the fixture writes");
 
         let entries = list(&root, None).expect("the root lists");
 
@@ -304,6 +305,11 @@ mod atlas_tests {
         assert_eq!(kind("default.layers.ron"), Some(EntryKind::SortingLayers));
         assert_eq!(kind("bob.anim.ron"), Some(EntryKind::Animation));
         assert_eq!(kind("hero.animator.ron"), Some(EntryKind::Animator));
+        assert_eq!(
+            kind("theme.clip.ron"),
+            Some(EntryKind::Clip),
+            "a clip's settings"
+        );
         assert_eq!(
             kind("demo.ron"),
             Some(EntryKind::Scene),

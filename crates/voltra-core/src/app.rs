@@ -429,15 +429,16 @@ impl App {
         // whose renderer is not up yet still hears the edit.
         let mut images = Vec::with_capacity(changed.len());
         for path in changed {
+            // A sound reaches its own clip and every clip a settings file
+            // makes of it.
             let reloaded = match self.clips.as_mut() {
-                Some(clips) => match clips.reload(&path) {
-                    true => clips.by_path_handle(&path),
-                    false => None,
-                },
-                None => None,
+                Some(clips) => clips.reload(&path),
+                None => Vec::new(),
             };
-            if let Some(clip) = reloaded {
-                self.scene_audio.restart(&self.world, clip, &mut self.audio);
+            if !reloaded.is_empty() {
+                for clip in reloaded {
+                    self.scene_audio.restart(&self.world, clip, &mut self.audio);
+                }
                 continue;
             }
             // A clip is read by its players next frame, a machine by its

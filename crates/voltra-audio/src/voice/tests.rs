@@ -207,7 +207,7 @@ fn a_fade_in_rises_from_silence() {
 #[test]
 fn a_fade_out_ends_the_voice_where_it_arrives() {
     let mut voice = slow(left(), Duration::ZERO);
-    voice.stop(Duration::from_millis(2));
+    voice.stop(Duration::from_millis(2), Curve::Linear);
     assert!(!voice.is_finished(), "it is still fading");
 
     let out = mix(&mut voice, 4, 2);
@@ -219,10 +219,10 @@ fn a_fade_out_ends_the_voice_where_it_arrives() {
 #[test]
 fn a_fade_cancels_a_stop_in_progress() {
     let mut voice = slow(left(), Duration::ZERO);
-    voice.stop(Duration::from_millis(4));
+    voice.stop(Duration::from_millis(4), Curve::Linear);
     mix(&mut voice, 2, 2);
 
-    voice.fade(1.0, Duration::from_millis(2));
+    voice.fade(1.0, Duration::from_millis(2), Curve::Linear);
     mix(&mut voice, 8, 2);
 
     assert!(!voice.is_finished(), "the game changed its mind");
@@ -254,4 +254,47 @@ fn durations_become_frames_at_the_device_s_rate() {
     assert_eq!(frames(Duration::from_millis(15), 48_000), 720);
     assert_eq!(frames(Duration::ZERO, 48_000), 0);
     assert_eq!(frames(Duration::from_secs(u64::MAX), 48_000), u32::MAX);
+}
+
+#[test]
+fn a_looping_voice_plays_its_intro_once_then_the_loop() {
+    // Frames 0 and 1 are the intro; 2..4 is the loop.
+    let clip = Clip::new(vec![0.1, 0.2, 0.3, 0.4, 0.9], 1, 8).with_loop(2, Some(4));
+    let looping = PlayParams {
+        looping: true,
+        ..left()
+    };
+    let mut voice = Voice::new(ID, clip, looping, 8, Duration::ZERO);
+    let out = mix(&mut voice, 7, 2);
+    let heard: Vec<f32> = out.iter().step_by(2).copied().collect();
+    assert_eq!(heard, vec![0.1, 0.2, 0.3, 0.4, 0.3, 0.4, 0.3]);
+}
+
+#[test]
+fn a_voice_that_does_not_loop_plays_past_the_loop_to_the_end() {
+    let clip = Clip::new(vec![0.1, 0.2, 0.3, 0.4, 0.9], 1, 8).with_loop(2, Some(4));
+    let mut voice = Voice::new(ID, clip, left(), 8, Duration::ZERO);
+    let out = mix(&mut voice, 5, 2);
+    assert_eq!(out[8], 0.9);
+    assert!(voice.is_finished());
+}
+
+#[test]
+fn a_streamed_clip_with_no_feed_is_finished_rather_than_stuck() {
+    // The stream could not be opened; the slot must not be held forever.
+    let source = std::sync::Arc::new(crate::stream::StreamSource::File("gone.ogg".into()));
+    let clip = Clip::streamed(
+        source,
+        crate::stream::StreamInfo {
+            channels: 1,
+            rate: 8,
+            frames: None,
+        },
+    );
+    let looping = PlayParams {
+        looping: true,
+        ..left()
+    };
+    let voice = Voice::new(ID, clip, looping, 8, Duration::ZERO);
+    assert!(voice.is_finished());
 }

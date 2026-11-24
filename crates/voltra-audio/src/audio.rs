@@ -9,6 +9,9 @@ use crate::clip::Clip;
 use crate::command::Command;
 use crate::device::Output;
 use crate::params::PlayParams;
+use crate::ramp::Curve;
+use crate::retired::Retired;
+use crate::stream::{self, Streamer};
 use crate::voice::{VoiceId, SMOOTHING};
 
 /// The game's end of the audio thread.
@@ -28,8 +31,9 @@ pub struct Audio {
     /// `None` once there is no thread to talk to: no device at startup, or a
     /// stream that has gone away since.
     commands: Option<Sender<Command>>,
-    /// Clips coming back from finished voices, to be dropped on this thread.
-    retired: Option<Receiver<Clip>>,
+    /// Clips and feeds coming back from finished voices, to be dropped on
+    /// this thread.
+    retired: Option<Receiver<Retired>>,
     /// The live stream. Never read — dropping it is what stops the sound.
     output: Option<Output>,
     /// The next id to hand out. See [`VoiceId`] on why it never wraps.
@@ -42,6 +46,11 @@ pub struct Audio {
     /// a settings screen showing its sliders, and [`connect`](Self::connect)
     /// handing a new device the mix the game already set on a silent one.
     bus_volumes: [f32; MAX_BUSES],
+    /// Decodes every streamed clip that is playing, off the audio thread.
+    streamer: Streamer,
+    /// The track [`play_music`](Self::play_music) last started, and its
+    /// voice: what the next one cross-fades from.
+    music: Option<(VoiceId, Clip)>,
 }
 
 impl Audio {
@@ -65,6 +74,8 @@ impl Audio {
             next: 1,
             buses: Buses::default(),
             bus_volumes: [1.0; MAX_BUSES],
+            streamer: Streamer::new(),
+            music: None,
         }
     }
 
@@ -165,14 +176,89 @@ impl Audio {
         params: PlayParams,
         fade_in: Duration,
     ) -> VoiceId {
+        self.start(clip, params, fade_in, Curve::Linear)
+    }
+
+    /// Starts `clip` as the music, cross-fading from the track already
+    /// playing over `fade` with equal-power curves, and returns its voice.
+    ///
+    /// The outgoing track fades along a cosine and the incoming one along a
+    /// sine, so their powers sum to one at every frame and the mix does not
+    /// dip in the middle the way two linear fades do. The same clip asked for
+    /// again is left playing and its voice returned: a game that names its
+    /// area's music every time the player enters the area should not restart
+    /// it. `params` is used as given — `TickAudio::play_music` in
+    /// `voltra-core` fills in looping and the `music` bus.
+    pub fn play_music(&mut self, clip: &Clip, params: PlayParams, fade: Duration) -> VoiceId {
+        if let Some((voice, playing)) = &self.music {
+            if playing.same(clip) {
+                return *voice;
+            }
+        }
+        self.stop_music(fade);
+        let voice = self.start(clip, params, fade, Curve::EqualPower);
+        self.music = Some((voice, clip.clone()));
+        voice
+    }
+
+    /// Fades the music out over `fade` along the equal-power curve, and
+    /// forgets it.
+    pub fn stop_music(&mut self, fade: Duration) {
+        if let Some((voice, _)) = self.music.take() {
+            self.send(Command::Stop {
+                id: voice,
+                over: fade,
+                curve: Curve::EqualPower,
+            });
+        }
+    }
+
+    /// The voice the music is playing on, if any.
+    pub fn music(&self) -> Option<VoiceId> {
+        self.music.as_ref().map(|(voice, _)| *voice)
+    }
+
+    /// Issues an id and starts `clip` under it.
+    ///
+    /// A streamed clip gets its decoder here, on the calling thread, primed
+    /// with a tenth of a second of audio, and handed to the [`Streamer`];
+    /// its voice gets the feed. Without a device nothing is opened at all —
+    /// the id is still issued, as for every other sound.
+    fn start(
+        &mut self,
+        clip: &Clip,
+        params: PlayParams,
+        fade_in: Duration,
+        curve: Curve,
+    ) -> VoiceId {
         let id = VoiceId::new(self.next);
         self.next += 1;
+        if self.is_silent() {
+            return id;
+        }
+
+        let feed = if clip.is_streamed() {
+            match stream::start(clip, params.looping) {
+                Ok((decoder, feed)) => {
+                    self.streamer.add(decoder);
+                    Some(feed)
+                }
+                Err(e) => {
+                    log::warn!("{e}; it will play nothing");
+                    return id;
+                }
+            }
+        } else {
+            None
+        };
 
         self.send(Command::Play {
             id,
             clip: clip.clone(),
+            feed,
             params,
             fade_in,
+            curve,
         });
         id
     }
@@ -188,13 +274,22 @@ impl Audio {
     /// Slides a voice's fader to `volume` over `over`, on top of its own
     /// volume. `0.0` silences it without ending it.
     pub fn fade(&mut self, id: VoiceId, volume: f32, over: Duration) {
-        self.send(Command::Fade { id, volume, over });
+        self.send(Command::Fade {
+            id,
+            volume,
+            over,
+            curve: Curve::Linear,
+        });
     }
 
     /// Fades a voice to silence over `over` and ends it there: the outgoing
     /// half of a cross-fade.
     pub fn fade_out(&mut self, id: VoiceId, over: Duration) {
-        self.send(Command::Stop { id, over });
+        self.send(Command::Stop {
+            id,
+            over,
+            curve: Curve::Linear,
+        });
     }
 
     /// Ends one voice now — over [`SMOOTHING`] rather than in one sample,
@@ -206,6 +301,7 @@ impl Audio {
     /// Ends every voice, de-clicked the same way: a scene change, or an
     /// editor's Stop.
     pub fn stop_all(&mut self) {
+        self.music = None;
         self.send(Command::StopAll { over: SMOOTHING });
     }
 
@@ -249,19 +345,24 @@ impl Audio {
         self.bus_volumes.get(bus.index()).copied().unwrap_or(1.0)
     }
 
-    /// Frees the clips finished voices handed back.
+    /// Frees what finished voices handed back, and decodes the streams that
+    /// are decoded on this thread.
     ///
     /// Called once a frame by the loop, next to the other end-of-frame work.
     /// Doing it here rather than in the callback is the whole point of the
     /// retirement channel: this is the thread that can afford to free a
-    /// megabyte of samples.
+    /// megabyte of samples. The streams decoded here are every stream on the
+    /// web, which has no thread to give them, and none natively — see
+    /// [`Streamer`].
     pub fn end_frame(&mut self) {
+        self.streamer.pump();
         let Some(retired) = self.retired.as_ref() else {
             return;
         };
-        // Each `recv` moves a clip into this scope, where it is dropped.
-        for clip in retired.try_iter() {
-            drop(clip);
+        // Each `recv` moves a voice's leftovers into this scope, where they
+        // are dropped.
+        for leftovers in retired.try_iter() {
+            drop(leftovers);
         }
     }
 
@@ -280,6 +381,7 @@ impl Audio {
             self.commands = None;
             self.retired = None;
             self.output = None;
+            self.music = None;
         }
     }
 }

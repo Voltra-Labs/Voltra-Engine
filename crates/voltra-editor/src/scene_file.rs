@@ -27,7 +27,7 @@ pub(crate) fn scene_path(text: &str) -> Result<AssetPath, String> {
     if !voltra_assets::watch::is_scene(name) {
         return Err(format!(
             "{} is not a scene file name: it should end in .ron, and not in .atlas.ron, \
-             .anim.ron, .animator.ron, .input.ron or .layers.ron",
+             .anim.ron, .animator.ron, .clip.ron, .input.ron or .layers.ron",
             path.as_str()
         ));
     }

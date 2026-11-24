@@ -5,7 +5,9 @@ use std::time::Duration;
 use crate::bus::BusId;
 use crate::clip::Clip;
 use crate::params::PlayParams;
-use crate::ramp::Ramp;
+use crate::ramp::{Curve, Ramp};
+use crate::retired::Retired;
+use crate::stream::{Feed, StreamReader};
 
 /// How long a gain change takes to arrive when nobody asked for a fade.
 ///
@@ -62,6 +64,7 @@ pub struct Voice {
     id: VoiceId,
     clip: Clip,
     /// Where in the clip this voice is reading, in frames, fractional.
+    /// Unused for a streamed clip, whose reader keeps its own place.
     ///
     /// `f64` rather than `f32`: a 24-bit mantissa stops being able to
     /// represent every frame index at about 16.7 million, which is six minutes
@@ -93,17 +96,36 @@ pub struct Voice {
     smoothing: u32,
     /// The device's rate, kept to convert the fades that arrive later.
     out_rate: u32,
+    /// Where a streamed clip's frames come from; `None` for a resident one.
+    stream: Option<StreamReader>,
 }
 
 impl Voice {
     /// A voice reading `clip` for a device running at `out_rate`, rising from
-    /// silence over `fade_in`.
+    /// silence over `fade_in` in a straight line.
     pub fn new(
         id: VoiceId,
         clip: Clip,
         params: PlayParams,
         out_rate: u32,
         fade_in: Duration,
+    ) -> Self {
+        Self::start(id, clip, None, params, out_rate, fade_in, Curve::Linear)
+    }
+
+    /// The general form of [`new`](Self::new): `feed` is the stream a
+    /// streamed clip plays from, and `curve` the shape of the fade in.
+    ///
+    /// A streamed clip with no feed plays nothing and is finished at once:
+    /// the stream could not be opened, and the main thread already said why.
+    pub fn start(
+        id: VoiceId,
+        clip: Clip,
+        feed: Option<Feed>,
+        params: PlayParams,
+        out_rate: u32,
+        fade_in: Duration,
+        curve: Curve,
     ) -> Self {
         let out_rate = out_rate.max(1);
         let step = f64::from(clip.rate()) / f64::from(out_rate) * f64::from(params.speed());
@@ -113,7 +135,7 @@ impl Voice {
         let fade_in = frames(fade_in, out_rate);
         if fade_in > 0 {
             fader.jump(0.0);
-            fader.set(1.0, fade_in);
+            fader.set_curved(1.0, fade_in, curve);
         }
 
         Self {
@@ -132,6 +154,7 @@ impl Voice {
             stopping: false,
             smoothing: frames(SMOOTHING, out_rate),
             out_rate,
+            stream: feed.map(StreamReader::new),
         }
     }
 
@@ -145,14 +168,12 @@ impl Voice {
         self.bus
     }
 
-    /// Takes the clip out of a voice that is being retired.
-    ///
-    /// The mixer hands it back to the main thread rather than dropping it
-    /// here: this is the last owner of an `Arc` most of the time, and freeing
-    /// a megabyte of samples inside the device callback is a pause in the
-    /// middle of a buffer nobody can afford.
-    pub fn into_clip(self) -> Clip {
-        self.clip
+    /// Takes apart a voice that is being retired — see [`Retired`].
+    pub fn into_retired(self) -> Retired {
+        Retired::Voice {
+            clip: self.clip,
+            feed: self.stream.map(StreamReader::into_feed),
+        }
     }
 
     /// Moves the sound without restarting it, arriving over [`SMOOTHING`].
@@ -171,31 +192,38 @@ impl Voice {
         self.right.set(right, self.smoothing);
     }
 
-    /// Slides the fader to `volume` over `over`.
+    /// Slides the fader to `volume` over `over`, along `curve`.
     ///
     /// Cancels a stop in progress: a fade-out interrupted by a fade-in is a
     /// voice the game has changed its mind about, and the ramp carries on from
     /// the level actually being heard.
-    pub fn fade(&mut self, volume: f32, over: Duration) {
+    pub fn fade(&mut self, volume: f32, over: Duration, curve: Curve) {
         self.stopping = false;
-        self.fader.set(volume, frames(over, self.out_rate));
+        self.fader
+            .set_curved(volume, frames(over, self.out_rate), curve);
     }
 
-    /// Fades the voice to silence over `over`, and ends it there.
-    pub fn stop(&mut self, over: Duration) {
+    /// Fades the voice to silence over `over` along `curve`, and ends it
+    /// there.
+    pub fn stop(&mut self, over: Duration, curve: Curve) {
         self.stopping = true;
-        self.fader.set(0.0, frames(over, self.out_rate));
+        self.fader
+            .set_curved(0.0, frames(over, self.out_rate), curve);
     }
 
     /// Whether the voice has read past the end of a clip it is not looping,
     /// or has finished fading out.
     pub fn is_finished(&self) -> bool {
+        if self.stopping && self.fader.is_settled() {
+            return true;
+        }
+        if self.clip.is_streamed() {
+            return self.stream.as_ref().is_none_or(StreamReader::is_finished);
+        }
         // An empty clip is finished on its first look, looping or not.
         // Otherwise a looping voice on a broken file would spin forever and
         // never free its slot.
-        self.clip.is_empty()
-            || (!self.looping && self.cursor >= self.clip.frames() as f64)
-            || (self.stopping && self.fader.is_settled())
+        self.clip.is_empty() || (!self.looping && self.cursor >= self.clip.frames() as f64)
     }
 
     /// Adds this voice into `out`, which holds `channels` samples per frame.
@@ -215,7 +243,7 @@ impl Voice {
     /// vocabulary, not two channels copied around, and this engine has no way
     /// to author a position in it.
     pub fn mix(&mut self, out: &mut [f32], channels: usize, mut bus: Ramp) {
-        if channels == 0 || self.clip.is_empty() {
+        if channels == 0 || self.is_finished() {
             return;
         }
 
@@ -230,7 +258,10 @@ impl Voice {
             let level = self.fader.tick() * bus.tick();
             let gain_left = self.left.tick() * level;
             let gain_right = self.right.tick() * level;
-            let (left, right) = self.read(frames, stereo_source);
+            let (left, right) = match &self.stream {
+                Some(stream) => stream.read(),
+                None => self.read(frames, stereo_source),
+            };
             match channels {
                 // One speaker: the two sides are summed at half, so a centred
                 // sound is as loud on a mono device as on a stereo one.
@@ -241,7 +272,19 @@ impl Voice {
                 }
             }
 
-            self.advance(frames);
+            match &mut self.stream {
+                Some(stream) => stream.advance(self.step),
+                None => self.advance(frames),
+            }
+        }
+    }
+
+    /// The frame a looping voice turns back at: the loop's end, or the
+    /// clip's.
+    fn loop_end(&self, frames: usize) -> f64 {
+        match self.clip.loop_end() {
+            Some(end) => end as f64,
+            None => frames as f64,
         }
     }
 
@@ -258,10 +301,11 @@ impl Voice {
         let fraction = (self.cursor - index) as f32;
         let index = index.max(0.0) as usize;
 
-        // A looping voice interpolates across the seam into frame zero rather
-        // than into the silence past the end, or every loop would click.
-        let next = if self.looping && index + 1 >= frames {
-            0
+        // A looping voice interpolates across the seam into the loop's start
+        // rather than into the silence past its end, or every loop would
+        // click.
+        let next = if self.looping && (index + 1) as f64 >= self.loop_end(frames) {
+            self.clip.loop_start() as usize
         } else {
             index + 1
         };
@@ -277,19 +321,21 @@ impl Voice {
         (left, right)
     }
 
-    /// Steps the cursor, wrapping a looping voice back into the clip.
+    /// Steps the cursor, wrapping a looping voice back to its loop's start.
     fn advance(&mut self, frames: usize) {
         self.cursor += self.step;
 
         if !self.looping {
             return;
         }
-        let length = frames as f64;
-        if self.cursor >= length {
+        let end = self.loop_end(frames);
+        if self.cursor >= end {
             // `%` rather than a subtraction: a voice pitched up far enough to
-            // step over the whole clip in one frame would otherwise stay past
+            // step over the whole loop in one frame would otherwise stay past
             // the end and be silent forever.
-            self.cursor %= length;
+            let start = self.clip.loop_start() as f64;
+            let length = end - start;
+            self.cursor = start + (self.cursor - start) % length;
         }
     }
 }
