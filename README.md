@@ -272,6 +272,10 @@ privileged and plain `cargo build` covers everything.
 
 ## Roadmap
 
+Next: stages 88–110 polish the 2D engine toward 0.2, and 111–118 add
+networking for 0.3 — planned in [docs/plan-0.2-0.3.md](docs/plan-0.2-0.3.md).
+3D comes after, with a plan of its own.
+
 | Stage | Scope | State |
 | --- | --- | --- |
 | 1 | Window + wgpu surface + clear pass | done |
