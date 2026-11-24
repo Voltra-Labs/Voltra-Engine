@@ -46,13 +46,24 @@ fn project() -> PathBuf {
     assets
 }
 
-/// The editor process, killed when the test ends however it ends.
-struct Editor(Child);
+/// The editor process, killed when the test ends however it ends, and the
+/// file its log goes to.
+struct Editor {
+    child: Child,
+    log: PathBuf,
+}
+
+impl Editor {
+    /// What the editor has logged so far, for a failure to show.
+    fn log(&self) -> String {
+        std::fs::read_to_string(&self.log).unwrap_or_else(|e| format!("(no log: {e})"))
+    }
+}
 
 impl Drop for Editor {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
@@ -63,24 +74,40 @@ fn free_port() -> u16 {
         .expect("a free port")
 }
 
+/// Starts the editor on the project and waits for its bridge — failing at
+/// once, with the editor's log, if it exits first, and with the log too if
+/// it never answers.
 fn launch(assets: &Path) -> (Editor, BridgeClient) {
     let port = free_port();
+    let log = assets.with_file_name("editor.log");
+    let stderr = std::fs::File::create(&log).expect("the log file");
     let child = Process::new(env!("CARGO_BIN_EXE_voltra-editor"))
         .args(["scenes/box.ron", "--bridge", &port.to_string()])
         .env("VOLTRA_ASSET_ROOT", assets)
+        .env(
+            "RUST_LOG",
+            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_owned()),
+        )
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(stderr)
         .spawn()
         .expect("the editor starts");
-    let editor = Editor(child);
+    let mut editor = Editor { child, log };
     let start = Instant::now();
     loop {
         if let Ok(client) = BridgeClient::connect(port, Duration::from_secs(2)) {
             return (editor, client);
         }
+        if let Ok(Some(status)) = editor.child.try_wait() {
+            panic!(
+                "the editor exited ({status}) before its bridge answered:\n{}",
+                editor.log()
+            );
+        }
         assert!(
             start.elapsed() < Duration::from_secs(120),
-            "the bridge never answered"
+            "the bridge never answered; the editor logged:\n{}",
+            editor.log()
         );
         std::thread::sleep(Duration::from_millis(300));
     }
