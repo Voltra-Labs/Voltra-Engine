@@ -70,7 +70,7 @@ pub(super) fn mesh_draws<'a>(
             },
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: range.indices.clone(),
+            primitives: range.primitives.clone(),
             material: None,
         })
         .collect()

@@ -233,6 +233,9 @@ pub struct App {
     /// The world's sprite batch, kept so each frame refills its buffers
     /// instead of allocating them.
     frame_batch: voltra_scene::SpriteBatch,
+    /// The GPU buffers the world's batch is written into, kept and grown
+    /// rather than made afresh each frame (stage 108).
+    batch_buffers: voltra_render::MeshBuffers,
     /// The renderer's half of every emitter simulated on the GPU.
     gpu_rings: gpu_particles::GpuParticleRings,
     /// The renderer's half of every skinned sprite.

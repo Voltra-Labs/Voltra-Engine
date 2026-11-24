@@ -13,6 +13,7 @@ voltra-jobs.workspace = true
 log.workspace = true
 fontdue.workspace = true
 rustybuzz.workspace = true
+self_cell.workspace = true
 unicode-script.workspace = true
 unicode-bidi.workspace = true
 unicode-linebreak.workspace = true

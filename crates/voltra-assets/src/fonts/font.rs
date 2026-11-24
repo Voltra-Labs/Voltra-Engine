@@ -2,7 +2,7 @@
 //! `fontdue` parsed from them, which rasterizes.
 
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use super::atlas::GlyphMetrics;
 use super::embolden;
@@ -10,8 +10,10 @@ use super::embolden;
 /// A font file, parsed.
 ///
 /// Two readers of the same bytes: `rustybuzz` shapes a run into glyph ids
-/// and positions (its face borrows the bytes, so one is made per layout —
-/// cheap, the tables are parsed lazily), and `fontdue` rasterizes those ids.
+/// and positions, and `fontdue` rasterizes those ids. The shaping face
+/// borrows the bytes, and is kept beside them in a [`Shaper`]: making one
+/// builds every lookup's accelerator, and was most of laying out a short
+/// label while it was made per layout (stage 108).
 /// Both index glyphs the way the file does, so an id one hands out the other
 /// draws.
 ///
@@ -27,9 +29,42 @@ pub struct Font {
 /// The parsed file.
 #[derive(Clone)]
 struct Face {
-    bytes: Arc<[u8]>,
     raster: fontdue::Font,
+    /// Shared, as the bytes it owns are: a clone of the font is the same
+    /// file.
+    shaper: Arc<Shaper>,
+    /// Shape plans made for this face, by what they were made for: making
+    /// one looks up every feature of the script's lookups, which
+    /// `rustybuzz::shape` does on every call.
+    plans: Arc<Mutex<Plans>>,
 }
+
+/// The plans one face keeps.
+type Plans = Vec<(PlanKey, Arc<rustybuzz::ShapePlan>)>;
+
+/// What a shape plan is made for: direction, script and language.
+type PlanKey = (
+    rustybuzz::Direction,
+    rustybuzz::Script,
+    Option<rustybuzz::Language>,
+);
+
+/// Plans kept per face before they start over: a few scripts in each
+/// direction is all a game's text uses.
+const PLANS: usize = 32;
+
+/// A shaping face, as `rustybuzz` names its borrowing type.
+type ShapingFace<'a> = rustybuzz::Face<'a>;
+
+self_cell::self_cell!(
+    /// The file's bytes and the shaping face reading them, kept together:
+    /// the face borrows the bytes, which a plain struct cannot hold.
+    struct Shaper {
+        owner: Arc<[u8]>,
+        #[covariant]
+        dependent: ShapingFace,
+    }
+);
 
 /// Baseline-relative heights of a face at one size, in pixels.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -49,11 +84,15 @@ impl Font {
     pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, &'static str> {
         let bytes: Arc<[u8]> = bytes.into();
         let raster = fontdue::Font::from_bytes(&*bytes, fontdue::FontSettings::default())?;
-        if rustybuzz::Face::from_slice(&bytes, 0).is_none() {
-            return Err("the shaper cannot read its tables");
-        }
+        let shaper = Shaper::try_new(bytes, |bytes| {
+            rustybuzz::Face::from_slice(bytes, 0).ok_or("the shaper cannot read its tables")
+        })?;
         Ok(Self {
-            face: Some(Face { bytes, raster }),
+            face: Some(Face {
+                raster,
+                shaper: Arc::new(shaper),
+                plans: Arc::default(),
+            }),
         })
     }
 
@@ -73,9 +112,47 @@ impl Font {
         self.face.is_some()
     }
 
-    /// A shaping face over the file's bytes, borrowed for one layout.
-    pub(crate) fn shaper(&self) -> Option<rustybuzz::Face<'_>> {
-        rustybuzz::Face::from_slice(&self.face.as_ref()?.bytes, 0)
+    /// The shaping face over the file's bytes, made when the font was.
+    pub(crate) fn shaper(&self) -> Option<&rustybuzz::Face<'_>> {
+        Some(self.face.as_ref()?.shaper.borrow_dependent())
+    }
+
+    /// `buffer` shaped by this face, through a plan kept for its
+    /// direction, script and language — what `rustybuzz::shape` makes
+    /// afresh each call. `None` with no face. The buffer's segment
+    /// properties must already be set (`guess_segment_properties`).
+    pub(crate) fn shape(&self, buffer: rustybuzz::UnicodeBuffer) -> Option<rustybuzz::GlyphBuffer> {
+        let face = self.face.as_ref()?;
+        let shaper = face.shaper.borrow_dependent();
+        let key: PlanKey = (buffer.direction(), buffer.script(), buffer.language());
+        let made = || {
+            // An unset script reads back as `UNKNOWN`; the plan is made for
+            // none, as `rustybuzz::shape` makes it.
+            let script = (key.1 != rustybuzz::script::UNKNOWN).then_some(key.1);
+            Arc::new(rustybuzz::ShapePlan::new(
+                shaper,
+                key.0,
+                script,
+                key.2.as_ref(),
+                &[],
+            ))
+        };
+        let plan = match face.plans.lock() {
+            Ok(mut plans) => match plans.iter().find(|(k, _)| *k == key) {
+                Some((_, plan)) => plan.clone(),
+                None => {
+                    if plans.len() >= PLANS {
+                        plans.clear();
+                    }
+                    let plan = made();
+                    plans.push((key, plan.clone()));
+                    plan
+                }
+            },
+            // A panic while the lock was held: shape without keeping.
+            Err(_) => made(),
+        };
+        Some(rustybuzz::shape_with_plan(shaper, &plan, buffer))
     }
 
     /// Ascent, descent and line height at `px` pixels per em. A face with

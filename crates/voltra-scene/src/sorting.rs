@@ -144,7 +144,7 @@ mod tests {
             sprite_on(&mut world, "Background", 100, [0.0, 0.0, 1.0, 1.0]);
             let batch = SpriteBatch::from_world(&world, Sheets::default());
             assert_eq!(
-                batch.vertices[0].color,
+                batch.quad_vertices()[0].color,
                 [0.0, 0.0, 1.0, 1.0],
                 "background first"
             );
@@ -169,7 +169,7 @@ mod tests {
             let layers = SortingLayers::new(["Ground", "Sky"]);
             let batch = SpriteBatch::from_world(&world, Sheets::default().with_layers(&layers));
             assert_eq!(
-                batch.vertices[0].color,
+                batch.quad_vertices()[0].color,
                 [0.0, 1.0, 0.0, 1.0],
                 "ground is behind here"
             );

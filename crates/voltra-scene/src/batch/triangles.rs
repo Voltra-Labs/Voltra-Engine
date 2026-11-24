@@ -107,7 +107,7 @@ impl SpriteBatch {
         let start = self.indices.len() as u32;
         self.indices.extend(mesh.indices.iter().map(|i| base + i));
         let end = self.indices.len() as u32;
-        self.extend_ranges(surface, start..end);
+        self.extend_ranges(surface, voltra_render::Primitives::Triangles(start..end));
     }
 }
 

@@ -303,7 +303,7 @@ mod tests {
 
         let batch = SpriteBatch::from_world(&world, sheets);
         let left = batch
-            .vertices
+            .quad_vertices()
             .iter()
             .map(|v| v.position[0])
             .fold(f32::INFINITY, f32::min);

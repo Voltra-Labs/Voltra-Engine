@@ -41,7 +41,7 @@ fn sheets(fonts: &Fonts) -> Sheets<'_> {
 
 /// The smallest box holding every vertex of `batch`.
 fn extent(batch: &SpriteBatch) -> (Vec2, Vec2) {
-    batch.vertices.iter().fold(
+    batch.quad_vertices().iter().fold(
         (Vec2::splat(f32::INFINITY), Vec2::splat(f32::NEG_INFINITY)),
         |(min, max), v| {
             let p = Vec2::from(v.position);
@@ -217,7 +217,7 @@ fn a_childs_sprite_draws_over_its_panels_and_text_over_its_own_sprite() {
 
     let textures: Vec<_> = batch.ranges.iter().map(|r| r.texture).collect();
     assert_eq!(textures, vec![None, Some(Handle::forge(7, 0))]);
-    let first = batch.vertices[0].color;
+    let first = batch.quad_vertices()[0].color;
     assert_eq!(
         first,
         [0.0, 0.0, 1.0, 1.0],

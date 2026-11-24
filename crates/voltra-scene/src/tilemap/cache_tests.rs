@@ -64,6 +64,7 @@ fn level(atlases: &mut Atlases, path: &AssetPath) -> (World, Entity) {
 fn same(world: &World, sheets: Sheets<'_>, cache: &mut TileMeshCache) -> SpriteBatch {
     let cached = SpriteBatch::from_world_cached(world, sheets, cache);
     let fresh = SpriteBatch::from_world(world, sheets);
+    assert_eq!(cached.quads, fresh.quads);
     assert_eq!(cached.vertices, fresh.vertices);
     assert_eq!(cached.indices, fresh.indices);
     assert_eq!(cached.ranges, fresh.ranges);
@@ -179,6 +180,7 @@ fn a_rebuilt_batch_holds_only_this_frame() {
     let part = all.visible_in(Vec2::new(-3.5, -20.0), Vec2::new(20.0, 2.5));
     batch.rebuild(&world, part, &mut cache);
     let fresh = SpriteBatch::from_world(&world, part);
+    assert_eq!(batch.quads, fresh.quads);
     assert_eq!(batch.vertices, fresh.vertices);
     assert_eq!(batch.indices, fresh.indices);
     assert_eq!(batch.ranges, fresh.ranges);

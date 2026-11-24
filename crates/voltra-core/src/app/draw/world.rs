@@ -25,6 +25,8 @@ pub(in crate::app) struct WorldDraw<'a> {
     pub sorting_layers: &'a SortingLayers,
     /// Last frame's batch, rebuilt in place.
     pub batch: &'a mut SpriteBatch,
+    /// The GPU buffers it is written into, kept from frame to frame.
+    pub buffers: &'a mut voltra_render::MeshBuffers,
     pub tile_meshes: &'a mut TileMeshCache,
     pub gpu_rings: &'a GpuParticleRings,
     /// The renderer's half of every skinned sprite.
@@ -65,7 +67,7 @@ impl WorldDraw<'_> {
             None => sheets,
         };
         self.batch.rebuild(self.world, sheets, self.tile_meshes);
-        let mesh = self.batch.upload(&device);
+        let mesh = self.batch.upload_into(&device, &queue, self.buffers);
         let white = self.renderer.white_bind_group().clone();
         let bank = crate::app::scene_draws::prepare_materials(
             self.material_bank,
@@ -101,6 +103,6 @@ impl WorldDraw<'_> {
         self.renderer.lighting =
             lighting(self.world, &camera, sheets, self.silhouettes, self.textures);
         self.renderer
-            .render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
+            .render_scene(target, graded, mesh, &draws, layer, &post);
     }
 }

@@ -49,7 +49,7 @@ pub enum SceneDraw<'a> {
 pub fn draw_scene(
     encoder: &mut wgpu::CommandEncoder,
     view: &wgpu::TextureView,
-    sprites: &wgpu::RenderPipeline,
+    sprites: &crate::pipeline::SpritePipeline,
     particles: Option<&ParticlePipelines>,
     camera: &wgpu::BindGroup,
     mesh: Option<&Mesh>,
@@ -84,7 +84,7 @@ pub fn draw_scene(
                 };
                 binder.bind(&mut pass, range);
                 particles_bound = false;
-                mesh.draw_range(&mut pass, range.indices.clone());
+                mesh.draw_primitives(&mut pass, &range.primitives);
             }
             SceneDraw::Particles {
                 particles: emitter,

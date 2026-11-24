@@ -6,10 +6,11 @@ use super::uniforms::Layout;
 /// The function a material's WGSL defines.
 pub const FRAGMENT_ENTRY: &str = "fragment";
 
-/// What comes before a material's own source: the bindings of the sprite
-/// pipeline — group 0 the camera, group 1 the sprite's texture — the
-/// vertex stage, and `Fragment`, what the fragment function is handed.
-const PRELUDE: &str = r#"// The engine's: the sprite pipeline's bindings and vertex stage.
+/// What comes before a material's own source, after `quad.wgsl`: the
+/// bindings of the sprite pipeline — group 0 the camera, group 1 the
+/// sprite's texture — the vertex stages for triangles and quads, and
+/// `Fragment`, what the fragment function is handed.
+const PRELUDE: &str = r#"// The engine's: the sprite pipeline's bindings and vertex stages.
 struct Camera {
     view_proj: mat4x4<f32>,
 }
@@ -37,13 +38,23 @@ struct Fragment {
     @location(1) uv: vec2<f32>,
 }
 
+fn sprite_vertex(position: vec2<f32>, color: vec4<f32>, uv: vec2<f32>) -> Fragment {
+    var out: Fragment;
+    out.position = camera.view_proj * vec4<f32>(position, 0.0, 1.0);
+    out.color = color;
+    out.uv = uv;
+    return out;
+}
+
 @vertex
 fn vs_main(in: VertexInput) -> Fragment {
-    var out: Fragment;
-    out.position = camera.view_proj * vec4<f32>(in.position, 0.0, 1.0);
-    out.color = in.color;
-    out.uv = in.uv;
-    return out;
+    return sprite_vertex(in.position, in.color, in.uv);
+}
+
+@vertex
+fn vs_quad(@builtin(vertex_index) index: u32, quad: QuadInput) -> Fragment {
+    let corner = quad_corner(quad, index);
+    return sprite_vertex(corner.position, corner.color, corner.uv);
 }
 
 // What the sprite pipeline would have drawn: the texel times the tint.
@@ -62,7 +73,8 @@ fn sprite_color(in: Fragment) -> vec4<f32> {
 /// define `fn fragment(in: Fragment) -> vec4<f32>`.
 pub fn compose(fragment: &str, layout: &Layout) -> String {
     format!(
-        "{PRELUDE}\n// The material's uniforms.\n{}\n@group(2) @binding(0)\nvar<uniform> material: Material;\n\n// The material's own.\n{fragment}\n\n@fragment\nfn fs_main(in: Fragment) -> @location(0) vec4<f32> {{\n    return {FRAGMENT_ENTRY}(in);\n}}\n",
+        "{}\n{PRELUDE}\n// The material's uniforms.\n{}\n@group(2) @binding(0)\nvar<uniform> material: Material;\n\n// The material's own.\n{fragment}\n\n@fragment\nfn fs_main(in: Fragment) -> @location(0) vec4<f32> {{\n    return {FRAGMENT_ENTRY}(in);\n}}\n",
+        crate::shader::QUAD,
         layout.wgsl_struct()
     )
 }

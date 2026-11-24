@@ -104,7 +104,11 @@ impl App {
         // Into last frame's buffers, taken out for the frame and put back.
         let mut batch = std::mem::take(&mut self.frame_batch);
         batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
-        let mesh = batch.upload(renderer.context().device());
+        let mesh = batch.upload_into(
+            renderer.context().device(),
+            renderer.context().queue(),
+            &mut self.batch_buffers,
+        );
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
         // of surviving into the `&mut self` call below.
@@ -144,7 +148,7 @@ impl App {
         );
         let _render = voltra_profile::scope("render");
         renderer.set_gpu_timing(voltra_profile::is_enabled());
-        renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
+        renderer.render_mesh(mesh, &draws, layer, &post);
         record_gpu_timings(renderer);
         self.frame_batch = batch;
     }
@@ -245,6 +249,7 @@ impl App {
             silhouettes: self.silhouettes.as_mut(),
             sorting_layers: &self.sorting_layers,
             batch: &mut self.frame_batch,
+            buffers: &mut self.batch_buffers,
             tile_meshes: &mut self.tile_meshes,
             gpu_rings: &self.gpu_rings,
             skins: &self.skinned_meshes,

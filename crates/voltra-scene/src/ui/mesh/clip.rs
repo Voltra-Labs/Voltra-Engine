@@ -115,7 +115,7 @@ mod tests {
         let mask = Rect::new(Vec2::new(5.0, -5.0), Vec2::new(20.0, 2.5));
         let batch = pushed(Some(mask));
         assert_eq!(batch.sprite_count(), 1);
-        let v = &batch.vertices;
+        let v = &batch.quad_vertices();
         // Top-left corner moved to (5, 0) samples u = 0.5.
         assert_eq!(v[0].position, [5.0, 0.0]);
         assert_eq!(v[0].uv, [0.5, 0.0]);

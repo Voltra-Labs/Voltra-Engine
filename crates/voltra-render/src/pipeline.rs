@@ -1,10 +1,13 @@
 //! Render pipeline construction.
 
 use crate::lines::LineVertex;
-use crate::mesh::Vertex;
 use crate::shader;
 
-/// Builds the built-in flat-colour pipeline.
+pub use sprite::{SpritePipeline, SpritePipelineDescriptor};
+
+mod sprite;
+
+/// Builds the built-in flat-colour pipeline, for triangles and quads.
 ///
 /// `format` must match the surface configuration the pipeline will render
 /// into; a mismatch is a validation error at draw time, not at creation.
@@ -14,7 +17,7 @@ pub fn create_flat_color(
     format: wgpu::TextureFormat,
     camera_layout: &wgpu::BindGroupLayout,
     texture_layout: &wgpu::BindGroupLayout,
-) -> wgpu::RenderPipeline {
+) -> SpritePipeline {
     let module = shader::create_module(device, "flat-color", shader::FLAT_COLOR);
 
     // Declared rather than inferred from the shader: an explicit layout keeps
@@ -26,39 +29,22 @@ pub fn create_flat_color(
         immediate_size: 0,
     });
 
-    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-        label: Some("flat-color-pipeline"),
-        layout: Some(&layout),
-        vertex: wgpu::VertexState {
+    SpritePipeline::new(
+        device,
+        &SpritePipelineDescriptor {
+            label: "flat-color-pipeline",
+            layout: &layout,
             module: &module,
-            entry_point: Some("vs_main"),
-            compilation_options: Default::default(),
-            buffers: &[Some(Vertex::LAYOUT)],
-        },
-        primitive: wgpu::PrimitiveState {
-            topology: wgpu::PrimitiveTopology::TriangleList,
-            front_face: wgpu::FrontFace::Ccw,
-            // 2D geometry is always viewed from one side, so culling would
-            // only cost a winding rule to get wrong. The 3D pipeline turns it
-            // back on alongside the depth buffer.
-            cull_mode: None,
-            ..Default::default()
-        },
-        depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
-        fragment: Some(wgpu::FragmentState {
-            module: &module,
-            entry_point: Some("fs_main"),
-            compilation_options: Default::default(),
-            targets: &[Some(wgpu::ColorTargetState {
+            triangles_entry: "vs_main",
+            quads_entry: "vs_quad",
+            fragment_entry: "fs_main",
+            target: wgpu::ColorTargetState {
                 format,
                 blend: Some(wgpu::BlendState::ALPHA_BLENDING),
                 write_mask: wgpu::ColorWrites::ALL,
-            })],
-        }),
-        multiview_mask: None,
-        cache: None,
-    })
+            },
+        },
+    )
 }
 
 /// Builds the line pipeline.

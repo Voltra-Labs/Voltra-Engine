@@ -1,7 +1,7 @@
 //! The container that ties entities to their components.
 
+use crate::hash::FastMap;
 use std::any::{Any, TypeId};
-use std::collections::HashMap;
 
 use crate::entity::{Entities, Entity};
 use crate::storage::SparseSet;
@@ -35,7 +35,12 @@ impl<T: 'static> ErasedStorage for SparseSet<T> {
 pub struct World {
     entities: Entities,
     /// One sparse set per component type, keyed by that type's `TypeId`.
-    storages: HashMap<TypeId, Box<dyn ErasedStorage>>,
+    ///
+    /// Hashed with [`FastHasher`](crate::hash::FastHasher), not SipHash: a
+    /// `TypeId` is already a hash no one outside chooses, and every `get`
+    /// and `query` hashes one — SipHash was a fifth of composing 100k
+    /// transforms (stage 108).
+    storages: FastMap<TypeId, Box<dyn ErasedStorage>>,
 }
 
 impl World {
@@ -127,6 +132,14 @@ impl World {
             .downcast_mut::<SparseSet<T>>()
             .expect("storage keyed by TypeId::of::<T> always holds a SparseSet<T>")
             .insert(entity, component)
+    }
+
+    /// Every `T`, as the sparse set holding them, or `None` when no entity
+    /// ever had one. For a loop asking many entities for a `T`: each
+    /// [`get`](Self::get) finds the set by its type first, and that lookup
+    /// was most of composing 100k transforms (stage 108).
+    pub fn components<T: 'static>(&self) -> Option<&SparseSet<T>> {
+        self.storage::<T>()
     }
 
     /// The `T` of `entity`, if it has one.
