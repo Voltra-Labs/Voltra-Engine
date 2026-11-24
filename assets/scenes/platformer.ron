@@ -225,5 +225,39 @@
                 "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
             },
         ),
+        (
+            id: "01a20a00-0000-7000-8000-00000000c001",
+            components: {
+                "Name": "Touch stick",
+                "Sprite": (color:(1.0,1.0,1.0,0.12),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.0,1.0),anchor_max:(0.0,1.0),offset_min:(24.0,-164.0),offset_max:(164.0,-24.0)),
+            },
+        ),
+        (
+            id: "01a20a00-0000-7000-8000-00000000c002",
+            components: {
+                "Name": "Touch stick label",
+                "Parent": "01a20a00-0000-7000-8000-00000000c001",
+                "Text": (content:"< walk >",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,0.5),align:Center,sort_order:0),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,56.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a20a00-0000-7000-8000-00000000c003",
+            components: {
+                "Name": "Touch jump",
+                "Sprite": (color:(1.0,1.0,1.0,0.12),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(1.0,1.0),anchor_max:(1.0,1.0),offset_min:(-124.0,-124.0),offset_max:(-24.0,-24.0)),
+            },
+        ),
+        (
+            id: "01a20a00-0000-7000-8000-00000000c004",
+            components: {
+                "Name": "Touch jump label",
+                "Parent": "01a20a00-0000-7000-8000-00000000c003",
+                "Text": (content:"jump",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,0.5),align:Center,sort_order:0),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,38.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
     ],
 )

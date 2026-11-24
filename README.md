@@ -371,6 +371,7 @@ privileged and plain `cargo build` covers everything.
 | 83 | Sprite materials: a WGSL fragment and its uniforms, on every backend | done |
 | 84 | Several cameras: split screen, render textures, pixel-perfect views | done |
 | 85 | Editor comfort: grid snapping, a console, project settings | done |
+| 86 | Touch: fingers as pointers, a tap as a click, virtual sticks | done |
 
 ## Contributing
 

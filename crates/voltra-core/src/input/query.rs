@@ -44,7 +44,9 @@ impl Input {
             Binding::Key(code) => self.is_key_down(code),
             Binding::Mouse(button) => self.is_mouse_button_down(button),
             Binding::Pad(button) => self.pads.is_down(button),
-            Binding::PadAxis(..) => self.binding_value(binding) >= super::pads::AXIS_PRESS,
+            Binding::PadAxis(..) | Binding::Touch(..) => {
+                self.binding_value(binding) >= super::pads::AXIS_PRESS
+            }
         }
     }
 
@@ -56,6 +58,13 @@ impl Input {
             Binding::Mouse(button) => self.was_mouse_button_pressed(button),
             Binding::Pad(button) => self.pads.was_pressed(button),
             Binding::PadAxis(..) => false,
+            // A finger going down in the zone presses a held button; a stick
+            // has no press of its own.
+            Binding::Touch(zone, super::binding::TouchDir::Hold) => self
+                .touches()
+                .iter()
+                .any(|t| t.began && zone.contains(t.start, self.screen())),
+            Binding::Touch(..) => false,
         }
     }
 
@@ -68,6 +77,15 @@ impl Input {
             }
             Binding::Pad(button) => self.pads.button_value(button),
             Binding::PadAxis(axis, direction) => direction.amount(self.pads.axis(axis)),
+            Binding::Touch(zone, direction) => {
+                let screen = self.screen();
+                let radius = super::stick_radius(screen);
+                self.touches()
+                    .iter()
+                    .filter(|t| !t.ended && zone.contains(t.start, screen))
+                    .map(|t| direction.amount(t.position - t.start, radius))
+                    .fold(0.0, f32::max)
+            }
         }
     }
 

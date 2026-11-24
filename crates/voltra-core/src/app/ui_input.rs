@@ -80,8 +80,19 @@ impl App {
 }
 
 /// The mouse in points, with this frame's left-button edges, the wheel and
-/// whether Shift is held.
+/// whether Shift is held — or, while a finger is on the screen, the first
+/// finger: down when it touches, up when it lifts, so a tap is a click.
 pub(super) fn pointer_of(input: &Input, scale: f32) -> Pointer {
+    if let Some(finger) = input.touches().iter().min_by_key(|t| t.id) {
+        let position = finger.position / scale;
+        return Pointer {
+            position: position.is_finite().then_some(position),
+            went_down: finger.began,
+            went_up: finger.ended,
+            scroll: Vec2::ZERO,
+            extend: false,
+        };
+    }
     let position = input.cursor_position() / scale;
     Pointer {
         position: position.is_finite().then_some(position),
@@ -151,6 +162,21 @@ mod tests {
         let input = Input::new();
         let nav = navigation_of(&input, &ActionMap::new());
         assert_eq!(nav, Navigation::default());
+    }
+
+    #[test]
+    fn a_finger_is_the_pointer_and_a_tap_a_click() {
+        let mut input = Input::new();
+        input.on_touch(
+            4,
+            crate::input::TouchPhase::Started,
+            Vec2::new(300.0, 150.0),
+        );
+        let down = pointer_of(&input, 1.5);
+        assert_eq!(down.position, Some(Vec2::new(200.0, 100.0)));
+        assert!(down.went_down && !down.went_up);
+        input.on_touch(4, crate::input::TouchPhase::Ended, Vec2::new(300.0, 150.0));
+        assert!(pointer_of(&input, 1.5).went_up);
     }
 
     #[test]

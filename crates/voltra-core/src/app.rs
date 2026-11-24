@@ -341,6 +341,16 @@ impl App {
         // Once per frame, before anything reads an action: the fixed tick
         // below sees the same actions as the per-frame one.
         let input = voltra_profile::scope("input");
+        // The size touch zones divide, before the actions read them.
+        if let Some(window) = self.window.as_ref() {
+            let size = window.inner_size();
+            self.input.set_screen(voltra_render::glam::Vec2::new(
+                size.width as f32,
+                size.height as f32,
+            ));
+        } else if let Some(screen) = self.headless_screen {
+            self.input.set_screen(screen);
+        }
         self.input.update_actions(&self.actions);
         // After the actions, which navigate the focus, and before the tick,
         // which reads this frame's clicks.

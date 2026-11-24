@@ -5475,6 +5475,42 @@ turn and an unsnapped one, a missing texture's warning in the Console at
 warn and not at error, a bad layers file refused and a good one saved
 and read back live. In CI, on a software Vulkan driver.
 
+### Touches are pointers; a virtual stick is a binding
+
+Stage 86. The platformer played on a phone's browser.
+
+- **`Input::touches`**: each finger's id, where it went down, where it is,
+  and whether it went down or lifted this frame — kept to the end of the
+  frame it lifts in, so a tap inside one frame is seen. From winit's
+  `WindowEvent::Touch`, which its web backend raises for pointer events of
+  type touch. Lost focus lifts every finger, as it releases every key.
+- **A tap is a click**: while a finger is down, the first one drives the
+  UI pointer — down when it touches, up when it lifts — so every control
+  of stage 80 works by touch without knowing it.
+- **`Binding::Touch(zone, dir)`**: a finger that went down in a zone of
+  the screen (`Anywhere`, `LeftHalf`, `RightHalf`, `BottomLeft`,
+  `BottomRight`) — `Hold` for an on-screen button, or a direction for a
+  floating virtual stick whose strength is how far the finger has slid
+  from where it went down, as a share of a radius (a twelfth of the
+  screen's shorter side). Floating, as most mobile games' sticks are, so
+  a thumb that lands off-centre still works; through the action map, so
+  dead zones apply and a game reads `move_right` as it does from a key.
+  The default map binds walking to `Touch(BottomLeft, …)` and jumping to
+  `Touch(BottomRight, Hold)`; the platformer draws the two zones.
+  `Input` knows the screen's size from the window each frame.
+- The web page's canvas is `touch-action: none`: a finger on the game is
+  not a scroll or a zoom of the page.
+
+Pinned by `input/touch.rs` (down, moved, lifted over frames; a tap in one
+frame; an unknown finger ignored), the touch bindings in `input/tests.rs`
+(a slide's strength by how far, through the dead zone; a finger down
+elsewhere drives nothing; a hold presses; read from a file),
+`app/ui_input.rs` (a finger is the pointer, a tap a click) and
+`crates/voltra-player/web/test/touch.mjs`: the platformer built for the
+web on a touch screen, a finger held and slid right on its stick through
+Chromium's touch input, and the walker walking right — on WebGPU and
+WebGL2, in CI.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

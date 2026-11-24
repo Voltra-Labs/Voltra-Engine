@@ -7,7 +7,7 @@ merged half-done.
 
 ## Where the engine stands
 
-Stages 1–85 and W1–W4 (README roadmap): batched, lit and post-processed
+Stages 1–86 and W1–W4 (README roadmap): batched, lit and post-processed
 rendering; CPU and GPU particles; rigid bodies of four shapes with joints,
 continuous collision, characters and one-way platforms; tilemaps with auto-tiling; audio; prefabs; property
 animation with a timeline and state machines; navigation; an editor with
@@ -16,7 +16,6 @@ server; a profiler.
 
 What a game still cannot do, found by reading the tree (not guessed):
 
-- read a touch.
 
 And nothing tells a newcomer how to make a game with it.
 
@@ -44,14 +43,6 @@ the iteration loop instead — see 76), 3D (CLAUDE.md), networking (a
 subsystem of its own).
 
 ---
-
-## 86 — Touch input
-
-**Scope.** Touches as pointers (`Input::touches`, began/moved/ended), a tap
-as a click for UI, and virtual-stick bindings in the action map.
-
-**Done when** a Playwright test touches the platformer's on-screen stick and
-it walks.
 
 ## 87 — A guide, sample games, version 0.1
 

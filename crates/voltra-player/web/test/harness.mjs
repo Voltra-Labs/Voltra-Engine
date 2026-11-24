@@ -113,7 +113,7 @@ export const BACKENDS = [
 /// exits: non-zero, with each page's console, when one failed. `check`
 /// returns what went wrong, or null. A page that logs an error, or whose
 /// adapter is not the backend's, fails too.
-export async function onEveryBackend({ site, url, name, initScript, check }) {
+export async function onEveryBackend({ site, url, name, initScript, check, pageOptions = {} }) {
   const pw = playwright();
   const failures = [];
   for (const backend of BACKENDS) {
@@ -123,7 +123,7 @@ export async function onEveryBackend({ site, url, name, initScript, check }) {
     }
     console.log(`\n== ${backend.name}`);
     const browser = await pw.chromium.launch({ args: backend.args });
-    const page = await browser.newPage({ viewport: { width: 960, height: 540 } });
+    const page = await browser.newPage({ viewport: { width: 960, height: 540 }, ...pageOptions });
     if (initScript) await page.addInitScript(initScript);
     const consoleLines = [];
     page.on("console", (message) => consoleLines.push(`[${message.type()}] ${message.text()}`));

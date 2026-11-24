@@ -20,6 +20,88 @@ pub enum Binding {
     Mouse(MouseButton),
     Pad(PadButton),
     PadAxis(PadAxis, Direction),
+    /// A finger that went down in a part of the screen: held, or dragged
+    /// one way — a virtual stick. `Touch(BottomLeft, Right)` walks right
+    /// while a thumb pressed in the bottom-left corner is slid right;
+    /// `Touch(BottomRight, Hold)` is an on-screen jump button.
+    Touch(TouchZone, TouchDir),
+}
+
+/// The part of the screen a touch binding listens to: where a finger has
+/// to go down to drive it. It may wander out after.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum TouchZone {
+    Anywhere,
+    LeftHalf,
+    RightHalf,
+    /// The left half of the bottom half: where a left thumb rests.
+    BottomLeft,
+    BottomRight,
+}
+
+impl TouchZone {
+    /// Whether `point`, in pixels from the top-left of a `screen`, is in it.
+    pub fn contains(
+        self,
+        point: voltra_render::glam::Vec2,
+        screen: voltra_render::glam::Vec2,
+    ) -> bool {
+        let (left, bottom) = (point.x < screen.x * 0.5, point.y >= screen.y * 0.5);
+        match self {
+            Self::Anywhere => true,
+            Self::LeftHalf => left,
+            Self::RightHalf => !left,
+            Self::BottomLeft => left && bottom,
+            Self::BottomRight => !left && bottom,
+        }
+    }
+
+    /// Its middle, on a `screen`: where a simulated finger goes down.
+    pub fn centre(self, screen: voltra_render::glam::Vec2) -> voltra_render::glam::Vec2 {
+        let (x, y) = match self {
+            Self::Anywhere => (0.5, 0.5),
+            Self::LeftHalf => (0.25, 0.5),
+            Self::RightHalf => (0.75, 0.5),
+            Self::BottomLeft => (0.25, 0.75),
+            Self::BottomRight => (0.75, 0.75),
+        };
+        screen * voltra_render::glam::Vec2::new(x, y)
+    }
+}
+
+/// What a touch binding reads of its finger: held at all, or dragged one
+/// way from where it went down.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum TouchDir {
+    Hold,
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+impl TouchDir {
+    /// How far an `offset` from where the finger went down — screen
+    /// pixels, y down — lies this way, as a share of `radius`: `0` to `1`.
+    /// `Hold` is `1` for any finger.
+    pub fn amount(self, offset: voltra_render::glam::Vec2, radius: f32) -> f32 {
+        let along = match self {
+            Self::Hold => return 1.0,
+            Self::Left => -offset.x,
+            Self::Right => offset.x,
+            Self::Up => -offset.y,
+            Self::Down => offset.y,
+        };
+        if radius > 0.0 {
+            (along / radius).clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
 }
 
 /// A gamepad button, by where it sits on a standard pad.

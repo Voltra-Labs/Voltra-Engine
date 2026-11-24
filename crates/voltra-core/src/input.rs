@@ -21,15 +21,17 @@ pub mod drive;
 pub mod map;
 pub mod pads;
 mod query;
+pub mod touch;
 pub mod typing;
 
 use std::cell::RefCell;
 use std::collections::HashSet;
 
 pub use action::ActionState;
-pub use binding::{Binding, Direction, PadAxis, PadButton};
+pub use binding::{Binding, Direction, PadAxis, PadButton, TouchDir, TouchZone};
 pub use drive::{drive_action, HeldActions};
 pub use map::{Action, ActionMap, MapError};
+pub use touch::{Touch, TouchPhase};
 
 use action::ActionStates;
 
@@ -69,6 +71,11 @@ pub struct Input {
 
     /// Text, editing keys and IME composition, for a focused text field.
     typing: typing::Typing,
+
+    /// Fingers on the screen.
+    touches: touch::Touches,
+    /// The window's size in physical pixels, which touch zones are parts of.
+    screen: Vec2,
 
     /// Every action's state, re-derived by [`Input::update_actions`].
     actions: ActionStates,
@@ -174,6 +181,29 @@ impl Input {
         for button in self.buttons_held.drain() {
             self.buttons_released.insert(button);
         }
+        self.touches.release_all();
+    }
+
+    /// A finger went down, moved or lifted, at `position` in physical pixels.
+    pub fn on_touch(&mut self, id: u64, phase: TouchPhase, position: Vec2) {
+        if self.unfocused {
+            return;
+        }
+        self.touches.on_touch(id, phase, position);
+    }
+
+    /// The fingers down this frame, and those that lifted in it.
+    pub fn touches(&self) -> &[Touch] {
+        self.touches.list()
+    }
+
+    /// The window's size in physical pixels: what touch zones divide.
+    pub fn set_screen(&mut self, size: Vec2) {
+        self.screen = size.max(Vec2::ZERO);
+    }
+
+    pub fn screen(&self) -> Vec2 {
+        self.screen
     }
 
     /// What was typed this frame: text, editing keys, IME composition.
@@ -229,6 +259,19 @@ impl Input {
                 };
                 self.on_scroll(lines);
             }
+            WindowEvent::Touch(touch) => {
+                let phase = match touch.phase {
+                    winit::event::TouchPhase::Started => TouchPhase::Started,
+                    winit::event::TouchPhase::Moved => TouchPhase::Moved,
+                    winit::event::TouchPhase::Ended => TouchPhase::Ended,
+                    winit::event::TouchPhase::Cancelled => TouchPhase::Cancelled,
+                };
+                let at = Vec2::new(touch.location.x as f32, touch.location.y as f32);
+                self.on_touch(touch.id, phase, at);
+            }
+            WindowEvent::Resized(size) => {
+                self.set_screen(Vec2::new(size.width as f32, size.height as f32));
+            }
             WindowEvent::Focused(false) => self.on_focus_lost(),
             WindowEvent::Focused(true) => self.on_focus_gained(),
             _ => {}
@@ -245,6 +288,7 @@ impl Input {
         self.scroll_delta = 0.0;
         self.pads.end_frame();
         self.typing.end_frame();
+        self.touches.end_frame();
     }
 
     // --- queries ------------------------------------------------------------
@@ -292,6 +336,17 @@ impl Input {
     /// neither or both are. Saves every caller writing the same branch.
     pub fn axis(&self, negative: KeyCode, positive: KeyCode) -> f32 {
         f32::from(self.is_key_down(positive)) - f32::from(self.is_key_down(negative))
+    }
+}
+
+/// How far a virtual stick's finger slides to push it fully, in pixels: a
+/// twelfth of the screen's shorter side, or 60 before the size is known.
+pub(crate) fn stick_radius(screen: Vec2) -> f32 {
+    let side = screen.x.min(screen.y);
+    if side > 0.0 {
+        side / 12.0
+    } else {
+        60.0
     }
 }
 
