@@ -7010,6 +7010,132 @@ from its page's `?join=`; the server spawns the page's player and the page
 logs that it predicts it. Guide chapter `docs/guide/08-networking.md`,
 whose checked blocks run the match test and the server for two seconds.
 
+### A big world is regions streamed around anchors, loaded over frames within a budget
+
+Stage 109. Stage 30's scene loads, made asynchronous, for two uses: a
+world cut into regions loaded and unloaded around the players, and a full
+scene change behind a loading screen. Both run through one pipeline
+(`voltra-core/src/app/loading/`), once a frame, after the frame's scene
+requests.
+
+- **Authoring: a `.world.ron`** (`voltra_scene::WorldRegions`) lists
+  regions — each an ordinary scene, its entities at world positions, and
+  the rectangle it covers — plus a default `load_radius`, an
+  `unload_margin` (hysteresis) and an optional `base` scene. The shape of
+  Unreal's World Partition (grid cells loaded around *streaming
+  sources*), kept to files the engine already has: a region opens in the
+  editor like any scene and nothing in it knows it is one. Unity has no
+  built-in streaming (games stream additive scenes by hand); Godot leaves
+  it to the game. `WorldRegions::grid` generates a grid.
+- **Anchors**: every `StreamingAnchor { radius }` (registered, so a scene
+  or prefab carries it) keeps regions within its radius in — as many as a
+  game needs: split screen, a server's players. With none, every active
+  `Camera` is one, so a single-player game adds nothing. A region within
+  an anchor's reach loads, nearest first, at most two per pool thread at
+  once; one further than reach + margin from every anchor unloads.
+  `tick.stream_world(path)`, `tick.stop_streaming()`, `tick.streaming()`
+  (`StreamingStats`).
+- **The pipeline** (`build.rs`): on the pool, the file read, the RON
+  parsed, **every registered component checked against its type**
+  (`ComponentRegistry::normalize`, with no world — the registry is now
+  `Clone` and goes to the worker), the spawn order worked out
+  (`prefab::StagedScene`: parents before children, so an entity is
+  complete — parent resolved, references remapped — the moment it lands)
+  and the textures it names listed (`format::texture_paths`). Each texture
+  not in the store is decoded on the pool once, however many loads want it
+  (`decodes.rs`), and uploaded on the frame (`Textures::admit_decoded`,
+  `DecodedTexture`). Then, on the frame, one entity a unit — components
+  read, assets resolved — and each prefab instance synced. Components are
+  read into the world on the frame, not a worker: a component need not be
+  `Send` and the world is not shared; the worker's check is what makes a
+  load over frames all-or-nothing, a broken file found before anything is
+  touched.
+- **The budget** (`budget.rs`): load work on the frame is cut into units
+  (an entity, an upload, a batch of 64 despawns, a task polled) and a unit
+  starts only while the frame's budget lasts — `DEFAULT_LOAD_BUDGET` 4 ms,
+  a quarter of a 60 Hz frame (Unity's `backgroundLoadingPriority` spans
+  2–50 ms), `App::with_load_budget`. A frame overshoots by at most the unit
+  it was in; at least one unit runs, so a zero budget still progresses.
+  Loads (nearest first) and unloads take turns. `tick.load_stats()`
+  reports work, units, the last unit's start and the longest unit.
+- **Unloading** (`unload.rs`) despawns what the region spawned *and*
+  whatever was parented under it since, children first, in units; a
+  `Persistent` entity is lifted out where it stands. A region owns what it
+  spawned wherever it walked (Unreal: an actor goes with its streamed
+  level); its state does not survive an unload — saving it is the game's.
+  A region unwanted while loading is cancelled: an unstarted read never
+  runs (dropping a `Task` cancels it), a half-spawned region unloads. A
+  region that will not load is marked broken and not retried.
+- **Assets are not freed.** `Textures`, `Clips`, `Fonts`, `Atlases` and
+  `Prefabs` never remove — every handle they issue resolves for the
+  store's life, which every component relies on — so a region's textures
+  stay after it unloads. Regions mostly share a few sheets, so memory
+  grows with *distinct* assets, not regions visited; reference-counted
+  eviction is a change to every store and every holder of a handle, left
+  for when a world needs it. Region scene files are **not** cached in the
+  prefab store: parsed, spawned, dropped.
+- **Replication** (`voltra-replication` untouched): a server streams
+  around every player — give each a `StreamingAnchor` — and a region's
+  `Replicated` entities are the server's, spawned and despawned with the
+  region, and so on every client. A client streams the same regions for
+  their scenery but **skips every replicated record** (and its subtree):
+  loads have fresh ids, so a local copy would never be adopted and would
+  double the server's. Place replicated things in regions as prefab
+  instances, so a client builds them from the prefab the server names. A
+  client's region loaded before its first snapshot is covered by the
+  existing one-off sweep of strays.
+- **Loading screen**: `tick.change_scene(path, Some(loading_prefab))` —
+  Unity's `LoadSceneAsync` (single), Godot's `load_threaded_request`. The
+  prefab spawns at the end of the asking frame; the next tick reads
+  `tick.scene_change() == Some(Loading { progress: 0.0 })`, rising (a
+  quarter read, a quarter textures, the entities, a tenth syncing), then
+  `Finished` for one frame, then `None`; `Failed` if the file will not
+  load, the old scene standing. The old scene (every root but
+  `Persistent` ones and the screen) goes once the new file is read and
+  checked; the physics, and with it the fixed tick, does not step until
+  the new scene is whole — a level half built is a floor half there. The
+  per-frame tick runs throughout, to draw the bar. A `load_scene` drops a
+  change underway; a `stream_world` asked during one waits for the new
+  scene.
+- **The pool is the loader's own** (`JobPool::submit` → `voltra_jobs::Task`,
+  new): a background task a worker runs whenever free, polled each frame;
+  workers take a scope's jobs first and a scope's waiting caller never
+  takes a task, so a frame's own jobs never queue behind a parse. All
+  cores but two, 1–4 workers (`App::with_load_workers`): Unreal streams
+  from one loading thread for the same reason, and `std` sets no thread
+  priority.
+- **On the web** there are no threads: the loader's pool has
+  no workers there, and a task runs on its first poll — which the loader
+  makes only while the budget lasts. The same code degraded to the main
+  thread; one file's parse and one texture's decode are each a single
+  unit, the overshoot bound on the web.
+- **Editor**: Scene ▸ Show region bounds draws the regions of every world
+  file under the asset root naming the open scene (as base or region), the
+  open region brighter (`voltra-editor/src/view/regions.rs`). A world
+  editor proper — loading regions into the editor, a minimap, painting
+  cells — is out of scope.
+
+Pinned by `app/loading/tests/`: an anchored camera walked across a
+generated 24 × 4 world (96 regions, 5 760 entities) at 0.4 units a frame,
+1 ms slept per frame for the pool, with the default pool and with **no
+workers** (the web's path): every region near the path loads, the world
+never holds more than the regions within reach + margin + a cell (at most
+960 of the 5 760 measured), the prefab store does not grow, and stopping unloads
+all but the camera; **every frame** no unit starts past the budget, and the
+frame's wall-clock work is within budget + its longest unit + 1 ms on at
+least 19 frames in 20 (0 over measured run alone; the allowance is for
+preemption when the whole suite and its pools share four cores). Several
+anchors keep their own regions; no anchor falls back to the camera; a
+broken region is left out. Loading screen: progress from 0 rising to 1,
+the screen up throughout and gone at `Finished`, the new scene arriving in
+parts behind it, the old gone, a persistent body still while loading and
+falling after; a missing file and a broken component (found on the
+worker) leave the old scene. `tests/streaming_replication.rs`: a server
+and a client streaming the same world — one crate on the client (fails
+with the skip off), gone when the server's player walks away while the
+client's scenery stays. `voltra-jobs/tests/task.rs`, `StagedScene` and
+`Unload` unit tests.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

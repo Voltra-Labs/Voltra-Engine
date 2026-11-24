@@ -202,6 +202,16 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             }
             select::draw(editor, frame);
 
+            // Under the colliders, over the scene: where the streamed
+            // world's regions fall.
+            if editor.regions.show {
+                let scene = editor.document.path().cloned();
+                editor
+                    .regions
+                    .refresh(frame.textures.root(), scene.as_ref());
+                editor.regions.draw(scene.as_ref(), frame.lines());
+            }
+
             // Last of all: the overlay is drawn in the order it is pushed, and
             // a collider outline must not cover the handle being dragged over
             // it.

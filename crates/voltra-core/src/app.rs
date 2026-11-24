@@ -11,6 +11,7 @@ mod gamepads;
 mod gpu_particles;
 pub mod headless;
 mod input_map;
+mod loading;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
 mod net_counters;
@@ -69,6 +70,7 @@ use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
 pub use bus_layout::{parse_bus_layout, DEFAULT_BUS_LAYOUT};
 pub use input_map::DEFAULT_INPUT_MAP;
+pub use loading::{LoadStats, SceneChangeStatus, StreamingStats, DEFAULT_LOAD_BUDGET};
 pub use net_counters::NET_COUNTERS;
 pub use scenes::SceneLoad;
 pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
@@ -438,6 +440,9 @@ impl App {
         // Last: a scene change despawns what the ticks and steps were holding,
         // so it waits until they have let go.
         self.apply_scene_requests();
+        // After the requests, which may have started a change or a world:
+        // what loads over frames gets this frame's budget.
+        self.update_loading();
         // After every step: the snapshot is the world as the frame left it,
         // and a remote entity is drawn where the clock says, whatever the
         // physics did to it.

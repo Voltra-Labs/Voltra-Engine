@@ -19,8 +19,9 @@ pub mod window;
 
 pub use app::headless::{Headless, HeadlessError, Screenshot, ScreenshotError};
 pub use app::{
-    parse_bus_layout, parse_sorting_layers, App, Net, SceneLoad, Tick, UiFrame, DEFAULT_BUS_LAYOUT,
-    DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS, NET_COUNTERS,
+    parse_bus_layout, parse_sorting_layers, App, LoadStats, Net, SceneChangeStatus, SceneLoad,
+    StreamingStats, Tick, UiFrame, DEFAULT_BUS_LAYOUT, DEFAULT_INPUT_MAP, DEFAULT_LOAD_BUDGET,
+    DEFAULT_SORTING_LAYERS, NET_COUNTERS,
 };
 pub use game::Game;
 pub use input::{

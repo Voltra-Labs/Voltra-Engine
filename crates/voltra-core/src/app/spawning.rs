@@ -176,7 +176,7 @@ impl App {
         }
     }
 
-    fn resolve_entity(&mut self, entity: Entity) {
+    pub(super) fn resolve_entity(&mut self, entity: Entity) {
         let context = self.renderer.as_ref().map(|renderer| renderer.context());
         let gpu = match (self.textures.as_mut(), context) {
             (Some(textures), Some(context)) => Some((textures, context.device(), context.queue())),

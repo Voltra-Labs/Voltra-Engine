@@ -2,13 +2,16 @@
 //! order on the caller.
 
 use std::collections::HashSet;
+use std::path::Path;
 
 use voltra_jobs::JobPool;
 use voltra_render::texture::DecodedImage;
 use voltra_render::wgpu::{Device, Queue};
+use voltra_render::Texture;
 
 use super::{decode_file, Textures};
 use crate::error::AssetError;
+use crate::handle::Handle;
 use crate::path::AssetPath;
 
 impl Textures {
@@ -49,5 +52,54 @@ impl Textures {
             self.admit(device, queue, &path, texture);
         }
         count
+    }
+
+    /// Whether loading `path` would read and decode a file: it is not
+    /// loaded yet and is not a render texture (which is made, not read).
+    /// What a loader asks before handing the decode to a thread.
+    pub fn needs_decode(&self, path: &AssetPath) -> bool {
+        !self.is_loaded(path) && !super::is_render_texture(path.as_str())
+    }
+
+    /// Uploads what [`DecodedTexture::decode`] made elsewhere and caches it
+    /// under its path, as [`Textures::load`] would have — a failed decode
+    /// gets its private placeholder. A path loaded in the meantime keeps
+    /// what it has and the pixels are dropped.
+    pub fn admit_decoded(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        decoded: DecodedTexture,
+    ) -> Handle<Texture> {
+        if let Some(handle) = self.by_path_handle(&decoded.path) {
+            return handle;
+        }
+        let texture = decoded
+            .image
+            .and_then(|image| self.upload(device, queue, &decoded.path, &image));
+        self.admit(device, queue, &decoded.path, texture)
+    }
+}
+
+/// A texture's pixels, read and inflated with no device — on any thread —
+/// waiting for [`Textures::admit_decoded`] to upload them. How a load that
+/// spans frames keeps the decode off the frame.
+#[derive(Debug)]
+pub struct DecodedTexture {
+    path: AssetPath,
+    image: Result<DecodedImage, AssetError>,
+}
+
+impl DecodedTexture {
+    /// Reads and decodes `path` under `root` — the store's
+    /// [`root`](Textures::root) — or keeps why it would not.
+    pub fn decode(root: &Path, path: AssetPath) -> Self {
+        let image = decode_file(root, &path);
+        Self { path, image }
+    }
+
+    /// The path it was read from.
+    pub fn path(&self) -> &AssetPath {
+        &self.path
     }
 }

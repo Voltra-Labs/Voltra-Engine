@@ -75,7 +75,9 @@ impl App {
         // so there is one place a step runs from, and so the game's fixed tick
         // cannot be forgotten on one of two paths.
         let requested = self.simulation.take_steps();
-        let owed = if self.simulation.is_running() {
+        // Nor while a scene change is underway: the level is half built,
+        // and a body stepped now could fall through a floor still to come.
+        let owed = if self.simulation.is_running() && !self.is_changing_scene() {
             // Only while running: a stopped world must not bank the frames it
             // spent stopped and run them all at once when Play is pressed.
             self.physics_world.owed_steps(delta)

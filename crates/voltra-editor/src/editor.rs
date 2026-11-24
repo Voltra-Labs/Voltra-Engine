@@ -48,6 +48,9 @@ pub struct Editor {
     /// of the picture being authored. Unity, Unreal and Godot all hide their
     /// collision shapes behind a toggle for the same reason.
     pub(crate) show_colliders: bool,
+    /// A streamed world's region bounds over the scene, when it is part of
+    /// one: Scene ▸ Show region bounds.
+    pub(crate) regions: crate::view::regions::RegionOverlay,
     /// Whether the editor is authoring the scene or simulating it, and the
     /// snapshot Stop will put back.
     pub(crate) play: Play,

@@ -51,6 +51,7 @@ pub(super) type TemplateFn = fn() -> Result<Box<RawValue>, SceneError>;
 /// One component type's name and the conversions that go with it.
 ///
 /// `save`/`load`/`remove` are read by `save_one`/`load_one`/`remove_one` below.
+#[derive(Clone)]
 pub(super) struct Entry {
     pub(super) name: &'static str,
     pub(super) save: SaveFn,

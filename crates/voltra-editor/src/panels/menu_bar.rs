@@ -100,6 +100,14 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     ui.close();
                 }
                 ui.separator();
+                if ui
+                    .checkbox(&mut editor.regions.show, "Show region bounds")
+                    .on_hover_text("the regions of every .world.ron naming this scene")
+                    .changed()
+                {
+                    editor.regions.rescan();
+                }
+                ui.separator();
                 if ui.button("Quit").clicked() {
                     scene_dialogs::request(editor, frame, Then::Quit);
                     ui.close();

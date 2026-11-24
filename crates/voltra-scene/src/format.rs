@@ -7,6 +7,7 @@ pub mod record;
 pub mod refs;
 pub mod registry;
 pub mod save;
+pub mod texture_paths;
 
 pub use error::SceneError;
 pub use load::{from_scene_file, load};
@@ -16,3 +17,4 @@ pub use registry::{
     ComponentInfo, ComponentRegistry, Registration, ReplicateError, ReplicatedComponent,
 };
 pub use save::{save, to_scene_file, write, EntityRecord, SceneFile, VERSION};
+pub use texture_paths::texture_paths;
