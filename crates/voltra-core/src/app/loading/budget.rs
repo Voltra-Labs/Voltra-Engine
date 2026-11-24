@@ -53,6 +53,10 @@ pub(super) struct FrameBudget {
     units: u32,
     longest: Duration,
     last_start: Duration,
+    /// When the last [`has_time`](FrameBudget::has_time) that said yes
+    /// read the clock — the moment a unit was let start, which the next
+    /// [`begin`](FrameBudget::begin) reports rather than a later read.
+    granted: Option<Duration>,
 }
 
 /// A unit being timed.
@@ -66,19 +70,32 @@ impl FrameBudget {
             units: 0,
             longest: Duration::ZERO,
             last_start: Duration::ZERO,
+            granted: None,
         }
     }
 
     /// Whether another unit may start: the budget is not spent, or nothing
     /// has run yet this frame.
-    pub(super) fn has_time(&self) -> bool {
-        self.units == 0 || self.start.elapsed() < self.limit
+    ///
+    /// One clock read decides and dates the start: the unit begun next is
+    /// reported as starting when this said yes, so "no unit starts once the
+    /// budget is spent" holds exactly, not to within the microseconds
+    /// between this and [`begin`](Self::begin).
+    pub(super) fn has_time(&mut self) -> bool {
+        let elapsed = self.start.elapsed();
+        let yes = self.units == 0 || elapsed < self.limit;
+        self.granted = yes.then_some(elapsed);
+        yes
     }
 
-    /// Starts timing a unit.
+    /// Starts timing a unit, dated by the [`has_time`](Self::has_time)
+    /// that let it start, or by the clock when none did.
     pub(super) fn begin(&mut self) -> Unit {
         let now = Instant::now();
-        self.last_start = now.duration_since(self.start);
+        self.last_start = self
+            .granted
+            .take()
+            .unwrap_or_else(|| now.duration_since(self.start));
         Unit(now)
     }
 
@@ -112,6 +129,27 @@ mod tests {
         budget.end(unit);
         assert!(!budget.has_time());
         assert_eq!(budget.finish().units, 1);
+    }
+
+    #[test]
+    fn a_unit_is_dated_by_the_check_that_let_it_start() {
+        let mut budget = FrameBudget::new(Duration::from_millis(5));
+        let unit = budget.begin();
+        budget.end(unit);
+        std::thread::sleep(Duration::from_millis(1));
+        assert!(budget.has_time());
+        // Time passes between the check and the start, as it does on a
+        // busy machine: the start is still the moment the budget said yes.
+        std::thread::sleep(Duration::from_millis(10));
+        let unit = budget.begin();
+        budget.end(unit);
+        let stats = budget.finish();
+        assert!(
+            stats.last_start < stats.budget,
+            "dated by the check: {:?} within {:?}",
+            stats.last_start,
+            stats.budget
+        );
     }
 
     #[test]
