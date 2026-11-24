@@ -16,6 +16,9 @@
 //!   reliable-unordered and unreliable-sequenced; messages split into
 //!   fragments and put back together; typed messages through [`encode`] and
 //!   [`Message::decode`] (serde over `postcard`).
+//! - [`host`] and [`join`]: a session from a port or a `udp://` / `ws://`
+//!   address, with the transports made for it; a listen server
+//!   ([`HostOptions::listen`]) whose host plays as [`PeerId::SERVER`].
 //!
 //! Everything that arrives is untrusted: a transport bounds a datagram to
 //! [`MAX_DATAGRAM`] bytes before anyone sees it, and the endpoint reads every
@@ -40,6 +43,7 @@ mod multi;
 mod packet;
 mod rng;
 mod sequence;
+mod session;
 mod transport;
 mod wire;
 
@@ -63,6 +67,9 @@ pub use event::{DisconnectReason, NetEvent, PeerId};
 pub use memory::{MemoryNetwork, MemoryTransport};
 pub use message::{decode, encode, CodecError, Message};
 pub use multi::MultiTransport;
+pub use session::{
+    host, join, parse, HostOptions, SessionError, DEFAULT_UDP_PORT, DEFAULT_WEBSOCKET_PORT,
+};
 pub use transport::{Datagram, Transport, TransportError, MAX_DATAGRAM};
 
 #[cfg(target_arch = "wasm32")]

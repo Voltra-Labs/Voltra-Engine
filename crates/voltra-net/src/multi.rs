@@ -37,14 +37,6 @@ impl MultiTransport {
     pub fn is_empty(&self) -> bool {
         self.transports.is_empty()
     }
-
-    /// Every local address, one per transport that has one.
-    pub fn local_addrs(&self) -> Vec<Address> {
-        self.transports
-            .iter()
-            .filter_map(|t| t.local_addr())
-            .collect()
-    }
 }
 
 impl Transport for MultiTransport {
@@ -87,6 +79,13 @@ impl Transport for MultiTransport {
 
     fn local_addr(&self) -> Option<Address> {
         self.transports.iter().find_map(|t| t.local_addr())
+    }
+
+    fn local_addrs(&self) -> Vec<Address> {
+        self.transports
+            .iter()
+            .flat_map(|t| t.local_addrs())
+            .collect()
     }
 
     fn take_closed(&mut self) -> Option<Address> {

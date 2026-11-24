@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use serde::Serialize;
 use voltra_net::{
-    Address, ChannelId, ConnectionStats, DisconnectReason, Endpoint, Message, NetConfig, NetEvent,
-    PeerId, SendError, Transport,
+    Address, ChannelId, ConnectionStats, DisconnectReason, Endpoint, HostOptions, Message,
+    NetConfig, NetEvent, PeerId, SendError, SessionError, Transport,
 };
 
 use super::App;
@@ -49,14 +49,34 @@ impl Net {
         self.goodbye_heard = false;
     }
 
-    /// Hosts a server over `transport`.
-    pub fn host(&mut self, transport: impl Transport + 'static, config: NetConfig) {
+    /// Hosts a session on the ports `options` name — UDP for native
+    /// players, WebSockets for browser ones — from the next frame. With
+    /// [`HostOptions::listen`] this game plays too, as
+    /// [`PeerId::SERVER`]: a listen server, whose own player joins in the
+    /// next frame's events like any other. Fails if a port will not open,
+    /// and always in a browser, which cannot listen.
+    pub fn host(&mut self, options: &HostOptions) -> Result<(), SessionError> {
+        self.start(voltra_net::host(options)?);
+        Ok(())
+    }
+
+    /// Joins the server at `server` — `udp://host:port` or `ws://host:port`
+    /// natively, a `ws://` or `wss://` URL in a browser. A
+    /// [`NetEvent::Connected`] says when it let us in, a
+    /// [`NetEvent::Disconnected`] that it would not.
+    pub fn join(&mut self, server: &str, config: NetConfig) -> Result<(), SessionError> {
+        self.start(voltra_net::join(server, config)?);
+        Ok(())
+    }
+
+    /// Hosts a session over a transport built by hand — an in-memory one in
+    /// a test, a [`Conditioned`](voltra_net::Conditioned) one in the editor.
+    pub fn host_on(&mut self, transport: impl Transport + 'static, config: NetConfig) {
         self.start(Endpoint::server(transport, config));
     }
 
-    /// Joins the server at `server` over `transport`; a
-    /// [`NetEvent::Connected`] says when it let us in.
-    pub fn join(
+    /// Joins `server` over a transport built by hand.
+    pub fn join_on(
         &mut self,
         transport: impl Transport + 'static,
         server: Address,
@@ -104,6 +124,20 @@ impl Net {
     /// The connected peers: a server's clients, or a client's server.
     pub fn peers(&self) -> impl Iterator<Item = PeerId> + '_ {
         self.endpoint.iter().flat_map(Endpoint::peers)
+    }
+
+    /// Who plays: a server's clients, and the host first on a listen
+    /// server; a client itself, once in.
+    pub fn players(&self) -> Vec<PeerId> {
+        self.endpoint
+            .as_ref()
+            .map(Endpoint::players)
+            .unwrap_or_default()
+    }
+
+    /// Whether this game hosts and plays — a listen server.
+    pub fn is_listen_server(&self) -> bool {
+        self.endpoint.as_ref().is_some_and(Endpoint::host_plays)
     }
 
     /// Queues `bytes` for `peer` on `channel`, sent at the end of the frame.

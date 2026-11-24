@@ -57,7 +57,7 @@ fn a_hosted_game_and_a_joined_one_talk_through_their_ticks() {
     }));
     server
         .net_mut()
-        .host(server_transport, NetConfig::default());
+        .host_on(server_transport, NetConfig::default());
 
     let on_client = Rc::new(RefCell::new(Seen::default()));
     let log = on_client.clone();
@@ -79,7 +79,7 @@ fn a_hosted_game_and_a_joined_one_talk_through_their_ticks() {
     }));
     client
         .net_mut()
-        .join(client_transport, server_addr, NetConfig::default());
+        .join_on(client_transport, server_addr, NetConfig::default());
 
     for _ in 0..240 {
         server.step(1, FRAME);
@@ -122,4 +122,84 @@ fn a_hosted_game_and_a_joined_one_talk_through_their_ticks() {
         vec![(PeerId::SERVER, "hi, ada".to_owned())]
     );
     assert!(!client.net().is_active(), "and then it is gone");
+}
+
+/// A game that hosts and plays — a listen server — on real sockets: its
+/// own player joins first, as `PeerId::SERVER`, then a client joining by
+/// address; stopping the session ends both.
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn a_listen_server_s_own_player_joins_like_any_other() {
+    use voltra_core::net::{Address, HostOptions};
+
+    let joins = Rc::new(RefCell::new(Vec::new()));
+    let log = joins.clone();
+    let mut host = Headless::new(App::default().with_update(move |tick| {
+        log.borrow_mut().extend(tick.net.events().iter().copied());
+    }));
+    let options = HostOptions {
+        bind: [127, 0, 0, 1].into(),
+        udp_port: Some(0),
+        websocket_port: Some(0),
+        listen: true,
+        ..HostOptions::default()
+    };
+    host.net_mut().host(&options).expect("the ports open");
+    let addrs = host.net().endpoint().expect("hosting").local_addrs();
+    let Some(Address::Udp(udp)) = addrs.iter().find(|a| matches!(a, Address::Udp(_))).copied()
+    else {
+        panic!("a UDP address in {addrs:?}");
+    };
+    assert!(addrs.iter().any(|a| matches!(a, Address::WebSocket(_))));
+
+    let mut client = Headless::new(App::default());
+    client
+        .net_mut()
+        .join(&format!("udp://{udp}"), NetConfig::default())
+        .expect("a server address");
+    for _ in 0..200 {
+        host.step(1, FRAME);
+        client.step(1, FRAME);
+        std::thread::sleep(Duration::from_millis(1));
+        if host.net().players().len() == 2 && client.net().local_id().is_some() {
+            break;
+        }
+    }
+    assert!(host.net().is_listen_server());
+    assert_eq!(host.net().players(), vec![PeerId::SERVER, PeerId(1)]);
+    assert_eq!(client.net().players(), vec![PeerId(1)]);
+
+    host.net_mut().stop();
+    host.step(1, FRAME);
+    assert_eq!(
+        *joins.borrow(),
+        vec![
+            NetEvent::Connected(PeerId::SERVER),
+            NetEvent::Connected(PeerId(1)),
+            NetEvent::Disconnected {
+                peer: PeerId::SERVER,
+                reason: DisconnectReason::Left
+            },
+            NetEvent::Disconnected {
+                peer: PeerId(1),
+                reason: DisconnectReason::Left
+            },
+        ]
+    );
+    let mut told = Vec::new();
+    for _ in 0..50 {
+        client.step(1, FRAME);
+        told.extend(client.net().events().iter().copied());
+        std::thread::sleep(Duration::from_millis(1));
+        if !told.is_empty() {
+            break;
+        }
+    }
+    assert_eq!(
+        told,
+        vec![NetEvent::Disconnected {
+            peer: PeerId::SERVER,
+            reason: DisconnectReason::Shutdown
+        }]
+    );
 }

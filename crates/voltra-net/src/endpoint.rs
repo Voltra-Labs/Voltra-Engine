@@ -62,6 +62,8 @@ pub struct Endpoint {
     /// Whether the transport's failure was logged, so a dead socket warns
     /// once rather than every tick.
     reported: bool,
+    /// A listen server: the hosting process plays as [`PeerId::SERVER`].
+    host_plays: bool,
 }
 
 impl Endpoint {
@@ -99,6 +101,51 @@ impl Endpoint {
             pending: Vec::new(),
             now: Duration::ZERO,
             reported: false,
+            host_plays: false,
+        }
+    }
+
+    /// Makes a server a listen server — the hosting process plays too, as
+    /// [`PeerId::SERVER`] — or a dedicated one again. Turned on, the host's
+    /// own player joins as a client would: a [`NetEvent::Connected`] for
+    /// [`PeerId::SERVER`] in the next receive's events, so one code path
+    /// spawns every player (Unity's Netcode raises its client-connected
+    /// callback for the host's own client the same way); turned off, or at
+    /// [`close_all`](Self::close_all), a [`NetEvent::Disconnected`] for it.
+    /// Nothing on a client.
+    pub fn set_host_plays(&mut self, plays: bool) {
+        if !self.is_server() || plays == self.host_plays {
+            return;
+        }
+        self.host_plays = plays;
+        self.pending.push(if plays {
+            NetEvent::Connected(PeerId::SERVER)
+        } else {
+            NetEvent::Disconnected {
+                peer: PeerId::SERVER,
+                reason: DisconnectReason::Left,
+            }
+        });
+    }
+
+    /// Whether this is a listen server, whose host plays.
+    pub fn host_plays(&self) -> bool {
+        self.host_plays
+    }
+
+    /// Everyone playing in this session that this end knows of: on a
+    /// server its clients, and itself first if the host plays; on a client,
+    /// itself once it is in. (A client learns of the others through the
+    /// game's own messages, or replication.)
+    pub fn players(&self) -> Vec<PeerId> {
+        match &self.role {
+            Role::Server(_) => self
+                .host_plays
+                .then_some(PeerId::SERVER)
+                .into_iter()
+                .chain(self.peers())
+                .collect(),
+            Role::Client(client) => client.local_id().into_iter().collect(),
         }
     }
 
@@ -151,9 +198,15 @@ impl Endpoint {
         self.connections.get(&peer).map(Connection::stats)
     }
 
-    /// This end's own addresses, one per transport that has one.
+    /// This end's own address, the first transport's that has one.
     pub fn local_addr(&self) -> Option<Address> {
         self.transport.local_addr()
+    }
+
+    /// Every address this end is reached at — a host on UDP and WebSockets
+    /// has one of each.
+    pub fn local_addrs(&self) -> Vec<Address> {
+        self.transport.local_addrs()
     }
 
     /// The messages the last [`receive`](Self::receive) delivered, whole and
@@ -238,6 +291,7 @@ impl Endpoint {
     /// Ends every connection, telling each `reason` — a server shutting
     /// down says [`DisconnectReason::Shutdown`].
     pub fn close_all(&mut self, reason: DisconnectReason) {
+        self.set_host_plays(false);
         let peers: Vec<PeerId> = self.peers().collect();
         for peer in peers {
             self.end(peer, DisconnectReason::Left, reason);

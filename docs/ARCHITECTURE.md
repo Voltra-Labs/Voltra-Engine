@@ -94,6 +94,7 @@ version bump is a one-line change.
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
+| `voltra-server` | A dedicated server: a scene headless at a fixed tick, hosted over UDP and WebSockets; a library a game's own server binary is built on | `Server`, `ServerOptions`, `Pacer` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
 ### Planned crates
@@ -5711,6 +5712,55 @@ random byte strings decoded). `voltra-core/tests/net.rs`: two headless
 games, one hosting and one joining over a lossy link, talking through
 their ticks. The web probe of stage 111 now runs the whole handshake from
 the browser and echoes a fragmented message.
+
+### A server is the headless game plus sockets; a listen server is a flag
+
+Stage 113. Two ways to host, one session type underneath.
+
+- **Host and join from a game**: `voltra_net::host(&HostOptions)` opens a
+  UDP socket for native players and a WebSocket listener for browser ones
+  (`MultiTransport`; either may be `None`, port `0` picks a free one) and
+  hosts on both; `voltra_net::join("udp://host:port" | "ws://host:port")`
+  makes the transport the address names (in a browser, `ws://`/`wss://`
+  through `BrowserWebSocket`; hosting there is `SessionError::Unsupported`).
+  `tick.net.host(&options)` and `tick.net.join(address, config)` are the
+  same from a tick; `host_on`/`join_on` keep the hand-built-transport seam.
+  `Endpoint::local_addrs` names every address a host is reached at.
+- **Listen server** (`HostOptions::listen`): the hosting game plays as
+  `PeerId::SERVER`. Its own player *joins* — a `Connected(PeerId::SERVER)`
+  is the first event, a `Disconnected(SERVER, Left)` comes when the
+  session stops — so one code
+  path ("on `Connected(peer)`, spawn a player for `peer`") serves every
+  player, the host's included. Unity's Netcode raises its client-connected
+  callback for the host's own client for the same reason; Godot's
+  `peer_connected` is not emitted for the host, which a Godot game then
+  spawns by hand. `players()` lists the host first, then clients.
+- **Dedicated server** (`voltra-server`, a library and a binary): `Server`
+  wraps stage M1's `Headless` — the game minus its window — hosts it, and
+  steps it one frame per tick at a fixed rate (`ServerOptions::tick_rate`,
+  60 by default, the physics step's); each tick is the network received,
+  the game's ticks, the fixed steps, the network flushed. `run` paces on
+  the wall clock with `Pacer`, catching up at most five ticks after a
+  stall rather than bursting every client with a second's worth. Joins and
+  leaves are logged and in `Server::events`; `kick`, `clients`,
+  `addresses`, `shut_down` (every client told `Shutdown`). The binary runs
+  a scene with no game code — `voltra-server [SCENE] --asset-root DIR
+  --udp PORT|off --ws PORT|off --tick HZ --max-clients N --protocol N
+  --seconds N --port-file FILE`; a game with its own server logic builds
+  its own binary on `Server::open(game_app, scene, options)`, as it builds
+  its player, and its ticks run there unchanged (Unreal's dedicated server
+  target and Godot's headless export are the same idea).
+
+Pinned by `voltra-server/tests/session.rs`: a server on UDP and WebSockets,
+a client joining by `udp://` and one by `ws://` (as a browser would); both
+joins seen, one client leaving (`Closed` at the server, `Left` at the
+client) and the other kicked (`Kicked` at both); and the binary itself
+started on `sandbox.ron` with its ports written to a file and a client
+joining it. `voltra-core/tests/net.rs`: a listen server's own player
+joining first, a client by address after it, `players()` listing both,
+and `stop` ending them with the client told `Shutdown`. Unit tests of
+`Pacer` and the binary's arguments. `voltra-net/src/session.rs`: server
+addresses parsed by scheme.
 
 ### wgpu 30 API notes
 

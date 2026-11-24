@@ -115,6 +115,12 @@ pub trait Transport {
     /// The address peers reach this end at, when it has one to give.
     fn local_addr(&self) -> Option<Address>;
 
+    /// Every address peers reach this end at: one for most transports,
+    /// one per transport for a [`MultiTransport`](crate::MultiTransport).
+    fn local_addrs(&self) -> Vec<Address> {
+        self.local_addr().into_iter().collect()
+    }
+
     /// A stream peer whose connection ended since this was last asked.
     /// Datagram transports have none and keep the default.
     fn take_closed(&mut self) -> Option<Address> {
@@ -147,6 +153,10 @@ impl<T: Transport + ?Sized> Transport for Box<T> {
 
     fn local_addr(&self) -> Option<Address> {
         (**self).local_addr()
+    }
+
+    fn local_addrs(&self) -> Vec<Address> {
+        (**self).local_addrs()
     }
 
     fn take_closed(&mut self) -> Option<Address> {

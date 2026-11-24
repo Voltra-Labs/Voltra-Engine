@@ -195,6 +195,10 @@ impl<T: Transport> Transport for Conditioned<T> {
         self.inner.local_addr()
     }
 
+    fn local_addrs(&self) -> Vec<Address> {
+        self.inner.local_addrs()
+    }
+
     fn take_closed(&mut self) -> Option<Address> {
         self.inner.take_closed()
     }

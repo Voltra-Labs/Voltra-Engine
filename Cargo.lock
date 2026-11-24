@@ -4057,6 +4057,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-server"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "voltra-assets",
+ "voltra-core",
+ "voltra-scene",
+]
+
+[[package]]
 name = "voltra-testkit"
 version = "0.1.0"
 dependencies = [
