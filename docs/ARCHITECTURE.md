@@ -6204,6 +6204,56 @@ delta rule (`server/view.rs`), the input queue, the registry's
 replication (a `Transform` is 20 bytes; junk and trailing bytes change
 nothing; an unregistered type is refused) and `Interpolate`.
 
+### A remote entity is drawn a measured staleness behind the newest snapshot
+
+Stage 115. A client draws remote entities' interpolated components
+(`replicate_interpolated`, `Transform` by default) not as each snapshot
+brings them but at one moment of the server's past, between the two
+samples around it (`client/samples.rs`; `Interpolate` is linear for
+positions and scale, the short way round for a rotation, and written
+`a + (b - a) * t` so equal ends give exactly themselves — glam's `lerp`
+does not, and an entity at rest was drawn an ulp off). Components that do
+not opt in are applied as they arrive.
+
+- **The moment** (`Timeline`): each arrival's *offset* (arrival time minus
+  its tick's server time) gives the quickest path over the last three
+  seconds — latency without jitter. Each frame the clock asks how *stale*
+  the newest snapshot in hand is against that quickest path; the most
+  staleness in the window, plus one snapshot interval, is the delay. A
+  model of jitter (a percentile of arrival offsets) was tried first and
+  under-buffers: with jitter several intervals wide the sequenced channel
+  drops every snapshot a newer one overtook, so the arrivals it measures
+  are the early ones, and the clock held still every few frames. Staleness
+  measures what the jitter costs as it is felt — late, lost, overtaken,
+  and the wait between two. Unity Netcode's interpolation buffer and
+  Overwatch size their buffers from the link the same way; Source's
+  `cl_interp` fixes it by hand.
+- **No jumps**: the drawn moment runs at the clock's pace corrected by at
+  most 10 % toward its target (computed against where this frame would
+  land, not where the last one did — the first version ran a frame
+  ahead), so a change in the link is a change of pace, not a skip. Only a
+  gap over a quarter second (the first snapshot, a stall) snaps. Past the
+  newest sample it holds rather than extrapolates.
+- **Resting entities**: a snapshot that held everything due (`complete`)
+  is a sample for every entity it left out — unchanged at its tick — so an
+  entity that rests and then moves is drawn moving from where it rested,
+  not smeared from its last update. A budget-cut snapshot adds no such
+  samples.
+- The predicted entity (stage 116) is not drawn this way: its world copy
+  is the client's own.
+
+Pinned by `voltra-core/tests/interpolation.rs`: over 60 ms latency, up to
+50 ms of jitter and 5 % loss both ways, three seeds, a server entity
+going round a circle one server step at a time; seven seconds of the
+client's copy, frame by frame — the jitter measured above 20 ms and the
+delay above it, no frame moving more than 1.12 server steps or less than
+half of one (no jump, no stall), every point on the chord of server
+positions at most five ticks apart. Unit tests of `Timeline` (the delay
+grows with jitter delivered through a sequenced channel; a link 100 ms
+slower is caught up at a pace within 10 %), of the samples (between two;
+a held value is a sample) and of `Interpolate` (equal ends exact; the
+short way round).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
