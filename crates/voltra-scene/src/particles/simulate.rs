@@ -23,6 +23,18 @@ const MAX_STEP: f32 = 0.1;
 /// CPU instead. A GPU emitter's step is planned here and dispatched by the
 /// renderer — see [`ParticleEmitter::take_gpu_step`].
 pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
+    advance_where(world, dt, gpu, |_| true)
+}
+
+/// [`advance`] for only the emitters `which` picks — an editor previewing
+/// the selected emitter while the rest of the scene holds still. The
+/// finished one-shots it returns are among those.
+pub fn advance_where(
+    world: &mut World,
+    dt: f32,
+    gpu: bool,
+    which: impl Fn(Entity) -> bool,
+) -> Vec<Entity> {
     if !dt.is_finite() || dt <= 0.0 {
         return Vec::new();
     }
@@ -32,7 +44,7 @@ pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
     // pays nothing for the tiles it never looks at.
     let obstacles = if world
         .query::<ParticleEmitter>()
-        .any(|(_, emitter)| emitter.collision.is_some())
+        .any(|(entity, emitter)| emitter.collision.is_some() && which(entity))
     {
         Obstacles::gather(world)
     } else {
@@ -42,7 +54,7 @@ pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
     // emitter's collider is its own entity's, wherever it now is.
     let outlines: Vec<(Entity, Vec<[f32; 4]>)> = world
         .query::<ParticleEmitter>()
-        .filter(|(_, emitter)| emitter.shape == EmitShape::Outline)
+        .filter(|(entity, emitter)| emitter.shape == EmitShape::Outline && which(*entity))
         .map(|(entity, _)| {
             (
                 entity,
@@ -58,6 +70,9 @@ pub fn advance(world: &mut World, dt: f32, gpu: bool) -> Vec<Entity> {
     let mut scratch = Scratch::default();
     let mut finished = Vec::new();
     for (entity, emitter) in world.query_mut::<ParticleEmitter>() {
+        if !which(entity) {
+            continue;
+        }
         if emitter.shape != EmitShape::Outline && !emitter.state.outline.is_empty() {
             emitter.state.outline.clear();
         }

@@ -254,6 +254,7 @@ impl App {
         // to be drawn again.
         self.lines.clear();
 
+        let gpu_particles = renderer.particle_pipelines().is_some();
         let mut frame = UiFrame {
             world: &mut self.world,
             camera: &mut renderer.camera,
@@ -289,6 +290,7 @@ impl App {
             window: &mut self.window_requests,
             registry: &mut self.registry,
             game: &mut self.game,
+            gpu_particles,
         };
         {
             let _ui = voltra_profile::scope("ui");

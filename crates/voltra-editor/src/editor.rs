@@ -90,6 +90,8 @@ pub struct Editor {
     pub(crate) settings: panels::project_settings::ProjectSettingsWindow,
     /// The project's game, loaded from its library; see [`crate::game`].
     pub(crate) game: crate::game::GameHost,
+    /// The selected emitter, played while authoring.
+    pub(crate) particle_preview: crate::particle_preview::ParticlePreview,
 }
 
 impl Editor {
@@ -181,6 +183,13 @@ impl Editor {
             let posed = self.selection.live_primary(frame.world);
             self.timeline
                 .pose(frame.world, frame.animation_clips, posed);
+            // Live particles only, which no record holds: after the history
+            // so it never sees them, and ahead of the draw that shows them.
+            let dt = ui.ctx().input(|i| i.stable_dt);
+            let gpu = frame.gpu_particles();
+            self.particle_preview.update(frame.world, posed, dt, gpu);
+        } else {
+            self.particle_preview.stop(frame.world);
         }
     }
 

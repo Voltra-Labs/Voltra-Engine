@@ -3800,6 +3800,7 @@ name = "voltra-editor"
 version = "0.1.0"
 dependencies = [
  "base64",
+ "image",
  "log",
  "ron",
  "serde",

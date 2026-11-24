@@ -115,6 +115,9 @@ pub struct UiFrame<'a> {
     pub registry: &'a mut voltra_scene::ComponentRegistry,
     /// The game the turns run; see [`UiFrame::set_game`].
     pub(super) game: &'a mut Option<crate::game::Running>,
+    /// Whether the renderer can simulate GPU particles; see
+    /// [`UiFrame::gpu_particles`].
+    pub(super) gpu_particles: bool,
 }
 
 impl<'a> UiFrame<'a> {
@@ -194,6 +197,13 @@ impl<'a> UiFrame<'a> {
     /// outlines, and later any other debug draw — expressible at all.
     pub fn world_and_lines(&mut self) -> (&World, &mut LineBatch) {
         (self.world, self.lines)
+    }
+
+    /// Whether emitters set to the GPU can run there — what a panel
+    /// stepping particles itself (a preview) passes to
+    /// [`voltra_scene::particles::advance_where`].
+    pub fn gpu_particles(&self) -> bool {
+        self.gpu_particles
     }
 
     /// Whether each frame runs the physics steps it owes.

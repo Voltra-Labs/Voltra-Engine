@@ -179,7 +179,16 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
                 if let Some(emitter) = frame.world.get_mut::<ParticleEmitter>(entity) {
                     ui.separator();
-                    claim = claim.or(particles::show(ui, emitter));
+                    claim = claim.or(particles::show(
+                        ui,
+                        emitter,
+                        particles::Stores {
+                            textures: frame.textures,
+                            atlases: frame.atlases,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
                 }
                 if let Some(layer) = frame.world.get_mut::<Parallax>(entity) {
                     ui.separator();

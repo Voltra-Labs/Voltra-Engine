@@ -14,6 +14,7 @@ mod joints;
 mod marquee;
 mod paint;
 mod panels;
+mod particle_preview;
 mod picking;
 mod play;
 mod prefab;

@@ -17,6 +17,7 @@ pub mod look;
 pub mod mesh;
 pub mod obstacles;
 mod particle;
+pub mod presets;
 pub mod rng;
 pub mod shape;
 pub mod simulate;
@@ -34,7 +35,7 @@ pub use flipbook::{Flipbook, FlipbookTiming};
 pub use obstacles::Obstacles;
 pub use particle::{Particle, Particles};
 pub use shape::EmitShape;
-pub use simulate::advance;
+pub use simulate::{advance, advance_where};
 pub use simulation::Simulation;
 
 /// The most particles one emitter may hold, whatever its file says.

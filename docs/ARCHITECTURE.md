@@ -5620,6 +5620,59 @@ none), `voltra-render` `particles::{tables, uniforms}`.
 Not done: sub-emitters, sorting by age, a curve per axis (non-square
 particles), random-between-two-curves, and a flipbook's random start frame.
 
+### The selected emitter previews while authoring, and its curves are edited as graphs
+
+Stage 100. The inspector's particle section (`panels/inspector/particles.rs`
+and one file per part under `particles/`) is laid out in the order an effect
+is built — a preset, then rate and motion, the emission shape, the look over
+a life (texture, size, size and speed curves, colours or a gradient, alpha
+curve, rotation and spin), the flipbook, then simulation, collisions and
+sorting.
+
+- **Curve widget** (`curve_edit.rs`): the curve drawn over `0..=1` against
+  a value axis from `0` to the caller's top (2 for size and speed, 1 for
+  alpha) raised to the highest key and held for a drag, so the graph does
+  not rescale under the pointer. Drag a key, double-click to add, right-click
+  to remove; the selected key's `t`, value and ease underneath. A dragged key
+  keeps its place in the list (sampling reads keys in `t` order, so nothing
+  needs sorting under the pointer). Turning a curve on starts it at a flat
+  `1` — nothing jumps.
+- **Gradient widget** (`gradient_edit.rs`): the same gestures along a bar
+  painted as a colour-per-vertex mesh; a stop added takes the colour already
+  there; the selected stop's place and colour picker underneath (an open
+  picker holds one entry, as the colour fields already did).
+- **Undo**: every widget reports a label while it is being changed, and the
+  history's claim rule (stage 21) makes one held drag, or one open picker,
+  one entry.
+- **Live preview** (`particle_preview.rs`): while editing (not playing or
+  paused), the primary selection's emitter advances by egui's `stable_dt`
+  through `particles::advance_where` — `advance` for a chosen set, here one
+  entity, on the GPU when the renderer can (`UiFrame::gpu_particles`) —
+  after the history's after side, so only live particles change, which no
+  record holds: a preview is never an edit. Moving the selection off it, or
+  entering play, restarts it, so nothing is left frozen in the air; a
+  finished one-shot is kept, not despawned. Unity previews only the selected
+  system in the Scene view for the same reason: a level of fountains does
+  not all run while one is tuned.
+- **Restart / Burst *n*** act on live particles only (`ParticleEmitter::
+  restart`, `burst`), so they are not edits either. **Presets**
+  (`particles::presets::Preset` — smoke, sparks, rain, data a game can use
+  too) replace the motion and look and keep the texture, sorting, light
+  layers, simulation, collision, one-shot flag and flipbook: one entry.
+- The emitter's texture is now a path field (it had none in the inspector),
+  and the flipbook an atlas path field, a frame list typed as `0 1 2 5`
+  (refused, and reverted, if a word is not an index) and its timing.
+
+Pinned by the bridge test (`voltra-editor/tests/bridge.rs`, under Xvfb in
+CI's bridge step): an emitter selected but not playing fills the viewport's
+screenshot with particles; its size curve set through the bridge more than
+triples the covered pixels in the next screenshot; the status shows one
+undo entry, one undo empties the history and brings the curve back, and the
+preview draws small again. Unit tests: `particle_preview` (only the
+selection plays, a deselected one is cleared, a finished one-shot kept),
+`curve_edit` (the axis grows to the highest key), `flipbook_edit` (the frame
+list's parsing), `particles::presets` (a preset keeps where it draws).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
