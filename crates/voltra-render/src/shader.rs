@@ -51,6 +51,10 @@ pub const PARTICLES_DRAW: &str = include_str!("shaders/particles_draw.wgsl");
 /// [`PARTICLES_DRAW`]. See [`LayerPass`](crate::light_layers::LayerPass).
 pub const PARTICLE_LAYERS: &str = include_str!("shaders/particle_layers.wgsl");
 
+/// Draws sprite meshes deformed by bones. See
+/// [`SkinPipeline`](crate::skinning::SkinPipeline).
+pub const SKINNED: &str = include_str!("shaders/skinned.wgsl");
+
 /// Compiles WGSL into a shader module.
 ///
 /// `wgpu` validates and reports compilation errors through the device error

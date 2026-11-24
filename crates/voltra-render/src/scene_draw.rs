@@ -4,6 +4,7 @@
 use crate::mesh::Mesh;
 use crate::particles::{GpuParticles, ParticlePipelines};
 use crate::pass::{Binder, MeshDraw};
+use crate::skinning::{SkinPipeline, SkinnedMesh};
 
 /// One draw of the world, in the order it is drawn.
 ///
@@ -21,6 +22,17 @@ pub enum SceneDraw<'a> {
         /// The texture its particles are drawn with.
         texture: &'a wgpu::BindGroup,
         /// The light layers its particles are on, as a mesh range's are.
+        light_layers: u32,
+    },
+    /// A sprite mesh deformed by bones.
+    Skinned {
+        /// The mesh and its pose.
+        mesh: &'a SkinnedMesh,
+        /// The pipeline it is drawn through.
+        pipeline: &'a SkinPipeline,
+        /// The texture it is drawn with.
+        texture: &'a wgpu::BindGroup,
+        /// The light layers it is on, as a mesh range's are.
         light_layers: u32,
     },
 }
@@ -90,6 +102,19 @@ pub fn draw_scene(
                 }
                 pass.set_bind_group(1, *texture, &[]);
                 emitter.draw(&mut pass);
+            }
+            SceneDraw::Skinned {
+                mesh: skinned,
+                pipeline,
+                texture,
+                ..
+            } => {
+                pass.set_pipeline(&pipeline.pipeline);
+                pass.set_bind_group(0, camera, &[]);
+                pass.set_bind_group(1, *texture, &[]);
+                particles_bound = false;
+                binder.forget();
+                skinned.draw(&mut pass);
             }
         }
     }

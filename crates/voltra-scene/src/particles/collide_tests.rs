@@ -29,6 +29,8 @@ fn moved(before: Vec2, after: Vec2, velocity: Vec2) -> (Particle, Vec2) {
             velocity,
             age: 0.5,
             lifetime: 1.0,
+            rotation: 0.0,
+            spin: 0.0,
         },
         before,
     )

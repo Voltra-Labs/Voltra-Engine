@@ -7009,6 +7009,340 @@ build, on WebGPU and WebGL2, joins a native `arena-server` over WebSocket
 from its page's `?join=`; the server spawns the page's player and the page
 logs that it predicts it. Guide chapter `docs/guide/08-networking.md`,
 whose checked blocks run the match test and the server for two seconds.
+### Particles look things up over their life, and the GPU reads the same answers from a table
+
+Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
+at their defaults, so every scene written before still loads as it was:
+
+- **`shape: EmitShape`** — `Point` (the old behaviour), `Circle`, `Ring`,
+  `Box`, `Edge` (a line on the emitter's x) and `Outline`, the entity's own
+  `Collider` as it sits at the origin (read each advance, 32 segments a
+  turn; the origin when there is none). Uniform by area (`r = √lerp(r₀²,
+  r₁², u)`) and by perimeter length. Unity's Shape module and Godot's
+  emission shapes; the direction and spread still say which way.
+- **`size_curve`, `speed_curve`, `alpha_curve: Option<Curve>`** — multipliers
+  over a life (`t` = age / lifetime). The size curve multiplies the old
+  start/end blend; the speed curve scales the *distance covered* each step
+  (`p += v · speed(t) · dt`), not the stored velocity, so acceleration and
+  collisions are untouched; alpha multiplies the colour's.
+- **`gradient: Option<Gradient>`** — replaces `color_start..color_end` when it
+  has a stop.
+- **`rotation`, `angular_velocity`** — ranges picked per newborn; the quad
+  turns about its centre.
+- **`flipbook: Option<Flipbook>`** — an atlas (stage 25's `*.atlas.ron`, read
+  through `Atlas::frame` / `Frame::uv` only), an optional list of frame
+  indices (empty = all, in order; out of range left out; at most 64), and
+  `FlipbookTiming::OverLife { cycles }` or `PerSecond { fps }` — Unity's
+  Texture Sheet Animation. The emitter's `texture` stays the sheet, as a
+  sprite's does. Resolved with the sprites' atlases (`resolve_world_atlases`,
+  `resolve_entity`).
+
+`Curve` (`voltra_scene::curve`) and `Gradient` (`voltra_scene::gradient`)
+are general: keys at `t ∈ 0..=1`, read in order, broken ones skipped, flat
+past the ends; a curve's key carries the clip's `Ease` for the segment that
+leaves it (stage 66's vocabulary, so a curve and a clip read alike); an
+empty curve is `1`, an empty gradient "none". A line's width curve
+(stage 101) is the same type.
+
+**One look, two readers.** `particles::look` is the single answer —
+`size_at`, `speed_at`, `color_at` — that the CPU's quads use exactly and
+that `look::tables` samples into `voltra_render::ParticleTables`: four rows
+of 64 RGBA32F texels (colour; size, speed, alpha; flipbook UV rects; the
+outline's corners with the fraction of the perimeter before each), one
+small texture per GPU ring, written only when it changes
+(`GpuParticles::set_tables`). The compute shader reads the speed row and
+the outline; the vertex shader the rest, blending the two nearest samples
+(`textureLoad`, so an unfilterable float texture needs no feature). This is
+how Godot's `GPUParticles2D` bakes its curves (`CurveTexture`,
+`GradientTexture1D`); Unity's VFX Graph does the same with baked curves.
+Evaluating keys in WGSL would mean a storage buffer of keys and a loop per
+vertex for no visible gain. `ParticleLook` lost its size and colours —
+they live in the table — and gained the flipbook timing; the 32-byte GPU
+particle's padding became its rotation and spin.
+
+Shapes and spin are drawn from the CPU's xorshift on one side and the PCG
+hash on the other, so the two place newborns differently but alike;
+everything else is deterministic and the same formula on both sides
+(`EmitShape::offset` ↔ `spawn_offset`, `shape::on_outline` ↔ `on_outline`,
+`FlipbookTiming::index` ↔ `frame_of`). The culling reach grew by the
+shape's extent, the speed curve's peak and the size curve's peak (×√2 for a
+turned square).
+
+`Headless::screenshot` now dispatches the GPU emitters' owed steps before
+drawing, as the window's draw does — a headless shot of a GPU emitter showed
+its particles where they were born.
+
+Pinned by `voltra-core/tests/particles_cpu_gpu.rs` — each feature
+screenshotted with the emitter on the CPU and on the GPU (lavapipe in CI):
+size curve, speed curve, alpha curve with a gradient, rotation with spin and
+flipbook frames (both timings) match pixel for pixel within an edge and
+measure what they should; each shape covers the same box about as densely
+and nothing outside itself. Unit tests: `curve`, `gradient`,
+`particles::{shape, flipbook, look, format_tests}` (a stage-51 emitter
+loads as the default; every new field round-trips; a plain one writes
+none), `voltra-render` `particles::{tables, uniforms}`.
+
+Not done: sub-emitters, sorting by age, a curve per axis (non-square
+particles), random-between-two-curves, and a flipbook's random start frame.
+
+### The selected emitter previews while authoring, and its curves are edited as graphs
+
+Stage 100. The inspector's particle section (`panels/inspector/particles.rs`
+and one file per part under `particles/`) is laid out in the order an effect
+is built — a preset, then rate and motion, the emission shape, the look over
+a life (texture, size, size and speed curves, colours or a gradient, alpha
+curve, rotation and spin), the flipbook, then simulation, collisions and
+sorting.
+
+- **Curve widget** (`curve_edit.rs`): the curve drawn over `0..=1` against
+  a value axis from `0` to the caller's top (2 for size and speed, 1 for
+  alpha) raised to the highest key and held for a drag, so the graph does
+  not rescale under the pointer. Drag a key, double-click to add, right-click
+  to remove; the selected key's `t`, value and ease underneath. A dragged key
+  keeps its place in the list (sampling reads keys in `t` order, so nothing
+  needs sorting under the pointer). Turning a curve on starts it at a flat
+  `1` — nothing jumps.
+- **Gradient widget** (`gradient_edit.rs`): the same gestures along a bar
+  painted as a colour-per-vertex mesh; a stop added takes the colour already
+  there; the selected stop's place and colour picker underneath (an open
+  picker holds one entry, as the colour fields already did).
+- **Undo**: every widget reports a label while it is being changed, and the
+  history's claim rule (stage 21) makes one held drag, or one open picker,
+  one entry.
+- **Live preview** (`particle_preview.rs`): while editing (not playing or
+  paused), the primary selection's emitter advances by egui's `stable_dt`
+  through `particles::advance_where` — `advance` for a chosen set, here one
+  entity, on the GPU when the renderer can (`UiFrame::gpu_particles`) —
+  after the history's after side, so only live particles change, which no
+  record holds: a preview is never an edit. Moving the selection off it, or
+  entering play, restarts it, so nothing is left frozen in the air; a
+  finished one-shot is kept, not despawned. Unity previews only the selected
+  system in the Scene view for the same reason: a level of fountains does
+  not all run while one is tuned.
+- **Restart / Burst *n*** act on live particles only (`ParticleEmitter::
+  restart`, `burst`), so they are not edits either. **Presets**
+  (`particles::presets::Preset` — smoke, sparks, rain, data a game can use
+  too) replace the motion and look and keep the texture, sorting, light
+  layers, simulation, collision, one-shot flag and flipbook: one entry.
+- The emitter's texture is now a path field (it had none in the inspector),
+  and the flipbook an atlas path field, a frame list typed as `0 1 2 5`
+  (refused, and reverted, if a word is not an index) and its timing.
+
+Pinned by the bridge test (`voltra-editor/tests/bridge.rs`, under Xvfb in
+CI's bridge step): an emitter selected but not playing fills the viewport's
+screenshot with particles; its size curve set through the bridge more than
+triples the covered pixels in the next screenshot; the status shows one
+undo entry, one undo empties the history and brings the curve back, and the
+preview draws small again. Unit tests: `particle_preview` (only the
+selection plays, a deselected one is cleared, a finished one-shot kept),
+`curve_edit` (the axis grows to the highest key), `flipbook_edit` (the frame
+list's parsing), `particles::presets` (a preset keeps where it draws).
+
+### Lines, polygons and trails are triangles in the sprite batch, widened and cut on the CPU
+
+Stage 101. Three components, each turned into a `batch::TriangleMesh` every
+frame and appended by `SpriteBatch::push_triangles` — the quad path's runs,
+culling and painter's order for geometry that is not a quad — so they are
+lit (light layers, the light map), sorted (`sort_order`, sorting layer) and
+batched like sprites, with no pipeline of their own.
+
+- **`Line2D`** (Godot's `Line2D`, Unity's `LineRenderer`): points in the
+  entity's space, `closed`, `width` × an optional `width_curve` along its
+  length (the stage-99 `Curve`), colour, `joint` (`Miter` with a
+  `miter_limit` in half-widths, default 2 as Godot's sharp limit; `Bevel`;
+  `Round`), `begin_cap` / `end_cap` (`Butt`, `Square`, `Round`), a texture
+  `Stretch`ed once or `Tile`d every width. `line2d::stroke` widens it: one
+  quad strip per segment, cut where the width curve is sampled (32 pieces a
+  line) and where a tile ends; the outer side of each corner gets the
+  joint; caps at an open line's ends. **Tiling is cut on the CPU**, each
+  tile its own `u` 0..1, because the sprites' sampler clamps — a repeating
+  sampler would be a second texture bind group for every texture, and would
+  not work for a frame of an atlas. The inner side of a corner overlaps
+  (a translucent line is denser there), as Godot's simple mode does; an
+  exact inner join is the miter's mirror and can come when it shows.
+- **`Polygon2D`**: an outline in the entity's space, either way round,
+  concave allowed, filled by `triangulate::triangulate` — ear clipping
+  (Eberly), repeats and collinear corners dropped first, O(n²) for authored
+  sizes; a self-crossing outline has no ears left at some point, and the
+  rest is fanned and warned about rather than dropped. A texture is
+  stretched over the outline's bounds (the same clamped sampler; Godot's
+  repeat would need the second bind group above).
+- **`Trail2D`** (Unity's `TrailRenderer`): while the world runs, its
+  entity's world position is dropped as a point each `min_distance`, every
+  point ages, one past `lifetime` (or beyond `max_points`) goes. Drawn in
+  the world (identity matrix, once, not per parallax copy) from where the
+  entity is now through the points, by the same stroke — width and colour
+  by *age* (the stroke's `t` along the length mapped back to an age), round
+  joints and a round head; without a curve it tapers to nothing, without a
+  gradient its colour fades to clear. The points are `#[serde(skip)]` state.
+  Advanced with the particles in `App::advance_particles`, under the same
+  simulation gate.
+- **Editor**: inspector sections (`shapes2d.rs`) with every field, the
+  width curve through the particle editor's curve widget; **Edit points**
+  uses stage 55's polygon handles — `ShapeEdit` now edits any of an entity's
+  point lists (`shape_edit::Points::{Caster, Line, Polygon}`), the drag,
+  add-at-midpoint and right-click-remove and the one-entry-per-drag rule
+  unchanged. *Scene ▸ Spawn line / polygon / trail*. Registered with
+  templates, so the bridge and the MCP server can add them by name.
+
+Not done: picking a line or polygon by clicking its pixels (select it in
+the hierarchy), an exact inner join, a repeating texture on a polygon, a
+trail's texture tiled.
+
+Pinned by `voltra-core/tests/lines.rs` (headless screenshots: each joint
+covers its corner as it should — the miter its point, the bevel not, the
+round between; each cap past an end; a ten-point star filled with its
+notches empty; a line over and under a sprite by sort order; a trail
+behind a kinematic body moving at three units a second, bright behind it,
+fading, nothing past its lifetime or ahead), `line2d/tests.rs` (the same
+geometry by point-in-triangle, the miter limit, the width curve, tiled `u`
+within 0..1 ending on 1, a closed outline, nothing from too few or broken
+points, round trips), `triangulate` (an L both ways round, a star, repeats
+and collinear corners, a bow tie still drawn), `trail2d`, `polygon2d`,
+`batch::triangles` and `shape_edit` (a line's and a polygon's points as
+targets).
+
+### A bone is an entity; its pose is its transform, its rest and length a component
+
+Stage 102. `voltra_scene::skeleton`: **`Skeleton2D`** marks a root;
+**`Bone2D { length, rest }`** goes on an entity in the hierarchy whose own
+`Transform` *is* the bone's pose relative to its parent bone, pointing along
+its +x; **`TwoBoneIk { target, flip, enabled }`** bends a limb. Godot's
+`Skeleton2D`/`Bone2D` nodes and Unity's 2D Animation (bones are
+`Transform`s) have this shape, and it is what made the rest free:
+
+- **Cut-out animation** is a sprite parented to a bone — the hierarchy
+  already composes the matrices (stage 21).
+- **Keyed by the timeline like any property**: a clip's `Rotation` track on
+  `"thigh_l"` (stage 66's name path from the player) turns that bone; the
+  Timeline offers bones in its add-track list because they are named
+  entities. No bone-specific property, no second animation system.
+- **Posed in the viewport** with the rotate tool on a selected bone; bones
+  are drawn over the art as kites (`view/bones.rs`, the selected one lit),
+  and a click within six pixels of one selects it before the sprites hung
+  on it (`picking`, `skeleton::bone_at`).
+- **Rest pose** (`Bone2D::rest`, a `Transform`): *Set rest* in the inspector
+  takes the current pose; *Reset to rest* / the skeleton's *Reset pose*
+  (`skeleton::reset_to_rest`) puts it back. A skinned mesh (stage 103) is
+  bound in it.
+- **Two-bone IK** (Unity's `LimbSolver2D`, Godot's `TwoBoneIK`
+  modification): on the *lower* bone, its parent the upper; the target an
+  entity named by path from the skeleton root, as clip tracks are, so every
+  copy of a prefab reaches for its own. `ik::solve_two_bone` places the
+  elbow by the law of cosines (left of the reach, or right with `flip`;
+  straight towards a target out of reach), then each bone is turned by the
+  world angle between where it points and where it should — so a lower bone
+  hung off its parent's axis, or a skeleton scaled or mirrored (a negative
+  determinant turns the other way), still lands. Upper length is measured
+  origin to origin, lower by `length`. Applied in `advance_animations` after
+  the clips (IK has the last word) while the world runs. A limb that cannot
+  be solved is left alone and `ik::problem` says why (the inspector shows
+  it) rather than warning every frame.
+- **Editor**: inspector sections (bone length, set/reset rest, *Add child
+  bone* at the tip; IK target, flip, on, its problem; the skeleton's bone
+  count and *Reset pose*); *Scene ▸ Spawn skeleton* (a root and one bone,
+  one undo entry). Registered with templates.
+
+**Sample**: `scenes/bones.ron` — a cut-out walker (torso, head and legs as
+sprites hung on bones, `sprites/walker/`), walking by
+`animations/walk.anim.ron` (thighs swing, knees bend, the hip bobs), its
+arm bent by IK towards a goal the clip swings.
+
+Rejected: **bones as data inside one component** (Spine's and Unity's
+`SpriteSkin` keep a bone list) — every system that already knows entities
+(clips, gizmo, hierarchy, the inspector, the bridge) would need a second
+addressing scheme; **IK every frame in the editor** — writing bone
+transforms while authoring would be an edit each frame; Unity's IK manager
+runs in edit mode only when asked, and so would this, with a preview like
+the particles'.
+
+Pinned by `skeleton/tests.rs` (the tip reaching a target in reach to 1e-4,
+left by default and right flipped; out of reach straight towards it; a
+mirrored skeleton still reaching; a limb with no target or no upper bone
+left alone with its reason; bones found, placed, picked and reset; round
+trips), and `voltra-core/tests/bones.rs` through the sample (the left foot
+strides more than 0.4 units and is back after the one-second loop, each
+sprite riding its bone; the hand on the IK goal within 1e-3 every frame;
+the picture changes as it walks).
+
+### A skinned sprite stores its mesh and weights; the GPU blends its bones
+
+Stage 103. **`SkinnedSprite`** (`voltra_scene::skinned`) is a sprite cut
+into a mesh whose vertices are held by bones — Unity's `SpriteSkin` over a
+sprite mesh, Godot's `Polygon2D` bound to a `Skeleton2D`. The component
+holds everything the file needs: texture, tint, `pixels_per_unit`, the
+bones **by path from the skeleton root** (as clip tracks and IK targets
+name entities, so prefab copies bind to their own), and the `SkinMesh` —
+each vertex's bind-pose position, texture point and up to four
+`(bone, weight)` pairs, plus the triangles. So painted weights are scene
+data and round-trip through the file like any field.
+
+- **Mesh from the outline** (`skinned::generate`): the texture's traced
+  silhouette (stage 59's `Silhouettes`, the largest loop) in the entity's
+  units (centred, texels ÷ ppu, as a sprite of it is drawn), cut on a grid
+  (a quarter of the narrow side, at most 48 cells a side) with each cell's
+  piece clipped (Sutherland–Hodgman) and ear-clipped (stage 101's
+  `triangulate`); vertices on cell edges are shared, so the mesh has no
+  T-junctions to crack open. A grid stands in for the interior points
+  Unity's tessellator adds, without a constrained Delaunay triangulator.
+- **Weights**: `weights::automatic` — each vertex held by its nearest bones
+  (rest-pose segments in the mesh's space, `pose::bone_segments`) by
+  `1/d²`, among those within three times the nearest's distance, at most
+  four, normalised: a vertex on a bone is that bone's, a joint is shared,
+  a shoulder does not follow the hand. `weights::paint` /
+  `paint_vertex` — a soft brush adding or taking one bone's weight, then
+  renormalising and keeping the four strongest.
+- **Pose** (`skinned::pose`): per bone `world(bone) · rest(bone)⁻¹ ·
+  rest(mesh)`, with `rest(x)` the chain of rest poses (`Bone2D::rest`, a
+  plain transform for a non-bone) from the skeleton root — at rest every
+  bone's matrix is the mesh's own. A bone path that names nothing, or a
+  rest that cannot be inverted, holds its vertices rigidly with the mesh;
+  a vertex held by nothing is the mesh's own (`RIGID_SLOT`). `deformed`
+  computes the same blend on the CPU for the batch's cull box and the
+  editor's weight dots.
+- **GPU** (`voltra_render::skinning`): `SkinnedMesh` — a vertex buffer of
+  `SkinVertex { position, uv, bones: [u32; 4], weights: [f32; 4] }`
+  (sanitised: indices clamped, weights finite and summing to one), an index
+  buffer, and a uniform block of a tint plus 64 + 1 bone matrices (two
+  `vec4`s each, 2 KiB), rewritten each frame; `skinned.wgsl` blends the
+  four terms written out (no runtime vector index, for FXC). A **uniform
+  array** rather than a storage buffer, so it runs on WebGL2 too — no
+  fallback path needed; 64 bones is more than a 2D character has. Linear
+  blend skinning; dual quaternions would fix the candy-wrapper twist that
+  2D limbs rarely show.
+- **Painter's order**: the batch records a `SkinnedDraw` where the sort key
+  falls (with how many GPU emitters came first, so an emitter and a mesh at
+  the same place keep their order) and seals the range before it, as GPU
+  emitters do (`SpriteBatch::sealed` now covers both); `scene_draws`
+  merges them into `SceneDraw::Skinned`, drawn by `draw_scene` through the
+  renderer's `SkinPipeline` (shared by clone into the app's
+  `SkinnedMeshes`, which re-uploads a mesh when its vertices or weights
+  change and poses every mesh before each drawn frame, the window's and a
+  headless screenshot's).
+- **Editor**: the inspector's section — texture, ppu, tint, *Use the
+  skeleton's bones*, *Generate mesh* (trace + grid + automatic weights),
+  *Auto weights*, and **Paint weights**: a viewport mode (`weight_paint.rs`,
+  as the shape editor is) where a drag adds the chosen bone's weight under a
+  soft round brush on the mesh *as posed*, Shift takes it away, each vertex
+  drawn as a dot from blue to red by that bone's weight; one undo entry a
+  stroke. *Scene ▸ Spawn skinned sprite*.
+
+Not done: skinned meshes in the light-layer and normal-map passes (lit as
+if on every layer, flat); a skinned mesh repeated by parallax (drawn once);
+picking one by its pixels; editing the mesh's vertices by hand.
+
+Pinned by `voltra-core/tests/skinned.rs` (headless: an arm whose mesh is
+traced from a 32 × 64 texture with cut corners and weighted automatically
+hangs straight at rest; with the lower bone turned a quarter, the hand lands
+a unit to the right of the elbow, nothing hangs below, and the outside of
+the bend — where two hinged cut-out rectangles cover nothing — is filled
+out most of the way to its apex, further than a hard-weighted mesh),
+`skinned/tests.rs` (at rest every bone matrix is the mesh's own; a turned
+lower bone carries the hand and shares the elbow; a missing bone holds
+rigid; the GPU mesh drops bad weights and broken triangles; **painted
+weights saved to a scene file and loaded back unchanged**),
+`skinned::{generate, weights}` and `voltra-render` `skinning::mesh`
+(sanitising, the uniform's layout).
 
 ### wgpu 30 API notes
 
@@ -7040,6 +7374,8 @@ Verified against the crate source, not from memory:
 | `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
 | Headless tests | `headless_device()` needs an adapter; in a Linux container without a GPU, `apt-get install mesa-vulkan-drivers` (lavapipe) makes the GPU tests run instead of skipping |
 | WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |
+| Float data textures | `Rgba32Float` is not filterable without `Features::FLOAT32_FILTERABLE`: bind it as `TextureSampleType::Float { filterable: false }` and read it with `textureLoad` (vertex and compute stages alike); `write_texture` rows need no 256-byte alignment |
+| Integer vertex attributes | `VertexFormat::Uint32x4` reaches WGSL as `@location(n) x: vec4<u32>`; a uniform `array<Struct, N>` may be indexed by such a value in the vertex stage (clamp it — an out-of-range uniform index is undefined on some backends) |
 | Web backends | `wgpu::util::new_instance_with_webgpu_detection(desc).await` drops `BROWSER_WEBGPU` when the browser has no working WebGPU, so the `webgl` feature's GL backend serves; detection must happen before the instance exists |
 | Web canvas formats | A WebGPU canvas offers `bgra8unorm` / `rgba8unorm` / `rgba16float`, never sRGB: configure the linear format with its sRGB variant in `view_formats` and draw through that view |
 | Web buffers | `Drop` for a web `Buffer`/`Texture` is a no-op — the browser frees it when the JS wrapper is collected. Call `destroy()` on anything made per frame (after the submit) |

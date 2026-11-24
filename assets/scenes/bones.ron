@@ -1,0 +1,115 @@
+// A cut-out character: sprites hung on bones, walking by a clip of bone
+// rotations (animations/walk.anim.ron), its arm bent by two-bone IK towards
+// a goal the clip swings. Stage 102's sample.
+(
+    version: 1,
+    entities: [
+        (id: "019fb0e5-0000-7000-8000-000000000001", components: {
+            "Name": "Walker",
+            "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+            "Skeleton2D": (),
+            "AnimationPlayer": (clip:Some(Path("animations/walk.anim.ron")),playing:true,speed:1.0),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000002", components: {
+            "Name": "hip",
+            "Transform": (translation:(0.0,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000001",
+            "Bone2D": (length:0.7,rest:(translation:(0.0,0.0),rotation:1.5707963267948966,scale:(1.0,1.0))),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000003", components: {
+            "Name": "torso_art",
+            "Transform": (translation:(0.35,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000002",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:2,texture:Some(Path("sprites/walker/torso.png")),pixels_per_unit:Some(40.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000004", components: {
+            "Name": "head_art",
+            "Transform": (translation:(0.88,0.0),rotation:-1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000002",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:3,texture:Some(Path("sprites/walker/head.png")),pixels_per_unit:Some(48.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000005", components: {
+            "Name": "thigh_l",
+            "Transform": (translation:(0.0,0.0),rotation:-1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000001",
+            "Bone2D": (length:0.45,rest:(translation:(0.0,0.0),rotation:-1.5707963267948966,scale:(1.0,1.0))),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000006", components: {
+            "Name": "thigh_l_art",
+            "Transform": (translation:(0.225,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000005",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:4,texture:Some(Path("sprites/walker/limb.png")),pixels_per_unit:Some(48.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000007", components: {
+            "Name": "shin_l",
+            "Transform": (translation:(0.45,0.0),rotation:0.0,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000005",
+            "Bone2D": (length:0.45,rest:(translation:(0.45,0.0),rotation:0.0,scale:(1.0,1.0))),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000008", components: {
+            "Name": "shin_l_art",
+            "Transform": (translation:(0.225,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000007",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:4,texture:Some(Path("sprites/walker/limb.png")),pixels_per_unit:Some(48.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000009", components: {
+            "Name": "thigh_r",
+            "Transform": (translation:(0.0,0.0),rotation:-1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000001",
+            "Bone2D": (length:0.45,rest:(translation:(0.0,0.0),rotation:-1.5707963267948966,scale:(1.0,1.0))),
+        }),
+        (id: "019fb0e5-0000-7000-8000-00000000000a", components: {
+            "Name": "thigh_r_art",
+            "Transform": (translation:(0.225,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000009",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:Some(Path("sprites/walker/limb.png")),pixels_per_unit:Some(48.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-00000000000b", components: {
+            "Name": "shin_r",
+            "Transform": (translation:(0.45,0.0),rotation:0.0,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000009",
+            "Bone2D": (length:0.45,rest:(translation:(0.45,0.0),rotation:0.0,scale:(1.0,1.0))),
+        }),
+        (id: "019fb0e5-0000-7000-8000-00000000000c", components: {
+            "Name": "shin_r_art",
+            "Transform": (translation:(0.225,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-00000000000b",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:Some(Path("sprites/walker/limb.png")),pixels_per_unit:Some(48.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-00000000000d", components: {
+            "Name": "arm_upper",
+            "Transform": (translation:(0.6,0.0),rotation:3.141592653589793,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000002",
+            "Bone2D": (length:0.3,rest:(translation:(0.6,0.0),rotation:3.141592653589793,scale:(1.0,1.0))),
+        }),
+        (id: "019fb0e5-0000-7000-8000-00000000000e", components: {
+            "Name": "arm_upper_art",
+            "Transform": (translation:(0.15,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-00000000000d",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/walker/arm.png")),pixels_per_unit:Some(64.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-00000000000f", components: {
+            "Name": "arm_lower",
+            "Transform": (translation:(0.3,0.0),rotation:0.0,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-00000000000d",
+            "Bone2D": (length:0.3,rest:(translation:(0.3,0.0),rotation:0.0,scale:(1.0,1.0))),
+            "TwoBoneIk": (target:"hand_goal",flip:true),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000010", components: {
+            "Name": "arm_lower_art",
+            "Transform": (translation:(0.15,0.0),rotation:1.5707963267948966,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-00000000000f",
+            "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/walker/arm.png")),pixels_per_unit:Some(64.0)),
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000011", components: {
+            "Name": "hand_goal",
+            "Transform": (translation:(0.35,0.15),rotation:0.0,scale:(1.0,1.0)),
+            "Parent": "019fb0e5-0000-7000-8000-000000000001",
+        }),
+        (id: "019fb0e5-0000-7000-8000-000000000012", components: {
+            "Name": "Camera",
+            "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+            "Camera": (size:1.5,priority:0,active:true),
+        }),
+    ],
+)

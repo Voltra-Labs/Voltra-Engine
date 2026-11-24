@@ -27,6 +27,7 @@ pub mod readback;
 pub mod renderer;
 pub mod scene_draw;
 pub mod shader;
+pub mod skinning;
 pub mod target;
 pub mod texture;
 
@@ -45,13 +46,15 @@ pub use lines::{LineBatch, LineVertex, ViewportBinding};
 pub use mesh::{Mesh, Vertex};
 pub use normals::NormalPass;
 pub use particles::{
-    GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse, SimStep,
+    FrameTiming, GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse,
+    ParticleTables, SimStep, SpawnShape,
 };
 pub use pass::{MaterialDraw, MeshDraw};
 pub use post::{PostPass, PostSettings};
 pub use readback::read_rgba8;
 pub use renderer::{Layer, Placed, Renderer};
 pub use scene_draw::SceneDraw;
+pub use skinning::{SkinPipeline, SkinVertex, SkinnedMesh};
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};
 

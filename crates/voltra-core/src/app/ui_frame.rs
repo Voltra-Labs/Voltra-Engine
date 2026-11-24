@@ -118,6 +118,9 @@ pub struct UiFrame<'a> {
     /// The network session, which the editor hosts its in-process clients
     /// on when it plays with them.
     pub net: &'a mut crate::Net,
+    /// Whether the renderer can simulate GPU particles; see
+    /// [`UiFrame::gpu_particles`].
+    pub(super) gpu_particles: bool,
 }
 
 impl<'a> UiFrame<'a> {
@@ -197,6 +200,13 @@ impl<'a> UiFrame<'a> {
     /// outlines, and later any other debug draw — expressible at all.
     pub fn world_and_lines(&mut self) -> (&World, &mut LineBatch) {
         (self.world, self.lines)
+    }
+
+    /// Whether emitters set to the GPU can run there — what a panel
+    /// stepping particles itself (a preview) passes to
+    /// [`voltra_scene::particles::advance_where`].
+    pub fn gpu_particles(&self) -> bool {
+        self.gpu_particles
     }
 
     /// Whether each frame runs the physics steps it owes.
@@ -407,6 +417,22 @@ pub(super) fn resolve_world_textures(
         let path = light.cookie.clone();
         light.set_cookie(path, textures, device, queue);
     }
+    for (_, line) in world.query_mut::<voltra_scene::Line2D>() {
+        let path = line.texture.clone();
+        line.set_texture(path, textures, device, queue);
+    }
+    for (_, polygon) in world.query_mut::<voltra_scene::Polygon2D>() {
+        let path = polygon.texture.clone();
+        polygon.set_texture(path, textures, device, queue);
+    }
+    for (_, trail) in world.query_mut::<voltra_scene::Trail2D>() {
+        let path = trail.texture.clone();
+        trail.set_texture(path, textures, device, queue);
+    }
+    for (_, skinned) in world.query_mut::<voltra_scene::SkinnedSprite>() {
+        let path = skinned.texture.clone();
+        skinned.set_texture(path, textures, device, queue);
+    }
 }
 
 /// Re-resolves every [`AudioSource`]'s clip handle from its path.
@@ -421,8 +447,8 @@ pub(super) fn resolve_world_clips(world: &mut World, clips: &mut Clips) {
     }
 }
 
-/// Re-resolves every [`Sprite`]'s and [`Tilemap`]'s atlas handle from its
-/// path.
+/// Re-resolves every [`Sprite`]'s, [`Tilemap`]'s and particle flipbook's
+/// atlas handle from its path.
 ///
 /// The slicing half of [`resolve_world_textures`], and separate from it
 /// because it needs no device: a world can be re-sliced headless, and only the
@@ -435,5 +461,8 @@ pub(super) fn resolve_world_atlases(world: &mut World, atlases: &mut Atlases) {
     for (_, map) in world.query_mut::<Tilemap>() {
         let path = map.atlas.clone();
         map.set_atlas(path, atlases);
+    }
+    for (_, emitter) in world.query_mut::<voltra_scene::ParticleEmitter>() {
+        emitter.resolve_atlas(atlases);
     }
 }

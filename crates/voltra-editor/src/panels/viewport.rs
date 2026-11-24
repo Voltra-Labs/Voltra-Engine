@@ -96,6 +96,22 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 editor.paint.set_tool(None);
             }
 
+            // While a skinned sprite's weights are painted, the brush has the
+            // pointer, as a caster's handles do below.
+            if let Some(skinned) = editor
+                .weight_paint
+                .target(frame.world, editor.selection.primary())
+            {
+                editor.gizmo.cancel_drag();
+                editor.marquee.cancel();
+                if let Some(label) = editor.weight_paint.update(ui, &scene, frame, skinned) {
+                    editor.history.claim(label);
+                }
+                editor.camera.navigate(ui, &scene, frame.camera);
+                editor.weight_paint.draw(&scene, frame, skinned);
+                return;
+            }
+
             // While a caster's shape is edited, its handles have the pointer,
             // as a painted layer does below.
             if let Some(caster) = editor.shape.target(frame.world, editor.selection.primary()) {
@@ -200,6 +216,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 view::caster::draw(&outlines, lines);
                 view::light::draw(world, entity, lines);
             }
+            // Every bone, over the art it moves, the selected one lit.
+            let selected = editor.selection.live_primary(frame.world);
+            let per_pixel = frame.camera.half_extents().x * 2.0 / scene.rect.width().max(1.0);
+            let (world, lines) = frame.world_and_lines();
+            view::bones::draw(world, selected, per_pixel, lines);
             select::draw(editor, frame);
 
             // Last of all: the overlay is drawn in the order it is pushed, and

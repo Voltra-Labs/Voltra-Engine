@@ -160,6 +160,23 @@ impl ComponentRegistry {
         registry
             .register::<ShadowCaster2D>("ShadowCaster2D")
             .with_template();
+        registry.register::<crate::Line2D>("Line2D").with_template();
+        registry
+            .register::<crate::Polygon2D>("Polygon2D")
+            .with_template();
+        registry
+            .register::<crate::Trail2D>("Trail2D")
+            .with_template();
+        registry
+            .register::<crate::Skeleton2D>("Skeleton2D")
+            .with_template();
+        registry.register::<crate::Bone2D>("Bone2D").with_template();
+        registry
+            .register::<crate::TwoBoneIk>("TwoBoneIk")
+            .with_template();
+        registry
+            .register::<crate::SkinnedSprite>("SkinnedSprite")
+            .with_template();
         registry
     }
 

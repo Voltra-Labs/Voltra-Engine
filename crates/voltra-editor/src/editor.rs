@@ -100,6 +100,10 @@ pub struct Editor {
     /// What the hierarchy's search box holds; see [`crate::search`].
     pub(crate) hierarchy_search: String,
     pub(crate) netplay: crate::netplay::NetPlay,
+    /// The selected emitter, played while authoring.
+    pub(crate) particle_preview: crate::particle_preview::ParticlePreview,
+    /// The skinned sprite whose weights the viewport is painting, if any.
+    pub(crate) weight_paint: crate::weight_paint::WeightPaint,
 }
 
 impl Editor {
@@ -200,6 +204,13 @@ impl Editor {
             let posed = self.selection.live_primary(frame.world);
             self.timeline
                 .pose(frame.world, frame.animation_clips, posed);
+            // Live particles only, which no record holds: after the history
+            // so it never sees them, and ahead of the draw that shows them.
+            let dt = ui.ctx().input(|i| i.stable_dt);
+            let gpu = frame.gpu_particles();
+            self.particle_preview.update(frame.world, posed, dt, gpu);
+        } else {
+            self.particle_preview.stop(frame.world);
         }
     }
 

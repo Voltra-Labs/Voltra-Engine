@@ -95,6 +95,10 @@ impl Headless {
         self.ensure_renderer(width, height)?;
         self.app.resolve_materials();
         self.app.resolve_text_icons();
+        // What the window's draw does first: GPU emitters run the steps they
+        // owe, so a shot shows where their particles are now.
+        self.app.step_gpu_particles();
+        self.app.update_skinned_meshes();
         let app = &mut self.app;
         let (
             Some(renderer),
@@ -139,6 +143,7 @@ impl Headless {
                 batch: &mut app.frame_batch,
                 tile_meshes: &mut app.tile_meshes,
                 gpu_rings: &app.gpu_rings,
+                skins: &app.skinned_meshes,
                 materials: app.materials.as_ref(),
                 material_bank: &mut app.material_bank,
                 pool: &mut app.camera_pool,
@@ -189,6 +194,7 @@ impl Headless {
             batch: &mut app.frame_batch,
             tile_meshes: &mut app.tile_meshes,
             gpu_rings: &app.gpu_rings,
+            skins: &app.skinned_meshes,
             materials: app.materials.as_ref(),
             material_bank: &mut app.material_bank,
             elapsed: app.elapsed,

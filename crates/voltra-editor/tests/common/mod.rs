@@ -12,9 +12,17 @@ use voltra_bridge::{BridgeClient, Command};
 
 pub const WAIT: Duration = Duration::from_secs(30);
 
+/// The scene every project starts on unless a test brings its own: one box.
+pub const BOX: &str = r#"(version: 1, entities: [(id: "019fe500-0000-7000-8000-000000000001", components: {"Name": "Box", "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)), "Sprite": (color:(1.0,0.5,0.2,1.0),sort_order:0)})])"#;
+
 /// A project of its own: the engine's input map, layers and font, a scene
 /// holding one box, and a `build.ron` beside the assets.
 pub fn project(name: &str) -> PathBuf {
+    project_with(name, BOX)
+}
+
+/// [`project`] with `scene` as its `scenes/box.ron`.
+pub fn project_with(name: &str, scene: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("voltra-{name}-test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let assets = dir.join("assets");
@@ -29,11 +37,7 @@ pub fn project(name: &str) -> PathBuf {
         std::fs::copy(engine.join(file), &to).expect("copied");
     }
     std::fs::create_dir_all(assets.join("scenes")).expect("scenes");
-    std::fs::write(
-        assets.join("scenes/box.ron"),
-        r#"(version: 1, entities: [(id: "019fe500-0000-7000-8000-000000000001", components: {"Name": "Box", "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)), "Sprite": (color:(1.0,0.5,0.2,1.0),sort_order:0)})])"#,
-    )
-    .expect("the scene");
+    std::fs::write(assets.join("scenes/box.ron"), scene).expect("the scene");
     std::fs::write(
         dir.join("build.ron"),
         r#"(version: 1, name: "Bridge Test", scene: "scenes/box.ron")"#,
@@ -119,12 +123,17 @@ pub fn call(client: &mut BridgeClient, command: Command) -> Value {
 /// found — so what a test spawns is not swept away by the scene opening on
 /// the editor's first frame.
 pub fn wait_for_scene(client: &mut BridgeClient) {
+    wait_for(client, "Box");
+}
+
+/// Waits until the scene is open: `entity` is there to be found.
+pub fn wait_for(client: &mut BridgeClient, entity: &str) {
     let start = Instant::now();
     while client
         .call(
             Command::Rename {
-                entity: "Box".to_owned(),
-                name: "Box".to_owned(),
+                entity: entity.to_owned(),
+                name: entity.to_owned(),
             },
             WAIT,
         )

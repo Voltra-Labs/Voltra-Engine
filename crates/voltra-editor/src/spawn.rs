@@ -10,12 +10,16 @@ mod hud;
 mod hud_controls;
 mod hud_menus;
 mod light;
+mod shapes;
+mod skeleton;
 mod text;
 
 pub(crate) use hud::{hud_button, hud_column, hud_panel, hud_text, particles};
 pub(crate) use hud_controls::{hud_scroll_list, hud_slider, hud_text_field, hud_toggle};
 pub(crate) use hud_menus::{hud_dropdown, hud_tabs};
 pub(crate) use light::{global_light, light};
+pub(crate) use shapes::{line, polygon, trail};
+pub(crate) use skeleton::{child_bone, skeleton, skinned_sprite};
 pub(crate) use text::text;
 
 use voltra_assets::AssetPath;

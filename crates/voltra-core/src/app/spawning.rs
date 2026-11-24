@@ -118,7 +118,7 @@ pub(super) fn resolve_entity(
         }
     }
     if let Some(map) = world.get_mut::<Tilemap>(entity) {
-        if let Some(atlases) = atlases {
+        if let Some(atlases) = atlases.as_deref_mut() {
             let path = map.atlas.clone();
             map.set_atlas(path, atlases);
         }
@@ -128,6 +128,12 @@ pub(super) fn resolve_entity(
             let normal = map.normal_map.clone();
             map.set_normal_map(normal, textures, device, queue);
         }
+    }
+    if let (Some(emitter), Some(atlases)) = (
+        world.get_mut::<voltra_scene::ParticleEmitter>(entity),
+        atlases,
+    ) {
+        emitter.resolve_atlas(atlases);
     }
     if let (Some(emitter), Some((textures, device, queue))) = (
         world.get_mut::<voltra_scene::ParticleEmitter>(entity),
@@ -142,6 +148,32 @@ pub(super) fn resolve_entity(
     ) {
         let path = light.cookie.clone();
         light.set_cookie(path, textures, device, queue);
+    }
+    if let (Some(line), Some((textures, device, queue))) =
+        (world.get_mut::<voltra_scene::Line2D>(entity), gpu.as_mut())
+    {
+        let path = line.texture.clone();
+        line.set_texture(path, textures, device, queue);
+    }
+    if let (Some(polygon), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::Polygon2D>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = polygon.texture.clone();
+        polygon.set_texture(path, textures, device, queue);
+    }
+    if let (Some(trail), Some((textures, device, queue))) =
+        (world.get_mut::<voltra_scene::Trail2D>(entity), gpu.as_mut())
+    {
+        let path = trail.texture.clone();
+        trail.set_texture(path, textures, device, queue);
+    }
+    if let (Some(skinned), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::SkinnedSprite>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = skinned.texture.clone();
+        skinned.set_texture(path, textures, device, queue);
     }
     if let (Some(text), Some(fonts)) = (world.get_mut::<Text>(entity), fonts) {
         let path = text.font.clone();

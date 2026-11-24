@@ -201,6 +201,9 @@ impl LayerPass {
                     pass.set_bind_group(3, group, &[]);
                     particles.draw(&mut pass);
                 }
+                // Not drawn into the layer buffer yet: a skinned mesh is lit
+                // as if on every layer (stage 103's note).
+                SceneDraw::Skinned { .. } => {}
             }
         }
     }
@@ -211,6 +214,7 @@ fn layers_of(draw: &SceneDraw<'_>) -> u32 {
     match draw {
         SceneDraw::Mesh(range) => range.light_layers,
         SceneDraw::Particles { light_layers, .. } => *light_layers,
+        SceneDraw::Skinned { light_layers, .. } => *light_layers,
     }
 }
 

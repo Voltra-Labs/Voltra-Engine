@@ -17,6 +17,7 @@ mod netplay;
 mod pack_atlas;
 mod paint;
 mod panels;
+mod particle_preview;
 mod picking;
 mod play;
 mod prefab;
@@ -33,6 +34,7 @@ mod timeline;
 mod tool;
 mod undo;
 mod view;
+mod weight_paint;
 
 use editor::Editor;
 use voltra_assets::AssetPath;

@@ -20,6 +20,7 @@ mod restyle;
 mod scene_draws;
 mod scenes;
 mod simulation;
+mod skinned_meshes;
 mod sorting_layers;
 mod spawning;
 mod startup;
@@ -232,6 +233,8 @@ pub struct App {
     frame_batch: voltra_scene::SpriteBatch,
     /// The renderer's half of every emitter simulated on the GPU.
     gpu_rings: gpu_particles::GpuParticleRings,
+    /// The renderer's half of every skinned sprite.
+    skinned_meshes: skinned_meshes::SkinnedMeshes,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a

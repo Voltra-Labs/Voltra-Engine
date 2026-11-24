@@ -4,13 +4,17 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
-use super::SpriteBatch;
+use super::{SpriteBatch, Surface};
 use crate::hierarchy::WorldTransforms;
+use crate::line2d::Line2D;
 use crate::particles::{self, ParticleEmitter};
+use crate::polygon2d::Polygon2D;
+use crate::skinned::{pose, SkinnedSprite};
 use crate::sprite::sheets::Sheets;
 use crate::sprite::{draw_key, Sprite};
 use crate::text::Text;
 use crate::tilemap::{mesh, TileMeshCache, Tilemap};
+use crate::trail2d::Trail2D;
 use crate::transform::Transform;
 
 /// What the batch draws one of: every kind sorts by the same key.
@@ -19,6 +23,10 @@ enum Drawn<'a> {
     Tilemap(&'a Tilemap),
     Text(&'a Text),
     Particles(&'a ParticleEmitter),
+    Line(&'a Line2D),
+    Polygon(&'a Polygon2D),
+    Trail(&'a Trail2D),
+    Skinned(&'a SkinnedSprite),
 }
 
 impl Drawn<'_> {
@@ -28,6 +36,10 @@ impl Drawn<'_> {
             Self::Tilemap(map) => map.sort_order,
             Self::Text(text) => text.sort_order,
             Self::Particles(emitter) => emitter.sort_order,
+            Self::Line(line) => line.sort_order,
+            Self::Polygon(polygon) => polygon.sort_order,
+            Self::Trail(trail) => trail.sort_order,
+            Self::Skinned(skinned) => skinned.sort_order,
         }
     }
 
@@ -37,6 +49,10 @@ impl Drawn<'_> {
             Self::Tilemap(map) => &map.sorting_layer,
             Self::Text(text) => &text.sorting_layer,
             Self::Particles(emitter) => &emitter.sorting_layer,
+            Self::Line(line) => &line.sorting_layer,
+            Self::Polygon(polygon) => &polygon.sorting_layer,
+            Self::Trail(trail) => &trail.sorting_layer,
+            Self::Skinned(skinned) => &skinned.sorting_layer,
         }
     }
 }
@@ -100,6 +116,26 @@ impl SpriteBatch {
                     .query2::<Transform, ParticleEmitter>()
                     .map(|(entity, _, emitter)| (entity, Drawn::Particles(emitter))),
             )
+            .chain(
+                world
+                    .query2::<Transform, Line2D>()
+                    .map(|(entity, _, line)| (entity, Drawn::Line(line))),
+            )
+            .chain(
+                world
+                    .query2::<Transform, Polygon2D>()
+                    .map(|(entity, _, polygon)| (entity, Drawn::Polygon(polygon))),
+            )
+            .chain(
+                world
+                    .query2::<Transform, Trail2D>()
+                    .map(|(entity, _, trail)| (entity, Drawn::Trail(trail))),
+            )
+            .chain(
+                world
+                    .query2::<Transform, SkinnedSprite>()
+                    .map(|(entity, _, skinned)| (entity, Drawn::Skinned(skinned))),
+            )
             // A `UiRect` puts an entity on the screen instead: the
             // screen-space pass draws it, and drawing it here too would put a
             // second copy in the world at its stale transform.
@@ -135,6 +171,8 @@ impl SpriteBatch {
         self.indices.clear();
         self.ranges.clear();
         self.gpu_emitters.clear();
+        self.skinned.clear();
+        self.sealed = None;
         let batch = self;
         // Asked once: a world with no repeating layer draws every entity
         // once, without looking for one above it.
@@ -162,10 +200,43 @@ impl SpriteBatch {
                         None => mesh::push(batch, matrix, map, sheets),
                     },
                     Drawn::Text(text) => batch.push_text(matrix, text, sheets),
+                    Drawn::Line(line) => batch.push_triangles(
+                        matrix,
+                        &line.mesh(),
+                        Surface::textured(line.texture_handle).on(line.light_layers),
+                        sheets,
+                    ),
+                    Drawn::Polygon(polygon) => batch.push_triangles(
+                        matrix,
+                        &polygon.mesh(),
+                        Surface::textured(polygon.texture_handle).on(polygon.light_layers),
+                        sheets,
+                    ),
+                    // In the world already, and once: the ribbon is where the
+                    // entity has been, not where a copy of it is.
+                    Drawn::Trail(trail) if copy == 0 => batch.push_triangles(
+                        Mat3::IDENTITY,
+                        &trail.mesh(matrix.transform_point2(voltra_render::glam::Vec2::ZERO)),
+                        Surface::textured(trail.texture_handle).on(trail.light_layers),
+                        sheets,
+                    ),
+                    Drawn::Trail(_) => {}
+                    // Once, where its bones are: the GPU deforms it.
+                    Drawn::Skinned(skinned) if copy == 0 => {
+                        let posed =
+                            pose::skin_pose(world, entity, skinned, &|e| transforms.matrix(e));
+                        batch.push_skinned(
+                            entity,
+                            skinned.texture_handle,
+                            skinned.light_layers,
+                            &pose::deformed(skinned, &posed),
+                        );
+                    }
+                    Drawn::Skinned(_) => {}
                     Drawn::Particles(emitter) => {
                         // What the CPU still holds — all of it, on the CPU;
                         // what is left from before a switch, on the GPU.
-                        particles::mesh::push(batch, matrix, emitter);
+                        particles::mesh::push(batch, matrix, emitter, sheets.atlases);
                         // One draw however many repeats: the particles are
                         // where they are, not where a copy of the emitter is.
                         // Left out when nothing can be alive, or nothing

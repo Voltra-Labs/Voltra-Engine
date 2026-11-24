@@ -9,7 +9,7 @@ use voltra_render::glam::{Mat3, Vec2};
 use voltra_render::particles::MAX_GPU_PARTICLES;
 use voltra_render::{ParticleCollider, ParticleLook, ParticleResponse, SimStep};
 
-use super::{Obstacles, ParticleEmitter};
+use super::{look, Obstacles, ParticleEmitter};
 
 /// How long past its longest lifetime a birth is still counted alive.
 ///
@@ -116,6 +116,9 @@ impl GpuPlan {
             speed: emitter.speed,
             lifetime: emitter.lifetime,
             acceleration: emitter.acceleration,
+            shape: emitter.shape.spawn(),
+            rotation: emitter.rotation,
+            angular_velocity: emitter.angular_velocity,
             to_world: if emitter.world_space {
                 Mat3::IDENTITY
             } else {
@@ -228,14 +231,21 @@ fn reach(emitter: &ParticleEmitter, matrix: Mat3, lifetime: f32) -> f32 {
     } else {
         1.0
     };
+    // The speed curve scales the distance covered, so its peak scales every
+    // term of it; the size curve the widest a particle gets; the shape where
+    // it may start.
+    let (size, pace) = look::peaks(emitter);
     let speed = finite_or(emitter.speed.0.abs().max(emitter.speed.1.abs()), 0.0) * scale;
     let acceleration = if emitter.acceleration.is_finite() {
         emitter.acceleration.length()
     } else {
         0.0
     };
-    let size = finite_or(emitter.size.0.max(emitter.size.1), 0.0).max(0.0);
-    let reach = speed * lifetime + 0.5 * acceleration * lifetime * lifetime + size * 0.5;
+    // A turned square reaches its corner: half its diagonal.
+    let size = finite_or(size, 0.0) * std::f32::consts::SQRT_2;
+    let start = emitter.shape.extent(&emitter.state.outline) * scale;
+    let reach =
+        start + pace * (speed * lifetime + 0.5 * acceleration * lifetime * lifetime) + size * 0.5;
     // Infinite rather than NaN: a box that sees everything draws, which is
     // the safe answer for a reach that cannot be bounded.
     if reach.is_finite() {
@@ -253,9 +263,12 @@ pub(crate) fn look(emitter: &ParticleEmitter, matrix: Mat3) -> ParticleLook {
         } else {
             matrix
         },
-        size: emitter.size,
-        color_start: emitter.color_start,
-        color_end: emitter.color_end,
+        frames: emitter
+            .flipbook
+            .as_ref()
+            .map_or(voltra_render::FrameTiming::None, |flipbook| {
+                flipbook.gpu_timing()
+            }),
     }
 }
 

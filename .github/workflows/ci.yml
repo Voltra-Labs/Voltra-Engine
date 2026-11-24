@@ -148,7 +148,8 @@ jobs:
       # and driven through its bridge: grid snapping, the Console's filter,
       # a project setting saved and read back (crates/voltra-editor/tests/bridge.rs);
       # two in-editor clients played over 100 ms of latency, the profiler's
-      # net counters read back (tests/netplay.rs).
+      # net counters read back (tests/netplay.rs); a particle curve changing
+      # the live preview as one undo entry (tests/particle_preview.rs).
       # winit opens libxkbcommon-x11 at run time on X11, and the runner
       # image does not ship it: without it the editor panics at startup.
       - name: The editor through its bridge
@@ -157,6 +158,7 @@ jobs:
           sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers libxkbcommon-x11-0
           xvfb-run -a cargo test -p voltra-editor --test bridge -- --ignored
           xvfb-run -a cargo test -p voltra-editor --test netplay -- --ignored
+          xvfb-run -a cargo test -p voltra-editor --test particle_preview -- --ignored
 
       # The authoring windows through the same bridge: the texture packer,
       # the Atlas Editor slicing, renaming and saving a sheet (diffed against

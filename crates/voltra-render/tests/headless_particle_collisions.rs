@@ -58,7 +58,7 @@ impl Gpu {
     }
 
     fn ring(&self, colliders: &[ParticleCollider]) -> GpuParticles {
-        let mut ring = GpuParticles::new(&self.device, &self.pipelines, 4);
+        let mut ring = GpuParticles::new(&self.device, &self.queue, &self.pipelines, 4);
         ring.set_colliders(&self.device, &self.queue, &self.pipelines, colliders);
         ring
     }
