@@ -23,10 +23,12 @@ pub mod particles;
 pub mod pass;
 pub mod pipeline;
 pub mod post;
+pub mod quad;
 pub mod readback;
 pub mod renderer;
 pub mod scene_draw;
 pub mod shader;
+pub mod skinning;
 pub mod target;
 pub mod texture;
 
@@ -42,16 +44,20 @@ pub use lights::{
     ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
 };
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
-pub use mesh::{Mesh, Vertex};
+pub use mesh::{Mesh, MeshBuffers, Primitives, Vertex};
 pub use normals::NormalPass;
 pub use particles::{
-    GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse, SimStep,
+    FrameTiming, GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse,
+    ParticleTables, SimStep, SpawnShape,
 };
 pub use pass::{MaterialDraw, MeshDraw};
+pub use pipeline::SpritePipeline;
 pub use post::{PostPass, PostSettings};
+pub use quad::QuadInstance;
 pub use readback::read_rgba8;
 pub use renderer::{Layer, Placed, Renderer};
 pub use scene_draw::SceneDraw;
+pub use skinning::{SkinPipeline, SkinVertex, SkinnedMesh};
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};
 

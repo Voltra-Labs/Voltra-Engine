@@ -1,10 +1,14 @@
-//! The project's settings files: the input map, the sorting layers and the
-//! build manifest — read, checked and saved as the files they already are.
+//! The project's settings files: the input map, the sorting layers, the audio
+//! buses and the build manifest — read, checked and saved as the files they
+//! already are.
 
 use std::path::{Path, PathBuf};
 
 use voltra_core::input::ActionMap;
-use voltra_core::{parse_sorting_layers, DEFAULT_INPUT_MAP, DEFAULT_SORTING_LAYERS};
+use voltra_core::{
+    parse_bus_layout, parse_sorting_layers, DEFAULT_BUS_LAYOUT, DEFAULT_INPUT_MAP,
+    DEFAULT_SORTING_LAYERS,
+};
 
 /// One of the files the Project Settings window edits.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -13,17 +17,26 @@ pub(crate) enum SettingsFile {
     InputMap,
     /// `default.layers.ron`, under the asset root.
     SortingLayers,
+    /// `default.buses.ron`, under the asset root: each bus's volume and
+    /// effects.
+    Buses,
     /// `build.ron`, beside the asset root.
     Build,
 }
 
 impl SettingsFile {
-    pub(crate) const ALL: [Self; 3] = [Self::InputMap, Self::SortingLayers, Self::Build];
+    pub(crate) const ALL: [Self; 4] = [
+        Self::InputMap,
+        Self::SortingLayers,
+        Self::Buses,
+        Self::Build,
+    ];
 
     pub(crate) fn label(self) -> &'static str {
         match self {
             Self::InputMap => "Input map",
             Self::SortingLayers => "Sorting layers",
+            Self::Buses => "Audio buses",
             Self::Build => "Build",
         }
     }
@@ -33,6 +46,7 @@ impl SettingsFile {
         match name {
             "input" | "input_map" => Some(Self::InputMap),
             "layers" | "sorting_layers" => Some(Self::SortingLayers),
+            "buses" | "audio" | "audio_buses" => Some(Self::Buses),
             "build" => Some(Self::Build),
             _ => None,
         }
@@ -43,6 +57,7 @@ impl SettingsFile {
         match self {
             Self::InputMap => assets.join(DEFAULT_INPUT_MAP),
             Self::SortingLayers => assets.join(DEFAULT_SORTING_LAYERS),
+            Self::Buses => assets.join(DEFAULT_BUS_LAYOUT),
             Self::Build => assets
                 .parent()
                 .filter(|dir| !dir.as_os_str().is_empty())
@@ -58,6 +73,7 @@ impl SettingsFile {
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
             Self::SortingLayers => parse_sorting_layers(text).map(|_| ()),
+            Self::Buses => parse_bus_layout(text).map(|_| ()),
             Self::Build => voltra_player::Manifest::from_ron(text, path)
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
@@ -132,6 +148,22 @@ mod tests {
         );
         assert!(write(SettingsFile::InputMap, &assets, "(version: 1, actions: {").is_err());
         assert!(write(SettingsFile::Build, &assets, "(nope)").is_err());
+    }
+
+    #[test]
+    fn buses_are_saved_read_back_and_refused_when_they_would_not_mix() {
+        let assets = project();
+        let text = r#"(version: 1, buses: [(name: "music", effects: [Reverb(mix: 0.2)])])"#;
+        let path = write(SettingsFile::Buses, &assets, text).expect("saves");
+        assert_eq!(path, assets.join(DEFAULT_BUS_LAYOUT));
+        assert_eq!(read(SettingsFile::Buses, &assets), Ok(text.to_owned()));
+
+        let ducked_by_itself =
+            r#"(version: 1, buses: [(name: "music", effects: [Duck(by: "music")])])"#;
+        let error = write(SettingsFile::Buses, &assets, ducked_by_itself).expect_err("refused");
+        assert!(error.contains("itself"), "{error}");
+        assert_eq!(read(SettingsFile::Buses, &assets), Ok(text.to_owned()));
+        assert_eq!(SettingsFile::named("buses"), Some(SettingsFile::Buses));
     }
 
     #[test]

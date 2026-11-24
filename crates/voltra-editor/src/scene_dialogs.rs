@@ -5,6 +5,11 @@
 //! unsaved changes it asks first (Save, Don't Save, Cancel, as every editor
 //! does), otherwise it goes ahead. Open and Save As have windows of their
 //! own; see [`windows`].
+//!
+//! So does leaving prefab mode ([`Then::Back`]), and a New, Open or Quit
+//! asked for in it returns level by level first, each document asked about
+//! in turn: the scene set aside under a prefab has unsaved changes of its
+//! own, and none of the three may drop them unasked.
 
 mod windows;
 
@@ -14,6 +19,7 @@ use voltra_core::egui::{Context, Key, KeyboardShortcut, Modifiers, Ui};
 use voltra_core::UiFrame;
 
 use crate::editor::Editor;
+use crate::prefab_mode::Pending;
 use crate::scene_file;
 
 /// What happens once the open scene may be let go.
@@ -22,6 +28,8 @@ pub(crate) enum Then {
     New,
     Open(AssetPath),
     Quit,
+    /// Leave the prefab being edited for the document under it.
+    Back,
 }
 
 /// Which of the scene windows is up, and what it holds.
@@ -85,7 +93,21 @@ pub(crate) fn request(editor: &mut Editor, frame: &mut UiFrame<'_>, then: Then) 
 /// Does `then`, the open scene already let go. A scene that will not open
 /// is logged and leaves the open one as it was.
 fn perform(editor: &mut Editor, frame: &mut UiFrame<'_>, then: Then) {
+    if editor.prefab_mode.is_active() && then != Then::Back {
+        // The prefab was answered for; the document under it is asked about
+        // next, and so on down to the scene, which `then` is about.
+        match crate::prefab_mode::leave(editor, frame) {
+            Ok(_) => request(editor, frame, then),
+            Err(e) => log::error!("{e}"),
+        }
+        return;
+    }
     match then {
+        Then::Back => {
+            if let Err(e) = crate::prefab_mode::leave(editor, frame) {
+                log::error!("{e}");
+            }
+        }
         Then::New => scene_file::new_scene(editor, frame),
         Then::Open(path) => {
             if let Err(e) = scene_file::open(editor, frame, &path) {
@@ -118,7 +140,14 @@ pub(crate) fn show_open(editor: &mut Editor, frame: &UiFrame<'_>) {
 }
 
 /// Puts up the Save As window, starting from the scene's own path.
+///
+/// Not in prefab mode, as in Unity's: the prefab is its file, and its
+/// instances name that file. Save writes it.
 pub(crate) fn show_save_as(editor: &mut Editor, then: Option<Then>) {
+    if editor.prefab_mode.is_active() {
+        log::warn!("a prefab is saved to its own file: Save writes it, and Save As is not offered");
+        return;
+    }
     let text = editor
         .document
         .path()
@@ -140,7 +169,18 @@ pub(crate) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             log::error!("{e}");
         }
     }
-    frame.set_title(editor.document.title(&editor.history));
+    // What a panel asked of prefab mode last frame, before any panel draws
+    // the world it replaces.
+    match editor.prefab_mode.take_pending() {
+        Some(Pending::Edit(path)) => {
+            if let Err(e) = crate::prefab_mode::enter(editor, frame, &path) {
+                log::error!("{e}");
+            }
+        }
+        Some(Pending::Back) if !editor.dialogs.busy() => request(editor, frame, Then::Back),
+        _ => {}
+    }
+    frame.set_title(crate::prefab_mode::title(editor));
     if frame.close_requested() && !editor.dialogs.busy() {
         request(editor, frame, Then::Quit);
     }

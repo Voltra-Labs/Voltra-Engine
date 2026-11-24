@@ -54,7 +54,7 @@ fn frame(post: PostSettings) -> Option<(Vec<Rgba>, usize)> {
             texture: &white,
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: 0..6,
+            primitives: voltra_render::Primitives::Triangles(0..6),
             material: None,
         }],
         wgpu::Color::BLACK,

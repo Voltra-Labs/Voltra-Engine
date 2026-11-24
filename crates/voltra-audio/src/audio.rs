@@ -1,5 +1,7 @@
 //! What the engine holds to make a sound.
 
+mod effects;
+
 use std::fmt;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Duration;
@@ -8,13 +10,20 @@ use crate::bus::{BusId, Buses, MAX_BUSES};
 use crate::clip::Clip;
 use crate::command::Command;
 use crate::device::Output;
+use crate::effect::EffectDesc;
 use crate::params::PlayParams;
+use crate::ramp::Curve;
+use crate::retired::Retired;
+use crate::stream::{self, Streamer};
 use crate::voice::{VoiceId, SMOOTHING};
 
 /// The game's end of the audio thread.
 ///
 /// One per app. Every method is a message posted to the mixer and returns
-/// immediately; nothing here blocks, allocates a buffer, or touches a sample.
+/// immediately; nothing here blocks or touches a sample. The two that do real
+/// work do it here so the audio thread does not: a streamed clip's decoder is
+/// opened and primed by [`play`](Self::play), and a bus's effects are built,
+/// delay lines and all, by [`set_bus_effects`](Self::set_bus_effects).
 ///
 /// **A silent `Audio` is a working `Audio`.** When there is no output device —
 /// a CI runner, a machine with the sound card disabled, a laptop with
@@ -28,8 +37,9 @@ pub struct Audio {
     /// `None` once there is no thread to talk to: no device at startup, or a
     /// stream that has gone away since.
     commands: Option<Sender<Command>>,
-    /// Clips coming back from finished voices, to be dropped on this thread.
-    retired: Option<Receiver<Clip>>,
+    /// Clips and feeds coming back from finished voices, to be dropped on
+    /// this thread.
+    retired: Option<Receiver<Retired>>,
     /// The live stream. Never read — dropping it is what stops the sound.
     output: Option<Output>,
     /// The next id to hand out. See [`VoiceId`] on why it never wraps.
@@ -42,6 +52,17 @@ pub struct Audio {
     /// a settings screen showing its sliders, and [`connect`](Self::connect)
     /// handing a new device the mix the game already set on a silent one.
     bus_volumes: [f32; MAX_BUSES],
+    /// Decodes every streamed clip that is playing, off the audio thread.
+    streamer: Streamer,
+    /// The track [`play_music`](Self::play_music) last started, and its
+    /// voice: what the next one cross-fades from.
+    music: Option<(VoiceId, Clip)>,
+    /// Each bus's effects as last described, by [`BusId::index`]: the main
+    /// thread's copy, for a settings screen and for a device opened late.
+    bus_effects: Vec<Vec<EffectDesc>>,
+    /// The buses the last [`apply_layout`](Self::apply_layout) set, so the
+    /// next one can put back any it no longer lists.
+    layout: Vec<BusId>,
 }
 
 impl Audio {
@@ -65,14 +86,24 @@ impl Audio {
             next: 1,
             buses: Buses::default(),
             bus_volumes: [1.0; MAX_BUSES],
+            streamer: Streamer::new(),
+            music: None,
+            bus_effects: vec![Vec::new(); MAX_BUSES],
+            layout: Vec::new(),
         }
     }
 
     /// The same `Audio` with `buses` as its table instead of
-    /// [`Buses::default`], every one at unity.
+    /// [`Buses::default`], every one at unity and with no effects.
     pub fn with_buses(mut self, buses: Buses) -> Self {
         self.buses = buses;
         self.bus_volumes = [1.0; MAX_BUSES];
+        for index in 0..MAX_BUSES {
+            if !self.bus_effects[index].is_empty() {
+                self.set_bus_effects(BusId::from_index(index), Vec::new());
+            }
+        }
+        self.layout.clear();
         for index in 0..MAX_BUSES {
             self.send(Command::SetBusVolume {
                 bus: BusId::from_index(index),
@@ -104,6 +135,7 @@ impl Audio {
                 self.retired = Some(retire_receiver);
                 self.output = Some(output);
                 self.replay_bus_volumes();
+                self.replay_bus_effects();
             }
             Err(e) => log::warn!("{e}; the game will run without sound"),
         }
@@ -165,14 +197,89 @@ impl Audio {
         params: PlayParams,
         fade_in: Duration,
     ) -> VoiceId {
+        self.start(clip, params, fade_in, Curve::Linear)
+    }
+
+    /// Starts `clip` as the music, cross-fading from the track already
+    /// playing over `fade` with equal-power curves, and returns its voice.
+    ///
+    /// The outgoing track fades along a cosine and the incoming one along a
+    /// sine, so their powers sum to one at every frame and the mix does not
+    /// dip in the middle the way two linear fades do. The same clip asked for
+    /// again is left playing and its voice returned: a game that names its
+    /// area's music every time the player enters the area should not restart
+    /// it. `params` is used as given — `TickAudio::play_music` in
+    /// `voltra-core` fills in looping and the `music` bus.
+    pub fn play_music(&mut self, clip: &Clip, params: PlayParams, fade: Duration) -> VoiceId {
+        if let Some((voice, playing)) = &self.music {
+            if playing.same(clip) {
+                return *voice;
+            }
+        }
+        self.stop_music(fade);
+        let voice = self.start(clip, params, fade, Curve::EqualPower);
+        self.music = Some((voice, clip.clone()));
+        voice
+    }
+
+    /// Fades the music out over `fade` along the equal-power curve, and
+    /// forgets it.
+    pub fn stop_music(&mut self, fade: Duration) {
+        if let Some((voice, _)) = self.music.take() {
+            self.send(Command::Stop {
+                id: voice,
+                over: fade,
+                curve: Curve::EqualPower,
+            });
+        }
+    }
+
+    /// The voice the music is playing on, if any.
+    pub fn music(&self) -> Option<VoiceId> {
+        self.music.as_ref().map(|(voice, _)| *voice)
+    }
+
+    /// Issues an id and starts `clip` under it.
+    ///
+    /// A streamed clip gets its decoder here, on the calling thread, primed
+    /// with a tenth of a second of audio, and handed to the [`Streamer`];
+    /// its voice gets the feed. Without a device nothing is opened at all —
+    /// the id is still issued, as for every other sound.
+    fn start(
+        &mut self,
+        clip: &Clip,
+        params: PlayParams,
+        fade_in: Duration,
+        curve: Curve,
+    ) -> VoiceId {
         let id = VoiceId::new(self.next);
         self.next += 1;
+        if self.is_silent() {
+            return id;
+        }
+
+        let feed = if clip.is_streamed() {
+            match stream::start(clip, params.looping) {
+                Ok((decoder, feed)) => {
+                    self.streamer.add(decoder);
+                    Some(feed)
+                }
+                Err(e) => {
+                    log::warn!("{e}; it will play nothing");
+                    return id;
+                }
+            }
+        } else {
+            None
+        };
 
         self.send(Command::Play {
             id,
             clip: clip.clone(),
+            feed,
             params,
             fade_in,
+            curve,
         });
         id
     }
@@ -188,13 +295,22 @@ impl Audio {
     /// Slides a voice's fader to `volume` over `over`, on top of its own
     /// volume. `0.0` silences it without ending it.
     pub fn fade(&mut self, id: VoiceId, volume: f32, over: Duration) {
-        self.send(Command::Fade { id, volume, over });
+        self.send(Command::Fade {
+            id,
+            volume,
+            over,
+            curve: Curve::Linear,
+        });
     }
 
     /// Fades a voice to silence over `over` and ends it there: the outgoing
     /// half of a cross-fade.
     pub fn fade_out(&mut self, id: VoiceId, over: Duration) {
-        self.send(Command::Stop { id, over });
+        self.send(Command::Stop {
+            id,
+            over,
+            curve: Curve::Linear,
+        });
     }
 
     /// Ends one voice now — over [`SMOOTHING`] rather than in one sample,
@@ -206,6 +322,7 @@ impl Audio {
     /// Ends every voice, de-clicked the same way: a scene change, or an
     /// editor's Stop.
     pub fn stop_all(&mut self) {
+        self.music = None;
         self.send(Command::StopAll { over: SMOOTHING });
     }
 
@@ -249,19 +366,24 @@ impl Audio {
         self.bus_volumes.get(bus.index()).copied().unwrap_or(1.0)
     }
 
-    /// Frees the clips finished voices handed back.
+    /// Frees what finished voices handed back, and decodes the streams that
+    /// are decoded on this thread.
     ///
     /// Called once a frame by the loop, next to the other end-of-frame work.
     /// Doing it here rather than in the callback is the whole point of the
     /// retirement channel: this is the thread that can afford to free a
-    /// megabyte of samples.
+    /// megabyte of samples. The streams decoded here are every stream on the
+    /// web, which has no thread to give them, and none natively — see
+    /// [`Streamer`].
     pub fn end_frame(&mut self) {
+        self.streamer.pump();
         let Some(retired) = self.retired.as_ref() else {
             return;
         };
-        // Each `recv` moves a clip into this scope, where it is dropped.
-        for clip in retired.try_iter() {
-            drop(clip);
+        // Each `recv` moves a voice's leftovers into this scope, where they
+        // are dropped.
+        for leftovers in retired.try_iter() {
+            drop(leftovers);
         }
     }
 
@@ -280,6 +402,7 @@ impl Audio {
             self.commands = None;
             self.retired = None;
             self.output = None;
+            self.music = None;
         }
     }
 }
@@ -302,171 +425,4 @@ impl fmt::Debug for Audio {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_silent_audio_accepts_everything() {
-        // The CI runner's case, and `App::default`'s. None of this may panic.
-        let mut audio = Audio::silent();
-        assert!(audio.is_silent());
-        assert_eq!(audio.rate(), None);
-        assert_eq!(audio.channels(), None);
-
-        let voice = audio.play(&Clip::silent(), PlayParams::default());
-        audio.set_gain(voice, 0.5, -1.0);
-        audio.stop(voice);
-        audio.stop_all();
-        audio.end_frame();
-    }
-
-    #[test]
-    fn every_voice_gets_its_own_id() {
-        // Ids are how a caller reaches one sound of many, so two plays must
-        // never come back the same — device or no device.
-        let mut audio = Audio::silent();
-        let clip = Clip::silent();
-
-        let first = audio.play(&clip, PlayParams::default());
-        let second = audio.play(&clip, PlayParams::default());
-
-        assert_ne!(first, second);
-    }
-
-    #[test]
-    fn a_silent_audio_still_issues_ids_in_order() {
-        // A looping source keeps its id and stops it later. That has to work
-        // the same on a machine with no sound card, or the code path a
-        // developer tests is not the one that ships.
-        let mut audio = Audio::silent();
-        let clip = Clip::silent();
-
-        let ids: Vec<_> = (0..3)
-            .map(|_| audio.play(&clip, PlayParams::default()))
-            .collect();
-
-        assert!(ids[0] < ids[1] && ids[1] < ids[2]);
-    }
-
-    #[test]
-    fn a_dead_audio_thread_turns_the_whole_thing_silent() {
-        // An unplugged device. The next sound must cost nothing rather than
-        // failing one send at a time.
-        let (sender, receiver) = channel();
-        let mut audio = Audio {
-            commands: Some(sender),
-            ..Audio::silent()
-        };
-        drop(receiver);
-
-        audio.play(&Clip::silent(), PlayParams::default());
-
-        assert!(audio.is_silent());
-        audio.play(&Clip::silent(), PlayParams::default());
-    }
-
-    #[test]
-    fn what_is_played_reaches_the_mixer_s_end_of_the_channel() {
-        let (sender, receiver) = channel();
-        let mut audio = Audio {
-            commands: Some(sender),
-            ..Audio::silent()
-        };
-
-        let voice = audio.play(&Clip::new(vec![1.0, 1.0], 1, 8), PlayParams::default());
-        audio.stop(voice);
-
-        let played = receiver.try_recv().expect("the play should be queued");
-        match played {
-            Command::Play { id, clip, .. } => {
-                assert_eq!(id, voice);
-                assert_eq!(clip.frames(), 2);
-            }
-            other => panic!("expected a Play, got {other:?}"),
-        }
-        assert!(matches!(receiver.try_recv(), Ok(Command::Stop { id, .. }) if id == voice));
-    }
-
-    #[test]
-    fn end_of_frame_drops_the_clips_the_mixer_handed_back() {
-        let (sender, receiver) = channel();
-        let mut audio = Audio {
-            retired: Some(receiver),
-            ..Audio::silent()
-        };
-        sender
-            .send(Clip::new(vec![0.0; 64], 1, 8))
-            .expect("the queue takes it");
-
-        audio.end_frame();
-
-        assert!(
-            sender.send(Clip::silent()).is_ok(),
-            "the receiver should still be there for the next frame"
-        );
-    }
-
-    #[test]
-    fn a_bus_volume_set_while_silent_is_remembered() {
-        // A settings screen read before the window opened, or a game that
-        // set its music level in `main`.
-        let mut audio = Audio::silent();
-        let music = audio.bus("music");
-
-        audio.set_bus_volume(music, 0.25, Duration::ZERO);
-
-        assert_eq!(audio.bus_volume(music), 0.25);
-        assert_eq!(audio.bus_volume(BusId::MASTER), 1.0);
-    }
-
-    #[test]
-    fn a_bus_volume_the_mixer_would_refuse_is_not_reported_either() {
-        let mut audio = Audio::silent();
-        audio.set_bus_volume(BusId::MASTER, f32::NAN, Duration::ZERO);
-        assert_eq!(audio.bus_volume(BusId::MASTER), 0.0);
-        audio.set_bus_volume(BusId::MASTER, -3.0, Duration::ZERO);
-        assert_eq!(audio.bus_volume(BusId::MASTER), 0.0);
-    }
-
-    #[test]
-    fn the_volumes_a_silent_audio_holds_are_replayed_to_a_new_mixer() {
-        // `connect` opening a device under an `Audio` the game already
-        // configured: only what differs from unity needs sending.
-        let (sender, receiver) = channel();
-        let mut audio = Audio::silent();
-        let sfx = audio.bus("sfx");
-        audio.set_bus_volume(sfx, 0.5, Duration::ZERO);
-
-        audio.commands = Some(sender);
-        audio.replay_bus_volumes();
-
-        let replayed: Vec<Command> = receiver.try_iter().collect();
-        assert_eq!(replayed.len(), 1, "got {replayed:?}");
-        assert!(matches!(
-            replayed[0],
-            Command::SetBusVolume { bus, volume, .. } if bus == sfx && volume == 0.5
-        ));
-    }
-
-    #[test]
-    fn a_stop_is_de_clicked_rather_than_cut() {
-        let (sender, receiver) = channel();
-        let mut audio = Audio {
-            commands: Some(sender),
-            ..Audio::silent()
-        };
-
-        audio.stop(VoiceId::forge(7));
-        audio.stop_all();
-
-        assert!(matches!(receiver.try_recv(), Ok(Command::Stop { over, .. }) if over == SMOOTHING));
-        assert!(matches!(receiver.try_recv(), Ok(Command::StopAll { over }) if over == SMOOTHING));
-    }
-
-    #[test]
-    fn a_game_s_own_table_replaces_the_default_one() {
-        let audio = Audio::silent().with_buses(Buses::new(["dialogue"]));
-        assert_eq!(audio.buses().find("dialogue"), Some(BusId::from_index(1)));
-        assert_eq!(audio.buses().find("music"), None);
-    }
-}
+mod tests;

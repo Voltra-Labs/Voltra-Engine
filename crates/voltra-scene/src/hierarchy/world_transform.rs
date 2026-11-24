@@ -107,8 +107,30 @@ impl WorldTransforms {
     /// child a root: drawn where its own transform says, and warned about.
     pub fn from_world(world: &World) -> Self {
         let mut this = Self::default();
+        this.compose(world);
+        this
+    }
+
+    /// [`seen_from`](Self::seen_from) into this one, keeping its storage: a
+    /// draw composing every frame reuses last frame's rather than
+    /// allocating (and faulting in) megabytes for a large world afresh.
+    pub fn recompose_seen_from(&mut self, world: &World, camera: voltra_render::glam::Vec2) {
+        self.compose(world);
+        crate::parallax::apply(self, world, camera);
+    }
+
+    /// Empties this and composes `world` into it.
+    fn compose(&mut self, world: &World) {
+        self.matrices.clear();
+        self.len = 0;
+        let this = self;
         let mut chain: Vec<Entity> = Vec::new();
-        for (entity, _) in world.query::<Transform>() {
+        // Each set found once, not once per entity asked.
+        let parents = world.components::<Parent>();
+        let Some(transforms) = world.components::<Transform>() else {
+            return;
+        };
+        for (entity, transform) in transforms.iter() {
             if this.get(entity).is_some() {
                 continue;
             }
@@ -118,8 +140,8 @@ impl WorldTransforms {
             let mut above = Mat3::IDENTITY;
             loop {
                 chain.push(cursor);
-                let Some(parent) = world
-                    .get::<Parent>(cursor)
+                let Some(parent) = parents
+                    .and_then(|parents| parents.get(cursor))
                     .and_then(|link| link.entity)
                     .filter(|parent| world.is_alive(*parent))
                 else {
@@ -136,12 +158,20 @@ impl WorldTransforms {
                 cursor = parent;
             }
 
-            for entity in chain.iter().rev().copied() {
-                above *= local_matrix(world, entity);
-                this.insert(entity, above);
+            for link in chain.iter().rev().copied() {
+                // The query's own transform for the entity itself, rather
+                // than asking the world for it again.
+                above *= if link == entity {
+                    transform.matrix()
+                } else {
+                    // A grouping node without a transform adds no frame.
+                    transforms
+                        .get(link)
+                        .map_or(Mat3::IDENTITY, Transform::matrix)
+                };
+                this.insert(link, above);
             }
         }
-        this
     }
 
     fn insert(&mut self, entity: Entity, matrix: Mat3) {

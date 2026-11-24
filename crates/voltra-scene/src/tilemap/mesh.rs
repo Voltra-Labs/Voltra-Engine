@@ -11,7 +11,7 @@ use super::cache::{LayerCache, LayerStamp};
 use super::chunk::{cell_of, ChunkKey, CHUNK};
 use super::{Tile, Tilemap};
 use crate::batch::{SpriteBatch, Surface};
-use crate::sprite::quad::{flipped, WHOLE};
+use crate::sprite::quad::WHOLE;
 use crate::sprite::sheets::Sheets;
 
 /// Appends every tile of `map`, placed by `matrix`, to `batch`, with nothing
@@ -25,7 +25,7 @@ pub fn push(batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap, sheets: Sheets
         for (index, tile) in chunk.tiles() {
             let (uvs, texture) = sample(map, tile, sheets);
             let corners = corners_of(map, cell_of(key, index));
-            batch.push_quad_on(
+            batch.push_rect_on(
                 matrix,
                 corners,
                 uvs,
@@ -143,7 +143,22 @@ pub(super) fn sample(
     let ((min, max), texture) =
         found.unwrap_or((WHOLE, sheets.placeholder().or(map.texture_handle)));
 
-    let (u0, u1) = flipped(tile.flip_x, min[0], max[0]);
-    let (v0, v1) = flipped(tile.flip_y, min[1], max[1]);
-    ([[u0, v0], [u0, v1], [u1, v1], [u1, v0]], texture)
+    // Each corner of the cell as drawn — top-left, bottom-left, bottom-right,
+    // top-right, `y` down — samples where the tile's orientation sends it.
+    let uv = |corner: Vec2| {
+        let at = tile.sample(corner);
+        [
+            min[0] + (max[0] - min[0]) * at.x,
+            min[1] + (max[1] - min[1]) * at.y,
+        ]
+    };
+    (
+        [
+            uv(Vec2::new(0.0, 0.0)),
+            uv(Vec2::new(0.0, 1.0)),
+            uv(Vec2::new(1.0, 1.0)),
+            uv(Vec2::new(1.0, 0.0)),
+        ],
+        texture,
+    )
 }

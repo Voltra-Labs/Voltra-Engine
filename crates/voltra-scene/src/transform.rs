@@ -1,6 +1,6 @@
 //! Where a thing is, how big it is, and which way it faces.
 
-use voltra_render::glam::{Affine2, Mat3, Vec2};
+use voltra_render::glam::{Affine2, Mat3, Vec2, Vec3};
 
 /// A 2D position, rotation and scale.
 ///
@@ -54,6 +54,18 @@ impl Transform {
     /// Scale, then rotate, then translate. Any other order makes an object's
     /// position depend on its size or facing.
     pub fn matrix(&self) -> Mat3 {
+        if self.rotation == 0.0 {
+            // An unturned transform — most sprites, every tile layer — needs
+            // no sine or cosine, which are most of composing one: sin ±0 is
+            // ±0 and cos 0 is 1, so this is `from_scale_angle_translation`'s
+            // matrix to the bit, without the call.
+            let (sin, cos) = (self.rotation, 1.0);
+            return Mat3::from_cols(
+                Vec3::new(cos * self.scale.x, sin * self.scale.x, 0.0),
+                Vec3::new(-sin * self.scale.y, cos * self.scale.y, 0.0),
+                Vec3::new(self.translation.x, self.translation.y, 1.0),
+            );
+        }
         Mat3::from_scale_angle_translation(self.scale, self.rotation, self.translation)
     }
 
@@ -88,6 +100,28 @@ mod tests {
 
     fn apply(transform: &Transform, point: Vec2) -> Vec2 {
         transform.matrix().transform_point2(point)
+    }
+
+    #[test]
+    fn an_unturned_matrix_is_the_general_one_to_the_bit() {
+        for rotation in [0.0, -0.0] {
+            let transform = Transform {
+                translation: Vec2::new(3.5, -2.0),
+                rotation,
+                scale: Vec2::new(-2.0, 0.25),
+            };
+            let general = Mat3::from_scale_angle_translation(
+                transform.scale,
+                transform.rotation,
+                transform.translation,
+            );
+            let bits = |m: Mat3| m.to_cols_array().map(f32::to_bits);
+            assert_eq!(
+                bits(transform.matrix()),
+                bits(general),
+                "rotation {rotation}"
+            );
+        }
     }
 
     #[test]

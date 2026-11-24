@@ -396,3 +396,23 @@ fn the_position_comes_back_with_undo_and_a_new_edit_is_somewhere_new() {
     history.clear();
     assert_eq!(history.position(), 0);
 }
+
+#[test]
+fn a_skipped_frame_records_the_world_swapped_under_it_as_nothing() {
+    let mut host = FakeHost::new();
+    let fixture = Fixture::new();
+    let mut history = History::default();
+    let id = spawn(&mut host.world, 0.0);
+    record_move(&mut history, &mut host, &fixture, id, 1.0);
+
+    // The scene replaced mid-frame, as prefab mode does on the way in or out.
+    history.watch(view(&host, &fixture), [id]);
+    move_to(&mut host.world, id, 9.0);
+    history.skip_frame();
+    history.end_frame(view(&host, &fixture));
+
+    assert_eq!(history.len(), 1, "the entries before it are kept");
+    // The next frame watches afresh, and an edit in it is one.
+    record_move(&mut history, &mut host, &fixture, id, 2.0);
+    assert_eq!(history.len(), 2);
+}

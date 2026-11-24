@@ -38,6 +38,14 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
     if frame.world.get::<PrefabPart>(entity).is_none() {
         ui.label(RichText::new("added to the instance: its own").weak());
     }
+    if ui
+        .button("Edit prefab")
+        .on_hover_text("open the prefab on its own; Back returns here, and this instance follows")
+        .clicked()
+    {
+        // Next frame: the rest of this inspector still draws this entity.
+        editor.prefab_mode.request_edit(source.clone());
+    }
 
     let mut revert = None;
     for name in &overridden {

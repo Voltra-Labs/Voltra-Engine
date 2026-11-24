@@ -15,12 +15,16 @@
 mod buffer;
 mod colliders;
 mod pipelines;
+mod spawn_shape;
+mod tables;
 mod uniforms;
 
 pub use buffer::GpuParticles;
 pub use colliders::{ParticleCollider, ParticleResponse};
 pub use pipelines::ParticlePipelines;
-pub use uniforms::{ParticleLook, SimStep};
+pub use spawn_shape::SpawnShape;
+pub use tables::{ParticleTables, TABLE_SAMPLES};
+pub use uniforms::{FrameTiming, ParticleLook, SimStep};
 
 /// The most particles one GPU emitter may hold.
 pub const MAX_GPU_PARTICLES: u32 = 1 << 20;

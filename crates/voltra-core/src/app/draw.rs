@@ -21,7 +21,9 @@ impl App {
     pub(super) fn redraw_without_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.update_skinned_meshes();
         self.resolve_materials();
+        self.resolve_text_icons();
         let (Some(renderer), Some(textures), Some(atlases), Some(fonts)) = (
             self.renderer.as_mut(),
             self.textures.as_mut(),
@@ -64,6 +66,7 @@ impl App {
                 batch: &mut self.frame_batch,
                 tile_meshes: &mut self.tile_meshes,
                 gpu_rings: &self.gpu_rings,
+                skins: &self.skinned_meshes,
                 materials: self.materials.as_ref(),
                 material_bank: &mut self.material_bank,
                 pool: &mut self.camera_pool,
@@ -101,7 +104,11 @@ impl App {
         // Into last frame's buffers, taken out for the frame and put back.
         let mut batch = std::mem::take(&mut self.frame_batch);
         batch.rebuild(&self.world, sheets, &mut self.tile_meshes);
-        let mesh = batch.upload(renderer.context().device());
+        let mesh = batch.upload_into(
+            renderer.context().device(),
+            renderer.context().queue(),
+            &mut self.batch_buffers,
+        );
         // Cloned (a cheap ref-count bump — `wgpu::BindGroup` is `Clone`)
         // rather than borrowed, so the borrow on `renderer` ends here instead
         // of surviving into the `&mut self` call below.
@@ -114,8 +121,14 @@ impl App {
             &batch,
             self.materials.as_ref(),
         );
-        let draws =
-            super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings, bank, None);
+        let draws = super::scene_draws::scene_draws(
+            &batch,
+            textures,
+            &white,
+            (&self.gpu_rings, &self.skinned_meshes),
+            bank,
+            None,
+        );
 
         let config = renderer.context().config();
         let hud = ui_batch(&self.world, sheets, config.width, config.height, scale);
@@ -135,7 +148,7 @@ impl App {
         );
         let _render = voltra_profile::scope("render");
         renderer.set_gpu_timing(voltra_profile::is_enabled());
-        renderer.render_mesh(mesh.as_ref(), &draws, layer, &post);
+        renderer.render_mesh(mesh, &draws, layer, &post);
         record_gpu_timings(renderer);
         self.frame_batch = batch;
     }
@@ -144,7 +157,9 @@ impl App {
     pub(super) fn redraw_with_ui(&mut self) {
         let _draw = voltra_profile::scope("draw");
         self.step_gpu_particles();
+        self.update_skinned_meshes();
         self.resolve_materials();
+        self.resolve_text_icons();
         let (
             Some(renderer),
             Some(window),
@@ -216,6 +231,7 @@ impl App {
                 batch: &mut self.frame_batch,
                 tile_meshes: &mut self.tile_meshes,
                 gpu_rings: &self.gpu_rings,
+                skins: &self.skinned_meshes,
                 materials: self.materials.as_ref(),
                 material_bank: &mut self.material_bank,
                 pool: &mut self.camera_pool,
@@ -233,8 +249,10 @@ impl App {
             silhouettes: self.silhouettes.as_mut(),
             sorting_layers: &self.sorting_layers,
             batch: &mut self.frame_batch,
+            buffers: &mut self.batch_buffers,
             tile_meshes: &mut self.tile_meshes,
             gpu_rings: &self.gpu_rings,
+            skins: &self.skinned_meshes,
             materials: self.materials.as_ref(),
             material_bank: &mut self.material_bank,
             elapsed: self.elapsed,
@@ -254,6 +272,7 @@ impl App {
         // to be drawn again.
         self.lines.clear();
 
+        let gpu_particles = renderer.particle_pipelines().is_some();
         let mut frame = UiFrame {
             world: &mut self.world,
             camera: &mut renderer.camera,
@@ -289,6 +308,8 @@ impl App {
             window: &mut self.window_requests,
             registry: &mut self.registry,
             game: &mut self.game,
+            net: &mut self.net,
+            gpu_particles,
         };
         {
             let _ui = voltra_profile::scope("ui");
@@ -324,6 +345,25 @@ impl App {
     pub(super) fn resolve_materials(&mut self) {
         if let Some(materials) = self.materials.as_mut() {
             voltra_scene::sprite_material::resolve_world(&mut self.world, materials);
+        }
+    }
+
+    /// Loads the atlases and textures rich texts' `[icon=…]` tags name —
+    /// every frame, as a language switch can bring an icon; a scan for the
+    /// tag when nothing changed.
+    pub(super) fn resolve_text_icons(&mut self) {
+        if let (Some(renderer), Some(atlases), Some(textures)) = (
+            self.renderer.as_ref(),
+            self.atlases.as_mut(),
+            self.textures.as_mut(),
+        ) {
+            voltra_scene::text::icons::resolve_world(
+                &mut self.world,
+                atlases,
+                textures,
+                renderer.context().device(),
+                renderer.context().queue(),
+            );
         }
     }
 }

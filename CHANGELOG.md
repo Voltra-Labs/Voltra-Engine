@@ -5,6 +5,56 @@ All notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/) — before 1.0, a minor version may
 break the API.
 
+## [0.3.0] — 2026-11-24
+
+The plan split this into 0.2 (2D polish, stages 88–110) and 0.3
+(networking, 111–118); both landed together, so they ship as one release.
+Every stage is a row in the README's roadmap and a decision in
+`docs/ARCHITECTURE.md`; the guide (`docs/guide/`) covers each from a
+user's side.
+
+### 2D polish
+- **Options and windows:** rebound controls saved on every platform, the
+  web included; fullscreen, window size, vsync and monitor modes from a
+  tick; a reusable options screen (display, audio, rebinding) that new
+  games get from `cargo xtask new-game`.
+- **Text:** shaped with HarfBuzz (`rustybuzz`) — ligatures, Arabic,
+  Devanagari — with a fallback font chain per language, bidirectional
+  order, Unicode line breaking, and rich text markup (`[b]`, `[color]`,
+  `[size]`, `[font]`, `[icon]`).
+- **UI:** dropdowns, tooltips, tabs, and themes (`.theme.ron`) swapped at
+  run time.
+- **Assets and levels:** a texture packer (`cargo xtask pack-atlas`, also in
+  the editor) with trimmed regions and pivots; an atlas editor; a tile
+  palette with stamps, rotation, flood fill and an eyedropper; per-tile
+  collision shapes (slopes, halves, polygons) and custom data.
+- **Effects and animation:** particles with curves, gradients, emitter
+  shapes, spin and flipbooks on CPU and GPU, edited live; `Line2D`,
+  `Polygon2D` and `Trail2D`; 2D bones with two-bone IK; skinned sprite
+  meshes with painted weights.
+- **Audio:** streamed clips with loop points, equal-power music
+  crossfades, and bus effects — filters, delay, reverb, ducking — laid out
+  in `default.buses.ron`.
+- **Editor:** prefab edit mode, and search in the hierarchy and assets
+  with Unity's `t:` syntax.
+- **Scale:** a benchmark suite (`voltra-bench`, `cargo xtask bench`) with a
+  regression check in CI, the optimisations it pointed at, and big worlds
+  streamed by region around anchors, with loading screens.
+
+### Networking
+- **`voltra-net`:** UDP and WebSocket transports (the browser included),
+  connections with a version handshake, reliable and unreliable channels,
+  fragmentation, typed messages; untrusted input bounded throughout.
+- **`voltra-server`:** a headless authoritative server; host, join and
+  listen servers from a tick.
+- **`voltra-replication`:** replicated components with snapshots, deltas
+  and a per-client byte budget; interpolation through a jitter buffer;
+  prediction and reconciliation of the local player.
+- **Editor:** play with up to three clients, link conditions changed live,
+  net counters in the profiler.
+- **`games/arena`:** a networked sample for two to four players, native and
+  on the web, played end to end in CI.
+
 ## [0.1.0] — 2026-11-24
 
 The first release of the Rust rewrite: a 2D engine an outsider can make and
@@ -53,4 +103,5 @@ ship a game with. The README's roadmap lists every stage; in short:
 - A user guide (`docs/guide/`), checked by CI; three sample games:
   `platformer`, `breakout` and `dodge`; every public item documented.
 
+[0.3.0]: https://github.com/Voltra-Labs/Voltra-Engine/releases/tag/v0.3.0
 [0.1.0]: https://github.com/Voltra-Labs/Voltra-Engine/releases/tag/v0.1.0

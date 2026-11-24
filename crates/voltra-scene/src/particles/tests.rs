@@ -241,14 +241,18 @@ fn particles_are_drawn_shrinking_and_fading() {
 
     let batch = SpriteBatch::from_world(&world, Sheets::default());
     assert_eq!(batch.sprite_count(), 1);
-    let xs: Vec<f32> = batch.vertices.iter().map(|v| v.position[0]).collect();
+    let xs: Vec<f32> = batch
+        .quad_vertices()
+        .iter()
+        .map(|v| v.position[0])
+        .collect();
     let width =
         xs.iter().copied().fold(f32::MIN, f32::max) - xs.iter().copied().fold(f32::MAX, f32::min);
     assert!(
         (width - 0.5).abs() < 0.05,
         "half way through, half the size: {width}"
     );
-    let alpha = batch.vertices[0].color[3];
+    let alpha = batch.quad_vertices()[0].color[3];
     assert!((alpha - 0.5).abs() < 0.05, "and half faded: {alpha}");
 }
 

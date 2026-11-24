@@ -18,6 +18,7 @@ pub mod handle;
 pub mod material;
 pub mod materials;
 pub mod pack;
+pub mod packer;
 pub mod path;
 pub mod placeholder;
 pub mod root;
@@ -27,10 +28,10 @@ pub mod store;
 pub mod textures;
 pub mod watch;
 
-pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, Grid};
+pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, FrameEntry, FrameMeta, Grid, Trim};
 pub use atlases::Atlases;
 pub use browse::{Entry, EntryKind};
-pub use clips::Clips;
+pub use clips::{ClipSettings, Clips, CLIP_SETTINGS_VERSION};
 pub use error::AssetError;
 pub use fonts::{Font, Fonts, DEFAULT_FONT};
 pub use handle::Handle;
@@ -41,7 +42,7 @@ pub use root::{default_root, ROOT_ENV};
 pub use silhouette::Silhouettes;
 pub use size::TextureSizes;
 pub use store::Assets;
-pub use textures::{RenderTexture, Textures};
+pub use textures::{DecodedTexture, RenderTexture, Textures};
 pub use watch::AssetWatcher;
 
 /// The rasterizer, for a caller that needs a face's own metrics. Only this

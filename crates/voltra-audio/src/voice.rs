@@ -5,7 +5,9 @@ use std::time::Duration;
 use crate::bus::BusId;
 use crate::clip::Clip;
 use crate::params::PlayParams;
-use crate::ramp::Ramp;
+use crate::ramp::{Curve, Ramp};
+use crate::retired::Retired;
+use crate::stream::{Feed, StreamReader};
 
 /// How long a gain change takes to arrive when nobody asked for a fade.
 ///
@@ -62,6 +64,7 @@ pub struct Voice {
     id: VoiceId,
     clip: Clip,
     /// Where in the clip this voice is reading, in frames, fractional.
+    /// Unused for a streamed clip, whose reader keeps its own place.
     ///
     /// `f64` rather than `f32`: a 24-bit mantissa stops being able to
     /// represent every frame index at about 16.7 million, which is six minutes
@@ -93,17 +96,36 @@ pub struct Voice {
     smoothing: u32,
     /// The device's rate, kept to convert the fades that arrive later.
     out_rate: u32,
+    /// Where a streamed clip's frames come from; `None` for a resident one.
+    stream: Option<StreamReader>,
 }
 
 impl Voice {
     /// A voice reading `clip` for a device running at `out_rate`, rising from
-    /// silence over `fade_in`.
+    /// silence over `fade_in` in a straight line.
     pub fn new(
         id: VoiceId,
         clip: Clip,
         params: PlayParams,
         out_rate: u32,
         fade_in: Duration,
+    ) -> Self {
+        Self::start(id, clip, None, params, out_rate, fade_in, Curve::Linear)
+    }
+
+    /// The general form of [`new`](Self::new): `feed` is the stream a
+    /// streamed clip plays from, and `curve` the shape of the fade in.
+    ///
+    /// A streamed clip with no feed plays nothing and is finished at once:
+    /// the stream could not be opened, and the main thread already said why.
+    pub fn start(
+        id: VoiceId,
+        clip: Clip,
+        feed: Option<Feed>,
+        params: PlayParams,
+        out_rate: u32,
+        fade_in: Duration,
+        curve: Curve,
     ) -> Self {
         let out_rate = out_rate.max(1);
         let step = f64::from(clip.rate()) / f64::from(out_rate) * f64::from(params.speed());
@@ -113,7 +135,7 @@ impl Voice {
         let fade_in = frames(fade_in, out_rate);
         if fade_in > 0 {
             fader.jump(0.0);
-            fader.set(1.0, fade_in);
+            fader.set_curved(1.0, fade_in, curve);
         }
 
         Self {
@@ -132,6 +154,7 @@ impl Voice {
             stopping: false,
             smoothing: frames(SMOOTHING, out_rate),
             out_rate,
+            stream: feed.map(StreamReader::new),
         }
     }
 
@@ -145,14 +168,12 @@ impl Voice {
         self.bus
     }
 
-    /// Takes the clip out of a voice that is being retired.
-    ///
-    /// The mixer hands it back to the main thread rather than dropping it
-    /// here: this is the last owner of an `Arc` most of the time, and freeing
-    /// a megabyte of samples inside the device callback is a pause in the
-    /// middle of a buffer nobody can afford.
-    pub fn into_clip(self) -> Clip {
-        self.clip
+    /// Takes apart a voice that is being retired — see [`Retired`].
+    pub fn into_retired(self) -> Retired {
+        Retired::Voice {
+            clip: self.clip,
+            feed: self.stream.map(StreamReader::into_feed),
+        }
     }
 
     /// Moves the sound without restarting it, arriving over [`SMOOTHING`].
@@ -171,42 +192,45 @@ impl Voice {
         self.right.set(right, self.smoothing);
     }
 
-    /// Slides the fader to `volume` over `over`.
+    /// Slides the fader to `volume` over `over`, along `curve`.
     ///
     /// Cancels a stop in progress: a fade-out interrupted by a fade-in is a
     /// voice the game has changed its mind about, and the ramp carries on from
     /// the level actually being heard.
-    pub fn fade(&mut self, volume: f32, over: Duration) {
+    pub fn fade(&mut self, volume: f32, over: Duration, curve: Curve) {
         self.stopping = false;
-        self.fader.set(volume, frames(over, self.out_rate));
+        self.fader
+            .set_curved(volume, frames(over, self.out_rate), curve);
     }
 
-    /// Fades the voice to silence over `over`, and ends it there.
-    pub fn stop(&mut self, over: Duration) {
+    /// Fades the voice to silence over `over` along `curve`, and ends it
+    /// there.
+    pub fn stop(&mut self, over: Duration, curve: Curve) {
         self.stopping = true;
-        self.fader.set(0.0, frames(over, self.out_rate));
+        self.fader
+            .set_curved(0.0, frames(over, self.out_rate), curve);
     }
 
     /// Whether the voice has read past the end of a clip it is not looping,
     /// or has finished fading out.
     pub fn is_finished(&self) -> bool {
+        if self.stopping && self.fader.is_settled() {
+            return true;
+        }
+        if self.clip.is_streamed() {
+            return self.stream.as_ref().is_none_or(StreamReader::is_finished);
+        }
         // An empty clip is finished on its first look, looping or not.
         // Otherwise a looping voice on a broken file would spin forever and
         // never free its slot.
-        self.clip.is_empty()
-            || (!self.looping && self.cursor >= self.clip.frames() as f64)
-            || (self.stopping && self.fader.is_settled())
+        self.clip.is_empty() || (!self.looping && self.cursor >= self.clip.frames() as f64)
     }
 
     /// Adds this voice into `out`, which holds `channels` samples per frame.
     ///
-    /// Adds rather than writes: the mixer clears the buffer once and every
-    /// voice sums into it, which is what mixing is.
-    ///
-    /// `bus` is a copy of the bus's ramp as the buffer starts. Every voice on
-    /// the bus steps its own copy frame by frame, so all of them hear the same
-    /// fade at the same frame, and the mixer advances the real one once
-    /// afterwards. That is per-bus gain without a per-bus buffer to sum into.
+    /// Adds rather than writes: the mixer clears its bus's block once and
+    /// every voice on the bus sums into it, which is what mixing is. The
+    /// bus's effects and gain are the mixer's, applied to the sum.
     ///
     /// Channel mapping, and the reason it is this and not a matrix: a mono
     /// clip is panned into the two channels, a stereo one keeps its sides, and
@@ -214,8 +238,8 @@ impl Voice {
     /// rest are left alone — surround is a speaker layout with its own
     /// vocabulary, not two channels copied around, and this engine has no way
     /// to author a position in it.
-    pub fn mix(&mut self, out: &mut [f32], channels: usize, mut bus: Ramp) {
-        if channels == 0 || self.clip.is_empty() {
+    pub fn mix(&mut self, out: &mut [f32], channels: usize) {
+        if channels == 0 || self.is_finished() {
             return;
         }
 
@@ -227,10 +251,13 @@ impl Voice {
                 return;
             }
 
-            let level = self.fader.tick() * bus.tick();
+            let level = self.fader.tick();
             let gain_left = self.left.tick() * level;
             let gain_right = self.right.tick() * level;
-            let (left, right) = self.read(frames, stereo_source);
+            let (left, right) = match &self.stream {
+                Some(stream) => stream.read(),
+                None => self.read(frames, stereo_source),
+            };
             match channels {
                 // One speaker: the two sides are summed at half, so a centred
                 // sound is as loud on a mono device as on a stereo one.
@@ -241,7 +268,19 @@ impl Voice {
                 }
             }
 
-            self.advance(frames);
+            match &mut self.stream {
+                Some(stream) => stream.advance(self.step),
+                None => self.advance(frames),
+            }
+        }
+    }
+
+    /// The frame a looping voice turns back at: the loop's end, or the
+    /// clip's.
+    fn loop_end(&self, frames: usize) -> f64 {
+        match self.clip.loop_end() {
+            Some(end) => end as f64,
+            None => frames as f64,
         }
     }
 
@@ -258,10 +297,11 @@ impl Voice {
         let fraction = (self.cursor - index) as f32;
         let index = index.max(0.0) as usize;
 
-        // A looping voice interpolates across the seam into frame zero rather
-        // than into the silence past the end, or every loop would click.
-        let next = if self.looping && index + 1 >= frames {
-            0
+        // A looping voice interpolates across the seam into the loop's start
+        // rather than into the silence past its end, or every loop would
+        // click.
+        let next = if self.looping && (index + 1) as f64 >= self.loop_end(frames) {
+            self.clip.loop_start() as usize
         } else {
             index + 1
         };
@@ -277,280 +317,24 @@ impl Voice {
         (left, right)
     }
 
-    /// Steps the cursor, wrapping a looping voice back into the clip.
+    /// Steps the cursor, wrapping a looping voice back to its loop's start.
     fn advance(&mut self, frames: usize) {
         self.cursor += self.step;
 
         if !self.looping {
             return;
         }
-        let length = frames as f64;
-        if self.cursor >= length {
+        let end = self.loop_end(frames);
+        if self.cursor >= end {
             // `%` rather than a subtraction: a voice pitched up far enough to
-            // step over the whole clip in one frame would otherwise stay past
+            // step over the whole loop in one frame would otherwise stay past
             // the end and be silent forever.
-            self.cursor %= length;
+            let start = self.clip.loop_start() as f64;
+            let length = end - start;
+            self.cursor = start + (self.cursor - start) % length;
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const ID: VoiceId = VoiceId(1);
-
-    /// A voice over `samples` with the device running at the clip's own rate,
-    /// so one output frame is one clip frame and the arithmetic is visible.
-    fn voice(samples: Vec<f32>, channels: u16, params: PlayParams) -> Voice {
-        Voice::new(
-            ID,
-            Clip::new(samples, channels, 8),
-            params,
-            8,
-            Duration::ZERO,
-        )
-    }
-
-    /// Hard left, so a mono voice writes its raw samples into channel 0 and
-    /// nothing into channel 1 — the pan law's `1.0` end.
-    fn left() -> PlayParams {
-        PlayParams {
-            pan: -1.0,
-            ..Default::default()
-        }
-    }
-
-    fn mix(voice: &mut Voice, frames: usize, channels: usize) -> Vec<f32> {
-        let mut out = vec![0.0; frames * channels];
-        voice.mix(&mut out, channels, Ramp::new(1.0));
-        out
-    }
-
-    #[test]
-    fn a_voice_at_the_device_s_own_rate_plays_its_samples_untouched() {
-        let mut voice = voice(vec![0.25, 0.5, 0.75], 1, left());
-        let out = mix(&mut voice, 3, 2);
-        assert_eq!(out, vec![0.25, 0.0, 0.5, 0.0, 0.75, 0.0]);
-    }
-
-    #[test]
-    fn a_voice_adds_into_the_buffer_rather_than_replacing_it() {
-        // What makes a mixer a mixer: two voices in one buffer.
-        let mut voice = voice(vec![0.25, 0.25], 1, left());
-        let mut out = vec![1.0, 0.0, 1.0, 0.0];
-        voice.mix(&mut out, 2, Ramp::new(1.0));
-        assert_eq!(out, vec![1.25, 0.0, 1.25, 0.0]);
-    }
-
-    #[test]
-    fn a_stereo_clip_keeps_its_sides() {
-        let params = PlayParams::default();
-        let mut voice = voice(vec![1.0, -1.0, 0.5, -0.5], 2, params);
-        let out = mix(&mut voice, 2, 2);
-
-        let (gain_left, gain_right) = params.gains();
-        assert!((out[0] - gain_left).abs() < 1e-6);
-        assert!((out[1] + gain_right).abs() < 1e-6);
-    }
-
-    #[test]
-    fn a_mono_clip_reaches_both_sides_when_it_is_centred() {
-        let mut voice = voice(vec![1.0], 1, PlayParams::default());
-        let out = mix(&mut voice, 1, 2);
-        assert!((out[0] - out[1]).abs() < 1e-6);
-        assert!(out[0] > 0.0);
-    }
-
-    #[test]
-    fn a_mono_device_sums_the_two_sides() {
-        let mut voice = voice(vec![1.0], 1, PlayParams::default());
-        let out = mix(&mut voice, 1, 1);
-        // Both sides at 0.707, halved: the same loudness a stereo device gets
-        // out of its pair.
-        assert!((out[0] - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-6);
-    }
-
-    #[test]
-    fn a_voice_that_runs_out_leaves_the_rest_of_the_buffer_alone() {
-        // The buffer is longer than the sound, which is every callback that
-        // contains the end of a one-shot.
-        let mut voice = voice(vec![1.0, 1.0], 1, left());
-        let out = mix(&mut voice, 4, 2);
-        assert_eq!(&out[4..], &[0.0, 0.0, 0.0, 0.0]);
-        assert!(voice.is_finished());
-    }
-
-    #[test]
-    fn a_finished_voice_stays_finished_and_adds_nothing_more() {
-        let mut voice = voice(vec![1.0], 1, left());
-        mix(&mut voice, 4, 2);
-        let again = mix(&mut voice, 4, 2);
-        assert_eq!(again, vec![0.0; 8]);
-    }
-
-    #[test]
-    fn an_empty_clip_is_finished_immediately_even_when_it_loops() {
-        // A file that would not decode, played by a source set to loop. The
-        // voice must not occupy a slot forever.
-        let looping = PlayParams {
-            looping: true,
-            ..Default::default()
-        };
-        let mut voice = voice(Vec::new(), 1, looping);
-        assert!(voice.is_finished());
-        assert_eq!(mix(&mut voice, 4, 2), vec![0.0; 8]);
-    }
-
-    #[test]
-    fn a_looping_voice_starts_again_at_the_end() {
-        let looping = PlayParams {
-            looping: true,
-            ..left()
-        };
-        let mut voice = voice(vec![0.5, 0.25], 1, looping);
-        let out = mix(&mut voice, 4, 2);
-        assert_eq!(out, vec![0.5, 0.0, 0.25, 0.0, 0.5, 0.0, 0.25, 0.0]);
-        assert!(!voice.is_finished());
-    }
-
-    #[test]
-    fn a_looping_voice_pitched_past_the_whole_clip_still_wraps() {
-        // The bug a subtraction instead of a modulo leaves behind: one step
-        // longer than the clip and the cursor never comes back.
-        let looping = PlayParams {
-            looping: true,
-            pitch: 8.0,
-            ..left()
-        };
-        let mut voice = voice(vec![1.0, 1.0, 1.0, 1.0], 1, looping);
-        let out = mix(&mut voice, 4, 2);
-        assert!(out.iter().any(|s| *s != 0.0), "it went silent: {out:?}");
-        assert!(!voice.is_finished());
-    }
-
-    #[test]
-    fn a_faster_pitch_reads_further_into_the_clip() {
-        let fast = PlayParams {
-            pitch: 2.0,
-            ..left()
-        };
-        let mut voice = voice(vec![0.0, 0.1, 0.2, 0.3], 1, fast);
-        let out = mix(&mut voice, 2, 2);
-        assert!((out[0] - 0.0).abs() < 1e-6);
-        assert!((out[2] - 0.2).abs() < 1e-6, "got {out:?}");
-    }
-
-    #[test]
-    fn a_device_running_faster_than_the_clip_interpolates_between_frames() {
-        // The everyday case: a 22 kHz file on a 44 kHz device.
-        let clip = Clip::new(vec![0.0, 1.0], 1, 8);
-        let mut voice = Voice::new(ID, clip, left(), 16, Duration::ZERO);
-        let out = mix(&mut voice, 2, 2);
-        assert!((out[0] - 0.0).abs() < 1e-6);
-        assert!((out[2] - 0.5).abs() < 1e-6, "got {out:?}");
-    }
-
-    #[test]
-    fn a_pitch_of_zero_holds_the_first_frame_rather_than_finishing() {
-        let held = PlayParams {
-            pitch: 0.0,
-            ..left()
-        };
-        let mut voice = voice(vec![0.75, 0.1], 1, held);
-        let out = mix(&mut voice, 3, 2);
-        assert_eq!(out, vec![0.75, 0.0, 0.75, 0.0, 0.75, 0.0]);
-    }
-
-    #[test]
-    fn moving_a_voice_changes_its_gains_without_restarting_it() {
-        let mut voice = voice(vec![1.0, 1.0, 1.0], 1, left());
-        mix(&mut voice, 1, 2);
-
-        voice.set_gain(1.0, 1.0);
-        let out = mix(&mut voice, 1, 2);
-
-        assert!(out[0].abs() < 1e-6, "it moved to the other ear");
-        assert!((out[1] - 1.0).abs() < 1e-6);
-        assert!(!voice.is_finished(), "and did not start over");
-    }
-
-    #[test]
-    fn a_zero_channel_buffer_is_ignored_rather_than_dividing_by_zero() {
-        let mut voice = voice(vec![1.0], 1, left());
-        let mut out = Vec::new();
-        voice.mix(&mut out, 0, Ramp::new(1.0));
-    }
-
-    /// A voice at 1 kHz over a constant clip, so fades are a few frames long
-    /// and readable.
-    fn slow(params: PlayParams, fade_in: Duration) -> Voice {
-        Voice::new(
-            ID,
-            Clip::new(vec![1.0; 64], 1, 1_000),
-            params,
-            1_000,
-            fade_in,
-        )
-    }
-
-    #[test]
-    fn a_fade_in_rises_from_silence() {
-        let mut voice = slow(left(), Duration::from_millis(4));
-        let out = mix(&mut voice, 5, 2);
-        let heard: Vec<f32> = out.iter().step_by(2).copied().collect();
-        assert_eq!(heard, vec![0.0, 0.25, 0.5, 0.75, 1.0]);
-    }
-
-    #[test]
-    fn a_fade_out_ends_the_voice_where_it_arrives() {
-        let mut voice = slow(left(), Duration::ZERO);
-        voice.stop(Duration::from_millis(2));
-        assert!(!voice.is_finished(), "it is still fading");
-
-        let out = mix(&mut voice, 4, 2);
-
-        assert!(voice.is_finished());
-        assert_eq!(out, vec![1.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0]);
-    }
-
-    #[test]
-    fn a_fade_cancels_a_stop_in_progress() {
-        let mut voice = slow(left(), Duration::ZERO);
-        voice.stop(Duration::from_millis(4));
-        mix(&mut voice, 2, 2);
-
-        voice.fade(1.0, Duration::from_millis(2));
-        mix(&mut voice, 8, 2);
-
-        assert!(!voice.is_finished(), "the game changed its mind");
-    }
-
-    #[test]
-    fn a_gain_change_slides_rather_than_steps() {
-        // At 1 kHz the smoothing is fifteen frames: the first frame after the
-        // change must still be near the old gain, not at the new one.
-        let mut voice = slow(left(), Duration::ZERO);
-        voice.set_gain(0.0, -1.0);
-
-        let out = mix(&mut voice, 16, 2);
-
-        assert!(out[0] > 0.9, "it jumped: {}", out[0]);
-        assert_eq!(out[30], 0.0, "and it arrives");
-    }
-
-    #[test]
-    fn the_bus_gain_multiplies_the_voice() {
-        let mut voice = slow(left(), Duration::ZERO);
-        let mut out = vec![0.0; 2];
-        voice.mix(&mut out, 2, Ramp::new(0.5));
-        assert_eq!(out[0], 0.5);
-    }
-
-    #[test]
-    fn durations_become_frames_at_the_device_s_rate() {
-        assert_eq!(frames(Duration::from_millis(15), 48_000), 720);
-        assert_eq!(frames(Duration::ZERO, 48_000), 0);
-        assert_eq!(frames(Duration::from_secs(u64::MAX), 48_000), u32::MAX);
-    }
-}
+mod tests;

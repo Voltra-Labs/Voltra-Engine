@@ -63,7 +63,7 @@ fn mesh(map: &Tilemap, atlases: &Atlases) -> SpriteBatch {
 }
 
 fn positions(batch: &SpriteBatch) -> Vec<[f32; 2]> {
-    batch.vertices.iter().map(|v| v.position).collect()
+    batch.quad_vertices().iter().map(|v| v.position).collect()
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn a_tile_samples_its_frame_of_the_sheet() {
 
     let batch = mesh(&map, &atlases);
 
-    let us: Vec<f32> = batch.vertices.iter().map(|v| v.uv[0]).collect();
+    let us: Vec<f32> = batch.quad_vertices().iter().map(|v| v.uv[0]).collect();
     assert_eq!(us, [0.5, 0.5, 0.75, 0.75]);
     assert_eq!(batch.ranges[0].texture, Some(sheet()));
 }
@@ -111,13 +111,14 @@ fn a_flipped_tile_swaps_its_uvs() {
             frame: 0,
             flip_x: true,
             flip_y: true,
+            transpose: false,
         }),
     );
 
     let batch = mesh(&map, &atlases);
 
     assert_eq!(
-        batch.vertices[0].uv,
+        batch.quad_vertices()[0].uv,
         [0.25, 1.0],
         "top-left samples bottom-right"
     );
@@ -177,7 +178,7 @@ fn a_layer_draws_among_sprites_by_sort_order() {
     let batch = SpriteBatch::from_world(&world, Sheets::new(&atlases, &Sizes));
 
     let xs: Vec<f32> = batch
-        .vertices
+        .quad_vertices()
         .iter()
         .step_by(4)
         .map(|v| v.position[0])
@@ -197,7 +198,7 @@ fn a_layer_moves_with_its_transform() {
 
     let batch = SpriteBatch::from_world(&world, Sheets::new(&atlases, &Sizes));
 
-    assert_eq!(batch.vertices[1].position, [5.0, 5.0]);
+    assert_eq!(batch.quad_vertices()[1].position, [5.0, 5.0]);
 }
 
 #[test]
@@ -234,7 +235,7 @@ fn an_animated_frame_samples_the_frame_its_clock_is_on() {
             &map,
             Sheets::new(&atlases, &Sizes).at_time(time),
         );
-        batch.vertices[0].uv[0]
+        batch.quad_vertices()[0].uv[0]
     };
     assert_eq!(u_at(0.0), 0.0, "frame 0 at the start");
     assert_eq!(u_at(0.75), 0.5, "frame 2 of four is half way across");
@@ -253,7 +254,23 @@ fn a_frame_with_no_animation_is_unchanged_by_the_clock() {
         &map,
         Sheets::new(&atlases, &Sizes).at_time(123.0),
     );
-    assert_eq!(batch.vertices[0].uv[0], 0.25);
+    assert_eq!(batch.quad_vertices()[0].uv[0], 0.25);
+}
+
+#[test]
+fn a_turned_tile_samples_its_frame_a_quarter_round() {
+    let (mut atlases, path) = atlases();
+    let mut map = layer(&mut atlases, &path);
+    map.set(IVec2::ZERO, Some(Tile::new(0).rotated_cw()));
+
+    let batch = mesh(&map, &atlases);
+
+    // Frame 0 is u 0..0.25, v 0..1. Turned clockwise, the cell's top-left
+    // shows what was the frame's bottom-left, and its top-right the
+    // frame's top-left.
+    assert_eq!(batch.quad_vertices()[0].uv, [0.0, 1.0], "top-left");
+    assert_eq!(batch.quad_vertices()[3].uv, [0.0, 0.0], "top-right");
+    assert_eq!(batch.quad_vertices()[2].uv, [0.25, 0.0], "bottom-right");
 }
 
 #[test]

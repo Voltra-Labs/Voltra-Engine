@@ -4,16 +4,16 @@
 
 A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs/wgpu) (Vulkan, Metal, DX12, GL, WebGPU) and [`winit`](https://github.com/rust-windowing/winit).
 
-> **Status: 0.1 — a 2D base.** Voltra was originally a C++/OpenGL engine; the
-> C++ tree is preserved in the `main` branch history and tagged
+> **Status: 0.3 — a 2D engine with networking.** Voltra was originally a
+> C++/OpenGL engine; the C++ tree is preserved in the `main` branch history and tagged
 > `v0-cpp-final`. The Rust rewrite is a 2D engine with an editor, a player,
-> native and web export, and games written as Rust crates the editor hot
-> reloads. 3D is on the roadmap, not in the tree. See
+> native and web export, multiplayer over UDP and WebSocket, and games
+> written as Rust crates the editor hot reloads. 3D is on the roadmap, not in the tree. See
 > [CHANGELOG.md](CHANGELOG.md).
 
 **New here? Start with [the guide](docs/guide/README.md)** — from install
-to a game in a browser. `games/` holds three sample games: `platformer`,
-`breakout` and `dodge`.
+to a game in a browser. `games/` holds four sample games: `platformer`,
+`breakout`, `dodge` and the networked `arena`.
 
 ## Design stance
 
@@ -55,7 +55,13 @@ cargo xtask dist --manifest platformer.build.ron   # a game with its own code
 cargo xtask new-game my-game                      # start a game of your own: games/my-game
 cargo xtask dist --web          # the same build for the browser (docs/WEB.md)
 cargo xtask guide               # run the guide's checked commands, as CI does
+cargo xtask pack-atlas <folder>                   # its PNGs into one sheet + .atlas.ron (--trim, --out)
+cargo xtask bench               # time the hot paths in release (--compare FILE: check for regressions)
 cargo run -p breakout           # a sample game (also: dodge, voltra-platformer)
+cargo run -p arena -- --host                      # the networked sample: host a match (UDP 7777, WS 7778)
+cargo run -p arena -- --join udp://127.0.0.1:7777 # ... and join it from another terminal
+cargo run -p arena --bin arena-server -- --asset-root games/arena/assets  # its dedicated server
+cargo run -p voltra-server -- scenes/sandbox.ron  # serve any scene headless to clients (--help)
 cargo run -p voltra-mcp -- --project .             # MCP server for an AI client (docs/MCP.md)
 cargo run -p voltra-editor -- --bridge             # editor an MCP client can drive live
 cargo build --workspace         # build everything
@@ -250,27 +256,39 @@ Voltra-Engine/
 │   ├── voltra-jobs/      # worker pool, scoped jobs that borrow — std only
 │   ├── voltra-profile/   # where a frame's time goes: scopes, counters — std only
 │   ├── voltra-assets/    # handles, paths, the texture cache, hot reload
-│   ├── voltra-render/    # GPU layer: passes, render targets, egui backend
+│   ├── voltra-render/    # GPU layer: passes, render targets, egui backend  (owns wgpu)
+│   ├── voltra-audio/     # mixer, buses and effects, streaming, the device  (owns cpal, symphonia)
 │   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
 │   ├── voltra-physics/   # rigid bodies, integration, contact detection
 │   ├── voltra-nav/       # navigation grids baked from colliders, A* paths
+│   ├── voltra-net/       # datagram transports (UDP, WebSocket) and connections
+│   ├── voltra-replication/ # snapshots and deltas to clients, interpolation, prediction
 │   ├── voltra-bridge/    # commands to a running editor over a loopback socket
 │   ├── voltra-mcp/       # binary: the MCP server, a project's tools for an AI
 │   ├── voltra-core/      # platform layer: event loop, window  (owns winit)
 │   ├── voltra-editor/    # binary: the editor and its panels
 │   ├── voltra-player/    # binary: runs a scene, or the build beside it
-│   └── xtask/            # `cargo xtask dist`: packages a build
+│   ├── voltra-server/    # binary: a scene headless at a fixed tick, hosted for clients
+│   ├── voltra-bench/     # benchmarks of the hot paths and the regression check
+│   ├── voltra-testkit/   # headless GPU scaffolding for the integration tests
+│   └── xtask/            # `cargo xtask …`: dist, new-game, pack-atlas, bench, guide
 ├── games/
-│   └── platformer/       # sample game crate: the editor loads it, its binary ships it
+│   ├── platformer/       # sample game crate: the editor loads it, its binary ships it
+│   ├── breakout/, dodge/ # two more: physics events; timers, tweens, sensors
+│   └── arena/            # networked sample: a listen or dedicated server, native and web
 └── docs/
     ├── ARCHITECTURE.md   # layering, crate graph, planned crates
-    └── CONVENTIONS.md    # naming, file/folder rules, code style
+    ├── CONVENTIONS.md    # naming, file/folder rules, code style, benchmarks
+    └── guide/            # the user guide, from install to a shipped game
 ```
 
 The workspace root is a *virtual manifest* — it has no `src/`, so no crate is
 privileged and plain `cargo build` covers everything.
 
 ## Roadmap
+
+Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
+3D comes next, with a plan of its own.
 
 | Stage | Scope | State |
 | --- | --- | --- |
@@ -381,6 +399,37 @@ privileged and plain `cargo build` covers everything.
 | 85 | Editor comfort: grid snapping, a console, project settings | done |
 | 86 | Touch: fingers as pointers, a tap as a click, virtual sticks | done |
 | 87 | Version 0.1: a user guide checked by CI, two more sample games, every public item documented | done |
+| 88 | Rebound controls saved through the saves storage, the web included | done |
+| 89 | Window settings from a tick: fullscreen, size, vsync, monitor modes | done |
+| 90 | An options-screen prefab: display, audio, rebinding | done |
+| 91 | Shaped text: HarfBuzz runs, a fallback font chain per language | done |
+| 92 | Bidirectional text and Unicode line breaking; the caret in visual order | done |
+| 93 | Rich text: inline colour, bold, size, font and icons | done |
+| 94 | UI 3: dropdown, tooltip, tabs, swappable themes | done |
+| 95 | Texture packer: `cargo xtask pack-atlas`, trimmed regions, pivots | done |
+| 96 | Atlas editor: slice by grid or by hand, preview, undo | done |
+| 97 | Tilemap editor: palette, stamps, rotation, flood fill, eyedropper | done |
+| 98 | Tiles with their own collision shapes and custom data | done |
+| 99 | Particles 2: curves, gradients, emitter shapes, spin, flipbooks — CPU and GPU | done |
+| 100 | Particle editor: curve and gradient widgets, live preview, presets | done |
+| 101 | `Line2D`, `Polygon2D` and `Trail2D` in the sprite batch | done |
+| 102 | 2D bones: skeletons, cut-out animation, two-bone IK | done |
+| 103 | Skinned sprite meshes: weights painted, deformed on the GPU | done |
+| 104 | Streaming music, loop points, equal-power crossfades | done |
+| 105 | Bus effects: filters, delay, reverb, ducking; `default.buses.ron` | done |
+| 106 | Editor: prefab edit mode, search in hierarchy and assets | done |
+| 107 | Benchmarks (`voltra-bench`, `cargo xtask bench`) and a regression check in CI | done |
+| 108 | Performance: instanced sprite quads, kept upload buffers, linear scene parsing | done |
+| 109 | Big worlds: regions streamed around anchors, loading screens | done |
+| 110 | Version 0.3: guide chapters for 88–118, the changelog (0.2 and 0.3 ship together) | done |
+| 111 | `voltra-net`: UDP and WebSocket transports, the web included | done |
+| 112 | Connections, channels and typed messages | done |
+| 113 | `voltra-server`; host, join, listen servers | done |
+| 114 | Replication: replicated components, snapshots, deltas, budgets | done |
+| 115 | Interpolation of remote entities through a jitter buffer | done |
+| 116 | Prediction and reconciliation of the local player | done |
+| 117 | Network play in the editor: clients, link conditions, counters | done |
+| 118 | `games/arena`: a networked sample, native and web | done |
 
 ## Contributing
 

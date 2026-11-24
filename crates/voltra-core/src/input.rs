@@ -18,9 +18,12 @@
 pub mod action;
 pub mod binding;
 pub mod drive;
+mod label;
 pub mod map;
 pub mod pads;
+pub mod player;
 mod query;
+pub mod rebinding;
 pub mod touch;
 pub mod typing;
 
@@ -31,6 +34,8 @@ pub use action::ActionState;
 pub use binding::{Binding, Direction, PadAxis, PadButton, TouchDir, TouchZone};
 pub use drive::{drive_action, HeldActions};
 pub use map::{Action, ActionMap, MapError};
+pub use player::PLAYER_CONTROLS;
+pub use rebinding::BindingKind;
 pub use touch::{Touch, TouchPhase};
 
 use action::ActionStates;

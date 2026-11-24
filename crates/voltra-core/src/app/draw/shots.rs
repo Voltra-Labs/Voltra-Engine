@@ -26,6 +26,8 @@ pub(in crate::app) struct ShotDraw<'a> {
     pub batch: &'a mut SpriteBatch,
     pub tile_meshes: &'a mut TileMeshCache,
     pub gpu_rings: &'a GpuParticleRings,
+    /// The renderer's half of every skinned sprite.
+    pub skins: &'a crate::app::skinned_meshes::SkinnedMeshes,
     pub materials: Option<&'a Materials>,
     pub material_bank: &'a mut Option<MaterialBank>,
     /// The scene and picture targets of the screen's cameras, by place in
@@ -112,7 +114,7 @@ impl ShotDraw<'_> {
             self.batch,
             self.textures,
             &white,
-            self.gpu_rings,
+            (self.gpu_rings, self.skins),
             bank,
             shot.target,
         );

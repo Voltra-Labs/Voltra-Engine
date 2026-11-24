@@ -87,6 +87,9 @@ pub enum MapError {
         /// The file involved.
         path: PathBuf,
     },
+    /// The player's own file could not be reached: no folder, a name
+    /// refused, a read or write that failed.
+    Storage(crate::saves::SaveError),
 }
 
 impl fmt::Display for MapError {
@@ -105,6 +108,7 @@ impl fmt::Display for MapError {
             Self::EmptyActionName { path } => {
                 write!(f, "{} names an action with an empty name", path.display())
             }
+            Self::Storage(source) => write!(f, "the player's controls: {source}"),
         }
     }
 }
@@ -115,6 +119,7 @@ impl std::error::Error for MapError {
             Self::Io { source, .. } => Some(source),
             Self::Parse { source, .. } => Some(source),
             Self::Serialize(source) => Some(source),
+            Self::Storage(source) => Some(source),
             Self::UnsupportedVersion { .. } | Self::EmptyActionName { .. } => None,
         }
     }
@@ -164,23 +169,19 @@ impl ActionMap {
             .map_err(MapError::Serialize)
     }
 
-    /// Writes the map to `path` — wherever the game keeps a player's
-    /// settings. Through a temporary file and a rename, so a crash mid-write
-    /// leaves the previous file rather than half of this one.
+    /// Writes the map to `path`: a tool writing the project's own map
+    /// (the editor's Project Settings, a script). Through the same storage
+    /// a player's files go through — a temporary file and a rename, so a
+    /// crash mid-write leaves the previous file rather than half of this
+    /// one. A player's rebound controls go through
+    /// [`save_player`](Self::save_player) instead, which finds their folder
+    /// on every platform, the web included.
     pub fn save(&self, path: &Path) -> Result<(), MapError> {
         let text = self.to_ron()?;
-        let io = |source| MapError::Io {
+        crate::storage::write(path, &text).map_err(|source| MapError::Io {
             path: path.to_path_buf(),
             source,
-        };
-        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
-            std::fs::create_dir_all(parent).map_err(io)?;
-        }
-        let mut temporary = path.as_os_str().to_owned();
-        temporary.push(".tmp");
-        let temporary = PathBuf::from(temporary);
-        std::fs::write(&temporary, text).map_err(io)?;
-        std::fs::rename(&temporary, path).map_err(io)
+        })
     }
 
     /// The bindings of `action`, empty for an action the map does not have.

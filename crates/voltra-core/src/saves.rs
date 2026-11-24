@@ -1,4 +1,6 @@
-//! Save games: named slots holding whatever the game serialises.
+//! Save games: named slots holding whatever the game serialises — and,
+//! beside them, the player's other files: the controls they rebound, the
+//! options they chose.
 //!
 //! Unreal's shape — `SaveGameToSlot` with a game-defined `USaveGame` — rather
 //! than a snapshot of the world. A world holds what the *level* is, and much
@@ -9,17 +11,11 @@
 //! crash cannot leave half of it, and reading it back without trusting it.
 
 pub mod dir;
-#[cfg(not(target_arch = "wasm32"))]
-mod native;
-#[cfg(target_arch = "wasm32")]
-mod web;
+mod error;
+mod files;
 
-#[cfg(not(target_arch = "wasm32"))]
-use native as storage;
-#[cfg(target_arch = "wasm32")]
-use web as storage;
+pub use error::SaveError;
 
-use std::fmt;
 use std::path::{Path, PathBuf};
 
 use serde::de::DeserializeOwned;
@@ -28,90 +24,25 @@ use serde::Serialize;
 /// The extension every slot file carries.
 pub const EXTENSION: &str = "save.ron";
 
-/// The most a slot may hold. A save is a file the player can edit, copy in
-/// from a forum or have corrupted by a full disk; reading one is never an
-/// unbounded allocation.
+/// The most a slot — or any other of the player's files — may hold. A save
+/// is a file the player can edit, copy in from a forum or have corrupted by
+/// a full disk; reading one is never an unbounded allocation.
 pub const MAX_SAVE_BYTES: u64 = 16 * 1024 * 1024;
 
 /// The longest slot name accepted.
 pub const MAX_SLOT_LEN: usize = 64;
 
-/// Why a save could not be written, read or removed.
-#[derive(Debug)]
-pub enum SaveError {
-    /// The environment names no home for a saves folder; see
-    /// [`dir::SAVE_DIR_ENV`].
-    NoSaveDir,
-    /// A slot name that is empty, too long, or not just letters, digits,
-    /// `-` and `_` — which is what keeps a slot inside the saves folder.
-    BadSlot(String),
-    /// The slot file is over [`MAX_SAVE_BYTES`].
-    TooLarge {
-        /// The slot file.
-        path: PathBuf,
-        /// Its size in bytes.
-        bytes: u64,
-    },
-    /// The slot file could not be read, written or removed.
-    Io {
-        /// The file involved.
-        path: PathBuf,
-        /// The underlying I/O error.
-        source: std::io::Error,
-    },
-    /// The value could not be written as RON.
-    Serialize(ron::Error),
-    /// The slot file is not RON for the type asked for.
-    Parse {
-        /// The file that did not parse.
-        path: PathBuf,
-        /// The parser's error, with its position.
-        source: Box<ron::error::SpannedError>,
-    },
-}
+/// The longest name accepted for a player's file beside the slots
+/// ([`Saves::write_text`]).
+pub const MAX_FILE_NAME_LEN: usize = 96;
 
-impl fmt::Display for SaveError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NoSaveDir => write!(
-                f,
-                "no folder to save into: the environment names no home (set {})",
-                dir::SAVE_DIR_ENV
-            ),
-            Self::BadSlot(slot) => write!(
-                f,
-                "`{slot}` is not a slot name: 1 to {MAX_SLOT_LEN} letters, digits, `-` or `_`"
-            ),
-            Self::TooLarge { path, bytes } => write!(
-                f,
-                "{} is {bytes} bytes, over the {MAX_SAVE_BYTES}-byte limit",
-                path.display()
-            ),
-            Self::Io { path, source } => write!(f, "{}: {source}", path.display()),
-            Self::Serialize(source) => write!(f, "could not write the save: {source}"),
-            Self::Parse { path, source } => {
-                write!(
-                    f,
-                    "{} is not a save this game can read: {source}",
-                    path.display()
-                )
-            }
-        }
-    }
-}
-
-impl std::error::Error for SaveError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Io { source, .. } => Some(source),
-            Self::Serialize(source) => Some(source),
-            Self::Parse { source, .. } => Some(source),
-            _ => None,
-        }
-    }
-}
-
-/// A game's save slots, in one folder.
+/// A game's save slots, in one folder — and the player's other files,
+/// beside them ([`write_text`](Self::write_text), [`save_file`](Self::save_file)).
+///
+/// One folder for all of a player's files, slots or not: the environment
+/// override that moves saves ([`dir::SAVE_DIR_ENV`]) moves the rest with
+/// them, so a portable build or a test keeps every one of them out of the
+/// real profile.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Saves {
     dir: Option<PathBuf>,
@@ -137,13 +68,10 @@ impl Saves {
         self.dir.as_deref()
     }
 
-    /// Where `slot` lives — also what a game hands
-    /// [`ActionMap::save`](crate::ActionMap::save) to keep a player's
-    /// bindings beside their saves.
+    /// Where `slot` lives: a file natively, a `localStorage` key on the web.
     pub fn path_of(&self, slot: &str) -> Result<PathBuf, SaveError> {
         check_slot(slot)?;
-        let dir = self.dir.as_ref().ok_or(SaveError::NoSaveDir)?;
-        Ok(dir.join(format!("{slot}.{EXTENSION}")))
+        self.path_of_file(&slot_file(slot))
     }
 
     /// Writes `data` to `slot`, replacing what was there. Natively through a
@@ -151,15 +79,8 @@ impl Saves {
     /// save rather than half of this one; on the web one `localStorage`
     /// write, which the browser already makes whole or not at all.
     pub fn save<T: Serialize>(&self, slot: &str, data: &T) -> Result<(), SaveError> {
-        let path = self.path_of(slot)?;
-        let text = ron::ser::to_string_pretty(data, ron::ser::PrettyConfig::default())
-            .map_err(SaveError::Serialize)?;
-        storage::write(&path, &text).map_err(|source| SaveError::Io {
-            path: path.clone(),
-            source,
-        })?;
-        log::info!("saved {}", path.display());
-        Ok(())
+        check_slot(slot)?;
+        self.save_file(&slot_file(slot), data)
     }
 
     /// What `slot` holds, or `None` if nothing was ever saved there.
@@ -168,30 +89,14 @@ impl Saves {
     /// from an older version of the game is something to tell the player
     /// about, not to silently start over from.
     pub fn load<T: DeserializeOwned>(&self, slot: &str) -> Result<Option<T>, SaveError> {
-        let path = self.path_of(slot)?;
-        let io = |source| SaveError::Io {
-            path: path.clone(),
-            source,
-        };
-        let Some(bytes) = storage::size(&path).map_err(io)? else {
-            return Ok(None);
-        };
-        if bytes > MAX_SAVE_BYTES {
-            return Err(SaveError::TooLarge { path, bytes });
-        }
-        let text = storage::read(&path).map_err(io)?;
-        ron::from_str(&text)
-            .map(Some)
-            .map_err(|source| SaveError::Parse {
-                path,
-                source: Box::new(source),
-            })
+        check_slot(slot)?;
+        self.load_file(&slot_file(slot))
     }
 
     /// Removes `slot`. Returns whether there was one.
     pub fn delete(&self, slot: &str) -> Result<bool, SaveError> {
-        let path = self.path_of(slot)?;
-        storage::remove(&path).map_err(|source| SaveError::Io { path, source })
+        check_slot(slot)?;
+        self.remove_file(&slot_file(slot))
     }
 
     /// Every slot saved so far, sorted. Files that are not slots — a
@@ -202,7 +107,7 @@ impl Saves {
             return Vec::new();
         };
         let suffix = format!(".{EXTENSION}");
-        let mut slots: Vec<String> = storage::file_names(dir)
+        let mut slots: Vec<String> = crate::storage::file_names(dir)
             .into_iter()
             .filter_map(|name| {
                 let slot = name.strip_suffix(&suffix)?;
@@ -213,6 +118,11 @@ impl Saves {
         slots.sort();
         slots
     }
+}
+
+/// The file `slot` is kept in.
+fn slot_file(slot: &str) -> String {
+    format!("{slot}.{EXTENSION}")
 }
 
 fn check_slot(slot: &str) -> Result<(), SaveError> {

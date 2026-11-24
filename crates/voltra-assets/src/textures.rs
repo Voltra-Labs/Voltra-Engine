@@ -17,6 +17,7 @@ mod generated;
 mod preload;
 mod render_texture;
 
+pub use preload::DecodedTexture;
 pub use render_texture::{
     is_render_texture, RenderTexture, RenderTextureFile, RENDER_TEXTURE_SUFFIX,
 };

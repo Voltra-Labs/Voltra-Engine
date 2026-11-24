@@ -50,6 +50,24 @@ impl Tick<'_> {
         self.spawned.extend_from_slice(&instance.entities);
         Ok(instance)
     }
+
+    /// A copy of `entity` and everything under it, as the editor's
+    /// duplicate makes one: fresh ids, links inside it remapped, the copy a
+    /// root (parent it where it belongs) and linked to no prefab — every
+    /// component the registry knows, through the same cut a prefab file is
+    /// made with. What a screen built from a template row does once per
+    /// row.
+    pub fn duplicate(&mut self, entity: Entity) -> Result<Instance, SceneError> {
+        let file = prefab::fragment(self.world, self.registry, entity)?;
+        let copy = Prefab::new(file)?;
+        let instance = prefab::spawn(self.world, self.registry, &copy, &Transform::default())?;
+        for &made in &instance.entities {
+            self.world.remove::<voltra_scene::PrefabInstance>(made);
+            self.world.remove::<voltra_scene::PrefabPart>(made);
+        }
+        self.spawned.extend_from_slice(&instance.entities);
+        Ok(instance)
+    }
 }
 
 /// The prefab store, made on first use.
@@ -100,7 +118,7 @@ pub(super) fn resolve_entity(
         }
     }
     if let Some(map) = world.get_mut::<Tilemap>(entity) {
-        if let Some(atlases) = atlases {
+        if let Some(atlases) = atlases.as_deref_mut() {
             let path = map.atlas.clone();
             map.set_atlas(path, atlases);
         }
@@ -110,6 +128,12 @@ pub(super) fn resolve_entity(
             let normal = map.normal_map.clone();
             map.set_normal_map(normal, textures, device, queue);
         }
+    }
+    if let (Some(emitter), Some(atlases)) = (
+        world.get_mut::<voltra_scene::ParticleEmitter>(entity),
+        atlases,
+    ) {
+        emitter.resolve_atlas(atlases);
     }
     if let (Some(emitter), Some((textures, device, queue))) = (
         world.get_mut::<voltra_scene::ParticleEmitter>(entity),
@@ -124,6 +148,32 @@ pub(super) fn resolve_entity(
     ) {
         let path = light.cookie.clone();
         light.set_cookie(path, textures, device, queue);
+    }
+    if let (Some(line), Some((textures, device, queue))) =
+        (world.get_mut::<voltra_scene::Line2D>(entity), gpu.as_mut())
+    {
+        let path = line.texture.clone();
+        line.set_texture(path, textures, device, queue);
+    }
+    if let (Some(polygon), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::Polygon2D>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = polygon.texture.clone();
+        polygon.set_texture(path, textures, device, queue);
+    }
+    if let (Some(trail), Some((textures, device, queue))) =
+        (world.get_mut::<voltra_scene::Trail2D>(entity), gpu.as_mut())
+    {
+        let path = trail.texture.clone();
+        trail.set_texture(path, textures, device, queue);
+    }
+    if let (Some(skinned), Some((textures, device, queue))) = (
+        world.get_mut::<voltra_scene::SkinnedSprite>(entity),
+        gpu.as_mut(),
+    ) {
+        let path = skinned.texture.clone();
+        skinned.set_texture(path, textures, device, queue);
     }
     if let (Some(text), Some(fonts)) = (world.get_mut::<Text>(entity), fonts) {
         let path = text.font.clone();
@@ -158,7 +208,7 @@ impl App {
         }
     }
 
-    fn resolve_entity(&mut self, entity: Entity) {
+    pub(super) fn resolve_entity(&mut self, entity: Entity) {
         let context = self.renderer.as_ref().map(|renderer| renderer.context());
         let gpu = match (self.textures.as_mut(), context) {
             (Some(textures), Some(context)) => Some((textures, context.device(), context.queue())),

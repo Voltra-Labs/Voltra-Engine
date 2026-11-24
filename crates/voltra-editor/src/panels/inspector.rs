@@ -25,6 +25,9 @@ mod particles;
 mod path_field;
 mod prefab;
 mod shadow_caster;
+mod shapes2d;
+mod skeleton;
+mod skinned;
 mod sorting_layer;
 mod sprite;
 mod sprite_material;
@@ -33,13 +36,16 @@ mod tilemap;
 mod transform;
 mod ui_button;
 mod ui_controls;
+mod ui_dropdown;
 mod ui_rect;
 mod ui_scroll;
 mod ui_slice;
 mod ui_slider;
 mod ui_stack;
+mod ui_tabs;
 mod ui_text_field;
 mod ui_toggle;
+mod ui_tooltip;
 
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
@@ -166,6 +172,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                         tilemap::Palette {
                             sheet,
                             paint: &mut editor.paint,
+                            window: &mut editor.tile_palette.open,
                         },
                     ));
                 }
@@ -179,7 +186,77 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 }
                 if let Some(emitter) = frame.world.get_mut::<ParticleEmitter>(entity) {
                     ui.separator();
-                    claim = claim.or(particles::show(ui, emitter));
+                    claim = claim.or(particles::show(
+                        ui,
+                        emitter,
+                        particles::Stores {
+                            textures: frame.textures,
+                            atlases: frame.atlases,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
+                }
+                if let Some(line) = frame.world.get_mut::<voltra_scene::Line2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(shapes2d::line(
+                        ui,
+                        line,
+                        shapes2d::Context {
+                            entity,
+                            shape: &mut editor.shape,
+                            textures: frame.textures,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
+                }
+                if let Some(polygon) = frame.world.get_mut::<voltra_scene::Polygon2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(shapes2d::polygon(
+                        ui,
+                        polygon,
+                        shapes2d::Context {
+                            entity,
+                            shape: &mut editor.shape,
+                            textures: frame.textures,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
+                }
+                if let Some(trail) = frame.world.get_mut::<voltra_scene::Trail2D>(entity) {
+                    ui.separator();
+                    claim = claim.or(shapes2d::trail(
+                        ui,
+                        trail,
+                        shapes2d::Context {
+                            entity,
+                            shape: &mut editor.shape,
+                            textures: frame.textures,
+                            device: frame.device,
+                            queue: frame.queue,
+                        },
+                    ));
+                }
+                claim = claim.or(skinned::show(
+                    ui,
+                    frame.world,
+                    skinned::Context {
+                        entity,
+                        paint: &mut editor.weight_paint,
+                        textures: frame.textures,
+                        silhouettes: frame.silhouettes.as_deref_mut(),
+                        device: frame.device,
+                        queue: frame.queue,
+                    },
+                ));
+                let asked = skeleton::show(ui, frame.world, entity);
+                claim = claim.or(asked.claim);
+                if asked.child_bone {
+                    crate::spawn::record(editor, frame, "Add child bone", |frame| {
+                        crate::spawn::child_bone(frame, entity)
+                    });
                 }
                 if let Some(layer) = frame.world.get_mut::<Parallax>(entity) {
                     ui.separator();

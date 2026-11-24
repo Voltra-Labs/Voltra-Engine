@@ -8,10 +8,19 @@ use std::time::Duration;
 
 use crate::job::Job;
 use crate::scope::{Scope, ScopeState};
+use crate::task::{Slot, Task};
+
+/// What the workers take jobs from: a scope's, which a waiting caller helps
+/// with, and background tasks', which only workers run.
+#[derive(Default)]
+struct Queues {
+    scoped: VecDeque<Job>,
+    background: VecDeque<Job>,
+}
 
 /// What the workers and every scope share.
 pub(crate) struct Shared {
-    queue: Mutex<VecDeque<Job>>,
+    queue: Mutex<Queues>,
     /// Signalled when a job is queued, when a job finishes (a waiting scope
     /// may be done) and at shutdown.
     signal: Condvar,
@@ -21,8 +30,25 @@ pub(crate) struct Shared {
 impl Shared {
     #[cfg(not(target_arch = "wasm32"))]
     pub(crate) fn push(&self, job: Job) {
-        lock(&self.queue).push_back(job);
+        lock(&self.queue).scoped.push_back(job);
         self.signal.notify_one();
+    }
+
+    /// Queues a background task's job, for a worker only: a scope's caller
+    /// helping with its own jobs must not pick up a long load and stall the
+    /// frame it is part of.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn push_background(&self, job: Job) {
+        lock(&self.queue).background.push_back(job);
+        self.signal.notify_one();
+    }
+
+    /// Whether the pool has begun shutting down: no worker starts a
+    /// background job after that, so a task still queued is run by whoever
+    /// next asks for it.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn is_shut_down(&self) -> bool {
+        self.shutdown.load(Ordering::Acquire)
     }
 
     /// Wakes everyone waiting: a job finished, and the scope it belonged to
@@ -39,7 +65,7 @@ impl Shared {
                 return;
             }
             let mut queue = lock(&self.queue);
-            if let Some(job) = queue.pop_front() {
+            if let Some(job) = queue.scoped.pop_front() {
                 drop(queue);
                 job.run();
                 continue;
@@ -70,7 +96,7 @@ impl JobPool {
     /// one core, or a test that wants order, gets.
     pub fn new(workers: usize) -> Self {
         let shared = Arc::new(Shared {
-            queue: Mutex::new(VecDeque::new()),
+            queue: Mutex::new(Queues::default()),
             signal: Condvar::new(),
             shutdown: AtomicBool::new(false),
         });
@@ -122,6 +148,32 @@ impl JobPool {
         drop(wait);
         state.resume_panic();
         result
+    }
+
+    /// Hands `f` to the workers to run whenever one is free, and returns at
+    /// once; [`Task::poll`] collects the result. A worker takes a scope's
+    /// jobs before a task's, and a scope's caller never takes a task's, so
+    /// a long load submitted here does not stall a frame's own jobs.
+    ///
+    /// Where there are no workers — a pool of zero, the web — the work runs
+    /// on the first poll instead (see [`Task`]).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn submit<T: Send + 'static>(&self, f: impl FnOnce() -> T + Send + 'static) -> Task<T> {
+        let slot = Arc::new(Slot::new(Box::new(f)));
+        if self.workers.is_empty() {
+            return Task::new(slot, None);
+        }
+        let job_slot = Arc::clone(&slot);
+        self.shared
+            .push_background(Job::owned(Box::new(move || job_slot.run())));
+        Task::new(slot, Some(Arc::clone(&self.shared)))
+    }
+
+    /// Hands `f` over to run on the first [`Task::poll`]: the web has no
+    /// workers.
+    #[cfg(target_arch = "wasm32")]
+    pub fn submit<T: 'static>(&self, f: impl FnOnce() -> T + 'static) -> Task<T> {
+        Task::new(Arc::new(Slot::new(Box::new(f))))
     }
 
     /// Calls `f` on consecutive chunks of `items`, each at least `min_chunk`
@@ -187,11 +239,18 @@ fn work(shared: &Shared) {
         let job = {
             let mut queue = lock(&shared.queue);
             loop {
-                if let Some(job) = queue.pop_front() {
+                // A scope's jobs first: a frame is waiting on them, and a
+                // load can wait one job longer.
+                if let Some(job) = queue.scoped.pop_front() {
                     break Some(job);
                 }
+                // None after shutdown: a task left queued runs where it is
+                // next polled, rather than holding the drop up.
                 if shared.shutdown.load(Ordering::Acquire) {
                     break None;
+                }
+                if let Some(job) = queue.background.pop_front() {
+                    break Some(job);
                 }
                 queue = shared
                     .signal

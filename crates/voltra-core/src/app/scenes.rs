@@ -11,7 +11,7 @@
 //! entities go, and keeping track of what an additive load brought so it can
 //! be taken away again.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
@@ -26,18 +26,24 @@ use super::App;
 pub struct SceneLoad(u32);
 
 #[derive(Debug, Clone, PartialEq)]
-enum Request {
+pub(super) enum Request {
     Replace(AssetPath),
     Add(AssetPath, SceneLoad),
     Unload(SceneLoad),
+    /// A change over frames, with its loading screen (`loading/scene_change.rs`).
+    Change(AssetPath, Option<AssetPath>),
+    /// A world to stream, or none (`loading/streaming.rs`).
+    Stream(Option<AssetPath>),
 }
 
-/// What the ticks asked for this frame, and what every additive load brought.
+/// What the ticks asked for this frame, what every additive load brought,
+/// and the loads that span frames.
 #[derive(Debug, Default)]
 pub(super) struct Scenes {
-    requests: Vec<Request>,
+    pub(super) requests: Vec<Request>,
     next: u32,
     loaded: HashMap<SceneLoad, Vec<Entity>>,
+    pub(super) loading: super::loading::Loading,
 }
 
 impl Tick<'_> {
@@ -99,6 +105,8 @@ impl App {
                         }
                     }
                 }
+                Request::Change(path, screen) => self.begin_scene_change(&path, screen.as_ref()),
+                Request::Stream(world) => self.scenes.loading.request_streaming(world),
             }
         }
         // A scene saved with an older copy of a prefab arrives in step.
@@ -115,7 +123,18 @@ impl App {
         let Some(arrived) = self.spawn_scene(path) else {
             return;
         };
-        let keep: std::collections::HashSet<Entity> = arrived.iter().copied().collect();
+        let keep: HashSet<Entity> = arrived.iter().copied().collect();
+        self.sweep_roots(&keep);
+        // A change over frames underway, and the streamed world, were for
+        // the scene just swept.
+        self.scenes.loading.swept();
+        log::info!("changed to {} ({} entities)", path.as_str(), arrived.len());
+    }
+
+    /// Despawns every root but those in `keep` and the [`Persistent`] ones,
+    /// with everything under them: the old scene, on a change. What the
+    /// additive loads were tracking is forgotten with it.
+    pub(super) fn sweep_roots(&mut self, keep: &HashSet<Entity>) {
         let leaving: Vec<Entity> = self
             .world
             .entities()
@@ -125,10 +144,22 @@ impl App {
                     && self.world.get::<Persistent>(*entity).is_none()
             })
             .collect();
-        for entity in leaving {
-            if self.world.is_alive(entity) {
-                hierarchy::despawn_recursive(&mut self.world, entity);
+        // One pass over the links for the whole sweep, as an unload makes.
+        let mut leaving_set: HashSet<Entity> = leaving.iter().copied().collect();
+        let mut children: HashMap<Entity, Vec<Entity>> = HashMap::new();
+        for (child, link) in self.world.query::<voltra_scene::Parent>() {
+            if let Some(parent) = link.entity {
+                children.entry(parent).or_default().push(child);
             }
+        }
+        let mut frontier = leaving;
+        while let Some(entity) = frontier.pop() {
+            if let Some(under) = children.get(&entity) {
+                frontier.extend(under.iter().copied().filter(|c| leaving_set.insert(*c)));
+            }
+        }
+        for entity in leaving_set {
+            self.world.despawn(entity);
         }
         // Contacts, sleep and pending events all name a world that is gone;
         // ending every old pair with an event on the next step would report
@@ -136,7 +167,6 @@ impl App {
         self.physics_world.reset();
         self.pending_events.clear();
         self.scenes.loaded.clear();
-        log::info!("changed to {} ({} entities)", path.as_str(), arrived.len());
     }
 
     /// Reads `path` and spawns a copy of it, or logs why not. The entities

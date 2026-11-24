@@ -5,11 +5,15 @@
 //! [`quad`](crate::sprite::quad::quad) is one: a click must land on the
 //! pixels it appears to.
 
-use voltra_assets::fonts::{TextLayout, Wrap};
-use voltra_assets::{Font, Fonts, Handle};
+use std::sync::Arc;
+
+use voltra_assets::fonts::TextLayout;
+use voltra_assets::{Fonts, Handle};
 use voltra_render::glam::Vec2;
 use voltra_render::Texture;
 
+use super::markup::Style;
+use super::paragraph;
 use super::Text;
 
 /// One glyph's quad, in the entity's space.
@@ -20,6 +24,8 @@ pub struct GlyphQuad {
     pub corners: [Vec2; 4],
     /// Texture coordinates for each corner, in the same order.
     pub uvs: [[f32; 2]; 4],
+    /// Its colour: the text's, or its span's.
+    pub color: [f32; 4],
 }
 
 /// A text's laid-out box, in the entity's space: from the leftmost line's
@@ -45,14 +51,6 @@ impl Bounds {
     }
 }
 
-/// The resolved font a text draws with, if its handle names one with a
-/// face.
-fn font<'a>(text: &Text, fonts: &'a Fonts) -> Option<&'a Font> {
-    let font = fonts.try_get(text.font_handle?)?;
-    font.face()?;
-    Some(font)
-}
-
 /// Entity units per raster pixel, rasterized at `px`.
 fn scale(text: &Text, px: u32) -> f32 {
     text.size / px.max(1) as f32
@@ -64,6 +62,34 @@ fn offset(text: &Text, width: f32) -> f32 {
     -width * text.align.share()
 }
 
+/// `text` laid out at `px` raster pixels per em, wrapped at `width` entity
+/// units, or `None` with no usable font. Shaped, bidi-ordered and broken by
+/// [`Fonts::layout`], which caches it: the prepare, the draw and the pick
+/// of one frame share one layout.
+pub fn layout_at(
+    text: &Text,
+    fonts: &Fonts,
+    px: u32,
+    width: Option<f32>,
+) -> Option<Arc<TextLayout>> {
+    let font = text.font_handle?;
+    let paragraph = paragraph::of(text, fonts, font, px);
+    fonts.layout(
+        &paragraph.content,
+        &paragraph.spans,
+        text.wrap_at(px, width),
+    )
+}
+
+/// The rich-text styles of `text`'s spans, by tag; one default for plain
+/// text.
+fn styles(text: &Text, fonts: &Fonts, px: u32) -> Vec<Style> {
+    match text.font_handle {
+        Some(font) => paragraph::of(text, fonts, font, px).styles,
+        None => Vec::new(),
+    }
+}
+
 /// The laid-out box, or `None` with no usable font.
 pub fn bounds(text: &Text, fonts: &Fonts) -> Option<Bounds> {
     bounds_at(text, fonts, text.px(), text.max_width)
@@ -73,7 +99,7 @@ pub fn bounds(text: &Text, fonts: &Fonts) -> Option<Bounds> {
 /// `pixels_per_em` - what a screen-space text uses to land 1:1 on pixels —
 /// and wrapped at `width` entity units, or not at all.
 pub fn bounds_at(text: &Text, fonts: &Fonts, px: u32, width: Option<f32>) -> Option<Bounds> {
-    let layout = font(text, fonts)?.layout(&text.content, px, text.wrap_at(px, width))?;
+    let layout = layout_at(text, fonts, px, width)?;
     Some(bounds_of(text, &layout, px))
 }
 
@@ -85,31 +111,31 @@ fn bounds_of(text: &Text, layout: &TextLayout, px: u32) -> Bounds {
         left = left.min(start);
         right = right.max(start + width);
     }
-    let last = layout.line_widths.len().saturating_sub(1) as f32;
     Bounds {
-        min: Vec2::new(left, -last * layout.line_height + layout.descent) * s,
+        min: Vec2::new(left, -layout.last_baseline() + layout.descent) * s,
         max: Vec2::new(right, layout.ascent) * s,
     }
 }
 
-/// Where a caret can stand on the first line — before each character and
-/// after the last — as x in the entity's space, the alignment applied:
-/// `content.chars().count() + 1` stops for a line with no control
-/// characters. `None` with no usable font. Needs no glyph rasterized: the
-/// face's metrics place them.
+/// Where a caret can stand on the first line, as x in the entity's space,
+/// the alignment applied: one stop before each character of the content
+/// and one after the last, in the content's order — `chars().count() + 1`
+/// of them for one line. Right-to-left text puts a character's stop on its
+/// right. `None` with no usable font. Needs no glyph rasterized: the
+/// shaper's advances place them.
 pub fn caret_stops_at(text: &Text, fonts: &Fonts, px: u32) -> Option<Vec<f32>> {
-    let layout = font(text, fonts)?.layout(&text.content, px, Wrap::default())?;
+    let layout = layout_at(text, fonts, px, None)?;
     let s = scale(text, px);
     let width = layout.line_widths.first().copied().unwrap_or(0.0);
     let start = offset(text, width);
-    let mut stops: Vec<f32> = layout
-        .glyphs
-        .iter()
-        .filter(|glyph| glyph.line == 0)
-        .map(|glyph| (start + glyph.pen) * s)
-        .collect();
-    stops.push((start + width) * s);
-    Some(stops)
+    Some(
+        layout
+            .carets
+            .iter()
+            .filter(|caret| caret.line == 0)
+            .map(|caret| (start + caret.x) * s)
+            .collect(),
+    )
 }
 
 /// Every glyph quad a text draws, and the texture they sample.
@@ -130,16 +156,17 @@ pub fn glyphs_at(
     px: u32,
     width: Option<f32>,
 ) -> (Vec<GlyphQuad>, Option<Handle<Texture>>) {
-    let Some(font) = font(text, fonts) else {
+    let Some(layout) = layout_at(text, fonts, px, width) else {
         return (Vec::new(), None);
     };
-    let texture = font.texture();
-    let Some(layout) = font.layout(&text.content, px, text.wrap_at(px, width)) else {
-        return (Vec::new(), None);
-    };
-
     let s = scale(text, px);
-    let atlas = font.atlas();
+    let atlas = fonts.atlas();
+    let styles = styles(text, fonts, px);
+    let color_of = |tag: u32| {
+        styles
+            .get(tag as usize)
+            .map_or(text.color, |style| paragraph::color(text, style))
+    };
     let quads = layout
         .glyphs
         .iter()
@@ -148,8 +175,9 @@ pub fn glyphs_at(
             let rect = glyph.rect?;
             let m = glyph.metrics;
             let start = offset(text, layout.line_widths[placed.line]);
+            let baseline = -layout.baselines[placed.line] + placed.rise;
             let left = (start + placed.pen + m.xmin as f32) * s;
-            let bottom = (-(placed.line as f32) * layout.line_height + m.ymin as f32) * s;
+            let bottom = (baseline + m.ymin as f32) * s;
             let right = left + m.width as f32 * s;
             let top = bottom + m.height as f32 * s;
             Some(GlyphQuad {
@@ -160,8 +188,76 @@ pub fn glyphs_at(
                     Vec2::new(right, top),
                 ],
                 uvs: atlas.uvs(rect),
+                color: color_of(placed.tag),
             })
         })
         .collect();
-    (quads, texture)
+    (quads, fonts.texture())
+}
+
+/// The layout [`glyphs_at`] would draw from, for a caller that rasterizes
+/// it: what [`prepare`](super::prepare) does for every text.
+pub(crate) fn wrapped(text: &Text, fonts: &Fonts, px: u32) -> Option<Arc<TextLayout>> {
+    layout_at(text, fonts, px, text.max_width)
+}
+
+/// One inline icon's quad, in the entity's space.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IconQuad {
+    /// Top-left, bottom-left, bottom-right, top-right.
+    pub corners: [Vec2; 4],
+    /// Texture coordinates for each corner.
+    pub uvs: [[f32; 2]; 4],
+    /// The texture it samples.
+    pub texture: Handle<Texture>,
+    /// White faded by the text's alpha, or its run's `[color]`.
+    pub color: [f32; 4],
+}
+
+/// Every inline icon `text` draws, at `px` and wrapped at `width` as
+/// [`glyphs_at`] lays it out: each standing on its line's baseline in the
+/// em box the line gave it. Empty for an icon whose image did not resolve
+/// ([`icons::resolve_world`](super::icons::resolve_world) logs why).
+pub fn icons_at(text: &Text, fonts: &Fonts, px: u32, width: Option<f32>) -> Vec<IconQuad> {
+    if text.icons.is_empty() {
+        return Vec::new();
+    }
+    let Some(layout) = layout_at(text, fonts, px, width) else {
+        return Vec::new();
+    };
+    let styles = styles(text, fonts, px);
+    let s = scale(text, px);
+    layout
+        .objects
+        .iter()
+        .filter_map(|object| {
+            let style = styles.get(object.tag as usize)?;
+            let reference = style.icon.as_ref()?;
+            let icon = text
+                .icons
+                .iter()
+                .find(|icon| icon.reference == *reference)?;
+            let texture = icon.texture?;
+            let start = offset(text, layout.line_widths[object.line]);
+            let left = (start + object.pen) * s;
+            let bottom = -layout.baselines[object.line] * s;
+            let right = left + object.width * s;
+            let top = bottom + object.height * s;
+            let color = match style.color {
+                Some(_) => paragraph::color(text, style),
+                None => [1.0, 1.0, 1.0, text.color[3]],
+            };
+            Some(IconQuad {
+                corners: [
+                    Vec2::new(left, top),
+                    Vec2::new(left, bottom),
+                    Vec2::new(right, bottom),
+                    Vec2::new(right, top),
+                ],
+                uvs: icon.uvs,
+                texture,
+                color,
+            })
+        })
+        .collect()
 }

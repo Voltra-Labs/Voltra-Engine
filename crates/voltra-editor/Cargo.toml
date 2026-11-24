@@ -25,3 +25,7 @@ voltra-bridge.workspace = true
 voltra-player.workspace = true
 serde_json.workspace = true
 base64.workspace = true
+
+# The bridge test decodes its screenshots.
+[dev-dependencies]
+image.workspace = true

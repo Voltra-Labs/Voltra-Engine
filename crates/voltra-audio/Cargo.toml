@@ -12,6 +12,9 @@ repository.workspace = true
 cpal.workspace = true
 symphonia.workspace = true
 log.workspace = true
+# Bus settings and effect descriptions, read from a project file by the
+# engine above.
+serde.workspace = true
 
 # The browser's WebAudio as the output device; without it cpal has only a
 # silent host on wasm.

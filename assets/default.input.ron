@@ -18,5 +18,8 @@
         "ui_left": (bindings: [Key(ArrowLeft), Pad(DPadLeft)]),
         "ui_right": (bindings: [Key(ArrowRight), Pad(DPadRight)]),
         "ui_accept": (bindings: [Key(Enter), Key(NumpadEnter), Pad(South)]),
+        // Backing out of a menu, and opening one over the game.
+        "ui_cancel": (bindings: [Key(Escape), Pad(East)]),
+        "pause": (bindings: [Key(Escape), Pad(Start)]),
     },
 )

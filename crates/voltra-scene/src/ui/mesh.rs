@@ -15,6 +15,7 @@ use crate::text::{shape, ui_px, Text};
 
 mod clip;
 mod field;
+mod overlay;
 
 /// Draw order, then sprite (0) before text (1) on one entity.
 type ElementKey = (i32, u32, u32, u8);
@@ -77,6 +78,8 @@ pub fn batch(world: &World, sheets: Sheets<'_>, layout: &UiLayout, scale: f32) -
             },
         }
     }
+    // Over everything, unmasked: open lists, then tooltips.
+    overlay::push(&mut batch, world, sheets, layout, scale);
     batch
 }
 
@@ -155,17 +158,21 @@ fn push_text(mut target: Target<'_>, rect: Rect, text: &Text, sheets: Sheets<'_>
     let Some(bounds) = shape::bounds_at(text, fonts, px, width) else {
         return;
     };
-    let (quads, Some(texture)) = shape::glyphs_at(text, fonts, px, width) else {
-        return;
-    };
     let x = super::text_field::view::aligned_x(rect, text.align);
     // `bounds.max.y` is the ascent, in the text's own units — points here.
     let origin = (Vec2::new(x, rect.min.y + bounds.max.y) * scale).round();
     // Glyph quads come y-up in points; the target is y-down in pixels.
     let matrix = Mat3::from_translation(origin) * Mat3::from_scale(Vec2::new(scale, -scale));
+    for icon in shape::icons_at(text, fonts, px, width) {
+        let corners = icon.corners.map(|c| matrix.transform_point2(c));
+        target.push(corners, icon.uvs, icon.color, Some(icon.texture));
+    }
+    let (quads, Some(texture)) = shape::glyphs_at(text, fonts, px, width) else {
+        return;
+    };
     for glyph in quads {
         let corners = glyph.corners.map(|c| matrix.transform_point2(c));
-        target.push(corners, glyph.uvs, text.color, Some(texture));
+        target.push(corners, glyph.uvs, glyph.color, Some(texture));
     }
 }
 

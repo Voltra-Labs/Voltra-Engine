@@ -129,3 +129,32 @@ cargo test --workspace
 `cargo clippy` must be warning-free. A warning that is genuinely wrong gets an
 `#[allow(...)]` with a comment explaining why — never a blanket allow at crate
 level.
+
+## Performance
+
+The engine's hot paths — the sprite batch, tilemap meshing, physics steps,
+UI and text layout, scene parsing, a headless frame — are timed by
+`crates/voltra-bench`, and CI's `bench` job fails a PR that makes one
+slower than its threshold (each benchmark's own, measured from the
+runners' noise; `docs/ARCHITECTURE.md`, stage 107). To check a change
+before it gets there, time the base, then the change, on the same machine:
+
+```sh
+git switch main
+cargo xtask bench --runs 3 --save target/bench/base.json
+git switch my-branch
+cargo xtask bench --runs 3 --compare target/bench/base.json
+```
+
+`--runs 3` keeps each benchmark's best of three runs — a busy machine only
+ever adds time — and `--compare` fails when one regressed. `--filter
+batch/` runs only the benchmarks whose name holds the text, `--threshold
+10` compares every benchmark at 10 % instead of its own, and `--quick` only
+checks that the suite runs. Reports from two machines, or from a debug
+build, are refused rather than compared. The suite builds in release, so
+the first run takes a while.
+
+A new hot path gets a benchmark in `crates/voltra-bench/src/suite/` that
+builds its own input in code (not from a scene file someone may edit), so
+its number moves only when the code it times does.
+

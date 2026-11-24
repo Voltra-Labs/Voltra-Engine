@@ -12,10 +12,10 @@
 //! - **Local quads** — corners in the layer's space, UVs, texture — go stale
 //!   when the cells, the tile size, the sheet or atlas, the atlas's contents,
 //!   or an animated tile's current frame change.
-//! - **World vertices** — the local quads through the layer's matrix, in its
-//!   colour — go stale when the layer moves or is recoloured. A still layer
-//!   wholly in view is a copy; a moving one re-transforms, but never
-//!   re-resolves a frame.
+//! - **World quads** — the local quads through the layer's matrix, in its
+//!   colour, as the batch's instances — go stale when the layer moves or is
+//!   recoloured. A still layer wholly in view is a copy; a moving one
+//!   re-transforms, but never re-resolves a frame.
 //!
 //! A chunk straddling the edge of the view is pushed quad by quad from its
 //! local quads, so each quad is culled exactly as an uncached one would be:
@@ -29,7 +29,7 @@ use voltra_assets::Handle;
 use voltra_ecs::hash::FastMap;
 use voltra_ecs::Entity;
 use voltra_render::glam::{IVec2, Mat3, Vec2};
-use voltra_render::{Texture, Vertex};
+use voltra_render::{Primitives, QuadInstance, Texture};
 
 use super::chunk::{cell_of, Chunk, ChunkKey};
 use super::mesh::{corners_of, sample, surface};
@@ -135,9 +135,8 @@ struct LocalQuad {
 struct WorldMesh {
     matrix: Mat3,
     color: [f32; 4],
-    vertices: Vec<Vertex>,
-    /// Two triangles per quad, counted from the chunk's first vertex.
-    indices: Vec<u32>,
+    /// One instance per quad, as [`SpriteBatch::push_rect_on`] makes them.
+    quads: Vec<QuadInstance>,
     /// Consecutive quads sharing a texture, in order.
     runs: Vec<(Option<Handle<Texture>>, u32)>,
 }
@@ -211,7 +210,7 @@ impl LayerCache {
             entry.append_world(batch, matrix, map, material);
         } else {
             for quad in &entry.quads {
-                batch.push_quad_on(
+                batch.push_rect_on(
                     matrix,
                     quad.corners,
                     quad.uvs,
@@ -240,7 +239,7 @@ impl ChunkMesh {
         }
     }
 
-    /// The chunk's quads through `matrix`, as [`SpriteBatch::push_quad_on`]
+    /// The chunk's quads through `matrix`, as [`SpriteBatch::push_rect_on`]
     /// would have written them, copied in. The surfaces are `map`'s now —
     /// its normal map and light layers are not part of the mesh, so editing
     /// them rebuilds nothing.
@@ -260,17 +259,16 @@ impl ChunkMesh {
             self.world = Some(WorldMesh::of(&self.quads, matrix, color));
         }
         let world = self.world.as_ref().expect("made just above");
+        let quads = &world.quads;
 
-        let base = batch.vertices.len() as u32;
-        batch.vertices.extend_from_slice(&world.vertices);
-        let first = batch.indices.len() as u32;
-        batch
-            .indices
-            .extend(world.indices.iter().map(|index| base + index));
-        let mut start = first;
-        for &(texture, quads) in &world.runs {
-            let end = start + quads * crate::batch::QUAD_INDICES.len() as u32;
-            batch.extend_ranges(surface(map, texture, material), start..end);
+        let mut start = batch.quads.len() as u32;
+        batch.quads.extend_from_slice(quads);
+        for &(texture, count) in &world.runs {
+            let end = start + count;
+            batch.extend_ranges(
+                surface(map, texture, material),
+                Primitives::Quads(start..end),
+            );
             start = end;
         }
     }
@@ -278,20 +276,15 @@ impl ChunkMesh {
 
 impl WorldMesh {
     fn of(quads: &[LocalQuad], matrix: Mat3, color: [f32; 4]) -> Self {
-        let mut vertices = Vec::with_capacity(quads.len() * crate::batch::CORNERS_PER_QUAD);
-        let mut indices = Vec::with_capacity(quads.len() * crate::batch::QUAD_INDICES.len());
+        let mut instances = Vec::with_capacity(quads.len());
         let mut runs: Vec<(Option<Handle<Texture>>, u32)> = Vec::new();
         for quad in quads {
-            let base = vertices.len() as u32;
-            indices.extend(
-                crate::batch::QUAD_INDICES
-                    .iter()
-                    .map(|offset| base + offset),
-            );
-            for (corner, uv) in quad.corners.into_iter().zip(quad.uvs) {
-                let at = matrix.transform_point2(corner);
-                vertices.push(Vertex::new([at.x, at.y], color, uv));
-            }
+            instances.push(crate::batch::unchecked(
+                matrix,
+                quad.corners,
+                quad.uvs,
+                color,
+            ));
             match runs.last_mut() {
                 Some((texture, count)) if *texture == quad.texture => *count += 1,
                 _ => runs.push((quad.texture, 1)),
@@ -300,8 +293,7 @@ impl WorldMesh {
         Self {
             matrix,
             color,
-            vertices,
-            indices,
+            quads: instances,
             runs,
         }
     }

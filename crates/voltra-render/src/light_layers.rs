@@ -14,8 +14,9 @@ use std::sync::{Mutex, PoisonError};
 
 use wgpu::util::DeviceExt;
 
-use crate::mesh::{Mesh, Vertex};
+use crate::mesh::Mesh;
 use crate::particles::ParticlePipelines;
+use crate::pipeline::{SpritePipeline, SpritePipelineDescriptor};
 use crate::scene_draw::SceneDraw;
 use crate::shader;
 
@@ -24,7 +25,7 @@ pub const LAYER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Uint;
 
 /// Draws the batch's light layers. One per renderer.
 pub struct LayerPass {
-    pipeline: wgpu::RenderPipeline,
+    pipeline: SpritePipeline,
     /// GPU emitters' particles, through their own vertex stage; `None`
     /// without GPU particles, where every emitter is in the batch.
     particles: Option<wgpu::RenderPipeline>,
@@ -64,32 +65,23 @@ impl LayerPass {
             bind_group_layouts: &[Some(camera_layout), Some(texture_layout), Some(&layout)],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("sprite-layers"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
+        let pipeline = SpritePipeline::new(
+            device,
+            &SpritePipelineDescriptor {
+                label: "sprite-layers",
+                layout: &pipeline_layout,
                 module: &module,
-                entry_point: Some("vs_layers"),
-                compilation_options: Default::default(),
-                buffers: &[Some(Vertex::LAYOUT)],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_layers"),
-                compilation_options: Default::default(),
+                triangles_entry: "vs_layers",
+                quads_entry: "vs_layers_quad",
+                fragment_entry: "fs_layers",
                 // Integer targets do not blend: the last surface wins.
-                targets: &[Some(wgpu::ColorTargetState {
+                target: wgpu::ColorTargetState {
                     format: LAYER_FORMAT,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+                },
+            },
+        );
         let particles = particles.map(|particles| {
             particle_pipeline(
                 device,
@@ -166,7 +158,8 @@ impl LayerPass {
         #[derive(PartialEq)]
         enum Bound {
             Nothing,
-            Sprites,
+            Triangles,
+            Quads,
             Particles,
         }
         let mut bound = Bound::Nothing;
@@ -177,14 +170,19 @@ impl LayerPass {
                     let Some(mesh) = mesh else {
                         continue;
                     };
-                    if bound != Bound::Sprites {
-                        pass.set_pipeline(&self.pipeline);
+                    let kind = if range.primitives.is_quads() {
+                        Bound::Quads
+                    } else {
+                        Bound::Triangles
+                    };
+                    if bound != kind {
+                        pass.set_pipeline(self.pipeline.for_primitives(&range.primitives));
                         pass.set_bind_group(0, camera, &[]);
-                        bound = Bound::Sprites;
+                        bound = kind;
                     }
                     pass.set_bind_group(1, range.texture, &[]);
                     pass.set_bind_group(2, group, &[]);
-                    mesh.draw_range(&mut pass, range.indices.clone());
+                    mesh.draw_primitives(&mut pass, &range.primitives);
                 }
                 SceneDraw::Particles {
                     particles, texture, ..
@@ -201,6 +199,9 @@ impl LayerPass {
                     pass.set_bind_group(3, group, &[]);
                     particles.draw(&mut pass);
                 }
+                // Not drawn into the layer buffer yet: a skinned mesh is lit
+                // as if on every layer (stage 103's note).
+                SceneDraw::Skinned { .. } => {}
             }
         }
     }
@@ -211,6 +212,7 @@ fn layers_of(draw: &SceneDraw<'_>) -> u32 {
     match draw {
         SceneDraw::Mesh(range) => range.light_layers,
         SceneDraw::Particles { light_layers, .. } => *light_layers,
+        SceneDraw::Skinned { light_layers, .. } => *light_layers,
     }
 }
 

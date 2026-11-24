@@ -6,7 +6,8 @@
 //! no light that needs them pays nothing — the pass is not recorded. See
 //! `sprite_normals.wgsl` for the encoding and the tangent frame.
 
-use crate::mesh::{Mesh, Vertex};
+use crate::mesh::Mesh;
+use crate::pipeline::{SpritePipeline, SpritePipelineDescriptor};
 use crate::scene_draw::SceneDraw;
 use crate::texture::Texture;
 use crate::{shader, Filter};
@@ -25,7 +26,7 @@ pub const FLAT: wgpu::Color = wgpu::Color {
 
 /// Draws the batch's normals. One per renderer.
 pub struct NormalPass {
-    pipeline: wgpu::RenderPipeline,
+    pipeline: SpritePipeline,
     /// Bound as the normal map of ranges that have none: facing the screen,
     /// so they cover what is under them as a plain sprite should.
     flat: wgpu::BindGroup,
@@ -50,33 +51,24 @@ impl NormalPass {
             ],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("sprite-normals"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
+        let pipeline = SpritePipeline::new(
+            device,
+            &SpritePipelineDescriptor {
+                label: "sprite-normals",
+                layout: &layout,
                 module: &module,
-                entry_point: Some("vs_normals"),
-                compilation_options: Default::default(),
-                buffers: &[Some(Vertex::LAYOUT)],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_normals"),
-                compilation_options: Default::default(),
+                triangles_entry: "vs_normals",
+                quads_entry: "vs_normals_quad",
+                fragment_entry: "fs_normals",
                 // Replaced, not blended: the last thing drawn over a texel
                 // is the surface the light sees there.
-                targets: &[Some(wgpu::ColorTargetState {
+                target: wgpu::ColorTargetState {
                     format: NORMAL_FORMAT,
                     blend: None,
                     write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+                },
+            },
+        );
         // Facing the screen: (0, 0, 1).
         let flat = Texture::from_rgba8(
             device,
@@ -130,13 +122,20 @@ impl NormalPass {
         let Some(mesh) = mesh else {
             return;
         };
-        pass.set_pipeline(&self.pipeline);
-        pass.set_bind_group(0, camera, &[]);
+        // Which of the pair is bound: set again only when a range draws the
+        // other kind.
+        let mut bound: Option<bool> = None;
         for draw in draws {
             if let SceneDraw::Mesh(range) = draw {
+                let quads = range.primitives.is_quads();
+                if bound != Some(quads) {
+                    pass.set_pipeline(self.pipeline.for_primitives(&range.primitives));
+                    pass.set_bind_group(0, camera, &[]);
+                    bound = Some(quads);
+                }
                 pass.set_bind_group(1, range.texture, &[]);
                 pass.set_bind_group(2, range.normal.unwrap_or(&self.flat), &[]);
-                mesh.draw_range(&mut pass, range.indices.clone());
+                mesh.draw_primitives(&mut pass, &range.primitives);
             }
         }
     }

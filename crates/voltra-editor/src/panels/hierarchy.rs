@@ -6,6 +6,10 @@
 //! hierarchy reparents: drop onto a row to become its child, drop below the
 //! tree to become a root. The drop is applied *after* the tree is drawn — a
 //! reparent while walking the links would change the list being walked.
+//!
+//! The search box over it filters the tree to what matches — by name, and
+//! by component with `t:` (see [`crate::search`]) — keeping each match's
+//! parents, dimmed, so it is shown where it lives.
 
 use std::collections::HashSet;
 
@@ -15,25 +19,23 @@ use voltra_core::egui::{
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_scene::hierarchy::{self, HierarchyError};
-use voltra_scene::{Name, SceneId};
+use voltra_scene::SceneId;
 
 use crate::drag;
 use crate::editor::Editor;
+use crate::search::hierarchy::{filter, label, HierarchyFilter};
+use crate::search::Query;
 use crate::selection::Click;
-use crate::undo::SceneView;
+
+mod reparent;
+
+use reparent::{apply, Reparent};
 
 /// How far one level of nesting is indented, in points.
 ///
 /// Enough to read the shape of a deep tree in a 200-point panel, and not so
 /// much that four levels push a name off the edge.
 const INDENT: f32 = 14.0;
-
-/// A drop the tree asked for, applied once the walk is over.
-struct Reparent {
-    child: Entity,
-    /// `None` drops the entity at the top level.
-    parent: Option<Entity>,
-}
 
 /// What a walk over the tree collects, acted on once it is over: a drop
 /// would change the links being walked, and a Shift-click's range needs the
@@ -46,6 +48,8 @@ struct Walk {
     order: Vec<Entity>,
     request: Option<Reparent>,
     click: Option<(Entity, Click)>,
+    /// What a search left to show; `None` shows everything.
+    filter: Option<HierarchyFilter>,
 }
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
@@ -53,6 +57,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         .default_size(200.0)
         .show(ui, |ui| {
             ui.heading("Hierarchy");
+            ui.add(
+                egui::TextEdit::singleline(&mut editor.hierarchy_search)
+                    .hint_text("search: name, t:Sprite…")
+                    .desired_width(f32::INFINITY),
+            )
+            .on_hover_text("words in the name, and t: a component every match has");
             ui.separator();
 
             // Predicate is identity, not appearance — the same rule `Clear`
@@ -69,6 +79,25 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             }
 
             let mut walk = Walk::default();
+            let query = Query::parse(&editor.hierarchy_search);
+            if !query.is_empty() {
+                let found = filter(frame.world, &editor.registry, &query);
+                if !found.unknown.is_empty() {
+                    ui.label(
+                        RichText::new(format!(
+                            "no component is called {}",
+                            found.unknown.join(", ")
+                        ))
+                        .color(ui.visuals().error_fg_color),
+                    );
+                    return;
+                }
+                if found.matched.is_empty() {
+                    ui.label(RichText::new("no entity matches").italics().weak());
+                    return;
+                }
+                walk.filter = Some(found);
+            }
 
             // The whole tree is one drop zone, so releasing over the empty
             // space below the last row unparents. A row that took the payload
@@ -133,6 +162,15 @@ fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity
     if !walk.drawn.insert(entity) {
         return;
     }
+    // Under a search, a row is drawn if it matches or holds a match; a
+    // holder alone is dimmed, so the matches are what reads.
+    let text = match &walk.filter {
+        Some(found) if !found.shown.contains(&entity) => return,
+        Some(found) if !found.matched.contains(&entity) => {
+            RichText::new(label(frame.world, entity)).weak()
+        }
+        _ => RichText::new(label(frame.world, entity)),
+    };
     walk.order.push(entity);
 
     let selected = editor.selection.contains(entity);
@@ -143,9 +181,7 @@ fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity
     // the entity became almost impossible to select. `dnd_set_drag_payload`
     // publishes the payload on `drag_started` instead, so both gestures live on
     // one response and neither has to win a race with the other.
-    let response = ui
-        .selectable_label(selected, label(frame.world, entity))
-        .interact(Sense::drag());
+    let response = ui.selectable_label(selected, text).interact(Sense::drag());
 
     response.dnd_set_drag_payload(entity);
     if response.dragged() {
@@ -198,71 +234,6 @@ fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity
             row(editor, ui, frame, child, walk);
         }
     });
-}
-
-/// Performs a drop, as one undo entry.
-///
-/// The entity keeps its **world** placement across the move, which is what
-/// Unity, Unreal and Godot all do when a row is dragged in the hierarchy:
-/// dropping a sprite onto another one is a statement about what it belongs to,
-/// not a request to teleport it into the parent's frame. The primitive in
-/// `voltra-scene` does the opposite and keeps the local values — that is the
-/// one that cannot lose data — so the placement is captured and put back here.
-fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Reparent) {
-    let Reparent { child, parent } = reparent;
-    if !frame.world.is_alive(child) {
-        return;
-    }
-    let Some(id) = frame.world.get::<SceneId>(child).copied() else {
-        return;
-    };
-
-    let view = SceneView {
-        world: frame.world,
-        registry: &editor.registry,
-        selected: vec![id],
-    };
-    editor.history.begin("Reparent", view, [id]);
-
-    let placement = hierarchy::world_transform(frame.world, child);
-    let outcome = match parent {
-        Some(parent) => hierarchy::set_parent(frame.world, child, parent),
-        None => {
-            hierarchy::clear_parent(frame.world, child);
-            Ok(())
-        }
-    };
-
-    match outcome {
-        Ok(()) => {
-            hierarchy::set_world_transform(frame.world, child, &placement);
-            // The dragged row, not whatever was selected before: the drag says
-            // which entity the user is thinking about.
-            editor.selection.set(Some(child));
-        }
-        // Refused, and every reason is a rule rather than a failure — a cycle,
-        // an entity without an identity, a physics body. A drop that silently
-        // does nothing reads as a broken panel, so it is reported; the commit
-        // below records no change, so the history stays clean.
-        Err(error) => log::warn!("reparent refused: {error}"),
-    }
-
-    let view = SceneView {
-        world: frame.world,
-        registry: &editor.registry,
-        selected: vec![id],
-    };
-    editor.history.commit(view);
-}
-
-/// What a row calls this entity.
-fn label(world: &World, entity: Entity) -> String {
-    match world.get::<Name>(entity) {
-        Some(name) if !name.as_str().is_empty() => name.as_str().to_owned(),
-        // Unnamed, or named the empty string mid-rename. The index is what the
-        // inspector shows too, so the two panels agree.
-        _ => format!("Entity {}", entity.index()),
-    }
 }
 
 /// Scene entities the walk from the roots never reached.

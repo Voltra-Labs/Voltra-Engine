@@ -26,7 +26,7 @@ impl ShapeEdit {
         if viewport.x <= 0.0 || viewport.y <= 0.0 {
             return;
         }
-        let Some((points, closed)) = polygon(frame.world, entity) else {
+        let Some((points, closed)) = polygon(frame.world, entity, self.which()) else {
             return;
         };
         let matrix = world_matrix(frame.world, entity);

@@ -30,7 +30,7 @@ pub use composite::Placed;
 /// Drives one frame at a time on top of a [`GpuContext`].
 pub struct Renderer {
     ctx: GpuContext,
-    flat_color: wgpu::RenderPipeline,
+    flat_color: crate::pipeline::SpritePipeline,
     camera_binding: CameraBinding,
     /// The screen-space UI's projection, in its own buffer so it and the
     /// world camera can both be written before one submit.
@@ -66,6 +66,8 @@ pub struct Renderer {
     gpu_timer: crate::gpu_timer::GpuTimer,
     /// Steps and draws GPU particles; `None` on an adapter that cannot.
     particles: Option<ParticlePipelines>,
+    /// Draws sprite meshes deformed by bones; every adapter can.
+    skin: crate::skinning::SkinPipeline,
     /// Where the world is drawn before the post pass on the window path,
     /// sized to the surface; made on the first frame.
     frame_target: Option<RenderTarget>,
@@ -149,6 +151,12 @@ impl Renderer {
             log::warn!("this adapter has no compute shaders; GPU particles run on the CPU");
             None
         };
+        let skin = crate::skinning::SkinPipeline::new(
+            ctx.device(),
+            ctx.format(),
+            camera_binding.layout(),
+            &texture_layout,
+        );
         let layers = LayerPass::new(
             ctx.device(),
             camera_binding.layout(),
@@ -182,6 +190,7 @@ impl Renderer {
             transients: TexturePool::default(),
             gpu_timer,
             particles,
+            skin,
             frame_target: None,
             viewport_binding,
             camera,
@@ -198,6 +207,19 @@ impl Renderer {
     /// The GPU context the renderer draws on.
     pub fn context(&self) -> &GpuContext {
         &self.ctx
+    }
+
+    /// Whether frames wait for the display's refresh; see
+    /// [`GpuContext::vsync`].
+    pub fn vsync(&self) -> bool {
+        self.ctx.vsync()
+    }
+
+    /// Turns vsync on or off: the surface's present mode, reconfigured.
+    /// What an options screen's toggle asks for, through the platform layer,
+    /// which owns no surface of its own.
+    pub fn set_vsync(&mut self, on: bool) {
+        self.ctx.set_vsync(on);
     }
 
     /// The layout of group 0, the camera, every sprite pipeline binds:
@@ -220,6 +242,11 @@ impl Renderer {
     /// them — the caller's cue to simulate on the CPU.
     pub fn particle_pipelines(&self) -> Option<&ParticlePipelines> {
         self.particles.as_ref()
+    }
+
+    /// The pipeline skinned meshes are made against and drawn through.
+    pub fn skin_pipeline(&self) -> &crate::skinning::SkinPipeline {
+        &self.skin
     }
 
     /// Steps every emitter in `steps` and sets how each is drawn, in one

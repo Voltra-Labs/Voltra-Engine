@@ -1,8 +1,8 @@
 // Built-in shader: one emitter's particles, aged, moved, collided and born
 // on the GPU.
 //
-// Must match `particles::uniforms::SimUniform`, `GpuParticle` and
-// `particles::colliders::ColliderGpu`. Each invocation owns one slot of the
+// Must match `particles::uniforms::SimUniform`, `GpuParticle`,
+// `particles::colliders::ColliderGpu` and `particles::tables`' rows. Each invocation owns one slot of the
 // ring. Slots in the spawn range are born this step (age 0, not yet moved:
 // the CPU path's order); every other slot still alive is integrated by `dt`
 // and its path tested against the colliders. A slot never written is
@@ -19,7 +19,8 @@ struct Particle {
     velocity: vec2<f32>,
     age: f32,
     lifetime: f32,
-    _pad: vec2<f32>,
+    rotation: f32,
+    spin: f32,
 }
 
 struct Sim {
@@ -42,8 +43,13 @@ struct Sim {
     from_world_t: vec4<f32>,
     // bounce, friction, lifetime loss, unused
     response: vec4<f32>,
-    // colliders, unused
-    colliders: vec4<u32>,
+    // colliders, shape kind (0 point, 1 ring, 2 box, 3 edge, 4 outline),
+    // outline corners, unused
+    counts: vec4<u32>,
+    // ring inner, outer; box half x, y; edge half length
+    shape: vec4<f32>,
+    // rotation min, max, spin min, max
+    spin: vec4<f32>,
 }
 
 struct Collider {
@@ -62,6 +68,17 @@ var<uniform> sim: Sim;
 @group(0) @binding(2)
 var<storage, read> colliders: array<Collider>;
 
+// Rows: colour, (size, speed, alpha, -), flipbook frames, outline corners
+// (x, y, fraction of the perimeter before it, -).
+@group(0) @binding(3)
+var tables: texture_2d<f32>;
+
+// Must match `particles::tables::TABLE_SAMPLES`.
+const SAMPLES: i32 = 64;
+const ROW_CURVES: i32 = 1;
+const ROW_OUTLINE: i32 = 3;
+const TAU: f32 = 6.283185307179586;
+
 // How far outside a surface a hit particle is put, so the next step starts
 // clear of it. Must match `particles::collide::SKIN`.
 const SKIN: f32 = 1e-3;
@@ -79,6 +96,61 @@ fn hash(v: u32) -> u32 {
 
 fn unit(v: u32) -> f32 {
     return f32(hash(v) >> 8u) / 16777216.0;
+}
+
+// Row `row` at `t` of a life, blended between its two nearest samples.
+fn table_at(row: i32, t: f32) -> vec4<f32> {
+    let x = clamp(t, 0.0, 1.0) * f32(SAMPLES - 1);
+    let i = min(i32(floor(x)), SAMPLES - 2);
+    let a = textureLoad(tables, vec2<i32>(i, row), 0);
+    let b = textureLoad(tables, vec2<i32>(i + 1, row), 0);
+    return mix(a, b, x - f32(i));
+}
+
+// Where along the outline `u` (0..1) of the perimeter is: the CPU's
+// `particles::shape::on_outline`, line for line.
+fn on_outline(u: f32) -> vec2<f32> {
+    let n = i32(sim.counts.z);
+    for (var i = 0; i < n; i = i + 1) {
+        let here = textureLoad(tables, vec2<i32>(i, ROW_OUTLINE), 0);
+        let next = textureLoad(tables, vec2<i32>((i + 1) % n, ROW_OUTLINE), 0);
+        var end = next.z;
+        if (i + 1 == n) {
+            end = 1.0;
+        }
+        if (u < end || i + 1 == n) {
+            let span = end - here.z;
+            var f = 0.0;
+            if (span > 0.0) {
+                f = clamp((u - here.z) / span, 0.0, 1.0);
+            }
+            return mix(here.xy, next.xy, f);
+        }
+    }
+    return vec2<f32>(0.0, 0.0);
+}
+
+// A newborn's offset from the origin, from two units: the CPU's
+// `particles::shape::offset`.
+fn spawn_offset(a: f32, b: f32) -> vec2<f32> {
+    let kind = sim.counts.y;
+    if (kind == 1u) {
+        let inner = sim.shape.x;
+        let outer = sim.shape.y;
+        let r = sqrt(mix(inner * inner, outer * outer, a));
+        let angle = b * TAU;
+        return vec2<f32>(cos(angle), sin(angle)) * r;
+    }
+    if (kind == 2u) {
+        return vec2<f32>((a * 2.0 - 1.0) * sim.shape.x, (b * 2.0 - 1.0) * sim.shape.y);
+    }
+    if (kind == 3u) {
+        return vec2<f32>((a * 2.0 - 1.0) * sim.shape.x, 0.0);
+    }
+    if (kind == 4u) {
+        return on_outline(a);
+    }
+    return vec2<f32>(0.0, 0.0);
 }
 
 fn point_to_world(p: vec2<f32>) -> vec2<f32> {
@@ -169,7 +241,7 @@ fn sweep(c: Collider, was: vec2<f32>, path: vec2<f32>) -> vec3<f32> {
 }
 
 fn collide(before: vec2<f32>, p: ptr<function, Particle>) {
-    let count = sim.colliders.x;
+    let count = sim.counts.x;
     if (count == 0u) {
         return;
     }
@@ -217,15 +289,20 @@ fn cs_main(@builtin(global_invocation_id) id: vec3<u32>) {
         let angle = sim.accel_dir.z + (unit(seed) - 0.5) * sim.origin_dt.w;
         let speed = mix(sim.ranges.x, sim.ranges.y, unit(seed + 1u));
         let local = vec2<f32>(cos(angle), sin(angle)) * speed;
-        p.position = sim.origin_dt.xy;
+        let offset = spawn_offset(unit(seed + 3u), unit(seed + 4u));
+        p.position = sim.origin_dt.xy + sim.basis.xy * offset.x + sim.basis.zw * offset.y;
         p.velocity = sim.basis.xy * local.x + sim.basis.zw * local.y;
         p.age = 0.0;
         p.lifetime = max(mix(sim.ranges.z, sim.ranges.w, unit(seed + 2u)), 0.0);
+        p.rotation = mix(sim.spin.x, sim.spin.y, unit(seed + 5u));
+        p.spin = mix(sim.spin.z, sim.spin.w, unit(seed + 6u));
     } else if (p.age < p.lifetime) {
         let before = p.position;
         p.age = p.age + dt;
+        let speed = table_at(ROW_CURVES, p.age / p.lifetime).y;
         p.velocity = p.velocity + sim.accel_dir.xy * dt;
-        p.position = p.position + p.velocity * dt;
+        p.position = p.position + p.velocity * (speed * dt);
+        p.rotation = p.rotation + p.spin * dt;
         collide(before, &p);
     }
     particles[i] = p;

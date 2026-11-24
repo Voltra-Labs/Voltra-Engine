@@ -13,7 +13,10 @@
 //! [`Walker`](components::Walker) the keys move, every
 //! [`Coin`](components::Coin), the [`Goal`](components::Goal) and the
 //! [`CoinCounter`](components::CoinCounter). `A`/`D` or the arrows walk,
-//! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump.
+//! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump — and
+//! keeps it for the next run — and F11 (or the HUD's button) goes
+//! fullscreen and back. Escape pauses, and the pause menu opens the
+//! engine's options screen ([`menu`]): display, volumes, controls.
 
 #![warn(missing_docs)]
 
@@ -26,6 +29,9 @@ use voltra_scene::ComponentRegistry;
 pub mod camera;
 pub mod coins;
 pub mod components;
+pub mod display;
+pub mod ladder;
+pub mod menu;
 pub mod progress;
 pub mod walker;
 
@@ -46,6 +52,8 @@ pub struct Platformer {
     jump: bool,
     /// F1 was pressed: the next key becomes jump.
     rebinding: bool,
+    /// The pause menu or the options screen, when one is over the level.
+    menu: menu::Menu,
 }
 
 impl Game for Platformer {
@@ -54,6 +62,9 @@ impl Game for Platformer {
     }
 
     fn start(&mut self, tick: &mut Tick<'_>) {
+        // The display and the volumes the options screen kept; the
+        // controls the loop has laid over the map already.
+        voltra_core::options::Settings::apply_saved(tick);
         coins::start(tick.world);
         if walker::find(tick.world).is_none() {
             log::warn!("the scene has no Walker: nothing for the keys to move");
@@ -61,6 +72,9 @@ impl Game for Platformer {
     }
 
     fn update(&mut self, tick: &mut Tick<'_>) {
+        if self.menu.update(tick) {
+            return;
+        }
         let Some(walker) = walker::find(tick.world) else {
             return;
         };
@@ -72,6 +86,11 @@ impl Game for Platformer {
             if let Some(binding) = tick.input.pressed_binding() {
                 tick.actions.rebind("jump", 0, binding);
                 log::info!("jump is now {binding:?}");
+                // Kept for the next run, in the player's folder — or the
+                // page's storage, in a browser.
+                if let Err(e) = tick.save_controls() {
+                    log::error!("could not keep the new jump: {e}");
+                }
                 self.rebinding = false;
             }
         } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F1)) {
@@ -82,6 +101,9 @@ impl Game for Platformer {
             progress::save(tick, walker, taken);
             // Let go of the focus a click gave it, or the pad's South —
             // jump — would press it again on the next jump.
+            tick.ui.focus(None);
+        } else if display::asked(tick) {
+            display::toggle(tick);
             tick.ui.focus(None);
         } else if tick.input.was_binding_pressed(Binding::Key(KeyCode::F9)) {
             if let Some(loaded) = progress::load(tick, walker) {
@@ -97,6 +119,12 @@ impl Game for Platformer {
         let Some(walker) = walker::find(tick.world) else {
             return;
         };
+        if self.menu.is_open() {
+            // Paused: the walker stands where it is, whatever is held.
+            self.jump = false;
+            walker::halt(tick.world, walker);
+            return;
+        }
         let worth = coins::take(tick, walker);
         if worth > 0 {
             coins::add(tick.world, worth);
@@ -114,6 +142,7 @@ impl Game for Platformer {
         // step ago or three.
         let jump = std::mem::take(&mut self.jump);
         walker::steer(tick, walker, jump);
+        ladder::climb(tick, walker);
     }
 }
 

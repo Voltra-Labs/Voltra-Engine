@@ -1,11 +1,18 @@
 //! A unit of work as the queue holds it.
 
 /// A job with its borrows' lifetime erased: what the queue stores and a
-/// worker runs. Only [`Scope::spawn`](crate::Scope::spawn) makes one, and
-/// only it may — see its safety argument.
+/// worker runs. [`Scope::spawn`](crate::Scope::spawn) makes one by erasing
+/// — see its safety argument — and a background task by owning everything
+/// it touches.
 pub(crate) struct Job(Box<dyn FnOnce() + Send + 'static>);
 
 impl Job {
+    /// A job that borrows nothing, which needs no argument to be queued.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn owned(f: Box<dyn FnOnce() + Send + 'static>) -> Self {
+        Self(f)
+    }
+
     /// # Safety
     ///
     /// `f` must have run, or been dropped, before anything it borrows for

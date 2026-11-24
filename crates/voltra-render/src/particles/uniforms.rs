@@ -3,6 +3,7 @@
 use glam::{Mat3, Vec2};
 
 use super::colliders::ParticleResponse;
+use super::spawn_shape::SpawnShape;
 
 /// One step of one emitter: how long it lasts, which slots are born in it,
 /// and what a newborn is drawn from.
@@ -33,6 +34,13 @@ pub struct SimStep {
     pub lifetime: (f32, f32),
     /// Added to every live particle's velocity, per second.
     pub acceleration: Vec2,
+    /// Where round `origin` a newborn starts, in the emitter's space
+    /// (through `basis` for a world-space emitter).
+    pub shape: SpawnShape,
+    /// Range a newborn's angle is drawn from, in radians.
+    pub rotation: (f32, f32),
+    /// Range a newborn's spin is drawn from, in radians per second.
+    pub angular_velocity: (f32, f32),
     /// Takes a particle's position and velocity into the world, where the
     /// colliders are: the identity for a world-space emitter, the emitter's
     /// world matrix for a local-space one.
@@ -56,33 +64,49 @@ impl Default for SimStep {
             speed: (0.0, 0.0),
             lifetime: (0.0, 0.0),
             acceleration: Vec2::ZERO,
+            shape: SpawnShape::Point,
+            rotation: (0.0, 0.0),
+            angular_velocity: (0.0, 0.0),
             to_world: Mat3::IDENTITY,
             response: ParticleResponse::default(),
         }
     }
 }
 
-/// How an emitter's particles are drawn.
+/// How a flipbook's frames follow a particle's life.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub enum FrameTiming {
+    /// Through every frame `cycles` times from birth to death.
+    OverLife {
+        /// Passes through the frames in one life.
+        cycles: f32,
+    },
+    /// At a rate, from the first frame at birth, round again after the last.
+    PerSecond {
+        /// Frames a second.
+        fps: f32,
+    },
+    /// No flipbook: the whole texture.
+    #[default]
+    None,
+}
+
+/// How an emitter's particles are placed and animated. What they look like
+/// over their life is in its [`ParticleTables`](super::ParticleTables).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParticleLook {
     /// Applied to every particle position: the emitter's world matrix for a
     /// local-space emitter, the identity for a world-space one.
     pub place: Mat3,
-    /// Side of the square at birth and at death.
-    pub size: (f32, f32),
-    /// Linear RGBA at birth.
-    pub color_start: [f32; 4],
-    /// Linear RGBA at death.
-    pub color_end: [f32; 4],
+    /// How the tables' flipbook frames are stepped through.
+    pub frames: FrameTiming,
 }
 
 impl Default for ParticleLook {
     fn default() -> Self {
         Self {
             place: Mat3::IDENTITY,
-            size: (0.0, 0.0),
-            color_start: [1.0; 4],
-            color_end: [1.0; 4],
+            frames: FrameTiming::None,
         }
     }
 }
@@ -104,8 +128,13 @@ pub(super) struct SimUniform {
     from_world_t: [f32; 4],
     /// bounce, friction, lifetime loss, unused
     response: [f32; 4],
-    /// colliders, unused ×3
-    colliders: [u32; 4],
+    /// colliders, shape kind (0 point, 1 ring, 2 box, 3 edge, 4 outline),
+    /// outline corners, unused
+    counts: [u32; 4],
+    /// The shape's sizes: ring inner, outer; box half x, y; edge half length.
+    shape: [f32; 4],
+    /// rotation min, max, angular velocity min, max
+    spin: [f32; 4],
 }
 
 impl SimUniform {
@@ -114,7 +143,8 @@ impl SimUniform {
     /// the clock backwards, and no more are born than the ring holds. A
     /// `to_world` that cannot be undone — scaled to nothing — tests none of
     /// the `colliders`: there is no way back from the world to the particle.
-    pub(super) fn new(step: &SimStep, capacity: u32, colliders: u32) -> Self {
+    /// An outline of fewer than two corners births at the origin.
+    pub(super) fn new(step: &SimStep, capacity: u32, colliders: u32, outline: u32) -> Self {
         let f = |v: f32| if v.is_finite() { v } else { 0.0 };
         let v = |v: Vec2| if v.is_finite() { v } else { Vec2::ZERO };
         let origin = v(step.origin);
@@ -129,6 +159,20 @@ impl SimUniform {
         let axes = |m: Mat3| [m.x_axis.x, m.x_axis.y, m.y_axis.x, m.y_axis.y];
         let translation = |m: Mat3| [m.z_axis.x, m.z_axis.y, 0.0, 0.0];
         let response = step.response.clamped();
+        let (kind, shape) = match step.shape {
+            SpawnShape::Point => (0, [0.0; 4]),
+            SpawnShape::Ring { inner, outer } => {
+                let (inner, outer) = (f(inner).abs(), f(outer).abs());
+                (1, [inner.min(outer), inner.max(outer), 0.0, 0.0])
+            }
+            SpawnShape::Box { half_extents } => {
+                let half = v(half_extents).abs();
+                (2, [half.x, half.y, 0.0, 0.0])
+            }
+            SpawnShape::Edge { half_length } => (3, [f(half_length).abs(), 0.0, 0.0, 0.0]),
+            SpawnShape::Outline if outline >= 2 => (4, [0.0; 4]),
+            SpawnShape::Outline => (0, [0.0; 4]),
+        };
         Self {
             origin_dt: [origin.x, origin.y, f(step.dt).max(0.0), f(step.spread)],
             basis: [x.x, x.y, y.x, y.y],
@@ -155,7 +199,14 @@ impl SimUniform {
                 response.lifetime_loss,
                 0.0,
             ],
-            colliders: [colliders, 0, 0, 0],
+            counts: [colliders, kind, outline, 0],
+            shape,
+            spin: [
+                f(step.rotation.0),
+                f(step.rotation.1),
+                f(step.angular_velocity.0),
+                f(step.angular_velocity.1),
+            ],
         }
     }
 }
@@ -167,13 +218,13 @@ pub(super) struct LookUniform {
     place_x: [f32; 4],
     place_y: [f32; 4],
     place_t: [f32; 4],
-    size: [f32; 4],
-    color_start: [f32; 4],
-    color_end: [f32; 4],
+    /// frames, timing (0 whole texture, 1 over life, 2 per second), cycles
+    /// or fps, unused
+    frames: [f32; 4],
 }
 
 impl LookUniform {
-    pub(super) fn new(look: &ParticleLook) -> Self {
+    pub(super) fn new(look: &ParticleLook, frames: u32) -> Self {
         let f = |v: f32| if v.is_finite() { v } else { 0.0 };
         let place = if look.place.is_finite() {
             look.place
@@ -181,65 +232,20 @@ impl LookUniform {
             Mat3::IDENTITY
         };
         let column = |c: glam::Vec3| [c.x, c.y, 0.0, 0.0];
+        let (mode, rate) = match look.frames {
+            _ if frames == 0 => (0.0, 0.0),
+            FrameTiming::None => (0.0, 0.0),
+            FrameTiming::OverLife { cycles } => (1.0, f(cycles)),
+            FrameTiming::PerSecond { fps } => (2.0, f(fps)),
+        };
         Self {
             place_x: column(place.x_axis),
             place_y: column(place.y_axis),
             place_t: column(place.z_axis),
-            size: [f(look.size.0), f(look.size.1), 0.0, 0.0],
-            color_start: look.color_start.map(f),
-            color_end: look.color_end.map(f),
+            frames: [frames as f32, mode, rate, 0.0],
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn nonsense_becomes_nothing() {
-        let step = SimStep {
-            dt: -1.0,
-            spawn_start: 10,
-            spawn_count: 99,
-            speed: (f32::NAN, 1.0),
-            origin: Vec2::new(f32::INFINITY, 0.0),
-            ..SimStep::default()
-        };
-        let u = SimUniform::new(&step, 8, 0);
-        assert_eq!(u.origin_dt[..3], [0.0, 0.0, 0.0]);
-        assert_eq!(u.ranges[0], 0.0);
-        assert_eq!(u.spawn[..3], [2, 8, 8], "wrapped and capped to the ring");
-    }
-
-    #[test]
-    fn an_empty_ring_does_not_divide_by_zero() {
-        let u = SimUniform::new(&SimStep::default(), 0, 0);
-        assert_eq!(u.spawn[..3], [0, 0, 0]);
-    }
-
-    #[test]
-    fn a_space_scaled_to_nothing_tests_no_collider() {
-        let flat = SimStep {
-            to_world: Mat3::from_scale(Vec2::new(1.0, 0.0)),
-            ..SimStep::default()
-        };
-        assert_eq!(SimUniform::new(&flat, 8, 3).colliders[0], 0);
-        let moved = SimStep {
-            to_world: Mat3::from_translation(Vec2::new(2.0, 0.0)),
-            ..SimStep::default()
-        };
-        let u = SimUniform::new(&moved, 8, 3);
-        assert_eq!(u.colliders[0], 3);
-        assert_eq!(u.from_world_t[0], -2.0, "the inverse goes back");
-    }
-
-    #[test]
-    fn a_broken_matrix_places_at_the_origin() {
-        let look = ParticleLook {
-            place: Mat3::from_cols_array(&[f32::NAN; 9]),
-            ..ParticleLook::default()
-        };
-        assert_eq!(LookUniform::new(&look).place_x, [1.0, 0.0, 0.0, 0.0]);
-    }
-}
+mod tests;

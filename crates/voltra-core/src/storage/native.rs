@@ -1,11 +1,11 @@
-//! Save slots on a desktop: files in the per-user folder.
+//! A player's files on a desktop: files in the per-user folder.
 
 use std::io;
 use std::path::{Path, PathBuf};
 
 /// Writes `text` to `path` through a temporary and a rename, creating the
 /// folder first.
-pub(super) fn write(path: &Path, text: &str) -> io::Result<()> {
+pub(crate) fn write(path: &Path, text: &str) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
@@ -17,7 +17,7 @@ pub(super) fn write(path: &Path, text: &str) -> io::Result<()> {
 }
 
 /// How many bytes `path` holds, or `None` when there is nothing there.
-pub(super) fn size(path: &Path) -> io::Result<Option<u64>> {
+pub(crate) fn size(path: &Path) -> io::Result<Option<u64>> {
     match std::fs::metadata(path) {
         Ok(meta) => Ok(Some(meta.len())),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -25,12 +25,12 @@ pub(super) fn size(path: &Path) -> io::Result<Option<u64>> {
     }
 }
 
-pub(super) fn read(path: &Path) -> io::Result<String> {
+pub(crate) fn read(path: &Path) -> io::Result<String> {
     std::fs::read_to_string(path)
 }
 
 /// Removes `path`; whether there was anything to remove.
-pub(super) fn remove(path: &Path) -> io::Result<bool> {
+pub(crate) fn remove(path: &Path) -> io::Result<bool> {
     match std::fs::remove_file(path) {
         Ok(()) => Ok(true),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
@@ -39,7 +39,7 @@ pub(super) fn remove(path: &Path) -> io::Result<bool> {
 }
 
 /// The names of the files directly in `dir`; none when it cannot be read.
-pub(super) fn file_names(dir: &Path) -> Vec<String> {
+pub(crate) fn file_names(dir: &Path) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return Vec::new();
     };

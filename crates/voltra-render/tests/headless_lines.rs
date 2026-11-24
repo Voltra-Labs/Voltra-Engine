@@ -59,18 +59,23 @@ fn render(device: &wgpu::Device, queue: &wgpu::Queue, batch: &LineBatch, zoom: f
         label: Some("headless-lines-encoder"),
     });
     // A clear first, in its own pass, because `draw_lines` deliberately does
-    // not clear — that is what makes it an overlay. With no mesh and no draws
-    // this records the clear and nothing else, so the pipeline it is handed is
-    // never bound.
-    pass::draw_mesh_batches(
-        &mut encoder,
-        &view,
-        &line_pipeline,
-        camera_binding.bind_group(),
-        None,
-        &[],
-        CLEAR,
-    );
+    // not clear — that is what makes it an overlay.
+    drop(encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("headless-lines-clear"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &view,
+            depth_slice: None,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(CLEAR),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+    }));
     pass::draw_lines(
         &mut encoder,
         &view,

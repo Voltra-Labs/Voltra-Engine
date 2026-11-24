@@ -14,6 +14,8 @@ voltra-render.workspace = true
 log.workspace = true
 serde.workspace = true
 ron.workspace = true
+# A replicated component on the wire (stage 114): compact, no field names.
+postcard.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]

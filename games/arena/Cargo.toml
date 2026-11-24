@@ -1,0 +1,41 @@
+[package]
+name = "arena"
+description = "Arena: a Voltra game."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# A `cdylib` for the editor to load, play and reload; an `rlib` for the
+# binary that ships. No dev-dependencies: the tests then build the engine
+# with the features the library is built with, which is what lets
+# `tests/plugin.rs` load the library cargo built for the run.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "arena"
+path = "src/main.rs"
+
+# The dedicated server: the match headless, hosted (`voltra-server`'s
+# command line). Native only; on the web it builds to nothing.
+[[bin]]
+name = "arena-server"
+path = "src/bin/server.rs"
+
+[dependencies]
+voltra-assets.workspace = true
+voltra-core.workspace = true
+voltra-ecs.workspace = true
+voltra-render.workspace = true
+voltra-scene.workspace = true
+log.workspace = true
+serde.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+voltra-server.workspace = true
+
+# The page's `?join=` address.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys.workspace = true
+web-sys = { workspace = true, features = ["Window", "Location"] }

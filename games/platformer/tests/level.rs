@@ -72,3 +72,18 @@ fn a_coin_worth_more_counts_for_more() {
         counter(session.world())
     );
 }
+
+#[test]
+fn f11_goes_fullscreen_and_back() {
+    use voltra_core::{Fullscreen, KeyCode};
+
+    let mut session = level(Platformer::default());
+    session.step(2, FRAME);
+    for expected in [Fullscreen::Borderless, Fullscreen::Windowed] {
+        session.input_mut().on_key(KeyCode::F11, true, false);
+        session.step(1, FRAME);
+        session.input_mut().on_key(KeyCode::F11, false, false);
+        session.step(1, FRAME);
+        assert_eq!(session.window().fullscreen(), expected);
+    }
+}

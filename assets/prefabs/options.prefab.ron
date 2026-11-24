@@ -1,0 +1,305 @@
+// The options screen `voltra_core::options::OptionsScreen` opens: tabs for
+// the display, the volumes and the controls, dropdowns for the display mode
+// and the resolution, a tooltip on every row. The code finds each part by
+// its name, and stamps one copy of `Volume row` per bus and of `Binding row`
+// per action; restyle anything, keep the names.
+(
+    version: 1,
+    entities: [
+        (
+            id: "01a2b000-0000-7000-8000-000000000001",
+            components: {
+                "Name": "Options",
+                "Persistent": (),
+                "Sprite": (color:(0.06,0.07,0.1,0.96),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.5,0.5),anchor_max:(0.5,0.5),offset_min:(-260.0,-310.0),offset_max:(260.0,310.0)),
+                "UiStack": (direction:Column,spacing:8.0,padding:(left:16.0,top:16.0,right:16.0,bottom:16.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000002",
+            components: {
+                "Name": "Options title",
+                "Parent": "01a2b000-0000-7000-8000-000000000001",
+                "Text": (content:"Options",font:None,size:26.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,32.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000003",
+            components: {
+                "Name": "Options tabs",
+                "Parent": "01a2b000-0000-7000-8000-000000000001",
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,478.0),slot:1),
+                "UiTabs": (current:"Display"),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000004",
+            components: {
+                "Name": "Tab bar",
+                "Parent": "01a2b000-0000-7000-8000-000000000003",
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0)),
+                "UiStack": (direction:Row,spacing:6.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000005",
+            components: {
+                "Name": "Display tab",
+                "Parent": "01a2b000-0000-7000-8000-000000000004",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(156.0,0.0)),
+                "UiTab": (page:"Display"),
+                "UiToggle": (on:true,on_tint:(0.45,1.0,0.55,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000006",
+            components: {
+                "Name": "Display tab label",
+                "Parent": "01a2b000-0000-7000-8000-000000000005",
+                "Text": (content:"Display",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000007",
+            components: {
+                "Name": "Audio tab",
+                "Parent": "01a2b000-0000-7000-8000-000000000004",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(156.0,0.0),slot:1),
+                "UiTab": (page:"Audio"),
+                "UiToggle": (on:false,on_tint:(0.45,1.0,0.55,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000008",
+            components: {
+                "Name": "Audio tab label",
+                "Parent": "01a2b000-0000-7000-8000-000000000007",
+                "Text": (content:"Audio",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000009",
+            components: {
+                "Name": "Controls tab",
+                "Parent": "01a2b000-0000-7000-8000-000000000004",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(156.0,0.0),slot:2),
+                "UiTab": (page:"Controls"),
+                "UiToggle": (on:false,on_tint:(0.45,1.0,0.55,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000000a",
+            components: {
+                "Name": "Controls tab label",
+                "Parent": "01a2b000-0000-7000-8000-000000000009",
+                "Text": (content:"Controls",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000000b",
+            components: {
+                "Name": "Display",
+                "Parent": "01a2b000-0000-7000-8000-000000000003",
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(0.0,42.0),offset_max:(0.0,0.0)),
+                "UiStack": (direction:Column,spacing:8.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000000c",
+            components: {
+                "Name": "Display mode",
+                "Parent": "01a2b000-0000-7000-8000-00000000000b",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Text": (content:"",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiDropdown": (options:["Windowed","Fullscreen"],selected:0,max_visible:8,list_color:(0.1,0.11,0.15,0.98),highlight_color:(0.25,0.45,0.9,1.0)),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0)),
+                "UiTooltip": (text:"Windowed, fullscreen over the desktop, or exclusive: the monitor switched to the chosen resolution",delay:0.5,max_width:260.0,size:14.0,background:(0.02,0.02,0.04,0.94),color:(1.0,1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000000d",
+            components: {
+                "Name": "Resolution",
+                "Parent": "01a2b000-0000-7000-8000-00000000000b",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Text": (content:"",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiDropdown": (options:["1280 × 720"],selected:0,max_visible:8,list_color:(0.1,0.11,0.15,0.98),highlight_color:(0.25,0.45,0.9,1.0)),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:1),
+                "UiTooltip": (text:"The window's size; in exclusive fullscreen, the monitor's mode",delay:0.5,max_width:260.0,size:14.0,background:(0.02,0.02,0.04,0.94),color:(1.0,1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000000e",
+            components: {
+                "Name": "VSync",
+                "Parent": "01a2b000-0000-7000-8000-00000000000b",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:2),
+                "UiToggle": (on:true,on_tint:(0.45,1.0,0.55,1.0)),
+                "UiTooltip": (text:"Waits for the screen between frames: no tearing, a little more latency",delay:0.5,max_width:260.0,size:14.0,background:(0.02,0.02,0.04,0.94),color:(1.0,1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000000f",
+            components: {
+                "Name": "VSync label",
+                "Parent": "01a2b000-0000-7000-8000-00000000000e",
+                "Text": (content:"VSync",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000010",
+            components: {
+                "Name": "Audio",
+                "Parent": "01a2b000-0000-7000-8000-000000000003",
+                "UiHidden": (),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(0.0,42.0),offset_max:(0.0,0.0)),
+                "UiStack": (direction:Column,spacing:8.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000011",
+            components: {
+                "Name": "Volumes",
+                "Parent": "01a2b000-0000-7000-8000-000000000010",
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,132.0)),
+                "UiStack": (direction:Column,spacing:4.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000012",
+            components: {
+                "Name": "Volume row",
+                "Parent": "01a2b000-0000-7000-8000-000000000011",
+                "Sprite": (color:(0.12,0.13,0.17,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,28.0)),
+                "UiSlider": (value:1.0,min:0.0,max:1.0,step:0.05,direction:Row),
+                "UiTooltip": (text:"Drag, or use left and right",delay:0.5,max_width:260.0,size:14.0,background:(0.02,0.02,0.04,0.94),color:(1.0,1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000013",
+            components: {
+                "Name": "Volume handle",
+                "Parent": "01a2b000-0000-7000-8000-000000000012",
+                "Sprite": (color:(0.75,0.8,0.95,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,1.0),offset_min:(-7.0,0.0),offset_max:(7.0,0.0)),
+                "UiSliderPart": Handle,
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000014",
+            components: {
+                "Name": "Volume label",
+                "Parent": "01a2b000-0000-7000-8000-000000000012",
+                "Text": (content:"Master 100%",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(4.0,4.0),offset_max:(-4.0,-4.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000015",
+            components: {
+                "Name": "Controls",
+                "Parent": "01a2b000-0000-7000-8000-000000000003",
+                "UiHidden": (),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(0.0,42.0),offset_max:(0.0,0.0)),
+                "UiStack": (direction:Column,spacing:8.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000016",
+            components: {
+                "Name": "Bindings",
+                "Parent": "01a2b000-0000-7000-8000-000000000015",
+                "Sprite": (color:(0.09,0.1,0.14,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,380.0)),
+                "UiScroll": (offset:(0.0,0.0),vertical:true,horizontal:false,step:34.0),
+                "UiStack": (direction:Column,spacing:4.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000017",
+            components: {
+                "Name": "Binding row",
+                "Parent": "01a2b000-0000-7000-8000-000000000016",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,30.0)),
+                "UiTooltip": (text:"Press, then the key or pad button to bind; Esc cancels",delay:0.5,max_width:260.0,size:14.0,background:(0.02,0.02,0.04,0.94),color:(1.0,1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000018",
+            components: {
+                "Name": "Binding label",
+                "Parent": "01a2b000-0000-7000-8000-000000000017",
+                "Text": (content:"Action: Key",font:None,size:16.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-000000000019",
+            components: {
+                "Name": "Reset controls",
+                "Parent": "01a2b000-0000-7000-8000-000000000015",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:1),
+                "UiTooltip": (text:"Every action back to the game's own keys and buttons",delay:0.5,max_width:260.0,size:14.0,background:(0.02,0.02,0.04,0.94),color:(1.0,1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000001a",
+            components: {
+                "Name": "Reset controls label",
+                "Parent": "01a2b000-0000-7000-8000-000000000019",
+                "Text": (content:"Reset controls",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000001b",
+            components: {
+                "Name": "Options footer",
+                "Parent": "01a2b000-0000-7000-8000-000000000001",
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:2),
+                "UiStack": (direction:Row,spacing:8.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000001c",
+            components: {
+                "Name": "Back",
+                "Parent": "01a2b000-0000-7000-8000-00000000001b",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(240.0,0.0)),
+                "UiTooltip": (text:"Keeps the changes and closes",delay:0.5,max_width:260.0,size:14.0,background:(0.02,0.02,0.04,0.94),color:(1.0,1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "01a2b000-0000-7000-8000-00000000001d",
+            components: {
+                "Name": "Back label",
+                "Parent": "01a2b000-0000-7000-8000-00000000001c",
+                "Text": (content:"Back",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+    ],
+)

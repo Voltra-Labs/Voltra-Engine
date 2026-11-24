@@ -10,7 +10,7 @@ use voltra_render::particles::PARTICLE_SIZE;
 use voltra_render::scene_draw::{draw_scene, SceneDraw};
 use voltra_render::{
     pipeline, texture, wgpu, Filter, GpuParticles, LayerPass, Mesh, MeshDraw, ParticleLook,
-    ParticlePipelines, RenderTarget, SimStep, Texture, Vertex,
+    ParticlePipelines, ParticleTables, RenderTarget, SimStep, Texture, Vertex,
 };
 use voltra_testkit::{headless_device, read_buffer, read_texture};
 
@@ -82,7 +82,7 @@ fn a_step_births_its_slots_and_the_next_moves_them() {
         return;
     };
     let (pipelines, _, _) = pipelines(&device);
-    let particles = GpuParticles::new(&device, &pipelines, 8);
+    let particles = GpuParticles::new(&device, &queue, &pipelines, 8);
 
     step(&device, &queue, &pipelines, &particles, &fountain());
     let born = slots(&device, &queue, &particles);
@@ -125,7 +125,7 @@ fn births_wrap_round_the_ring_and_spread_varies_them() {
         return;
     };
     let (pipelines, _, _) = pipelines(&device);
-    let particles = GpuParticles::new(&device, &pipelines, 8);
+    let particles = GpuParticles::new(&device, &queue, &pipelines, 8);
     step(
         &device,
         &queue,
@@ -189,7 +189,7 @@ fn particles_draw_between_the_sprites_around_them() {
     );
 
     // One big red particle over the middle.
-    let particles = GpuParticles::new(&device, &pipelines, 4);
+    let mut particles = GpuParticles::new(&device, &queue, &pipelines, 4);
     step(
         &device,
         &queue,
@@ -202,22 +202,16 @@ fn particles_draw_between_the_sprites_around_them() {
             ..SimStep::default()
         },
     );
-    particles.set_look(
-        &queue,
-        &ParticleLook {
-            size: (1.0, 1.0),
-            color_start: [1.0, 0.0, 0.0, 1.0],
-            color_end: [1.0, 0.0, 0.0, 1.0],
-            ..ParticleLook::default()
-        },
-    );
+    let red = [1.0, 0.0, 0.0, 1.0];
+    particles.set_tables(&queue, &ParticleTables::linear((1.0, 1.0), red, red));
+    particles.set_look(&queue, &ParticleLook::default());
 
     let draws = [
         SceneDraw::Mesh(MeshDraw {
             texture: &white,
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: 0..6,
+            primitives: voltra_render::Primitives::Triangles(0..6),
             material: None,
         }),
         SceneDraw::Particles {
@@ -229,7 +223,7 @@ fn particles_draw_between_the_sprites_around_them() {
             texture: &white,
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: 6..12,
+            primitives: voltra_render::Primitives::Triangles(6..12),
             material: None,
         }),
     ];
@@ -297,7 +291,7 @@ fn particles_are_drawn_into_the_light_layers_on_their_emitter_s() {
     let mesh = Mesh::indexed(&device, "backdrop", &vertices, &[0, 1, 2, 0, 2, 3]);
 
     // One particle a unit across, over the middle.
-    let particles = GpuParticles::new(&device, &pipelines, 4);
+    let mut particles = GpuParticles::new(&device, &queue, &pipelines, 4);
     step(
         &device,
         &queue,
@@ -310,19 +304,17 @@ fn particles_are_drawn_into_the_light_layers_on_their_emitter_s() {
             ..SimStep::default()
         },
     );
-    particles.set_look(
+    particles.set_tables(
         &queue,
-        &ParticleLook {
-            size: (1.0, 1.0),
-            ..ParticleLook::default()
-        },
+        &ParticleTables::linear((1.0, 1.0), [1.0; 4], [1.0; 4]),
     );
+    particles.set_look(&queue, &ParticleLook::default());
     let draws = [
         SceneDraw::Mesh(MeshDraw {
             texture: &white,
             normal: None,
             light_layers: 0b1,
-            indices: 0..6,
+            primitives: voltra_render::Primitives::Triangles(0..6),
             material: None,
         }),
         SceneDraw::Particles {

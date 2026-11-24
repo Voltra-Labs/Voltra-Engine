@@ -48,6 +48,9 @@ pub struct Editor {
     /// of the picture being authored. Unity, Unreal and Godot all hide their
     /// collision shapes behind a toggle for the same reason.
     pub(crate) show_colliders: bool,
+    /// A streamed world's region bounds over the scene, when it is part of
+    /// one: Scene ▸ Show region bounds.
+    pub(crate) regions: crate::view::regions::RegionOverlay,
     /// Whether the editor is authoring the scene or simulating it, and the
     /// snapshot Stop will put back.
     pub(crate) play: Play,
@@ -88,8 +91,22 @@ pub struct Editor {
     pub(crate) console: crate::console::Console,
     /// The Project Settings window.
     pub(crate) settings: panels::project_settings::ProjectSettingsWindow,
+    /// The Tile Palette window, which picks what the paint tools paint.
+    pub(crate) tile_palette: panels::tile_palette::TilePaletteWindow,
+    /// The Atlas Editor window and the atlas it has open.
+    pub(crate) atlas_editor: panels::atlas_editor::AtlasEditorWindow,
     /// The project's game, loaded from its library; see [`crate::game`].
     pub(crate) game: crate::game::GameHost,
+    /// The scenes set aside while a prefab is edited on its own; see
+    /// [`crate::prefab_mode`].
+    pub(crate) prefab_mode: crate::prefab_mode::PrefabMode,
+    /// What the hierarchy's search box holds; see [`crate::search`].
+    pub(crate) hierarchy_search: String,
+    pub(crate) netplay: crate::netplay::NetPlay,
+    /// The selected emitter, played while authoring.
+    pub(crate) particle_preview: crate::particle_preview::ParticlePreview,
+    /// The skinned sprite whose weights the viewport is painting, if any.
+    pub(crate) weight_paint: crate::weight_paint::WeightPaint,
 }
 
 impl Editor {
@@ -126,6 +143,10 @@ impl Editor {
             // After the watch, so an undo taken this frame is the change the
             // watcher sees rather than one it records a second time.
             match shortcut::poll(ui.ctx()) {
+                // Over the Atlas Editor, the keys are its own history's.
+                Some(action) if self.atlas_editor.has_pointer(ui.ctx()) => {
+                    self.atlas_editor.shortcut(action);
+                }
                 Some(shortcut::UndoAction::Undo) => self.undo(frame),
                 Some(shortcut::UndoAction::Redo) => self.redo(frame),
                 None => {}
@@ -137,6 +158,8 @@ impl Editor {
 
         // After the watch and the keys, before any panel: what a tool asked
         // for is in place before the frame draws.
+        // The clients follow the server's frame, before the bridge reads them.
+        crate::netplay::step(self, frame);
         crate::bridge::serve(self, frame);
         // After the edits of the frame so far, so the title's `*` and a
         // close request see them; its windows are modal, over everything.
@@ -161,9 +184,12 @@ impl Editor {
         panels::viewport::show(self, ui, frame);
         // Floating windows, over the docked panels.
         panels::profiler::show(self, ui, frame);
+        panels::network::show(self, ui, frame);
         panels::console::show(self, ui);
         let assets = frame.textures.root().to_path_buf();
         panels::project_settings::show(self, ui, &assets);
+        panels::atlas_editor::show(self, ui, frame);
+        panels::tile_palette::show(self, ui, frame);
 
         // Last, so it sees everything every panel did.
         if editing {
@@ -181,6 +207,13 @@ impl Editor {
             let posed = self.selection.live_primary(frame.world);
             self.timeline
                 .pose(frame.world, frame.animation_clips, posed);
+            // Live particles only, which no record holds: after the history
+            // so it never sees them, and ahead of the draw that shows them.
+            let dt = ui.ctx().input(|i| i.stable_dt);
+            let gpu = frame.gpu_particles();
+            self.particle_preview.update(frame.world, posed, dt, gpu);
+        } else {
+            self.particle_preview.stop(frame.world);
         }
     }
 
@@ -239,6 +272,7 @@ impl Editor {
         );
         if from_editing && self.play.state() == PlayState::Playing {
             frame.set_game(self.game.new_game());
+            crate::netplay::begin(self, frame);
         }
     }
 
@@ -263,7 +297,9 @@ impl Editor {
         if self.play.state() == PlayState::Editing {
             return false;
         }
-        // The game first: it belongs to the session the restore discards.
+        // The clients and the game first: they belong to the session the
+        // restore discards.
+        crate::netplay::end(self, frame);
         frame.set_game(None);
         self.play.stop(
             PlayContext {

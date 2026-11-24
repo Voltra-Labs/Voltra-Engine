@@ -65,6 +65,7 @@ impl App {
 
         self.load_input_map(&asset_root);
         self.load_sorting_layers(&asset_root);
+        self.load_bus_layout(&asset_root);
         self.gamepads = gamepads::Gamepads::connect();
 
         // And the legible part: a text in a world populated before `run`
@@ -128,6 +129,7 @@ impl App {
 
         self.renderer = Some(renderer);
         self.textures = Some(textures);
+        self.refresh_game_window();
 
         // Device creation takes long enough to produce a huge first delta;
         // restarting the clock here keeps frame one honest.
@@ -151,5 +153,8 @@ impl App {
         };
         self.locale = voltra_scene::Locale::open(root, language);
         self.locale.localize(&mut self.world);
+        if let Some(fonts) = self.fonts.as_mut() {
+            self.locale.apply_fonts(fonts);
+        }
     }
 }

@@ -49,9 +49,11 @@ voltra_core::export_game!(MyGame);
   text. **`fixed_update`** runs once a physics step: move things, read
   collision events. **`start`** runs once, when play begins.
 - **`tick`** is everything a turn may touch: `world` (query, spawn,
-  despawn), `input` (actions from `assets/default.input.ron`), `events`
-  (collisions), `audio`, `ui` (what was clicked), `tween`/`after`/`every`
-  (tweens and timers), `locale` (the language), `saves`, scene changes.
+  despawn), `input` (actions from `assets/default.input.ron`) and
+  `actions` (the map itself, to rebind), `events` (collisions), `audio`,
+  `ui` (what was clicked), `tween`/`after`/`every` (tweens and timers),
+  `locale` (the language), `saves`, `window` (fullscreen, size, vsync),
+  `net` (chapter 8), and scene changes and streamed worlds (chapter 10).
 
 ## In the editor
 

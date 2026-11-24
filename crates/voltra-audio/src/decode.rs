@@ -1,31 +1,33 @@
 //! Turning a file on disk into a [`Clip`].
 //!
 //! `symphonia` does the container and codec work, the way `image` does the PNG
-//! work for textures, and it is confined to this file for the same reason: the
-//! rest of the crate deals in `f32` samples and should not know what a packet
-//! is. Two formats are compiled in — WAV for the short sounds a game triggers,
-//! OGG Vorbis for anything long enough that raw PCM would be silly. MP3 is
-//! deliberately absent: it buys nothing over Vorbis for a game's own assets.
+//! work for textures, and it is confined to this file and its children for
+//! the same reason: the rest of the crate deals in `f32` samples and should
+//! not know what a packet is. Two formats are compiled in — WAV for the short
+//! sounds a game triggers, OGG Vorbis for anything long enough that raw PCM
+//! would be silly. MP3 is deliberately absent: it buys nothing over Vorbis for
+//! a game's own assets.
+//!
+//! Two ways in: [`decode`] reads the whole file into a resident clip, and
+//! [`probe`] only reads its header, for a clip that will be
+//! [streamed](crate::stream).
+
+mod open;
 
 use std::fs::File;
 use std::path::Path;
+use std::sync::Arc;
 
-use symphonia::core::codecs::audio::AudioDecoderOptions;
 use symphonia::core::errors::Error as SymphoniaError;
-use symphonia::core::formats::probe::Hint;
-use symphonia::core::formats::{FormatOptions, TrackType};
 use symphonia::core::io::MediaSourceStream;
-use symphonia::core::meta::MetadataOptions;
 
 use crate::clip::Clip;
 use crate::error::AudioError;
+use crate::stream::{StreamInfo, StreamSource};
+
+pub(crate) use open::{frame_to_ts, open, ts_to_frame, Opened};
 
 /// Decodes the whole file at `path` into memory.
-///
-/// The format is taken from the container, not the extension: the extension is
-/// passed to `symphonia` only as a hint of where to look first, so a `.ogg`
-/// that is really a WAV still decodes. Everything is decoded up front — see
-/// [`Clip`] on why there is no streaming path yet.
 pub fn decode(path: &Path) -> Result<Clip, AudioError> {
     let file = File::open(path).map_err(|source| AudioError::Read {
         path: path.to_owned(),
@@ -47,61 +49,52 @@ pub fn decode_bytes(bytes: Vec<u8>, path: &Path) -> Result<Clip, AudioError> {
     )
 }
 
-fn decode_stream(stream: MediaSourceStream<'static>, path: &Path) -> Result<Clip, AudioError> {
-    let mut hint = Hint::new();
-    if let Some(extension) = path.extension().and_then(|e| e.to_str()) {
-        hint.with_extension(extension);
-    }
-
-    let mut reader = symphonia::default::get_probe()
-        .probe(
-            &hint,
-            stream,
-            FormatOptions::default(),
-            MetadataOptions::default(),
-        )
-        .map_err(|source| AudioError::Decode {
-            path: path.to_owned(),
-            source: Box::new(source),
-        })?;
-
-    // The decoder is built inside its own scope: `default_track` borrows the
-    // reader, and the packet loop below needs it mutably. `declared` is what
-    // the container says the track is, kept for the file that holds a valid
-    // header and no samples — a truncated recording still has a rate, and a
-    // clip that forgot it would resample wrongly if it were ever repaired.
-    let (track_id, declared, mut decoder) = {
-        let track =
-            reader
-                .default_track(TrackType::Audio)
-                .ok_or_else(|| AudioError::Unsupported {
-                    path: path.to_owned(),
-                    reason: "it holds no audio track",
-                })?;
-
-        let params = track
-            .codec_params
-            .as_ref()
-            .and_then(|params| params.audio())
-            .ok_or_else(|| AudioError::Unsupported {
-                path: path.to_owned(),
-                reason: "its audio track declares no codec",
-            })?;
-
-        let decoder = symphonia::default::get_codecs()
-            .make_audio_decoder(params, &AudioDecoderOptions::default())
-            .map_err(|source| AudioError::Decode {
-                path: path.to_owned(),
-                source: Box::new(source),
-            })?;
-
-        let declared = (
-            params.sample_rate,
-            params.channels.as_ref().map(|channels| channels.count()),
-        );
-
-        (track.id, declared, decoder)
+/// A clip that will be decoded a piece at a time while it plays, from
+/// `source`, which is opened here once to check it decodes and to read its
+/// shape.
+///
+/// Reads the header and nothing else: the samples stay where they are until
+/// a voice asks for them.
+pub fn probe(source: StreamSource) -> Result<Clip, AudioError> {
+    let path = source.path().to_owned();
+    let opened = open(source.open()?, &path)?;
+    let (Some(rate), Some(channels)) = (opened.rate, opened.channels) else {
+        return Err(AudioError::Unsupported {
+            path,
+            reason: "it declares no rate or channels, so it cannot be streamed",
+        });
     };
+    let channels = u16::try_from(channels).unwrap_or(u16::MAX);
+    if channels == 0 || rate == 0 {
+        return Err(AudioError::Unsupported {
+            path,
+            reason: "it declares no channels or no sample rate",
+        });
+    }
+    Ok(Clip::streamed(
+        Arc::new(source),
+        StreamInfo {
+            channels,
+            rate,
+            frames: opened.frames,
+        },
+    ))
+}
+
+fn decode_stream(stream: MediaSourceStream<'static>, path: &Path) -> Result<Clip, AudioError> {
+    // `declared` is what the container says the track is, kept for the file
+    // that holds a valid header and no samples — a truncated recording still
+    // has a rate, and a clip that forgot it would resample wrongly if it were
+    // ever repaired.
+    let Opened {
+        mut reader,
+        mut decoder,
+        track_id,
+        rate,
+        channels,
+        ..
+    } = open(stream, path)?;
+    let declared = (rate, channels);
 
     let mut samples: Vec<f32> = Vec::new();
     let mut packet_samples: Vec<f32> = Vec::new();

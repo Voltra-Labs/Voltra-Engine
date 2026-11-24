@@ -69,6 +69,18 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         });
         ui.close();
     }
+    if ui.button("Spawn HUD dropdown").clicked() {
+        spawn::record(editor, frame, "Spawn HUD dropdown", |frame| {
+            spawn::hud_dropdown(frame, "HUD dropdown")
+        });
+        ui.close();
+    }
+    if ui.button("Spawn HUD tabs").clicked() {
+        spawn::record_all(editor, frame, "Spawn HUD tabs", |frame, _| {
+            spawn::hud_tabs(frame, "HUD tabs")
+        });
+        ui.close();
+    }
     if ui.button("Spawn HUD scroll list").clicked() {
         spawn::record(editor, frame, "Spawn HUD scroll list", |frame| {
             spawn::hud_scroll_list(frame, "HUD scroll list")
@@ -78,6 +90,31 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     if ui.button("Spawn particles").clicked() {
         spawn::record(editor, frame, "Spawn particles", |frame| {
             spawn::particles(frame, "Particles", Vec2::ZERO)
+        });
+        ui.close();
+    }
+    for (label, name, make) in [
+        (
+            "Spawn line",
+            "Line",
+            spawn::line as fn(&mut UiFrame<'_>, &str, Vec2) -> voltra_ecs::Entity,
+        ),
+        ("Spawn polygon", "Polygon", spawn::polygon),
+        ("Spawn trail", "Trail", spawn::trail),
+        (
+            "Spawn skinned sprite",
+            "Skinned sprite",
+            spawn::skinned_sprite,
+        ),
+    ] {
+        if ui.button(label).clicked() {
+            spawn::record(editor, frame, label, |frame| make(frame, name, Vec2::ZERO));
+            ui.close();
+        }
+    }
+    if ui.button("Spawn skeleton").clicked() {
+        spawn::record_all(editor, frame, "Spawn skeleton", |frame, _| {
+            spawn::skeleton(frame, "Skeleton", Vec2::ZERO)
         });
         ui.close();
     }

@@ -276,6 +276,7 @@ fn a_click_on_a_label_clicks_its_button_and_the_keys_walk_the_column() {
     let up_key = Navigation {
         direction: Some(Vec2::new(0.0, -1.0)),
         accept: false,
+        cancel: false,
     };
     frame(&mut world, &mut buttons, Pointer::default(), up_key);
     assert_eq!(buttons.focused(), Some(options));
@@ -284,6 +285,7 @@ fn a_click_on_a_label_clicks_its_button_and_the_keys_walk_the_column() {
     let accept = Navigation {
         direction: None,
         accept: true,
+        cancel: false,
     };
     frame(&mut world, &mut buttons, Pointer::default(), accept);
     assert!(buttons.clicked(resume));
@@ -416,7 +418,7 @@ fn render(
             },
             normal: None,
             light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-            indices: range.indices.clone(),
+            primitives: range.primitives.clone(),
             material: None,
         })
         .collect();

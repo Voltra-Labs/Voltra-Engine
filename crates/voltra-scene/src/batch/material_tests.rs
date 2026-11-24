@@ -62,7 +62,12 @@ fn runs_split_only_where_the_material_or_its_values_change() {
     let runs: Vec<(Option<u32>, u32)> = batch
         .ranges
         .iter()
-        .map(|r| (r.material, (r.indices.end - r.indices.start) / 6))
+        .map(|r| match &r.primitives {
+            voltra_render::Primitives::Quads(quads) => (r.material, quads.end - quads.start),
+            voltra_render::Primitives::Triangles(indices) => {
+                (r.material, (indices.end - indices.start) / 6)
+            }
+        })
         .collect();
     assert_eq!(runs, vec![(None, 1), (Some(0), 2), (Some(1), 1), (None, 2)]);
     assert_eq!(batch.materials.len(), 2, "one use per set of values");

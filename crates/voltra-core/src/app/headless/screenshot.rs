@@ -94,6 +94,11 @@ impl Headless {
         let (width, height) = (width.max(1), height.max(1));
         self.ensure_renderer(width, height)?;
         self.app.resolve_materials();
+        self.app.resolve_text_icons();
+        // What the window's draw does first: GPU emitters run the steps they
+        // owe, so a shot shows where their particles are now.
+        self.app.step_gpu_particles();
+        self.app.update_skinned_meshes();
         let app = &mut self.app;
         let (
             Some(renderer),
@@ -138,6 +143,7 @@ impl Headless {
                 batch: &mut app.frame_batch,
                 tile_meshes: &mut app.tile_meshes,
                 gpu_rings: &app.gpu_rings,
+                skins: &app.skinned_meshes,
                 materials: app.materials.as_ref(),
                 material_bank: &mut app.material_bank,
                 pool: &mut app.camera_pool,
@@ -157,7 +163,7 @@ impl Headless {
                     },
                     normal: None,
                     light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                    indices: range.indices.clone(),
+                    primitives: range.primitives.clone(),
                     material: None,
                 })
                 .collect();
@@ -186,8 +192,10 @@ impl Headless {
             silhouettes: app.silhouettes.as_mut(),
             sorting_layers: &app.sorting_layers,
             batch: &mut app.frame_batch,
+            buffers: &mut app.batch_buffers,
             tile_meshes: &mut app.tile_meshes,
             gpu_rings: &app.gpu_rings,
+            skins: &app.skinned_meshes,
             materials: app.materials.as_ref(),
             material_bank: &mut app.material_bank,
             elapsed: app.elapsed,

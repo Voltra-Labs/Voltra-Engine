@@ -249,3 +249,106 @@ fn a_layer_replaced_by_an_equal_copy_is_rebuilt() {
     assert_eq!(after.len(), 1);
     assert_ne!(after[0].0, before);
 }
+
+#[test]
+fn a_shaped_tile_is_a_polygon_beside_the_merged_full_ones() {
+    let mut world = World::new();
+    let layer = solid_layer(&mut world, Vec2::ZERO, &row(3));
+    {
+        let map = world.get_mut::<Tilemap>(layer).expect("a layer");
+        map.set(IVec2::new(3, 0), Some(Tile::new(1)));
+        map.set(IVec2::new(4, 0), Some(Tile::new(2)));
+        map.tile_data.insert(
+            1,
+            TileData {
+                shape: TileShape::Slope {
+                    left: 0.0,
+                    right: 1.0,
+                },
+                ..TileData::default()
+            },
+        );
+        map.tile_data.insert(
+            2,
+            TileData {
+                shape: TileShape::Empty,
+                ..TileData::default()
+            },
+        );
+    }
+
+    sync_colliders(&mut world);
+
+    let found = generated(&world);
+    assert_eq!(
+        found.len(),
+        2,
+        "one box for the full run, one slope, nothing for the empty"
+    );
+    let (_, transform, collider) = found
+        .iter()
+        .find(|(_, _, c)| matches!(c, Collider::Polygon { .. }))
+        .expect("the slope");
+    assert_eq!(
+        transform.translation,
+        Vec2::new(1.75, 0.25),
+        "centred on its cell"
+    );
+    let Collider::Polygon { points, .. } = collider else {
+        unreachable!()
+    };
+    assert_eq!(points.points().len(), 3);
+    assert!(
+        points.points().contains(&Vec2::new(0.25, 0.25)),
+        "high on the right"
+    );
+    assert!(points.points().contains(&Vec2::new(-0.25, -0.25)));
+}
+
+#[test]
+fn a_shape_changed_without_a_cell_rebuilds_the_colliders() {
+    let mut world = World::new();
+    let layer = solid_layer(&mut world, Vec2::ZERO, &row(2));
+    sync_colliders(&mut world);
+    assert_eq!(generated(&world).len(), 1);
+
+    world
+        .get_mut::<Tilemap>(layer)
+        .expect("a layer")
+        .tile_data
+        .insert(
+            0,
+            TileData {
+                shape: TileShape::Half(Side::Bottom),
+                ..TileData::default()
+            },
+        );
+    sync_colliders(&mut world);
+
+    let found = generated(&world);
+    assert_eq!(found.len(), 2, "each half tile its own polygon");
+    assert!(found
+        .iter()
+        .all(|(_, _, c)| matches!(c, Collider::Polygon { .. })));
+}
+
+#[test]
+fn a_game_reads_a_tiles_custom_values_by_cell() {
+    let mut map = Tilemap::new(Vec2::ONE);
+    map.set(IVec2::new(2, 3), Some(Tile::new(4)));
+    map.tile_data
+        .entry(4)
+        .or_default()
+        .custom
+        .insert("ladder".into(), TileValue::Bool(true));
+
+    assert!(map
+        .custom_at(IVec2::new(2, 3), "ladder")
+        .is_some_and(TileValue::truthy));
+    assert_eq!(map.custom_at(IVec2::new(2, 3), "damage"), None);
+    assert_eq!(
+        map.custom_at(IVec2::new(0, 0), "ladder"),
+        None,
+        "no tile there"
+    );
+}

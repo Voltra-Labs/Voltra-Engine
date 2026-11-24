@@ -3,6 +3,7 @@
 mod animation;
 mod audio;
 mod builder;
+mod bus_layout;
 mod camera_rig;
 mod draw;
 mod framing;
@@ -10,25 +11,34 @@ mod gamepads;
 mod gpu_particles;
 pub mod headless;
 mod input_map;
+mod loading;
 #[cfg(not(target_arch = "wasm32"))]
 mod native;
+mod net_counters;
 mod particles;
 mod prefab_sync;
+mod restyle;
 mod scene_draws;
 mod scenes;
 mod simulation;
+mod skinned_meshes;
 mod sorting_layers;
 mod spawning;
 mod startup;
 mod thumbnails;
 mod tick;
 mod tick_audio;
+mod tick_controls;
+pub mod tick_net;
+mod tick_replication;
+mod tick_theme;
 mod tick_time;
 mod ui_frame;
 mod ui_input;
 #[cfg(target_arch = "wasm32")]
 mod web;
 mod window_requests;
+mod window_seam;
 
 #[cfg(not(target_arch = "wasm32"))]
 use native as platform;
@@ -59,11 +69,15 @@ use crate::input::{ActionMap, Input};
 use crate::time::Clock;
 use crate::ui::{EguiLayer, TextureId};
 use crate::window::WindowConfig;
+pub use bus_layout::{parse_bus_layout, DEFAULT_BUS_LAYOUT};
 pub use input_map::DEFAULT_INPUT_MAP;
+pub use loading::{LoadStats, SceneChangeStatus, StreamingStats, DEFAULT_LOAD_BUDGET};
+pub use net_counters::NET_COUNTERS;
 pub use scenes::SceneLoad;
 pub use sorting_layers::{parse_sorting_layers, DEFAULT_SORTING_LAYERS};
 pub use tick::Tick;
 pub use tick_audio::TickAudio;
+pub use tick_net::Net;
 pub use ui_frame::UiFrame;
 
 type UiFn = Box<dyn FnMut(&mut egui::Ui, &mut UiFrame<'_>)>;
@@ -175,6 +189,10 @@ pub struct App {
     gamepads: Option<gamepads::Gamepads>,
     /// The game's named actions, re-evaluated into `input` every frame.
     actions: ActionMap,
+    /// The actions as the game ships them — its map file, or the map handed
+    /// to `with_actions` — before the player's own controls are laid over:
+    /// what a rebound control is saved as a difference from.
+    default_actions: ActionMap,
     /// The map file named by `with_input_map`; `None` reads the convention.
     input_map_path: Option<AssetPath>,
     /// Whether `actions` was handed in by `with_actions`, which the
@@ -182,6 +200,9 @@ pub struct App {
     actions_from_code: bool,
     /// Whether frames simulate, and the one-off steps and resets a UI asks for.
     simulation: Simulation,
+    /// The game's network session, received before the ticks and flushed
+    /// after them.
+    net: tick_net::Net,
     /// The output device, or a silent stand-in when there is none.
     ///
     /// Not an `Option`: [`Audio::silent`] already is the "no device" case, and
@@ -212,8 +233,13 @@ pub struct App {
     /// The world's sprite batch, kept so each frame refills its buffers
     /// instead of allocating them.
     frame_batch: voltra_scene::SpriteBatch,
+    /// The GPU buffers the world's batch is written into, kept and grown
+    /// rather than made afresh each frame (stage 108).
+    batch_buffers: voltra_render::MeshBuffers,
     /// The renderer's half of every emitter simulated on the GPU.
     gpu_rings: gpu_particles::GpuParticleRings,
+    /// The renderer's half of every skinned sprite.
+    skinned_meshes: skinned_meshes::SkinnedMeshes,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a
@@ -232,6 +258,8 @@ pub struct App {
     held_actions: crate::input::HeldActions,
     /// The title and close the UI asked for this frame.
     window_requests: window_requests::WindowRequests,
+    /// The window as the game's ticks see it, and what they asked of it.
+    game_window: crate::window::GameWindow,
     /// The renderer a browser is still building, and the page's gesture;
     /// see `app/web.rs`.
     #[cfg(target_arch = "wasm32")]
@@ -359,8 +387,15 @@ impl App {
         self.input.update_actions(&self.actions);
         // After the actions, which navigate the focus, and before the tick,
         // which reads this frame's clicks.
-        self.update_ui_controls();
+        self.update_ui_controls(delta);
+        // A theme the controls just applied may name skins and fonts.
+        self.resolve_restyled();
         drop(input);
+        // Before the tick, so it reads this frame's messages and events.
+        self.receive_net(delta);
+        // Before the tick too, which reads what the server sent: spawned,
+        // despawned and changed.
+        self.receive_replication();
         // Before the tick, so it reads this frame's finished tweens and
         // fired timers, as it reads this frame's clicks.
         self.step_tweens_and_timers(delta);
@@ -371,6 +406,9 @@ impl App {
         // After the tick, which may have switched the language or spawned a
         // keyed text, and before anything draws one.
         self.locale.localize(&mut self.world);
+        if let Some(fonts) = self.fonts.as_mut() {
+            self.locale.apply_fonts(fonts);
+        }
         // Before anything else looks at what the tick made: a spawned sprite
         // is drawn, and a spawned source started, with its handles in place.
         self.resolve_spawned();
@@ -408,6 +446,15 @@ impl App {
         // Last: a scene change despawns what the ticks and steps were holding,
         // so it waits until they have let go.
         self.apply_scene_requests();
+        // After the requests, which may have started a change or a world:
+        // what loads over frames gets this frame's budget.
+        self.update_loading();
+        // After every step: the snapshot is the world as the frame left it,
+        // and a remote entity is drawn where the clock says, whatever the
+        // physics did to it.
+        self.send_replication(delta);
+        // What every tick of the frame queued goes out together.
+        self.flush_net();
     }
 
     /// Applies whatever the watcher saw since the last frame.
@@ -429,15 +476,16 @@ impl App {
         // whose renderer is not up yet still hears the edit.
         let mut images = Vec::with_capacity(changed.len());
         for path in changed {
+            // A sound reaches its own clip and every clip a settings file
+            // makes of it.
             let reloaded = match self.clips.as_mut() {
-                Some(clips) => match clips.reload(&path) {
-                    true => clips.by_path_handle(&path),
-                    false => None,
-                },
-                None => None,
+                Some(clips) => clips.reload(&path),
+                None => Vec::new(),
             };
-            if let Some(clip) = reloaded {
-                self.scene_audio.restart(&self.world, clip, &mut self.audio);
+            if !reloaded.is_empty() {
+                for clip in reloaded {
+                    self.scene_audio.restart(&self.world, clip, &mut self.audio);
+                }
                 continue;
             }
             // A clip is read by its players next frame, a machine by its
@@ -466,6 +514,9 @@ impl App {
                 continue;
             }
             if self.reload_sorting_layers(&path) {
+                continue;
+            }
+            if self.reload_bus_layout(&path) {
                 continue;
             }
             // A face needs no device either: its atlas starts over and is
@@ -571,8 +622,16 @@ impl ApplicationHandler for App {
                 if let Some(renderer) = self.renderer.as_mut() {
                     renderer.resize(size.width, size.height);
                 }
+                // A resize is also how fullscreen arriving, or leaving by
+                // the platform's own key, shows.
+                self.refresh_game_window();
+            }
+            WindowEvent::Moved(_) | WindowEvent::ScaleFactorChanged { .. } => {
+                // Another monitor, other modes.
+                self.refresh_game_window();
             }
             WindowEvent::RedrawRequested => {
+                self.refresh_game_window_shown();
                 self.update();
 
                 if self.ui.is_some() {
@@ -583,6 +642,11 @@ impl ApplicationHandler for App {
 
                 // Must come after everything that reads input this frame.
                 self.input.end_frame();
+
+                // Between this frame and the next, as the scene changes
+                // were: fullscreen, size and vsync change on a window that
+                // is not being drawn into.
+                self.apply_game_window();
 
                 // A close the UI agreed to, or asked for itself.
                 if self.window_requests.should_exit() {

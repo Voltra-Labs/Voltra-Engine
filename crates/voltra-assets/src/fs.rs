@@ -55,6 +55,13 @@ pub fn exists(path: &Path) -> bool {
     on_disk(path)
 }
 
+/// Whether `path` is answered by a mounted pack rather than the disk — so a
+/// caller that would open the file and read it a block at a time (a
+/// streamed sound) knows its bytes are already in memory instead.
+pub fn is_packed(path: &Path) -> bool {
+    in_pack(path).is_some()
+}
+
 /// [`read`], as UTF-8 text.
 pub fn read_to_string(path: &Path) -> io::Result<String> {
     String::from_utf8(read(path)?).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))

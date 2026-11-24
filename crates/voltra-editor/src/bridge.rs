@@ -8,8 +8,13 @@
 //! their own; play, step and stop through the toolbar's own paths; a
 //! screenshot from the viewport as this frame drew it.
 
+mod atlas;
 mod edits;
+mod prefab_mode;
 mod read;
+mod search;
+mod tiles;
+mod unsaved;
 
 use base64::Engine;
 use serde_json::{json, Value};
@@ -20,6 +25,7 @@ use crate::editor::Editor;
 use crate::play::PlayState;
 use crate::scene_file;
 use crate::selection::Selection;
+use unsaved::{keep_unsaved, not_in_prefab_mode};
 
 /// Applies and answers whatever arrived since last frame.
 pub(crate) fn serve(editor: &mut Editor, frame: &mut UiFrame<'_>) {
@@ -44,6 +50,9 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             "entities": frame.world.query::<voltra_scene::SceneId>().count(),
             "undo": editor.history.undo_label(),
             "redo": editor.history.redo_label(),
+            // The documents a prefab is open over, the scene first; empty
+            // outside prefab mode.
+            "prefab_trail": editor.prefab_mode.trail().collect::<Vec<_>>(),
         })),
         Command::Read => read::entities(frame.world, &editor.registry),
         Command::Snap {
@@ -99,7 +108,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
         }
         Command::Settings { file, text } => {
             let which = crate::project_settings::SettingsFile::named(file)
-                .ok_or_else(|| format!("{file:?} is not input, layers or build"))?;
+                .ok_or_else(|| format!("{file:?} is not input, layers, buses or build"))?;
             let assets = frame.textures.root().to_path_buf();
             match text {
                 Some(text) => {
@@ -182,6 +191,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             discard_changes,
         } => {
             let path = scene_file::scene_path(path)?;
+            not_in_prefab_mode(editor)?;
             keep_unsaved(editor, *discard_changes)?;
             scene_file::open(editor, frame, &path)?;
             Ok(json!({
@@ -190,6 +200,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }))
         }
         Command::New { discard_changes } => {
+            not_in_prefab_mode(editor)?;
             keep_unsaved(editor, *discard_changes)?;
             scene_file::new_scene(editor, frame);
             Ok(json!({ "new": true }))
@@ -230,6 +241,35 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }
             Ok(json!({ "holding": action, "frames": frames }))
         }
+        Command::AtlasOpen { .. }
+        | Command::AtlasRead
+        | Command::AtlasSlice { .. }
+        | Command::AtlasRegion { .. }
+        | Command::AtlasUndo
+        | Command::AtlasRedo
+        | Command::AtlasSave { .. } => atlas::apply(editor, frame, command),
+        Command::TilePick { .. }
+        | Command::TileStamp { .. }
+        | Command::TilePaint { .. }
+        | Command::TileRead { .. } => tiles::apply(editor, frame, command),
+        Command::PackAtlas { folder, trim } => {
+            let folder = voltra_assets::AssetPath::new(folder).map_err(|e| e.to_string())?;
+            let (atlas, report) = crate::pack_atlas::pack(frame, &folder, *trim)?;
+            editor.assets.refresh();
+            Ok(json!({
+                "atlas": atlas.as_str(),
+                "sheet": report.texture.as_ref().map(|path| path.as_str()),
+                "regions": report.regions,
+                "size": [report.size.x, report.size.y],
+                "gone": report.gone,
+            }))
+        }
+        Command::PrefabOpen { .. } | Command::PrefabClose { .. } => {
+            prefab_mode::apply(editor, frame, command)
+        }
+        Command::HierarchySearch { .. } | Command::AssetSearch { .. } => {
+            search::apply(editor, frame, command)
+        }
         Command::Profile { frames, record } => {
             if let Some(record) = record {
                 voltra_profile::set_enabled(*record);
@@ -241,6 +281,23 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             answer["frames_recorded"] = json!(voltra_profile::frames_recorded());
             Ok(answer)
         }
+        Command::NetPlay {
+            clients,
+            latency_ms,
+            jitter_ms,
+            loss,
+            bandwidth,
+        } => {
+            let settings = crate::netplay::Settings {
+                clients: *clients,
+                latency_ms: *latency_ms,
+                jitter_ms: *jitter_ms,
+                loss: *loss,
+                bandwidth: *bandwidth,
+            };
+            crate::netplay::configure(editor, settings)?;
+            Ok(crate::netplay::status(editor, frame))
+        }
         Command::Screenshot => {
             let shot = frame.capture_viewport();
             let png = shot.png_bytes().map_err(|e| e.to_string())?;
@@ -251,17 +308,4 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             }))
         }
     }
-}
-
-/// Refuses to let unsaved changes go unless the caller said to: the person
-/// at the editor may be in the middle of them, and an AI must not throw
-/// their work away by accident.
-fn keep_unsaved(editor: &Editor, discard_changes: bool) -> Result<(), String> {
-    if editor.document.is_dirty(&editor.history) && !discard_changes {
-        return Err(format!(
-            "{} has unsaved changes: save it first, or pass discard_changes to drop them",
-            editor.document.name()
-        ));
-    }
-    Ok(())
 }

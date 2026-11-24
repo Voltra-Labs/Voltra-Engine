@@ -69,8 +69,10 @@ decoding is arithmetic over a file — which is what keeps its tests headless on
 a machine with no sound card.
 
 **Rule:** exactly one crate may depend on `winit` (`voltra-core`), exactly one
-on `wgpu` (`voltra-render`), and exactly one on `cpal` and `symphonia`
-(`voltra-audio`). Everything else consumes them through re-exports, so a
+on `wgpu` (`voltra-render`), exactly one on `cpal` and `symphonia`
+(`voltra-audio`), and exactly one on `tungstenite` (`voltra-net`, which
+opens every socket a game plays over; the editor bridge's loopback socket
+is a tool's, not a game's). Everything else consumes them through re-exports, so a
 version bump is a one-line change.
 
 ### Current crates
@@ -86,11 +88,14 @@ version bump is a one-line change.
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
 | `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
+| `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport`, `Endpoint`, `NetConfig`, `ChannelKind`, `ChannelId`, `PeerId`, `NetEvent`, `DisconnectReason`, `Message` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
 | `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs — and a running editor, through the bridge — for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
-| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock` |
+| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session and its replication | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
+| `voltra-replication` | The server's world sent to its clients: snapshots and deltas within a per-client budget, interpolation of remote entities, prediction of the owned one | `ReplicationServer`, `ReplicationClient`, `ReplicationConfig`, `Timeline`, `Prediction`, `NetOwner` |
+| `voltra-server` | A dedicated server: a scene headless at a fixed tick, hosted over UDP and WebSockets; a library a game's own server binary is built on | `Server`, `ServerOptions`, `Pacer` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
 ### Planned crates
@@ -2383,6 +2388,9 @@ tiles in 38, auto-tiling in 39–40, the mesh cache in 44.)
 
 ### Text is quads in the sprite batch, from one glyph atlas per font
 
+(Stage 91 replaced the per-character layout and the atlas per font: see
+"Text is shaped by run, and a missing glyph falls back to the next font".)
+
 Stage 26a. A `Text` (content, optional font path, `size` in entity units,
 `pixels_per_em` raster resolution, colour, `Align`, `sort_order`) is drawn in
 world space by the sprite pipeline: one quad per inked glyph, pushed into the
@@ -2668,8 +2676,8 @@ whether to trust it.
   start over from silently. Versioning the type is the game's (a field in
   `T`), since only it knows what changed.
 - **Synchronous**, from `tick.saves`: a save is small and a checkpoint wants
-  it on disk before anything else can go wrong. `Saves::path_of` also gives
-  `ActionMap::save` a home beside the slots.
+  it on disk before anything else can go wrong. The player's other files
+  (rebound controls, options) live beside the slots — stage 88.
 - The platformer saves its coin count and the walker's position on F5 and
   restores them on F9.
 
@@ -5243,7 +5251,8 @@ language, switched while the game runs.
 - **`Text::key`**: a string-table key, Godot's auto-translate and Unity's
   localized string. The **`Locale`** (`voltra-scene`) holds the current
   language and its table, `locale/<language>.ron`
-  (`(version: 1, strings: {key: string})`, read through the asset funnel,
+  (`(version: 1, strings: {key: string})` — version 2 adds `fonts`, stage
+  91 — read through the asset funnel,
   so the web bundle carries it), and writes each keyed text's string into
   its `content` every frame — after the tick, so a language switched or a
   text spawned shows the next draw, in the editor as in the game. A key
@@ -5544,6 +5553,2172 @@ Stage 87, version 0.1: a base is solid when someone else can use it.
 - **`CHANGELOG.md`** in Keep a Changelog form; the workspace is `0.1.0`.
   The `v0.1.0` tag belongs on `main` once this lands, not on a branch.
 
+### Rebound controls are saved through the saves storage
+
+Stage 88. A player's rebound keys survive a restart on every platform, the
+web included: before, `ActionMap::save` wrote through `std::fs`, which a
+browser does not have, while `Saves` already reached `localStorage`.
+
+- **One storage seam** (`voltra-core/src/storage.rs`, with `native.rs` and
+  `web.rs` moved there from `saves/`): write whole (a temporary and a
+  rename; one `localStorage` set), size, read, remove, list — by full
+  path, so the folder rules stay in `saves::dir`. Three callers: save
+  slots, the player's other files, and `ActionMap::save(path)`, which a
+  tool uses to write the project's own map (kept for that; the editor's
+  Project Settings writes text through its own atomic write).
+- **The player's files beside the slots**: `Saves::write_text` /
+  `read_text` / `remove_file` / `save_file::<T>` / `load_file::<T>`, under
+  the slot rules made for a file name — `[A-Za-z0-9._-]`, no leading dot,
+  at most 96 bytes, reads bounded at 16 MiB. One folder for everything a
+  player owns, so `VOLTRA_SAVE_DIR` moves all of it; a file not named
+  `*.save.ron` is never listed as a slot.
+- **Only what changed is kept** — Unity's binding overrides
+  (`SaveBindingOverridesAsJson`), not Godot's whole `InputMap`: the App
+  keeps the game's own map (`default_actions`: its file, or the map handed
+  to `with_actions`), `ActionMap::overrides(defaults)` is the actions that
+  differ, each whole, and `apply_overrides` lays them over the game's map,
+  skipping actions the game no longer has. A whole map saved would freeze
+  every default at the version the player first rebound in; a new action
+  or a changed default must still reach them. The file
+  (`controls.input.ron`, `PLAYER_CONTROLS`) is an input map of the current
+  version, so it reads like one; with nothing changed it is removed.
+- **From a tick**: `tick.save_controls()`, `tick.reset_controls()`,
+  `tick.default_controls()`. **At start, and after every reload of the
+  map**, the loop lays the saved controls over it (`App::use_actions`):
+  natively in `finish_resume`, headless in `Headless::new`, on the web
+  under `/<game>/saves/controls.input.ron`. A hot reload still discards
+  unsaved runtime rebinds — the file is what the developer edits — but not
+  saved ones. No folder (`App::default`) is no saved controls; a file that
+  will not read is a warning and the game's own bindings stand.
+- The platformer's F1-then-a-key rebinding of jump now saves.
+
+Pinned by `saves/files.rs` (a file beside the slots, not a slot; a value
+round trip; names that would leave the folder refused), `input/player.rs`
+(only what changed; overrides skip actions the game lost; a round trip
+through a temporary user folder; a broken file an error),
+`app/tick_controls.rs` (a key rebound and saved in one headless session
+drives jump in the next, and the old key does not; a reset saved leaves no
+file) and `crates/voltra-player/web/test/rebind.mjs`: the platformer built
+for the web, jump rebound to J, the key read back from `localStorage`, the
+page reloaded, and J jumps the walker while Space does not — on WebGPU and
+WebGL2, in CI.
+
+### A game's window requests are carried out between frames
+
+Stage 89. `tick.window` (`voltra-core/src/window/game_window.rs`,
+`GameWindow`): how the window fills the screen (`Fullscreen::Windowed`,
+`Borderless`, `Exclusive(VideoMode)`), its inner size, vsync, and the
+monitors with their modes (`monitors()`, `monitor()`, `modes()`,
+`Monitor::resolutions`, `best_mode`) — plain values in `window/display.rs`
+a game can list, compare and save.
+
+- **Requests, like scene changes**: `set_fullscreen`, `set_size`,
+  `set_vsync` are kept until the frame is over and carried out after the
+  present, before the next frame is asked for — Godot's
+  `DisplayServer.window_set_mode` and Unity's `Screen.SetResolution` defer
+  the same way, and for the same reason: a window resized inside the frame
+  would resize the surface being drawn into. The last request of a kind
+  wins. Reads (`fullscreen()`, `size()`, `vsync()`) are the window as the
+  loop last saw it, so the frame after a request reads it granted.
+- **One seam** (`window/seam.rs`, `WindowSeam`): what the loop needs of a
+  window — abilities, what is shown, monitors, and the three changes. The
+  real one is winit's window plus the renderer (`app/window_seam.rs`), the
+  only place the requests meet the platform; a headless session has a
+  pretend window that grants everything (`app/headless/window.rs`); tests
+  drive the app's ticks against a fake (`window/fake.rs`) that writes down
+  each call.
+- **Fullscreen first, then the size**: a windowed size asked while
+  fullscreen is kept and applied when the window is windowed again, so an
+  options screen can set both in either order. Exclusive takes the window's
+  monitor's mode that matches exactly, else the size at its highest
+  refresh, else borderless (with a warning) — Wayland has none, nor the
+  web. A zero size is refused.
+- **Vsync is the surface's present mode**, in `voltra-render`
+  (`GpuContext::set_vsync` / `Renderer::set_vsync`, reconfiguring the
+  surface): on is `Fifo`, which every surface has and which a context now
+  starts with (before, the default config took the adapter's first listed
+  mode); off is `AutoNoVsync` (immediate, else mailbox, else FIFO), so it
+  can never fail. The platform layer asks; winit never meets wgpu.
+- **The state is read every frame** before the ticks (`refresh_shown`):
+  a platform can change it with no event — a browser granting fullscreen
+  to a canvas already the size of the page sends no resize, and Escape
+  leaves fullscreen behind the game's back. Monitors are re-read on start,
+  resize, move and scale change, and after each request.
+- **In the editor the requests are dropped**, logged once a frame they
+  arrive: the editor's window is not the game's (Unity's
+  `Screen.SetResolution` does nothing in its editor either).
+- **On the web**: fullscreen is the canvas through the Fullscreen API
+  (winit 0.30 calls `requestFullscreen` at once), which the browser grants
+  only with transient activation — a key, click or touch in the last few
+  seconds, which a tick reacting to one has; exclusive is borderless; the
+  size is the page's and vsync the browser's (`abilities()` says so, and
+  the requests are logged and dropped); no monitors are listed.
+- The platformer goes fullscreen and back on F11 or its HUD's Fullscreen
+  button.
+
+Pinned by `window/display.rs` (resolutions listed once, largest first; the
+best mode for a size), `window/game_window/tests.rs` (nothing until the
+frame is over; exclusive and its fallback; a size kept while fullscreen and
+applied on leaving; a size and vsync; a zero size refused; a page takes
+only fullscreen; the editor drops them), `app/window_seam.rs` (every request
+from a tick reaching the fake window between frames, each frame reading
+what the last asked; the editor's window untouched),
+`voltra-render/tests/headless_vsync.rs` (vsync on from the start, off and
+on by asking), the platformer's `tests/level.rs` (F11 headless) and
+`crates/voltra-player/web/test/fullscreen.mjs`: the platformer built for the
+web, its Fullscreen button clicked, the canvas the page's fullscreen
+element, clicked again and it is not — on WebGPU and WebGL2, in CI.
+
+### The options screen is a prefab the engine's code fills by name
+
+Stage 90. `assets/prefabs/options.prefab.ron` and `voltra_core::options`:
+a display row (windowed, fullscreen, exclusive where the monitor has
+modes), a resolution slider, a vsync toggle, one volume slider per bus,
+a scrolling list with one row per action to rebind, Reset controls and
+Back — built from stage 80's controls only (stage 94 brings dropdowns,
+tabs and a theme, and restyles it).
+
+- **A prefab, not an engine-drawn dialog** — the shape of Unity's and
+  Godot's sample options menus: a scene the game instances, a script
+  behind it. `OptionsScreen::open(tick, &OptionsConfig)` spawns it,
+  unlinks it from its file (a prefab sync must not put back the texts it
+  writes), finds each part by its `Name` and fills the lists by stamping
+  the prefab's own `Volume row` and `Binding row` once per bus and action
+  with the new `Tick::duplicate` (the editor's duplicate: a prefab
+  fragment spawned again, unlinked), then removes the templates and sizes a
+  fixed list to its rows. Restyle anything, keep the names; a part
+  missing is a warning and that row is left out. `update(tick)` each frame
+  answers `Outcome::Open` or `Closed`; `close` saves and despawns.
+- **Every change applies as it is made** — `tick.window` (from the next
+  frame), the bus volume, the action map — **and is kept on close**:
+  the controls through `tick.save_controls()` (stage 88's overrides), the
+  rest as `Settings` (`options.settings.ron` beside the slots: fullscreen,
+  windowed size, vsync, volume by bus; versioned, every field defaulted).
+  `Settings::apply_saved(tick)` puts the display and volumes back from a
+  game's `start`; the loop already laid the controls over the map. The
+  screen opens on the game as it runs (the window's real state, the live
+  volumes) plus the windowed size kept — F11 since the last save shows.
+- **Rebinding**: a row clicked waits ("press a key… (Esc cancels)"); the
+  next control pressed becomes the action's first binding *of its kind*
+  (`ActionMap::assign`: keyboard and mouse, or gamepad — a row shows one of
+  each, `Jump: Space / Pad South`), read from the frame after the click so
+  the accept that started it is not taken. Unlike `rebind`, `assign`
+  takes the control off no other action: binding jump to the key that
+  walks would silently unbind walking. The clash is shown instead, on
+  both rows and in a clash colour (`ActionMap::conflicts`, among the
+  listed actions), for the player to resolve — Unity's rebinding sample
+  and Godot's projects do the same. The cancel action is `ui_cancel`
+  (Escape, a pad's East), new in the default map with `pause` (Escape,
+  Start); it cannot be bound from the screen. `Binding` is `Display` now
+  (`J`, `Up`, `Mouse Left`, `Pad South`).
+- **Resolutions** are the window's monitor's modes, else the common 16:9
+  sizes that fit on it, plus the size it starts at — smallest first, so
+  the slider's right is bigger; none on the web ("set by the page"), where
+  vsync reads "the browser's".
+- The platformer pauses on Escape (`menu.rs`, `assets/prefabs/
+  pause.prefab.ron`): Resume, Options; Back returns to the pause menu. The
+  walker stands still under it. `cargo xtask new-game` copies the options
+  prefab into a new game.
+
+Pinned by `options/settings.rs` (a round trip; another version refused;
+missing fields defaulted), `options/screen/labels.rs` (names as words; a
+row with both kinds and its clash), `options/screen/display.rs` (modes,
+else the common sizes; the display mode going round; no exclusive without
+modes), `input/rebinding.rs` (assign by kind, no repeats, a clash kept and
+reported), `input/label.rs`, `options/screen/tests.rs` (the shipped prefab
+opened headless: a volume per bus and a row per action, the templates
+gone; a rebound key shown, a clash coloured, Back saving both files;
+Escape cancelling a rebind before closing; the display rows reaching the
+window; a volume slider setting its bus) and the platformer's
+`tests/options.rs`: Escape, Options, jump rebound to J, Back, Escape —
+then a new headless session with the same player folder, where J jumps
+and Space does not; and the level standing still under the pause menu.
+### A long clip is streamed by its settings file, and music cross-fades at equal power
+
+Stage 104. Before it every clip decoded whole at load (`clip.rs`): fine for a
+coin, 23 MB a minute for 48 kHz stereo music.
+
+**Where `stream` is decided: on the asset.** Unity makes it an `AudioClip`
+import setting (Load Type: Streaming), Godot an `.import` setting of the
+Ogg stream (with `loop` and `loop_offset` beside it), FMOD a flag when the
+sound is created — all three on the sound, none on the thing playing it.
+The `AudioSource` was the alternative and was rejected: two sources naming
+one file would disagree about how it is stored, and a tick playing a handle
+has no source at all. This engine has no import sidecars, so the settings
+are an asset of their own, `*.clip.ron`, named wherever a sound is:
+
+```ron
+(version: 1, file: "audio/theme.ogg", stream: true, loop_start: 4.0, loop_end: Some(62.5))
+```
+
+`Clips::load` follows it to the sound — `stream: true` probes only the
+header (`decode::probe`), otherwise decodes whole as before — and applies the
+loop points either way (`Clip::with_loop`; a looping voice plays the intro
+once, then `loop_start..loop_end`). A plain `.wav`/`.ogg` named directly is
+what it always was. `is_clip` accepts the suffix, so the watcher, the asset
+browser and a drop on the viewport treat it as a sound; editing the `.ogg`
+reloads every settings clip naming it (`Clips::reload` now answers every
+handle that changed).
+
+**One `Clip` type, two representations**, Unity's shape: resident samples
+or an `Arc<StreamSource>` (a path natively; the pack's bytes where one is
+mounted, which on the web is always). Everything that plays a clip plays
+either.
+
+**Who decodes.** Each voice of a streamed clip gets its own `StreamDecoder`,
+made and primed with 100 ms on the calling thread at `Audio::play`, feeding
+a fixed `ring` of one second of samples (`stream::BUFFER`; 384 KB at 48 kHz
+stereo). The ring is single-producer single-consumer over `AtomicU32` slots,
+no `unsafe`, no lock, nothing allocated after it is made; the voice's
+`StreamReader` keeps the two frames it interpolates between and pulls the
+next as the cursor crosses one. The device callback only copies out of it.
+Natively a `voltra-stream` thread (`Streamer`) tops every ring up every
+5 ms, asleep on a channel when nothing streams. `wasm32-unknown-unknown`
+has no threads, so there the same `Pump` runs from `Audio::end_frame` once
+a frame — the second of buffer covers a slow frame many times over. A
+decoder that falls behind leaves silence, not a skip, and the count is
+logged from the decoder's side (the callback cannot log). A stopped voice's
+feed is retired to the main thread like its clip (`Retired`); its ring's
+`closed` flag ends the decoder. Only the first two channels are queued —
+all the mixer reads.
+
+**Loop points are the decoder's job**, so the voice never sees a seam. At
+`loop_end` (or the file's end) it seeks to 4096 frames before `loop_start`
+with `SeekMode::Accurate`, resets the decoder and drops frames by packet
+timestamp until `loop_start`: exact for WAV, and for Vorbis whose first
+packet after a reset is silenced. A container that cannot seek is opened
+again and decoded through. A loop that keeps turning back with nothing in
+it (a header longer than the file) ends the stream rather than spinning.
+
+**`tick.audio.play_music(handle, fade)`** makes a clip the music: looping,
+on the `music` bus, cross-fading from the last one. `Ramp` gained a
+`Curve`; `EqualPower` fades along `from·cos θ + to·sin θ`, so the outgoing
+cosine and incoming sine have squared gains summing to one at every frame —
+two linear halves are each −6 dB at the middle, a dip anyone hears.
+`Command::Play/Fade/Stop` carry the curve. Naming the track already playing
+keeps it (`Clip::same`, by pointer), so a tick may name its area's music
+every frame. `stop_music`, `play_music_with` for other params.
+
+Pinned by `stream/tests.rs` (every frame in order then the end; intro then
+loop, with and without a loop end; one second of ring and no more; primed
+before the voice starts; a dropped feed ends the decoder; the thread fills
+it; an empty loop ends), `stream/ring.rs` (order, wrap, all-or-nothing
+frames, two threads), `tests/streaming_memory.rs` (a counting allocator: a
+three-minute 16 kHz stereo WAV — 23 MB resident — plays start to end
+through the mixer with a 237 KB peak, asserted under 2 MB, and no silent
+block), `mixer/tests.rs` (an equal-power cross-fade's two voices hold
+`L² + R²` at one, ±0.1 %, every frame), `ramp.rs`, `audio/tests.rs` (the
+commands a cross-fade sends; the same track kept), `clips/tests.rs` and
+`clips/settings.rs` (streamed from disk or from a pack, resident with a
+loop, broken settings silent, edits of either file reaching the clip).
+
+### Buses carry effects in order, laid out by `default.buses.ron`
+
+Stage 105. `bus.rs` said buses feeding buses would wait for "an effect to put
+on a node"; now there are effects, and routing stays one level deep — every
+bus feeds the master — because inserts on a bus need no graph.
+
+**Inserts, then the fader**, a desk's channel strip and Unity's, Godot's and
+Wwise's shape: a bus's voices are summed into the bus's own block, its
+chain runs first to last, then its volume, then it joins the master; the
+master's chain and volume run on the sum, then the limiter. Before this
+stage each voice multiplied a copy of its bus's ramp and there were no
+per-bus buffers; now the mixer works in `BLOCK`s of 256 frames with one
+preallocated block per bus (32 × 256 × channels floats), so any buffer
+length a host asks for is handled without growing anything. A bus is run
+only when a voice is on it or it has effects — a delay's echoes and a
+reverb's tail outlive the last voice — and a reverb's tail follows its
+bus's fader.
+
+**The effects** (`effect/`), each on the first two channels:
+
+- `LowPass` / `HighPass`: an RBJ-cookbook biquad (Web Audio's
+  `BiquadFilterNode` formulas), transposed direct form II, 12 dB/octave,
+  cutoff clamped to 10 Hz..0.49·rate. Coefficients recomputed every 16
+  frames while the cutoff or Q ramps.
+- `Delay`: a line per side, `MAX_DELAY` (2 s) long whatever the time, so a
+  time moved from a tick never allocates; fractional read (a moving time
+  bends pitch like tape, no click); feedback capped at 0.95; `mix` is a
+  dry/wet cross-fade.
+- `Reverb`: Freeverb — 8 lowpass-feedback combs and 4 all-passes a side,
+  Jezar's tunings scaled from 44.1 kHz to the device rate, 23-sample stereo
+  spread; `room_size`, `damping`, `width`, `mix`.
+- `Duck { by, depth, threshold, attack, release }`: the bus pulled to
+  `1 − depth` while `by` is above `threshold`, along straight lines in gain,
+  so it is fully down exactly `attack` after `by` sounds. Every bus's level
+  (its voices' peak times its volume) is measured after all voices are
+  summed and before any chain runs, so a duck hears its trigger in the same
+  block whatever the bus order — no lag and no ordering rule. Activity is
+  per block (5 ms at 48 kHz).
+
+**Built on the main thread.** `EffectDesc` (serde) is the effect as a file
+or a tick says it; `Effect::build` makes the running one at the device rate
+on the calling thread, delay lines and combs included, and
+`Command::SetBusEffects` sends the finished chain, at most `MAX_EFFECTS`
+(8). The replaced chain comes back as `Retired::Effects` and is freed in
+`end_frame`. `Audio` mirrors each bus's descriptions — for a settings
+screen, and so a device opened late gets them (`replay_bus_effects`). An
+effect with a `NaN` or negative number is left off with a warning; a merely
+large one is clamped where used.
+
+**Rampable from a tick like a volume**: `tick.audio.set_bus_param(bus,
+effect, Param::Cutoff, 4000.0, over)` slides the effect at that index
+(`Command::SetBusParam`, a `Ramp` per parameter; a duck's numbers move
+along its own attack and release). It answers `false` for an effect or a
+parameter that is not there, so a typo is told. `set_bus_effects` replaces
+a chain; `voltra_core::effect` re-exports the types for a game.
+
+**Where bus config lives: `default.buses.ron`**, a new project file
+beside `default.layers.ron` (version 1), Godot's `default_bus_layout.tres`
+in shape — stage 23b had only code, because there was no settings file yet:
+
+```ron
+(version: 1, buses: [
+    (name: "music", volume: 0.8, effects: [Duck(by: "dialogue", depth: 0.7)]),
+    (name: "sfx", effects: [Reverb(room_size: 0.6, mix: 0.25)]),
+])
+```
+
+`parse_bus_layout` checks it (version, a name twice, a bus ducked by itself,
+effect numbers); `App` reads it at startup and on hot reload
+(`app/bus_layout.rs`) and `Audio::apply_layout` applies it *additively*:
+buses are registered by name and never renumbered, so voices already
+playing stay on their bus and a table from `with_buses` keeps working; a bus
+the previous layout set and the new one drops goes back to unity with no
+effects. The editor's Project Settings gets an "Audio buses" tab (the same
+check-then-save RON editor as the other files; the bridge's `settings` takes
+`buses`), the asset browser lists it as `BusLayout`, and `new-game` copies
+the shipped file.
+
+Pinned by `effect/tests.rs`, all offline through the mixer at 48 kHz: a
+1 kHz low-pass passes 200 Hz within 0.5 dB, is −3 dB ± 0.5 at the cutoff and
+below −30 dB at 8 kHz (high-pass mirrored at 125 Hz); a cutoff ramped from
+200 Hz to 18 kHz opens on a 4 kHz tone; a 0.25 s delay's echo peaks at
+exactly frame 12 000 at half, the fed-back one at 24 000 at a quarter, with
+silence between; a reverb's impulse tail falls over 40 dB in two seconds
+and a bigger room rings over ten times longer; the tail follows the fader;
+a 0.75-deep duck is at 0.625 half way through its 50 ms attack, at a quarter
+exactly at its end, holds, and returns along its 200 ms release from the
+first block the trigger is silent; effects on one bus leave another alone; a
+replaced chain is retired. `tests/realtime_alloc.rs` counts allocations
+around 200 renders with resident and streamed voices, every effect, a
+moving parameter and a buffer that is not a whole number of blocks: zero.
+`audio/tests.rs` (built and sent whole, the mirror, refused params,
+layouts applied and undone), `layout.rs`, `app/bus_layout.rs` (the
+conventional file, a broken one changing nothing, a reload, the shipped
+file reads) and `project_settings.rs` (saved, refused when it would not mix).
+### The network is a polled datagram transport, written in-house
+
+Stage 111. A new crate, `voltra-net`, owns every socket a game plays over.
+One trait, `Transport`, moves datagrams of at most `MAX_DATAGRAM` (1200)
+bytes: `update(now)` once a tick for the I/O that is neither a send nor a
+receive (accepting, handshakes, flushes, releasing delayed datagrams),
+`send(to, bytes)`, `recv()` drained until `None`, `reaches(address)` for
+routing, and `take_closed`/`close` for transports with a stream per peer.
+An `Address` names the transport kind as well as the peer (`Udp`,
+`WebSocket`, `Memory`, and `Server` — the one peer a browser page dialled,
+whose socket it never learns), so a UDP and a WebSocket peer on the same
+`ip:port` are two peers.
+
+- **Backends**: `UdpTransport` (`std::net::UdpSocket`, non-blocking);
+  `WebSocketServer` and `WebSocketClient` natively, over `tungstenite`;
+  `BrowserWebSocket` on wasm (`web-sys`'s `WebSocket`, its `onmessage`
+  pushing into a queue the tick drains); `MemoryNetwork` endpoints in one
+  process; `Conditioned<T>` wrapping any of them with seeded loss,
+  latency, jitter (which reorders) and duplication; `MultiTransport` for a
+  server on UDP and WebSockets at once, routing a send by address kind.
+- **Polled, no runtime.** Godot's `PacketPeer.poll()` and renet's
+  `update`/`send_packets` have the same shape; a browser can only call us
+  back, and a tokio runtime (as `renet2`'s WebSocket and WebTransport
+  servers need) would be a second scheduler beside the frame loop. The
+  native WebSocket listener runs `tungstenite`'s handshakes on non-blocking
+  streams and resumes them each update; only the native *client* uses a
+  short-lived thread, because std has no non-blocking `connect` and a frame
+  must not wait on one.
+- **Unreliable by contract**, every backend: a full buffer or a stream
+  still opening drops the datagram and answers `Ok`. Errors mean a wrong
+  request (`TooLarge`, `Unreachable`) or a dead transport (`Closed`, `Io`).
+  Over WebSockets nothing is lost, which makes stage 112's acks redundant
+  there but harmless — one protocol over both.
+- **Untrusted input is bounded at the transport.** UDP reads into a buffer
+  one byte longer than the limit and drops a datagram that fills it (and
+  skips Windows' ICMP resets), at most 256 skipped per call; WebSockets set
+  `max_message_size` and `max_frame_size` to the datagram limit (a longer
+  message ends the stream), a 256 KiB write buffer per stream, and cap
+  streams (1024), half-open handshakes (64, 5 s each) and queued datagrams
+  (8192) — `WebSocketLimits`.
+- **Conditions are a wrapper, not a memory-network feature**, so the
+  editor's network panel (stage 117) can put the same loss and latency on
+  a real socket. Unity Transport's `SimulatorPipelineStage` and renet's
+  conditioner sit in the same place. Applied on the way out; a bad link
+  both ways wraps both ends.
+
+**In-house, not `renet` or `laminar`.** Read from their sources (renet
+2.0.1, laminar 0.5.0): renet's core is transport-agnostic and its channels
+are good, but it has no unreliable-*sequenced* channel, its handshake lives
+in `renet_netcode` (connect tokens from a matchmaker, UDP only), and a
+browser needs the `renet2` fork's async servers. laminar binds and owns its
+own `UdpSocket`, reaches the caller over `crossbeam` channels, is UDP only,
+and drags `rand` 0.8 and `clap` 2. Either way the transports, the web path
+and the handshake would be ours, and what is left — channels, acks,
+fragmentation — is the part whose bounds on untrusted input we most want
+to own and test (stage 112). CLAUDE.md's rule against framework crates
+points the same way. `tungstenite` stays: it is a leaf (a protocol over any
+`Read + Write`), and only `voltra-net` may name it, as only `voltra-core`
+names `winit`.
+
+Pinned by `voltra-net/tests/udp.rs` (a client and server exchange
+datagrams; a datagram one byte over the limit, sent raw, is dropped and the
+next one arrives whole), `tests/websocket.rs` (an exchange; a closed client
+reported and then unreachable; a hand-made client's over-long frame ending
+its stream with nothing taken; a connection that never shakes hands timed
+out while a real client still gets in), the unit tests of `memory.rs`,
+`conditions.rs` (latency held to the millisecond, loss near its share and
+counted, jitter reordering, duplicates, a seed replaying) and `multi.rs`,
+and `crates/voltra-player/web/test/net.mjs` in CI's web job: the wasm
+`examples/web_probe.rs` in Chromium opens a `BrowserWebSocket` to the native
+`examples/echo_server.rs` and gets its datagram back.
+
+### A connection is a stateless handshake, packet acks and per-channel windows
+
+Stage 112. `voltra_net::Endpoint` is a server or a client over any
+`Transport`: one type for both roles, because after the handshake both ends
+are the same — peers, messages on channels, events — as Godot's
+`MultiplayerPeer` and Unity's `NetworkDriver` are one type. Polled:
+`receive(now)` at the top of a tick, `flush(now)` at the bottom, the
+caller's clock in both. A server numbers clients from `PeerId(1)`; to a
+client its server is `PeerId::SERVER`, and `local_id()` is the number the
+server gave it (what replication will name an owner by).
+
+- **Handshake** (`packet.rs` lays out every packet): request (protocol
+  version, the config's fingerprint, a nonce) → challenge (a cookie: a
+  keyed hash of address, nonce and a 10 s time slice, so the server keeps
+  nothing per stranger) → response (the cookie back) → accept (a session id,
+  the client's `PeerId`) or deny (a reason). netcode's shape without its
+  encryption. Request and response are padded to 64 bytes — more than any
+  answer — so a spoofed source gets no amplification. The fingerprint
+  hashes the game's `NetConfig::protocol`, the channel layout, the message
+  size and the channel budget: a mismatch is refused as
+  `ProtocolMismatch` at the door rather than misread later. A response
+  from a connected address with a new nonce is that client restarted.
+- **Keep-alive, timeouts, reasons**: an empty payload when an ack is owed or
+  the line was quiet for `keepalive` (250 ms); `timeout` (10 s) of silence
+  drops a peer; a client gives up after `connect_timeout` (5 s).
+  `DisconnectReason`: `Left`, `Closed`, `Kicked`, `ServerFull`,
+  `ProtocolMismatch`, `Violation`, `Shutdown` (sent, three times, as a
+  `disconnect` packet), and `Timeout`, `ConnectTimeout`, `TransportClosed`
+  (seen only locally). Dropping an endpoint says goodbye to every peer.
+- **Packet acks**, as Gaffer On Games lays them out and netcode, renet and
+  Unity Transport keep: every payload carries the newest sequence received
+  and 32 bits for the ones before. A reliable fragment is acknowledged
+  when a packet that carried it is, and resent after 1.5 smoothed RTTs
+  (RFC 6298's 1/8 gain; clamped to 20 ms–1 s). Sequences start at 1 so
+  "nothing received yet" acknowledges nothing.
+- **Channels** (`NetConfig::channels`, default one of each, `ChannelId`
+  constants naming them): `ReliableOrdered`, `ReliableUnordered`,
+  `UnreliableSequenced` (older than the newest delivered is dropped). Each
+  has its own numbering, so head-of-line blocking stays inside a channel.
+  A reliable channel's window is 512 messages from the oldest not yet
+  handed out; the sender stops at the same 512 (`SendError::ChannelFull`),
+  so an honest peer is never outside it.
+- **Fragmentation**: a message over 1024 bytes goes as fragments of
+  exactly 1024 but the last; reassembled per message id, reliable ones
+  fragment by fragment, sequenced ones whole or not at all (at most four
+  half-built). `max_message_size` (64 KiB default, 16 MiB at most) caps a
+  message.
+- **Untrusted input**: every length is checked before slicing
+  (`wire.rs`), a message id must be in the window (or just behind it, a
+  resend), a fragment count within the largest message, and each
+  reassembly is charged to the channel's budget (`channel_budget`, 1 MiB)
+  *before* its buffer is allocated. The sender counts the same charge
+  against the same budget, so going over can only be hostile: the peer is
+  disconnected with `Violation`. Junk from strangers is dropped; a receive
+  reads at most 16 384 datagrams. Nothing in a datagram can panic us — the
+  tests feed it random bytes. Not done: encryption and authentication
+  (netcode.io's connect tokens) — the session id stops blind spoofing, not
+  an on-path attacker.
+- **Typed messages**: `encode(&value)` / `Message::decode::<T>()` (and
+  `Endpoint::send_message`) are serde over `postcard` — varints, no field
+  names. A message is one value; trailing bytes are an error.
+- **`tick.net`** in `voltra-core` (`app/tick_net.rs`, type `Net`): `host`,
+  `join`, `start(endpoint)` (the seam for a hand-built one), `stop`,
+  `peers`, `send`, `send_message`, `broadcast`, `received`,
+  `take_received`, `events`, `kick`, `disconnect`, `stats`, and
+  `endpoint()` for engine code built on it (replication, stage 114). The
+  loop receives before the ticks and flushes after the fixed steps, every
+  frame, simulating or not; the session's clock is the sum of the frame
+  deltas, so a headless run is deterministic. Messages and events are per
+  frame, like collision events in the per-frame hook; `take_received`
+  hands each message out once for a fixed tick that runs twice. A session
+  `stop`ped is kept one more frame so the game hears its own goodbye.
+  `voltra_core::net` re-exports the crate.
+
+Pinned by `voltra-net/tests/connections.rs`, over the memory network with
+20 % loss, 30–70 ms latency (jitter reorders) and 5 % duplication: 1500
+messages up to five fragments long each way, every one delivered exactly
+once and the ordered ones in order, with resends counted; a sequenced
+channel never going backwards and losing some; typed messages; the largest
+message whole and one byte more refused; another protocol or channel
+layout refused; a full server refusing one more; leave and kick seen by
+both ends with their reasons; timeouts both ways and a connect to nobody;
+a dropped endpoint's goodbye; 2000 random datagrams from a stranger, and a
+client whose payloads' frames are turned to junk cut off for `Violation`
+while an honest one carries on. `tests/sockets.rs`: one server on UDP and
+WebSockets at once, a client on each, a message each way. Unit tests of
+`acks.rs`, `channel/` (send, receive, assembly), `packet.rs` (every packet
+round-trips; padding; 50 000 random packets) and `message.rs` (10 000
+random byte strings decoded). `voltra-core/tests/net.rs`: two headless
+games, one hosting and one joining over a lossy link, talking through
+their ticks. The web probe of stage 111 now runs the whole handshake from
+the browser and echoes a fragmented message.
+
+### A server is the headless game plus sockets; a listen server is a flag
+
+Stage 113. Two ways to host, one session type underneath.
+
+- **Host and join from a game**: `voltra_net::host(&HostOptions)` opens a
+  UDP socket for native players and a WebSocket listener for browser ones
+  (`MultiTransport`; either may be `None`, port `0` picks a free one) and
+  hosts on both; `voltra_net::join("udp://host:port" | "ws://host:port")`
+  makes the transport the address names (in a browser, `ws://`/`wss://`
+  through `BrowserWebSocket`; hosting there is `SessionError::Unsupported`).
+  `tick.net.host(&options)` and `tick.net.join(address, config)` are the
+  same from a tick; `host_on`/`join_on` keep the hand-built-transport seam.
+  `Endpoint::local_addrs` names every address a host is reached at.
+- **Listen server** (`HostOptions::listen`): the hosting game plays as
+  `PeerId::SERVER`. Its own player *joins* — a `Connected(PeerId::SERVER)`
+  is the first event, a `Disconnected(SERVER, Left)` comes when the
+  session stops — so one code
+  path ("on `Connected(peer)`, spawn a player for `peer`") serves every
+  player, the host's included. Unity's Netcode raises its client-connected
+  callback for the host's own client for the same reason; Godot's
+  `peer_connected` is not emitted for the host, which a Godot game then
+  spawns by hand. `players()` lists the host first, then clients.
+- **Dedicated server** (`voltra-server`, a library and a binary): `Server`
+  wraps stage M1's `Headless` — the game minus its window — hosts it, and
+  steps it one frame per tick at a fixed rate (`ServerOptions::tick_rate`,
+  60 by default, the physics step's); each tick is the network received,
+  the game's ticks, the fixed steps, the network flushed. `run` paces on
+  the wall clock with `Pacer`, catching up at most five ticks after a
+  stall rather than bursting every client with a second's worth. Joins and
+  leaves are logged and in `Server::events`; `kick`, `clients`,
+  `addresses`, `shut_down` (every client told `Shutdown`). The binary runs
+  a scene with no game code — `voltra-server [SCENE] --asset-root DIR
+  --udp PORT|off --ws PORT|off --tick HZ --max-clients N --protocol N
+  --seconds N --port-file FILE`; a game with its own server logic builds
+  its own binary on `Server::open(game_app, scene, options)`, as it builds
+  its player, and its ticks run there unchanged (Unreal's dedicated server
+  target and Godot's headless export are the same idea).
+
+Pinned by `voltra-server/tests/session.rs`: a server on UDP and WebSockets,
+a client joining by `udp://` and one by `ws://` (as a browser would); both
+joins seen, one client leaving (`Closed` at the server, `Left` at the
+client) and the other kicked (`Kicked` at both); and the binary itself
+started on `sandbox.ron` with its ports written to a file and a client
+joining it. `voltra-core/tests/net.rs`: a listen server's own player
+joining first, a client by address after it, `players()` listing both,
+and `stop` ending them with the client told `Shutdown`. Unit tests of
+`Pacer` and the binary's arguments. `voltra-net/src/session.rs`: server
+addresses parsed by scheme.
+### A folder packs into one sheet; a region keeps its index by its name
+
+Stage 95. `voltra_assets::packer`, run by `cargo xtask pack-atlas <folder>`
+and by the editor (the asset browser's "Pack into atlas" on a folder, and
+the bridge's `PackAtlas`): every PNG under a folder, at any depth, into one
+sheet and the `.atlas.ron` that cuts it — `sprites/hero/` to
+`sprites/hero.png` and `sprites/hero.atlas.ron` beside it. One packer
+behind both, so a sheet packed from either is the same sheet.
+
+- **Max-rects, best short side fit, biggest first** (`packer/maxrects.rs`,
+  Jylänki 2010): what TexturePacker, libGDX's packer and Unity's sprite
+  packer build on. Never rotated — no sprite reads a rotation flag, and a
+  turned region would need its UVs turned back. The sheet is the smallest
+  power-of-two pair that fits (squarer and wider first), up to
+  `--max-size` (4096: WebGL2's guaranteed `MAX_TEXTURE_SIZE`).
+- **Padding and extruded edges** (`--padding 2 --extrude 1`): each picture
+  is copied with its outermost texels repeated outward, then the padding
+  is left transparent. Padding alone swaps a neighbour's pixels for
+  transparency at a bilinear edge, which still darkens it; extrusion makes
+  the half-texel overreach read the edge itself.
+- **Trimming** (`--trim`): transparent borders cut off, and the cut
+  recorded per frame as `trim: (offset, source)` — TexturePacker's
+  `spriteSourceSize`/`sourceSize` — so the frame draws where it was in the
+  whole picture. A picture with nothing in it keeps one texel rather than
+  becoming a zero-area frame.
+- **Names, and indices that hold.** A region is named after its file's
+  path under the folder, without the extension (`walk/0`). A sprite still
+  names its frame by *index* (stage 22), so a re-pack orders regions by the
+  atlas it replaces (`packer/order.rs`): its names keep their indices, new
+  files come after, and a file that is gone keeps its slot as an empty
+  frame — what still names it draws the missing-frame checker rather than
+  whichever region slid into its place — unless it was last, when nothing
+  can shift and it is dropped. Pivots set since (stage 96) are kept by name
+  too. An atlas at the output path that will not read stops the pack: its
+  names are what would have been kept. Unity keeps sprite references by
+  GUID inside one texture's meta for the same reason; an index plus a name
+  is the smallest change to our format that does the same.
+- **The format, version 2.** An explicit frame may carry `name`, `trim` and
+  `pivot`, each left out when absent, so a plain frame is written as in
+  version 1 and version 1 files read unchanged. At run time they are
+  `FrameMeta`, one per frame beside `Atlas::frames` (`Frame` itself stays
+  `Copy` geometry). `Atlas::index_of(name)` finds a frame by name. A trim
+  the frame does not fit in is dropped with a warning; a pivot outside
+  `0..1` is clamped.
+- **Drawing in place.** `sprite::quad` gains a `centre`: a trimmed or
+  pivoted frame's quad is its part of the whole picture, sized by the
+  usual rule (pixels-per-unit, or the unit square), placed so the pivot —
+  the centre by default — is on the origin. Batching, picking and shadow
+  silhouettes all go through `Quad::corners`/`contains`, so they agree. A
+  mirrored sprite mirrors about the origin, so a pivot at the feet stays at
+  the feet. UI images and tiles keep using the frame's rectangle as is.
+
+Pinned by `packer/tests.rs` (every region is its picture again, trimmed or
+not; regions padded apart and extruded; the smallest sheet; too big
+refused; a re-pack keeps indices and pivots by name and empties a gone
+file's slot; the sheet inside its own folder is not re-packed; an
+unreadable previous atlas left alone), `atlas/tests.rs` (version 1 reads;
+names, trims and pivots round-trip), `sprite/quad.rs` (a trimmed frame
+where it was; a pivot on the origin; mirrored about it) and
+`voltra-scene/tests/headless_packed_atlas.rs`: the sample sprites and a
+bordered badge packed trimmed and drawn through the sprite batch beside
+the loose files, one texel to a pixel — every pixel identical, with nearest
+and with linear filtering.
+
+### The Atlas Editor edits the file, with an undo history of its own
+
+Stage 96. Window ▸ Atlas Editor, or an atlas or texture in the asset
+browser (double-click an atlas; "Slice in Atlas Editor" on a texture):
+a sheet shown with its regions outlined, cut by a grid (cell, offset,
+spacing — every whole cell, in reading order, named `<sheet>_<i>`) or by
+hand (Draw region, then drag), regions picked on the sheet or in the list,
+each one's name, rectangle and pivot edited (Centre and Feet buttons for
+the two pivots everyone wants), a run of regions previewed as an animation
+at a chosen rate, and Save writing the `.atlas.ron` (version 2, stage 95)
+through a temporary file, then reloaded in the session. Opening a texture
+opens the atlas beside it (`hero.png`, `hero.atlas.ron`) if there is one.
+
+- **A document, not scene state** (`atlas_doc.rs`): the regions, the sheet
+  and their history, kept apart from the scene's. The scene's history
+  watches the selected entities; an atlas is a file no entity owns, and
+  sharing the scene's entries would make a Ctrl+Z in the viewport take
+  back a rename in a window. Unity's Sprite Editor keeps its own
+  revert/apply, Godot's TileSet editor its own undo context; Ctrl+Z is
+  routed to the atlas while the pointer is over its window, and to the
+  scene everywhere else.
+- **Snapshots, settled per gesture**: each edit is a copy of the regions
+  (an atlas is at most a few hundred rectangles), recorded once nothing is
+  held and nothing is being typed — a dragged field or a typed name is one
+  entry, as a gizmo drag is one in the scene. Two hundred entries deep.
+- **Kept honest**: a region is clamped onto the sheet and refused if none
+  of it is there; a name another region has is refused (a typed one is
+  shown in red and stops Save) because `Atlas::index_of` and the packer
+  find regions by it; an atlas with no regions is not saved, since it
+  would not load. Removing a region says that the ones after it move down
+  an index — what a sprite names it by.
+- **The bridge** gains `AtlasOpen`, `AtlasRead`, `AtlasSlice`,
+  `AtlasRegion` (add, rename, move, pivot or remove), `AtlasUndo`,
+  `AtlasRedo` and `AtlasSave`, each answering the atlas as it now is, and
+  `PackAtlas` (stage 95's packer on a folder).
+
+Pinned by `atlas_doc/tests.rs` (a sheet opens empty beside its atlas; a
+grid slicing names its cells; every edit one undo entry, redo puts it back;
+a change made in place is one entry once settled; duplicate names and
+off-sheet regions refused; a saved atlas opens as it was), `slice.rs`,
+`canvas.rs`, `preview.rs`, and `voltra-editor/tests/authoring.rs`: the
+editor launched under Xvfb, a folder packed through the bridge, the coin
+sheet sliced by 16, a region renamed, a pivot set, undone and redone, a
+duplicate name refused, the file saved and compared byte for byte with the
+one expected, and opened again. In CI beside the bridge test.
+
+### The brush paints a stamp: picked off the palette or the map, turned whole
+
+Stage 97. Window ▸ Tile Palette (or "Tile Palette…" in a layer's
+inspector): the selected layer's tileset laid out as its sheet is —
+frames grouped into columns by their left edge and rows by their top
+(`paint/palette.rs`), so a grid atlas is its grid and a packed one the
+nearest grid its frames make. A click picks one tile, a drag a block.
+
+- **A stamp, not a tile** (`paint/stamp.rs`): what the brush, the
+  rectangle and the bucket paint is a block of tiles, its holes left
+  alone — Tiled's stamp, Unity's brush pick. The brush puts the block's
+  bottom-left on each cell it crosses; the rectangle and the bucket lay
+  it as a repeating pattern. `Z` turns it clockwise (Shift+`Z` the other
+  way), `X` and `Y` mirror it, Tiled's keys; buttons in the palette and
+  the inspector do the same.
+- **A tile has a third flag** (`Tile::transpose`, `tilemap/orientation.rs`):
+  Tiled's diagonal flip, bit 29 of a stored cell, applied before the two
+  mirrors. With them it makes all eight ways a square turns, so a turned
+  stamp turns its tiles' pictures too — Godot 4's `TRANSFORM_TRANSPOSE`.
+  Turning composes 2×2 signed permutation matrices and reads the three
+  flags back. The bit was unused, so every saved map reads the same; a
+  frame now goes to 2²⁹−2.
+- **The bucket** (`G`, `paint/fill.rs`): every cell four-connected to the
+  clicked one that holds what it holds — a diagonal gap is a wall, as in
+  every paint program. A map here has no edge, so a fill of empty cells
+  is kept to the box around the layer's tiles (an empty cell outside it
+  fills nothing) and to the rectangle's million-cell limit.
+- **The eyedropper is Alt** held as a stroke starts, with any tool: a
+  click picks the tile under it, turned as it is; a drag picks the block.
+  It changes no cell, so it makes no undo entry.
+- **Terrains still join up**: with a terrain chosen, the brush, the
+  rectangle and the bucket paint it and re-pick the edges (stages 39–40).
+- **One stroke, one entry, from either end**: a stroke is press, drag
+  and release (`paint/gesture.rs`), fed by the viewport's pointer or by
+  the bridge's list of cells, so a test paints exactly what a hand would.
+  The bridge gains `TilePick` (a palette block), `TileStamp` (turn and
+  mirror), `TilePaint` (a stroke of any tool, or the eyedropper, one undo
+  entry) and `TileRead`.
+
+Pinned by `stamp.rs` (a block from its bottom-left; holes; turning and
+mirroring a block and its tiles; picked off the map; the pattern),
+`orientation.rs` (four quarter turns are none; a turn is Tiled's diagonal
+and horizontal flags), `fill.rs`, `palette.rs`, `paint/tests.rs` (a 3×2
+stamp; a rectangle of a pattern; the bucket inside walls only; the bucket
+with a terrain auto-tiled; the eyedropper picks and paints nothing),
+`tilemap/mesh_tests.rs` (a turned tile's UVs) and the bridge test in
+`voltra-editor/tests/authoring.rs`: a 3×2 block picked off the palette and
+stamped, undone in one step and redone; a ring drawn in one stroke and
+its inside filled, the ring and the outside left; the eyedropper picking
+a tile and adding no undo entry; a picked tile turned and painted turned.
+
+### A tile collides with its frame's shape and carries values a game reads
+
+Stage 98. `Tilemap::tile_data`, by frame beside `animations` and
+`terrains`: a frame's collision shape and a map of custom values —
+Godot's TileSet physics and custom data layers, Tiled's tile properties.
+
+- **Shapes** (`tilemap/tile_data.rs`): `Full` (the default, so every layer
+  saved before collides as it did), `Empty` (walked through on a solid
+  layer — a ladder, a doorway), `Half(side)`, `Slope { left, right }` (a
+  floor from one height to another, in `0..=1` of the cell: `(0, 1)` is
+  45°, `(0, 0.5)` and `(0.5, 1)` the two tiles of a gentle slope) and
+  `Polygon` (any outline, colliding as its convex hull of up to eight
+  points). A shape is drawn upright and turned with its tile, so one
+  slope frame mirrored is the slope going the other way, and a turned half
+  tile is the other half.
+- **Generated colliders** (stage 25's `sync_colliders`): full tiles merge
+  into boxes as before; every other shaped tile is one static convex
+  polygon of its own, centred on its cell; empty adds nothing. Merging
+  slopes would need concave outlines the physics does not have, and a
+  slope is rarely more than a few tiles; the seam between a slope and the
+  boxes beside it is what a character's `step_height` already walks over.
+  A shape changed without a cell changing rebuilds too: the shapes are
+  hashed into what a layer's colliders were built from.
+- **Custom values** are RON literals — `{"ladder": true, "damage": 5}` —
+  read by cell with `Tilemap::custom_at(cell, key)`, or by a point in the
+  world with `tilemap::query::custom_under(world, point, key)`, which goes
+  through each layer's transform. Kept on the layer, not in the atlas:
+  that is where everything else a frame means to a layer (animations,
+  terrains) already lives, and the collider sync needs nothing but the
+  world.
+- **The editor**: the inspector's "Tile N" section edits the picked tile's
+  frame — a shape from a list, its heights, side or points, and named
+  values of four kinds — undoable as any inspector edit.
+- **The platformer** has a hill (`sprites/ramps.png`, a gentle slope up,
+  across and down the mirrored slope) and a ladder right of the ledge,
+  both tiles of one layer; `ladder.rs` reads `ladder` under the walker and
+  climbs with up and down, gravity off while on it.
+
+Pinned by `tile_data.rs` (a mirrored slope, a turned half tile, values
+read as RON literals), `colliders_tests.rs` (a slope a polygon beside the
+merged full run, empty nothing; a shape change rebuilds; values by cell),
+`query.rs`, the platformer's `ladder.rs`, and
+`voltra-physics/tests/tile_slopes.rs`: a `CharacterBody2D` walked up a
+gentle slope of two tiles onto a platform, and up the same slope mirrored.
+
+### A prefab is edited on its own while the scene waits; search is Unity's `t:`
+
+Stage 106. Two editor gaps: a prefab could only be changed through an
+instance (edit it, Apply), and neither the hierarchy nor the asset browser
+could be searched.
+
+**Prefab mode** (`prefab_mode.rs`, `prefab_mode/swap.rs`). Opened from the
+asset browser (a double-click on a `*.prefab.ron`, or "Edit as prefab" on
+any scene tile's menu), from an instance's inspector ("Edit prefab"), or
+the bridge. The prior art splits two ways: Unity's Prefab Mode opens the
+asset as a temporary scene, alone or "in context" over the dimmed level,
+with a breadcrumb back; Godot opens the instanced scene in a tab of its
+own; Unreal opens a Blueprint editor. We have one world and one viewport,
+and nothing to dim with, so it is Unity's isolation mode:
+
+- **The scene is set aside whole**: its world written to a `SceneFile`
+  (play's snapshot, same rule: what has a `SceneId`), its
+  `SceneDocument`, `History`, selection and camera parked on a stack. The
+  prefab's file is read into the emptied world, and the prefabs nested in
+  it synced. A file that will not read puts the scene straight back.
+- **The prefab is a document like a scene**: every tool, the bridge's
+  edits and Save work on it unchanged. Save writes its file (refusing,
+  as `prefab::write` does, a file that would contain itself — one drag
+  away in this mode; now checked on every save, of a scene too) and
+  reloads it in the `Prefabs` store at once rather than waiting for the
+  watcher. Save As is not offered, Unity's rule: instances name the file.
+- **Back** puts the scene back from its snapshot, reloads the prefab,
+  and `sync_all`s — stage 64's sync, so instances follow the prefab as
+  last saved, but for what each overrides. The sync is not an undo entry,
+  as at Open or a hot reload. Unsaved prefab changes are asked about
+  through stage 72's "save changes?" (`Then::Back`); a New, Open or Quit
+  asked for in prefab mode leaves level by level, each document asked
+  about in turn, since the scene set aside has unsaved changes of its own.
+  The bridge refuses Open and New there instead (`prefab_close` first).
+- **History per document**: the parked `History` comes back as it was,
+  position and all, so the scene's `*` and Ctrl+Z are where they were and
+  an undo in the prefab never reaches the scene. Swapping the world
+  mid-frame would read as an edit to the watcher, so the outgoing history
+  closes its frame first and the incoming one is told to record nothing
+  this frame (`History::skip_frame`).
+- **Nested**: an instance inside the open prefab opens in turn; the
+  toolbar's second row shows the trail (`level.ron › coin.prefab.ron ›
+  gem.prefab.ron`) and Back returns one level. A path already on the
+  stack is refused.
+- **Deferred from panels**: a button asks (`PrefabMode::request_*`) and
+  `scene_dialogs::show` acts at the start of the next frame — an inspector
+  still drawing the entity must not have the world replaced under it.
+- **`*.prefab.ron`** names a prefab: Create prefab from selection now
+  writes `<name>.prefab.ron` (stage 90's options screen already used the
+  name). Any scene can still be instanced; the suffix says what its
+  author meant it for, which picks the double-click and `t:prefab`.
+
+**Search** (`search.rs`, `search/{hierarchy,assets}.rs`). Unity's syntax,
+which its Hierarchy and Project windows share: words a name holds (case
+aside, every word), `t:` a type. Godot filters by name only; `t:Camera`
+is what finds every camera in a large scene.
+
+- **Hierarchy**: `t:` is a registered component name (case aside); every
+  `t:` must hold, so `t:Sprite t:Collider` narrows. A match's ancestors
+  stay, dimmed — Godot's tree keeps the path; Unity flattens and loses
+  where a match lives. Asking each entity for a component through
+  `save_one` would write it out (a tilemap's chunks, per frame), so the
+  registry gains `ComponentRegistry::has`, a `world.get::<T>` per type.
+- **Assets**: the whole root, not the open folder (Unity's and Unreal's
+  search), walked on the listing's one-second schedule while a search is
+  up. `t:` is a kind — texture, atlas, sound, font, scene, prefab,
+  material, animation, animator, input, layers, buses, folder, with the
+  obvious aliases — and any of them may hold, since a file is one kind.
+  `.material.ron` files are now their own `EntryKind::Material` (they
+  were listed as scenes). A folder picked from the results is opened and
+  the search ends.
+- An unknown `t:` says so in the panel (and is an error on the bridge)
+  rather than showing an empty list with no reason.
+
+**Bridge**: `PrefabOpen { path | entity }`, `PrefabClose {
+discard_changes }`, `HierarchySearch { query }` (matches and the parents
+kept) and `AssetSearch { query }`; `Status` gains `prefab_trail`.
+
+**Not yet**: Unity's "in context" mode (the level drawn dimmed behind the
+prefab); a variant (a prefab of a prefab with overrides); searching by a
+component's field values.
+
+Pinned by `prefab_mode/swap.rs` tests (a prefab saved in its mode
+reaching the scene, an override kept; a prefab dropped into itself found
+before saving; a broken prefab leaving the scene to come back), `search`
+tests (words and types, the parents kept, `t:` narrowing, kinds and their
+aliases across folders), `History::skip_frame`'s test, the registry's
+`has`, and `voltra-editor/tests/prefab_mode.rs`: the editor under Xvfb, a
+level of two coin instances (one overriding its colour) searched by name
+and by component, the assets by name and kind; the coin opened from an
+instance, edited, undone, redone, given a child, refused a Save As and a
+Back over unsaved changes, saved; back in the level its history and `*`
+as they were, the plain instance green with the new child, the overriding
+one still blue; then an edit dropped on the way back reaching nothing.
+In CI beside the authoring test.
+
+### Text is shaped by run, and a missing glyph falls back to the next font
+
+Stage 91. Arabic joins and reads right to left, Devanagari moves its vowel
+signs and builds conjuncts, `ffi` is one ligature — before this every
+character was one `fontdue` glyph, placed by kerning alone, from one font
+with one fallback (the default face for a file that would not parse).
+
+- **A layout is the HarfBuzz pipeline, in `voltra_assets::fonts`.** Per
+  paragraph (split at `\n`): bidi levels (`unicode-bidi`,
+  `ParagraphBidiInfo`), runs of one span × one level × one script
+  (`itemize.rs`; Common and Inherited characters join the script before
+  them, as `hb-ot-shape` expects its caller to do), each run shaped by
+  `rustybuzz` (`shape.rs`), lines cut (`breaks.rs`), each line reordered
+  visually and placed (`place.rs`). Chrome, Godot's `TextServerAdvanced` and
+  cosmic-text are the same steps in the same order; we write the glue
+  because the glue is where our spans, our atlas and our caret live.
+  `rustybuzz` because it is HarfBuzz's algorithm in pure Rust — a leaf
+  crate, no C toolchain for the web build (`harfrust` is its successor, not
+  yet what the plan named; the swap is local to `shape.rs`).
+- **Glyph ids, not characters.** `GlyphKey { font, glyph, px, embolden }`:
+  shaping turns three characters into one ligature and one letter into one
+  of four joined forms, none of which a `char` names. `fontdue` still
+  rasterizes — by id (`rasterize_indexed`), which works because
+  `FontSettings::load_substitutions` (on by default) loads every glyph a
+  GSUB lookup can produce, not just those `cmap` reaches.
+- **One atlas for every font**, in `Fonts` rather than one per `Font`: a line
+  falling back from Latin to Arabic, or a rich text switching fonts, draws
+  from one texture, so it stays one batch range. A reload clears the whole
+  atlas (rare, editor-time) rather than evicting one font's glyphs.
+- **The fallback chain**: the text's font, then the current language's
+  fonts, then the default. Each stretch of clusters a font has no glyph for
+  is reshaped with the next — whole stretches, so the next font sees words
+  to join; a stretch no later font maps keeps the first font's missing
+  box, so the gap shows in the text's own face. Browsers and Godot fall back
+  per cluster the same way; Unity's TextMeshPro per character, which breaks
+  Arabic joining across the seam.
+- **Fonts per language, in the string table** (`TABLE_VERSION` 2):
+  `(version: 2, fonts: ["fonts/NotoSansArabic-Regular.ttf"], strings: {…})`;
+  a version 1 file reads as one naming none. Plain path strings, as a
+  translator writes them. `Locale::apply_fonts` makes them
+  `Fonts::set_fallbacks` after every `localize` (a comparison when nothing
+  changed), so a language switched from a tick takes its fonts with it.
+- **Layouts are cached** by (string, spans, wrap) behind a mutex in `Fonts`,
+  so `&Fonts` — what the draw and the pick hold — can ask: the prepare, the
+  draw and the pick of a frame share one layout, and an unchanged text is
+  not reshaped next frame. Cleared on a reload or a new chain; started over
+  at 4096 entries, so a timer's new string every frame does not grow it.
+- **Lines of mixed faces**: each line is as tall as its tallest face at its
+  size; baselines are the gap below one line's lowest descent to the next's
+  highest ascent plus the larger line gap — a face's own line height when
+  every line is one face, so Latin layout is unchanged (every stage-26 and
+  stage-81 layout test still passes). `TextLayout::baselines` carries them.
+- **Faux bold** (`embolden.rs`, used by stage 93's `[b]`): coverage dilated
+  by `px / 24` pixels right and up, the advance widened as much —
+  FreeType's `FT_Outline_Embolden` grows the outline, we have only the
+  bitmap.
+- **Fonts shipped**: Noto Sans Arabic, Devanagari and Hebrew (the full
+  files from `notofonts.github.io`, about 500 KB together) with their OFL
+  licences beside them in `assets/fonts/`. No CJK face: Noto Sans JP is
+  several megabytes; a CJK string draws the text font's missing boxes until
+  a game ships one and names it in its table.
+
+Rejected: **`cosmic-text`** — a whole text engine with its own font
+database, cache and editor; the plan keeps the engine pieces ours and the
+leaves borrowed. **One atlas per font, kept** — a fallback in the middle of
+a line would split its batch.
+
+Pinned by `fonts/shaping_tests.rs` (`ffi` one glyph with four caret stops;
+Arabic in joined forms, right to left, its first stop on the right; the
+Devanagari i sign before its consonant in one cluster; a missing glyph from
+the next font and the rest in the text's; what no font has is the text
+font's box; kerning kept; a layout made once and again for a new chain;
+faux bold wider and thicker; each glyph rasterized from its own font),
+`locale/tests.rs` (a version 2 table's fonts, a version 1's none, applied as
+the chain) and `voltra-scene/tests/headless_shaping.rs`: Arabic, Devanagari
+and `office ffi` drawn headless and matched against
+`tests/references/*.png` (`VOLTRA_BLESS=1` rewrites them), and Arabic
+letters drawn joined against the same letters kept apart by zero-width
+non-joiners.
+
+### Lines break at UAX #14 opportunities and read in bidi order; arrows move visually
+
+Stage 92. Hebrew inside English reads right to left without turning the
+English around, a Japanese paragraph wraps between its characters, and a
+text field's arrows go the way they point.
+
+- **Bidi is per paragraph and per line** (the layout's steps 1 and 5,
+  stage 91): `ParagraphBidiInfo` with the direction found from the first
+  strong character (UAX #9 P2–P3), levels per byte; runs never cross a
+  level change, and each line's glyphs are put in visual order by
+  `reorder_visual` over their levels after `reordered_levels` has applied
+  L1 to that line. HarfBuzz returns a right-to-left run in visual order;
+  we keep shaped glyphs in logical order (reversed) so the line breaker
+  sees the text's order, and the reorder turns them back — a multi-glyph
+  cluster keeps HarfBuzz's own glyph order through both reversals.
+- **Alignment stays physical.** `Align::Left` is the left edge in a
+  right-to-left paragraph too, as Godot's `HORIZONTAL_ALIGNMENT_LEFT` and
+  Unity's `TextAlignment.Left` are; a start/end alignment is a later,
+  additive choice.
+- **Line breaking is UAX #14** (`unicode-linebreak`): a line may end only
+  at an opportunity — after a space, between two ideographs, after a hyphen
+  — and not before `。` or after `「`. Greedy as before (Godot's and
+  Unity's), measured on whole clusters, so a ligature or a conjunct never
+  splits; trailing white space hangs and is dropped at a wrap; a word wider
+  than the line still breaks between clusters; a mandatory break inside a
+  paragraph (U+2028) breaks it. With no width only the mandatory breaks
+  apply and nothing is dropped, so a field's trailing space keeps its stop.
+- **Caret stops** (`TextLayout::carets`): one before every character of
+  the string, in its order, and one after each paragraph's last — at the
+  character's leading edge: its left in left-to-right text, its right in
+  right-to-left. A cluster's width is shared among its characters, so
+  `ffi` has stops inside its one glyph, as browsers give it.
+  `shape::caret_stops_at` hands the first line's to the text field.
+- **The text field moves visually**: `UiTextField::take_measured` measures
+  its text as each arrow finds it, and Left/Right step to the next caret
+  stop by x (`text_field/visual.rs`), so in a mixed line the right arrow
+  walks right on screen, backward through the Hebrew word. Word steps,
+  Home and End stay logical, as a browser's `<input>` and Godot's
+  `LineEdit` have them; Unity's `InputField` moves logically everywhere,
+  which sends the caret the wrong way in Hebrew. Without a font to measure
+  with, the arrows stay logical. Where two logical positions share an x (a
+  run boundary) they are visited one after the other. A selection over a
+  run boundary is drawn as one band between its ends' stops: right for one
+  direction, approximate for mixed (a browser draws one band per run).
+
+Pinned by `fonts/bidi_tests.rs` (Hebrew inside English in visual order and
+the English kept; English inside a Hebrew paragraph on its left; digits in
+Arabic left to right; mixed caret stops, the Hebrew's from its right end; a
+Japanese paragraph wrapped within its width with nothing dropped; `。` never
+starting a line; a hyphen as a break; a wrapped right-to-left paragraph
+keeping its first word on the first line), `text_field/visual.rs` (steps in
+LTR, RTL and a mixed line; stops that do not fit move nothing) and
+`text_field/tests.rs` (`in_visual_order`: the right arrow walks a real
+`ab שלום` field through every position, x never decreasing, back through
+the Hebrew; the left arrow walks it back; no font, logical).
+
+### Rich text is inline tags parsed into spans the layout sets as one paragraph
+
+Stage 93. A dialogue line can colour a name, embolden a warning, enlarge a
+number and put a coin beside it, and a translated string can do the same.
+
+- **Markup** (`text/markup.rs`): BBCode-like, Godot's `RichTextLabel` and
+  TextMeshPro's shape — `[b]`, `[color=#f00]` (`#rgb`, `#rgba`,
+  `#rrggbb`, `#rrggbbaa`, a few names), `[size=24]` (the em height in the
+  text's own units), `[font=fonts/x.ttf]`, and `[icon=…]`, which closes
+  nothing. Tags close in any order (each run's style is recomputed from the
+  tags still open, so `[b][color]…[/b]…[/color]` does what it says). `[[`
+  is a literal `[`. An unknown tag, a value that does not read, or a close
+  with nothing open is shown as written — the typo is seen where it is —
+  and logged once per spelling for the session.
+- **Spans, one paragraph** (`text/paragraph.rs`): the parsed runs become
+  stage 91's `Span`s, each with its font, raster size (`px × size /
+  text.size`), faux bold or not, and a tag back to its style; the layout
+  shapes, bidi-orders and wraps them as one paragraph, so a style crosses
+  a line break, a run of another size makes its line taller, and a
+  `[font=…]` still falls back to the language's fonts. Colour is not in
+  the span — it changes no glyph — the draw looks it up by the glyph's tag:
+  a run's colour replaces the text's, with the text's alpha multiplied in,
+  so fading a text fades every colour in it.
+- **Bold**: `Text::bold_font`, the family's bold file, sets a `[b]` run;
+  with none — and for a `[b]` inside a `[font=…]`, whose family we do not
+  know — faux bold (stage 91's dilation, the advance widened to match).
+  Godot's `FontVariation` embolden and TextMeshPro's "bold" weight are the
+  same fallback; a font *family* asset naming regular/bold/italic files is
+  the general version, deferred until a stage needs italics too.
+- **Icons**: `[icon=sprites/ui.atlas.ron/3]` is frame 3 of an atlas, drawn
+  from the texture the atlas names; `[icon=sprites/coin.png]` is a whole
+  image. Atlases are named by frame index — named regions do not exist yet.
+  The icon stands on the baseline in a box as tall as its font's ascent,
+  as wide as the picture's aspect makes it, and carries an object
+  replacement character (U+FFFC) in the parsed string, which bidi and line
+  breaking treat as one neutral object. `text::icons::resolve_world` loads
+  what the tags name — every frame before the draw, a scan for `[icon=`
+  when nothing changed, since a language switch can bring an icon — into
+  `Text::icons` (never saved); an icon that does not resolve is logged and
+  keeps its room but draws nothing. The batch and the UI mesh push icon
+  quads with their own texture beside the glyphs'.
+- **`Text::rich`** (on by default, not written when on): off shows the
+  brackets. A text field's text is never rich — what was typed, brackets
+  and all — however its `Text` is set; the field draws, measures and
+  rasterizes it plain.
+- **Strings from the locale table** are contents like any other, so they
+  may carry markup.
+- Inspector: *rich text*, *bold font*.
+
+Rejected: **HTML-like tags** (TextMeshPro's `<b>`) — square brackets need
+no escaping in RON strings and are what Godot users write; **a separate
+`RichText` component** (Godot's `Label` vs `RichTextLabel`) — one text type
+whose plain case costs one scan for `[` keeps every caller (pick, bounds,
+UI, locale) on one path.
+
+Pinned by `text/markup/tests.rs` (tags out, styled runs; nesting closed in
+any order; colours in four spellings and names; unknown tags, bad values
+and stray closes shown; an icon as one object character; `[[`; a font
+path), `text/rich_tests.rs` (plain is one span; `[size]`, `[b]` and
+`[font]` set their spans; a bold file instead of faux bold; rich off shows
+brackets; a run's colour and the text's alpha on the glyphs; a coloured run
+on two lines of a wrap; an icon's em box with the next letter after it; a
+keyed string's markup) and `voltra-scene/tests/headless_rich_text.rs`: a
+red word, a larger green one and an atlas coin on one line, matched against
+`tests/references/rich_text_line.png`, and a green run still green on the
+line it wraps onto.
+
+### Dropdowns, tooltips and tabs share the focus; a theme is written into controls once
+
+Stage 94. The control set gets the three pieces every options screen
+wants, and one file restyles all of them.
+
+- **`UiDropdown`** turns the `UiButton` beside it into a dropdown, as
+  `UiToggle` turns one into a checkbox (Godot's `OptionButton` is a
+  `Button` too): the box keeps the button's hover, press, focus and
+  colours, the entity's `Text` is the style and shows the chosen option.
+  A click, or accept on the focus, opens the list; while it is open
+  (`UiControls::open_list`) the list has the input — the pointer
+  highlights and a click picks, up and down move the highlight (the
+  window scrolls past `max_visible`), accept picks, cancel or a click
+  outside closes it unchanged. A pick that changes the choice is a
+  change, as a slider's move is. `Navigation` gained `cancel`
+  (`ui_cancel`), and `UiControls::cancelled` says a cancel was spent
+  closing a list, so a screen backing out on the same key does not.
+- **The list is drawn by the UI pass, not spawned** (`ui/overlay.rs`,
+  `ui/mesh/overlay.rs`): after every element, unmasked, under the box —
+  over it where there is more room above. Unity's `Dropdown` instantiates
+  a template under a top-level canvas and Godot opens a `PopupMenu`
+  window; both need a layer above everything. Drawing it last is that
+  layer with nothing to sort and nothing left in a saved scene. The
+  prepare rasterizes the overlay's texts beside the world's.
+- **`UiTooltip`** on any element: under the pointer — or on anything
+  under it, a label over a row — for `delay` seconds, or while it holds
+  the focus (a pad player gets them too, which Godot's mouse-only tooltip
+  does not), it shows in a box under the element, kept on the screen.
+  `UiInput::delta` counts the delay. Its text may be keyed (`key`, read by
+  the `Locale`) and is rich text.
+- **`UiTabs` and `UiTab`**: a tab button names its page (`page`, a
+  `Name` under the same container); the container's `current` page shows
+  and the others are `UiHidden`. Godot's `TabContainer` pairs titles with
+  children by order and draws its own bar; naming lets the bar be laid
+  out like any other stack, and the options screen already finds its
+  parts by name. A tab with a `UiToggle` is drawn selected while its page
+  shows. Clicking one reports the container as changed.
+- **`UiHidden`** — a new marker, needed by tabs and useful alone: a hidden
+  element and its subtree are not laid out, so not drawn, picked or
+  focused, and take no room in a stack. Godot's `visible`, Unity's
+  `SetActive`: the entities stay, values and all.
+- **`UiTheme`, a `.theme.ron`** (`assets/ui/dark.theme.ron`,
+  `light.theme.ron`): font, text colour, button colours by state, a
+  selected tint, panel, field, slider, dropdown-list and tooltip colours,
+  9-slice skins (texture + borders) for buttons, panels and fields,
+  spacing and padding. Every section optional (`implicit_some`). Set with
+  `UiControls::set_theme` or `tick.set_theme("ui/light.theme.ron")`. It is
+  written into each element **once** — when the element first appears,
+  and again to all when the theme changes — rather than consulted every
+  frame, so code colouring a label afterwards (a clash in the controls
+  list) stands; Godot resolves theme items at draw time instead, which
+  would need every component's colour to be optional, a file-format break
+  for every scene. "Controls that set none of their own" is spelled
+  `UiOwnStyle`: an element marked so is passed over. A skin's texture and
+  a font are left as paths for the loop (`App::resolve_restyled`) to load,
+  since that needs the GPU. With no theme set nothing changes, so every
+  existing scene draws as before.
+- **The options screen** uses all three: tabs for Display, Audio and
+  Controls (the hidden pages start `UiHidden` in the prefab, so the editor
+  shows one page too), dropdowns for the display mode (windowed,
+  fullscreen, exclusive where the monitor has modes) and the resolution
+  (disabled, "Set by the page", on the web), a tooltip on every row,
+  stamped rows included. Escape closes an open list before the screen.
+- Registered with templates: `UiDropdown`, `UiTooltip`, `UiTabs`, `UiTab`,
+  `UiHidden`, `UiOwnStyle`. Inspectors for each (hidden and own-style as
+  checkboxes on every UI element); Spawn menu: *HUD dropdown*, *HUD tabs*.
+
+Pinned by `ui/dropdown.rs` (the list under, or over near the bottom; rows
+under the pointer; the highlight kept on the list and scrolling it; no
+options never opens), `ui/tabs.rs` (one page, the first by default; nested
+containers apart), `ui/controls/tests/popups.rs` (a click opens and an item
+click picks; keys open, move and pick, cancel closes and is reported, then
+down moves the focus again; a click outside closes unchanged; the open
+list's boxes and items over everything; a tooltip after its delay under
+the pointer, gone when it leaves, shown on focus; a tab click shows its page
+and lays the other out of the screen; a hidden child takes no room),
+`ui/theme/tests.rs` (**a theme swapped and every control restyled** —
+button colours and skin, labels' colour and font, toggle and tab tints,
+slider track and handle, field box and selection, dropdown list, tooltip,
+panel and stack spacing — and the own-styled one not; a colour set after
+the theme stands; a late element themed on its first frame; the shipped
+themes read; a newer version refused), `options/screen/tests.rs` (tabs,
+dropdowns reaching the window, Escape on an open list) and
+`games/platformer/tests/options.rs` (now through the Controls tab), and
+`voltra-scene/tests/headless_overlay.rs`: in pixels, an open list over a
+panel sorted above everything, its highlighted item, and a tooltip under
+its element.
+
+### The server sends what each client has not acknowledged, most important first
+
+Stage 114. A new crate, `voltra-replication`, between `voltra-net`'s
+connections and the scene; `voltra-core` drives it from the loop and
+`tick.net` (`app/tick_replication.rs`).
+
+- **What is replicated** is chosen twice. A *type* opts in at registration:
+  `registry.replicate::<T>()` (or `.replicated()` on the `register` chain),
+  `replicate_interpolated::<T>()` for one drawn between snapshots
+  (`Interpolate`, stage 115); `Transform` is, by default. An *entity* opts
+  in with the `Replicated` component (`priority`, default 1). Unreal's
+  `UPROPERTY(Replicated)` plus `bReplicates`, Bevy replicon's
+  `replicate::<C>()` plus `Replicated`, Unity's `NetworkObject` — the same
+  two switches. The registry keeps the wire conversions beside the RON ones
+  (`format/registry/replicate.rs`): `postcard`, so a `Transform` is 20
+  bytes, not the 50 of its RON. The server sends the component *names*
+  once per client (the schema, reliable); snapshots number them by that
+  list, and a client maps by name, logging a type it does not replicate.
+- **Server authority.** Nothing a client sends changes a replicated
+  component on the server: its say is its acknowledgements and its
+  inputs (stage 116). The game moves its entities on the server; the
+  loop sends the world as the frame left it, after the fixed steps.
+- **Snapshots and deltas.** One snapshot per server tick (a fixed step;
+  `snapshot_interval` to thin them) per client, unreliable-sequenced on a
+  channel of replication's own (`ReplicationChannels`: three channels put
+  after the game's by `ReplicationConfig::net_config`, which `tick.net`'s
+  `host`/`join` apply once `enable_replication` / `App::with_replication`
+  turned it on; a session made without them is refused by replication
+  with an error, and the handshake's fingerprint refuses a client whose
+  layout differs). Per client and entity the server keeps the value
+  acknowledged and the value last sent, per component, and sends a
+  component when the current value differs from *either*: the first is
+  "a delta against the last acknowledged snapshot" (a lost change is sent
+  again because it was never acknowledged), the second covers a value
+  gone back to the acknowledged one while another was in flight. Values
+  travel whole, so a client applies each update on its own with no
+  baseline of its own — Quake 3's per-snapshot baselines would need the
+  client to keep every snapshot it acknowledged; Unreal's per-connection
+  shadow state, resent on a NAK, is this rule seen from the other side.
+  The client reports which snapshots arrived as the newest tick and 64
+  bits before it, every frame, on its own channel.
+- **Spawn and despawn.** An entity's first update carries its spawn — its
+  `SceneId`, the prefab it came from (`PrefabInstance`) and its owner
+  (`NetOwner`) — until a snapshot carrying it is acknowledged. The client
+  adopts an entity with that id if its own copy of the level has one, or
+  spawns the prefab (the sprite and the children that only draw, as
+  Godot's `MultiplayerSpawner` spawns by scene path and Unity by prefab
+  hash), or a bare entity; a replicated part of that prefab is despawned
+  locally, since it comes in a spawn of its own. Its assets are resolved
+  by the loop like a tick's spawns. A despawn is in every snapshot until
+  one carrying it is acknowledged, then forgotten; ids (`NetId`, a `u32`
+  varint) are never reused in a session, and the sequenced channel drops
+  any older snapshot, so a despawned entity is never brought back. The
+  first *complete* snapshot (see below) also despawns the replicated
+  entities of the client's level the server never had (one it despawned
+  before the client joined) — once only, since a replicated entity spawned
+  on the client later races the server's spawn of the same.
+- **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
+  datagram with room for its header, 60 KB/s at 60 Hz) bounds each
+  client's snapshot. Due entities are taken by banked priority — each
+  snapshot an entity waits, its `priority` is added to its bank; sent, it
+  starts again from zero (Gaffer On Games' priority accumulator; Unreal's
+  `NetPriority` times the time since last sent) — and encoded one by one
+  until the next does not fit; a smaller one after it still may. A single
+  update larger than the whole budget goes alone, with a warning, rather
+  than starve. A snapshot that held everything due says so (`complete`).
+  No interest management: every client is sent every replicated entity.
+- **Untrusted input.** A snapshot or client message that will not decode
+  is dropped whole; a client's lists are cut at 64; a component value that
+  will not decode changes nothing. A client whose game despawned a
+  replicated entity asks for it whole again (`resync`).
+
+Pinned by `voltra-core/tests/replication.rs`: a server and two clients
+over 20 % loss, 30–50 ms latency and 2 % duplication — a level entity
+adopted (not doubled) and a client-only one removed, 20 entities spawned,
+moved for two seconds, seven despawned and three spawned, and both
+clients' replicated entities and transforms equal to the server's,
+exactly; 301 moving entities under a 600-byte budget, every snapshot at
+or under it and every frame's bytes within a datagram's header of it, the
+priority-40 entity kept closer than the crowd, and all of them through
+once they rest; a prefab-spawned entity spawned from its prefab on the
+client (its child too) and despawned with it. Unit tests of the snapshot
+wire format (written in parts, read whole; junk), the ack bits, the
+delta rule (`server/view.rs`), the input queue, the registry's
+replication (a `Transform` is 20 bytes; junk and trailing bytes change
+nothing; an unregistered type is refused) and `Interpolate`.
+
+### A remote entity is drawn a measured staleness behind the newest snapshot
+
+Stage 115. A client draws remote entities' interpolated components
+(`replicate_interpolated`, `Transform` by default) not as each snapshot
+brings them but at one moment of the server's past, between the two
+samples around it (`client/samples.rs`; `Interpolate` is linear for
+positions and scale, the short way round for a rotation, and written
+`a + (b - a) * t` so equal ends give exactly themselves — glam's `lerp`
+does not, and an entity at rest was drawn an ulp off). Components that do
+not opt in are applied as they arrive.
+
+- **The moment** (`Timeline`): each arrival's *offset* (arrival time minus
+  its tick's server time) gives the quickest path over the last three
+  seconds — latency without jitter. Each frame the clock asks how *stale*
+  the newest snapshot in hand is against that quickest path; the most
+  staleness in the window, plus one snapshot interval, is the delay. A
+  model of jitter (a percentile of arrival offsets) was tried first and
+  under-buffers: with jitter several intervals wide the sequenced channel
+  drops every snapshot a newer one overtook, so the arrivals it measures
+  are the early ones, and the clock held still every few frames. Staleness
+  measures what the jitter costs as it is felt — late, lost, overtaken,
+  and the wait between two. Unity Netcode's interpolation buffer and
+  Overwatch size their buffers from the link the same way; Source's
+  `cl_interp` fixes it by hand.
+- **No jumps**: the drawn moment runs at the clock's pace corrected by at
+  most 10 % toward its target (computed against where this frame would
+  land, not where the last one did — the first version ran a frame
+  ahead), so a change in the link is a change of pace, not a skip. Only a
+  gap over a quarter second (the first snapshot, a stall) snaps. Past the
+  newest sample it holds rather than extrapolates.
+- **Resting entities**: a snapshot that held everything due (`complete`)
+  is a sample for every entity it left out — unchanged at its tick — so an
+  entity that rests and then moves is drawn moving from where it rested,
+  not smeared from its last update. A budget-cut snapshot adds no such
+  samples.
+- The predicted entity (stage 116) is not drawn this way: its world copy
+  is the client's own.
+
+Pinned by `voltra-core/tests/interpolation.rs`: over 60 ms latency, up to
+50 ms of jitter and 5 % loss both ways, three seeds, a server entity
+going round a circle one server step at a time; seven seconds of the
+client's copy, frame by frame — the jitter measured above 20 ms and the
+delay above it, no frame moving more than 1.12 server steps or less than
+half of one (no jump, no stall), every point on the chord of server
+positions at most five ticks apart. Unit tests of `Timeline` (the delay
+grows with jitter delivered through a sequenced channel; a link 100 ms
+slower is caught up at a pace within 10 %), of the samples (between two;
+a held value is a sample) and of `Interpolate` (equal ends exact; the
+short way round).
+
+### The owned entity is predicted by the game's own movement, and replayed on correction
+
+Stage 116. The entity a client owns (`NetOwner`, set by the server's game
+on the entity it spawned for a peer, carried in its spawn) is simulated
+ahead on the client and reconciled with the server, through a
+`Prediction<I>` the game holds and steps from its fixed tick:
+`tick.predict(&mut prediction, input, simulate)`.
+
+- **Inputs by tick.** Each fixed step the client simulates its entity with
+  the input it just read, numbers the input by its own step and queues it;
+  every frame's replication message carries the newest eight not yet
+  acknowledged (`input_redundancy`), so a lost one costs nothing. The
+  server holds a client's inputs by number (`server/inputs.rs`) and gives
+  one to each of its fixed steps, oldest first — `tick.net.input::<I>(peer)`
+  in the server's fixed tick; none waiting is `None`, and the game leaves
+  the entity be, never repeats the last (which would move it a step the
+  client never took). A queue past `max_buffered_inputs` drops its oldest
+  — a client running fast must not queue itself into latency. Each
+  snapshot says the newest input simulated (`input_ack`).
+- **Rewind and replay.** The predicted entity is not interpolated: its
+  server values are kept as a `Correction` (every replicated component the
+  server says it has, and the `input_ack` they include). At the next step,
+  `Prediction` puts the entity back to that state, drops the
+  acknowledged inputs and replays the rest through the same `simulate`,
+  then simulates the new input. When both ran the same inputs, the replay
+  lands exactly on the prediction — the steady state shows nothing;
+  where they differ (a push only the server saw), the server wins.
+  `PredictionStats` count corrections, replayed inputs and the distance a
+  correction moved the entity. Unity Netcode's predicted ghosts, Overwatch
+  and Rocket League replay commands the same way; Gaffer On Games'
+  "client-side prediction" is the reference.
+- **Where the fixed step is not deterministic** (in `prediction.rs`):
+  only the one entity is replayed, by the game's `simulate`, not the
+  world's physics step, which moves every body. So `simulate` must read
+  only the entity's own replicated state, the input and the step — another
+  entity is where it is *now* on the client, not where it was on the
+  server at the replayed step; an entity moved by its body's velocity or
+  pushed by contacts mispredicts and is corrected — move a predicted
+  entity kinematically. `f32` is the same for the same operations in the
+  same order on one build; a server built for another architecture may
+  fuse multiply-adds differently, an ulp a step, corrected by the next
+  snapshot. Errors are not smoothed on screen: a misprediction snaps. Full
+  rollback of the whole world (fighting games) is its own design.
+- A listen server's own player needs none of this: its entity is the
+  server's. `Net::owned_by(world, peer)` finds a peer's entity there.
+
+Pinned by `voltra-core/tests/prediction.rs`, 150 ms of latency each way
+(a 300 ms round trip): the player moves the very step it is pressed,
+while the server has not heard; held for two seconds with a turn, over
+60 corrections each replaying a round trip of inputs, every one landing
+within 1e-5 of the prediction; let go, client and server at the same
+place exactly, with only a round trip of inputs still held. And a push
+the server makes alone is corrected to: the client ends where the server
+put it. Unit tests of the input queue (each input once, in order; a flood
+cut to the newest; oversized ones dropped).
+
+### The editor plays a listen server and its clients in one process, over links it conditions
+
+Stage 117. `Window ▸ Network` (`panels/network.rs`) sets how many clients
+Play starts (up to three, beside the host) and how bad every link is;
+`crate::netplay` runs them.
+
+- **One process.** With clients asked for, Play hosts the editor's own
+  world as a listen server — its game plays the host, in the viewport —
+  and starts each client as the game run `Headless` on the scene as Play
+  found it (the editor's registry, a fresh game from the loaded library),
+  joined over an in-memory network; Stop ends them with the session.
+  Unity's Multiplayer Play Mode and Godot's "run multiple instances" start
+  each client as a process with a window; worlds in the editor's own
+  process are stepped in its frame (by the server's clock, paused with
+  it), their state is there to show and to read through the bridge, and
+  the link is one the editor owns at both ends. What they lack is a
+  picture: the renderer draws the editor's one world, so the window draws
+  each client as a map of its replicated entities over the server's —
+  a client lagging or missing one shows as a dot apart. A client per
+  window (a player process joining over UDP) is not done.
+- **Conditions** are `Conditioned` on every link, the server's and each
+  client's, so a bad link is bad both ways. `LinkConditions` gained a
+  bandwidth cap (bytes a second: a datagram waits for the ones before it,
+  and is dropped once that wait passes a second, as a router's queue
+  drops; counted as `throttled`), and `Conditioned` keeps its conditions
+  behind a shared `LinkControl`, so the window turns them live after the
+  transports went into their endpoints. Unity's Network Simulator
+  (latency, jitter, loss) and Chrome's throttling (bandwidth) are the
+  model.
+- **Net stats in the profiler**: every frame a session sets `net rtt ms`
+  (the largest round trip), `net bytes out`/`in` and `net packets
+  out`/`in` (this frame's, the connections' running totals differenced,
+  so a counter's average is the rate) and `net peers` —
+  `voltra_core::NET_COUNTERS`. A session stepped inside another's frame
+  (`Headless::unprofiled`, the editor's clients) neither ends the
+  profiler's frame nor sets the counters, which stay the host's.
+  `UiFrame::net` reaches the session from the editor.
+- **Bridge**: `net_play` (clients, latency, jitter, loss, bandwidth; a
+  field left out is kept, a value out of range refused) answers the
+  session — its settings, the server's connections, each client's id,
+  connection, replicated entities, snapshots and interpolation delay. The
+  counters read back through `profile`. No MCP tool wraps it yet.
+
+Pinned by `voltra-editor/tests/netplay.rs` (ignored; CI's bridge step runs
+it under Xvfb): the editor on a scene with one replicated box, two clients
+at 100 ms each way; both join and replicate the box, the server's round
+trips read 180–400 ms, `profile`'s `net rtt ms` likewise, `net peers` 2,
+bytes and packets both ways; an out-of-range setting refused; Stop ends
+the clients. Unit tests of the bandwidth cap (a 10 KB/s link carries ten
+1000-byte datagrams a second and drops past a second of queue) and of a
+`LinkControl` changing a link from outside.
+
+### A networked sample decides the match where the server is, and predicts only its own player
+
+Stage 118. `games/arena` (made with `cargo xtask new-game arena --title
+Arena`, then grown): two to four players race for a coin, first to five.
+One game value for every end; what it does depends on where it runs.
+
+- **Where the match is decided** — a dedicated server, a listen server, or
+  a run with no session — the rules run (`authority.rs`): a player spawned
+  from `prefabs/player.prefab.ron` per peer as it joins (`NetOwner` set;
+  the listen host's own player is the `Connected(PeerId::SERVER)` event,
+  so one path spawns all), despawned as it leaves; each player moved one
+  step by its own input (`tick.net.input`, the host's from its keys); the
+  coin taken by whoever reaches it, the round won at its target and
+  restarted after a pause. A **client** runs none of it: it predicts its
+  own player through `tick.predict` with the same `walk`, and replication
+  brings the rest — `Transform`, `Player` (speed and bounds, which `walk`
+  reads, so the replay matches), `Score`, and the scene's `Round` entity
+  (adopted by id from the level both ends loaded; the coin likewise). The
+  scores and the players' colours are drawn on every end from replicated
+  state alone (`hud.rs`).
+- **Inputs are whole numbers** (`Steer`, two `i8`): two bytes on the
+  wire, and the same direction on both ends exactly.
+- **Starting a session**: `Session::{Solo, Host, Join}` from the command
+  line (`--host`, `--join ADDR`, `--bot`) or, in a browser, the page's
+  `?join=ws://…`; a session already running — the editor's network play,
+  a dedicated server's — is left alone. The arena's `NetConfig::protocol`
+  keeps other games out at the handshake.
+- **A dedicated server binary of its own**, `arena-server`, on a seam
+  this stage added to `voltra-server`: `voltra_server::cli::main(name,
+  |args| app)` is the `voltra-server` command line and run, with the
+  game's app and a chance to set defaults (its first scene, its protocol)
+  on the parsed `args` — the way a game builds its player on `App::run`.
+  `voltra-server`'s own binary is now that call with no game. On the web
+  the server binary builds to nothing.
+- **Found by the match**: a predicted entity's non-interpolated
+  components (its score) were being held back with its position; only the
+  interpolated ones (where it is) are the client's own now, the rest apply
+  as they arrive.
+
+Pinned by `games/arena/tests/match.rs` (in `cargo test --workspace`, no
+display): `arena-server` started as a process on a free UDP port, two
+headless bot clients joining it by `udp://` and playing until a round is
+won — both see the same winner, a client, at the target, the same scores,
+the server's log saying it decided it, and a second of each client's
+inputs simulated by the server. `tests/plugin.rs` (the template's): the
+library loaded as the editor loads it, the solo player spawned and walked.
+`crates/voltra-player/web/test/arena.mjs` in CI's web job: the arena's web
+build, on WebGPU and WebGL2, joins a native `arena-server` over WebSocket
+from its page's `?join=`; the server spawns the page's player and the page
+logs that it predicts it. Guide chapter `docs/guide/08-networking.md`,
+whose checked blocks run the match test and the server for two seconds.
+### Particles look things up over their life, and the GPU reads the same answers from a table
+
+Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
+at their defaults, so every scene written before still loads as it was:
+
+- **`shape: EmitShape`** — `Point` (the old behaviour), `Circle`, `Ring`,
+  `Box`, `Edge` (a line on the emitter's x) and `Outline`, the entity's own
+  `Collider` as it sits at the origin (read each advance, 32 segments a
+  turn; the origin when there is none). Uniform by area (`r = √lerp(r₀²,
+  r₁², u)`) and by perimeter length. Unity's Shape module and Godot's
+  emission shapes; the direction and spread still say which way.
+- **`size_curve`, `speed_curve`, `alpha_curve: Option<Curve>`** — multipliers
+  over a life (`t` = age / lifetime). The size curve multiplies the old
+  start/end blend; the speed curve scales the *distance covered* each step
+  (`p += v · speed(t) · dt`), not the stored velocity, so acceleration and
+  collisions are untouched; alpha multiplies the colour's.
+- **`gradient: Option<Gradient>`** — replaces `color_start..color_end` when it
+  has a stop.
+- **`rotation`, `angular_velocity`** — ranges picked per newborn; the quad
+  turns about its centre.
+- **`flipbook: Option<Flipbook>`** — an atlas (stage 25's `*.atlas.ron`, read
+  through `Atlas::frame` / `Frame::uv` only), an optional list of frame
+  indices (empty = all, in order; out of range left out; at most 64), and
+  `FlipbookTiming::OverLife { cycles }` or `PerSecond { fps }` — Unity's
+  Texture Sheet Animation. The emitter's `texture` stays the sheet, as a
+  sprite's does. Resolved with the sprites' atlases (`resolve_world_atlases`,
+  `resolve_entity`).
+
+`Curve` (`voltra_scene::curve`) and `Gradient` (`voltra_scene::gradient`)
+are general: keys at `t ∈ 0..=1`, read in order, broken ones skipped, flat
+past the ends; a curve's key carries the clip's `Ease` for the segment that
+leaves it (stage 66's vocabulary, so a curve and a clip read alike); an
+empty curve is `1`, an empty gradient "none". A line's width curve
+(stage 101) is the same type.
+
+**One look, two readers.** `particles::look` is the single answer —
+`size_at`, `speed_at`, `color_at` — that the CPU's quads use exactly and
+that `look::tables` samples into `voltra_render::ParticleTables`: four rows
+of 64 RGBA32F texels (colour; size, speed, alpha; flipbook UV rects; the
+outline's corners with the fraction of the perimeter before each), one
+small texture per GPU ring, written only when it changes
+(`GpuParticles::set_tables`). The compute shader reads the speed row and
+the outline; the vertex shader the rest, blending the two nearest samples
+(`textureLoad`, so an unfilterable float texture needs no feature). This is
+how Godot's `GPUParticles2D` bakes its curves (`CurveTexture`,
+`GradientTexture1D`); Unity's VFX Graph does the same with baked curves.
+Evaluating keys in WGSL would mean a storage buffer of keys and a loop per
+vertex for no visible gain. `ParticleLook` lost its size and colours —
+they live in the table — and gained the flipbook timing; the 32-byte GPU
+particle's padding became its rotation and spin.
+
+Shapes and spin are drawn from the CPU's xorshift on one side and the PCG
+hash on the other, so the two place newborns differently but alike;
+everything else is deterministic and the same formula on both sides
+(`EmitShape::offset` ↔ `spawn_offset`, `shape::on_outline` ↔ `on_outline`,
+`FlipbookTiming::index` ↔ `frame_of`). The culling reach grew by the
+shape's extent, the speed curve's peak and the size curve's peak (×√2 for a
+turned square).
+
+`Headless::screenshot` now dispatches the GPU emitters' owed steps before
+drawing, as the window's draw does — a headless shot of a GPU emitter showed
+its particles where they were born.
+
+Pinned by `voltra-core/tests/particles_cpu_gpu.rs` — each feature
+screenshotted with the emitter on the CPU and on the GPU (lavapipe in CI):
+size curve, speed curve, alpha curve with a gradient, rotation with spin and
+flipbook frames (both timings) match pixel for pixel within an edge and
+measure what they should; each shape covers the same box about as densely
+and nothing outside itself. Unit tests: `curve`, `gradient`,
+`particles::{shape, flipbook, look, format_tests}` (a stage-51 emitter
+loads as the default; every new field round-trips; a plain one writes
+none), `voltra-render` `particles::{tables, uniforms}`.
+
+Not done: sub-emitters, sorting by age, a curve per axis (non-square
+particles), random-between-two-curves, and a flipbook's random start frame.
+
+### The selected emitter previews while authoring, and its curves are edited as graphs
+
+Stage 100. The inspector's particle section (`panels/inspector/particles.rs`
+and one file per part under `particles/`) is laid out in the order an effect
+is built — a preset, then rate and motion, the emission shape, the look over
+a life (texture, size, size and speed curves, colours or a gradient, alpha
+curve, rotation and spin), the flipbook, then simulation, collisions and
+sorting.
+
+- **Curve widget** (`curve_edit.rs`): the curve drawn over `0..=1` against
+  a value axis from `0` to the caller's top (2 for size and speed, 1 for
+  alpha) raised to the highest key and held for a drag, so the graph does
+  not rescale under the pointer. Drag a key, double-click to add, right-click
+  to remove; the selected key's `t`, value and ease underneath. A dragged key
+  keeps its place in the list (sampling reads keys in `t` order, so nothing
+  needs sorting under the pointer). Turning a curve on starts it at a flat
+  `1` — nothing jumps.
+- **Gradient widget** (`gradient_edit.rs`): the same gestures along a bar
+  painted as a colour-per-vertex mesh; a stop added takes the colour already
+  there; the selected stop's place and colour picker underneath (an open
+  picker holds one entry, as the colour fields already did).
+- **Undo**: every widget reports a label while it is being changed, and the
+  history's claim rule (stage 21) makes one held drag, or one open picker,
+  one entry.
+- **Live preview** (`particle_preview.rs`): while editing (not playing or
+  paused), the primary selection's emitter advances by egui's `stable_dt`
+  through `particles::advance_where` — `advance` for a chosen set, here one
+  entity, on the GPU when the renderer can (`UiFrame::gpu_particles`) —
+  after the history's after side, so only live particles change, which no
+  record holds: a preview is never an edit. Moving the selection off it, or
+  entering play, restarts it, so nothing is left frozen in the air; a
+  finished one-shot is kept, not despawned. Unity previews only the selected
+  system in the Scene view for the same reason: a level of fountains does
+  not all run while one is tuned.
+- **Restart / Burst *n*** act on live particles only (`ParticleEmitter::
+  restart`, `burst`), so they are not edits either. **Presets**
+  (`particles::presets::Preset` — smoke, sparks, rain, data a game can use
+  too) replace the motion and look and keep the texture, sorting, light
+  layers, simulation, collision, one-shot flag and flipbook: one entry.
+- The emitter's texture is now a path field (it had none in the inspector),
+  and the flipbook an atlas path field, a frame list typed as `0 1 2 5`
+  (refused, and reverted, if a word is not an index) and its timing.
+
+Pinned by the bridge test (`voltra-editor/tests/bridge.rs`, under Xvfb in
+CI's bridge step): an emitter selected but not playing fills the viewport's
+screenshot with particles; its size curve set through the bridge more than
+triples the covered pixels in the next screenshot; the status shows one
+undo entry, one undo empties the history and brings the curve back, and the
+preview draws small again. Unit tests: `particle_preview` (only the
+selection plays, a deselected one is cleared, a finished one-shot kept),
+`curve_edit` (the axis grows to the highest key), `flipbook_edit` (the frame
+list's parsing), `particles::presets` (a preset keeps where it draws).
+
+### Lines, polygons and trails are triangles in the sprite batch, widened and cut on the CPU
+
+Stage 101. Three components, each turned into a `batch::TriangleMesh` every
+frame and appended by `SpriteBatch::push_triangles` — the quad path's runs,
+culling and painter's order for geometry that is not a quad — so they are
+lit (light layers, the light map), sorted (`sort_order`, sorting layer) and
+batched like sprites, with no pipeline of their own.
+
+- **`Line2D`** (Godot's `Line2D`, Unity's `LineRenderer`): points in the
+  entity's space, `closed`, `width` × an optional `width_curve` along its
+  length (the stage-99 `Curve`), colour, `joint` (`Miter` with a
+  `miter_limit` in half-widths, default 2 as Godot's sharp limit; `Bevel`;
+  `Round`), `begin_cap` / `end_cap` (`Butt`, `Square`, `Round`), a texture
+  `Stretch`ed once or `Tile`d every width. `line2d::stroke` widens it: one
+  quad strip per segment, cut where the width curve is sampled (32 pieces a
+  line) and where a tile ends; the outer side of each corner gets the
+  joint; caps at an open line's ends. **Tiling is cut on the CPU**, each
+  tile its own `u` 0..1, because the sprites' sampler clamps — a repeating
+  sampler would be a second texture bind group for every texture, and would
+  not work for a frame of an atlas. The inner side of a corner overlaps
+  (a translucent line is denser there), as Godot's simple mode does; an
+  exact inner join is the miter's mirror and can come when it shows.
+- **`Polygon2D`**: an outline in the entity's space, either way round,
+  concave allowed, filled by `triangulate::triangulate` — ear clipping
+  (Eberly), repeats and collinear corners dropped first, O(n²) for authored
+  sizes; a self-crossing outline has no ears left at some point, and the
+  rest is fanned and warned about rather than dropped. A texture is
+  stretched over the outline's bounds (the same clamped sampler; Godot's
+  repeat would need the second bind group above).
+- **`Trail2D`** (Unity's `TrailRenderer`): while the world runs, its
+  entity's world position is dropped as a point each `min_distance`, every
+  point ages, one past `lifetime` (or beyond `max_points`) goes. Drawn in
+  the world (identity matrix, once, not per parallax copy) from where the
+  entity is now through the points, by the same stroke — width and colour
+  by *age* (the stroke's `t` along the length mapped back to an age), round
+  joints and a round head; without a curve it tapers to nothing, without a
+  gradient its colour fades to clear. The points are `#[serde(skip)]` state.
+  Advanced with the particles in `App::advance_particles`, under the same
+  simulation gate.
+- **Editor**: inspector sections (`shapes2d.rs`) with every field, the
+  width curve through the particle editor's curve widget; **Edit points**
+  uses stage 55's polygon handles — `ShapeEdit` now edits any of an entity's
+  point lists (`shape_edit::Points::{Caster, Line, Polygon}`), the drag,
+  add-at-midpoint and right-click-remove and the one-entry-per-drag rule
+  unchanged. *Scene ▸ Spawn line / polygon / trail*. Registered with
+  templates, so the bridge and the MCP server can add them by name.
+
+Not done: picking a line or polygon by clicking its pixels (select it in
+the hierarchy), an exact inner join, a repeating texture on a polygon, a
+trail's texture tiled.
+
+Pinned by `voltra-core/tests/lines.rs` (headless screenshots: each joint
+covers its corner as it should — the miter its point, the bevel not, the
+round between; each cap past an end; a ten-point star filled with its
+notches empty; a line over and under a sprite by sort order; a trail
+behind a kinematic body moving at three units a second, bright behind it,
+fading, nothing past its lifetime or ahead), `line2d/tests.rs` (the same
+geometry by point-in-triangle, the miter limit, the width curve, tiled `u`
+within 0..1 ending on 1, a closed outline, nothing from too few or broken
+points, round trips), `triangulate` (an L both ways round, a star, repeats
+and collinear corners, a bow tie still drawn), `trail2d`, `polygon2d`,
+`batch::triangles` and `shape_edit` (a line's and a polygon's points as
+targets).
+
+### A bone is an entity; its pose is its transform, its rest and length a component
+
+Stage 102. `voltra_scene::skeleton`: **`Skeleton2D`** marks a root;
+**`Bone2D { length, rest }`** goes on an entity in the hierarchy whose own
+`Transform` *is* the bone's pose relative to its parent bone, pointing along
+its +x; **`TwoBoneIk { target, flip, enabled }`** bends a limb. Godot's
+`Skeleton2D`/`Bone2D` nodes and Unity's 2D Animation (bones are
+`Transform`s) have this shape, and it is what made the rest free:
+
+- **Cut-out animation** is a sprite parented to a bone — the hierarchy
+  already composes the matrices (stage 21).
+- **Keyed by the timeline like any property**: a clip's `Rotation` track on
+  `"thigh_l"` (stage 66's name path from the player) turns that bone; the
+  Timeline offers bones in its add-track list because they are named
+  entities. No bone-specific property, no second animation system.
+- **Posed in the viewport** with the rotate tool on a selected bone; bones
+  are drawn over the art as kites (`view/bones.rs`, the selected one lit),
+  and a click within six pixels of one selects it before the sprites hung
+  on it (`picking`, `skeleton::bone_at`).
+- **Rest pose** (`Bone2D::rest`, a `Transform`): *Set rest* in the inspector
+  takes the current pose; *Reset to rest* / the skeleton's *Reset pose*
+  (`skeleton::reset_to_rest`) puts it back. A skinned mesh (stage 103) is
+  bound in it.
+- **Two-bone IK** (Unity's `LimbSolver2D`, Godot's `TwoBoneIK`
+  modification): on the *lower* bone, its parent the upper; the target an
+  entity named by path from the skeleton root, as clip tracks are, so every
+  copy of a prefab reaches for its own. `ik::solve_two_bone` places the
+  elbow by the law of cosines (left of the reach, or right with `flip`;
+  straight towards a target out of reach), then each bone is turned by the
+  world angle between where it points and where it should — so a lower bone
+  hung off its parent's axis, or a skeleton scaled or mirrored (a negative
+  determinant turns the other way), still lands. Upper length is measured
+  origin to origin, lower by `length`. Applied in `advance_animations` after
+  the clips (IK has the last word) while the world runs. A limb that cannot
+  be solved is left alone and `ik::problem` says why (the inspector shows
+  it) rather than warning every frame.
+- **Editor**: inspector sections (bone length, set/reset rest, *Add child
+  bone* at the tip; IK target, flip, on, its problem; the skeleton's bone
+  count and *Reset pose*); *Scene ▸ Spawn skeleton* (a root and one bone,
+  one undo entry). Registered with templates.
+
+**Sample**: `scenes/bones.ron` — a cut-out walker (torso, head and legs as
+sprites hung on bones, `sprites/walker/`), walking by
+`animations/walk.anim.ron` (thighs swing, knees bend, the hip bobs), its
+arm bent by IK towards a goal the clip swings.
+
+Rejected: **bones as data inside one component** (Spine's and Unity's
+`SpriteSkin` keep a bone list) — every system that already knows entities
+(clips, gizmo, hierarchy, the inspector, the bridge) would need a second
+addressing scheme; **IK every frame in the editor** — writing bone
+transforms while authoring would be an edit each frame; Unity's IK manager
+runs in edit mode only when asked, and so would this, with a preview like
+the particles'.
+
+Pinned by `skeleton/tests.rs` (the tip reaching a target in reach to 1e-4,
+left by default and right flipped; out of reach straight towards it; a
+mirrored skeleton still reaching; a limb with no target or no upper bone
+left alone with its reason; bones found, placed, picked and reset; round
+trips), and `voltra-core/tests/bones.rs` through the sample (the left foot
+strides more than 0.4 units and is back after the one-second loop, each
+sprite riding its bone; the hand on the IK goal within 1e-3 every frame;
+the picture changes as it walks).
+
+### A skinned sprite stores its mesh and weights; the GPU blends its bones
+
+Stage 103. **`SkinnedSprite`** (`voltra_scene::skinned`) is a sprite cut
+into a mesh whose vertices are held by bones — Unity's `SpriteSkin` over a
+sprite mesh, Godot's `Polygon2D` bound to a `Skeleton2D`. The component
+holds everything the file needs: texture, tint, `pixels_per_unit`, the
+bones **by path from the skeleton root** (as clip tracks and IK targets
+name entities, so prefab copies bind to their own), and the `SkinMesh` —
+each vertex's bind-pose position, texture point and up to four
+`(bone, weight)` pairs, plus the triangles. So painted weights are scene
+data and round-trip through the file like any field.
+
+- **Mesh from the outline** (`skinned::generate`): the texture's traced
+  silhouette (stage 59's `Silhouettes`, the largest loop) in the entity's
+  units (centred, texels ÷ ppu, as a sprite of it is drawn), cut on a grid
+  (a quarter of the narrow side, at most 48 cells a side) with each cell's
+  piece clipped (Sutherland–Hodgman) and ear-clipped (stage 101's
+  `triangulate`); vertices on cell edges are shared, so the mesh has no
+  T-junctions to crack open. A grid stands in for the interior points
+  Unity's tessellator adds, without a constrained Delaunay triangulator.
+- **Weights**: `weights::automatic` — each vertex held by its nearest bones
+  (rest-pose segments in the mesh's space, `pose::bone_segments`) by
+  `1/d²`, among those within three times the nearest's distance, at most
+  four, normalised: a vertex on a bone is that bone's, a joint is shared,
+  a shoulder does not follow the hand. `weights::paint` /
+  `paint_vertex` — a soft brush adding or taking one bone's weight, then
+  renormalising and keeping the four strongest.
+- **Pose** (`skinned::pose`): per bone `world(bone) · rest(bone)⁻¹ ·
+  rest(mesh)`, with `rest(x)` the chain of rest poses (`Bone2D::rest`, a
+  plain transform for a non-bone) from the skeleton root — at rest every
+  bone's matrix is the mesh's own. A bone path that names nothing, or a
+  rest that cannot be inverted, holds its vertices rigidly with the mesh;
+  a vertex held by nothing is the mesh's own (`RIGID_SLOT`). `deformed`
+  computes the same blend on the CPU for the batch's cull box and the
+  editor's weight dots.
+- **GPU** (`voltra_render::skinning`): `SkinnedMesh` — a vertex buffer of
+  `SkinVertex { position, uv, bones: [u32; 4], weights: [f32; 4] }`
+  (sanitised: indices clamped, weights finite and summing to one), an index
+  buffer, and a uniform block of a tint plus 64 + 1 bone matrices (two
+  `vec4`s each, 2 KiB), rewritten each frame; `skinned.wgsl` blends the
+  four terms written out (no runtime vector index, for FXC). A **uniform
+  array** rather than a storage buffer, so it runs on WebGL2 too — no
+  fallback path needed; 64 bones is more than a 2D character has. Linear
+  blend skinning; dual quaternions would fix the candy-wrapper twist that
+  2D limbs rarely show.
+- **Painter's order**: the batch records a `SkinnedDraw` where the sort key
+  falls (with how many GPU emitters came first, so an emitter and a mesh at
+  the same place keep their order) and seals the range before it, as GPU
+  emitters do (`SpriteBatch::sealed` now covers both); `scene_draws`
+  merges them into `SceneDraw::Skinned`, drawn by `draw_scene` through the
+  renderer's `SkinPipeline` (shared by clone into the app's
+  `SkinnedMeshes`, which re-uploads a mesh when its vertices or weights
+  change and poses every mesh before each drawn frame, the window's and a
+  headless screenshot's).
+- **Editor**: the inspector's section — texture, ppu, tint, *Use the
+  skeleton's bones*, *Generate mesh* (trace + grid + automatic weights),
+  *Auto weights*, and **Paint weights**: a viewport mode (`weight_paint.rs`,
+  as the shape editor is) where a drag adds the chosen bone's weight under a
+  soft round brush on the mesh *as posed*, Shift takes it away, each vertex
+  drawn as a dot from blue to red by that bone's weight; one undo entry a
+  stroke. *Scene ▸ Spawn skinned sprite*.
+
+Not done: skinned meshes in the light-layer and normal-map passes (lit as
+if on every layer, flat); a skinned mesh repeated by parallax (drawn once);
+picking one by its pixels; editing the mesh's vertices by hand.
+
+Pinned by `voltra-core/tests/skinned.rs` (headless: an arm whose mesh is
+traced from a 32 × 64 texture with cut corners and weighted automatically
+hangs straight at rest; with the lower bone turned a quarter, the hand lands
+a unit to the right of the elbow, nothing hangs below, and the outside of
+the bend — where two hinged cut-out rectangles cover nothing — is filled
+out most of the way to its apex, further than a hard-weighted mesh),
+`skinned/tests.rs` (at rest every bone matrix is the mesh's own; a turned
+lower bone carries the hand and shares the elbow; a missing bone holds
+rigid; the GPU mesh drops bad weights and broken triangles; **painted
+weights saved to a scene file and loaded back unchanged**),
+`skinned::{generate, weights}` and `voltra-render` `skinning::mesh`
+(sanitising, the uniform's layout).
+### Benchmarks are an in-house harness, compared base against head in one CI job
+
+Stage 107. `crates/voltra-bench`: the hot paths timed headless, the results
+written as JSON, and a comparer that fails CI when one slows past its
+threshold. Nothing was optimized: the numbers below are what stage 108
+starts from.
+
+**The suite** (`suite/*.rs`, one file a group). Every benchmark builds its
+own world in code, not from a scene file someone may edit, so its number
+moves only when the code it times does:
+
+| Benchmark | Times |
+| --- | --- |
+| `batch/sprites/{10k,50k,100k}` | `SpriteBatch::rebuild` of N sprites in a grid, all in view, over 8 textures — the draw path's per-frame build |
+| `batch/upload/100k` | the 100k-quad batch written to the device (lavapipe) as the draw path writes it — since stage 108 into kept buffers (`SpriteBatch::upload_into`) and submitted; stage 107 timed fresh buffers (`SpriteBatch::upload`) |
+| `tilemap/mesh/256x256` | `tilemap::mesh::push`: a 65 536-tile layer meshed from nothing |
+| `tilemap/cached/256x256` | the same layer through `TileMeshCache`, nothing changed: a steady frame |
+| `physics/step/1k-bodies` | 50 columns of 20 boxes, every body awake and touching; 10 steps from placement, reported per step |
+| `physics/pile/settle-210` | a 20-row pyramid, 120 steps (2 s) from placement, per step |
+| `ui/layout/1k-elements` | `UiLayout::from_world` on a column of 50 row stacks of 19 cells |
+| `text/layout/{paragraph-1k,labels-100}` | `Fonts::layout_uncached`: 1 000 characters shaped and wrapped at 400 px; 100 HUD labels — what a changed text costs |
+| `text/layout/{paragraph-1k,labels-100}-cached` | the same through `Fonts::layout`'s cache, warm (stage 108) — what a frame showing the same text again costs |
+| `scene/parse/{250,500}-entities`, `scene/load/250-entities` | `ron::from_str::<SceneFile>`, and that plus `from_scene_file` |
+| `frame/headless/sandbox-640x360` | `Headless::screenshot` of `sandbox.ron`: record, submit, lavapipe, read back |
+
+GPU benchmarks are recorded as skipped, and never compared, where there is
+no adapter. The older timing examples (`voltra-scene`'s `batch_stress`,
+`voltra-physics`'s `stress`) stay as exploratory tools; the suite is what
+is compared. Scenes are small (250 and 500 entities) because a large one
+takes seconds to parse — see the budgets.
+
+**Harness, not `criterion`.** `criterion` is a leaf library and allowed, but
+what CI needs from it is what it does least well: its results are an
+undocumented tree under `target/criterion`, its baselines live there too
+(a base built in another checkout has to be pointed at the same
+directory), and its change test reports "within noise threshold" from one
+global setting rather than a threshold per benchmark. The part we need is
+small (`harness.rs`, `stats.rs`): warm up for 300 ms, doubling the
+iterations while one run is shorter than a sample; size a sample to 25 ms
+by the *wall* clock, setup included (a nanosecond routine behind a
+millisecond setup would otherwise ask for millions of setups per sample);
+take 21 samples; keep the median and the median absolute deviation, which
+one preempted sample cannot drag the way it drags a mean and a standard
+deviation. `iter` times a routine that needs nothing fresh; `iter_batched`
+makes each iteration's input before the clock starts and drops each output
+after it stops (a physics world stepped cannot be stepped from the same
+place again). Unity's Performance Testing package is the prior art that
+fits: samples, a median, JSON out, a threshold per test against a stored
+baseline. Bevy runs `criterion` and reads regressions off a dashboard after
+merge; Godot's benchmarks run nightly in a repository of their own. Both
+inform rather than gate, which is not what was asked here.
+
+**JSON** (`report.rs`, `FORMAT` = 1): the machine (OS, arch, CPUs,
+optimized or not) and per benchmark its name, threshold, stats or the
+reason it skipped, how many runs it is the best of and their spread. A
+report of another format is refused by number, not half-read. Several runs
+combine as the **best** of them per benchmark (`Report::best_of`): what
+slows a run on a shared machine — another process, a migrated thread —
+only ever adds time, so the fastest run is the closest to what the code
+costs.
+
+**Comparer** (`compare.rs`): reports are matched by name; a benchmark
+regresses when `head > base × (1 + threshold)`, improves past the same
+margin the other way, and is unchanged in between. Added, removed and
+skipped ones are listed and never fail. Reports of two machines, or of a
+debug build, are refused (exit 2): they differ for reasons that are not the
+change. `--threshold P` overrides every benchmark's own.
+
+**CLI.** `cargo xtask bench [--save FILE] [--compare FILE]… [--threshold P]
+[--filter TEXT] [--runs N] [--quick]` builds the suite in release, runs it
+(`target/bench/latest.json` by default) and compares. It fronts the
+`voltra-bench` binary (`run`, `compare`, `noise`, `list`), which CI calls
+directly because it builds two of them.
+
+**CI** (the `bench` job): the base is the PR's merge base (for a push, the
+commit the branch moved from), checked out as a worktree. Both suites build
+in release in one target directory, so the dependencies build once, and
+run **on the same runner, interleaved three rounds** (base, head, base,
+head, …) so a slow minute of the machine lands on both sides; each side's
+best run is compared. The six JSON files are uploaded as the `benchmarks`
+artifact, which `voltra-bench noise` reads to re-measure the runner's own
+noise. A base from before the suite existed is noted and skipped; the head
+still runs. A PR that changes a benchmark's own definition is compared
+against the old definition — read its verdict with that in mind.
+
+**Noise, measured first.** `voltra-bench noise` over two sessions of 12
+runs of identical code on the development machine (4-core Xeon @ 2.3 GHz,
+shared with other builds, load average 6–8). The *spread* is one run
+against one run (slowest median over fastest); the *A/A change* is what the
+check itself sees comparing the code with itself — best of 3 interleaved
+against best of 3, the worst over every window of 6 consecutive runs.
+Taking the best of three shrinks the noise from 10–47 % to 1–20 % (the
+frame, on a rasterizer that uses every core, from 105 % to 30 %). Each
+threshold is twice the worst A/A change of either session, at least 15 %,
+rounded up to 5 (`noise::suggest`):
+
+| Benchmark | Spread | A/A | Threshold |
+| --- | --- | --- | --- |
+| `batch/sprites/10k` | 29–35 % | 9–20 % | 40 % |
+| `batch/sprites/50k` | 9–23 % | 4–10 % | 25 % |
+| `batch/sprites/100k` | 24–47 % | 9–13 % | 30 % |
+| `batch/upload/100k` | 37 % | 6–9 % | 20 % |
+| `tilemap/mesh/256x256` | 10–14 % | 2–6 % | 15 % |
+| `tilemap/cached/256x256` | 28–33 % | 12–15 % | 30 % |
+| `physics/step/1k-bodies` | 19–32 % | 2–5 % | 15 % |
+| `physics/pile/settle-210` | 15–17 % | 2–7 % | 15 % |
+| `ui/layout/1k-elements` | 19–28 % | 2–4 % | 15 % |
+| `text/layout/paragraph-1k` | 21–24 % | 4–6 % | 15 % |
+| `text/layout/labels-100` | 27–28 % | 3–10 % | 25 % |
+| `scene/parse/250-entities` | 14–28 % | 1–7 % | 15 % |
+| `scene/parse/500-entities` | 14–17 % | 4–8 % | 20 % |
+| `scene/load/250-entities` | 15–23 % | 3–5 % | 15 % |
+| `frame/headless/sandbox-640x360` | 105–111 % | 29–30 % | 65 % |
+
+A hosted runner is another machine; its noise is in every run's artifact,
+and a threshold that proves too tight or too loose there is re-set from
+`voltra-bench noise` over those files, not guessed.
+
+**Budgets** — the targets stage 108 worked toward, on this machine's CPU
+(lavapipe for the GPU rows). "107" is the best of stage 107's second
+session; "108" is the best of three runs after stage 108 (see "Sprites are
+drawn as instanced quads" below for what changed each number). The text
+rows were re-set in stage 108: stage 91's shaped layouts replaced the
+glyph-by-glyph layout the first budgets were written against.
+
+| Benchmark | 107 | 108 | Budget | Why that number |
+| --- | --- | --- | --- | --- |
+| `batch/sprites/100k` | 11.5 ms | 6.3 ms | 4 ms | **not met.** 100k sprites at 60 fps leaves 16.7 ms for everything, and the batch may take a quarter. What is left is memory: 100k sprites' components read, matrices composed and instances written, ~60 ns a sprite on this 2.3 GHz shared Xeon. The next step is building the batch on the job pool in chunks (the sorted list splits cleanly; `Sheets` and the ECS storages are not `Sync` yet) |
+| `batch/sprites/10k` | 1.35 ms | 0.57 ms | 0.4 ms | not met, for the same reason at a tenth of the size |
+| `batch/upload/100k` | 8.2 ms | 0.64 ms | 2 ms | met: kept buffers written with `write_buffer`, and 64 bytes a quad rather than 152 |
+| `tilemap/mesh/256x256` | 2.4 ms | 1.5 ms | 2 ms | met; an edit rebuilds one chunk, a full rebuild happens on load |
+| `tilemap/cached/256x256` | 0.73 ms | 0.31 ms | 0.5 ms | met: 65k cached tiles copied a frame as instances, no indices |
+| `physics/step/1k-bodies` | 0.75 ms | 0.54 ms | 2 ms | met. The plan's "2k active bodies under 4 ms" is this budget doubled |
+| `physics/pile/settle-210` | 0.42 ms | 0.33 ms | 1 ms | met |
+| `ui/layout/1k-elements` | 0.15 ms | 0.10 ms | 0.25 ms | met (stages 88–106 had taken it to 0.30 ms) |
+| `text/layout/paragraph-1k` | 349 µs | 325 µs | 500 µs | met. Shaping a changed paragraph once: 3 % of a frame, paid on the frame it changes |
+| `text/layout/labels-100` | 1.5 ms | 0.77 ms | 1 ms | met. Every label of a HUD changing in one frame is the worst case; a timer or a score changes one or two |
+| `text/layout/paragraph-1k-cached` | — | 0.28 µs | 5 µs | met; laid out on every frame it shows |
+| `text/layout/labels-100-cached` | — | 7.9 µs | 25 µs | met; a HUD's worth every frame |
+| `scene/parse/250-entities` | 97 ms | 3.4 ms | 5 ms | met, and **linear**: `parse/500` is 1.95 × `parse/250` (budget: at most 2.2 ×) |
+| `scene/parse/500-entities` | 375 ms | 6.6 ms | 10 ms | met; stage 109's regions need a 10k-entity level in well under a second (~130 ms at this rate) |
+| `scene/load/250-entities` | 97 ms | 4.5 ms | 10 ms | met |
+| `frame/headless/sandbox-640x360` | 2.5 ms | 2.3 ms | 8 ms | met on a software rasterizer. 100k sprites at 60 fps on the reference GPU needs a windowed run on that GPU; see stage 108's hand measurement |
+
+Pinned by `compare/tests.rs` (the same numbers pass; past the threshold
+regresses and within it does not; faster is no failure; `--threshold`
+overrides; added, removed and skipped never fail; another machine or a
+debug build is refused; and **a deliberately slowed function** — the same
+sum through three times the work, measured by the real harness — tripping
+the check), `report.rs` tests (JSON round trip, another format refused by
+number, the best of runs and its spread, skips), `stats.rs`, `harness.rs`
+(setup is not timed, the per-step divisor), `noise.rs` (spread, the
+interleaved A/A, the suggestion) and `suite.rs` (unique names; every CPU
+benchmark runs once). In CI as the `bench` job.
+
+### A big world is regions streamed around anchors, loaded over frames within a budget
+
+Stage 109. Stage 30's scene loads, made asynchronous, for two uses: a
+world cut into regions loaded and unloaded around the players, and a full
+scene change behind a loading screen. Both run through one pipeline
+(`voltra-core/src/app/loading/`), once a frame, after the frame's scene
+requests.
+
+- **Authoring: a `.world.ron`** (`voltra_scene::WorldRegions`) lists
+  regions — each an ordinary scene, its entities at world positions, and
+  the rectangle it covers — plus a default `load_radius`, an
+  `unload_margin` (hysteresis) and an optional `base` scene. The shape of
+  Unreal's World Partition (grid cells loaded around *streaming
+  sources*), kept to files the engine already has: a region opens in the
+  editor like any scene and nothing in it knows it is one. Unity has no
+  built-in streaming (games stream additive scenes by hand); Godot leaves
+  it to the game. `WorldRegions::grid` generates a grid.
+- **Anchors**: every `StreamingAnchor { radius }` (registered, so a scene
+  or prefab carries it) keeps regions within its radius in — as many as a
+  game needs: split screen, a server's players. With none, every active
+  `Camera` is one, so a single-player game adds nothing. A region within
+  an anchor's reach loads, nearest first, at most two per pool thread at
+  once; one further than reach + margin from every anchor unloads.
+  `tick.stream_world(path)`, `tick.stop_streaming()`, `tick.streaming()`
+  (`StreamingStats`).
+- **The pipeline** (`build.rs`): on the pool, the file read, the RON
+  parsed, **every registered component checked against its type**
+  (`ComponentRegistry::normalize`, with no world — the registry is now
+  `Clone` and goes to the worker), the spawn order worked out
+  (`prefab::StagedScene`: parents before children, so an entity is
+  complete — parent resolved, references remapped — the moment it lands)
+  and the textures it names listed (`format::texture_paths`). Each texture
+  not in the store is decoded on the pool once, however many loads want it
+  (`decodes.rs`), and uploaded on the frame (`Textures::admit_decoded`,
+  `DecodedTexture`). Then, on the frame, one entity a unit — components
+  read, assets resolved — and each prefab instance synced. Components are
+  read into the world on the frame, not a worker: a component need not be
+  `Send` and the world is not shared; the worker's check is what makes a
+  load over frames all-or-nothing, a broken file found before anything is
+  touched.
+- **The budget** (`budget.rs`): load work on the frame is cut into units
+  (an entity, an upload, a batch of 64 despawns, a task polled) and a unit
+  starts only while the frame's budget lasts — `DEFAULT_LOAD_BUDGET` 4 ms,
+  a quarter of a 60 Hz frame (Unity's `backgroundLoadingPriority` spans
+  2–50 ms), `App::with_load_budget`. A frame overshoots by at most the unit
+  it was in; at least one unit runs, so a zero budget still progresses.
+  Loads (nearest first) and unloads take turns. `tick.load_stats()`
+  reports work, units, the last unit's start and the longest unit.
+- **Unloading** (`unload.rs`) despawns what the region spawned *and*
+  whatever was parented under it since, children first, in units; a
+  `Persistent` entity is lifted out where it stands. A region owns what it
+  spawned wherever it walked (Unreal: an actor goes with its streamed
+  level); its state does not survive an unload — saving it is the game's.
+  A region unwanted while loading is cancelled: an unstarted read never
+  runs (dropping a `Task` cancels it), a half-spawned region unloads. A
+  region that will not load is marked broken and not retried.
+- **Assets are not freed.** `Textures`, `Clips`, `Fonts`, `Atlases` and
+  `Prefabs` never remove — every handle they issue resolves for the
+  store's life, which every component relies on — so a region's textures
+  stay after it unloads. Regions mostly share a few sheets, so memory
+  grows with *distinct* assets, not regions visited; reference-counted
+  eviction is a change to every store and every holder of a handle, left
+  for when a world needs it. Region scene files are **not** cached in the
+  prefab store: parsed, spawned, dropped.
+- **Replication** (`voltra-replication` untouched): a server streams
+  around every player — give each a `StreamingAnchor` — and a region's
+  `Replicated` entities are the server's, spawned and despawned with the
+  region, and so on every client. A client streams the same regions for
+  their scenery but **skips every replicated record** (and its subtree):
+  loads have fresh ids, so a local copy would never be adopted and would
+  double the server's. Place replicated things in regions as prefab
+  instances, so a client builds them from the prefab the server names. A
+  client's region loaded before its first snapshot is covered by the
+  existing one-off sweep of strays.
+- **Loading screen**: `tick.change_scene(path, Some(loading_prefab))` —
+  Unity's `LoadSceneAsync` (single), Godot's `load_threaded_request`. The
+  prefab spawns at the end of the asking frame; the next tick reads
+  `tick.scene_change() == Some(Loading { progress: 0.0 })`, rising (a
+  quarter read, a quarter textures, the entities, a tenth syncing), then
+  `Finished` for one frame, then `None`; `Failed` if the file will not
+  load, the old scene standing. The old scene (every root but
+  `Persistent` ones and the screen) goes once the new file is read and
+  checked; the physics, and with it the fixed tick, does not step until
+  the new scene is whole — a level half built is a floor half there. The
+  per-frame tick runs throughout, to draw the bar. A `load_scene` drops a
+  change underway; a `stream_world` asked during one waits for the new
+  scene.
+- **The pool is the loader's own** (`JobPool::submit` → `voltra_jobs::Task`,
+  new): a background task a worker runs whenever free, polled each frame;
+  workers take a scope's jobs first and a scope's waiting caller never
+  takes a task, so a frame's own jobs never queue behind a parse. All
+  cores but two, 1–4 workers (`App::with_load_workers`): Unreal streams
+  from one loading thread for the same reason, and `std` sets no thread
+  priority.
+- **On the web** there are no threads: the loader's pool has
+  no workers there, and a task runs on its first poll — which the loader
+  makes only while the budget lasts. The same code degraded to the main
+  thread; one file's parse and one texture's decode are each a single
+  unit, the overshoot bound on the web.
+- **Editor**: Scene ▸ Show region bounds draws the regions of every world
+  file under the asset root naming the open scene (as base or region), the
+  open region brighter (`voltra-editor/src/view/regions.rs`). A world
+  editor proper — loading regions into the editor, a minimap, painting
+  cells — is out of scope.
+
+Pinned by `app/loading/tests/`: an anchored camera walked across a
+generated 24 × 4 world (96 regions, 5 760 entities) at 0.4 units a frame,
+1 ms slept per frame for the pool, with the default pool and with **no
+workers** (the web's path): every region near the path loads, the world
+never holds more than the regions within reach + margin + a cell (at most
+960 of the 5 760 measured), the prefab store does not grow, and stopping unloads
+all but the camera; **every frame** no unit starts past the budget, and the
+frame's wall-clock work is within budget + its longest unit + 1 ms on at
+least 19 frames in 20 (0 over measured run alone; the allowance is for
+preemption when the whole suite and its pools share four cores). Several
+anchors keep their own regions; no anchor falls back to the camera; a
+broken region is left out. Loading screen: progress from 0 rising to 1,
+the screen up throughout and gone at `Finished`, the new scene arriving in
+parts behind it, the old gone, a persistent body still while loading and
+falling after; a missing file and a broken component (found on the
+worker) leave the old scene. `tests/streaming_replication.rs`: a server
+and a client streaming the same world — one crate on the client (fails
+with the skip off), gone when the server's player walks away while the
+client's scenery stays. `voltra-jobs/tests/task.rs`, `StagedScene` and
+`Unload` unit tests.
+### Sprites are drawn as instanced quads, and every speed-up is a measured one
+
+Stage 108. Stage 107's budgets met where the numbers allowed, each change
+kept only when `cargo xtask bench --compare` showed it (best of three runs a
+side, the same shared machine, one session: `before` is merge-107 plus the
+text fix, `after` is this stage). The budgets table above has the result.
+
+**Quads are instances.** A `SpriteBatch` quad — sprite, tile, glyph, CPU
+particle, interface piece — is one `QuadInstance` (`voltra-render/quad.rs`):
+corner 0, the two edges leaving it, the same three for the UVs, and a
+colour, 64 bytes. The vertex stage makes the six corners from
+`@builtin(vertex_index)` (`shaders/quad.wgsl`, prepended to every
+sprite-batch shader). A quad was four `Vertex`es and six indices, 152 bytes
+written per sprite per frame and uploaded. Any 2D affine transform keeps a
+rectangle a parallelogram, so nothing is lost: turned, sheared, flipped,
+parented, a tile turned a quarter (an affine UV map). Corners some caller
+made up that are no parallelogram are drawn as two triangles instead
+(`batch/placed.rs`), so `push_quad` still takes any four corners. Lines,
+polygons and trails stay indexed triangles. Bevy draws its sprites as
+instances since 0.13 for the same reason, and Godot 4's canvas renderer
+batches rects into per-instance arrays; Unity's dynamic batching expands
+on the CPU, which is what we measured as too slow.
+
+- A `SpriteRange` (and `MeshDraw`) now draws `Primitives::Quads(range)` or
+  `Primitives::Triangles(range)`, one kind a range; a run never grows across
+  a change of kind, keeping painter's order exactly.
+- Each sprite-batch shader has two vertex entry points over one fragment
+  stage, built as a `SpritePipeline` pair (`pipeline/sprite.rs`): the flat
+  colour pipeline, the light-layer and normal passes, and every material —
+  `material::compose` puts the quad stage in the prelude, so material
+  sources are unchanged. Light layers and normal maps read the same
+  corners.
+- WebGL2: instancing and `gl_VertexID` are core; a draw's first instance is
+  emulated by wgpu's GL backend, which offsets the instance buffer's binding
+  (`wgpu-hal` `gles/command.rs`, `prepare_draw`). Both Playwright tests
+  (`first-frame.mjs`, `materials.mjs`) pass on WebGPU and WebGL2.
+
+**Kept buffers.** `MeshBuffers` (`mesh/buffers.rs`) holds the batch's three
+GPU buffers from frame to frame, rewritten with `Queue::write_buffer`, grown
+to the next power of two and cut back below a quarter use. The window and
+viewport paths write the world's batch into it (`SpriteBatch::upload_into`);
+one-off draws (screenshots of camera shots, tests) keep `upload`. Bevy's
+`RawBufferVec` and Godot's canvas buffers are the same idea. Several writes
+before one submit would overwrite each other, which is why the camera-shot
+path, which submits per shot, keeps fresh buffers.
+
+**What each change bought** (100k sprites unless named; best of 3):
+
+| Change | Before → after |
+| --- | --- |
+| Instances + kept buffers | `batch/upload/100k` 8.9 → 1.0 ms; `tilemap/cached` 0.72 → 0.31 ms; `batch/sprites/100k` *slower*, 14.7 → 17.9 ms: the parallelogram check per quad and an enum of 132 bytes moved per push, until the next rows |
+| Sprite and tile quads built without the parallelogram check (rectangles by construction), the batch's list built by plain loops instead of an eight-deep iterator chain, the last sorting layer's rank kept, no list allocated per entity for parallax copies | sprites 17.9 → 9.6 ms (probe) |
+| `Transform::matrix` skips `sin_cos` for an unturned transform (the same bits: sin ±0 = ±0, cos 0 = 1; pinned by a test) and `WorldTransforms` reuses its storage and the queried transform | transforms 3.5 → 0.9 ms of it |
+| The ECS keys its storages by `TypeId` with `FastHasher`, not SipHash — every `get` and `query` hashed one | sprites → 6.0 ms; `physics/step` 0.77 → 0.55 ms, `physics/pile` 0.44 → 0.35 ms, `ui/layout` 0.30 → 0.23 ms for free |
+| `UiLayout` maps on `FastHasher`; an element its stack already placed skips the hidden-ancestor walk | `ui/layout` 0.23 → 0.10 ms |
+| `ron` 0.12.2 → 0.12.3 | `scene/parse/250` 96 → 3.4 ms, `parse/500` 377 → 6.6 ms (linear), `scene/load` 97 → 4.5 ms |
+| A font's `rustybuzz::Face` kept with its bytes (`self_cell`) instead of made per layout, and shape plans kept per face, direction, script and language | `text/layout/labels-100` 1.54 → 0.77 ms; `paragraph-1k` 347 → 325 µs |
+| A `query2` that returns early when no entity holds the second type | no change measured: not kept |
+
+**Scenes: an upgrade, not a parser of our own.** `ron` 0.12.3 (released a
+month before this stage) bounds `next_bytes_is_float`'s search for `..` to
+the number's own characters. The other options were worse: parsing
+components typed would need the registry at parse time and still read
+unknown components raw; a pre-pass handing the parser per-component slices
+leaves one large component (a tilemap) quadratic. The file format and the
+`RawValue` round trip are unchanged; 0.12.3 also trims non-comment
+whitespace around a nested `RawValue` on read, which only makes a re-saved
+file's unknown components stop gaining blank space. The public load API is
+untouched (stage 109 builds on it).
+
+**Text.** Stage 91's shaped layouts made both text rows ten times their
+budgets, which were written for the old layout. Shaping is now cheaper per
+call (above) and the budgets say what each case costs: a changed text pays
+the uncached row once, and every frame after pays the cached row — a hash
+and a compare. The new `-cached` rows' thresholds (25 %) are a first guess,
+to be re-set from `voltra-bench noise` once CI has runs of them.
+
+**100k sprites at 60 fps, by hand.** This machine has no GPU, so the claim
+on the reference GPU stays unmeasured. What could be measured, headless on
+lavapipe (a CPU rasterizer on the same 4 shared cores), 100k unit sprites
+all in view through `Headless::screenshot`: 47 ms a frame at 320×180,
+56 ms at 1280×720 (10k sprites: 5 ms and 11 ms; none: 0.7 ms and 5.5 ms).
+The CPU's share of it — batch 6.3 ms plus upload 0.6 ms — is under half a
+60 fps frame; the rest is lavapipe running the vertex and fragment stages
+in software. A windowed run on the reference GPU is still owed.
+
+Pinned by `voltra-render`'s `quad.rs` tests (layout matches the struct,
+corners round-trip, a turned tile's UVs, a kite refused) and
+`tests/headless_quads.rs` (an instance draws what its two triangles draw,
+texels and all; quads and triangles keep painter's order between them;
+kept buffers grow, are reused, shrink, and draw the last write), the scene
+batch, cull, material, tilemap-cache (cached and fresh are the same
+instances) and `placed.rs` tests, `transform.rs`'s bit-for-bit test, every
+headless screenshot test of `voltra-scene` and `voltra-render`, and the two
+Playwright tests on both backends.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5568,11 +7743,14 @@ Verified against the crate source, not from memory:
 | Compute pass | `begin_compute_pass(&ComputePassDescriptor { label, timestamp_writes })`; `dispatch_workgroups(x, y, z)` |
 | Buffer copy | `copy_buffer_to_buffer(src, offset, dst, offset, size)` — `size` is `impl Into<Option<u64>>` |
 | Downlevel | `adapter.get_downlevel_capabilities().flags`; vertex-stage storage needs `DownlevelFlags::VERTEX_STORAGE` |
+| Present mode | `get_default_config` takes the adapter's *first* listed present mode, not `Fifo`; set it. `PresentMode::AutoVsync` / `AutoNoVsync` fall back on their own (`AutoNoVsync`: immediate, mailbox, FIFO); the explicit modes fail `configure` when unsupported. Change it by setting `config.present_mode` and calling `surface.configure` again |
 | D3D12 / FXC | A WGSL loop that writes a vector component by a **runtime index** (`v[i] = …`) fails pipeline creation: FXC must unroll it and cannot (`X3511`). Write the components out. Windows CI hits this; reproduce locally with `WGPU_BACKEND=dx12 WGPU_DX12_COMPILER=fxc cargo test` |
 | Data textures | A normal map must be sampled through a non-sRGB view (`Texture::raw_view`, `Textures::raw_bind_group`); the sRGB view decodes it as colour. The view format must be listed in `view_formats` at creation, which `Texture::from_rgba8` does — except on GL, which cannot, where it uploads a second `Rgba8Unorm` copy |
 | `Min` / `Max` blend | Both factors must be `BlendFactor::One`. `R16Float` is blendable on every device (`guaranteed_format_features`); `R32Float` only with `Features::FLOAT32_BLENDABLE` |
 | Headless tests | `headless_device()` needs an adapter; in a Linux container without a GPU, `apt-get install mesa-vulkan-drivers` (lavapipe) makes the GPU tests run instead of skipping |
 | WGSL names | `from` is a reserved word (naga `keywords/wgsl.rs`); builtins like `step` may be shadowed but are best avoided |
+| Float data textures | `Rgba32Float` is not filterable without `Features::FLOAT32_FILTERABLE`: bind it as `TextureSampleType::Float { filterable: false }` and read it with `textureLoad` (vertex and compute stages alike); `write_texture` rows need no 256-byte alignment |
+| Integer vertex attributes | `VertexFormat::Uint32x4` reaches WGSL as `@location(n) x: vec4<u32>`; a uniform `array<Struct, N>` may be indexed by such a value in the vertex stage (clamp it — an out-of-range uniform index is undefined on some backends) |
 | Web backends | `wgpu::util::new_instance_with_webgpu_detection(desc).await` drops `BROWSER_WEBGPU` when the browser has no working WebGPU, so the `webgl` feature's GL backend serves; detection must happen before the instance exists |
 | Web canvas formats | A WebGPU canvas offers `bgra8unorm` / `rgba8unorm` / `rgba16float`, never sRGB: configure the linear format with its sRGB variant in `view_formats` and draw through that view |
 | Web buffers | `Drop` for a web `Buffer`/`Texture` is a no-op — the browser frees it when the JS wrapper is collected. Call `destroy()` on anything made per frame (after the submit) |
@@ -5580,6 +7758,8 @@ Verified against the crate source, not from memory:
 | GL `VIEW_FORMATS` | The GL backend (WebGL2 included) never sets `DownlevelFlags::VIEW_FORMATS`; a texture declaring `view_formats` fails validation there |
 | Device lost | `device.set_device_lost_callback(callback)`, a `Fn(DeviceLostReason, String)`; natively it fires only on loss or an explicit `destroy`, not on drop |
 | Headless Chromium | WebGPU canvases need `--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=vulkan --enable-unsafe-swiftshader`; on ANGLE's GL path the swap chain's shared image cannot be made and the device is lost on the first present |
+| Instanced draws on GL | `draw(vertices, first..end)` with a non-zero first instance works on WebGL2, which has no base instance: `wgpu-hal`'s GLES backend rebinds each instance-stepped buffer at `offset + first_instance * stride` (`gles/command.rs`, `prepare_draw`). `@builtin(vertex_index)` is GLSL ES 3.0's `gl_VertexID` |
+| `Queue::write_buffer` ordering | Writes land before the next `submit`'s commands and after every earlier submit's: two writes to one buffer before one submit leave only the second for every draw of that submit |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7
@@ -5597,6 +7777,7 @@ rather than trusting a tutorial.
 | Run | `EventLoopExtWebSys::spawn_app(app)` returns at once; `run_app` throws to unwind |
 | Canvas | `WindowAttributesExtWebSys::with_append(true)` appends it to `<body>`; focusable (tabindex) by default |
 | Size | A requested inner size is written into the canvas's **style** and pins it; leave it out and size the canvas in CSS — a `ResizeObserver` sends `Resized` |
+| Fullscreen | `Window::set_fullscreen(Some(Borderless(_) or Exclusive(_)))` both call the canvas's `requestFullscreen()` at once (`web_sys/fullscreen.rs`), its rejection swallowed: it works only with transient activation, a few seconds after a trusted key, click or touch — a request made at the end of the frame that saw one is in time. `fullscreen()` answers `Borderless(None)` or `None` from `document.fullscreenElement`; a canvas already the page's size sends no `Resized` on entering, so poll it. `MonitorHandle::video_modes` is always empty |
 | Proxy | `EventLoop::create_proxy` only (not on `ActiveEventLoop`); the web proxy is an `mpsc::Sender<T>` plus a wake, so `T` need not be `Send` |
 
 ### egui 0.35 API notes
@@ -5616,6 +7797,11 @@ Same problem, same rule: read the source, not a tutorial.
 | Pointer position | `Response::hover_pos` is in global screen points; subtract `response.rect.min` for widget-local ones |
 | Shortcuts | `InputState::consume_shortcut` matches modifiers *logically* — extra Shift and Alt are ignored, so `Ctrl+Z`'s pattern also accepts `Ctrl+Shift+Z`. Test the most specific one first |
 | Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |
+| Context menu | `Response::context_menu(\|ui\| …)` opens on a secondary click; close it from inside with `ui.close()` |
+| Strokes | `Painter::rect_stroke(rect, radius, stroke, StrokeKind)` takes a `StrokeKind` (`Inside`, `Middle`, `Outside`) |
+| `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before |
+| Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
+| Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes
 
@@ -5635,6 +7821,10 @@ Both differ from most training data and from every tutorial written against
 | End of stream | `next_packet()` returns `Ok(None)`; it is not an `IoError` of kind `UnexpectedEof` any more |
 | Samples out | `decoded.copy_to_vec_interleaved(&mut vec)` **resizes** its destination, so decode into a scratch `Vec` and extend from it |
 | `AudioSpec` | not `Copy`; read `rate()` and `channels().count()` rather than storing the spec |
+| Seeking | `reader.seek(SeekMode::Accurate, SeekTo::Timestamp { ts: Timestamp::new(i64), track_id })` lands at or *before* the target; call `decoder.reset()` after it. `Timestamp`/`Duration` are newtypes (`.get()`), not bare integers |
+| Packet timing | `packet.pts` is the presentation time of the packet's first *valid* frame; decoders trim encoder delay and padding themselves (`trim_start`/`trim_end`). WAV and Vorbis use a time base of one over the rate, so `pts` is a frame index |
+| Vorbis after a reset | with gapless on (the default) the first packet decodes to nothing, so seek a little early and drop frames by `pts` |
+| In-memory source | `io::Cursor<T>` is a `MediaSource` for any `T: AsRef<[u8]> + Send + Sync`, so `Cursor<Arc<[u8]>>` streams shared bytes without a copy per reader |
 | Web | Without the `wasm-bindgen` feature cpal on `wasm32-unknown-unknown` has only the null host (no device). With it, the WebAudio host makes an `AudioContext` per stream and schedules buffers on timers; `play()` is `ctx.resume()`, which a browser honours only during a user gesture. `audioworklet` needs atomics (threads) |
 
 ### `fontdue` 0.9 notes
@@ -5647,6 +7837,20 @@ Both differ from most training data and from every tutorial written against
 | `Metrics` | `xmin`/`ymin` are the bitmap's bottom-left from the pen on the baseline, y up |
 | Errors | `Font::from_bytes` fails with a `&'static str`, not an error type |
 | `Font` | `Clone`, not `Debug` |
+| Glyph ids | `from_bytes` loads every glyph `cmap` reaches **and**, with `FontSettings::load_substitutions` (default `true`), every glyph a GSUB single/multiple/alternate/ligature/reverse-chain lookup produces — so ids a shaper hands out rasterize; an id it never loaded rasterizes empty |
+| Data | `from_bytes` copies the bytes; the shaper keeps its own `Arc<[u8]>` beside it |
+
+### `rustybuzz` 0.20, `unicode-bidi` 0.3, `unicode-linebreak` 0.1 notes
+
+| Thing | Version notes |
+| --- | --- |
+| Face | `rustybuzz::Face::from_slice(&bytes, 0) -> Option<Face<'_>>` borrows the bytes, so it is made per layout, not stored; it derefs to `ttf_parser::Face` (`glyph_index(char)`) |
+| Buffer | `UnicodeBuffer::add(char, cluster)` — our clusters are byte offsets into the whole string; `set_pre_context` / `set_post_context` (5 chars) for joining across a run edge, the post context **after** the `add`s (`add` clears it) |
+| Shape | `rustybuzz::shape(&face, &[], buffer) -> GlyphBuffer`; `glyph_infos()[i].glyph_id` (u32, ≤ u16::MAX), `.cluster`; `glyph_positions()` in font units — scale by `px / units_per_em()` |
+| Direction | a right-to-left buffer comes back in **visual** order (clusters descending); we reverse to logical and let the bidi reorder turn it back |
+| Script | `Script::from_iso15924_tag(ttf_parser::Tag::from_bytes(b"Arab"))`; `unicode_script::Script::short_name()` gives the tag |
+| Bidi | `ParagraphBidiInfo::new(text, None)` (auto direction): `levels` per **byte**, `reordered_levels(line)` applies L1 to a line, `reorder_visual(&levels)` gives visual indices — usable on glyph levels as well as characters |
+| Line breaks | `unicode_linebreak::linebreaks(s)` yields `(byte, Allowed \| Mandatory)`: a line may end *before* that byte; the end of the text is always `Mandatory` |
 
 ### `gilrs` 0.11 notes
 
@@ -5657,3 +7861,33 @@ Both differ from most training data and from every tutorial written against
 | Ids | `GamepadId` → `usize::from(id)`; stable for a pad while connected, reused by UUID on reconnect |
 | Errors | `Gilrs::new()` returns `Error::NotImplemented(dummy)` on unsupported platforms — usable, but we just skip pads |
 | Filters | default filters apply a small stick dead zone and axis-to-button thresholds before we see values |
+
+### `tungstenite` 0.30 notes
+
+| Thing | 0.30.0 |
+| --- | --- |
+| `WebSocketConfig` | `#[non_exhaustive]`: build it from `default()` with the setters (`max_message_size(Some(n))`, `max_frame_size`, `write_buffer_size`, `max_write_buffer_size`, `read_buffer_size`); `max_write_buffer_size` must exceed `write_buffer_size` or it panics |
+| Defaults | 64 MiB messages, 16 MiB frames, unlimited write buffer: far too trusting for a game server — set all three |
+| Non-blocking accept | `accept_with_config(stream, Some(config))` on a non-blocking stream returns `Err(HandshakeError::Interrupted(mid))`; keep `mid` and call `mid.handshake()` again later. Types: `handshake::{MidHandshake, HandshakeError}`, `handshake::server::{ServerHandshake, NoCallback}` |
+| Client over our own stream | `client::client_with_config(url, stream, config)`; `&str`/`String` are `IntoClientRequest` without the `url` feature |
+| `send` | write + flush. `Err(Io(WouldBlock))` means the frame **is** buffered — flush later, do not resend. `Err(WriteBufferFull(msg))` means it was not |
+| `read` | `Err(Io(WouldBlock))` when nothing complete is in; partial frames are kept inside. Pings are answered on the next read/write/flush |
+| `Message::Binary` | holds a `bytes::Bytes`; `Message::binary(vec)` builds one |
+| Over-long message | `Err(Capacity(..))` from `read`: treat as the end of that stream |
+| Closing a stream | `close(None)` only queues the close frame. Dropping the `TcpStream` with the peer's bytes unread makes the OS send a reset, and **Windows discards what the peer had not read yet** (Linux keeps it) — a kick's reason lost. `WebSocketServer::close` keeps the stream, draining its input, until the peer answers the close or `CLOSE_TIMEOUT` (2 s); pinned by `tests/sockets.rs` on the Windows CI job |
+
+### `postcard` 1.2 notes
+
+| Thing | 1.2.0 |
+| --- | --- |
+| Features | `default` pulls `heapless`; `default-features = false, features = ["alloc"]` is enough for `to_allocvec` |
+| Decode | `from_bytes` ignores trailing bytes; `take_from_bytes` returns them — check they are empty for "one message is one value" |
+| Untrusted lengths | a sequence's `size_hint` is `None` when its claimed length exceeds the bytes left, so serde preallocates nothing for a lying length |
+| `Error` | `#[non_exhaustive]`, `Clone + Eq`; `DeserializeBadEncoding` is the generic "not well encoded" |
+
+### `ron` 0.12 notes
+
+| Thing | 0.12.2 |
+| --- | --- |
+| Untyped numbers are quadratic (**fixed in 0.12.3**, which the workspace pins since stage 108: the search is bounded to the number's own characters) | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
+| `RawValue` whitespace (0.12.3) | Non-comment whitespace around a nested `RawValue` is trimmed when it is read, so a pretty-printed file read and written again no longer grows blank space around unknown components |

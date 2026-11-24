@@ -14,8 +14,10 @@ use voltra_ecs::{Entity, World};
 
 mod entry;
 mod registration;
+mod replicate;
 
 pub use registration::{ComponentInfo, Registration};
+pub use replicate::{ReplicateError, ReplicatedComponent};
 
 use entry::Entry;
 
@@ -33,6 +35,7 @@ use crate::{
 ///
 /// Registration is explicit. A type that is not registered is not persisted,
 /// which is a property worth choosing rather than inheriting.
+#[derive(Clone)]
 pub struct ComponentRegistry {
     entries: Vec<Entry>,
 }
@@ -54,7 +57,16 @@ impl ComponentRegistry {
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register::<Name>("Name").with_template();
-        registry.register::<Transform>("Transform").with_template();
+        // Replicated by default: where a networked thing is, is what every
+        // networked game sends, and remote copies are drawn between
+        // snapshots rather than snapped to each.
+        registry
+            .register::<Transform>("Transform")
+            .with_template()
+            .replicated_interpolated();
+        registry
+            .register::<crate::Replicated>(crate::Replicated::NAME)
+            .with_template();
         // Stored as the parent's `SceneId`; the live `Entity` is resolved after
         // the whole file is in, by `hierarchy::resolve_parents`.
         registry.register::<Parent>("Parent");
@@ -117,7 +129,24 @@ impl ComponentRegistry {
             .register::<UiTextField>("UiTextField")
             .with_template();
         registry
+            .register::<crate::UiDropdown>("UiDropdown")
+            .with_template();
+        registry
+            .register::<crate::UiTooltip>("UiTooltip")
+            .with_template();
+        registry.register::<crate::UiTabs>("UiTabs").with_template();
+        registry.register::<crate::UiTab>("UiTab").with_template();
+        registry
+            .register::<crate::UiHidden>("UiHidden")
+            .with_template();
+        registry
+            .register::<crate::UiOwnStyle>("UiOwnStyle")
+            .with_template();
+        registry
             .register::<Persistent>("Persistent")
+            .with_template();
+        registry
+            .register::<crate::StreamingAnchor>(crate::StreamingAnchor::NAME)
             .with_template();
         registry.register::<Parallax>("Parallax").with_template();
         registry
@@ -134,6 +163,23 @@ impl ComponentRegistry {
             .with_template();
         registry
             .register::<ShadowCaster2D>("ShadowCaster2D")
+            .with_template();
+        registry.register::<crate::Line2D>("Line2D").with_template();
+        registry
+            .register::<crate::Polygon2D>("Polygon2D")
+            .with_template();
+        registry
+            .register::<crate::Trail2D>("Trail2D")
+            .with_template();
+        registry
+            .register::<crate::Skeleton2D>("Skeleton2D")
+            .with_template();
+        registry.register::<crate::Bone2D>("Bone2D").with_template();
+        registry
+            .register::<crate::TwoBoneIk>("TwoBoneIk")
+            .with_template();
+        registry
+            .register::<crate::SkinnedSprite>("SkinnedSprite")
             .with_template();
         registry
     }
@@ -160,12 +206,15 @@ impl ComponentRegistry {
             remove: |world, entity| {
                 world.remove::<T>(entity);
             },
+            has: |world, entity| world.get::<T>(entity).is_some(),
             normalize: |value| {
                 let component: T = value.into_rust().map_err(SceneError::Parse)?;
                 RawValue::from_rust(&component).map_err(SceneError::Serialize)
             },
             refs: None,
             template: None,
+            type_id: std::any::TypeId::of::<T>(),
+            replicate: None,
         });
         Registration::new(
             self.entries
@@ -294,6 +343,14 @@ impl ComponentRegistry {
             },
             other => other,
         }))
+    }
+
+    /// Whether `entity` has the component registered as `name`, or `None`
+    /// for an unregistered name. Asks the world, writing nothing out — what
+    /// the editor's `t:` search runs over every entity.
+    pub fn has(&self, world: &World, entity: Entity, name: &str) -> Option<bool> {
+        let entry = self.entries.iter().find(|e| e.name == name)?;
+        Some((entry.has)(world, entity))
     }
 
     /// Takes `name` off `entity`, returning whether the name was registered.

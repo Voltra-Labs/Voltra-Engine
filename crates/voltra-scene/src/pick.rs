@@ -352,7 +352,7 @@ mod tests {
         );
 
         let batch = crate::batch::SpriteBatch::from_world(&world, Sheets::default());
-        let last_drawn_green = batch.vertices[batch.vertices.len() - 1].color[1];
+        let last_drawn_green = batch.quad_vertices()[batch.quad_vertices().len() - 1].color[1];
 
         assert_eq!(pick(&world, Vec2::ZERO), Some(top));
         assert!(
@@ -440,7 +440,7 @@ mod frame_tests {
 
         let batch = SpriteBatch::from_world(&world, sheets);
         let left = batch
-            .vertices
+            .quad_vertices()
             .iter()
             .map(|vertex| vertex.position[0])
             .fold(f32::INFINITY, f32::min);

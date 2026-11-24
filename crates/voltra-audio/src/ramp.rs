@@ -7,12 +7,30 @@
 //! Audio calls it `linearRampToValueAtTime`; all three exist because the
 //! alternative is audible.
 //!
-//! Linear rather than exponential. An exponential ramp is the better fade for
-//! a long musical cross-fade, because loudness is logarithmic — but the ramp
-//! that runs a thousand times more often here is the fifteen-millisecond one
-//! that smooths a source moving across the screen, and over fifteen
-//! milliseconds the two curves are indistinguishable. One curve that is right
-//! for the common case and close enough for the rare one beats two.
+//! Linear by default. An exponential ramp is the better fade for a long
+//! musical cross-fade, because loudness is logarithmic — but the ramp that
+//! runs a thousand times more often here is the fifteen-millisecond one that
+//! smooths a source moving across the screen, and over fifteen milliseconds
+//! the curves are indistinguishable. The one place the curve is heard is a
+//! cross-fade between two tracks, and there the [`Curve::EqualPower`] pair
+//! is what keeps the sum from dipping in the middle.
+
+use std::f32::consts::FRAC_PI_2;
+
+/// The shape of a ramp between where it was and where it is going.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Curve {
+    /// A straight line: the same step every frame. What every gain uses.
+    #[default]
+    Linear,
+    /// A quarter of a sine: `from·cos θ + to·sin θ` as θ goes from zero to a
+    /// quarter turn. A fade out and a fade in of the same length on this
+    /// curve have squared gains that sum to one at every frame — a
+    /// cross-fade whose loudness does not dip at the middle, which two
+    /// linear fades (each at half, `-6 dB`, there) do. Meant for fades to
+    /// and from silence; between two other levels it overshoots both.
+    EqualPower,
+}
 
 /// A gain on its way from what it was to what it was last set to.
 ///
@@ -25,12 +43,14 @@
 /// to silence on the way in, once, rather than checked at every use.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Ramp {
-    value: f32,
+    /// Where the current ramp started.
+    from: f32,
     target: f32,
-    /// How far `value` moves per frame while the ramp is running.
-    step: f32,
-    /// Frames left before `value` is exactly `target`. Zero means settled.
+    /// How many frames the current ramp takes in all.
+    total: u32,
+    /// Frames left before the value is exactly `target`. Zero means settled.
     remaining: u32,
+    curve: Curve,
 }
 
 impl Ramp {
@@ -38,42 +58,60 @@ impl Ramp {
     pub fn new(value: f32) -> Self {
         let value = gain(value);
         Self {
-            value,
+            from: value,
             target: value,
-            step: 0.0,
+            total: 0,
             remaining: 0,
+            curve: Curve::Linear,
         }
     }
 
     /// Sets the value with no ramp at all — what a voice's opening gain is.
     pub fn jump(&mut self, target: f32) {
         let target = gain(target);
-        self.value = target;
+        self.from = target;
         self.target = target;
-        self.step = 0.0;
+        self.total = 0;
         self.remaining = 0;
     }
 
-    /// Heads for `target`, arriving in `frames` frames.
+    /// Heads for `target` in a straight line, arriving in `frames` frames.
     ///
-    /// Retargeting mid-ramp is not a special case: the new step is measured
-    /// from wherever the value has got to, so a fade interrupted by another
-    /// fade continues from the gain that is actually being heard rather than
+    /// Retargeting mid-ramp is not a special case: the new ramp starts from
+    /// wherever the value has got to, so a fade interrupted by another fade
+    /// continues from the gain that is actually being heard rather than
     /// snapping back to where the first one started.
     pub fn set(&mut self, target: f32, frames: u32) {
+        self.set_curved(target, frames, Curve::Linear);
+    }
+
+    /// [`set`](Self::set) along `curve`.
+    pub fn set_curved(&mut self, target: f32, frames: u32, curve: Curve) {
         let target = gain(target);
         if frames == 0 {
             self.jump(target);
             return;
         }
+        self.from = self.value();
         self.target = target;
+        self.total = frames;
         self.remaining = frames;
-        self.step = (target - self.value) / frames as f32;
+        self.curve = curve;
     }
 
     /// The gain right now.
     pub fn value(&self) -> f32 {
-        self.value
+        if self.remaining == 0 {
+            return self.target;
+        }
+        let t = (self.total - self.remaining) as f32 / self.total as f32;
+        match self.curve {
+            Curve::Linear => self.from + (self.target - self.from) * t,
+            Curve::EqualPower => {
+                let angle = t * FRAC_PI_2;
+                self.from * angle.cos() + self.target * angle.sin()
+            }
+        }
     }
 
     /// Where the ramp is heading, which is where it already is once settled.
@@ -91,7 +129,7 @@ impl Ramp {
 
     /// The gain for this frame, advancing one frame.
     pub fn tick(&mut self) -> f32 {
-        let value = self.value;
+        let value = self.value();
         self.advance(1);
         value
     }
@@ -101,20 +139,12 @@ impl Ramp {
     /// For a bus with nothing routed into it this buffer. Its gain multiplied
     /// nothing, but a fade that paused whenever the bus fell silent would
     /// arrive late — or never, for a bus fading out.
+    ///
+    /// The value is worked out from how far along the ramp is rather than
+    /// accumulated a step at a time, so it lands exactly on the target: a
+    /// gain summed to 0.999 in `f32` never lets a fading voice finish.
     pub fn advance(&mut self, frames: u32) {
-        if self.remaining == 0 {
-            return;
-        }
-        let frames = frames.min(self.remaining);
-        self.remaining -= frames;
-        // The last frame assigns rather than accumulates: `step * frames`
-        // summed in `f32` lands near the target, not on it, and a gain that
-        // settles at 0.999 never lets a fading voice finish.
-        if self.remaining == 0 {
-            self.value = self.target;
-        } else {
-            self.value += self.step * frames as f32;
-        }
+        self.remaining -= frames.min(self.remaining);
     }
 }
 
@@ -251,5 +281,32 @@ mod tests {
         ramp.advance(2);
         assert!(ramp.value().is_finite());
         assert_eq!(ramp.value(), 0.0);
+    }
+
+    #[test]
+    fn an_equal_power_pair_keeps_its_power_at_every_frame() {
+        // The cross-fade's whole point: out² + in² = 1 all the way across.
+        let mut out = Ramp::new(1.0);
+        let mut into = Ramp::new(0.0);
+        out.set_curved(0.0, 100, Curve::EqualPower);
+        into.set_curved(1.0, 100, Curve::EqualPower);
+        for _ in 0..=100 {
+            let (a, b) = (out.tick(), into.tick());
+            assert!((a * a + b * b - 1.0).abs() < 1e-5, "{a} and {b}");
+        }
+        assert_eq!((out.value(), into.value()), (0.0, 1.0));
+    }
+
+    #[test]
+    fn two_linear_fades_dip_in_the_middle() {
+        // Why the curve exists: linear halves are each -6 dB at the middle.
+        let mut out = Ramp::new(1.0);
+        let mut into = Ramp::new(0.0);
+        out.set(0.0, 2);
+        into.set(1.0, 2);
+        out.tick();
+        into.tick();
+        let power = out.value().powi(2) + into.value().powi(2);
+        assert!((power - 0.5).abs() < 1e-6, "got {power}");
     }
 }

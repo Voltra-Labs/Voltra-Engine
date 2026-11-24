@@ -75,7 +75,9 @@ impl App {
         // so there is one place a step runs from, and so the game's fixed tick
         // cannot be forgotten on one of two paths.
         let requested = self.simulation.take_steps();
-        let owed = if self.simulation.is_running() {
+        // Nor while a scene change is underway: the level is half built,
+        // and a body stepped now could fall through a floor still to come.
+        let owed = if self.simulation.is_running() && !self.is_changing_scene() {
             // Only while running: a stopped world must not bank the frames it
             // spent stopped and run them all at once when Play is pressed.
             self.physics_world.owed_steps(delta)
@@ -88,6 +90,8 @@ impl App {
             // Before the step, not after: a force the tick applies is meant to
             // act during the step that follows it, which is the whole reason
             // the hook is per step rather than per frame.
+            // The server's tick, and each client's input for it.
+            self.net.begin_fixed_step();
             {
                 let _fixed = voltra_profile::scope("fixed tick");
                 self.run_fixed_update(step);

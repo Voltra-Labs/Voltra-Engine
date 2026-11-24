@@ -52,7 +52,14 @@ fn the_library_is_accepted_and_registers_the_games_components() {
     let mut registry = ComponentRegistry::with_defaults();
     library.register(&mut registry);
 
-    for name in ["Walker", "Coin", "Goal", "CoinCounter", "SaveButton"] {
+    for name in [
+        "Walker",
+        "Coin",
+        "Goal",
+        "CoinCounter",
+        "SaveButton",
+        "FullscreenButton",
+    ] {
         assert!(registry.names().any(|n| n == name), "{name} registered");
     }
 }

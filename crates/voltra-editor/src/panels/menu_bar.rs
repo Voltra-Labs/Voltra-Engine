@@ -88,9 +88,24 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     scene_dialogs::save(editor, frame);
                     ui.close();
                 }
-                if ui.add(item("Save As…", "Ctrl+Shift+S")).clicked() {
+                if ui
+                    .add_enabled(
+                        !editor.prefab_mode.is_active(),
+                        item("Save As…", "Ctrl+Shift+S"),
+                    )
+                    .on_disabled_hover_text("a prefab is saved to its own file: Save writes it")
+                    .clicked()
+                {
                     scene_dialogs::show_save_as(editor, None);
                     ui.close();
+                }
+                ui.separator();
+                if ui
+                    .checkbox(&mut editor.regions.show, "Show region bounds")
+                    .on_hover_text("the regions of every .world.ron naming this scene")
+                    .changed()
+                {
+                    editor.regions.rescan();
                 }
                 ui.separator();
                 if ui.button("Quit").clicked() {
@@ -225,12 +240,24 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     editor.profiler.open();
                     ui.close();
                 }
+                if ui.button("Network").clicked() {
+                    editor.netplay.open = true;
+                    ui.close();
+                }
                 if ui.button("Console").clicked() {
                     editor.console.open = true;
                     ui.close();
                 }
                 if ui.button("Project Settings").clicked() {
                     editor.settings.open();
+                    ui.close();
+                }
+                if ui.button("Tile Palette").clicked() {
+                    editor.tile_palette.open = true;
+                    ui.close();
+                }
+                if ui.button("Atlas Editor").clicked() {
+                    editor.atlas_editor.open = true;
                     ui.close();
                 }
             });

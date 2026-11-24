@@ -7,6 +7,8 @@ use voltra_core::UiFrame;
 use crate::drag;
 use crate::editor::Editor;
 
+mod scene;
+
 /// Side of a tile's picture, in points.
 const TILE: f32 = 64.0;
 
@@ -26,14 +28,49 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
             if response.clicked() {
                 editor.assets.go(Some(entry.path.clone()));
             }
+            // The texture packer, on the folder of loose sprites it packs.
+            response.context_menu(|ui| {
+                for (label, trim) in [
+                    ("Pack into atlas", false),
+                    ("Pack into atlas, trimmed", true),
+                ] {
+                    if ui.button(label).clicked() {
+                        match crate::pack_atlas::pack(frame, &entry.path, trim) {
+                            Ok(_) => editor.assets.refresh(),
+                            Err(e) => log::error!("packing {}: {e}", entry.path.as_str()),
+                        }
+                        ui.close();
+                    }
+                }
+            });
         }
-        EntryKind::Texture => texture_tile(ui, frame, entry, &response),
-        EntryKind::Atlas => atlas_tile(ui, frame, entry, &response),
+        EntryKind::Texture => {
+            texture_tile(ui, frame, entry, &response);
+            response.context_menu(|ui| {
+                if ui.button("Slice in Atlas Editor").clicked() {
+                    open_in_atlas_editor(editor, frame, entry);
+                    ui.close();
+                }
+            });
+        }
+        EntryKind::Atlas => {
+            atlas_tile(ui, frame, entry, &response);
+            if response.double_clicked() {
+                open_in_atlas_editor(editor, frame, entry);
+            }
+            response.context_menu(|ui| {
+                if ui.button("Edit in Atlas Editor").clicked() {
+                    open_in_atlas_editor(editor, frame, entry);
+                    ui.close();
+                }
+            });
+        }
         EntryKind::Clip => clip_tile(ui, entry, &response),
         EntryKind::Font => font_tile(ui, entry, &response),
         // Loadable, so not dimmed; nothing to place, so no drag.
         EntryKind::InputMap => settings_tile(ui, rect, "INPUT"),
         EntryKind::SortingLayers => settings_tile(ui, rect, "LAYERS"),
+        EntryKind::BusLayout => settings_tile(ui, rect, "BUSES"),
         // Dragged onto an animation player's clip field.
         EntryKind::Animation => badge_tile(
             ui,
@@ -50,24 +87,29 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
             "FSM",
             ui.visuals().widgets.active.bg_fill,
         ),
-        EntryKind::Scene => {
-            scene_tile(ui, entry, &response);
-            // Unity's and Godot's gesture: a double-click opens the scene,
-            // through "save changes?" like every other way to Open.
-            if response.double_clicked() {
-                crate::scene_dialogs::request(
-                    editor,
-                    frame,
-                    crate::scene_dialogs::Then::Open(entry.path.clone()),
-                );
-            }
-        }
+        EntryKind::Scene => scene::tile(editor, ui, frame, entry, &response),
+        // Dragged onto a sprite's material field.
+        EntryKind::Material => badge_tile(
+            ui,
+            entry,
+            &response,
+            "MAT",
+            ui.visuals().widgets.hovered.bg_fill,
+        ),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
         EntryKind::Other => paint_block(ui, rect, ui.visuals().faint_bg_color),
     }
 
     paint_name(ui, rect, &entry.name);
+}
+
+/// Opens a sheet or an atlas in the Atlas Editor, saying why not if it
+/// will not open.
+fn open_in_atlas_editor(editor: &mut Editor, frame: &mut UiFrame<'_>, entry: &Entry) {
+    if let Err(e) = editor.atlas_editor.open_path(frame, &entry.path) {
+        log::error!("the Atlas Editor cannot open {}: {e}", entry.path.as_str());
+    }
 }
 
 /// A texture tile: its own pixels, and the drag that carries its path.
@@ -190,24 +232,14 @@ fn settings_tile(ui: &mut Ui, rect: Rect, kind: &str) {
     );
 }
 
-/// A scene tile: a block with a word on it, and the same drag. Dropped on the
-/// viewport, a scene is spawned as a prefab; double-clicked, it is opened.
-///
-/// A colour of its own rather than the sound's, so a folder holding both reads
-/// at a glance. Not a rendered thumbnail: that would mean spawning every scene
-/// on screen into a world of its own to draw it.
-fn scene_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response) {
-    badge_tile(
-        ui,
-        entry,
-        response,
-        "SCENE",
-        ui.visuals().widgets.active.bg_fill,
-    );
-}
-
 /// A tile that is a coloured block with `text` on it, armed as a drag.
-fn badge_tile(ui: &mut Ui, entry: &Entry, response: &egui::Response, text: &str, fill: Color32) {
+pub(super) fn badge_tile(
+    ui: &mut Ui,
+    entry: &Entry,
+    response: &egui::Response,
+    text: &str,
+    fill: Color32,
+) {
     paint_block(ui, response.rect, fill);
     let rect = picture(response.rect);
     ui.painter().text(

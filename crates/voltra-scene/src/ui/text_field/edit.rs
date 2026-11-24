@@ -1,7 +1,7 @@
 //! The editing a field takes: typing, deleting, moving and selecting, in
 //! characters rather than bytes so a caret never lands inside one.
 
-use super::{Edit, EditKey, Preedit, TextInput, UiTextField};
+use super::{visual, Edit, EditKey, Preedit, TextInput, UiTextField};
 
 /// What an edit did.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -90,8 +90,18 @@ impl UiTextField {
         }
     }
 
-    /// Applies one key.
+    /// Applies one key, the arrows moving through the characters' logical
+    /// order.
     pub fn apply(&mut self, key: EditKey) -> Edited {
+        self.apply_measured(key, None)
+    }
+
+    /// Applies one key; with `stops` — the x of each caret position of the
+    /// text as laid out, [`caret_stops_at`](crate::text::shape::caret_stops_at)
+    /// — the arrows move in visual order, so in mixed-direction text the
+    /// right arrow goes right on screen. A word at a time, Home and End stay
+    /// logical, as browsers have them.
+    pub fn apply_measured(&mut self, key: EditKey, stops: Option<&[f32]>) -> Edited {
         self.settle();
         let mut edited = Edited::default();
         let chars: Vec<char> = self.text.chars().collect();
@@ -105,6 +115,14 @@ impl UiTextField {
                     range.end
                 };
                 self.place_caret(to, false);
+            }
+            Edit::Left | Edit::Right
+                if !key.word && stops.is_some_and(|s| s.len() == chars.len() + 1) =>
+            {
+                let stops = stops.expect("checked by the guard");
+                if let Some(to) = visual::step(stops, self.caret, key.edit == Edit::Right) {
+                    self.place_caret(to, key.extend);
+                }
             }
             Edit::Left => {
                 let to = if key.word {
@@ -159,6 +177,17 @@ impl UiTextField {
     /// keys, in that order — a commit arrives with the composition it ends
     /// already cleared.
     pub fn take(&mut self, input: &TextInput) -> Edited {
+        self.take_measured(input, &|_| None)
+    }
+
+    /// [`take`](Self::take), measuring the text as each key finds it with
+    /// `measure` (the caret stops of a content), so the arrows move in
+    /// visual order; see [`apply_measured`](Self::apply_measured).
+    pub fn take_measured(
+        &mut self,
+        input: &TextInput,
+        measure: &dyn Fn(&str) -> Option<Vec<f32>>,
+    ) -> Edited {
         let mut edited = Edited::default();
         if let Some(preedit) = &input.preedit {
             self.set_preedit(preedit.clone());
@@ -169,7 +198,10 @@ impl UiTextField {
             edited.changed |= self.insert(&input.typed);
         }
         for &key in &input.keys {
-            let one = self.apply(key);
+            let stops = matches!(key.edit, Edit::Left | Edit::Right)
+                .then(|| measure(&self.text))
+                .flatten();
+            let one = self.apply_measured(key, stops.as_deref());
             edited.changed |= one.changed;
             edited.submitted |= one.submitted;
         }

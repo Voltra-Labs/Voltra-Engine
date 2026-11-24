@@ -8,8 +8,18 @@
 //! Hot reload arrives with the asset layer; until then, embedding keeps the
 //! binary self-contained and removes any working-directory dependency.
 
-/// Source of the built-in flat-colour triangle shader.
-pub const FLAT_COLOR: &str = include_str!("shaders/flat_color.wgsl");
+/// The sprite batch's quads as instances: `QuadInput` and `quad_corner`,
+/// put before every shader that draws them. See
+/// [`QuadInstance`](crate::quad::QuadInstance).
+pub const QUAD: &str = include_str!("shaders/quad.wgsl");
+
+/// Source of the built-in flat-colour shader: the sprite batch's triangles
+/// and quads.
+pub const FLAT_COLOR: &str = concat!(
+    include_str!("shaders/quad.wgsl"),
+    "\n",
+    include_str!("shaders/flat_color.wgsl")
+);
 
 /// Source of the shader that draws egui's tessellated triangles.
 pub const EGUI: &str = include_str!("shaders/egui.wgsl");
@@ -33,10 +43,18 @@ pub const LIGHTS_GLOBAL: &str = include_str!("shaders/lights_global.wgsl");
 pub const LIGHTS_COMPOSITE: &str = include_str!("shaders/lights_composite.wgsl");
 
 /// Draws the sprite batch's light layers. See [`LayerPass`](crate::light_layers::LayerPass).
-pub const SPRITE_LAYERS: &str = include_str!("shaders/sprite_layers.wgsl");
+pub const SPRITE_LAYERS: &str = concat!(
+    include_str!("shaders/quad.wgsl"),
+    "\n",
+    include_str!("shaders/sprite_layers.wgsl")
+);
 
 /// Draws the sprite batch's normals. See [`NormalPass`](crate::normals::NormalPass).
-pub const SPRITE_NORMALS: &str = include_str!("shaders/sprite_normals.wgsl");
+pub const SPRITE_NORMALS: &str = concat!(
+    include_str!("shaders/quad.wgsl"),
+    "\n",
+    include_str!("shaders/sprite_normals.wgsl")
+);
 
 /// Draws occluding edges into the 2D shadow map. See [`LightPass`](crate::lights::LightPass).
 pub const LIGHT_SHADOWS: &str = include_str!("shaders/light_shadows.wgsl");
@@ -50,6 +68,10 @@ pub const PARTICLES_DRAW: &str = include_str!("shaders/particles_draw.wgsl");
 /// A GPU emitter's light layers: a fragment stage appended to
 /// [`PARTICLES_DRAW`]. See [`LayerPass`](crate::light_layers::LayerPass).
 pub const PARTICLE_LAYERS: &str = include_str!("shaders/particle_layers.wgsl");
+
+/// Draws sprite meshes deformed by bones. See
+/// [`SkinPipeline`](crate::skinning::SkinPipeline).
+pub const SKINNED: &str = include_str!("shaders/skinned.wgsl");
 
 /// Compiles WGSL into a shader module.
 ///

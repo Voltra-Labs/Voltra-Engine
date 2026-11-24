@@ -25,8 +25,12 @@ pub(in crate::app) struct WorldDraw<'a> {
     pub sorting_layers: &'a SortingLayers,
     /// Last frame's batch, rebuilt in place.
     pub batch: &'a mut SpriteBatch,
+    /// The GPU buffers it is written into, kept from frame to frame.
+    pub buffers: &'a mut voltra_render::MeshBuffers,
     pub tile_meshes: &'a mut TileMeshCache,
     pub gpu_rings: &'a GpuParticleRings,
+    /// The renderer's half of every skinned sprite.
+    pub skins: &'a crate::app::skinned_meshes::SkinnedMeshes,
     /// The materials sprites name, and what they are drawn with.
     pub materials: Option<&'a voltra_assets::Materials>,
     pub material_bank: &'a mut Option<voltra_render::material::MaterialBank>,
@@ -63,7 +67,7 @@ impl WorldDraw<'_> {
             None => sheets,
         };
         self.batch.rebuild(self.world, sheets, self.tile_meshes);
-        let mesh = self.batch.upload(&device);
+        let mesh = self.batch.upload_into(&device, &queue, self.buffers);
         let white = self.renderer.white_bind_group().clone();
         let bank = crate::app::scene_draws::prepare_materials(
             self.material_bank,
@@ -76,7 +80,7 @@ impl WorldDraw<'_> {
             self.batch,
             self.textures,
             &white,
-            self.gpu_rings,
+            (self.gpu_rings, self.skins),
             bank,
             None,
         );
@@ -99,6 +103,6 @@ impl WorldDraw<'_> {
         self.renderer.lighting =
             lighting(self.world, &camera, sheets, self.silhouettes, self.textures);
         self.renderer
-            .render_scene(target, graded, mesh.as_ref(), &draws, layer, &post);
+            .render_scene(target, graded, mesh, &draws, layer, &post);
     }
 }

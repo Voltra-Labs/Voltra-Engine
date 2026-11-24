@@ -22,9 +22,13 @@ use super::App;
 /// An [`App`] stepped by hand, with no window.
 pub struct Headless {
     app: App,
+    /// What `tick.window`'s requests are carried out on.
+    window: window::PretendWindow,
     frames: u64,
     /// What the engine logged since the session last handed its lines out.
     logs: crate::logging::LogCapture,
+    /// Whether a frame ends the profiler's frame, as a run of its own does.
+    profiled: bool,
 }
 
 /// Why a headless edit could not be made.
@@ -78,6 +82,7 @@ impl Headless {
         app.silhouettes = Some(voltra_assets::Silhouettes::new(root.clone()));
         app.load_input_map(&root);
         app.load_sorting_layers(&root);
+        app.load_bus_layout(&root);
         let mut fonts = Fonts::new(root.clone());
         voltra_scene::text::resolve_fonts(&mut app.world, &mut fonts);
         app.fonts = Some(fonts);
@@ -86,10 +91,14 @@ impl Headless {
         let mut clips = Clips::new(root.clone());
         resolve_world_clips(&mut app.world, &mut clips);
         app.clips = Some(clips);
+        let window = window::PretendWindow::new(PRETEND_SIZE);
+        app.game_window.refresh(&window);
         Self {
             app,
+            window,
             frames: 0,
             logs: crate::logging::capture(),
+            profiled: true,
         }
     }
 
@@ -117,11 +126,14 @@ impl Headless {
         };
         for _ in 0..frames {
             // A frame is a step here: what a profile of a headless run reads.
-            voltra_profile::end_frame();
-            voltra_profile::count("entities", self.app.world.entity_count() as f64);
-            let _frame = voltra_profile::scope("update");
+            let _frame = self.profiled.then(|| {
+                voltra_profile::end_frame();
+                voltra_profile::count("entities", self.app.world.entity_count() as f64);
+                voltra_profile::scope("update")
+            });
             self.app.advance(delta);
             self.app.input.end_frame();
+            self.app.carry_out_window_requests(&mut self.window);
             self.frames += 1;
         }
     }
@@ -139,7 +151,15 @@ impl Headless {
     /// the keys, a pad and typing. Without one the controls are left alone.
     pub fn with_screen(mut self, size: voltra_render::glam::Vec2) -> Self {
         self.app.headless_screen = Some(size);
+        self.window = window::PretendWindow::new((size.x.max(0.0) as u32, size.y.max(0.0) as u32));
+        self.app.game_window.refresh(&self.window);
         self
+    }
+
+    /// The window as the game's ticks see it: what their requests left it
+    /// as, granted the way a desktop window grants them.
+    pub fn window(&self) -> &crate::window::GameWindow {
+        &self.app.game_window
     }
 
     /// The input the next frame reads: drive the mouse, the keys, a pad and
@@ -177,6 +197,12 @@ impl Headless {
         self.app.ui_controls.focus(control);
     }
 
+    /// The controls as the last frame left them: focus, an open list, the
+    /// theme.
+    pub fn ui(&self) -> &voltra_scene::UiControls {
+        &self.app.ui_controls
+    }
+
     /// Frames run so far.
     pub fn frames(&self) -> u64 {
         self.frames
@@ -202,6 +228,44 @@ impl Headless {
             log::warn!("no binding for the action {action:?} to press");
         }
         driven
+    }
+
+    /// The network session: what a headless server hosts on, and what a
+    /// test reads a run's joins and messages from.
+    pub fn net(&self) -> &crate::Net {
+        self.app.net()
+    }
+
+    /// The network session, mutably — to host or join before the first
+    /// step.
+    pub fn net_mut(&mut self) -> &mut crate::Net {
+        self.app.net_mut()
+    }
+
+    /// Whether its frames simulate — the ticks and the physics — or only
+    /// keep the network and the clocks going, as a paused editor's do.
+    pub fn set_simulating(&mut self, simulating: bool) {
+        self.app.set_simulating(simulating);
+    }
+
+    /// A session stepped inside another's frame — an editor's in-process
+    /// client: its steps neither end the profiler's frame nor set its
+    /// counters (the net counters stay the host's), though their scopes
+    /// still nest in the frame that steps them.
+    pub fn unprofiled(mut self) -> Self {
+        self.profiled = false;
+        self.app.net.set_counted(false);
+        self
+    }
+
+    /// Spawns the prefab at `path` into the running game, as a tick's
+    /// `spawn` does — what a test or a server sets a match up with.
+    pub fn spawn(
+        &mut self,
+        path: &AssetPath,
+        at: &voltra_scene::Transform,
+    ) -> Result<voltra_scene::Instance, SceneError> {
+        self.app.spawn(path, at)
     }
 
     /// The world.
@@ -290,6 +354,10 @@ impl Headless {
 }
 
 mod screenshot;
+mod window;
+
+/// The size a headless window pretends to be when no screen was given.
+const PRETEND_SIZE: (u32, u32) = (1280, 720);
 
 pub use screenshot::{Screenshot, ScreenshotError};
 

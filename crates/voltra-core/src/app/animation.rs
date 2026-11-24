@@ -35,6 +35,9 @@ impl App {
         let machines = machine_store(&mut self.state_machines, &self.asset_root);
         animator::evaluate(&mut self.world, machines, clips);
         keyframes::advance(&mut self.world, clips, delta);
+        // After the clips: a clip poses a limb, and IK has the last word on
+        // the bones it bends.
+        voltra_scene::skeleton::ik::apply(&mut self.world);
     }
 
     /// The state machines the animators run, made on first use.

@@ -6,7 +6,7 @@
 //! while every sprite was a unit square; with a frame's size and a
 //! pixels-per-unit deciding the extents, it is not.
 
-use voltra_assets::{Frame, Handle};
+use voltra_assets::{Frame, FrameMeta, Handle};
 use voltra_render::glam::{UVec2, Vec2};
 use voltra_render::Texture;
 
@@ -25,6 +25,10 @@ pub(crate) const WHOLE_UVS: [[f32; 2]; 4] = [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0],
 pub struct Quad {
     /// Half the width and height, in world units.
     pub half_extents: Vec2,
+    /// Where the quad's middle is, in the sprite's own space: the origin,
+    /// unless its frame was trimmed or has a pivot off its centre — then the
+    /// quad sits where that part of the whole picture would.
+    pub centre: Vec2,
     /// The UV for each corner [`corners`](Self::corners) returns, in order.
     pub uvs: [[f32; 2]; 4],
     /// What to bind: the sprite's texture, or the placeholder when it asks for
@@ -46,38 +50,109 @@ impl Quad {
             Vec2::new(x, -y),
             Vec2::new(x, y),
         ]
+        .map(|corner| corner + self.centre)
     }
 
     /// Whether `local` — a point already in the sprite's own space — is on the
     /// quad.
     pub fn contains(&self, local: Vec2) -> bool {
+        let local = local - self.centre;
         local.x.abs() <= self.half_extents.x && local.y.abs() <= self.half_extents.y
     }
 }
 
 /// The quad `sprite` covers, resolved against the loaded sheets.
 pub fn quad(sprite: &Sprite, sheets: Sheets<'_>) -> Quad {
-    let (size, uv, texture) = match slice(sprite, sheets) {
+    let (size, uv, texture, placing) = match slice(sprite, sheets) {
         Slice::Whole => (
             sheets.size(sprite.texture_handle),
             WHOLE,
             sprite.texture_handle,
+            None,
         ),
-        Slice::Cut { size, uv } => (Some(size), uv, sprite.texture_handle),
+        Slice::Cut { size, uv, placing } => (Some(size), uv, sprite.texture_handle, placing),
         // The checker, which is what a texture that would not load already
         // draws. Drawing nothing would be a silent failure, and drawing the
         // nearest frame would hide the mistake where it would be seen.
-        Slice::Missing => (None, WHOLE, sheets.placeholder().or(sprite.texture_handle)),
+        Slice::Missing => (
+            None,
+            WHOLE,
+            sheets.placeholder().or(sprite.texture_handle),
+            None,
+        ),
     };
 
     let (min, max) = uv;
     let (u0, u1) = flipped(sprite.flip_x, min[0], max[0]);
     let (v0, v1) = flipped(sprite.flip_y, min[1], max[1]);
 
+    let (half_extents, mut centre) = match (placing, size) {
+        (Some(placing), Some(size)) => placing.place(sprite.pixels_per_unit, size),
+        _ => (half_extents(sprite.pixels_per_unit, size), Vec2::ZERO),
+    };
+    // Mirrored about the origin, as the picture is: a pivot at the feet
+    // stays at the feet when the character turns round.
+    if sprite.flip_x {
+        centre.x = -centre.x;
+    }
+    if sprite.flip_y {
+        centre.y = -centre.y;
+    }
+
     Quad {
-        half_extents: half_extents(sprite.pixels_per_unit, size),
+        half_extents,
+        centre,
         uvs: [[u0, v0], [u0, v1], [u1, v1], [u1, v0]],
         texture,
+    }
+}
+
+/// Where a frame's quad goes in the picture it was cut from: its trim and
+/// its pivot. Only an atlas frame has either.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct Placing {
+    /// The frame's top-left in the untrimmed picture, in texels.
+    offset: UVec2,
+    /// The untrimmed picture's size, in texels.
+    source: UVec2,
+    /// The point of the picture on the origin, `0..1`, `y` down.
+    pivot: Vec2,
+}
+
+impl Placing {
+    /// What `meta` says, or `None` when it says nothing — the frame is the
+    /// whole picture and centred, and the plain rule applies.
+    fn of(meta: Option<&FrameMeta>) -> Option<Self> {
+        let meta = meta?;
+        if meta.trim.is_none() && meta.pivot.is_none() {
+            return None;
+        }
+        let (offset, source) = meta.trim.map_or((UVec2::ZERO, UVec2::ZERO), |trim| {
+            (trim.offset, trim.source)
+        });
+        Some(Self {
+            offset,
+            source,
+            pivot: meta.pivot_or_centre(),
+        })
+    }
+
+    /// Half extents and centre of a `size`-texel frame placed this way.
+    ///
+    /// The whole picture is sized by the plain rule — `ppu` texels a unit,
+    /// or the unit square without one — and the frame is its part of that.
+    fn place(&self, ppu: Option<f32>, size: UVec2) -> (Vec2, Vec2) {
+        let source = if self.source.x == 0 || self.source.y == 0 {
+            size
+        } else {
+            self.source
+        };
+        let whole = half_extents(ppu, Some(source)) * 2.0;
+        let source = source.as_vec2();
+        let part = size.as_vec2() / source;
+        let middle = self.offset.as_vec2() / source + part * 0.5;
+        let from_pivot = (middle - self.pivot) * whole;
+        (part * whole * 0.5, Vec2::new(from_pivot.x, -from_pivot.y))
     }
 }
 
@@ -102,10 +177,12 @@ pub(crate) fn frame_missing(sprite: &Sprite, sheets: Sheets<'_>) -> bool {
 enum Slice {
     /// All of it.
     Whole,
-    /// A rectangle of it, `size` texels across, sampled over `uv`.
+    /// A rectangle of it, `size` texels across, sampled over `uv`, placed
+    /// in its picture by `placing` when it is a trimmed or pivoted frame.
     Cut {
         size: UVec2,
         uv: ([f32; 2], [f32; 2]),
+        placing: Option<Placing>,
     },
     /// A frame the sprite named and the sheets do not have.
     Missing,
@@ -121,11 +198,11 @@ fn slice(sprite: &Sprite, sheets: Sheets<'_>) -> Slice {
         let Some(frame) = atlas.frame(sprite.frame) else {
             return Slice::Missing;
         };
-        return cut(frame, atlas.sheet());
+        return cut(frame, atlas.sheet(), Placing::of(atlas.meta(sprite.frame)));
     }
 
     match (sprite.region, sheets.size(sprite.texture_handle)) {
-        (Some(region), Some(sheet)) => cut(region, sheet),
+        (Some(region), Some(sheet)) => cut(region, sheet, None),
         // A region with no sheet to resolve it against is not a missing frame:
         // a caller without a texture store — every headless test of this
         // geometry — still draws what it drew before regions existed.
@@ -136,11 +213,12 @@ fn slice(sprite: &Sprite, sheets: Sheets<'_>) -> Slice {
 /// `frame` of a `sheet`-sized image, or [`Slice::Missing`] when it covers no
 /// texels: a zero-area quad is not a picture of anything, and dividing by a
 /// zero sheet is how a `NaN` reaches the vertex buffer.
-fn cut(frame: Frame, sheet: UVec2) -> Slice {
+fn cut(frame: Frame, sheet: UVec2, placing: Option<Placing>) -> Slice {
     match frame.uv(sheet) {
         Some(uv) => Slice::Cut {
             size: frame.size(),
             uv,
+            placing,
         },
         None => Slice::Missing,
     }
@@ -435,5 +513,76 @@ mod tests {
         );
 
         assert_eq!(quad.texture, Some(Sizes::placeholder()));
+    }
+
+    /// A trimmed frame and a pivoted one, as the packer and the atlas
+    /// editor write them.
+    fn placed_atlases() -> (Atlases, AssetPath) {
+        let root = scratch_root();
+        std::fs::write(
+            root.join("hero.atlas.ron"),
+            "(version: 2, sheet: Some((64, 64)), frames: [
+             (x: 0, y: 0, width: 8, height: 4, trim: Some((offset: (8, 4), source: (16, 16)))),
+             (x: 16, y: 0, width: 16, height: 16, pivot: Some((0.5, 1.0))),
+             ])",
+        )
+        .expect("the fixture writes");
+        let atlases = Atlases::new(&root);
+        (atlases, AssetPath::new("hero.atlas.ron").expect("valid"))
+    }
+
+    fn sheets(atlases: &Atlases) -> Sheets<'_> {
+        Sheets {
+            atlases: Some(atlases),
+            textures: None,
+            fonts: None,
+            camera: voltra_render::glam::Vec2::ZERO,
+            visible: None,
+            time: 0.0,
+            layers: None,
+            materials: None,
+        }
+    }
+
+    #[test]
+    fn a_trimmed_frame_draws_where_it_was_in_the_whole_picture() {
+        let (mut atlases, path) = placed_atlases();
+        let mut sprite = sprite_on(&mut atlases, &path, 0);
+        sprite.pixels_per_unit = Some(16.0);
+
+        let drawn = quad(&sprite, sheets(&atlases));
+
+        // The whole picture is one unit square around the origin; the frame
+        // is its texels 8..16 across and 4..8 down.
+        assert_eq!(drawn.half_extents, Vec2::new(0.25, 0.125));
+        assert_eq!(drawn.corners()[0], Vec2::new(0.0, 0.25), "top-left");
+        assert_eq!(drawn.corners()[2], Vec2::new(0.5, 0.0), "bottom-right");
+        assert!(drawn.contains(Vec2::new(0.25, 0.1)));
+        assert!(!drawn.contains(Vec2::splat(-0.1)), "trimmed away");
+
+        sprite.flip_x = true;
+        let mirrored = quad(&sprite, sheets(&atlases));
+        assert_eq!(
+            mirrored.corners()[0],
+            Vec2::new(-0.5, 0.25),
+            "the top-left corner, now left of the origin"
+        );
+        assert_eq!(
+            mirrored.centre,
+            Vec2::new(-0.25, 0.125),
+            "mirrored about the origin"
+        );
+    }
+
+    #[test]
+    fn a_pivot_puts_its_point_of_the_picture_on_the_origin() {
+        let (mut atlases, path) = placed_atlases();
+        let sprite = sprite_on(&mut atlases, &path, 1);
+
+        let drawn = quad(&sprite, sheets(&atlases));
+
+        // No pixels-per-unit: the unit square, standing on its bottom middle.
+        assert_eq!(drawn.half_extents, Vec2::splat(0.5));
+        assert_eq!(drawn.centre, Vec2::new(0.0, 0.5));
     }
 }

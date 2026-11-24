@@ -87,6 +87,8 @@ impl UiStack {
     pub fn arrange(&self, world: &World, stack: Entity, rect: Rect) -> Vec<(Entity, Rect)> {
         let mut children: Vec<(i32, Entity, UiRect)> = hierarchy::children_of(world, stack)
             .into_iter()
+            // A hidden child takes no room.
+            .filter(|&child| world.get::<super::UiHidden>(child).is_none())
             .filter_map(|child| world.get::<UiRect>(child).map(|r| (r.slot, child, *r)))
             .collect();
         children.sort_by_key(|(slot, child, _)| (*slot, child.index()));

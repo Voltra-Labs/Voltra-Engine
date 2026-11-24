@@ -4,7 +4,10 @@ use std::time::Duration;
 
 use crate::bus::BusId;
 use crate::clip::Clip;
+use crate::effect::{Effect, Param};
 use crate::params::PlayParams;
+use crate::ramp::Curve;
+use crate::stream::Feed;
 use crate::voice::VoiceId;
 
 /// One message from the game to the mixer.
@@ -16,8 +19,9 @@ use crate::voice::VoiceId;
 /// into the audio thread and let it own its own state.
 ///
 /// A `Clip` travels inside [`Play`](Self::Play), which is a pointer bump on
-/// the sending side and nothing at all on the receiving one. It travels back
-/// out through the retirement channel when the voice ends, so the last
+/// the sending side and nothing at all on the receiving one; so does a
+/// streamed clip's [`Feed`], made and primed on the sending side. Both travel
+/// back out through the retirement channel when the voice ends, so the last
 /// reference is dropped by the thread that can afford to.
 ///
 /// Times travel as [`Duration`]s, not frames: the device's rate is the mixer's
@@ -31,10 +35,16 @@ pub enum Command {
         id: VoiceId,
         /// The sound to play.
         clip: Clip,
+        /// Where a streamed clip's frames come from; `None` for a resident
+        /// one.
+        feed: Option<Feed>,
         /// Volume, pitch, pan, looping and the bus it plays on.
         params: PlayParams,
         /// How long the rise from silence takes.
         fade_in: Duration,
+        /// The rise's shape: [`Curve::EqualPower`] for the incoming half of a
+        /// cross-fade.
+        curve: Curve,
     },
     /// Move a voice that is already playing. Ignored if it has finished.
     ///
@@ -62,6 +72,8 @@ pub enum Command {
         volume: f32,
         /// How long the slide takes.
         over: Duration,
+        /// The slide's shape.
+        curve: Curve,
     },
     /// End one voice, fading it to silence over `over` first. Ignored if it
     /// has finished.
@@ -70,6 +82,9 @@ pub enum Command {
         id: VoiceId,
         /// How long the fade to silence takes.
         over: Duration,
+        /// The fade's shape: [`Curve::EqualPower`] for the outgoing half of a
+        /// cross-fade.
+        curve: Curve,
     },
     /// End every voice the same way: what an editor's Stop button and a scene
     /// change both want, and the only way to end voices whose ids the caller
@@ -84,6 +99,28 @@ pub enum Command {
         bus: BusId,
         /// The volume to slide to, as a linear multiplier.
         volume: f32,
+        /// How long the slide takes.
+        over: Duration,
+    },
+    /// Replace one bus's effects with `effects`, built on the main thread.
+    /// The chain it replaces comes back through the retirement channel.
+    SetBusEffects {
+        /// The bus to change.
+        bus: BusId,
+        /// Its new chain, first to last.
+        effects: Vec<Effect>,
+    },
+    /// Move one number on one effect of one bus to `value` over `over`.
+    /// Ignored for an effect that is not there or a parameter it lacks.
+    SetBusParam {
+        /// The bus the effect is on.
+        bus: BusId,
+        /// Which effect, counting from zero in the chain.
+        effect: usize,
+        /// Which of its numbers.
+        param: Param,
+        /// The value to head for.
+        value: f32,
         /// How long the slide takes.
         over: Duration,
     },

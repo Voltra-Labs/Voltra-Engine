@@ -1,0 +1,17 @@
+[package]
+name = "voltra-server"
+description = "A dedicated Voltra server: a scene run headless at a fixed tick, hosted for clients."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "voltra-server"
+path = "src/main.rs"
+
+[dependencies]
+voltra-assets.workspace = true
+voltra-core.workspace = true
+voltra-scene.workspace = true
+log.workspace = true

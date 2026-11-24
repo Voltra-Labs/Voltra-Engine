@@ -37,7 +37,7 @@ pub struct MaterialBank {
 }
 
 struct Cached {
-    pipeline: wgpu::RenderPipeline,
+    pipeline: crate::pipeline::SpritePipeline,
     last_used: u64,
 }
 

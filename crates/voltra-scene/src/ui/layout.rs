@@ -1,7 +1,6 @@
 //! Every [`UiRect`] resolved to a box on a screen of a given size.
 
-use std::collections::HashMap;
-
+use voltra_ecs::hash::FastMap;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
@@ -33,9 +32,14 @@ struct Placed {
 /// [`WorldTransforms`]: crate::WorldTransforms
 #[derive(Debug, Clone, Default)]
 pub struct UiLayout {
-    resolved: HashMap<Entity, Placed>,
+    /// Hashed with the ECS's fast hasher, as every entity-keyed map
+    /// rebuilt each frame is: SipHash was a third of laying out 1k
+    /// elements (stage 108).
+    resolved: FastMap<Entity, Placed>,
     /// For each scroll, the box its content covers, as laid out.
-    content: HashMap<Entity, Rect>,
+    content: FastMap<Entity, Rect>,
+    /// The screen it was laid out on.
+    screen: Rect,
 }
 
 impl UiLayout {
@@ -46,8 +50,21 @@ impl UiLayout {
     /// is the screen.
     pub fn from_world(world: &World, screen: Vec2) -> Self {
         let screen = Rect::screen(screen);
-        let mut layout = Self::default();
+        let mut layout = Self {
+            screen,
+            ..Self::default()
+        };
         for (entity, _) in world.query::<UiRect>() {
+            // Placed already, by its stack: something was laid out under
+            // an element only when nothing above it is hidden, so there is
+            // no need to walk its ancestors again to ask.
+            if layout.resolved.contains_key(&entity) {
+                continue;
+            }
+            // A hidden element and all under it are not laid out at all.
+            if super::hidden::is_hidden(world, entity) {
+                continue;
+            }
             layout.resolve(world, entity, screen);
         }
         layout
@@ -136,6 +153,12 @@ impl UiLayout {
                 .or_insert(placed.rect);
         }
         self.resolved.insert(entity, placed);
+    }
+
+    /// The screen it was laid out on, in points: where a dropdown's list
+    /// and a tooltip are kept.
+    pub fn screen(&self) -> Rect {
+        self.screen
     }
 
     /// The box `entity` occupies, or `None` if it has no `UiRect`.

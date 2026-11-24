@@ -28,6 +28,10 @@ pub(super) type LoadFn = fn(&mut World, Entity, &RawValue) -> Result<(), ron::er
 /// reports success.
 pub(super) type RemoveFn = fn(&mut World, Entity);
 
+/// Whether an entity has a registered type, without writing it out: what a
+/// search by component asks of every entity in a scene, every frame.
+pub(super) type HasFn = fn(&World, Entity) -> bool;
+
 /// A registered type's round trip: a stored value read as the type and
 /// written back, for comparing values whatever text they were stored as.
 pub(super) type NormalizeFn = fn(&RawValue) -> Result<Box<RawValue>, SceneError>;
@@ -47,11 +51,13 @@ pub(super) type TemplateFn = fn() -> Result<Box<RawValue>, SceneError>;
 /// One component type's name and the conversions that go with it.
 ///
 /// `save`/`load`/`remove` are read by `save_one`/`load_one`/`remove_one` below.
+#[derive(Clone)]
 pub(super) struct Entry {
     pub(super) name: &'static str,
     pub(super) save: SaveFn,
     pub(super) load: LoadFn,
     pub(super) remove: RemoveFn,
+    pub(super) has: HasFn,
     pub(super) normalize: NormalizeFn,
     /// For a type naming other entities by id; `None` for every other.
     pub(super) refs: Option<(RemapFn, RewriteFn)>,
@@ -59,4 +65,11 @@ pub(super) struct Entry {
     /// for structure (a parent link, a prefab part) a tool must not make
     /// up.
     pub(super) template: Option<TemplateFn>,
+    /// The type itself, so [`ComponentRegistry::replicate`] can find the
+    /// entry a `T` was registered under.
+    ///
+    /// [`ComponentRegistry::replicate`]: super::ComponentRegistry::replicate
+    pub(super) type_id: std::any::TypeId,
+    /// For a type the server sends its clients; `None` for every other.
+    pub(super) replicate: Option<super::replicate::ReplicateFns>,
 }
