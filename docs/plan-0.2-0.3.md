@@ -89,66 +89,6 @@ player; full rollback is its own design).
 
 ---
 
-## 99 — Particles 2
-
-**Scope.** Curves over a particle's life for size, speed and alpha; a
-colour gradient; emitter shapes (point, circle, ring, box, edge, along a
-collider's outline); rotation and angular velocity; flipbook frames from an
-atlas region list. The GPU path (stage 45) gets the same features through
-small lookup textures, so CPU and GPU emitters stay interchangeable.
-
-**Done when** headless screenshots of each feature match on CPU and GPU.
-
-## 100 — Particle editor
-
-**Scope.** In the inspector: curve and gradient widgets, a live preview
-while not playing, restart and burst buttons, and a few presets (smoke,
-sparks, rain) to start from.
-
-**Done when** a curve edited through the bridge changes the emitter's
-particles in the next screenshot, as one undo entry.
-
-## 101 — Lines, filled polygons and trails
-
-**Scope.** `Line2D` (points, width, joins and caps, a texture along or
-tiled, a width curve), `Polygon2D` (filled, textured, triangulated by ear
-clipping), `Trail2D` (a ribbon behind a moving entity, fading over a time).
-Drawn through the sprite batch, lit, in sorting order. Points editable in
-the viewport (reusing stage 55's polygon handles).
-
-**Done when** screenshots pin joins, caps, a concave filled polygon and a
-trail behind a moving body.
-
-## 102 — 2D bones
-
-**Scope.** `Skeleton2D` and `Bone2D` (parented transforms with rest pose
-and length), sprites attached to bones (cut-out animation), bones keyed by
-the timeline (stage 66) like any property, and two-bone IK for limbs. Bones
-drawn and posed in the viewport.
-
-**Done when** a sample character walks by an animation clip of bone
-rotations, and the IK test reaches a target.
-
-## 103 — Skinned sprite meshes
-
-**Scope.** A sprite split into a mesh whose vertices carry up to four bone
-weights, deformed on the GPU; weights painted in the editor; the mesh made
-from the sprite's outline (stage 59's silhouette tracing).
-
-**Done when** a skinned arm bends smoothly in a screenshot and the
-painted weights round-trip through the scene file.
-
-## 107 — Benchmarks and a regression check
-
-**Scope.** Benchmarks for the hot paths: sprite batching (10k–100k quads),
-tilemap meshing, physics steps (1k bodies, piles), UI layout, text layout,
-scene load. Run headless, numbers written as JSON; CI compares with the
-main branch's and fails on a regression past a threshold (noise measured
-first, so the threshold is honest). Budgets stated in ARCHITECTURE.md.
-
-**Done when** the suite runs in CI, and a deliberately slowed function
-trips it in a test of the comparer.
-
 ## 108 — Performance
 
 **Scope.** What 107 shows: likely instancing sprites instead of expanding
@@ -158,16 +98,6 @@ cached text layouts. Each change justified by a number before and after.
 **Done when** the stated budgets hold (for example 100k sprites at 60 fps
 on the reference GPU and 2k active bodies in one step under 4 ms), recorded
 in ARCHITECTURE.md.
-
-## 109 — Big worlds
-
-**Scope.** A scene split into regions loaded and unloaded around the
-camera (additive loading, stage 30, made asynchronous: assets decoded on
-the job pool, entities added over frames within a budget); a loading
-screen with progress for a full scene change.
-
-**Done when** a test walks a camera across a world of many regions with
-memory bounded and no frame over budget while loading.
 
 ## 110 — Version 0.2
 

@@ -396,9 +396,16 @@ networking for 0.3 — planned in [docs/plan-0.2-0.3.md](docs/plan-0.2-0.3.md).
 | 96 | Atlas editor: slice by grid or by hand, preview, undo | done |
 | 97 | Tilemap editor: palette, stamps, rotation, flood fill, eyedropper | done |
 | 98 | Tiles with their own collision shapes and custom data | done |
+| 99 | Particles 2: curves, gradients, emitter shapes, spin, flipbooks — CPU and GPU | done |
+| 100 | Particle editor: curve and gradient widgets, live preview, presets | done |
+| 101 | `Line2D`, `Polygon2D` and `Trail2D` in the sprite batch | done |
+| 102 | 2D bones: skeletons, cut-out animation, two-bone IK | done |
+| 103 | Skinned sprite meshes: weights painted, deformed on the GPU | done |
 | 104 | Streaming music, loop points, equal-power crossfades | done |
 | 105 | Bus effects: filters, delay, reverb, ducking; `default.buses.ron` | done |
 | 106 | Editor: prefab edit mode, search in hierarchy and assets | done |
+| 107 | Benchmarks (`voltra-bench`, `cargo xtask bench`) and a regression check in CI | done |
+| 109 | Big worlds: regions streamed around anchors, loading screens | done |
 | 111 | `voltra-net`: UDP and WebSocket transports, the web included | done |
 | 112 | Connections, channels and typed messages | done |
 | 113 | `voltra-server`; host, join, listen servers | done |
