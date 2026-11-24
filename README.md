@@ -4,16 +4,16 @@
 
 A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs/wgpu) (Vulkan, Metal, DX12, GL, WebGPU) and [`winit`](https://github.com/rust-windowing/winit).
 
-> **Status: 0.1 — a 2D base.** Voltra was originally a C++/OpenGL engine; the
-> C++ tree is preserved in the `main` branch history and tagged
+> **Status: 0.3 — a 2D engine with networking.** Voltra was originally a
+> C++/OpenGL engine; the C++ tree is preserved in the `main` branch history and tagged
 > `v0-cpp-final`. The Rust rewrite is a 2D engine with an editor, a player,
-> native and web export, and games written as Rust crates the editor hot
-> reloads. 3D is on the roadmap, not in the tree. See
+> native and web export, multiplayer over UDP and WebSocket, and games
+> written as Rust crates the editor hot reloads. 3D is on the roadmap, not in the tree. See
 > [CHANGELOG.md](CHANGELOG.md).
 
 **New here? Start with [the guide](docs/guide/README.md)** — from install
-to a game in a browser. `games/` holds three sample games: `platformer`,
-`breakout` and `dodge`.
+to a game in a browser. `games/` holds four sample games: `platformer`,
+`breakout`, `dodge` and the networked `arena`.
 
 ## Design stance
 
@@ -287,9 +287,8 @@ privileged and plain `cargo build` covers everything.
 
 ## Roadmap
 
-Next: stages 88–110 polish the 2D engine toward 0.2, and 111–118 add
-networking for 0.3 — planned in [docs/plan-0.2-0.3.md](docs/plan-0.2-0.3.md).
-3D comes after, with a plan of its own.
+Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
+3D comes next, with a plan of its own.
 
 | Stage | Scope | State |
 | --- | --- | --- |
@@ -420,7 +419,9 @@ networking for 0.3 — planned in [docs/plan-0.2-0.3.md](docs/plan-0.2-0.3.md).
 | 105 | Bus effects: filters, delay, reverb, ducking; `default.buses.ron` | done |
 | 106 | Editor: prefab edit mode, search in hierarchy and assets | done |
 | 107 | Benchmarks (`voltra-bench`, `cargo xtask bench`) and a regression check in CI | done |
+| 108 | Performance: instanced sprite quads, kept upload buffers, linear scene parsing | done |
 | 109 | Big worlds: regions streamed around anchors, loading screens | done |
+| 110 | Version 0.3: guide chapters for 88–118, the changelog (0.2 and 0.3 ship together) | done |
 | 111 | `voltra-net`: UDP and WebSocket transports, the web included | done |
 | 112 | Connections, channels and typed messages | done |
 | 113 | `voltra-server`; host, join, listen servers | done |
