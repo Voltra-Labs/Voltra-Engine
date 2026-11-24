@@ -5737,6 +5737,69 @@ and collinear corners, a bow tie still drawn), `trail2d`, `polygon2d`,
 `batch::triangles` and `shape_edit` (a line's and a polygon's points as
 targets).
 
+### A bone is an entity; its pose is its transform, its rest and length a component
+
+Stage 102. `voltra_scene::skeleton`: **`Skeleton2D`** marks a root;
+**`Bone2D { length, rest }`** goes on an entity in the hierarchy whose own
+`Transform` *is* the bone's pose relative to its parent bone, pointing along
+its +x; **`TwoBoneIk { target, flip, enabled }`** bends a limb. Godot's
+`Skeleton2D`/`Bone2D` nodes and Unity's 2D Animation (bones are
+`Transform`s) have this shape, and it is what made the rest free:
+
+- **Cut-out animation** is a sprite parented to a bone — the hierarchy
+  already composes the matrices (stage 21).
+- **Keyed by the timeline like any property**: a clip's `Rotation` track on
+  `"thigh_l"` (stage 66's name path from the player) turns that bone; the
+  Timeline offers bones in its add-track list because they are named
+  entities. No bone-specific property, no second animation system.
+- **Posed in the viewport** with the rotate tool on a selected bone; bones
+  are drawn over the art as kites (`view/bones.rs`, the selected one lit),
+  and a click within six pixels of one selects it before the sprites hung
+  on it (`picking`, `skeleton::bone_at`).
+- **Rest pose** (`Bone2D::rest`, a `Transform`): *Set rest* in the inspector
+  takes the current pose; *Reset to rest* / the skeleton's *Reset pose*
+  (`skeleton::reset_to_rest`) puts it back. A skinned mesh (stage 103) is
+  bound in it.
+- **Two-bone IK** (Unity's `LimbSolver2D`, Godot's `TwoBoneIK`
+  modification): on the *lower* bone, its parent the upper; the target an
+  entity named by path from the skeleton root, as clip tracks are, so every
+  copy of a prefab reaches for its own. `ik::solve_two_bone` places the
+  elbow by the law of cosines (left of the reach, or right with `flip`;
+  straight towards a target out of reach), then each bone is turned by the
+  world angle between where it points and where it should — so a lower bone
+  hung off its parent's axis, or a skeleton scaled or mirrored (a negative
+  determinant turns the other way), still lands. Upper length is measured
+  origin to origin, lower by `length`. Applied in `advance_animations` after
+  the clips (IK has the last word) while the world runs. A limb that cannot
+  be solved is left alone and `ik::problem` says why (the inspector shows
+  it) rather than warning every frame.
+- **Editor**: inspector sections (bone length, set/reset rest, *Add child
+  bone* at the tip; IK target, flip, on, its problem; the skeleton's bone
+  count and *Reset pose*); *Scene ▸ Spawn skeleton* (a root and one bone,
+  one undo entry). Registered with templates.
+
+**Sample**: `scenes/bones.ron` — a cut-out walker (torso, head and legs as
+sprites hung on bones, `sprites/walker/`), walking by
+`animations/walk.anim.ron` (thighs swing, knees bend, the hip bobs), its
+arm bent by IK towards a goal the clip swings.
+
+Rejected: **bones as data inside one component** (Spine's and Unity's
+`SpriteSkin` keep a bone list) — every system that already knows entities
+(clips, gizmo, hierarchy, the inspector, the bridge) would need a second
+addressing scheme; **IK every frame in the editor** — writing bone
+transforms while authoring would be an edit each frame; Unity's IK manager
+runs in edit mode only when asked, and so would this, with a preview like
+the particles'.
+
+Pinned by `skeleton/tests.rs` (the tip reaching a target in reach to 1e-4,
+left by default and right flipped; out of reach straight towards it; a
+mirrored skeleton still reaching; a limb with no target or no upper bone
+left alone with its reason; bones found, placed, picked and reset; round
+trips), and `voltra-core/tests/bones.rs` through the sample (the left foot
+strides more than 0.4 units and is back after the one-second loop, each
+sprite riding its bone; the hand on the IK goal within 1e-3 every frame;
+the picture changes as it walks).
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).

@@ -27,6 +27,13 @@ pub fn clicked_entity(response: &Response, frame: &UiFrame<'_>) -> Option<Entity
     if let Some(element) = ui::element_at(frame.world, &layout, Vec2::new(local.x, local.y)) {
         return Some(element);
     }
+    // Then a bone, drawn over the sprites hung on it: within six pixels of
+    // its line.
+    let at = world_at(response, pointer, frame);
+    let per_pixel = frame.camera.half_extents().x * 2.0 / response.rect.width().max(1.0);
+    if let Some(bone) = voltra_scene::skeleton::bone_at(frame.world, at, 6.0 * per_pixel) {
+        return Some(bone);
+    }
     pick::entity_at(
         frame.world,
         world_at(response, pointer, frame),

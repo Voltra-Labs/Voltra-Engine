@@ -95,6 +95,12 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             ui.close();
         }
     }
+    if ui.button("Spawn skeleton").clicked() {
+        spawn::record_all(editor, frame, "Spawn skeleton", |frame, _| {
+            spawn::skeleton(frame, "Skeleton", Vec2::ZERO)
+        });
+        ui.close();
+    }
     if ui.button("Spawn light").clicked() {
         spawn::record(editor, frame, "Spawn light", |frame| {
             spawn::light(frame, "Light", Vec2::ZERO)

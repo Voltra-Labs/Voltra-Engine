@@ -143,6 +143,13 @@ impl ComponentRegistry {
             .register::<crate::Trail2D>("Trail2D")
             .with_template();
         registry
+            .register::<crate::Skeleton2D>("Skeleton2D")
+            .with_template();
+        registry.register::<crate::Bone2D>("Bone2D").with_template();
+        registry
+            .register::<crate::TwoBoneIk>("TwoBoneIk")
+            .with_template();
+        registry
     }
 
     /// Adds a component type under `name`, which is what appears in the file.

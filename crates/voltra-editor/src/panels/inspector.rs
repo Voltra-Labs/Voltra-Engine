@@ -26,6 +26,7 @@ mod path_field;
 mod prefab;
 mod shadow_caster;
 mod shapes2d;
+mod skeleton;
 mod sorting_layer;
 mod sprite;
 mod sprite_material;
@@ -232,6 +233,13 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             queue: frame.queue,
                         },
                     ));
+                }
+                let asked = skeleton::show(ui, frame.world, entity);
+                claim = claim.or(asked.claim);
+                if asked.child_bone {
+                    crate::spawn::record(editor, frame, "Add child bone", |frame| {
+                        crate::spawn::child_bone(frame, entity)
+                    });
                 }
                 if let Some(layer) = frame.world.get_mut::<Parallax>(entity) {
                     ui.separator();

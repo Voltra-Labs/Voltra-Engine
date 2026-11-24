@@ -200,6 +200,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 view::caster::draw(&outlines, lines);
                 view::light::draw(world, entity, lines);
             }
+            // Every bone, over the art it moves, the selected one lit.
+            let selected = editor.selection.live_primary(frame.world);
+            let per_pixel = frame.camera.half_extents().x * 2.0 / scene.rect.width().max(1.0);
+            let (world, lines) = frame.world_and_lines();
+            view::bones::draw(world, selected, per_pixel, lines);
             select::draw(editor, frame);
 
             // Last of all: the overlay is drawn in the order it is pushed, and
