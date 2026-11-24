@@ -1,0 +1,9 @@
+// Arena: what `cargo xtask dist --manifest games/arena/build.ron`
+// packages, and what the editor opens with `--game` this file.
+(
+    version: 1,
+    name: "Arena",
+    window: (width: 1280, height: 720),
+    assets: "assets",
+    game: (package: "arena"),
+)

@@ -88,6 +88,8 @@ impl App {
             // Before the step, not after: a force the tick applies is meant to
             // act during the step that follows it, which is the whole reason
             // the hook is per step rather than per frame.
+            // The server's tick, and each client's input for it.
+            self.net.begin_fixed_step();
             {
                 let _fixed = voltra_profile::scope("fixed tick");
                 self.run_fixed_update(step);

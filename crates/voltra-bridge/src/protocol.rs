@@ -327,6 +327,27 @@ pub enum Command {
         /// What to search for; empty clears the search.
         query: String,
     },
+    /// Network play: how many clients Play starts beside the editor's own
+    /// world, which hosts, and how bad every link between them is — live.
+    /// A field left out keeps its value. Answers the session: its
+    /// settings, the server's connections and each client's.
+    NetPlay {
+        /// Clients the next Play starts; `0` plays offline.
+        #[serde(default)]
+        clients: Option<usize>,
+        /// One-way delay on every link, both ways, in milliseconds.
+        #[serde(default)]
+        latency_ms: Option<f64>,
+        /// Up to this much more, at random per datagram, in milliseconds.
+        #[serde(default)]
+        jitter_ms: Option<f64>,
+        /// The share of datagrams lost, `0.0..=1.0`.
+        #[serde(default)]
+        loss: Option<f32>,
+        /// Bytes a second each link carries; `0` for no cap.
+        #[serde(default)]
+        bandwidth: Option<u32>,
+    },
 }
 
 impl Command {

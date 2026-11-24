@@ -6,6 +6,7 @@ pub mod console;
 pub mod hierarchy;
 pub mod inspector;
 pub mod menu_bar;
+pub mod network;
 pub mod prefab_bar;
 pub mod profiler;
 pub mod project_settings;

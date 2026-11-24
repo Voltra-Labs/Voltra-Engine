@@ -281,6 +281,23 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
             answer["frames_recorded"] = json!(voltra_profile::frames_recorded());
             Ok(answer)
         }
+        Command::NetPlay {
+            clients,
+            latency_ms,
+            jitter_ms,
+            loss,
+            bandwidth,
+        } => {
+            let settings = crate::netplay::Settings {
+                clients: *clients,
+                latency_ms: *latency_ms,
+                jitter_ms: *jitter_ms,
+                loss: *loss,
+                bandwidth: *bandwidth,
+            };
+            crate::netplay::configure(editor, settings)?;
+            Ok(crate::netplay::status(editor, frame))
+        }
         Command::Screenshot => {
             let shot = frame.capture_viewport();
             let png = shot.png_bytes().map_err(|e| e.to_string())?;

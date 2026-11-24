@@ -221,6 +221,17 @@ impl Endpoint {
         std::mem::take(&mut self.messages)
     }
 
+    /// Takes the last receive's messages on `channels`, leaving the rest in
+    /// [`messages`](Self::messages): for engine code with channels of its
+    /// own (replication), whose traffic the game should never see.
+    pub fn take_messages_on(&mut self, channels: &[ChannelId]) -> Vec<Message> {
+        let (taken, kept) = std::mem::take(&mut self.messages)
+            .into_iter()
+            .partition(|m| channels.contains(&m.channel));
+        self.messages = kept;
+        taken
+    }
+
     /// What happened since the receive before the last one: joins, leaves,
     /// kicks, timeouts, and on a client the end of a failed connect.
     pub fn events(&self) -> &[NetEvent] {

@@ -188,6 +188,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "arena"
+version = "0.1.0"
+dependencies = [
+ "js-sys",
+ "log",
+ "serde",
+ "voltra-assets",
+ "voltra-core",
+ "voltra-ecs",
+ "voltra-render",
+ "voltra-scene",
+ "voltra-server",
+ "web-sys",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3953,6 +3969,7 @@ dependencies = [
  "voltra-physics",
  "voltra-profile",
  "voltra-render",
+ "voltra-replication",
  "voltra-scene",
  "voltra-testkit",
  "wasm-bindgen",
@@ -4100,11 +4117,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "voltra-replication"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "postcard",
+ "serde",
+ "voltra-assets",
+ "voltra-ecs",
+ "voltra-net",
+ "voltra-render",
+ "voltra-scene",
+]
+
+[[package]]
 name = "voltra-scene"
 version = "0.1.0"
 dependencies = [
  "image",
  "log",
+ "postcard",
  "ron",
  "serde",
  "uuid",

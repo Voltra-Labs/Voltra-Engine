@@ -96,6 +96,9 @@ jobs:
       # voltra-net's browser WebSocket reaching a native server (no GPU).
       - name: A page connected to a native server
         run: node crates/voltra-player/web/test/net.mjs
+      # The arena's web build joining a native arena-server over WebSocket.
+      - name: The arena in a browser, joined to its server
+        run: node crates/voltra-player/web/test/arena.mjs
       # The guide's checked blocks (docs/guide): a game made, tested and
       # built for the web, as a reader following it would.
       - name: The guide, followed
@@ -143,7 +146,9 @@ jobs:
 
       # The editor itself, launched under Xvfb on a software Vulkan driver
       # and driven through its bridge: grid snapping, the Console's filter,
-      # a project setting saved and read back (crates/voltra-editor/tests/bridge.rs).
+      # a project setting saved and read back (crates/voltra-editor/tests/bridge.rs);
+      # two in-editor clients played over 100 ms of latency, the profiler's
+      # net counters read back (tests/netplay.rs).
       # winit opens libxkbcommon-x11 at run time on X11, and the runner
       # image does not ship it: without it the editor panics at startup.
       - name: The editor through its bridge
@@ -151,6 +156,7 @@ jobs:
         run: |
           sudo apt-get install -y xvfb libvulkan1 mesa-vulkan-drivers libxkbcommon-x11-0
           xvfb-run -a cargo test -p voltra-editor --test bridge -- --ignored
+          xvfb-run -a cargo test -p voltra-editor --test netplay -- --ignored
 
       # The authoring windows through the same bridge: the texture packer,
       # the Atlas Editor slicing, renaming and saving a sheet (diffed against

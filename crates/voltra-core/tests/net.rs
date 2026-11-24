@@ -26,6 +26,7 @@ fn link() -> LinkConditions {
         jitter: Duration::from_millis(20),
         loss: 0.1,
         duplicate: 0.0,
+        bandwidth: 0,
     }
 }
 

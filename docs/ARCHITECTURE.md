@@ -91,9 +91,10 @@ version bump is a one-line change.
 | `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport`, `Endpoint`, `NetConfig`, `ChannelKind`, `ChannelId`, `PeerId`, `NetEvent`, `DisconnectReason`, `Message` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
 | `voltra-mcp` | The MCP server binary: a project's scenes, assets and runs — and a running editor, through the bridge — for an AI client, over stdio | `VoltraMcp`, `Project`, `tools::*` |
-| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
+| `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session and its replication | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
+| `voltra-replication` | The server's world sent to its clients: snapshots and deltas within a per-client budget, interpolation of remote entities, prediction of the owned one | `ReplicationServer`, `ReplicationClient`, `ReplicationConfig`, `Timeline`, `Prediction`, `NetOwner` |
 | `voltra-server` | A dedicated server: a scene headless at a fixed tick, hosted over UDP and WebSockets; a library a game's own server binary is built on | `Server`, `ServerOptions`, `Pacer` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
@@ -6711,6 +6712,303 @@ dropdowns reaching the window, Escape on an open list) and
 `voltra-scene/tests/headless_overlay.rs`: in pixels, an open list over a
 panel sorted above everything, its highlighted item, and a tooltip under
 its element.
+
+### The server sends what each client has not acknowledged, most important first
+
+Stage 114. A new crate, `voltra-replication`, between `voltra-net`'s
+connections and the scene; `voltra-core` drives it from the loop and
+`tick.net` (`app/tick_replication.rs`).
+
+- **What is replicated** is chosen twice. A *type* opts in at registration:
+  `registry.replicate::<T>()` (or `.replicated()` on the `register` chain),
+  `replicate_interpolated::<T>()` for one drawn between snapshots
+  (`Interpolate`, stage 115); `Transform` is, by default. An *entity* opts
+  in with the `Replicated` component (`priority`, default 1). Unreal's
+  `UPROPERTY(Replicated)` plus `bReplicates`, Bevy replicon's
+  `replicate::<C>()` plus `Replicated`, Unity's `NetworkObject` — the same
+  two switches. The registry keeps the wire conversions beside the RON ones
+  (`format/registry/replicate.rs`): `postcard`, so a `Transform` is 20
+  bytes, not the 50 of its RON. The server sends the component *names*
+  once per client (the schema, reliable); snapshots number them by that
+  list, and a client maps by name, logging a type it does not replicate.
+- **Server authority.** Nothing a client sends changes a replicated
+  component on the server: its say is its acknowledgements and its
+  inputs (stage 116). The game moves its entities on the server; the
+  loop sends the world as the frame left it, after the fixed steps.
+- **Snapshots and deltas.** One snapshot per server tick (a fixed step;
+  `snapshot_interval` to thin them) per client, unreliable-sequenced on a
+  channel of replication's own (`ReplicationChannels`: three channels put
+  after the game's by `ReplicationConfig::net_config`, which `tick.net`'s
+  `host`/`join` apply once `enable_replication` / `App::with_replication`
+  turned it on; a session made without them is refused by replication
+  with an error, and the handshake's fingerprint refuses a client whose
+  layout differs). Per client and entity the server keeps the value
+  acknowledged and the value last sent, per component, and sends a
+  component when the current value differs from *either*: the first is
+  "a delta against the last acknowledged snapshot" (a lost change is sent
+  again because it was never acknowledged), the second covers a value
+  gone back to the acknowledged one while another was in flight. Values
+  travel whole, so a client applies each update on its own with no
+  baseline of its own — Quake 3's per-snapshot baselines would need the
+  client to keep every snapshot it acknowledged; Unreal's per-connection
+  shadow state, resent on a NAK, is this rule seen from the other side.
+  The client reports which snapshots arrived as the newest tick and 64
+  bits before it, every frame, on its own channel.
+- **Spawn and despawn.** An entity's first update carries its spawn — its
+  `SceneId`, the prefab it came from (`PrefabInstance`) and its owner
+  (`NetOwner`) — until a snapshot carrying it is acknowledged. The client
+  adopts an entity with that id if its own copy of the level has one, or
+  spawns the prefab (the sprite and the children that only draw, as
+  Godot's `MultiplayerSpawner` spawns by scene path and Unity by prefab
+  hash), or a bare entity; a replicated part of that prefab is despawned
+  locally, since it comes in a spawn of its own. Its assets are resolved
+  by the loop like a tick's spawns. A despawn is in every snapshot until
+  one carrying it is acknowledged, then forgotten; ids (`NetId`, a `u32`
+  varint) are never reused in a session, and the sequenced channel drops
+  any older snapshot, so a despawned entity is never brought back. The
+  first *complete* snapshot (see below) also despawns the replicated
+  entities of the client's level the server never had (one it despawned
+  before the client joined) — once only, since a replicated entity spawned
+  on the client later races the server's spawn of the same.
+- **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
+  datagram with room for its header, 60 KB/s at 60 Hz) bounds each
+  client's snapshot. Due entities are taken by banked priority — each
+  snapshot an entity waits, its `priority` is added to its bank; sent, it
+  starts again from zero (Gaffer On Games' priority accumulator; Unreal's
+  `NetPriority` times the time since last sent) — and encoded one by one
+  until the next does not fit; a smaller one after it still may. A single
+  update larger than the whole budget goes alone, with a warning, rather
+  than starve. A snapshot that held everything due says so (`complete`).
+  No interest management: every client is sent every replicated entity.
+- **Untrusted input.** A snapshot or client message that will not decode
+  is dropped whole; a client's lists are cut at 64; a component value that
+  will not decode changes nothing. A client whose game despawned a
+  replicated entity asks for it whole again (`resync`).
+
+Pinned by `voltra-core/tests/replication.rs`: a server and two clients
+over 20 % loss, 30–50 ms latency and 2 % duplication — a level entity
+adopted (not doubled) and a client-only one removed, 20 entities spawned,
+moved for two seconds, seven despawned and three spawned, and both
+clients' replicated entities and transforms equal to the server's,
+exactly; 301 moving entities under a 600-byte budget, every snapshot at
+or under it and every frame's bytes within a datagram's header of it, the
+priority-40 entity kept closer than the crowd, and all of them through
+once they rest; a prefab-spawned entity spawned from its prefab on the
+client (its child too) and despawned with it. Unit tests of the snapshot
+wire format (written in parts, read whole; junk), the ack bits, the
+delta rule (`server/view.rs`), the input queue, the registry's
+replication (a `Transform` is 20 bytes; junk and trailing bytes change
+nothing; an unregistered type is refused) and `Interpolate`.
+
+### A remote entity is drawn a measured staleness behind the newest snapshot
+
+Stage 115. A client draws remote entities' interpolated components
+(`replicate_interpolated`, `Transform` by default) not as each snapshot
+brings them but at one moment of the server's past, between the two
+samples around it (`client/samples.rs`; `Interpolate` is linear for
+positions and scale, the short way round for a rotation, and written
+`a + (b - a) * t` so equal ends give exactly themselves — glam's `lerp`
+does not, and an entity at rest was drawn an ulp off). Components that do
+not opt in are applied as they arrive.
+
+- **The moment** (`Timeline`): each arrival's *offset* (arrival time minus
+  its tick's server time) gives the quickest path over the last three
+  seconds — latency without jitter. Each frame the clock asks how *stale*
+  the newest snapshot in hand is against that quickest path; the most
+  staleness in the window, plus one snapshot interval, is the delay. A
+  model of jitter (a percentile of arrival offsets) was tried first and
+  under-buffers: with jitter several intervals wide the sequenced channel
+  drops every snapshot a newer one overtook, so the arrivals it measures
+  are the early ones, and the clock held still every few frames. Staleness
+  measures what the jitter costs as it is felt — late, lost, overtaken,
+  and the wait between two. Unity Netcode's interpolation buffer and
+  Overwatch size their buffers from the link the same way; Source's
+  `cl_interp` fixes it by hand.
+- **No jumps**: the drawn moment runs at the clock's pace corrected by at
+  most 10 % toward its target (computed against where this frame would
+  land, not where the last one did — the first version ran a frame
+  ahead), so a change in the link is a change of pace, not a skip. Only a
+  gap over a quarter second (the first snapshot, a stall) snaps. Past the
+  newest sample it holds rather than extrapolates.
+- **Resting entities**: a snapshot that held everything due (`complete`)
+  is a sample for every entity it left out — unchanged at its tick — so an
+  entity that rests and then moves is drawn moving from where it rested,
+  not smeared from its last update. A budget-cut snapshot adds no such
+  samples.
+- The predicted entity (stage 116) is not drawn this way: its world copy
+  is the client's own.
+
+Pinned by `voltra-core/tests/interpolation.rs`: over 60 ms latency, up to
+50 ms of jitter and 5 % loss both ways, three seeds, a server entity
+going round a circle one server step at a time; seven seconds of the
+client's copy, frame by frame — the jitter measured above 20 ms and the
+delay above it, no frame moving more than 1.12 server steps or less than
+half of one (no jump, no stall), every point on the chord of server
+positions at most five ticks apart. Unit tests of `Timeline` (the delay
+grows with jitter delivered through a sequenced channel; a link 100 ms
+slower is caught up at a pace within 10 %), of the samples (between two;
+a held value is a sample) and of `Interpolate` (equal ends exact; the
+short way round).
+
+### The owned entity is predicted by the game's own movement, and replayed on correction
+
+Stage 116. The entity a client owns (`NetOwner`, set by the server's game
+on the entity it spawned for a peer, carried in its spawn) is simulated
+ahead on the client and reconciled with the server, through a
+`Prediction<I>` the game holds and steps from its fixed tick:
+`tick.predict(&mut prediction, input, simulate)`.
+
+- **Inputs by tick.** Each fixed step the client simulates its entity with
+  the input it just read, numbers the input by its own step and queues it;
+  every frame's replication message carries the newest eight not yet
+  acknowledged (`input_redundancy`), so a lost one costs nothing. The
+  server holds a client's inputs by number (`server/inputs.rs`) and gives
+  one to each of its fixed steps, oldest first — `tick.net.input::<I>(peer)`
+  in the server's fixed tick; none waiting is `None`, and the game leaves
+  the entity be, never repeats the last (which would move it a step the
+  client never took). A queue past `max_buffered_inputs` drops its oldest
+  — a client running fast must not queue itself into latency. Each
+  snapshot says the newest input simulated (`input_ack`).
+- **Rewind and replay.** The predicted entity is not interpolated: its
+  server values are kept as a `Correction` (every replicated component the
+  server says it has, and the `input_ack` they include). At the next step,
+  `Prediction` puts the entity back to that state, drops the
+  acknowledged inputs and replays the rest through the same `simulate`,
+  then simulates the new input. When both ran the same inputs, the replay
+  lands exactly on the prediction — the steady state shows nothing;
+  where they differ (a push only the server saw), the server wins.
+  `PredictionStats` count corrections, replayed inputs and the distance a
+  correction moved the entity. Unity Netcode's predicted ghosts, Overwatch
+  and Rocket League replay commands the same way; Gaffer On Games'
+  "client-side prediction" is the reference.
+- **Where the fixed step is not deterministic** (in `prediction.rs`):
+  only the one entity is replayed, by the game's `simulate`, not the
+  world's physics step, which moves every body. So `simulate` must read
+  only the entity's own replicated state, the input and the step — another
+  entity is where it is *now* on the client, not where it was on the
+  server at the replayed step; an entity moved by its body's velocity or
+  pushed by contacts mispredicts and is corrected — move a predicted
+  entity kinematically. `f32` is the same for the same operations in the
+  same order on one build; a server built for another architecture may
+  fuse multiply-adds differently, an ulp a step, corrected by the next
+  snapshot. Errors are not smoothed on screen: a misprediction snaps. Full
+  rollback of the whole world (fighting games) is its own design.
+- A listen server's own player needs none of this: its entity is the
+  server's. `Net::owned_by(world, peer)` finds a peer's entity there.
+
+Pinned by `voltra-core/tests/prediction.rs`, 150 ms of latency each way
+(a 300 ms round trip): the player moves the very step it is pressed,
+while the server has not heard; held for two seconds with a turn, over
+60 corrections each replaying a round trip of inputs, every one landing
+within 1e-5 of the prediction; let go, client and server at the same
+place exactly, with only a round trip of inputs still held. And a push
+the server makes alone is corrected to: the client ends where the server
+put it. Unit tests of the input queue (each input once, in order; a flood
+cut to the newest; oversized ones dropped).
+
+### The editor plays a listen server and its clients in one process, over links it conditions
+
+Stage 117. `Window ▸ Network` (`panels/network.rs`) sets how many clients
+Play starts (up to three, beside the host) and how bad every link is;
+`crate::netplay` runs them.
+
+- **One process.** With clients asked for, Play hosts the editor's own
+  world as a listen server — its game plays the host, in the viewport —
+  and starts each client as the game run `Headless` on the scene as Play
+  found it (the editor's registry, a fresh game from the loaded library),
+  joined over an in-memory network; Stop ends them with the session.
+  Unity's Multiplayer Play Mode and Godot's "run multiple instances" start
+  each client as a process with a window; worlds in the editor's own
+  process are stepped in its frame (by the server's clock, paused with
+  it), their state is there to show and to read through the bridge, and
+  the link is one the editor owns at both ends. What they lack is a
+  picture: the renderer draws the editor's one world, so the window draws
+  each client as a map of its replicated entities over the server's —
+  a client lagging or missing one shows as a dot apart. A client per
+  window (a player process joining over UDP) is not done.
+- **Conditions** are `Conditioned` on every link, the server's and each
+  client's, so a bad link is bad both ways. `LinkConditions` gained a
+  bandwidth cap (bytes a second: a datagram waits for the ones before it,
+  and is dropped once that wait passes a second, as a router's queue
+  drops; counted as `throttled`), and `Conditioned` keeps its conditions
+  behind a shared `LinkControl`, so the window turns them live after the
+  transports went into their endpoints. Unity's Network Simulator
+  (latency, jitter, loss) and Chrome's throttling (bandwidth) are the
+  model.
+- **Net stats in the profiler**: every frame a session sets `net rtt ms`
+  (the largest round trip), `net bytes out`/`in` and `net packets
+  out`/`in` (this frame's, the connections' running totals differenced,
+  so a counter's average is the rate) and `net peers` —
+  `voltra_core::NET_COUNTERS`. A session stepped inside another's frame
+  (`Headless::unprofiled`, the editor's clients) neither ends the
+  profiler's frame nor sets the counters, which stay the host's.
+  `UiFrame::net` reaches the session from the editor.
+- **Bridge**: `net_play` (clients, latency, jitter, loss, bandwidth; a
+  field left out is kept, a value out of range refused) answers the
+  session — its settings, the server's connections, each client's id,
+  connection, replicated entities, snapshots and interpolation delay. The
+  counters read back through `profile`. No MCP tool wraps it yet.
+
+Pinned by `voltra-editor/tests/netplay.rs` (ignored; CI's bridge step runs
+it under Xvfb): the editor on a scene with one replicated box, two clients
+at 100 ms each way; both join and replicate the box, the server's round
+trips read 180–400 ms, `profile`'s `net rtt ms` likewise, `net peers` 2,
+bytes and packets both ways; an out-of-range setting refused; Stop ends
+the clients. Unit tests of the bandwidth cap (a 10 KB/s link carries ten
+1000-byte datagrams a second and drops past a second of queue) and of a
+`LinkControl` changing a link from outside.
+
+### A networked sample decides the match where the server is, and predicts only its own player
+
+Stage 118. `games/arena` (made with `cargo xtask new-game arena --title
+Arena`, then grown): two to four players race for a coin, first to five.
+One game value for every end; what it does depends on where it runs.
+
+- **Where the match is decided** — a dedicated server, a listen server, or
+  a run with no session — the rules run (`authority.rs`): a player spawned
+  from `prefabs/player.prefab.ron` per peer as it joins (`NetOwner` set;
+  the listen host's own player is the `Connected(PeerId::SERVER)` event,
+  so one path spawns all), despawned as it leaves; each player moved one
+  step by its own input (`tick.net.input`, the host's from its keys); the
+  coin taken by whoever reaches it, the round won at its target and
+  restarted after a pause. A **client** runs none of it: it predicts its
+  own player through `tick.predict` with the same `walk`, and replication
+  brings the rest — `Transform`, `Player` (speed and bounds, which `walk`
+  reads, so the replay matches), `Score`, and the scene's `Round` entity
+  (adopted by id from the level both ends loaded; the coin likewise). The
+  scores and the players' colours are drawn on every end from replicated
+  state alone (`hud.rs`).
+- **Inputs are whole numbers** (`Steer`, two `i8`): two bytes on the
+  wire, and the same direction on both ends exactly.
+- **Starting a session**: `Session::{Solo, Host, Join}` from the command
+  line (`--host`, `--join ADDR`, `--bot`) or, in a browser, the page's
+  `?join=ws://…`; a session already running — the editor's network play,
+  a dedicated server's — is left alone. The arena's `NetConfig::protocol`
+  keeps other games out at the handshake.
+- **A dedicated server binary of its own**, `arena-server`, on a seam
+  this stage added to `voltra-server`: `voltra_server::cli::main(name,
+  |args| app)` is the `voltra-server` command line and run, with the
+  game's app and a chance to set defaults (its first scene, its protocol)
+  on the parsed `args` — the way a game builds its player on `App::run`.
+  `voltra-server`'s own binary is now that call with no game. On the web
+  the server binary builds to nothing.
+- **Found by the match**: a predicted entity's non-interpolated
+  components (its score) were being held back with its position; only the
+  interpolated ones (where it is) are the client's own now, the rest apply
+  as they arrive.
+
+Pinned by `games/arena/tests/match.rs` (in `cargo test --workspace`, no
+display): `arena-server` started as a process on a free UDP port, two
+headless bot clients joining it by `udp://` and playing until a round is
+won — both see the same winner, a client, at the target, the same scores,
+the server's log saying it decided it, and a second of each client's
+inputs simulated by the server. `tests/plugin.rs` (the template's): the
+library loaded as the editor loads it, the solo player spawned and walked.
+`crates/voltra-player/web/test/arena.mjs` in CI's web job: the arena's web
+build, on WebGPU and WebGL2, joins a native `arena-server` over WebSocket
+from its page's `?join=`; the server spawns the page's player and the page
+logs that it predicts it. Guide chapter `docs/guide/08-networking.md`,
+whose checked blocks run the match test and the server for two seconds.
 
 ### wgpu 30 API notes
 

@@ -26,7 +26,18 @@ use super::App;
 /// [`take_received`](Self::take_received), which hands each out once.
 #[derive(Default)]
 pub struct Net {
-    endpoint: Option<Endpoint>,
+    pub(super) endpoint: Option<Endpoint>,
+    /// Replication's settings, when the game turned it on.
+    pub(super) replication_config: Option<voltra_replication::ReplicationConfig>,
+    /// Replication for this session, made at the first receive that has
+    /// the registry and the step to make it with.
+    pub(super) replication: Option<voltra_replication::Replication>,
+    /// The session replication refused, so the error is logged once.
+    pub(super) replication_refused: bool,
+    /// The connection totals the last frame's counters were taken from.
+    pub(super) counted: voltra_net::ConnectionStats,
+    /// Whether the profiler's net counters are left alone.
+    pub(super) uncounted: bool,
     /// The session's clock: the sum of the frames' deltas, so a headless
     /// run is as deterministic as its steps.
     now: Duration,
@@ -45,6 +56,8 @@ impl Net {
     pub fn start(&mut self, endpoint: Endpoint) {
         // The old one says goodbye as it drops.
         self.endpoint = Some(endpoint);
+        self.replication = None;
+        self.replication_refused = false;
         self.stopping = false;
         self.goodbye_heard = false;
     }
@@ -56,7 +69,9 @@ impl Net {
     /// next frame's events like any other. Fails if a port will not open,
     /// and always in a browser, which cannot listen.
     pub fn host(&mut self, options: &HostOptions) -> Result<(), SessionError> {
-        self.start(voltra_net::host(options)?);
+        let mut options = options.clone();
+        options.config = self.session_config(options.config);
+        self.start(voltra_net::host(&options)?);
         Ok(())
     }
 
@@ -65,6 +80,7 @@ impl Net {
     /// [`NetEvent::Connected`] says when it let us in, a
     /// [`NetEvent::Disconnected`] that it would not.
     pub fn join(&mut self, server: &str, config: NetConfig) -> Result<(), SessionError> {
+        let config = self.session_config(config);
         self.start(voltra_net::join(server, config)?);
         Ok(())
     }
@@ -72,6 +88,7 @@ impl Net {
     /// Hosts a session over a transport built by hand — an in-memory one in
     /// a test, a [`Conditioned`](voltra_net::Conditioned) one in the editor.
     pub fn host_on(&mut self, transport: impl Transport + 'static, config: NetConfig) {
+        let config = self.session_config(config);
         self.start(Endpoint::server(transport, config));
     }
 
@@ -82,6 +99,7 @@ impl Net {
         server: Address,
         config: NetConfig,
     ) {
+        let config = self.session_config(config);
         self.start(Endpoint::client(transport, server, config));
     }
 
@@ -231,7 +249,7 @@ impl Net {
         self.now
     }
 
-    fn receive(&mut self, delta: f32) {
+    pub(super) fn receive(&mut self, delta: f32) {
         if delta.is_finite() && delta > 0.0 {
             self.now += Duration::from_secs_f32(delta);
         }
@@ -241,12 +259,13 @@ impl Net {
         self.goodbye_heard = self.stopping;
     }
 
-    fn flush(&mut self) {
+    pub(super) fn flush(&mut self) {
         if let Some(endpoint) = self.endpoint.as_mut() {
             endpoint.flush(self.now);
         }
         if self.goodbye_heard {
             self.endpoint = None;
+            self.replication = None;
             self.stopping = false;
             self.goodbye_heard = false;
         }
@@ -267,6 +286,7 @@ impl App {
     pub(super) fn flush_net(&mut self) {
         let _net = voltra_profile::scope("net");
         self.net.flush();
+        self.net.count();
     }
 
     /// The game's network session.

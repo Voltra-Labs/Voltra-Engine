@@ -20,6 +20,7 @@ fn bad_link() -> LinkConditions {
         jitter: Duration::from_millis(40),
         loss: 0.2,
         duplicate: 0.05,
+        bandwidth: 0,
     }
 }
 
