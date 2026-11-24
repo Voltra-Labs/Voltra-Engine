@@ -212,6 +212,41 @@ impl Texture {
         .expect("1x1 white texture has a valid size")
     }
 
+    /// The pixels of `target`, sampled as a sprite's texture: what a
+    /// camera drawing into a render texture is shown through. The texture is
+    /// the target's own — what the camera draws, the sprite shows — so it
+    /// must not outlive the target, nor be drawn while the target is drawn
+    /// into.
+    pub fn of_target(device: &wgpu::Device, target: &crate::RenderTarget, filter: Filter) -> Self {
+        let texture = target.texture().clone();
+        let format = target.format();
+        let raw = if reinterprets_srgb(device) {
+            format.remove_srgb_suffix()
+        } else {
+            format
+        };
+        let filter = wgpu::FilterMode::from(filter);
+        Self {
+            view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            raw_view: texture.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(raw),
+                ..Default::default()
+            }),
+            sampler: device.create_sampler(&wgpu::SamplerDescriptor {
+                label: Some("render-texture"),
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: filter,
+                min_filter: filter,
+                mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+                ..Default::default()
+            }),
+            width: target.width(),
+            height: target.height(),
+        }
+    }
+
     pub fn width(&self) -> u32 {
         self.width
     }

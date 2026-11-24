@@ -103,6 +103,9 @@ impl ComponentRegistry {
         registry.register::<UiButton>("UiButton").with_template();
         registry.register::<UiSlice>("UiSlice").with_template();
         registry.register::<UiStack>("UiStack").with_template();
+        registry
+            .register::<crate::CameraTarget>("CameraTarget")
+            .with_template();
         registry.register::<UiScroll>("UiScroll").with_template();
         registry.register::<UiToggle>("UiToggle").with_template();
         registry.register::<UiSlider>("UiSlider").with_template();

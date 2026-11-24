@@ -39,7 +39,7 @@ pub use root::{default_root, ROOT_ENV};
 pub use silhouette::Silhouettes;
 pub use size::TextureSizes;
 pub use store::Assets;
-pub use textures::Textures;
+pub use textures::{RenderTexture, Textures};
 pub use watch::AssetWatcher;
 
 /// The rasterizer, for a caller that needs a face's own metrics. Only this

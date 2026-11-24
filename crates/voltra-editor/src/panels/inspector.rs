@@ -9,6 +9,7 @@ mod animator;
 mod audio_source;
 mod camera;
 mod camera_rig;
+mod camera_view;
 mod character;
 mod collider;
 mod collision;
@@ -215,6 +216,9 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
                     ui.separator();
                     claim = claim.or(camera::show(ui, camera));
+                }
+                if frame.world.get::<Camera>(entity).is_some() {
+                    claim = claim.or(camera_view::show(ui, frame.world, entity));
                 }
                 claim = claim.or(camera_rig::show(ui, frame.world, entity));
                 if let Some(source) = frame.world.get_mut::<AudioSource>(entity) {

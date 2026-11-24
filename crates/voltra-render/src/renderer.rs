@@ -18,6 +18,7 @@ use crate::target::RenderTarget;
 use crate::texture::Texture;
 use crate::{pipeline, texture};
 
+mod composite;
 mod direct;
 mod frame;
 mod gpu_timing;
@@ -25,6 +26,8 @@ mod light_layers;
 mod normals;
 
 /// Drives one frame at a time on top of a [`GpuContext`].
+pub use composite::Placed;
+
 pub struct Renderer {
     ctx: GpuContext,
     flat_color: wgpu::RenderPipeline,

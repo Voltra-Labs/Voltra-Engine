@@ -94,6 +94,11 @@ pub struct App {
     pub(crate) materials: Option<voltra_assets::Materials>,
     /// The pipelines and uniforms they draw with; made with the first one.
     material_bank: Option<voltra_render::material::MaterialBank>,
+    /// The scene and picture targets of the screen's cameras, when a frame
+    /// draws several: split screen, a pixel-perfect view.
+    camera_pool: Vec<(voltra_render::RenderTarget, voltra_render::RenderTarget)>,
+    /// How images are filtered: the project's choice, nearest for pixel art.
+    texture_filter: voltra_render::Filter,
     /// Sprites' traced outlines, for shadow casters shaped by their sprite.
     /// `None` until `resumed`, for the root, like the stores around it.
     silhouettes: Option<voltra_assets::Silhouettes>,

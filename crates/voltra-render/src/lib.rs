@@ -48,7 +48,7 @@ pub use particles::{
 pub use pass::{MaterialDraw, MeshDraw};
 pub use post::{PostPass, PostSettings};
 pub use readback::read_rgba8;
-pub use renderer::{Layer, Renderer};
+pub use renderer::{Layer, Placed, Renderer};
 pub use scene_draw::SceneDraw;
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};

@@ -18,6 +18,7 @@ pub(super) fn scene_draws<'a>(
     white: &'a wgpu::BindGroup,
     rings: &'a GpuParticleRings,
     bank: Option<&'a MaterialBank>,
+    skip: Option<voltra_assets::Handle<voltra_render::Texture>>,
 ) -> Vec<SceneDraw<'a>> {
     let bind = |texture| match texture {
         Some(handle) => textures.bind_group(handle),
@@ -35,7 +36,11 @@ pub(super) fn scene_draws<'a>(
                 });
             }
         }
-        if let Some(range) = batch.ranges.get(index) {
+        if let Some(range) = batch
+            .ranges
+            .get(index)
+            .filter(|r| skip.is_none() || r.texture != skip)
+        {
             draws.push(SceneDraw::Mesh(MeshDraw {
                 texture: bind(range.texture),
                 // A normal map that would not load is drawn flat, not as

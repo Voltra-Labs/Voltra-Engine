@@ -5380,6 +5380,61 @@ outline drawn through the engine's own frame, natively) and
 `crates/voltra-player/web/test/materials.mjs` (the same scene, built
 with `dist --web`, on WebGPU and WebGL2, in CI).
 
+### Several cameras draw a frame; one can draw into a texture
+
+Stage 84. Two players on one screen, a minimap, pixel art that stays
+crisp while the camera moves.
+
+- **Which cameras draw** (`camera::shots`): every active camera, Unity's
+  model — those with a `CameraTarget` first, then the screen's, each set
+  by priority, lowest first, a later one over an earlier where viewports
+  overlap. A screen camera wholly under a later full-screen one is left
+  out, so a scene of several full-screen cameras draws only the highest,
+  exactly as when one camera took the frame.
+- **`Camera::viewport`**: a rectangle of the screen in fractions from its
+  top-left (Unity's `rect`); `LEFT` and `RIGHT` split it for two players.
+  Not written when full.
+- **`CameraTarget`**: a camera drawing into a render texture instead —
+  Unity's `targetTexture`, Godot's camera in a `SubViewport`. Its own
+  component because `Camera` is `Copy` and a path is not. The texture is a
+  `x.rendertexture.ron` (`(version: 1, width, height, nearest)`) that
+  `Textures` loads like an image: its targets are made in the renderer's
+  format, and a sprite or a HUD image naming the same file shows the
+  picture (`Texture::of_target` shares the target's texture). Texture
+  cameras draw first, so what shows them is this frame's; a camera never
+  draws the sprite showing its own texture, since a texture cannot be
+  sampled while drawn into. The editor draws render textures too, under
+  its own camera.
+- **The frame**: one plain full-screen camera keeps the direct path.
+  Otherwise each shot is drawn through its own view, lighting (its
+  ambient: `light::gather_through`) and grade into a target the size of
+  its viewport — `render_scene` as the editor's view uses it — and
+  `Renderer::composite` / `present_composite` lay the pictures on the
+  output with the HUD over them, once. Each shot's batch is rebuilt for
+  its view (culling and parallax are per camera); a shot's commands are
+  submitted before the next's uniforms are written.
+- **`Camera::pixel_perfect`** snaps the view so the target's pixel edges
+  fall on the world's pixel grid (`Shot::view`): moved by under half a
+  pixel, never scaled. With nearest filtering —
+  `App::with_texture_filter(Filter::Nearest)`, the project's choice as
+  Godot's `default_texture_filter` is — a sprite at whole texels lands
+  texel for pixel.
+
+Rejected: **scissoring one target per camera** — each camera's light
+map, bloom and grade are its own, and the chain already draws a camera
+into a target; **an integer-scaled low-resolution target for pixel
+art** — a pixel-perfect view gives crisp texels at any window size,
+and an upscaled target can come later as a camera option.
+
+Pinned by `camera/shots.rs` (several full-screen cameras draw only the
+highest; split halves both drawn, a texture camera first; unresolved and
+inactive left out; pixel-perfect edges on whole pixels),
+`camera/viewport.rs`, and `voltra-core/tests/cameras.rs`: a split screen
+— red on the left only, blue on the right only — with a minimap drawn
+into a render texture and shown by a HUD image, both blocks in it; and a
+pixel-perfect camera off the pixel grid whose every pixel over a 4 × 4
+texture matches a reference worked out on the CPU, texel by texel.
+
 ### wgpu 30 API notes
 
 wgpu 30 broke almost every tutorial published online (they target v25 and older).
@@ -5423,6 +5478,8 @@ rather than trusting a tutorial.
 
 - `wgpu::naga` is re-exported (wgpu_core is in every build, WebGL2 included): `naga::front::wgsl::parse_str` and `naga::valid::Validator::new(ValidationFlags::all(), Capabilities::empty()).validate`, errors through `emit_to_string(source)` — synchronous shader checking, unlike `create_shader_module`, whose errors go to an error scope.
 - A uniform buffer bound with `has_dynamic_offset: true` and `min_binding_size: None` takes per-draw offsets in `set_bind_group(2, group, &[offset])`; offsets must be multiples of `limits().min_uniform_buffer_offset_alignment` (256 on most adapters, WebGL2 included).
+
+- A `wgpu::Buffer` is destroyed when its owner drops, even if a recorded command buffer not yet submitted names it: keep a per-frame mesh alive until after `queue.submit` (found by `Renderer::composite`).
 
 ### winit 0.30 on the web
 

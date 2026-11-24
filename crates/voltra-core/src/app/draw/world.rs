@@ -78,6 +78,7 @@ impl WorldDraw<'_> {
             &white,
             self.gpu_rings,
             bank,
+            None,
         );
         // The game's HUD over the scene, in the target's pixels: what the
         // window shows in a build.

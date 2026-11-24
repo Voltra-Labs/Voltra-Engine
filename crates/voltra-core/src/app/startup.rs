@@ -38,6 +38,8 @@ impl App {
             renderer.texture_layout(),
             asset_root.clone(),
         );
+        textures.set_filter(self.texture_filter);
+        textures.set_target_format(renderer.context().format());
 
         // `App::world` is public and documented to be populated before `run`,
         // so by the time there is a device to upload with, the world may

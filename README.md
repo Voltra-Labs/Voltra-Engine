@@ -369,6 +369,7 @@ privileged and plain `cargo build` covers everything.
 | 81 | Text wrapping and localization: string tables per language | done |
 | 82 | Tweens and timers from the tick, gone with their entity | done |
 | 83 | Sprite materials: a WGSL fragment and its uniforms, on every backend | done |
+| 84 | Several cameras: split screen, render textures, pixel-perfect views | done |
 
 ## Contributing
 

@@ -49,6 +49,13 @@ impl App {
 
     /// Keeps the save slots in `dir` instead of the per-user folder: a
     /// portable build, or a test.
+    /// How every image is filtered when it does not land 1:1 on pixels:
+    /// `Filter::Nearest` keeps pixel art crisp. Linear when not given.
+    pub fn with_texture_filter(mut self, filter: voltra_render::Filter) -> Self {
+        self.texture_filter = filter;
+        self
+    }
+
     /// The language the game starts in: the table `locale/<language>.ron`
     /// it reads keyed texts from. English (`en`) when not given.
     pub fn with_language(mut self, language: &str) -> Self {

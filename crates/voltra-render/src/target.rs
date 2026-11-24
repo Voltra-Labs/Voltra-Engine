@@ -151,6 +151,32 @@ impl RenderTarget {
     }
 }
 
+impl RenderTarget {
+    /// Binds this target for sampling through its sRGB view: read back as
+    /// linear and written encoded again, what drawing one camera's picture
+    /// into another target through the sprite pipeline needs.
+    pub fn create_srgb_bind_group(
+        &self,
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+    ) -> wgpu::BindGroup {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some(&self.label),
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&self.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        })
+    }
+}
+
 /// Destroys the texture rather than leaving it to the drop, for the reason
 /// [`RenderTarget::resize`] does. Every target lives across frames — a
 /// renderer's, an app's, or the graph pool's, which drops one only after

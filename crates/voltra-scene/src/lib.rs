@@ -51,7 +51,7 @@ pub use audio_listener::AudioListener;
 pub use audio_source::AudioSource;
 pub use batch::{GpuEmitterDraw, SpriteBatch, SpriteRange, Surface};
 pub use body::{BodyType, RigidBody};
-pub use camera::Camera;
+pub use camera::{Camera, CameraTarget, Viewport};
 pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds};
 pub use character::{CharacterBody2D, CharacterContact};
 pub use collider::{Collider, ConvexPolygon, PolygonError, WorldShape};

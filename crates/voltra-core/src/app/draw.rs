@@ -9,6 +9,7 @@ use voltra_scene::sprite::sheets::Sheets;
 use super::{App, UiFrame};
 
 mod parts;
+pub(super) mod shots;
 pub(super) mod world;
 
 use parts::{
@@ -42,6 +43,48 @@ impl App {
             renderer.context().queue(),
             scale,
         );
+        voltra_scene::camera::target::resolve_world(
+            &mut self.world,
+            textures,
+            renderer.context().device(),
+            renderer.context().queue(),
+        );
+        let frame_shots = voltra_scene::camera::shots(&self.world);
+        if shots::needs_shots(&frame_shots) {
+            let config = renderer.context().config();
+            let screen = (config.width, config.height);
+            let rects = shots::ShotDraw {
+                world: &self.world,
+                renderer,
+                textures,
+                atlases,
+                fonts,
+                silhouettes: self.silhouettes.as_mut(),
+                sorting_layers: &self.sorting_layers,
+                batch: &mut self.frame_batch,
+                tile_meshes: &mut self.tile_meshes,
+                gpu_rings: &self.gpu_rings,
+                materials: self.materials.as_ref(),
+                material_bank: &mut self.material_bank,
+                pool: &mut self.camera_pool,
+                elapsed: self.elapsed,
+            }
+            .draw(&frame_shots, screen);
+            let hud = shots::hud(&self.world, atlases, textures, fonts, screen, scale);
+            let hud_mesh = hud.upload(renderer.context().device());
+            let white = renderer.white_bind_group().clone();
+            let hud_draws = mesh_draws(&hud, textures, &white);
+            let placed = shots::placed(&self.camera_pool, &rects);
+            let _render = voltra_profile::scope("render");
+            renderer.present_composite(
+                &placed,
+                Layer {
+                    mesh: hud_mesh.as_ref(),
+                    draws: &hud_draws,
+                },
+            );
+            return;
+        }
         // Rebuilt every frame, but for tilemap chunks drawn last frame from
         // the same cells, which are copied: a level's tiles are the bulk of
         // its quads and change least.
@@ -72,7 +115,7 @@ impl App {
             self.materials.as_ref(),
         );
         let draws =
-            super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings, bank);
+            super::scene_draws::scene_draws(&batch, textures, &white, &self.gpu_rings, bank, None);
 
         let config = renderer.context().config();
         let hud = ui_batch(&self.world, sheets, config.width, config.height, scale);
@@ -153,6 +196,34 @@ impl App {
         self.thumbnails.sync(egui, &device, textures);
 
         let scale = window.scale_factor() as f32;
+        // The scene's render textures, so a minimap shows in the editor too.
+        // The editor's own view draws below, through the editor's camera.
+        voltra_scene::camera::target::resolve_world(&mut self.world, textures, &device, &queue);
+        let texture_shots: Vec<_> = voltra_scene::camera::shots(&self.world)
+            .into_iter()
+            .filter(|shot| shot.target.is_some())
+            .collect();
+        if !texture_shots.is_empty() {
+            let editor_camera = renderer.camera;
+            shots::ShotDraw {
+                world: &self.world,
+                renderer,
+                textures,
+                atlases,
+                fonts,
+                silhouettes: self.silhouettes.as_mut(),
+                sorting_layers: &self.sorting_layers,
+                batch: &mut self.frame_batch,
+                tile_meshes: &mut self.tile_meshes,
+                gpu_rings: &self.gpu_rings,
+                materials: self.materials.as_ref(),
+                material_bank: &mut self.material_bank,
+                pool: &mut self.camera_pool,
+                elapsed: self.elapsed,
+            }
+            .draw(&texture_shots, (width.max(1), height.max(1)));
+            renderer.camera = editor_camera;
+        }
         world::WorldDraw {
             world: &self.world,
             renderer,
