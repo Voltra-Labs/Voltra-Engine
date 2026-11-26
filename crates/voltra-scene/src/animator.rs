@@ -11,6 +11,7 @@
 //! the transition's `duration`, which the player mixes. Unity's `Animator`
 //! and `AnimatorController`; Godot's `AnimationTree` state machine.
 
+mod check;
 pub mod component;
 pub mod machine;
 mod save;
