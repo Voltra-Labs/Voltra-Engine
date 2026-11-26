@@ -31,7 +31,7 @@ if (!skipBuild) {
     join(target, "wasm32-unknown-unknown", "debug", "examples", "web_probe.wasm"),
   ]);
   writeFileSync(join(site, "index.html"), `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>voltra-net probe</title></head>
+<html lang="en"><head><meta charset="utf-8"><title>voltra-net probe</title><link rel="icon" href="data:,"></head>
 <body><script type="module">
   import init from "./probe.js";
   init().catch((error) => console.error(String(error)));
