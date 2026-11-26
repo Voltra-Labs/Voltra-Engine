@@ -4011,6 +4011,50 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   in `keyframes/frame.rs`, the fade's state is `keyframes/fade.rs`.
 - **`played`** counts the seconds of the clip played since it started,
   through every loop — what an animator's exit time above one counts.
+- **Synced clips (stage 120)**: a player plays either its `clip` or a
+  `SyncedClips` — clips on one clock in *normalized* time, each mixed at a
+  weight (`play_synced`, `cross_fade_synced`, `synced_mut().weights_mut()`
+  to move the weights while the clock keeps its place, `stop`). The set's
+  length is the weight-averaged length of its weighted clips that have
+  one, so each clip is sampled at the same fraction of its own length — a
+  walk and a run keep their stride (Unity's blend-tree sync, Godot's
+  blend-space `sync`). A clip of no length weighs in the mix but not the
+  length; the set loops when any of its clips does, and a clip that does
+  not, in a set that loops, holds its end after the first loop. A set with
+  nothing to write (no clip that reads, at a weight) holds its clock, as an
+  empty clip does. Either side of a fade may be a set; the side faded out
+  keeps the weights it had. A `clip` written over a set plays (the field is
+  the older way in). The set is never saved. Being on the player, not the
+  animator, a set is the one shape anything playing clips together uses —
+  a blend tree today, a layer's motion in 121.
+- **The hot path (stage 120)**: a blend tree samples several clips per
+  entity per frame, so the stage-119 mixing was made to scale. A `Pose` is
+  kept **sorted** by (target, property): `get`/`set` binary-search, a
+  clip's tracks — mostly in order already — append in one comparison, and
+  `blend` walks its inputs side by side once (the next key is the least any
+  input has not passed), with no linear scan per property and no
+  allocation per property (none at all for up to eight inputs).
+  `blend_into` and `AnimationClip::sample_into` reuse a buffer; `advance`
+  samples every player through a few buffers, finds targets through **one
+  index of the hierarchy per frame** (`target::Children`, rather than
+  `children_of` scanning the world per path segment) with the last target
+  remembered (a sorted pose resolves each target once, no map), keeps a
+  fade's last mix by copying into the names it already owns
+  (`Pose::copy_from`: no `String` per fade frame in the steady state) and
+  formats a warning only when it warns. Measured with `voltra-bench run
+  --filter keyframes` (release; the median of 21 samples, after: the best
+  of three runs; the bench's 8 named children × 3 tracks, 100 players):
+
+  | benchmark | before (`c2cd5ca`) | after |
+  | --- | --- | --- |
+  | `keyframes/sample/24-tracks` | 1.03 µs | 0.74 µs |
+  | `keyframes/blend/3x24` | 7.01 µs | 1.53 µs |
+  | `keyframes/advance/100-playing` | 842 µs | 184 µs |
+  | `keyframes/advance/100-crossfading` | 1.50 ms | 365 µs |
+  | `keyframes/advance/100-blending-3` | — | 477 µs |
+
+  A three-clip tree on 100 entities costs less now than one clip on 100
+  entities did before.
 - **Not yet**: record mode (an edit in the viewport keying itself), curve
   editing, copying keys, a clip's undo, playing the preview in time.
 
@@ -4430,26 +4474,96 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
   in egui's memory under the machine's path. The field has no upper
   bound: egui clamps the value a ranged `DragValue` is shown, so a cap
   would rewrite a long fade typed in the file just by being opened.
-- **Save writes only the durations** (`StateMachines::save_durations`):
-  the store holds the machine *checked*, without the transitions, states
-  and start loading dropped, and saving that would delete an author's
-  typo'd work. So the file is read back as written
-  (`RonStore::read_as_written`), each transition given the duration of the
-  loaded one it became (`StateMachine::take_durations`, matched in order
-  on from, to, conditions and exit time) and written (`RonStore::write`);
-  a file that no longer reads is not written over. It writes pretty RON,
-  so the file's comments go, as a clip's do.
+- **Save writes only what the inspector edits** (`StateMachines::save_edits`,
+  stage 119's `save_durations` grown by trees): the store holds the machine
+  *checked*, without the transitions, states and start loading dropped,
+  and saving that would delete an author's typo'd work. So the file is read
+  back as written (`RonStore::read_as_written`), each transition given the
+  duration of the loaded one it became (`StateMachine::take_durations`,
+  matched in order on from, to, conditions and exit time), each state —
+  the first of its name, as the check keeps — the loaded one's tree
+  (`take_trees`), and written (`RonStore::write`); a file that no longer
+  reads is not written over. It writes pretty RON, so the file's comments
+  go, as a clip's do.
+- **Blend trees (stage 120)**: a state's motion is a `clip` or a `tree` —
+  `Blend1D { parameter, children: [(threshold, clip)] }` or
+  `Blend2D { x, y, children: [(position, clip)] }` — and `State::motion()`
+  says which (a tree wins over a clip; an empty tree, or neither, plays
+  nothing). Both fields are **written bare** (`animator/bare.rs`:
+  `clip: Path("idle.anim.ron")`, `tree: Blend1D(...)`, either left out when
+  absent) so every file from before reads unchanged and the new field reads
+  the same way. Entering a tree state, the animator has the player
+  `cross_fade_synced` the tree's clips at the weights its parameters give;
+  every frame it stays, it writes the weights again (`tree.weights(input,
+  set.weights_mut())`), so they follow the game with no transition; a tree
+  whose clips changed under it (a reload, an inspector edit) has them
+  swapped in keeping the phase. A player since told to play a clip of its
+  own is left alone, as in a clip state. Exit times read the set's phase
+  and loops. The playing and the mixing stay the keyframes layer's
+  (`SyncedClips`, `blend`); the tree, its parameters and its geometry are
+  the animator's (`animator/tree.rs`).
+  - **1D** (`tree/line.rs`): the nearest thresholds at or below and at or
+    above the input mix linearly; past the ends, the end child (clamped,
+    no extrapolation); children at one threshold share its weight.
+  - **2D** (`tree/plane.rs`): the children are **Delaunay-triangulated**
+    (brute force: the triangles whose circumcircle holds no other child,
+    accepted in index order unless they overlap one already taken, so four
+    children on one circle split along one diagonal and the weights stay
+    continuous) and an input inside a triangle mixes its corners by
+    **barycentric** weights — at a child that child alone, on an edge its
+    two ends. Outside the hull it is clamped to the nearest point on an
+    edge and mixes that edge's two. One child plays alone; children all on
+    a line blend as 1D along it; coincident children share. The geometry
+    runs in `f64` in a frame scaled to the children's spread, so one
+    epsilon serves any units. This is **Godot's `BlendSpace2D`** (auto
+    triangles, barycentric) — which, for Unity's *simple directional*
+    layout (an idle at the centre, one clip per direction), is exactly the
+    fan of triangles Unity blends over; unlike Unity it needs no rule
+    about one clip per direction and takes any layout. Unity's freeform
+    modes (gradient bands) were not copied: they cost a pass over every
+    pair of children per frame, and the triangle blend already gives
+    "nearest clips win" for a 2D game's stick or aim.
+  - **Lenient**, as the rest of the machine: a tree parameter that is not
+    a float, or not a parameter, reads `0`; a child at a threshold or point
+    that is not finite weighs nothing; an empty tree plays nothing;
+    a state with both clip and tree plays the tree — each warned of at
+    load, none removed, so a save writes them back as written. The weights
+    never hold a NaN: a bad input reads as `0`, and every degenerate layout
+    has a rule above.
+  - **The inspector** lists each tree under **blend trees**: a combo box per
+    parameter (the machine's floats; a name that is none of them is shown
+    as written, not replaced), a row per child (threshold, or `x` and `y`,
+    and the clip's path field — dropped from the browser or typed; its
+    **Clear** takes the child out), and an **add** field that appends a
+    child. Edited in the store and saved by the same **Save**/**Revert** as
+    the fades (`animator/edits.rs`).
+  - Unity's blend tree, Godot's `BlendSpace1D`/`BlendSpace2D`; Bevy's
+    `AnimationGraph` blends by weights a game writes, with no blend
+    spaces — our animator is that game, writing the weights from its
+    parameters.
 
 Rejected: **blending in the animator** — the mix is the keyframes layer's,
 which blend trees and layers reuse; **a machine-wide default duration** —
 two places to look for one fade; **eased fade curves** — linear is what
 Unity and Godot default to, and a curve can join later as a field;
 **sub-state machines**; **a graph editor now** — the file is short and hot
-reloads.
+reloads; **children each on their own clock** (stage 120) — a walk and a
+run blended out of phase slide the feet, which is what sync is for;
+**a `motion` enum field** in the file (`motion: Clip(...)`) — it would
+break every older file, where two optional fields written bare break
+none; **Unity's angle-sorted simple directional** — it is the Delaunay fan
+for its own layouts and undefined for others, so the triangulation is the
+general case at the same cost.
 
-- **Not yet**: blend trees, layers, a visual graph editor, interruption
+- **Not yet**: layers, a visual graph editor, interruption
   rules (Unity's interruption source and ordered interruption: here any
-  transition may interrupt a fade), a fade's offset into the incoming clip.
+  transition may interrupt a fade), a fade's offset into the incoming clip;
+  of blend trees: a tree as a tree's child (Unity's nested trees), a speed
+  per child, Unity's freeform (gradient band) 2D modes, the outgoing
+  tree's weights following the parameters through a fade (they hold),
+  caching a 2D tree's triangulation (it is recomputed per evaluation —
+  microseconds for the ten or so children a tree has; a machine-side cache
+  when a tree grows), and a visual blend-space view in the inspector.
 
 Pinned by `animator/tests.rs` (starting in the start state with a player
 added, a float moving between states at a state's speed, a trigger spent
@@ -4461,9 +4575,23 @@ half way, a transition mid-fade fading from the mix, a duration of zero
 cutting and not being written, a bad duration cutting, a machine reloaded
 and an entity despawned mid-fade, an exit time counting loops, an exit
 time above one on a clip played once and on one of no length) and
-`animator/save.rs` (a save keeping what loading dropped).
-The `character` example's idle, run, jump and fall are a machine, each
-transition a crossfade.
+`animator/save.rs` (a save keeping what loading dropped, and writing an
+edited tree) and `animator/tests/tree.rs` (a 1D tree's weights at, between
+and outside its thresholds every frame; a 2D tree at a child, on an edge,
+in a triangle and outside the hull; children in step and an exit time
+counting a tree's loops; an empty tree warning and playing nothing; a tree
+crossfading into a clip state and back; a reloaded tree's thresholds and
+clips taken at once, in step; a parameter that is not a float reading 0; a
+clip state written as it always was) and `tree/line.rs`, `tree/plane.rs`
+(the weights' edge cases: shared thresholds and points, a line, one child,
+a square on one circle, numbers that are not finite), and
+`keyframes/synced.rs`, `keyframes/tests/synced.rs` (the weight-averaged
+length and phases, weights moving without the clock, a set played once
+ending, a set faded into and out of).
+The `character` example's ground state is a blend tree of idle, walk
+(`hero/walk.anim.ron`, authored for it) and run by `speed` — the
+character accelerates, so the mix passes through the walk — and its jump
+and fall clips are crossfaded to and from it.
 
 ### Navigation is a grid baked from colliders, in a crate of its own
 

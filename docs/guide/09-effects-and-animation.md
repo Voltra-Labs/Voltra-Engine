@@ -1,7 +1,7 @@
 # 9. Effects and animation
 
-Particles, drawn lines and shapes, state machines that crossfade clips,
-and characters made of bones. Every one
+Particles, drawn lines and shapes, state machines that crossfade clips
+and blend them in trees, and characters made of bones. Every one
 of them is a component, edited in the inspector, saved in the scene file and
 drawn in painter's order with the sprites (`sort_order`, sorting layers,
 lights).
@@ -92,8 +92,42 @@ its fade in seconds; **Save** writes those durations into the file —
 only them: a transition the editor ignored for a typo stays in the file
 for you to fix (written as plain RON, without its comments) — and
 **Revert** reads it back. Every entity running the machine
-fades the new way at once. `crates/voltra-core/examples/character.rs` is a
-character whose idle, run, jump and fall crossfade
+fades the new way at once.
+
+## Blend trees
+
+A state can play a **blend tree** instead of one clip: several clips at
+once, each weighted by where a float parameter puts the game among them.
+A `Blend1D` places clips along one parameter — between two thresholds the
+two clips there mix in proportion, past either end the end clip plays:
+
+```ron
+(name: "move", tree: Blend1D(parameter: "speed", children: [
+    (threshold: 0.0, clip: Path("animations/hero/idle.anim.ron")),
+    (threshold: 1.5, clip: Path("animations/hero/walk.anim.ron")),
+    (threshold: 3.5, clip: Path("animations/hero/run.anim.ron")),
+])),
+```
+
+A `Blend2D` places them at points over two parameters, `x` and `y` — a
+stick's direction, say, with an idle at `(0.0, 0.0)` and a walk each way
+at `(1.0, 0.0)`, `(0.0, 1.0)` and so on. The game's point mixes the three
+clips of the triangle around it; outside every triangle, the two of the
+nearest edge. The weights follow the parameters every frame, with no
+transition.
+
+A tree's clips play **in step**: each is the same fraction through its own
+cycle, and the tree's length is their weighted average, so a walk sliding
+into a run keeps its stride. A state's `exit_time` counts the tree's loops.
+Transitions into and out of a tree state crossfade as any other does.
+
+A tree whose parameter is not a float, or not there, reads `0` and says so
+in the log; an empty tree plays nothing. The inspector shows each tree
+under **blend trees**: pick its parameters, drag thresholds and points,
+drop a clip from the browser onto a row to change it or onto **add** to
+add one, **Clear** a row to take its clip out — **Save** writes the trees
+with the fades. `crates/voltra-core/examples/character.rs` blends idle,
+walk and run by speed on the ground and crossfades to a jump or a fall
 (`assets/animations/hero.animator.ron`).
 
 ## Bones
