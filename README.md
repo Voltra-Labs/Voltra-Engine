@@ -438,6 +438,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 120 | Blend trees: 1D and 2D directional, synced children | done |
 | 121 | Animator layers (masks, override, additive); timeline record mode, key copy, clip undo | done |
 | 122 | Joints: wheel, prismatic, mouse; revolute spring; breaking | done |
+| 123 | Characters push bodies, keep speed on slopes, turn with their floor | done |
 
 ## Contributing
 

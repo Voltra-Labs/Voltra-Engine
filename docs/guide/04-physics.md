@@ -37,7 +37,32 @@ bounce of one, bricks taken on `Began`.
 `CharacterBody2D` moves a kinematic body by sliding along what it hits,
 with a floor, slopes and steps — what a platformer's walker wants instead
 of a dynamic body tipping over. `OneWay` makes a platform passable from
-below. `games/platformer` uses both.
+below. The game moves it in `fixed_update`, with its own gravity:
+
+```rust
+velocity.x = tick.input.action_axis("move_left", "move_right") * 4.0;
+velocity.y -= 9.81 * tick.delta;
+if let Some(slide) = move_and_slide(tick.world, player, velocity, tick.delta) {
+    velocity = slide.velocity; // less what went into walls, floors, ceilings
+}
+```
+
+Three more fields (Inspector ▸ Character), all off by default:
+
+- **`push_force`** (newtons) — a dynamic body it walks into is shoved,
+  at the contact point (a tall crate pushed low tips), by up to that force
+  and never faster than the character walks. A heavier crate moves less
+  and slows the character to its pace; a light one is walked on at full
+  speed. The body still stops the character for that step, so neither goes
+  through the other, nor a crate through the wall behind it.
+- **`constant_speed_on_slopes`** — up or down a slope it covers the same
+  ground across per second as on the flat, and stays on a slope walked
+  down without needing `snap`.
+- **`carry_rotation`** — a turning platform turns the character's own
+  rotation too, not only carries it round. Off keeps a capsule upright.
+
+`games/platformer`'s walker is one: it pushes the level's crates — the
+dark one is heavier — and climbs the hill at walking speed.
 
 ## Tiles
 

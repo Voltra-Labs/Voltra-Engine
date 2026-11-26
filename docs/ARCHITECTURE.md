@@ -4405,16 +4405,69 @@ to keep and what it touched (`Slide`). Godot's `CharacterBody2D` and
 - The character is a collider without a rigid body: a static obstacle to
   the bodies the step moves. The inspector warns when it has one.
 
+**Characters push dynamic bodies, and keep their speed on slopes** (stage
+123, `CharacterBody2D::push_force`, `constant_speed_on_slopes`, both
+`#[serde(default)]` and off by default, so every scene moves as before):
+
+- **A push is an impulse at the contact point, limited by a force**
+  (`character/push.rs`). Each dynamic body with mass a move meets while
+  moving into it is remembered — the harder of two meetings with one body —
+  and once the move is over it gets, along the contact's normal into it,
+  just the impulse that brings its contact point up to the character's speed
+  into it, and never more than `push_force × delta`. Mass and inertia are
+  the solver's own (`SolverBody::from_body`): a heavier crate takes the same
+  impulse with less speed, one met low turns, a locked one does not. The
+  point is the middle of where the two faces turned to each other overlap
+  across the normal — a face against a face its shared middle, a corner the
+  corner. Unity's `CharacterController` (`OnControllerColliderHit`) and
+  Godot's `CharacterBody2D` (a loop over `get_slide_collision`) leave this
+  to the game; we do it in the engine because every platformer writes the
+  same dozen lines, and gets the mass or the contact point wrong.
+- **The move still treats the body as solid**: the character stops at it
+  this move, and the body moves when the physics step that follows
+  integrates the impulse — so the character never tunnels into it, and the
+  solver, not the push, keeps a crate shoved at a wall out of the wall.
+  A velocity written wakes a sleeping body, as any game's write does.
+- **The character is slowed to what it pushes, not stopped and not
+  unslowed.** Unity keeps the controller's speed and lets the crate lag;
+  a wall takes it all. Neither feels like pushing: the velocity `Slide`
+  answers keeps, into a pushed wall or ceiling, the speed the body's contact
+  point now has (at most the character's) — a light crate is walked on at
+  full speed, a heavy one at its own pace, building up as it does — so a
+  game accelerating from the slide's velocity pushes smoothly. A body it
+  stands on is pressed (a seesaw tips under it) but the speed into a floor
+  is taken off as on any floor: kept, gravity would pile up in it while the
+  crate on the ground cannot move.
+- **Constant speed on slopes covers the same ground across** (Godot's
+  `floor_constant_speed`, `character/slope.rs`): on the ground and not
+  rising, a floor met turns what is left of the move along it, as far
+  across as it had to go, and a walk down the slope it stands on runs along
+  it from the start rather than off into the air for `snap` to bring back
+  (it needs no snap at all). The velocity kept is the walk across, with no
+  part up or down, so the next move starts level and a crest is not flown
+  off. Godot keeps the speed *along* the slope; across is what a level is
+  laid out in, so where a character is does not depend on the ground it
+  crossed. Off, nothing changes: the part of a
+  walk into a slope is taken off as before.
+
 Rejected: **a dynamic body with friction and a ground ray** — what the
-platformer example does, and it slides on slopes and pushes crates; fine for
-that game, not for a controller; **a capsule shape first** — the usual cure
+platformer's walker was until stage 123 (it slid on slopes; it now walks as
+a character with a push force); fine for a crate, not for a controller;
+**a capsule shape first** — the usual cure
 for seams, but a third collider shape touches every narrow-phase pair; the
 step handles seams for boxes, and a capsule can come with its own stage;
-**stepped or bisected casts** — approximate, and they tunnel.
+**stepped or bisected casts** — approximate, and they tunnel; **pushing by
+moving the body's transform** — through the solver's back, into walls;
+**the push applied during the move, the character moving on through the
+space it made** — the body would have to be cast out of the way first, and a
+body against a wall would let the character into it; **a push scaled by the
+character's mass** — a character has none; a force is what a designer tunes.
 
 - **Not yet**: moving platforms (the floor's motion carried), pushing
   dynamic bodies, constant speed on slopes, one-way platforms, a capsule
-  (all but pushing and constant speed since landed: 68, 75a).
+  (all landed: 68, 75a, 123); a pushed body pushing back on the character
+  (it is moved by the game, not by contacts); a push from the character's
+  own overlap or snap (only motion pushes).
 
 Pinned by `query/shape/tests.rs` (a box at a wall, onto a turned floor, a
 slide along a floor not hitting it, the way out of an overlap, a circle at
@@ -4425,8 +4478,16 @@ wall taking the speed into it, a gentle slope climbed and a steep one a
 wall, standing on a slope with and without `stop_on_slope`, a jump ending
 on a ceiling, snapping down a slope and falling off a ledge, pushed out of
 an overlap, a V corner, a floor of tiles without seams, a low ledge stepped
-onto and a high one not). `cargo run -p voltra-core --example character`
-walks it.
+onto and a high one not — `tests/character/slide.rs`; pushing a crate and
+walking on at full speed, a heavier crate moving less and slowing it, a push
+of zero a wall, a crate against a wall never into it nor the character into
+the crate, one met low turning and one met square not, a crate despawned
+mid-push and one stood on — `push.rs`; constant speed up and down a slope
+against off, on the flat the same, a jump off a slope not turned along it —
+`slopes.rs`), `character/push.rs` (the contact point of two faces, a corner
+and a circle) and `character/slope.rs`. `cargo run -p voltra-core --example
+character` walks it and pushes a crate; the platformer's walker pushes its
+crates and climbs its hill at constant speed (`tests/terrain.rs`).
 
 ### Every shape is a hull grown by a radius; boxes and circles keep fast paths
 
@@ -4629,16 +4690,31 @@ platform moved by a kinematic body, an animation clip or the game's code
 carries the same; Godot's velocity-based carry misses the last two.
 `platform_velocity` is what a game adds to a jump off one.
 
-Rejected: **one-way as a collision-layer trick** — layers are symmetric;
-**a carry by the floor's `RigidBody` velocity** — see above.
+**A turning floor turns the character too, when it asks**
+(`CharacterBody2D::carry_rotation`, stage 123, off by default): the carry's
+turn since the floor was stood on is added to the character's own
+`Transform` rotation before the move, so the move casts the turned shape
+and an edge turned into the floor is pushed out of as any overlap. Off is
+the default because the common character is a capsule kept upright; Godot
+leaves the body's rotation alone, Unity's `CharacterController` cannot turn
+at all. `up` stays the world's: a character turned by its floor still calls
+what faces `up` a floor.
 
-- **Not yet**: carrying the character's own rotation with a turning floor;
-  dynamic bodies riding animated (non-kinematic) platforms by friction.
+Rejected: **one-way as a collision-layer trick** — layers are symmetric;
+**a carry by the floor's `RigidBody` velocity** — see above; **turning `up`
+with the floor** — a floor tilted past `floor_max_angle` would still be one.
+
+- **Not yet**: carrying the character's own rotation with a turning floor
+  (landed: 123); dynamic bodies riding animated (non-kinematic) platforms
+  by friction.
 
 Pinned by `tests/one_way.rs` (a body landing on a platform, one thrown up
 from below passing through and landing on top, a solid one still stopping
 it, a character jumping up through and standing, a character carried by a
-platform moving, rising and turning, and nothing once it is gone), the
+platform moving, rising and turning, and nothing once it is gone),
+`tests/character/turning.rs` (turned with a tilting lift only with
+`carry_rotation`, carried round its centre either way, and not turned once
+it is gone), the
 cast's one-way test, and the component's format test. The `character`
 example has a one-way ledge and a lift moved by `animations/lift.anim.ron`.
 
