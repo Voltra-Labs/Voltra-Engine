@@ -192,24 +192,28 @@ pub(crate) fn turns(ui: &mut Ui, paint: &mut Paint) {
         let size = paint.stamp.size();
         ui.label(format!("stamp {}×{}", size.x, size.y));
         if ui
-            .button("⟲")
+            .button(crate::icons::ROTATE_CCW)
             .on_hover_text("turn anticlockwise (Shift+Z)")
             .clicked()
         {
             paint.stamp = paint.stamp.rotated_ccw();
         }
-        if ui.button("⟳").on_hover_text("turn clockwise (Z)").clicked() {
+        if ui
+            .button(crate::icons::ROTATE_CW)
+            .on_hover_text("turn clockwise (Z)")
+            .clicked()
+        {
             paint.stamp = paint.stamp.rotated_cw();
         }
         if ui
-            .button("⇔")
+            .button(crate::icons::MIRROR_X)
             .on_hover_text("mirror left to right (X)")
             .clicked()
         {
             paint.stamp = paint.stamp.mirrored_x();
         }
         if ui
-            .button("⇕")
+            .button(crate::icons::MIRROR_Y)
             .on_hover_text("mirror top to bottom (Y)")
             .clicked()
         {

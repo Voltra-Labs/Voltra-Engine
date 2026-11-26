@@ -131,7 +131,7 @@ impl AtlasFile {
     /// The file as RON, laid out one frame to a line, for a pull request to
     /// read and a diff to show the frame that changed.
     pub fn to_ron(&self) -> Result<String, ron::Error> {
-        let config = ron::ser::PrettyConfig::new()
+        let config = crate::pretty_ron()
             .depth_limit(2)
             .struct_names(false)
             .compact_arrays(false);

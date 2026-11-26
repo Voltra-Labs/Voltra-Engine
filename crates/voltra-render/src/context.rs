@@ -33,6 +33,7 @@ impl GpuContext {
     /// through [`GpuContext::new_async`].
     #[cfg(not(target_arch = "wasm32"))]
     pub fn new(target: impl Into<SurfaceTarget<'static>>, width: u32, height: u32) -> Self {
+        let _opening = crate::device_open::opening();
         pollster::block_on(Self::new_async(target, width, height))
     }
 
@@ -113,6 +114,7 @@ impl GpuContext {
     /// The format is the sRGB one a window most often gets, so a frame drawn
     /// here matches a window's.
     pub fn headless(width: u32, height: u32) -> Option<Self> {
+        let opening = crate::device_open::opening();
         let instance =
             wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
         let adapter =
@@ -125,6 +127,7 @@ impl GpuContext {
             ..Default::default()
         }))
         .ok()?;
+        drop(opening);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8UnormSrgb,

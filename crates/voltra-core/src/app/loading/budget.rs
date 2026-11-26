@@ -133,14 +133,17 @@ mod tests {
 
     #[test]
     fn a_unit_is_dated_by_the_check_that_let_it_start() {
-        let mut budget = FrameBudget::new(Duration::from_millis(5));
+        // Wide margins: a 1 ms sleep lasts a whole 15.6 ms timer tick on
+        // Windows, longer on a loaded machine, and a 5 ms budget was spent
+        // before the check one run in a few.
+        let mut budget = FrameBudget::new(Duration::from_millis(50));
         let unit = budget.begin();
         budget.end(unit);
         std::thread::sleep(Duration::from_millis(1));
         assert!(budget.has_time());
         // Time passes between the check and the start, as it does on a
         // busy machine: the start is still the moment the budget said yes.
-        std::thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(60));
         let unit = budget.begin();
         budget.end(unit);
         let stats = budget.finish();

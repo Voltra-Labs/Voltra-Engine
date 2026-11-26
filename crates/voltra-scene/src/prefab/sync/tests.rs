@@ -51,8 +51,7 @@ fn authoring() -> Authoring {
 /// file on disk would be — so its values are not in a world's own spelling.
 fn prefab_of(world: &World) -> Prefab {
     let file = to_scene_file(world, &registry()).expect("saves");
-    let text =
-        ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default()).expect("writes");
+    let text = ron::ser::to_string_pretty(&file, voltra_assets::pretty_ron()).expect("writes");
     let file: SceneFile = ron::from_str(&text).expect("reads");
     Prefab::new(file)
         .expect("this build's version")

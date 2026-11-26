@@ -54,8 +54,8 @@ impl Mixer {
 
         let (sum, rest) = self.scratch.split_at_mut(stride);
         let sum = &mut sum[..used];
-        for bus in 1..MAX_BUSES {
-            if !active[bus] {
+        for (bus, &on) in active.iter().enumerate().skip(1) {
+            if !on {
                 self.buses[bus].advance(u32::try_from(frames).unwrap_or(u32::MAX));
                 continue;
             }

@@ -194,21 +194,11 @@ pub fn depth(world: &World, entity: Entity) -> usize {
 ///
 /// Cycle-safe: an entity already reported is never walked a second time, so a
 /// hand-edited file that loops cannot make this list grow forever.
+///
+/// One pass over the world's links ([`ChildIndex`](super::ChildIndex)), not
+/// one per entity reached: a parent of 100k children is linear, not quadratic.
 pub fn descendants(world: &World, entity: Entity) -> Vec<Entity> {
-    let mut found = Vec::new();
-    let mut seen = HashSet::from([entity]);
-    let mut frontier = vec![entity];
-
-    while let Some(current) = frontier.pop() {
-        for child in children_of(world, current) {
-            if seen.insert(child) {
-                found.push(child);
-                frontier.push(child);
-            }
-        }
-    }
-
-    found
+    super::ChildIndex::new(world).descendants(entity)
 }
 
 /// Despawns `entity` and everything under it, returning what went.

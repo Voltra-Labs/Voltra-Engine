@@ -111,7 +111,7 @@ fn shape_fields(ui: &mut Ui, shape: &mut TileShape) -> Option<&'static str> {
                     claim = claim
                         .or(active(&x, "Set tile shape"))
                         .or(active(&y, "Set tile shape"));
-                    if ui.small_button("✕").clicked() {
+                    if ui.small_button(crate::icons::REMOVE).clicked() {
                         remove = Some(i);
                     }
                 });
@@ -144,7 +144,7 @@ fn custom_values(ui: &mut Ui, data: &mut TileData) -> Option<&'static str> {
             ui.horizontal(|ui| {
                 ui.label(key);
                 claim = claim.or(value_field(ui, value));
-                if ui.small_button("✕").clicked() {
+                if ui.small_button(crate::icons::REMOVE).clicked() {
                     remove = Some(key.clone());
                 }
             });

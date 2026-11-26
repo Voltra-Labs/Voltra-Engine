@@ -50,6 +50,9 @@ struct Walk {
     click: Option<(Entity, Click)>,
     /// What a search left to show; `None` shows everything.
     filter: Option<HierarchyFilter>,
+    /// Every row's children, read once for the whole walk: asking the world
+    /// per row made the panel quadratic in the entity count.
+    children: hierarchy::ChildIndex,
 }
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
@@ -78,7 +81,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 return;
             }
 
-            let mut walk = Walk::default();
+            let mut walk = Walk {
+                children: hierarchy::ChildIndex::new(frame.world),
+                ..Walk::default()
+            };
             let query = Query::parse(&editor.hierarchy_search);
             if !query.is_empty() {
                 let found = filter(frame.world, &editor.registry, &query);
@@ -221,7 +227,8 @@ fn row(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity
         });
     }
 
-    let children = hierarchy::children_of(frame.world, entity);
+    // Copied out: the rows below borrow the walk mutably.
+    let children = walk.children.children(entity).to_vec();
     if children.is_empty() {
         return;
     }

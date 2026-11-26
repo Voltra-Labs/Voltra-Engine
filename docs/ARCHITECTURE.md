@@ -7707,7 +7707,8 @@ all in view through `Headless::screenshot`: 47 ms a frame at 320×180,
 56 ms at 1280×720 (10k sprites: 5 ms and 11 ms; none: 0.7 ms and 5.5 ms).
 The CPU's share of it — batch 6.3 ms plus upload 0.6 ms — is under half a
 60 fps frame; the rest is lavapipe running the vertex and fragment stages
-in software. A windowed run on the reference GPU is still owed.
+in software. Stage 119 measured it in a window on an RTX 4060 Ti (below):
+the GPU's share is 0.19 ms, the CPU's 13 ms.
 
 Pinned by `voltra-render`'s `quad.rs` tests (layout matches the struct,
 corners round-trip, a turned tile's UVs, a kite refused) and
@@ -7718,6 +7719,73 @@ batch, cull, material, tilemap-cache (cached and fresh are the same
 instances) and `placed.rs` tests, `transform.rs`'s bit-for-bit test, every
 headless screenshot test of `voltra-scene` and `voltra-render`, and the two
 Playwright tests on both backends.
+
+### A hardware pass: what Windows and a real GPU found
+
+Stage 119. Every stage before it was built and checked on a Linux VM with no
+GPU — lavapipe for pictures, Xvfb for windows, no audio device. This pass
+ran everything on Windows 11 with an RTX 4060 Ti (Vulkan, driver 621.24):
+the workspace tests (2587), every `#[ignore]`d editor test through the
+bridge, hot reload end to end, the player, the editor and the four samples
+in windows, the arena hosted, joined and served dedicated, `dist` native
+and web, the web tests in a desktop Chrome on SwiftShader and on the GPU's
+own WebGPU, `xtask guide`, clippy and the benchmarks. What it found, each
+fixed with a test that fails without the fix:
+
+- **Opening devices from two threads could deadlock.** With every backend
+  enabled, `wgpu::Instance::new` brings up the Vulkan and the GL drivers;
+  NVIDIA's deadlock when two threads do it at once (`WGPU_BACKEND=vulkan,gl`
+  alone hung 8 runs in 12). Instance, adapter and device are created under
+  one process-wide lock, `voltra_render::device_open::opening`, which
+  `voltra-testkit` takes too. Pinned by `tests/headless_concurrent.rs`
+  (eight threads, a deadline instead of a hang).
+- **`Game::start` ran on an empty world in a game's own binary.**
+  `App::load_scene` replaced the world at the end of the first frame, so
+  the platformer's start found no Walker and counted no coins — fine in the
+  editor, which plays an open scene. The starting scene now opens at the
+  top of the frame, before the tick, as Unity loads it before `Start` and
+  Godot before `_ready`. Pinned by `the_starting_scene_is_in_before_the_first_tick`.
+- **The hierarchy was quadratic.** `children_of` scans every `Parent`
+  link; the editor's panel and `descendants` asked it once per entity, so a
+  parent of 100k children took 7 s a frame to draw (and deleting it would
+  have hung). `hierarchy::ChildIndex` reads the links once per walk.
+- **RON was written with CRLF on Windows** (`PrettyConfig::default()`'s
+  `new_line`), so a file saved there differed from the same file saved
+  elsewhere. Every writer starts from `voltra_assets::pretty_ron()`.
+- **Seven toolbar and inspector icons were empty boxes**: glyphs none of
+  egui's built-in fonts hold, never seen because the bridge's screenshot is
+  the viewport only. They live in `voltra-editor/src/icons.rs`, checked
+  against the fonts' character maps.
+- **The web page logged a 404 in every desktop browser** (no icon declared,
+  so `/favicon.ico` was asked for; CI's headless shell never asks). It
+  declares an empty one.
+- **`cargo xtask guide` ran WSL's bash**: `Command::new("bash")` searches
+  System32 before `PATH` on Windows. The first `bash.exe` on `PATH` outside
+  Windows' own folders is used.
+- A loading-budget test slept 1 ms against a 5 ms budget; Windows sleeps a
+  15.6 ms timer tick. Its margins are now 50 and 60 ms.
+
+**100k sprites in a window.** The 100k unit sprites of stage 108, all in
+view, in the release editor through `editor_profile`: the scene pass takes
+**0.19 ms on the GPU** and the frame's own drawing **13 ms on the CPU**
+(batch and upload). The engine draws 100k sprites at 60 fps on this
+machine, CPU-bound with the GPU idle; `batch/sprites/100k` stays the budget
+that is not met. The editor itself does not: its hierarchy lays out every
+row each frame, 190 ms for 100k — the panel needs virtual rows.
+
+**The benchmarks on Windows** (release, the same machine): `frame/headless`
+0.66 ms (2.3 ms on lavapipe); everything else within 10 % of the Linux
+column except what allocates — `tilemap/mesh` 2.7 ms, `labels-100` 1.1 ms,
+`parse/250` 5.1 ms, `parse/500` 10.8 ms, each 1.3–1.8 × the Linux run and
+just over its budget. The budgets are judged on CI's Linux runner, so CI
+stays green; Windows' system allocator is the likely difference, unmeasured.
+
+**Left as they are, noted:** the Vulkan loader's warnings came from a
+third-party overlay's layer on this machine, not from the engine; a game
+binary and its `cdylib` share a `.pdb` name on Windows (cargo #6313: the
+second link overwrites the first's debug symbols), and MSVC's localized
+"creating library" line trips rustc's `linker_messages` lint as a warning;
+every sample game logs a warning that it has no `locale/en.ron`.
 
 ### wgpu 30 API notes
 
@@ -7787,6 +7855,7 @@ Same problem, same rule: read the source, not a tutorial.
 | Thing | egui 0.35 |
 | --- | --- |
 | Frame | `Context::run` is gone; `Context::run_ui(input, \|ui\|)` hands out a root `Ui` |
+| Glyph coverage | `FontsView::has_glyphs` / `Font::has_glyph` compare *faces*: every glyph in the face holding the replacement character reads as missing (`▶`, `⬛`, `💧` in the defaults). Read the fonts' character maps instead (`FontDefinitions::default().font_data`, `fontdue::Font::lookup_glyph_index`) |
 | Panels | `SidePanel` and `TopBottomPanel` are merged into `Panel::{left,right,top,bottom}` |
 | Panel host | `Panel::show` and `CentralPanel::show` take a `&mut Ui`, not a `&Context` |
 | Panel size | `default_size`, not `default_width` / `default_height` |

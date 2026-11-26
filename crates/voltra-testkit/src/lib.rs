@@ -49,6 +49,7 @@ pub const CLEAR: wgpu::Color = wgpu::Color {
 /// Returns `None` when the machine has no usable adapter, so a CI runner
 /// without a GPU skips rather than fails.
 pub fn headless_device() -> Option<(wgpu::Device, wgpu::Queue)> {
+    let _opening = voltra_render::device_open::opening();
     let instance =
         wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
 

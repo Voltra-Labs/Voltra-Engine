@@ -430,6 +430,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 116 | Prediction and reconciliation of the local player | done |
 | 117 | Network play in the editor: clients, link conditions, counters | done |
 | 118 | `games/arena`: a networked sample, native and web | done |
+| 119 | Hardware pass: Windows and a real GPU, and what they found | done |
 
 ## Contributing
 

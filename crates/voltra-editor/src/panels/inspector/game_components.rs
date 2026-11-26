@@ -96,7 +96,7 @@ fn component(
     ui.horizontal(|ui| {
         ui.label(name);
         if ui
-            .small_button("✕")
+            .small_button(crate::icons::REMOVE)
             .on_hover_text(format!("remove {name}"))
             .clicked()
             && registry.remove_one(world, entity, name)

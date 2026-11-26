@@ -48,10 +48,10 @@ impl PaintTool {
     /// The glyph the toolbar draws for this tool.
     pub fn glyph(self) -> &'static str {
         match self {
-            Self::Brush => "🖌",
-            Self::Rectangle => "⬛",
-            Self::Eraser => "⌫",
-            Self::Fill => "💧",
+            Self::Brush => crate::icons::BRUSH,
+            Self::Rectangle => crate::icons::RECTANGLE,
+            Self::Eraser => crate::icons::ERASER,
+            Self::Fill => crate::icons::FILL,
         }
     }
 

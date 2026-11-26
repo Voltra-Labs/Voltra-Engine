@@ -21,11 +21,13 @@
 //!
 //! [`Transform`]: crate::Transform
 
+pub mod child_index;
 pub mod link;
 pub mod parent;
 pub mod resolve;
 pub mod world_transform;
 
+pub use child_index::ChildIndex;
 pub use link::{
     ancestors, can_parent, children_of, clear_parent, depth, descendants, despawn_recursive,
     is_ancestor, parent_of, roots, set_parent, HierarchyError, MAX_DEPTH,

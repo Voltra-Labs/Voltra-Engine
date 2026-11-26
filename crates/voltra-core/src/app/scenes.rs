@@ -41,6 +41,9 @@ pub(super) enum Request {
 #[derive(Debug, Default)]
 pub(super) struct Scenes {
     pub(super) requests: Vec<Request>,
+    /// What [`App::load_scene`] asked for, opened before the next frame's
+    /// tick rather than after it.
+    opening: Vec<AssetPath>,
     next: u32,
     loaded: HashMap<SceneLoad, Vec<Entity>>,
     pub(super) loading: super::loading::Loading,
@@ -75,11 +78,22 @@ impl Tick<'_> {
 
 impl App {
     /// Starts in the scene at `path`: it replaces whatever the world holds
-    /// at the end of the first frame, as a tick's
-    /// [`Tick::load_scene`] does, and through the same reads — the asset
-    /// pack in a browser. What a game with its own binary opens with.
+    /// at the top of the next frame, before the tick — so a game's
+    /// [`Game::start`](crate::Game::start) looks over the scene, as it does
+    /// when the editor plays (Unity loads the first scene before `Start`,
+    /// Godot before `_ready`). Read as a tick's [`Tick::load_scene`] is —
+    /// the asset pack in a browser. What a game with its own binary opens
+    /// with.
     pub fn load_scene(&mut self, path: &AssetPath) {
-        self.scenes.requests.push(Request::Replace(path.clone()));
+        self.scenes.opening.push(path.clone());
+    }
+
+    /// Opens what [`App::load_scene`] asked for, in order. Called at the top
+    /// of a frame, before anything reads the world.
+    pub(super) fn open_requested_scenes(&mut self) {
+        for path in std::mem::take(&mut self.scenes.opening) {
+            self.replace_scene(&path);
+        }
     }
 
     /// Carries out every scene request the frame's ticks made, in order.
