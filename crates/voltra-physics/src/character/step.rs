@@ -14,7 +14,8 @@ use voltra_scene::Transform;
 
 use crate::query::ShapeHit;
 
-use super::{Mover, TOUCH};
+use super::slide::Mover;
+use super::TOUCH;
 
 /// Where a step leaves the character, and the floor it landed on.
 pub(super) struct Step {
