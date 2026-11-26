@@ -43,6 +43,17 @@ pub fn draw(world: &World, lines: &mut LineBatch) {
                 .get::<Transform>(entity)
                 .map(|t| Joint2D::anchor_in_world(t, anchor))
         };
+        // A line joint with no axis joins nothing in the solver: nothing is
+        // drawn for it either.
+        let axis = match joint.kind {
+            JointKind::Wheel { axis, .. } | JointKind::Prismatic { axis, .. } => {
+                match axis.try_normalize() {
+                    Some(axis) => axis,
+                    None => continue,
+                }
+            }
+            _ => Vec2::ZERO,
+        };
         // What `b`'s space turns by: the world's is none.
         let b_turn = end
             .b
@@ -65,10 +76,7 @@ pub fn draw(world: &World, lines: &mut LineBatch) {
         mark(lines, a, JOINT_COLOR);
         mark(lines, b, b_color);
         match joint.kind {
-            JointKind::Wheel { axis, limit, .. } | JointKind::Prismatic { axis, limit, .. } => {
-                let Some(axis) = axis.try_normalize() else {
-                    continue;
-                };
+            JointKind::Wheel { limit, .. } | JointKind::Prismatic { limit, .. } => {
                 let axis = Vec2::from_angle(b_turn).rotate(axis);
                 let (lower, upper) = limit.map_or((-REACH, REACH), |l| (l.lower, l.upper));
                 lines.push(b + axis * lower, b + axis * upper, WIDTH, LIMIT_COLOR);
@@ -187,8 +195,12 @@ mod tests {
     }
 
     #[test]
-    fn a_zero_axis_draws_no_axis() {
-        assert!(limit_segments(JointKind::prismatic(Vec2::ZERO)).is_empty());
+    fn a_zero_axis_draws_nothing_as_the_solver_joins_nothing() {
+        let joint = Joint2D {
+            kind: JointKind::prismatic(Vec2::ZERO),
+            ..Joint2D::default()
+        };
+        assert!(drawn(Transform::default(), joint).is_empty());
     }
 
     #[test]
