@@ -9,28 +9,38 @@ use super::revolute::limit_terms;
 use super::{JointConstraint, Side};
 use crate::solver::Softness;
 
-/// The spring and the limits along `line`'s axis. The spring acts in the
-/// relax pass too, as every joint spring does; the limits are speculative
-/// inside and soft past them.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn solve(
+/// The spring along `line`'s axis, towards its rest. It acts in the relax
+/// pass too, as every joint spring does.
+pub(super) fn spring(
     joint: &mut JointConstraint,
     a: &mut Side,
     b: &mut Side,
     line: &Line,
-    (spring, limit): (Option<RestSpring>, Option<TranslationLimit>),
+    spring: Option<RestSpring>,
+) {
+    let Some(spring) = spring.filter(|s| s.hertz > 0.0) else {
+        return;
+    };
+    let s = joint.spring;
+    let c = line.translation - spring.rest;
+    let impulse = -s.mass_scale * line.axial_mass * (line.along_speed(a, b) + s.bias_rate * c)
+        - s.impulse_scale * joint.impulses.spring;
+    joint.impulses.spring += impulse;
+    line.push_along(a, b, impulse);
+}
+
+/// The limits along `line`'s axis: speculative inside, soft past them.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn limits(
+    joint: &mut JointConstraint,
+    a: &mut Side,
+    b: &mut Side,
+    line: &Line,
+    limit: Option<TranslationLimit>,
     softness: Softness,
     h: f32,
     use_bias: bool,
 ) {
-    if let Some(spring) = spring.filter(|s| s.hertz > 0.0) {
-        let s = joint.spring;
-        let c = line.translation - spring.rest;
-        let impulse = -s.mass_scale * line.axial_mass * (line.along_speed(a, b) + s.bias_rate * c)
-            - s.impulse_scale * joint.impulses.spring;
-        joint.impulses.spring += impulse;
-        line.push_along(a, b, impulse);
-    }
     let Some(limit) = limit else {
         return;
     };

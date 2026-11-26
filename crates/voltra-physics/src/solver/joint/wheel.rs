@@ -42,7 +42,8 @@ pub(super) fn solve(
     // Where the bodies are does not change within a solve, only how fast
     // they move: the line is worked out once.
     let line = Line::now(joint, a, b);
-    slide::solve(joint, a, b, &line, (spring, limit), softness, h, use_bias);
+    slide::spring(joint, a, b, &line, spring);
+    slide::limits(joint, a, b, &line, limit, softness, h, use_bias);
 
     let (mut bias, mut mass_scale, mut impulse_scale) = (0.0, 1.0, 0.0);
     if use_bias {

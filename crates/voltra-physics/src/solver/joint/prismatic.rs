@@ -9,8 +9,8 @@ use super::line::Line;
 use super::{block, slide, JointConstraint, Side};
 use crate::solver::Softness;
 
-/// One solve, in Box2D's order: the spring and the motor, the limits, then
-/// the line and the angle together — solved last, so they win.
+/// One solve, in Box2D's order: the spring, the motor, the limits, then the
+/// line and the angle together — solved last, so they win.
 pub(super) fn solve(
     joint: &mut JointConstraint,
     a: &mut Side,
@@ -30,6 +30,7 @@ pub(super) fn solve(
         return;
     };
     let line = Line::now(joint, a, b);
+    slide::spring(joint, a, b, &line, spring);
     if let Some(motor) = motor {
         let impulse = line.axial_mass * (motor.speed - line.along_speed(a, b));
         let max = h * motor.max_force.max(0.0);
@@ -37,7 +38,7 @@ pub(super) fn solve(
         joint.impulses.motor = (old + impulse).clamp(-max, max);
         line.push_along(a, b, joint.impulses.motor - old);
     }
-    slide::solve(joint, a, b, &line, (spring, limit), softness, h, use_bias);
+    slide::limits(joint, a, b, &line, limit, softness, h, use_bias);
 
     // Across the line and about the joint at once: a 2×2 block, as Box2D
     // solves it, since a push across the line turns the bodies too.
