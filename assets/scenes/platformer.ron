@@ -46,6 +46,16 @@
             },
         ),
         (
+            id: "01a209f1-ecd7-7812-b93b-95c9a1d0c4a7",
+            components: {
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "Name": "Heavy crate",
+                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:0.5,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false,can_sleep:true,bullet:false),
+                "Sprite": (color:(0.55,0.35,0.2,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform": (translation:(-5.0,-1.9),rotation:0.0,scale:(0.9,0.9)),
+            },
+        ),
+        (
             id: "01a209f1-ecd7-7812-b93b-95df2ec323df",
             components: {
                 "AudioSource": (clip:Some(Path("audio/coin.wav")),volume:1.0,pitch:1.0,looping:false,play_on_spawn:false,range:0.0,bus:"sfx"),
@@ -174,11 +184,10 @@
         (
             id: "01a209f1-ecd7-7812-b93b-969970abf61c",
             components: {
+                "CharacterBody2D": (up:(0.0,1.0),floor_max_angle:0.7853982,skin:0.01,snap:0.1,step_height:0.05,stop_on_slope:true,max_slides:4,push_force:20.0,constant_speed_on_slopes:true,carry_rotation:false),
                 "Collider": Box(half_extents:(0.5,0.5)),
                 "Name": "Walker",
                 "Persistent": (),
-                "PhysicsMaterial": (friction:0.0,restitution:0.0),
-                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:1.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:true,can_sleep:true,bullet:false),
                 "Sprite": (color:(0.35,0.75,1.0,1.0),sort_order:10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(0.7,1.2)),
                 "Walker": (),

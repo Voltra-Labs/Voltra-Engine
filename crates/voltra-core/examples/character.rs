@@ -1,6 +1,7 @@
 //! A character moved by `move_and_slide`: walls stop it, slopes are walked
-//! up or slid down by their angle, a floor of tiles has no seams, a low step
-//! is stepped onto, a jump ends on a ceiling, a one-way platform is jumped
+//! up — at the speed it walks on the flat — or slid down by their angle, a
+//! crate is pushed, a floor of tiles has no seams, a low step is stepped
+//! onto, a jump ends on a ceiling, a one-way platform is jumped
 //! up through, a lift — an animation clip — carries it, and the camera
 //! follows with slack, a lead and the level's bounds, and shakes on a hard
 //! landing. A state machine picks the character's motion from what the step
@@ -21,7 +22,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
     AnimationPlayer, Animator, Camera, CameraFollow2D, CameraShake, CharacterBody2D, Collider,
-    FollowBounds, OneWay, SceneId, Sprite, Transform,
+    FollowBounds, OneWay, RigidBody, SceneId, Sprite, Transform,
 };
 
 /// World units per second at full tilt.
@@ -165,6 +166,15 @@ fn spawn_level(app: &mut App) -> Entity {
     // A wall at the left end, and a ceiling low enough to bump.
     block(app, Vec2::new(-6.25, 1.5), Vec2::new(0.25, 1.5), 0.0, stone);
     block(app, Vec2::new(-3.0, 1.6), Vec2::new(1.5, 0.15), 0.0, stone);
+    // A crate to push, a dynamic body the step moves.
+    let crate_ = block(
+        app,
+        Vec2::new(-4.5, 0.4),
+        Vec2::splat(0.3),
+        0.0,
+        [0.75, 0.5, 0.3, 1.0],
+    );
+    app.world.insert(crate_, RigidBody::new_dynamic(1.0));
     // A low step, stepped onto, and a high one, jumped onto.
     block(app, Vec2::new(1.5, 0.02), Vec2::new(0.5, 0.02), 0.0, moss);
     block(app, Vec2::new(3.0, 0.2), Vec2::new(0.5, 0.2), 0.0, moss);
@@ -209,7 +219,14 @@ fn spawn_level(app: &mut App) -> Entity {
             half_extents: Vec2::splat(0.5),
         },
     );
-    app.world.insert(me, CharacterBody2D::default());
+    app.world.insert(
+        me,
+        CharacterBody2D {
+            push_force: 15.0,
+            constant_speed_on_slopes: true,
+            ..CharacterBody2D::default()
+        },
+    );
     // Idle, walk, run, jump and fall, each a clip that squashes and tints
     // it, and a layer that squashes it on landing.
     match AssetPath::new("animations/hero.animator.ron") {

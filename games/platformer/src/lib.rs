@@ -3,14 +3,15 @@
 //!
 //! What the two turns are for, in the smallest game that shows it. The edge
 //! — the frame the jump key went down — is read in [`Game::update`], because
-//! that is the only place an edge is seen exactly once. The forces are
-//! applied in [`Game::fixed_update`], because a velocity written per frame is
-//! scaled by the frame rate. Unity and Godot split `Update`/`FixedUpdate`
+//! that is the only place an edge is seen exactly once. The walker is
+//! moved in [`Game::fixed_update`], because a move made per frame is scaled
+//! by the frame rate. Unity and Godot split `Update`/`FixedUpdate`
 //! and `_process`/`_physics_process` over the same two facts.
 //!
 //! The level is `scenes/platformer.ron`, authored like any scene; the game
 //! finds what it acts on there by its own components ([`components`]): the
-//! [`Walker`](components::Walker) the keys move, every
+//! [`Walker`](components::Walker) the keys move — a `CharacterBody2D` that
+//! pushes the level's crates — every
 //! [`Coin`](components::Coin), the [`Goal`](components::Goal) and the
 //! [`CoinCounter`](components::CoinCounter). `A`/`D` or the arrows walk,
 //! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump — and
@@ -122,7 +123,7 @@ impl Game for Platformer {
         if self.menu.is_open() {
             // Paused: the walker stands where it is, whatever is held.
             self.jump = false;
-            walker::halt(tick.world, walker);
+            walker::halt(tick, walker);
             return;
         }
         let worth = coins::take(tick, walker);
@@ -143,6 +144,7 @@ impl Game for Platformer {
         let jump = std::mem::take(&mut self.jump);
         walker::steer(tick, walker, jump);
         ladder::climb(tick, walker);
+        walker::step(tick, walker);
     }
 }
 
