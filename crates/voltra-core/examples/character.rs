@@ -6,7 +6,8 @@
 //! landing. A state machine picks the character's motion from what the step
 //! sets: on the ground a blend tree mixes idle, walk and run by its speed —
 //! it speeds up over a moment, so the mix passes through the walk — and in
-//! the air a jump or fall clip.
+//! the air a jump or fall clip. An additive layer squashes it on every
+//! landing, over whatever the ground or air state plays.
 //!
 //! Run it with `cargo run -p voltra-core --example character`. `A`/`D` or
 //! the arrow keys walk, `Space` jumps.
@@ -94,6 +95,10 @@ fn main() {
                         animator.set_float("speed", velocity.x.abs());
                         animator.set_float("rising", velocity.y);
                         animator.set_bool("grounded", slide.contact.on_floor);
+                        if landed {
+                            // The impact layer's squash, over the rest.
+                            animator.trigger("landed");
+                        }
                     }
                 }
                 None => log::error!("the character lost its body or collider"),
@@ -205,7 +210,8 @@ fn spawn_level(app: &mut App) -> Entity {
         },
     );
     app.world.insert(me, CharacterBody2D::default());
-    // Idle, run, jump and fall, each a clip that squashes and tints it.
+    // Idle, walk, run, jump and fall, each a clip that squashes and tints
+    // it, and a layer that squashes it on landing.
     match AssetPath::new("animations/hero.animator.ron") {
         Ok(machine) => {
             app.world.insert(me, Animator::new(machine));

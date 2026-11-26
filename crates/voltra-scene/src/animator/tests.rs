@@ -99,6 +99,7 @@ impl Rig {
 }
 
 mod crossfade;
+mod layers;
 mod tree;
 
 #[test]
@@ -232,8 +233,12 @@ fn the_shipped_machine_reads_whole_and_names_clips_that_are_there() {
     );
     let tree = machine.state("move").and_then(|s| s.tree.as_ref());
     assert_eq!(tree.map(BlendTree::len), Some(3), "idle, walk and run");
+    let impact = machine.layer("impact").expect("the landing's layer");
+    assert_eq!(impact.blend, crate::keyframes::LayerBlend::Additive);
+    assert_eq!(impact.transitions.len(), 2, "none dropped");
     let mut clips = AnimationClips::new(&root);
-    for state in &machine.states {
+    let layered = impact.states.iter().filter(|s| s.clip.is_some());
+    for state in machine.states.iter().chain(layered) {
         let named: Vec<&AssetPath> = match state.motion() {
             Motion::Clip(clip) => vec![clip],
             Motion::Tree(tree) => tree.clips().collect(),

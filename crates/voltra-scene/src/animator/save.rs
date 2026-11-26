@@ -8,8 +8,9 @@ use crate::ron_store::RonAssetError;
 
 impl StateMachines {
     /// Writes what the inspector edits of the loaded `path` — the
-    /// transitions' durations and the states' blend trees — into its file,
-    /// and nothing else of what is loaded.
+    /// transitions' durations, the states' blend trees and the layers'
+    /// weights, masks and blends, of every layer — into its file, and
+    /// nothing else of what is loaded.
     ///
     /// What is loaded is the machine [`checked`](super::StateMachine::checked):
     /// a transition naming a state that is not there, a second state of one
@@ -17,8 +18,10 @@ impl StateMachines {
     /// would delete them from the file, an author's typo turned into lost
     /// work by a click on a duration. So the file is read back as written,
     /// given the loaded durations
-    /// ([`take_durations`](super::StateMachine::take_durations)) and trees
-    /// ([`take_trees`](super::StateMachine::take_trees)) and written; what
+    /// ([`take_durations`](super::StateMachine::take_durations)), trees
+    /// ([`take_trees`](super::StateMachine::take_trees)) and layer settings
+    /// ([`take_layer_settings`](super::StateMachine::take_layer_settings))
+    /// and written; what
     /// loading dropped stays in the file, to be fixed there. A file that no
     /// longer reads is not written over.
     pub fn save_edits(&mut self, path: &AssetPath) -> Result<(), RonAssetError> {
@@ -26,6 +29,7 @@ impl StateMachines {
         let mut written = self.read_as_written(path)?;
         written.take_durations(self.get(handle));
         written.take_trees(self.get(handle));
+        written.take_layer_settings(self.get(handle));
         self.write(path, &written)
     }
 }

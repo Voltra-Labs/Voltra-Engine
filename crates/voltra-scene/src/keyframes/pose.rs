@@ -109,6 +109,17 @@ impl<'a> Pose<'a> {
         self.samples.push(sample);
     }
 
+    /// Every value, to change in place. The caller changes values only: a
+    /// target or property changed would break the order.
+    pub(super) fn samples_mut(&mut self) -> &mut [Sample<'a>] {
+        &mut self.samples
+    }
+
+    /// Keeps only the values `keep` answers true for — a layer's mask.
+    pub(super) fn retain(&mut self, keep: impl FnMut(&Sample<'a>) -> bool) {
+        self.samples.retain(keep);
+    }
+
     /// Drops every value, keeping the room for the next frame's.
     pub fn clear(&mut self) {
         self.samples.clear();

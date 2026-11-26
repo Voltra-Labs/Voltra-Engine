@@ -170,4 +170,5 @@ fn the_shipped_clip_reads_whole() {
 }
 
 mod fade;
+mod layers;
 mod synced;

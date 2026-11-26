@@ -3,45 +3,52 @@
 
 use voltra_ecs::{Entity, World};
 
+use super::graph::Graph;
 use super::machine::{Condition, Motion, ParamValue, State, StateMachine, Transition};
 use super::progress::{progress, Progress};
 use super::tree::BlendTree;
-use super::{Animator, StateMachines};
+use super::Animator;
 use crate::keyframes::AnimationClips;
 use crate::AnimationPlayer;
 
+/// Which of an animator's layers a step moves: layer 0 — the machine's own
+/// states, played by the entity's player — or one above it, played by that
+/// player's layer of the same place.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Slot {
+    /// The machine's own states.
+    Base,
+    /// `layers[i]` of the machine.
+    Layer(usize),
+}
+
+/// Moves one layer of the animator on `entity` along `graph` — the
+/// transition its parameters call for, taken, and the state entered — or,
+/// staying, has a tree state's weights follow the parameters.
 pub(super) fn step(
     world: &mut World,
-    machines: &mut StateMachines,
+    machine: &StateMachine,
+    graph: Graph<'_>,
     clips: &mut AnimationClips,
     entity: Entity,
+    slot: Slot,
 ) {
     let Some(animator) = world.get::<Animator>(entity) else {
         return;
     };
-    let Some(path) = animator.machine.as_ref() else {
-        return;
-    };
-    let handle = machines.load(path);
-    let machine = machines.get(handle);
-    let current = animator
-        .state
-        .current
-        .as_deref()
-        .filter(|_| animator.state.machine.as_ref() == Some(path))
-        .and_then(|name| machine.state(name));
+    let current = current(animator, slot).and_then(|name| graph.state(name));
     let next = match current {
         // Started, restarted, given another machine, or its state is gone
         // from a reloaded one: the start state.
-        None => machine.start_state().map(|s| (s.clone(), Vec::new(), 0.0)),
+        None => graph.start_state().map(|s| (s, Vec::new(), 0.0)),
         Some(state) => {
-            let progress = progress(world, clips, entity, state);
-            machine
+            let progress = progress(player(world, entity, slot), clips, state);
+            graph
                 .transitions
                 .iter()
                 .find(|t| leaves(t, &state.name) && passes(t, machine, animator, progress))
                 .and_then(|t| {
-                    let to = machine.state(&t.to)?.clone();
+                    let to = graph.state(&t.to)?;
                     let spent: Vec<String> = t
                         .conditions
                         .iter()
@@ -58,7 +65,7 @@ pub(super) fn step(
         // Staying: a tree's weights follow its parameters every frame.
         if let Some(Motion::Tree(tree)) = current.map(State::motion) {
             let input = input(tree, machine, animator);
-            drive(world, entity, tree, input);
+            drive(world, entity, slot, tree, input);
         }
         return;
     };
@@ -66,19 +73,53 @@ pub(super) fn step(
         Motion::Tree(tree) => input(tree, machine, animator),
         _ => [0.0; 2],
     };
-    let path = path.clone();
     if let Some(animator) = world.get_mut::<Animator>(entity) {
-        animator.state.current = Some(state.name.clone());
-        animator.state.machine = Some(path);
+        set_current(animator, slot, &state.name);
         for name in spent {
             animator.reset_trigger(&name);
         }
     }
-    if world.get::<AnimationPlayer>(entity).is_none() {
+    if slot == Slot::Base && world.get::<AnimationPlayer>(entity).is_none() {
         world.insert(entity, AnimationPlayer::default());
     }
-    if let Some(player) = world.get_mut::<AnimationPlayer>(entity) {
-        enter(player, &state, input, duration);
+    if let Some(player) = player_mut(world, entity, slot) {
+        enter(player, state, input, duration);
+    }
+}
+
+/// The state `slot` of `animator` is in, by name.
+fn current(animator: &Animator, slot: Slot) -> Option<&str> {
+    match slot {
+        Slot::Base => animator.state.current.as_deref(),
+        Slot::Layer(i) => animator.state.layers.get(i)?.current.as_deref(),
+    }
+}
+
+fn set_current(animator: &mut Animator, slot: Slot, name: &str) {
+    let current = match slot {
+        Slot::Base => &mut animator.state.current,
+        Slot::Layer(i) => match animator.state.layers.get_mut(i) {
+            Some(layer) => &mut layer.current,
+            None => return,
+        },
+    };
+    *current = Some(name.to_owned());
+}
+
+/// What plays `slot`: the entity's player, or its layer of that place.
+fn player(world: &World, entity: Entity, slot: Slot) -> Option<&AnimationPlayer> {
+    let player = world.get::<AnimationPlayer>(entity)?;
+    match slot {
+        Slot::Base => Some(player),
+        Slot::Layer(i) => player.layers().get(i).map(|l| &l.player),
+    }
+}
+
+fn player_mut(world: &mut World, entity: Entity, slot: Slot) -> Option<&mut AnimationPlayer> {
+    let player = world.get_mut::<AnimationPlayer>(entity)?;
+    match slot {
+        Slot::Base => Some(player),
+        Slot::Layer(i) => player.layers_mut().get_mut(i).map(|l| &mut l.player),
     }
 }
 
@@ -97,11 +138,8 @@ fn enter(player: &mut AnimationPlayer, state: &State, input: [f32; 2], duration:
 /// first giving it the tree's clips, keeping its phase, if a reload or an
 /// edit changed them. A player told to play a clip of its own since is
 /// left to it, as in a clip state.
-fn drive(world: &mut World, entity: Entity, tree: &BlendTree, input: [f32; 2]) {
-    let Some(set) = world
-        .get_mut::<AnimationPlayer>(entity)
-        .and_then(AnimationPlayer::synced_mut)
-    else {
+fn drive(world: &mut World, entity: Entity, slot: Slot, tree: &BlendTree, input: [f32; 2]) {
+    let Some(set) = player_mut(world, entity, slot).and_then(AnimationPlayer::synced_mut) else {
         return;
     };
     if set.clips().len() != tree.len() || !set.clips().iter().eq(tree.clips()) {

@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use voltra_assets::AssetPath;
 
 use super::fade::{Fade, Outgoing, Playing};
+use super::layer::PlayerLayer;
 use super::synced::SyncedClips;
+use super::underneath::Underneath;
 
 /// Plays [`clip`](Self::clip) on this entity, and on the children its
 /// tracks name.
@@ -19,6 +21,11 @@ use super::synced::SyncedClips;
 /// weight ([`play_synced`](Self::play_synced), a [`SyncedClips`]) — what an
 /// animator's blend tree plays. A [`clip`](Self::clip) set wins: writing
 /// one plays it, whatever was synced.
+///
+/// Over its own motion it can play [layers](Self::layers_mut): each a
+/// motion of its own, masked to some targets, at a weight, overriding or
+/// adding — an animator's layers. A player with none plays exactly as one
+/// did before layers.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AnimationPlayer {
@@ -50,6 +57,13 @@ pub struct AnimationPlayer {
     /// child that is not there warns once rather than every frame.
     #[serde(skip)]
     pub(super) reported: Option<AssetPath>,
+    /// What is played over the motion, bottom up. Never saved: layers are
+    /// what a running animator asks for.
+    #[serde(skip)]
+    pub(super) layers: Vec<PlayerLayer>,
+    /// What the layers cover, and what is under them there.
+    #[serde(skip)]
+    pub(super) underneath: Underneath,
 }
 
 impl Default for AnimationPlayer {
@@ -63,6 +77,8 @@ impl Default for AnimationPlayer {
             fade: None,
             synced: None,
             reported: None,
+            layers: Vec::new(),
+            underneath: Underneath::default(),
         }
     }
 }
@@ -191,6 +207,27 @@ impl AnimationPlayer {
             }),
             (None, None, None) => None,
         }
+    }
+
+    /// The layers played over its own motion, bottom up.
+    pub fn layers(&self) -> &[PlayerLayer] {
+        &self.layers
+    }
+
+    /// The layers, to add, remove or drive: each layer's
+    /// [`player`](PlayerLayer::player) is played as a player is. A layer
+    /// taken out hands back what it wrote, as one whose weight falls to
+    /// zero does. [`play`](Self::play), [`stop`](Self::stop) and
+    /// [`restart`](Self::restart) are the player's own motion's, and leave
+    /// the layers alone.
+    pub fn layers_mut(&mut self) -> &mut Vec<PlayerLayer> {
+        &mut self.layers
+    }
+
+    /// Whether a frame of it goes through the layers: it has some, or had
+    /// some whose values are still to be handed back.
+    pub(super) fn is_layered(&self) -> bool {
+        !self.layers.is_empty() || !self.underneath.is_empty()
     }
 
     /// Plays from the start again, cutting any fade short.

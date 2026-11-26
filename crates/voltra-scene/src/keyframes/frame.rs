@@ -121,6 +121,22 @@ pub(super) fn step(
     })
 }
 
+/// What a paused or ended `player` would write, its clocks left where they
+/// are: a layer's held pose. `None` when it plays nothing.
+pub(super) fn held(
+    player: &mut AnimationPlayer,
+    clips: &mut AnimationClips,
+    picks: &mut Vec<Pick>,
+) -> Option<Frame> {
+    // A step of no time samples what is there without moving it; the flag
+    // it would set on a clip at its end is the one already true.
+    let was = player.playing;
+    player.playing = true;
+    let frame = step(player, clips, 0.0, picks);
+    player.playing = was;
+    frame
+}
+
 /// What `player` plays, if anything: a clip with keys, or synced clips.
 fn now(player: &mut AnimationPlayer, clips: &mut AnimationClips) -> Option<Now> {
     if let Some(path) = &player.clip {

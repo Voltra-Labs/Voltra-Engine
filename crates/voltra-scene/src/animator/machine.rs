@@ -4,11 +4,14 @@
 use serde::{Deserialize, Serialize};
 use voltra_assets::AssetPath;
 
+use super::graph::Graph;
+use super::layer::Layer;
 use super::tree::BlendTree;
 
 /// A state machine: the states an [`Animator`](super::Animator) moves
 /// between, each playing a clip, and the conditions on its parameters that
-/// move it.
+/// move it — and, over those, any [`layers`](Self::layers), each a state
+/// machine of its own reading the same parameters.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StateMachine {
@@ -21,6 +24,11 @@ pub struct StateMachine {
     pub states: Vec<State>,
     /// Tried in order; the first whose conditions hold is taken.
     pub transitions: Vec<Transition>,
+    /// Machines played over this one, bottom up. Layer 0 is the fields
+    /// above, so a file without `layers` is the one-layer machine it always
+    /// was, and is written back without them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<Layer>,
 }
 
 /// A named value a game sets and the transitions read.
@@ -157,14 +165,28 @@ impl Condition {
 }
 
 impl StateMachine {
-    /// The state named `name`.
-    pub fn state(&self, name: &str) -> Option<&State> {
-        self.states.iter().find(|s| s.name == name)
+    /// Layer 0: the top-level states and transitions.
+    pub fn graph(&self) -> Graph<'_> {
+        Graph {
+            start: &self.start,
+            states: &self.states,
+            transitions: &self.transitions,
+        }
     }
 
-    /// The state it starts in: `start`, or the first.
+    /// The state of layer 0 named `name`.
+    pub fn state(&self, name: &str) -> Option<&State> {
+        self.graph().state(name)
+    }
+
+    /// The state layer 0 starts in: `start`, or the first.
     pub fn start_state(&self) -> Option<&State> {
-        self.state(&self.start).or(self.states.first())
+        self.graph().start_state()
+    }
+
+    /// The layer named `name`: the first of that name.
+    pub fn layer(&self, name: &str) -> Option<&Layer> {
+        self.layers.iter().find(|l| l.name == name)
     }
 
     /// The parameter named `name`'s starting value.

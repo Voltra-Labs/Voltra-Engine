@@ -38,6 +38,21 @@ pub struct AnimatorState {
     /// What the game set; a parameter it never set has the machine's
     /// starting value.
     pub(super) params: HashMap<String, ParamValue>,
+    /// Each of the machine's layers above the first, by place: its name, and
+    /// the state it is in. A layer whose name no longer matches its place
+    /// (a reload that moved it) starts over.
+    pub(super) layers: Vec<LayerState>,
+    /// Layer weights the game set, by layer name, over the file's.
+    pub(super) weights: HashMap<String, f32>,
+}
+
+/// Where one layer of an animator is.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(super) struct LayerState {
+    /// The layer's name.
+    pub name: String,
+    /// The state it is in, once started.
+    pub current: Option<String>,
 }
 
 impl Animator {
@@ -52,9 +67,34 @@ impl Animator {
         }
     }
 
-    /// The state it is in, once it has started.
+    /// The state it is in, once it has started — the state of layer 0, the
+    /// machine's own states.
     pub fn current_state(&self) -> Option<&str> {
         self.state.current.as_deref()
+    }
+
+    /// The state the layer named `layer` is in, once it has started.
+    pub fn layer_state(&self, layer: &str) -> Option<&str> {
+        self.state
+            .layers
+            .iter()
+            .find(|l| l.name == layer)
+            .and_then(|l| l.current.as_deref())
+    }
+
+    /// Sets the weight of the layer named `layer`, over the one its file
+    /// gives: `0` hides it, `1` shows it whole — Unity's `SetLayerWeight`.
+    /// A value that is not finite is ignored; one outside `0..=1` is
+    /// clamped when it plays.
+    pub fn set_layer_weight(&mut self, layer: &str, weight: f32) {
+        if weight.is_finite() {
+            self.state.weights.insert(layer.to_owned(), weight);
+        }
+    }
+
+    /// The weight the game set for the layer named `layer`, if it set one.
+    pub fn layer_weight(&self, layer: &str) -> Option<f32> {
+        self.state.weights.get(layer).copied()
     }
 
     /// Sets a float parameter. A value that is not finite is ignored.
@@ -93,8 +133,8 @@ impl Animator {
         self.state.params.get(name).copied()
     }
 
-    /// Starts over from the machine's start state, with its parameters'
-    /// starting values.
+    /// Starts over from the machine's start state, every layer from its
+    /// own, with its parameters' starting values and its layers' weights.
     pub fn restart(&mut self) {
         self.state = AnimatorState::default();
     }

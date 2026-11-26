@@ -5,7 +5,9 @@ use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::hierarchy::{resolve_parents, set_parent};
-use voltra_scene::keyframes::{self, Ease, Key, Property, SyncedClips, Track, Value};
+use voltra_scene::keyframes::{
+    self, Ease, Key, LayerBlend, PlayerLayer, Property, SyncedClips, Track, Value,
+};
 use voltra_scene::{
     AnimationClip, AnimationClips, AnimationPlayer, Name, SceneId, Sprite, Transform,
 };
@@ -74,6 +76,35 @@ pub(super) fn benches() -> Vec<Bench> {
                         player.play_synced(SyncedClips::new(
                             CLIPS.iter().zip([0.2, 0.5, 0.3]).map(|(c, w)| (path(c), w)),
                         ));
+                    }
+                }
+                measure(
+                    config,
+                    1,
+                    iter(|| keyframes::advance(&mut world, &mut clips, FRAME)),
+                )
+                .into()
+            },
+        ),
+        Bench::new(
+            format!("keyframes/advance/{PLAYERS}-layered"),
+            30.0,
+            |config| {
+                let Some((mut world, mut clips, players)) = crowd() else {
+                    return unwritable();
+                };
+                for &player in &players {
+                    if let Some(player) = world.get_mut::<AnimationPlayer>(player) {
+                        // An upper body masked to half the parts, and an
+                        // additive breath over everything.
+                        let mut upper = PlayerLayer::new(LayerBlend::Override);
+                        upper.player.play(path(CLIPS[1]));
+                        upper.mask = (0..TARGETS / 2).map(|t| format!("part{t}")).collect();
+                        upper.weight = 0.7;
+                        let mut breath = PlayerLayer::new(LayerBlend::Additive);
+                        breath.player.play(path(CLIPS[2]));
+                        breath.weight = 0.5;
+                        player.layers_mut().extend([upper, breath]);
                     }
                 }
                 measure(

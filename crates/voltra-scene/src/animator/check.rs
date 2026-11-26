@@ -1,7 +1,9 @@
 //! Loading a machine leniently: what cannot run is dropped and warned
 //! about, and what an editor changed is put back into the file as written.
 
-use super::machine::{Condition, ParamValue, State, StateMachine};
+use std::collections::HashSet;
+
+use super::machine::{Condition, ParamValue, State, StateMachine, Transition};
 use super::tree::BlendTree;
 
 impl StateMachine {
@@ -14,109 +16,179 @@ impl StateMachine {
     /// zero, a child at a place that is not a finite number weighs
     /// nothing, an empty tree or a state with neither clip nor tree plays
     /// nothing — each with a warning; so the file an editor saves back has
-    /// it all.
+    /// it all. Every layer is checked the same way, each against its own
+    /// states; a layer's weight outside `0..=1` is warned of and clamped
+    /// when it plays, kept as written.
     ///
     /// Dropped rather than refusing the file, as a clip's bad keys are: an
     /// author mid-edit should still see the rest run.
     pub fn checked(mut self, source: &str) -> Self {
-        let mut seen = std::collections::HashSet::new();
-        self.states.retain(|state| {
+        let mut start = std::mem::take(&mut self.start);
+        let mut states = std::mem::take(&mut self.states);
+        let mut transitions = std::mem::take(&mut self.transitions);
+        let mut layers = std::mem::take(&mut self.layers);
+        self.check_graph(source, None, &mut start, &mut states, &mut transitions);
+        let mut names = HashSet::new();
+        for layer in &mut layers {
+            let label = format!("the layer {:?}", layer.name);
+            if !names.insert(layer.name.clone()) {
+                log::warn!("{source}: a second layer named {:?}; a weight set by its name reaches the first", layer.name);
+            }
+            if !(0.0..=1.0).contains(&layer.weight) {
+                log::warn!(
+                    "{source}: {label} weighs {}, which is not in 0..=1; it plays at {}",
+                    layer.weight,
+                    if layer.weight.is_nan() {
+                        0.0
+                    } else {
+                        layer.weight.clamp(0.0, 1.0)
+                    }
+                );
+            }
+            self.check_graph(
+                source,
+                Some(&label),
+                &mut layer.start,
+                &mut layer.states,
+                &mut layer.transitions,
+            );
+        }
+        self.start = start;
+        self.states = states;
+        self.transitions = transitions;
+        self.layers = layers;
+        self
+    }
+
+    /// [`checked`](Self::checked) for one layer's states and transitions —
+    /// the top level's, `layer` `None`, or a named layer's — against this
+    /// machine's parameters.
+    fn check_graph(
+        &self,
+        source: &str,
+        layer: Option<&str>,
+        start: &mut String,
+        states: &mut Vec<State>,
+        transitions: &mut Vec<Transition>,
+    ) {
+        let place = |what: String| match layer {
+            Some(layer) => format!("{source}: {layer}: {what}"),
+            None => format!("{source}: {what}"),
+        };
+        let mut seen = HashSet::new();
+        states.retain(|state| {
             let fresh = seen.insert(state.name.clone());
             if !fresh {
                 log::warn!(
-                    "{source}: a second state named {:?}; the first is kept",
-                    state.name
+                    "{}",
+                    place(format!(
+                        "a second state named {:?}; the first is kept",
+                        state.name
+                    ))
                 );
             }
             fresh
         });
-        for state in &self.states {
-            for problem in self.motion_problems(state) {
-                log::warn!("{source}: the state {:?} {problem}", state.name);
+        for state in states.iter() {
+            for problem in self.problems_of(state, layer.is_some()) {
+                log::warn!("{}", place(format!("the state {:?} {problem}", state.name)));
             }
         }
-        if !self.start.is_empty() && self.state(&self.start).is_none() {
+        if !start.is_empty() && !states.iter().any(|s| s.name == *start) {
             log::warn!(
-                "{source}: the start state {:?} is not there; starting in the first",
-                self.start
+                "{}",
+                place(format!(
+                    "the start state {start:?} is not there; starting in the first"
+                ))
             );
-            self.start.clear();
+            start.clear();
         }
-        for t in &mut self.transitions {
+        for t in transitions.iter_mut() {
             if !(t.duration.is_finite() && t.duration >= 0.0) {
                 log::warn!(
-                    "{source}: a transition to {:?} lasts {}s, which is not a time; it cuts",
-                    t.to,
-                    t.duration
+                    "{}",
+                    place(format!(
+                        "a transition to {:?} lasts {}s, which is not a time; it cuts",
+                        t.to, t.duration
+                    ))
                 );
                 t.duration = 0.0;
             }
         }
-        let machine = self.clone();
-        self.transitions.retain(|t| {
-            let known = |name: &str| machine.state(name).is_some();
+        transitions.retain(|t| {
+            let known = |name: &str| states.iter().any(|s| s.name == name);
             if !known(&t.to) || t.from.as_deref().is_some_and(|from| !known(from)) {
                 log::warn!(
-                    "{source}: a transition to {:?} names a state that is not there; dropped",
-                    t.to
+                    "{}",
+                    place(format!(
+                        "a transition to {:?} names a state that is not there; dropped",
+                        t.to
+                    ))
                 );
                 return false;
             }
             for condition in &t.conditions {
-                if let Some(problem) = machine.condition_problem(condition) {
-                    log::warn!("{source}: a transition to {:?} {problem}; dropped", t.to);
+                if let Some(problem) = self.condition_problem(condition) {
+                    log::warn!(
+                        "{}",
+                        place(format!("a transition to {:?} {problem}; dropped", t.to))
+                    );
                     return false;
                 }
             }
             true
         });
-        self
     }
 
-    /// Gives each transition the `duration` of its counterpart in `loaded`
-    /// — this machine as [`checked`](Self::checked) kept it, then edited.
+    /// Gives each transition, of every layer, the `duration` of its
+    /// counterpart in `loaded` — this machine as [`checked`](Self::checked)
+    /// kept it, then edited.
     ///
     /// The check keeps transitions in order, so each of `loaded`'s is the
     /// next of this machine's with the same `from`, `to`, conditions and
-    /// exit time; one the check dropped keeps its own duration.
+    /// exit time; one the check dropped keeps its own duration. The check
+    /// keeps every layer, so layers are matched by place.
     pub fn take_durations(&mut self, loaded: &StateMachine) {
-        let mut kept = loaded.transitions.iter().peekable();
-        for transition in &mut self.transitions {
-            let Some(edited) = kept.peek() else {
-                return;
-            };
-            let same = edited.from == transition.from
-                && edited.to == transition.to
-                && edited.conditions == transition.conditions
-                && edited.exit_time == transition.exit_time;
-            if same {
-                transition.duration = edited.duration;
-                kept.next();
-            }
+        take_durations(&mut self.transitions, &loaded.transitions);
+        for (layer, edited) in self.layers.iter_mut().zip(&loaded.layers) {
+            take_durations(&mut layer.transitions, &edited.transitions);
         }
     }
 
-    /// Gives each state the blend tree of its counterpart in `loaded` —
-    /// this machine as [`checked`](Self::checked) kept it, then edited:
-    /// the first state of each name, as the check keeps. A state the
-    /// check dropped keeps its own.
+    /// Gives each state, of every layer, the blend tree of its counterpart
+    /// in `loaded` — this machine as [`checked`](Self::checked) kept it,
+    /// then edited: the first state of each name, as the check keeps. A
+    /// state the check dropped keeps its own.
     pub fn take_trees(&mut self, loaded: &StateMachine) {
-        let mut seen = std::collections::HashSet::new();
-        for state in &mut self.states {
-            if !seen.insert(state.name.clone()) {
-                continue;
-            }
-            if let Some(edited) = loaded.state(&state.name) {
-                state.tree.clone_from(&edited.tree);
-            }
+        take_trees(&mut self.states, &loaded.states);
+        for (layer, edited) in self.layers.iter_mut().zip(&loaded.layers) {
+            take_trees(&mut layer.states, &edited.states);
         }
     }
 
-    /// What is wrong with what `state` plays, if anything.
+    /// Gives each layer the weight, mask and blend of its counterpart in
+    /// `loaded`, matched by place: the check keeps every layer.
+    pub fn take_layer_settings(&mut self, loaded: &StateMachine) {
+        for (layer, edited) in self.layers.iter_mut().zip(&loaded.layers) {
+            layer.weight = edited.weight;
+            layer.mask.clone_from(&edited.mask);
+            layer.blend = edited.blend;
+        }
+    }
+
+    /// What is wrong with what `state` of layer 0 plays, if anything.
+    #[cfg(test)]
     pub(super) fn motion_problems(&self, state: &State) -> Vec<String> {
+        self.problems_of(state, false)
+    }
+
+    /// What is wrong with what `state` plays, if anything. In a layer above
+    /// the first, a state that plays nothing is the way to show nothing,
+    /// and is not a problem.
+    fn problems_of(&self, state: &State, in_layer: bool) -> Vec<String> {
         let mut problems = Vec::new();
         let Some(tree) = &state.tree else {
-            if state.clip.is_none() {
+            if state.clip.is_none() && !in_layer {
                 problems.push("has neither a clip nor a tree; it plays nothing".to_owned());
             }
             return problems;
@@ -165,5 +237,36 @@ impl StateMachine {
             Condition::Greater(..) | Condition::Less(..) => matches!(value, ParamValue::Float(_)),
         };
         (!fits).then(|| format!("tests {name:?} as the wrong kind"))
+    }
+}
+
+/// [`StateMachine::take_durations`] for one layer's transitions.
+fn take_durations(transitions: &mut [Transition], loaded: &[Transition]) {
+    let mut kept = loaded.iter().peekable();
+    for transition in transitions {
+        let Some(edited) = kept.peek() else {
+            return;
+        };
+        let same = edited.from == transition.from
+            && edited.to == transition.to
+            && edited.conditions == transition.conditions
+            && edited.exit_time == transition.exit_time;
+        if same {
+            transition.duration = edited.duration;
+            kept.next();
+        }
+    }
+}
+
+/// [`StateMachine::take_trees`] for one layer's states.
+fn take_trees(states: &mut [State], loaded: &[State]) {
+    let mut seen = HashSet::new();
+    for state in states {
+        if !seen.insert(state.name.clone()) {
+            continue;
+        }
+        if let Some(edited) = loaded.iter().find(|s| s.name == state.name) {
+            state.tree.clone_from(&edited.tree);
+        }
     }
 }

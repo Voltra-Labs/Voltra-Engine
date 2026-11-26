@@ -1,8 +1,6 @@
 //! How far through its state's motion an animator's entity is: what an
 //! exit time waits for.
 
-use voltra_ecs::{Entity, World};
-
 use super::machine::{Motion, State};
 use crate::keyframes::AnimationClips;
 use crate::AnimationPlayer;
@@ -53,14 +51,14 @@ impl Progress {
 /// every exit time has been reached — one that loops included, since
 /// counting loops of nothing would never end. So does a state that plays
 /// nothing. A tree counts its synced clips' phase and loops, in lengths of
-/// their weighted average.
+/// their weighted average. `player` is what plays the state — the entity's
+/// player, or its layer's — `None` before there is one.
 pub(super) fn progress(
-    world: &World,
+    player: Option<&AnimationPlayer>,
     clips: &mut AnimationClips,
-    entity: Entity,
     state: &State,
 ) -> Progress {
-    let Some(player) = world.get::<AnimationPlayer>(entity) else {
+    let Some(player) = player else {
         return Progress::NONE;
     };
     let (phase, played, looping) = match state.motion() {

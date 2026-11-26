@@ -2,18 +2,19 @@
 
 use voltra_ecs::{Entity, World};
 
-use super::blend::blend_into;
-use super::fade::Outgoing;
-use super::frame::{step, Frame, Motion, Source};
+use super::frame::{step, Frame};
+use super::layered;
 use super::player::AnimationPlayer;
-use super::pose::{Pose, Sample};
+use super::report::report;
+use super::sample::{keep, sample_frame, Buffers};
 use super::store::AnimationClips;
 use super::synced::Pick;
 use super::target::Children;
 
 /// Runs every playing [`AnimationPlayer`] `delta` seconds and writes its
 /// clip's values — or its synced clips' mix, or, while it fades, the mix of
-/// what it plays and what it fades out — each property once.
+/// what it plays and what it fades out — each property once, its layers
+/// composited over it.
 ///
 /// Per frame, as `SpriteAnimation` is: what is animated is what is drawn.
 /// A player applies nothing while it is not playing, so an entity whose clip
@@ -24,15 +25,20 @@ use super::target::Children;
 /// A frame samples into a few buffers reused across every player, and finds
 /// targets through one index of the hierarchy, so a crowd of players
 /// blending several clips each allocates little and scans the world once.
+/// A player with no layers takes exactly the path it took before there
+/// were layers.
 pub fn advance(world: &mut World, clips: &mut AnimationClips, delta: f32) {
     let mut due = Vec::new();
+    let mut stacked = Vec::new();
     let mut picks = Vec::new();
     for (entity, player) in world.query_mut::<AnimationPlayer>() {
-        if let Some(frame) = step(player, clips, delta, &mut picks) {
+        if player.is_layered() {
+            stacked.push((entity, layered::step(player, clips, delta, &mut picks)));
+        } else if let Some(frame) = step(player, clips, delta, &mut picks) {
             due.push((entity, frame));
         }
     }
-    if due.is_empty() {
+    if due.is_empty() && stacked.is_empty() {
         return;
     }
     // Writing values moves no parent link: one index serves the frame.
@@ -42,15 +48,22 @@ pub fn advance(world: &mut World, clips: &mut AnimationClips, delta: f32) {
     for (entity, frame) in due {
         write(world, clips, &children, &picks, &mut buffers, entity, frame);
     }
-}
-
-/// The poses a frame samples and mixes into, reused player after player.
-#[derive(Default)]
-struct Buffers<'c> {
-    incoming: Pose<'c>,
-    outgoing: Pose<'c>,
-    mixed: Pose<'c>,
-    synced: Vec<Pose<'c>>,
+    if stacked.is_empty() {
+        return;
+    }
+    let mut more = layered::Buffers::default();
+    for (entity, frames) in stacked {
+        layered::write(
+            world,
+            clips,
+            &children,
+            &picks,
+            &mut buffers,
+            &mut more,
+            entity,
+            frames,
+        );
+    }
 }
 
 /// Samples, mixes and writes one player's frame, and warns of what it
@@ -64,123 +77,12 @@ fn write<'c>(
     entity: Entity,
     frame: Frame,
 ) {
-    let Buffers {
-        incoming,
-        outgoing,
-        mixed,
-        synced,
-    } = buffers;
-    match &frame.motion {
-        Some(motion) => sample(clips, motion, picks, synced, incoming),
-        None => incoming.clear(),
-    }
-    let mut held = None;
-    let fading = match frame.fade {
-        None => false,
-        Some((from, weight)) => {
-            match from {
-                Source::Motion(motion) => sample(clips, &motion, picks, synced, outgoing),
-                Source::Pose(pose) => held = Some(pose),
-            }
-            let from: &Pose<'c> = match &held {
-                Some(pose) => pose,
-                None => outgoing,
-            };
-            blend_into(&[(from, 1.0 - weight), (incoming, weight)], mixed);
-            true
-        }
-    };
-    let pose: &Pose<'c> = if fading { mixed } else { incoming };
+    let mut sampled = sample_frame(clips, picks, buffers, frame, false);
+    let pose = buffers.result(&sampled);
     let missed = pose.apply_through(world, entity, children);
-
     let Some(player) = world.get_mut::<AnimationPlayer>(entity) else {
         return;
     };
-    // A miss is what is faded in's when it animates that property, and
-    // otherwise the side faded out's — each warned of under its own name.
-    let faded_in = |s: &Sample| !fading || incoming.get(&s.target, s.property).is_some();
-    if let (true, Some(fade)) = (fading, player.fade.as_mut()) {
-        fade.last.get_or_insert_with(Pose::new).copy_from(mixed);
-        if let Some(pose) = held {
-            fade.from = Outgoing::Pose(pose);
-        }
-        if !fade.reported && missed.iter().any(|&s| !faded_in(s)) {
-            fade.reported = true;
-            let from = match &fade.from {
-                Outgoing::Clip(out) => format!("animation {}", out.clip.as_str()),
-                Outgoing::Synced { set, .. } => set.describe(),
-                Outgoing::Pose(_) => "an interrupted fade".to_owned(),
-            };
-            log::warn!(
-                "{from}, fading into {}: nothing to animate for {}",
-                playing(player),
-                list(missed.iter().filter(|&&s| !faded_in(s))),
-            );
-        }
-    }
-    if !missed.iter().any(|&s| faded_in(s)) {
-        return;
-    }
-    let reported = match (&player.clip, &mut player.synced) {
-        (Some(_), _) => player.reported == player.clip,
-        (None, Some(set)) => std::mem::replace(&mut set.reported, true),
-        (None, None) => true,
-    };
-    if reported {
-        return;
-    }
-    if player.clip.is_some() {
-        player.reported = player.clip.clone();
-    }
-    log::warn!(
-        "{}: nothing to animate for {}",
-        playing(player),
-        list(missed.iter().filter(|&&s| faded_in(s))),
-    );
-}
-
-/// `motion` sampled into `out`; synced clips each into a buffer of
-/// `synced`, then mixed by their weights.
-fn sample<'c>(
-    clips: &'c AnimationClips,
-    motion: &Motion,
-    picks: &[Pick],
-    synced: &mut Vec<Pose<'c>>,
-    out: &mut Pose<'c>,
-) {
-    match motion {
-        Motion::Clip(handle, time) => clips.get(*handle).sample_into(*time, out),
-        Motion::Synced(range) => {
-            let picks = &picks[range.clone()];
-            if synced.len() < picks.len() {
-                synced.resize_with(picks.len(), Pose::new);
-            }
-            for (pose, pick) in synced.iter_mut().zip(picks) {
-                clips.get(pick.handle).sample_into(pick.time, pose);
-            }
-            let inputs: Vec<(&Pose<'c>, f32)> = synced
-                .iter()
-                .zip(picks)
-                .map(|(p, k)| (p, k.weight))
-                .collect();
-            blend_into(&inputs, out);
-        }
-    }
-}
-
-/// What a player plays, by name, for a warning.
-fn playing(player: &AnimationPlayer) -> String {
-    match (&player.clip, &player.synced) {
-        (Some(clip), _) => format!("animation {}", clip.as_str()),
-        (None, Some(set)) => set.describe(),
-        (None, None) => "nothing".to_owned(),
-    }
-}
-
-/// Missed values, listed for a warning.
-fn list<'s, 'a: 's>(missed: impl Iterator<Item = &'s &'s Sample<'a>>) -> String {
-    let said: Vec<String> = missed
-        .map(|s| format!("{:?} on {:?}", s.property, s.target))
-        .collect();
-    said.join(", ")
+    keep(player, &mut sampled, &buffers.mixed);
+    report(player, sampled.fading, &buffers.incoming, &missed);
 }
