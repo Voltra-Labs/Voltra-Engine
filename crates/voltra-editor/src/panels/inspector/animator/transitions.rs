@@ -8,7 +8,7 @@ use voltra_scene::StateMachines;
 /// the store, so every animator running the machine fades so at once, and
 /// written to the file by **Save** (or dropped by **Revert**), as the
 /// timeline's clips are. Save writes only the durations, into the file as
-/// written ([`StateMachines::save_durations`]): what loading dropped stays.
+/// written ([`StateMachines::save_edits`]): what loading dropped stays.
 ///
 /// The machine is an asset, not the scene: its edits are not in the undo
 /// history. Whether it is edited is the UI's to remember, in egui's memory
@@ -51,7 +51,7 @@ pub(super) fn show(ui: &mut Ui, machines: &mut StateMachines, path: &AssetPath) 
                 if ui.add_enabled(edited, egui::Button::new("Save")).clicked() {
                     // The durations only, into the file as written: a save
                     // of the checked machine would delete what loading dropped.
-                    match machines.save_durations(path) {
+                    match machines.save_edits(path) {
                         Ok(()) => {
                             edited = false;
                             log::info!("saved {}", path.as_str());

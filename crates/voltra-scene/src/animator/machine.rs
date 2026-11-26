@@ -4,6 +4,8 @@
 use serde::{Deserialize, Serialize};
 use voltra_assets::AssetPath;
 
+use super::tree::BlendTree;
+
 /// A state machine: the states an [`Animator`](super::Animator) moves
 /// between, each playing a clip, and the conditions on its parameters that
 /// move it.
@@ -49,16 +51,48 @@ impl ParamValue {
     }
 }
 
-/// One state: a clip, played at a speed.
+/// One state: a clip or a blend tree, played at a speed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct State {
     /// The name transitions refer to it by.
     pub name: String,
-    /// The `.anim.ron` it plays — looping or not as the clip says.
-    pub clip: AssetPath,
+    /// The `.anim.ron` it plays — looping or not as the clip says. Written
+    /// bare (`clip: Path("idle.anim.ron")`), as before trees could stand in
+    /// for it, and left out for a state that plays a tree.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "super::bare")]
+    pub clip: Option<AssetPath>,
+    /// The clips it plays together instead, mixed by parameters — written
+    /// bare too: `tree: Blend1D(parameter: "speed", children: [...])`.
+    /// A state with both plays the tree.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "super::bare")]
+    pub tree: Option<BlendTree>,
     /// A multiple of the clip's speed.
     #[serde(default = "one", skip_serializing_if = "is_one")]
     pub speed: f32,
+}
+
+/// What a state plays.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Motion<'a> {
+    /// One clip.
+    Clip(&'a AssetPath),
+    /// A blend tree with at least one clip.
+    Tree(&'a BlendTree),
+    /// Nothing: no clip, or an empty tree.
+    Nothing,
+}
+
+impl State {
+    /// What it plays: its tree when it has one — nothing when that tree
+    /// is empty — else its clip.
+    pub fn motion(&self) -> Motion<'_> {
+        match (&self.tree, &self.clip) {
+            (Some(tree), _) if tree.is_empty() => Motion::Nothing,
+            (Some(tree), _) => Motion::Tree(tree),
+            (None, Some(clip)) => Motion::Clip(clip),
+            (None, None) => Motion::Nothing,
+        }
+    }
 }
 
 fn one() -> f32 {

@@ -98,6 +98,7 @@ impl Rig {
 }
 
 mod crossfade;
+mod tree;
 
 #[test]
 fn it_starts_in_the_start_state_and_gives_its_entity_a_player() {
@@ -222,20 +223,25 @@ fn the_shipped_machine_reads_whole_and_names_clips_that_are_there() {
     let mut machines = StateMachines::new(&root);
     let handle = machines.load(&path("animations/hero.animator.ron"));
     let machine = machines.get(handle);
-    assert_eq!(machine.states.len(), 4);
-    assert_eq!(machine.transitions.len(), 4, "none dropped");
+    assert_eq!(machine.states.len(), 3);
+    assert_eq!(machine.transitions.len(), 3, "none dropped");
     assert!(
         machine.transitions.iter().all(|t| t.duration > 0.0),
         "every move crossfades"
     );
+    let tree = machine.state("move").and_then(|s| s.tree.as_ref());
+    assert_eq!(tree.map(BlendTree::len), Some(3), "idle, walk and run");
     let mut clips = AnimationClips::new(&root);
     for state in &machine.states {
-        assert!(
-            root.join(state.clip.as_str()).is_file(),
-            "{}",
-            state.clip.as_str()
-        );
-        let clip = clips.load(&state.clip);
-        assert!(!clips.get(clip).is_empty(), "{} reads", state.clip.as_str());
+        let named: Vec<&AssetPath> = match state.motion() {
+            Motion::Clip(clip) => vec![clip],
+            Motion::Tree(tree) => tree.clips().collect(),
+            Motion::Nothing => panic!("{} plays nothing", state.name),
+        };
+        for clip in named {
+            assert!(root.join(clip.as_str()).is_file(), "{}", clip.as_str());
+            let handle = clips.load(clip);
+            assert!(!clips.get(handle).is_empty(), "{} reads", clip.as_str());
+        }
     }
 }

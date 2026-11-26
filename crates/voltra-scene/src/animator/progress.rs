@@ -3,7 +3,7 @@
 
 use voltra_ecs::{Entity, World};
 
-use super::machine::State;
+use super::machine::{Motion, State};
 use crate::keyframes::AnimationClips;
 use crate::AnimationPlayer;
 
@@ -28,6 +28,13 @@ impl Progress {
         looping: false,
     };
 
+    /// Over, or nothing to wait for: every exit time reached.
+    const ENDED: Self = Self {
+        phase: 1.0,
+        played: 1.0,
+        looping: false,
+    };
+
     /// Whether an exit time of `at` has been reached: below one, a point in
     /// each loop; from one up, a count of loops of a clip that loops, and
     /// the end of one that does not.
@@ -42,9 +49,11 @@ impl Progress {
     }
 }
 
-/// A clip of no length has nothing to wait for: it counts as ended, so
+/// A motion of no length has nothing to wait for: it counts as ended, so
 /// every exit time has been reached — one that loops included, since
-/// counting loops of nothing would never end.
+/// counting loops of nothing would never end. So does a state that plays
+/// nothing. A tree counts its synced clips' phase and loops, in lengths of
+/// their weighted average.
 pub(super) fn progress(
     world: &World,
     clips: &mut AnimationClips,
@@ -54,25 +63,35 @@ pub(super) fn progress(
     let Some(player) = world.get::<AnimationPlayer>(entity) else {
         return Progress::NONE;
     };
-    let handle = clips.load(&state.clip);
-    let clip = clips.get(handle);
-    let duration = clip.duration();
-    if duration <= 0.0 {
-        return Progress {
-            phase: 1.0,
-            played: 1.0,
-            looping: false,
-        };
-    }
-    let ended = !clip.looping && !player.playing && player.time() >= duration;
-    let phase = if ended {
-        1.0
-    } else {
-        (player.time() / duration).clamp(0.0, 1.0)
+    let (phase, played, looping) = match state.motion() {
+        Motion::Nothing => return Progress::ENDED,
+        Motion::Clip(path) => {
+            let handle = clips.load(path);
+            let clip = clips.get(handle);
+            let duration = clip.duration();
+            if duration <= 0.0 {
+                return Progress::ENDED;
+            }
+            (
+                player.time() / duration,
+                player.played() / duration,
+                clip.looping,
+            )
+        }
+        Motion::Tree(_) => {
+            let Some(set) = player.synced() else {
+                return Progress::NONE;
+            };
+            if set.length(clips) <= 0.0 {
+                return Progress::ENDED;
+            }
+            (set.phase(), set.played(), set.looping(clips))
+        }
     };
+    let ended = !looping && !player.playing && phase >= 1.0;
     Progress {
-        phase,
-        played: player.played() / duration,
-        looping: clip.looping,
+        phase: if ended { 1.0 } else { phase.clamp(0.0, 1.0) },
+        played,
+        looping,
     }
 }
