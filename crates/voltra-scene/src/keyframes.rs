@@ -18,6 +18,7 @@
 
 pub mod blend;
 pub mod clip;
+mod clock;
 pub mod ease;
 mod fade;
 mod frame;

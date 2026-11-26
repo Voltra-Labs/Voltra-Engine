@@ -4,8 +4,9 @@
 use voltra_assets::Handle;
 
 use super::clip::AnimationClip;
+use super::clock;
 use super::fade::Outgoing;
-use super::player::{self, AnimationPlayer};
+use super::player::AnimationPlayer;
 use super::pose::Pose;
 use super::store::AnimationClips;
 
@@ -80,7 +81,7 @@ pub(super) fn step(
         Outgoing::Clip(out) => {
             let handle = clips.load(&out.clip);
             let source = clips.get(handle);
-            player::run_clock(
+            clock::run_clock(
                 &mut out.time,
                 &mut out.playing,
                 out.speed,
