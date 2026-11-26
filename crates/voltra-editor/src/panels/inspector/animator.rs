@@ -1,7 +1,9 @@
 //! The animator: which state machine, where it is, its parameters, and
-//! the machine's transitions.
+//! the machine's transitions and blend trees.
 
+mod edits;
 mod transitions;
+mod trees;
 
 use voltra_assets::AssetPath;
 use voltra_core::egui::{self, DragValue, RichText, Ui};
@@ -44,7 +46,7 @@ pub(super) fn show(
     let Some(path) = animator.machine.clone() else {
         return claim;
     };
-    transitions::show(ui, machines, &path);
+    edits::show(ui, machines, &path);
     let handle = machines.load(&path);
     let parameters = machines.get(handle).parameters.clone();
     if parameters.is_empty() {
