@@ -59,9 +59,9 @@ impl Tool {
     /// The glyph the toolbar draws for this tool.
     pub fn glyph(self) -> &'static str {
         match self {
-            Self::Translate => "✥",
-            Self::Rotate => "⟳",
-            Self::Scale => "⤢",
+            Self::Translate => crate::icons::MOVE,
+            Self::Rotate => crate::icons::ROTATE_CW,
+            Self::Scale => crate::icons::SCALE,
         }
     }
 

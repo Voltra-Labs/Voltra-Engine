@@ -139,7 +139,7 @@ fn polygon(ui: &mut Ui, points: &mut ConvexPolygon) -> Option<&'static str> {
                         .or(active(&y, "Edit collider point"));
                 });
                 if ui
-                    .add_enabled(can_remove, egui::Button::new("✕"))
+                    .add_enabled(can_remove, egui::Button::new(crate::icons::REMOVE))
                     .on_hover_text("remove this point; a polygon keeps at least three")
                     .clicked()
                 {

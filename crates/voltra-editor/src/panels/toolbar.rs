@@ -48,7 +48,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             let playing = state == PlayState::Playing;
             let play = ui
-                .add(transport(if playing { "⏸" } else { "▶" }))
+                .add(transport(if playing {
+                    crate::icons::PAUSE
+                } else {
+                    crate::icons::PLAY
+                }))
                 .on_hover_text(if playing {
                     "Pause — stop stepping and leave the scene where it is"
                 } else {
@@ -65,7 +69,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // Enabled only while paused. An enabled-but-inert button teaches the
             // wrong thing about what the state means.
             let step = ui
-                .add_enabled(state == PlayState::Paused, transport("⏭"))
+                .add_enabled(state == PlayState::Paused, transport(crate::icons::STEP))
                 .on_hover_text("Step — run exactly one fixed physics step");
             if step.clicked() {
                 editor.step_play(frame);
@@ -73,7 +77,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             // The destructive one, so its tooltip says what it discards.
             let stop = ui
-                .add_enabled(state != PlayState::Editing, transport("⏹"))
+                .add_enabled(state != PlayState::Editing, transport(crate::icons::STOP))
                 .on_hover_text(
                     "Stop — put the scene back as it was when play began, \
                      discarding every change made while playing",
