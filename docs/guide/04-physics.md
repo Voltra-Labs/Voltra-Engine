@@ -87,7 +87,11 @@ A `Joint2D` holds two bodies together, or one to the world. It lives on
 any entity: `a` is the first body (none: the entity itself), `b` the
 second (none: the world, and `anchor_b` is then a point in the world).
 Physics ▸ Join selection hinges the selected bodies; the inspector's Joint
-section picks the kind and edits every part of it.
+section picks the kind and edits every part of it. An anchor is in its
+body's own space, turned and moved with it but never scaled:
+`Joint2D::anchor_on(transform, point)` gives the anchor at a world point.
+A motor, spring or limit taken off while the game runs stops acting on the
+next step.
 
 - **`Revolute`** — a hinge. Optional `limit`, `motor` and `spring` (a
   `RestSpring` turning it back to `rest` radians: a door that closes

@@ -3911,7 +3911,8 @@ solved and relaxed in every sub-step.
 - **`Prismatic { axis, reference_angle, limit, motor, spring }`**: the line
   and the angle solved together as Box2D's 2×2 block (a push across the
   line turns the bodies too); a `LinearMotor` (speed, `max_force`), a
-  `RestSpring` and limits along the axis. A zero axis joins nothing, as a
+  `RestSpring` and limits along the axis, in Box2D's order: spring, motor,
+  limits, then the block. A zero axis joins nothing, as a
   joint naming a missing body does; the inspector edits an axis as an angle,
   so it cannot make one.
 - **`Mouse { max_force, hertz, damping_ratio }`**: `a`'s anchor pulled to
@@ -3922,7 +3923,9 @@ solved and relaxed in every sub-step.
   frequency it pulls as hard as a joint holds its anchors; the accumulated
   impulse is capped at `max_force · h`. Box2D's fixed angular damping
   (0.5 Hz) is left out — a hardcoded spring nobody can set — so a body
-  picked off its centre swings about the grip.
+  picked off its centre swings about the grip. A `Mouse()` written with no
+  fields takes that testbed tuning (1000 N, 5 Hz, 0.7), each field
+  defaulting on its own.
 - **Revolute `spring: Option<RestSpring>`** towards `rest`, radians from
   the reference, before the motor (Box2D's order). Unwrapped, as the limit
   is: an axle wound three turns winds its spring three turns.
@@ -3945,9 +3948,30 @@ solved and relaxed in every sub-step.
   tick the step before it, the per-frame tick every step since its last
   turn, gathered by `app/pending_physics.rs`). A joint whose entity or
   body a game despawned between steps joins nothing and breaks nothing.
+- **A part switched off stops pushing.** Every impulse is warm started and
+  stored back each step, so a motor, spring or limit removed at run time
+  (or a spring at zero hertz, or a kind changed) would warm start its last
+  impulse for ever: nothing else decays it. Box2D's `Enable*` setters reset
+  the part's impulse; here games and the inspector edit the component
+  directly, so `prepare_joints` keeps only the impulses of the parts the
+  kind has and uses now (`solver/joint/active.rs`), and clamps a motor's or
+  a mouse joint's to its current cap over the sub-step. A lowered
+  `max_torque` is felt from the next step.
+- **Singular is relative.** The point constraint's and the prismatic's 2×2
+  effective mass is singular when `det <= ε · k11 · k22`
+  (`solver/joint/block.rs`, Box2D's `b2Solve22`), not below a fixed `ε`:
+  `det` goes as the inverse mass squared, so a fixed threshold dropped the
+  joint on a body of a few tonnes with its anchor near the centre.
+- **Anchors are unscaled.** An anchor is in its body's space as rotation
+  and translation only — the solver turns it by the body's angle and never
+  scales it. `Joint2D::anchor_in_world` and `Joint2D::anchor_on` are that
+  rule, and the overlay, `join_selection` and the play-mode grab all use
+  them, so a hinge put on a stretched sprite holds where it was put.
 - **Sleep**: a motor on any kind, or a mouse joint, drives its island; and
   a driven joint now **wakes** its bodies at the start of the step — a motor
   or a hand put on a sleeping body changed nothing else sleep would notice.
+- **Overlay**: a wheel or slider with a zero axis joins nothing in the
+  solver, and the overlay draws nothing for it.
 - **Editor**: the inspector lists every kind (`JointKind::NAMES`,
   `JointKind::named` the parameters a new one starts from) with its axis,
   suspension, limits, motor and spring rows, the target for a mouse joint,
@@ -3981,6 +4005,10 @@ pulling a body to its target, and one too weak to hold it up; a revolute
 spring turning a bar back to rest; a rod breaking once past its force while
 a hanging one holds, then both bodies despawned with the steps going on; a
 joint to a body despawned between steps; a weld breaking past its torque),
+`tests/joint_switches.rs` (a motor, spring and limit switched off at run time
+on a wheel, a slider and a hinge, each then coasting or falling),
+`tests/heavy_joints.rs` (a mouse joint, a pin and a slider holding ten-tonne
+bodies),
 `prefab::sync` (a joint inside a prefab joining the instance's own bodies,
 and following an edit), the scene component's format tests (every kind and
 both thresholds round-trip; a 0.3 revolute reads unchanged and writes no new
