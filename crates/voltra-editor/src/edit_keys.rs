@@ -33,9 +33,7 @@ pub(crate) fn poll(editor: &mut Editor, ctx: &Context, frame: &mut UiFrame<'_>) 
                     editor.timeline.copy_keys(frame.animation_clips);
                 }
                 Event::Cut => {
-                    if editor.timeline.copy_keys(frame.animation_clips) > 0 {
-                        editor.timeline.delete_key(frame.animation_clips);
-                    }
+                    editor.timeline.cut_keys(frame.animation_clips);
                 }
                 Event::Paste(_) => {
                     editor.timeline.paste_keys(frame.animation_clips);

@@ -14,6 +14,10 @@ const AT: f32 = 0.005;
 /// at the playhead — so a paste puts them all at the playhead.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct CopiedKey {
+    /// The track it came from, by place: a paste into the same clip goes
+    /// back to it, even beside another track of the same target and
+    /// property.
+    pub track: usize,
     /// The track's target, as the track named it.
     pub target: String,
     /// The track's property.
@@ -58,6 +62,27 @@ impl Timeline {
         true
     }
 
+    /// Copies, then deletes, what [`copy_keys`](Self::copy_keys) would copy:
+    /// the selected key, or every key at the playhead. Answers how many.
+    pub fn cut_keys(&mut self, clips: &mut AnimationClips) -> usize {
+        let Some(path) = self.open.clone() else {
+            return 0;
+        };
+        let cut = self.copy_keys(clips);
+        if cut == 0 {
+            return 0;
+        }
+        let handle = clips.load(&path);
+        let clip = clips.get_mut(handle);
+        // One key per track at most: removing one moves no other's index.
+        for (t, k) in picked(clip, self.selected, self.playhead) {
+            clip.tracks[t].keys.remove(k);
+        }
+        self.selected = None;
+        self.dirty.insert(path);
+        cut
+    }
+
     /// Deletes the open clip's selected key. Answers whether there was one.
     pub fn delete_key(&mut self, clips: &mut AnimationClips) -> bool {
         let (Some(path), Some((t, k))) = (self.open.clone(), self.selected) else {
@@ -84,30 +109,12 @@ pub(crate) fn copy(
     selected: Option<(usize, usize)>,
     playhead: f32,
 ) -> Vec<CopiedKey> {
-    let mut picked: Vec<(&Track, usize)> = Vec::new();
-    match selected {
-        Some((t, k)) => {
-            if let Some(track) = clip.tracks.get(t).filter(|track| k < track.keys.len()) {
-                picked.push((track, k));
-            }
-        }
-        None => {
-            for track in &clip.tracks {
-                if let Some(k) = track
-                    .keys
-                    .iter()
-                    .position(|key| (key.time - playhead).abs() < AT)
-                {
-                    picked.push((track, k));
-                }
-            }
-        }
-    }
-    picked
+    picked(clip, selected, playhead)
         .into_iter()
-        .map(|(track, k)| {
-            let key = &track.keys[k];
+        .map(|(t, k)| {
+            let (track, key) = (&clip.tracks[t], &clip.tracks[t].keys[k]);
             CopiedKey {
+                track: t,
                 target: track.target.clone(),
                 property: track.property,
                 value: key.value,
@@ -117,11 +124,43 @@ pub(crate) fn copy(
         .collect()
 }
 
+/// Where the keys a copy takes are, as (track, key): the selected key, or
+/// every track's key at the playhead — at most one per track.
+fn picked(
+    clip: &AnimationClip,
+    selected: Option<(usize, usize)>,
+    playhead: f32,
+) -> Vec<(usize, usize)> {
+    match selected {
+        Some((t, k)) => clip
+            .tracks
+            .get(t)
+            .filter(|track| k < track.keys.len())
+            .map(|_| (t, k))
+            .into_iter()
+            .collect(),
+        None => clip
+            .tracks
+            .iter()
+            .enumerate()
+            .filter_map(|(t, track)| {
+                track
+                    .keys
+                    .iter()
+                    .position(|key| (key.time - playhead).abs() < AT)
+                    .map(|k| (t, k))
+            })
+            .collect(),
+    }
+}
+
 /// Pastes `copied` at `playhead`, replacing a key already there. One key
-/// goes into the `into` track when that track takes its kind of value —
-/// a position copied off one entity pasted onto another's; otherwise each
-/// goes into the track of its own target and property, made if the clip has
-/// none. Answers where each landed, as (track, key).
+/// goes into the `into` track when that track animates the same property —
+/// a position copied off one entity pasted onto another's. Otherwise each
+/// goes back to the track it came from, if that track is still there and
+/// still its target's property, or else into the track of its target and
+/// property, made if the clip has none. Answers where each landed, as
+/// (track, key).
 pub(crate) fn paste(
     clip: &mut AnimationClip,
     copied: &[CopiedKey],
@@ -132,14 +171,21 @@ pub(crate) fn paste(
         ([one], Some(t)) => clip
             .tracks
             .get(t)
-            .filter(|track| track.property.kind() == one.property.kind())
+            .filter(|track| track.property == one.property)
             .map(|_| t),
         _ => None,
     };
     let time = playhead.max(0.0);
     let mut landed = Vec::with_capacity(copied.len());
     for key in copied {
-        let t = single.unwrap_or_else(|| track_for(clip, &key.target, key.property));
+        let own = clip.tracks.get(key.track).is_some_and(|track| {
+            track.property == key.property && canonical(&track.target) == canonical(&key.target)
+        });
+        let t = match (single, own) {
+            (Some(t), _) => t,
+            (None, true) => key.track,
+            (None, false) => track_for(clip, &key.target, key.property),
+        };
         let track = &mut clip.tracks[t];
         let k = track.set_key(time, key.value);
         track.keys[k].ease = key.ease;
@@ -208,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn one_key_goes_into_the_selected_track_of_its_kind_or_makes_its_own() {
+    fn one_key_goes_into_the_selected_track_of_its_property_or_its_own() {
         let mut clip = clip();
         let copied = copy(&clip, Some((1, 0)), 0.0);
         let mut lamp = Track::new("lamp", Property::Translation);
@@ -218,12 +264,42 @@ mod tests {
         assert_eq!(
             paste(&mut clip, &copied, 0.75, Some(0)),
             [(1, 1)],
-            "a rotation takes no position"
+            "a rotation track takes no position"
         );
 
         let mut empty = AnimationClip::default();
         assert_eq!(paste(&mut empty, &copied, 0.0, None), [(0, 0)]);
         assert_eq!(empty.tracks[0].property, Property::Translation);
         assert!(copy(&empty, None, 9.0).is_empty());
+    }
+
+    #[test]
+    fn a_number_of_another_property_is_not_pasted_into_a_track() {
+        let mut clip = clip();
+        let mut lamp = Track::new("lamp", Property::LightIntensity);
+        lamp.set_key(0.0, Value::Float(3.0));
+        clip.tracks.push(lamp);
+        let copied = copy(&clip, Some((2, 0)), 0.0);
+        // Selected: the arm's rotation, a float as well.
+        assert_eq!(paste(&mut clip, &copied, 0.5, Some(0)), [(2, 1)]);
+        assert_eq!(clip.tracks[0].keys.len(), 2, "the rotation is untouched");
+    }
+
+    #[test]
+    fn keys_of_two_tracks_of_one_property_go_back_to_their_own() {
+        let mut clip = clip();
+        let mut twin = Track::new("arm", Property::Rotation);
+        twin.set_key(0.0, Value::Float(5.0));
+        clip.tracks.push(twin);
+        let copied = copy(&clip, None, 0.0);
+        assert_eq!(copied.len(), 2, "the arm's two rotations at 0");
+        paste(&mut clip, &copied, 3.0, None);
+        let last = |t: usize| clip.tracks[t].keys.last().map(|k| (k.time, k.value));
+        assert_eq!(last(0), Some((3.0, Value::Float(0.0))));
+        assert_eq!(
+            last(2),
+            Some((3.0, Value::Float(5.0))),
+            "not merged into the first"
+        );
     }
 }

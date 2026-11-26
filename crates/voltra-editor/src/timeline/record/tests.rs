@@ -198,3 +198,18 @@ fn a_key_copied_is_pasted_at_the_playhead_and_undone() {
     assert_eq!(scene.clip().tracks[0].keys.len(), 2);
     assert_eq!(scene.timeline.selected, None, "the pasted key is gone");
 }
+
+#[test]
+fn a_cut_with_no_key_selected_takes_the_column_at_the_playhead() {
+    let mut scene = scene();
+    scene.timeline.playhead = 1.0;
+    assert_eq!(scene.timeline.cut_keys(&mut scene.clips), 1);
+    assert_eq!(scene.clip().tracks[0].keys.len(), 1, "the key at 1s went");
+    scene.timeline.playhead = 2.0;
+    assert!(scene.timeline.paste_keys(&mut scene.clips));
+    let key = scene.clip().tracks[0].keys[1];
+    assert_eq!(
+        (key.time, key.value),
+        (2.0, Value::Vec2(Vec2::new(4.0, 0.0)))
+    );
+}

@@ -9,11 +9,14 @@ use voltra_scene::{Bone2D, Skeleton2D, Transform, TwoBoneIk};
 use super::active;
 
 /// What the bone section asked for that needs the editor: a child bone at
-/// its tip, spawned once the world is no longer borrowed.
+/// its tip, spawned once the world is no longer borrowed, and the bone's
+/// rest set from its pose — once the timeline has put the scene back as
+/// authored, since a rest copies the transform and no clip keys a rest.
 #[derive(Debug, Default)]
 pub(super) struct Asked {
     pub claim: Option<&'static str>,
     pub child_bone: bool,
+    pub set_rest: bool,
 }
 
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
@@ -34,7 +37,6 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
             }
         });
     }
-    let pose = world.get::<Transform>(entity).copied().unwrap_or_default();
     if let Some(bone) = world.get_mut::<Bone2D>(entity) {
         ui.separator();
         ui.label(RichText::new("Bone").strong());
@@ -56,8 +58,7 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
                 .on_hover_text("this pose is the one a skinned mesh is bound in")
                 .clicked()
             {
-                bone.rest = pose;
-                asked.claim = Some("Set bone rest pose");
+                asked.set_rest = true;
             }
             reset = ui.button("Reset to rest").clicked();
             asked.child_bone = ui

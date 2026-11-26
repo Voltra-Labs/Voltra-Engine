@@ -18,6 +18,9 @@ pub(super) struct Context<'a> {
     /// It has a sprite with a texture: a caster can take its silhouette.
     pub textured_sprite: bool,
     pub shape: &'a mut ShapeEdit,
+    /// The timeline is recording: the sprite's quad is the pose's frame,
+    /// and copying it into a polygon would author the pose.
+    pub recording: bool,
 }
 
 /// The caster toggle and its settings, for an entity that has a collider or
@@ -39,14 +42,22 @@ pub(super) fn show(
         starting,
         textured_sprite,
         shape,
+        recording,
     } = context;
+    // The quad is the frame shown; while recording that is the pose's.
+    let copies_quad = recording && !has_collider && starting.is_some();
+    const WAIT: &str = "turn the timeline's Record off first: it would copy the recorded pose";
     ui.label(RichText::new("Shadows").strong())
         .on_hover_text("blocks the light of lights that cast shadows");
     let mut claim = None;
 
     let mut casts = world.get::<ShadowCaster2D>(entity).is_some();
     // A checkbox is one click, so `changed` is the whole edit.
-    if ui.checkbox(&mut casts, "casts shadows").changed() {
+    let toggle = ui.add_enabled(
+        !(copies_quad && !casts),
+        egui::Checkbox::new(&mut casts, "casts shadows"),
+    );
+    if toggle.on_disabled_hover_text(WAIT).changed() {
         if casts {
             let caster = match (has_collider, starting.clone()) {
                 (false, Some(points)) => ShadowCaster2D {
@@ -92,7 +103,11 @@ pub(super) fn show(
                 } else {
                     "start from the sprite's quad and edit it in the viewport"
                 };
-                if ui.button("Use own polygon").on_hover_text(from).clicked() {
+                let own = ui
+                    .add_enabled(!copies_quad, Button::new("Use own polygon"))
+                    .on_hover_text(from)
+                    .on_disabled_hover_text(WAIT);
+                if own.clicked() {
                     replace = Some(CasterShape::Polygon {
                         points,
                         closed: true,

@@ -253,6 +253,20 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 ));
                 let asked = skeleton::show(ui, frame.world, entity);
                 claim = claim.or(asked.claim);
+                if asked.set_rest {
+                    // A rest copies the transform: the authored one, never
+                    // a recorded pose.
+                    editor
+                        .timeline
+                        .end_record(frame.world, frame.animation_clips);
+                    let pose = frame.world.get::<Transform>(entity).copied();
+                    if let (Some(pose), Some(bone)) =
+                        (pose, frame.world.get_mut::<voltra_scene::Bone2D>(entity))
+                    {
+                        bone.rest = pose;
+                        claim = Some("Set bone rest pose");
+                    }
+                }
                 if asked.child_bone {
                     crate::spawn::record(editor, frame, "Add child bone", |frame| {
                         crate::spawn::child_bone(frame, entity)
@@ -328,6 +342,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     let outcome = collider::show(ui, shape, textured);
                     claim = claim.or(outcome.claim);
                     if outcome.fit_to_sprite {
+                        // Fitted to the frame shown: the authored one.
+                        editor
+                            .timeline
+                            .end_record(frame.world, frame.animation_clips);
                         claim = claim.or(fit_to_sprite(frame, entity));
                     }
                 }
@@ -370,6 +388,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                                 .get::<Sprite>(entity)
                                 .is_some_and(|sprite| sprite.texture.is_some()),
                             shape: &mut editor.shape,
+                            recording: editor.timeline.is_recording(),
                         },
                     ));
                 }

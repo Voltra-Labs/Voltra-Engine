@@ -67,6 +67,13 @@ impl Timeline {
         true
     }
 
+    /// Whether the editing panels are seeing the pose this frame: an action
+    /// that copies what they see into something no clip keys — a bone's
+    /// rest, a shape — must [`end_record`](Self::end_record) first, or wait.
+    pub fn is_recording(&self) -> bool {
+        self.recording.is_some()
+    }
+
     /// Keys at the playhead every value the editing panels moved since
     /// [`begin_record`](Self::begin_record), then puts the scene back as
     /// authored. Answers how many it keyed. Called early — before an action
