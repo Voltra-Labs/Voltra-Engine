@@ -207,10 +207,14 @@ enters it and stops nothing, which is what a coin, a checkpoint or a damage
 zone is. Both are absent by default, meaning "every layer, and solid".
 
 A `Joint2D` holds two bodies together, or one to the world: a revolute hinge
-(with an optional angle limit and motor), a distance joint (a rod, a spring, or
-a rope that goes slack), or a weld. `Physics ▸ Join selection` hinges the last
-picked body to the other selected one or to the world, and the inspector edits
-the rest; the collider overlay draws every joint.
+(with an optional angle limit, motor and return spring), a distance joint (a
+rod, a spring, or a rope that goes slack), a weld, a wheel on a sprung
+suspension with a motor, a prismatic slider (limits, motor, spring), or a mouse
+joint pulling a body to a target. Any of them breaks past its `break_force` or
+`break_torque`, and `Tick::broken_joints` says so once. `Physics ▸ Join
+selection` hinges the last picked body to the other selected one or to the
+world, and the inspector edits the rest; the collider overlay draws every joint,
+its axis and its limits. In play, dragging a body pulls it with a mouse joint.
 
 `Tick::events` is the stream of what began and ended touching, sensors
 included. Each hook is handed every event exactly once, so a pickup can be
@@ -433,6 +437,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 119 | Animator crossfades; exit time counting loops | done |
 | 120 | Blend trees: 1D and 2D directional, synced children | done |
 | 121 | Animator layers (masks, override, additive); timeline record mode, key copy, clip undo | done |
+| 122 | Joints: wheel, prismatic, mouse; revolute spring; breaking | done |
 
 ## Contributing
 

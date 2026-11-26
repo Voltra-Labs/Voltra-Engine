@@ -3880,21 +3880,114 @@ held). Box2D's three, with its math (`b2SolveRevoluteJoint`,
 
 Rejected: **joints on the body, Unity's shape** — one per entity here;
 **XPBD joints** — the contacts are TGS Soft, and two solvers on one body
-fight; **wheel and prismatic joints now** — the same machinery with an axis,
-when a vehicle needs them.
+fight.
 
-- **Not yet**: wheel, prismatic, motor and mouse joints; a revolute joint's
-  spring; breaking under force; joints on bodies without a collider turning
-  (no inertia without a shape, as before).
+**Stage 122 — wheel, prismatic and mouse joints; springs; breaking.**
+Box2D v3's `b2WheelJoint`, `b2PrismaticJoint` and `b2MouseJoint`, worked
+from its known design and the in-repo solver that already follows it (no
+source to hand): the same soft constraints (`b2MakeSoft`), warm started,
+solved and relaxed in every sub-step.
+
+- **Which body is which: the joint lives on the body that moves**, as a
+  revolute's lives on the body that turns. Box2D's wheel and prismatic put
+  the axis on body A and slide B along it; here `a` — the wheel, the slider
+  — is Box2D's B, and the **axis is in `b`'s space** (the world's when `b`
+  is the world), so a wheel's motor speed is the wheel's, as a revolute's
+  is, and the common case — a slider on its own entity, held to the world —
+  names neither body and has a world axis. The arm on the base reaches to
+  the *mover's* anchor (Box2D's `d + rA`). `solver/joint/line.rs` is the
+  geometry both share; `slide.rs` their spring and limits along it.
+- **`Wheel { axis, spring, limit, motor }`**: the wheel's anchor kept on
+  the line (soft, as every joint's), the suspension a `RestSpring` (hz,
+  damping, a rest along the axis; `None` slides freely, Box2D's
+  `enableSpring` off), translation limits, and the revolute's angular
+  `Motor` turning the wheel against `b`. Box2D's order: motor, spring,
+  limits, line. Unity's `WheelJoint2D` (a `JointSuspension2D` of frequency
+  and damping ratio, a `JointMotor2D`) is the same shape; Godot builds a
+  wheel from two nodes (`GrooveJoint2D` + `DampedSpringJoint2D`), which is
+  two components here for what is one constraint. Unity's `SliderJoint2D`
+  is the prismatic, its `TargetJoint2D` (target, max force, frequency,
+  damping) the mouse joint.
+- **`Prismatic { axis, reference_angle, limit, motor, spring }`**: the line
+  and the angle solved together as Box2D's 2×2 block (a push across the
+  line turns the bodies too); a `LinearMotor` (speed, `max_force`), a
+  `RestSpring` and limits along the axis. A zero axis joins nothing, as a
+  joint naming a missing body does; the inspector edits an axis as an angle,
+  so it cannot make one.
+- **`Mouse { max_force, hertz, damping_ratio }`**: `a`'s anchor pulled to
+  `b`'s — the **target is `anchor_b`**, a world point when `b` is the world,
+  so a game moves it by writing the field. The general two-body case is the
+  same constraint (the point constraint's own mass matrix), so a body can be
+  pulled to another. Soft in the relax pass too, as Box2D's; with no
+  frequency it pulls as hard as a joint holds its anchors; the accumulated
+  impulse is capped at `max_force · h`. Box2D's fixed angular damping
+  (0.5 Hz) is left out — a hardcoded spring nobody can set — so a body
+  picked off its centre swings about the grip.
+- **Revolute `spring: Option<RestSpring>`** towards `rest`, radians from
+  the reference, before the motor (Box2D's order). Unwrapped, as the limit
+  is: an axle wound three turns winds its spring three turns.
+  `RestSpring` is one struct for the three kinds that rest somewhere along a
+  coordinate; a distance joint's `Spring` rests at its `length`.
+- **Breaking: `break_force` / `break_torque: Option<f32>` on `Joint2D`**,
+  `None` (not written) never. After the step, each joint's load is its
+  impulses over the *sub-step* — they are a sub-step's, warm started in
+  each — exactly Box2D's `b2Joint_GetConstraintForce` (`impulse · inv_h`):
+  every linear part at once (the anchors', the line's and along it), every
+  angular part at once (spring, motor, limits, held angle). Measured once
+  the step is solved, so it is the settled load, not a sub-step's spike.
+  Past it the **component is removed** and a `JointBroken { entity, a, b,
+  force, torque }` raised once — Unity's breakable joint (removed, then
+  `OnJointBreak2D`), not Box2D's report-only event: a joint left in place
+  holds again next step and reports again. Removed at run time only: an
+  editor Stop restores the scene file's joint; a scene never says broken.
+  The events ride beside the collisions — `PhysicsWorld::broken_joints`,
+  and `Tick::broken_joints` handed out as `Tick::events` are (the fixed
+  tick the step before it, the per-frame tick every step since its last
+  turn, gathered by `app/pending_physics.rs`). A joint whose entity or
+  body a game despawned between steps joins nothing and breaks nothing.
+- **Sleep**: a motor on any kind, or a mouse joint, drives its island; and
+  a driven joint now **wakes** its bodies at the start of the step — a motor
+  or a hand put on a sleeping body changed nothing else sleep would notice.
+- **Editor**: the inspector lists every kind (`JointKind::NAMES`,
+  `JointKind::named` the parameters a new one starts from) with its axis,
+  suspension, limits, motor and spring rows, the target for a mouse joint,
+  and both thresholds (switched on at 1000, not at zero, which would break
+  on the next step). The overlay draws a wheel's or slider's axis between
+  its limits with a mark at each, a hinge limit's two rays and `a`'s own
+  axis. **Play-mode drag** (`grab.rs`): a primary drag the gizmo did not
+  take, starting on a dynamic body while playing, spawns a transient entity
+  (no `SceneId`: never saved or snapshot) with a mouse joint at the point
+  pressed — Box2D's testbed tuning, 5 Hz, ratio 0.7, `1000 · mass` N — and
+  moves its target with the pointer; release, Stop (before the restore,
+  which despawns only the scene's entities) or the body going lets go.
+  Unity and Godot have no such drag; their play-mode handles are gizmos,
+  which stay — a gizmo teleports, the joint pulls through the solver.
+
+- **Not yet**: joints on bodies without a collider turning (no inertia
+  without a shape, as before); a motor joint (Box2D's `b2MotorJoint`,
+  driving one body's offset and angle to another's — no game needs it
+  yet); a gear or pulley joint; a mouse joint's angular damping; breaking
+  that leaves the component flagged rather than removed.
 
 Pinned by `tests/joints.rs` (a rod and a pin pendulum keeping their length
 through a swing; a rod between two falling bodies; a rope slack then taut; a
 spring stretched by `g/k` and settled; a weld holding a plank level; a limit
 stopping a hinge and resting on it; a motor at its speed on its axle; joined
 bodies passing through each other unless asked; a hanging pendulum sleeping
-while a motor's wheel does not), `prefab::sync` (a joint inside a prefab
-joining the instance's own bodies, and following an edit) and the scene
-component's format test.
+while a motor's wheel does not; a parked car's suspension settling on a
+slope and a wheel motor driving one; a slider driven to each limit and held
+on its line, and one hanging on its spring at `rest − g/k`; a mouse joint
+pulling a body to its target, and one too weak to hold it up; a revolute
+spring turning a bar back to rest; a rod breaking once past its force while
+a hanging one holds, then both bodies despawned with the steps going on; a
+joint to a body despawned between steps; a weld breaking past its torque),
+`prefab::sync` (a joint inside a prefab joining the instance's own bodies,
+and following an edit), the scene component's format tests (every kind and
+both thresholds round-trip; a 0.3 revolute reads unchanged and writes no new
+field; a short wheel or slider takes its axis), the overlay's (an axis
+between its limits; a hinge's rays), the tick's (each hook handed a break
+once) and the editor's grab (a press pulls the grip to the pointer; ground
+and a static body grab nothing; a despawned body is let go).
 
 ### Property animation is clips of eased keys, bound by name from a player
 
