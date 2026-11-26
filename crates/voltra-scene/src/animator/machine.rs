@@ -84,7 +84,7 @@ pub struct Transition {
     /// played first. Below one, the point in each loop: `0.5` is half way
     /// through any loop. One or more counts loops on a clip that loops —
     /// `2.5` waits for two loops and a half — and is the end of one that
-    /// does not.
+    /// does not. A clip of no length has nothing to wait for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_time: Option<f32>,
     /// Seconds to crossfade into `to`'s clip, the one leaving still playing
@@ -197,6 +197,29 @@ impl StateMachine {
             true
         });
         self
+    }
+
+    /// Gives each transition the `duration` of its counterpart in `loaded`
+    /// — this machine as [`checked`](Self::checked) kept it, then edited.
+    ///
+    /// The check keeps transitions in order, so each of `loaded`'s is the
+    /// next of this machine's with the same `from`, `to`, conditions and
+    /// exit time; one the check dropped keeps its own duration.
+    pub fn take_durations(&mut self, loaded: &StateMachine) {
+        let mut kept = loaded.transitions.iter().peekable();
+        for transition in &mut self.transitions {
+            let Some(edited) = kept.peek() else {
+                return;
+            };
+            let same = edited.from == transition.from
+                && edited.to == transition.to
+                && edited.conditions == transition.conditions
+                && edited.exit_time == transition.exit_time;
+            if same {
+                transition.duration = edited.duration;
+                kept.next();
+            }
+        }
     }
 
     fn condition_problem(&self, condition: &Condition) -> Option<String> {

@@ -241,14 +241,32 @@ fn a_paused_fade_holds_and_a_clip_that_ends_first_is_held_to_the_end() {
     let mut clips = store(&[("a.anim.ron", hold(0.0, 0.0)), ("b.anim.ron", short.into())]);
     let mut world = World::new();
     let (root, _) = rig(&mut world, "a.anim.ron");
+    let playing = |world: &World| world.get::<AnimationPlayer>(root).expect("p").playing;
     advance(&mut world, &mut clips, 0.0);
     fading(&mut world, root, "b.anim.ron", 1.0);
     advance(&mut world, &mut clips, 0.25);
     // b ended at 0.1 and holds 8; a quarter of the way.
     assert!((x(&world, root) - 2.0).abs() < 1e-5, "{}", x(&world, root));
-    assert!(!world.get::<AnimationPlayer>(root).expect("p").playing);
+    assert!(playing(&world), "ended, but playing until the fade is over");
+
+    // A pause now holds the fade, though its clip has ended.
+    world.get_mut::<AnimationPlayer>(root).expect("p").playing = false;
+    advance(&mut world, &mut clips, 0.25);
+    assert!(
+        (x(&world, root) - 2.0).abs() < 1e-5,
+        "paused: {}",
+        x(&world, root)
+    );
+    assert_eq!(
+        world.get::<AnimationPlayer>(root).expect("p").fade_weight(),
+        Some(0.25)
+    );
+    world.get_mut::<AnimationPlayer>(root).expect("p").playing = true;
     advance(&mut world, &mut clips, 0.25);
     assert!((x(&world, root) - 4.0).abs() < 1e-5, "the fade runs on");
+    advance(&mut world, &mut clips, 0.5);
+    assert_eq!(x(&world, root), 8.0);
+    assert!(!playing(&world), "the fade over, the ended clip stops");
 
     fading(&mut world, root, "a.anim.ron", 1.0);
     advance(&mut world, &mut clips, 0.0);
@@ -260,4 +278,23 @@ fn a_paused_fade_holds_and_a_clip_that_ends_first_is_held_to_the_end() {
         world.get::<AnimationPlayer>(root).expect("p").fade_weight(),
         Some(0.0)
     );
+}
+
+#[test]
+fn a_miss_of_the_side_faded_out_is_not_the_new_clip_s() {
+    let bare = "(looping: true, tracks: [(property: Translation, keys: [(time: 0.0, value: Vec2((4.0, 0.0)))])])";
+    let mut clips = store(&[("a.anim.ron", hold(0.0, 3.0)), ("b.anim.ron", bare.into())]);
+    let mut world = World::new();
+    let (root, lamp) = rig(&mut world, "a.anim.ron");
+    advance(&mut world, &mut clips, 0.0);
+    fading(&mut world, root, "b.anim.ron", 1.0);
+    world.remove::<PointLight2D>(lamp);
+    advance(&mut world, &mut clips, 0.5);
+    let player = world.get::<AnimationPlayer>(root).expect("p");
+    assert_eq!(player.reported, None, "b animates everything it names");
+    assert!(
+        player.fade.as_ref().is_some_and(|f| f.reported),
+        "a's miss, said once"
+    );
+    assert!((x(&world, root) - 2.0).abs() < 1e-5);
 }

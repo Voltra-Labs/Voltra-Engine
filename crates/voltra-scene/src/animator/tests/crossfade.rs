@@ -155,3 +155,40 @@ fn an_exit_time_above_one_counts_loops() {
     rig.frame(0.0);
     assert_eq!(rig.state().as_deref(), Some("idle"));
 }
+
+#[test]
+fn an_exit_time_above_one_on_a_clip_that_plays_once_is_its_end() {
+    let once = r#"(
+        start: "land",
+        states: [
+            (name: "land", clip: Path("land.anim.ron")),
+            (name: "idle", clip: Path("idle.anim.ron")),
+            (name: "blink", clip: Path("blink.anim.ron")),
+        ],
+        transitions: [
+            (from: Some("land"), to: "idle", exit_time: Some(2.0)),
+            (from: Some("idle"), to: "blink", exit_time: Some(1.0)),
+            (from: Some("blink"), to: "land", exit_time: Some(3.0)),
+        ],
+    )"#;
+    // `land` plays once, half a second; `blink` is one key, of no length.
+    let blink =
+        "(looping: true, tracks: [(property: Rotation, keys: [(time: 0.0, value: Float(1.0))])])";
+    let mut rig = Rig::with_clips(once, &[("land", ONCE), ("idle", LOOP), ("blink", blink)]);
+    rig.frame(0.3);
+    rig.frame(0.0);
+    assert_eq!(rig.state().as_deref(), Some("land"), "not yet at its end");
+    rig.frame(0.3);
+    rig.frame(0.0);
+    assert_eq!(rig.state().as_deref(), Some("idle"), "its end, not never");
+
+    rig.frame(1.1);
+    rig.frame(0.0);
+    assert_eq!(rig.state().as_deref(), Some("blink"));
+    rig.frame(0.0);
+    assert_eq!(
+        rig.state().as_deref(),
+        Some("land"),
+        "a clip of no length has nothing to wait for"
+    );
+}

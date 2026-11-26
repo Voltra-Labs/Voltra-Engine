@@ -49,20 +49,28 @@ pub(super) fn step(
             });
     };
     // Paused mid-fade: everything holds, the fade too.
-    if !player.playing && !fade.held {
+    if !player.playing {
         player.fade = Some(fade);
         return None;
     }
     if let Some(handle) = incoming {
         let clip = clips.get(handle);
-        let was = player.playing;
         player.step(clip.duration(), clip.looping, delta);
-        fade.held |= was && !player.playing;
+        if !player.playing {
+            // It ended, not paused: held on its end, and kept playing so a
+            // pause can still be told apart, until the fade is over.
+            fade.ended = true;
+            player.playing = true;
+        }
     }
     fade.tick(delta);
     let clip = incoming.map(|handle| (handle, player.time()));
     if fade.done() {
-        // The last frame of the fade is the clip alone, and the fade ends.
+        // The last frame of the fade is the clip alone, and the fade ends —
+        // as does a clip that ended during it.
+        if fade.ended {
+            player.playing = false;
+        }
         return clip.map(|clip| Frame {
             clip: Some(clip),
             fade: None,

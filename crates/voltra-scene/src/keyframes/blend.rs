@@ -21,15 +21,20 @@ pub enum Mixing {
 }
 
 /// The weighted mix of `inputs`: one value for every (target, property)
-/// any of them holds, in the order first met.
+/// some input of positive weight holds, in the order first met.
 ///
 /// Each property is mixed among only the inputs that hold it, their
 /// weights scaled to sum to one among those — so a property one clip
 /// animates and another does not is that clip's at full weight, never
 /// pulled towards a default the other does not state. N inputs rather than
-/// two: a crossfade is two, a blend tree several. Weights that are not a
-/// finite positive number count as zero; a property whose inputs all weigh
-/// zero is their even mix rather than lost.
+/// two: a crossfade is two, a blend tree several.
+///
+/// The weights are shares of one whole — a crossfade's `1 - w` and `w` —
+/// not opacities: an input of weight zero (or a weight that is not a finite
+/// number) is absent, and a property only such inputs hold is not in the
+/// mix at all. Layering one pose *over* another, where a weight is how much
+/// of the lower one shows through, is a composite on top of this, not an
+/// input to it.
 pub fn blend<'a>(inputs: &[(&Pose<'a>, f32)]) -> Pose<'a> {
     let mut out = Pose::new();
     let mut parts = Vec::with_capacity(inputs.len());
@@ -57,48 +62,52 @@ pub fn blend<'a>(inputs: &[(&Pose<'a>, f32)]) -> Pose<'a> {
 }
 
 /// `parts` — values of `property` and their weights — mixed as the
-/// property's [`Mixing`] says. `None` when none is of the property's kind.
+/// property's [`Mixing`] says. `None` when none is of the property's kind
+/// with a positive weight.
 ///
-/// The heaviest input is the reference: a discrete property takes its
-/// value (the later of two that weigh the same, so a crossfade switches at
-/// half way), and an angle is mixed around it, so a mix that is all one
-/// input is that input's value exactly, not a turn away from it.
+/// A discrete property takes the heaviest part's value — the later of two
+/// that weigh the same, so a crossfade switches at half way. An angle is
+/// mixed the short way from the *first* part, a fixed side whatever the
+/// weights, so two angles half a turn apart sweep one way through the
+/// whole fade rather than flipping at half way; one part alone is its own
+/// value exactly.
 pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
     let kind = property.kind();
     let parts: Vec<(Value, f32)> = parts
         .iter()
-        .filter(|(v, _)| v.kind() == kind)
-        .map(|&(v, w)| (v, if w.is_finite() && w > 0.0 { w } else { 0.0 }))
+        .filter(|(v, w)| v.kind() == kind && w.is_finite() && *w > 0.0)
+        .copied()
         .collect();
-    let total: f32 = parts.iter().map(|(_, w)| w).sum();
-    let even = total <= 0.0 || !total.is_finite();
-    let share = |w: f32| {
-        if even {
-            1.0 / parts.len() as f32
-        } else {
-            w / total
-        }
-    };
-    let mut heaviest = *parts.first()?;
-    for &(v, w) in &parts[1..] {
+    let (first, rest) = parts.split_first()?;
+    if rest.is_empty() {
+        return Some(first.0);
+    }
+    // Over the heaviest first, so a sum of large weights stays finite.
+    let most = parts.iter().map(|(_, w)| *w).fold(0.0, f32::max);
+    let total: f32 = parts.iter().map(|(_, w)| w / most).sum();
+    let share = |w: f32| w / most / total;
+    let mut heaviest = *first;
+    for &(v, w) in rest {
         if w >= heaviest.1 {
             heaviest = (v, w);
         }
     }
     let heaviest = heaviest.0;
-    Some(match (property.mixing(), heaviest) {
-        (Mixing::Discrete, _) | (_, Value::Int(_)) => heaviest,
-        (Mixing::Angle, Value::Float(at)) => {
+    Some(match (property.mixing(), heaviest, first.0) {
+        (Mixing::Discrete, ..) | (_, Value::Int(_), _) => heaviest,
+        (Mixing::Angle, Value::Float(top), Value::Float(from)) => {
             let turn: f32 = parts
                 .iter()
                 .map(|&(v, w)| match v {
-                    Value::Float(a) => shortest(a - at) * share(w),
+                    Value::Float(a) => shortest(a - from) * share(w),
                     _ => 0.0,
                 })
                 .sum();
-            Value::Float(at + turn)
+            // The same angle, wound as the heaviest part is, so a fade
+            // ending on it does not end a turn away.
+            Value::Float(top + shortest(from + turn - top))
         }
-        (_, Value::Float(_)) => Value::Float(
+        (_, Value::Float(_), _) => Value::Float(
             parts
                 .iter()
                 .map(|&(v, w)| match v {
@@ -107,7 +116,7 @@ pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
                 })
                 .sum(),
         ),
-        (_, Value::Vec2(_)) => Value::Vec2(
+        (_, Value::Vec2(_), _) => Value::Vec2(
             parts
                 .iter()
                 .map(|&(v, w)| match v {
@@ -116,7 +125,7 @@ pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
                 })
                 .sum(),
         ),
-        (_, Value::Color(_)) => {
+        (_, Value::Color(_), _) => {
             let mut sum = [0.0; 4];
             for &(v, w) in &parts {
                 if let Value::Color(c) = v {
@@ -220,6 +229,46 @@ mod tests {
     }
 
     #[test]
+    fn angles_half_a_turn_apart_sweep_one_way_through_half_way() {
+        let out = pose(&[("", Property::Rotation, Value::Float(0.0))]);
+        let into = pose(&[("", Property::Rotation, Value::Float(PI))]);
+        let at = |w: f32| match blend(&[(&out, 1.0 - w), (&into, w)]).get("", Property::Rotation) {
+            Some(Value::Float(a)) => a,
+            other => panic!("a rotation, not {other:?}"),
+        };
+        // The same direction either side of half way: no flip.
+        let (before, after) = (at(0.49), at(0.51));
+        let gap = shortest(after - before);
+        assert!(
+            gap.abs() < 0.1,
+            "{} then {}",
+            before.to_degrees(),
+            after.to_degrees()
+        );
+        assert!(
+            (shortest(before - -0.49 * PI)).abs() < 1e-4,
+            "{}",
+            before.to_degrees()
+        );
+        assert_eq!(at(1.0), PI, "ends on the input exactly");
+        assert_eq!(at(0.0), 0.0);
+    }
+
+    #[test]
+    fn an_input_of_weight_zero_is_absent() {
+        let base = pose(&[("", Property::LightIntensity, Value::Float(1.0))]);
+        let layer = pose(&[
+            ("", Property::LightIntensity, Value::Float(9.0)),
+            ("lamp", Property::LightRadius, Value::Float(5.0)),
+        ]);
+        let mixed = blend(&[(&base, 1.0), (&layer, 0.0)]);
+        assert_eq!(
+            mixed, base,
+            "nothing of the layer, not even its own property"
+        );
+    }
+
+    #[test]
     fn a_discrete_value_switches_at_half_weight() {
         let out = pose(&[("", Property::SpriteFrame, Value::Int(2))]);
         let into = pose(&[("", Property::SpriteFrame, Value::Int(7))]);
@@ -259,10 +308,7 @@ mod tests {
             Value::Float(3.75)
         ));
         let none = blend(&[(&a, 0.0), (&c, -1.0)]);
-        assert!(
-            close(none.get("", Property::LightIntensity), Value::Float(3.0)),
-            "all zero: an even mix"
-        );
+        assert!(none.is_empty(), "weighing nothing is absent");
         assert!(blend(&[]).is_empty());
         assert_eq!(mix(Property::Rotation, &[(Value::Int(1), 1.0)]), None);
     }

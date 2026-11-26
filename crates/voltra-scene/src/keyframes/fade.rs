@@ -39,9 +39,13 @@ pub(super) struct Fade {
     elapsed: f32,
     /// Seconds it lasts, positive.
     duration: f32,
-    /// The clip faded in does not loop and ended first: it holds its last
-    /// frame and the fade runs on, though the player is no longer playing.
-    pub held: bool,
+    /// The clip faded in does not loop and ended first. It holds its last
+    /// frame and the fade runs on; the player stays playing until the fade
+    /// is over, so a pause — `playing` turned off — still holds the fade.
+    pub ended: bool,
+    /// Whether the side faded out found something it animates missing, and
+    /// said so: once per fade, apart from the clip faded in's own warning.
+    pub reported: bool,
     /// The mix last written — what a fade that interrupts this one starts
     /// from.
     pub last: Option<Pose<'static>>,
@@ -54,7 +58,8 @@ impl Fade {
             from,
             elapsed: 0.0,
             duration,
-            held: false,
+            ended: false,
+            reported: false,
             last: None,
         }
     }

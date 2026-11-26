@@ -132,9 +132,22 @@ impl<T: RonAsset> RonStore<T> {
     /// temporary file renamed over it — the watcher sees one change, and a
     /// crash mid-write leaves the old file. A path never loaded is loaded
     /// first (and so written as it reads).
+    ///
+    /// What is loaded is the [`checked`](RonAsset::checked) value: a save
+    /// of it drops from the file what loading dropped. A type whose check
+    /// drops what an author wrote saves through
+    /// [`read_as_written`](Self::read_as_written) and
+    /// [`write`](Self::write) instead.
     pub fn save(&mut self, path: &AssetPath) -> Result<(), RonAssetError> {
         let handle = self.load(path);
-        let text = ron::ser::to_string_pretty(self.get(handle), ron::ser::PrettyConfig::default())
+        let value = self.get(handle);
+        self.write(path, value)
+    }
+
+    /// Writes `value` to `path`'s file as [`save`](Self::save) does,
+    /// leaving what is loaded as it is; the watcher's reload reads it back.
+    pub fn write(&self, path: &AssetPath, value: &T) -> Result<(), RonAssetError> {
+        let text = ron::ser::to_string_pretty(value, ron::ser::PrettyConfig::default())
             .map_err(RonAssetError::Serialize)?;
         let file = self.root.join(path.as_str());
         if let Some(parent) = file.parent() {
@@ -143,6 +156,14 @@ impl<T: RonAsset> RonStore<T> {
         let tmp = file.with_extension("ron.tmp");
         std::fs::write(&tmp, text).map_err(RonAssetError::Io)?;
         std::fs::rename(&tmp, &file).map_err(RonAssetError::Io)
+    }
+
+    /// What `path`'s file says, as written — not checked, so what loading
+    /// would drop is still there, for a save that must keep it.
+    pub fn read_as_written(&self, path: &AssetPath) -> Result<T, RonAssetError> {
+        let text = voltra_assets::fs::read_to_string(&self.root.join(path.as_str()))
+            .map_err(RonAssetError::Io)?;
+        ron::from_str(&text).map_err(RonAssetError::Parse)
     }
 
     /// The directory every path is resolved against.
@@ -166,11 +187,8 @@ impl<T: RonAsset> RonStore<T> {
             .expect("a RonStore never removes, so every handle it issued resolves")
     }
 
-    /// The only place this type reads the disk.
+    /// What `path` loads as: the file, checked.
     fn read(&self, path: &AssetPath) -> Result<T, RonAssetError> {
-        let text = voltra_assets::fs::read_to_string(&self.root.join(path.as_str()))
-            .map_err(RonAssetError::Io)?;
-        let value: T = ron::from_str(&text).map_err(RonAssetError::Parse)?;
-        Ok(value.checked(path.as_str()))
+        Ok(self.read_as_written(path)?.checked(path.as_str()))
     }
 }
