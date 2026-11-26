@@ -81,9 +81,21 @@ pub struct Transition {
     #[serde(default)]
     pub conditions: Vec<Condition>,
     /// How much of the state's clip, as a fraction of its length, must have
-    /// played first — `1.0` waits for a clip that does not loop to end.
+    /// played first. Below one, the point in each loop: `0.5` is half way
+    /// through any loop. One or more counts loops on a clip that loops —
+    /// `2.5` waits for two loops and a half — and is the end of one that
+    /// does not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_time: Option<f32>,
+    /// Seconds to crossfade into `to`'s clip, the one leaving still playing
+    /// meanwhile; `0`, the default, cuts. Per transition, with no machine-
+    /// wide default: one place to look.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub duration: f32,
+}
+
+fn is_zero(value: &f32) -> bool {
+    *value == 0.0
 }
 
 /// A test of one parameter.
@@ -132,7 +144,8 @@ impl StateMachine {
     /// The machine as an animator can trust it: transitions naming a state
     /// that is not there, or testing a parameter that is not — or one of
     /// the wrong kind — dropped, with a warning naming `source`; two states
-    /// of one name keep the first.
+    /// of one name keep the first; a fade's duration that is not a time of
+    /// zero or more is a cut.
     ///
     /// Dropped rather than refusing the file, as a clip's bad keys are: an
     /// author mid-edit should still see the rest run.
@@ -154,6 +167,16 @@ impl StateMachine {
                 self.start
             );
             self.start.clear();
+        }
+        for t in &mut self.transitions {
+            if !(t.duration.is_finite() && t.duration >= 0.0) {
+                log::warn!(
+                    "{source}: a transition to {:?} lasts {}s, which is not a time; it cuts",
+                    t.to,
+                    t.duration
+                );
+                t.duration = 0.0;
+            }
         }
         let machine = self.clone();
         self.transitions.retain(|t| {

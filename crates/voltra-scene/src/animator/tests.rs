@@ -45,14 +45,22 @@ struct Rig {
 
 impl Rig {
     fn new(machine: &str) -> Self {
+        Self::with_clips(
+            machine,
+            &[
+                ("idle", LOOP),
+                ("run", LOOP),
+                ("jump", LOOP),
+                ("land", ONCE),
+            ],
+        )
+    }
+
+    /// A rig whose clips are `clips`, each `name.anim.ron`.
+    fn with_clips(machine: &str, clips: &[(&str, &str)]) -> Self {
         let root = voltra_testkit::scratch_root();
         std::fs::write(root.join("hero.animator.ron"), machine).expect("writes");
-        for (name, text) in [
-            ("idle", LOOP),
-            ("run", LOOP),
-            ("jump", LOOP),
-            ("land", ONCE),
-        ] {
+        for (name, text) in clips {
             std::fs::write(root.join(format!("{name}.anim.ron")), text).expect("writes");
         }
         let mut world = World::new();
@@ -88,6 +96,8 @@ impl Rig {
         player.clip.as_ref().map(|p| p.as_str().to_owned())
     }
 }
+
+mod crossfade;
 
 #[test]
 fn it_starts_in_the_start_state_and_gives_its_entity_a_player() {
@@ -214,6 +224,10 @@ fn the_shipped_machine_reads_whole_and_names_clips_that_are_there() {
     let machine = machines.get(handle);
     assert_eq!(machine.states.len(), 4);
     assert_eq!(machine.transitions.len(), 4, "none dropped");
+    assert!(
+        machine.transitions.iter().all(|t| t.duration > 0.0),
+        "every move crossfades"
+    );
     let mut clips = AnimationClips::new(&root);
     for state in &machine.states {
         assert!(

@@ -168,3 +168,5 @@ fn the_shipped_clip_reads_whole() {
     assert!(clip.tracks.iter().all(|t| t.keys.len() == 3));
     assert_eq!(clip.duration(), 1.5);
 }
+
+mod fade;

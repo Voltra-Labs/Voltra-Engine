@@ -3,7 +3,8 @@
 use serde::{Deserialize, Serialize};
 use voltra_ecs::{Entity, World};
 
-use super::target::Targets;
+use super::pose::Pose;
+use super::target::canonical;
 use super::track::Track;
 
 /// What a `.anim.ron` file holds.
@@ -75,23 +76,32 @@ impl AnimationClip {
         self
     }
 
+    /// Every track's value at `time`, written nowhere: what a blend mixes
+    /// with another clip's before anything is written. A track with no keys
+    /// holds nothing; of two tracks on one property, the later's value.
+    pub fn sample(&self, time: f32) -> Pose<'_> {
+        let mut pose = Pose::new();
+        for track in &self.tracks {
+            if let Some(value) = track.sample(time) {
+                pose.set(track.target.as_str(), track.property, value);
+            }
+        }
+        pose
+    }
+
     /// Writes every track's value at `time` onto the entities it names under
     /// `root`. Answers the tracks that found nothing to write to — a target
     /// no child is named, or one without the property's component.
     pub fn apply(&self, world: &mut World, root: Entity, time: f32) -> Vec<&Track> {
-        let mut targets = Targets::default();
-        let mut missed = Vec::new();
-        for track in &self.tracks {
-            let Some(value) = track.sample(time) else {
-                continue;
-            };
-            let written = targets
-                .get(world, root, &track.target)
-                .is_some_and(|entity| track.property.write(world, entity, value));
-            if !written {
-                missed.push(track);
-            }
-        }
-        missed
+        let pose = self.sample(time);
+        let missed = pose.apply(world, root);
+        self.tracks
+            .iter()
+            .filter(|track| {
+                missed
+                    .iter()
+                    .any(|s| s.property == track.property && s.target == canonical(&track.target))
+            })
+            .collect()
     }
 }

@@ -1,5 +1,7 @@
 // The character example's state machine. The game sets `speed` (how fast
-// it walks), `grounded` and `rising` (its upward speed) every step.
+// it walks), `grounded` and `rising` (its upward speed) every step. Every
+// transition crossfades (`duration`, seconds): leaving the ground quickly,
+// settling into a run or idle more slowly.
 (
     parameters: [
         (name: "speed", value: Float(0.0)),
@@ -14,9 +16,9 @@
         (name: "fall", clip: Path("animations/hero/fall.anim.ron")),
     ],
     transitions: [
-        (to: "jump", conditions: [IfNot("grounded"), Greater("rising", 0.5)]),
-        (to: "fall", conditions: [IfNot("grounded"), Less("rising", -0.5)]),
-        (to: "run", conditions: [If("grounded"), Greater("speed", 0.1)]),
-        (to: "idle", conditions: [If("grounded"), Less("speed", 0.1)]),
+        (to: "jump", conditions: [IfNot("grounded"), Greater("rising", 0.5)], duration: 0.05),
+        (to: "fall", conditions: [IfNot("grounded"), Less("rising", -0.5)], duration: 0.1),
+        (to: "run", conditions: [If("grounded"), Greater("speed", 0.1)], duration: 0.15),
+        (to: "idle", conditions: [If("grounded"), Less("speed", 0.1)], duration: 0.2),
     ],
 )

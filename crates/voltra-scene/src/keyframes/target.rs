@@ -1,5 +1,6 @@
 //! Finding the entity a track animates, by the names from the player down.
 
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 
 use voltra_ecs::{Entity, World};
@@ -25,6 +26,18 @@ pub fn resolve(world: &World, root: Entity, path: &str) -> Option<Entity> {
         })?;
     }
     Some(at)
+}
+
+/// `path` as [`resolve`] reads it: empty segments dropped, so `"/arm//hand/"`
+/// is `"arm/hand"`. Borrowed when it already is — the spelling every
+/// editor-made track has.
+pub fn canonical(path: &str) -> Cow<'_, str> {
+    let clean = !path.starts_with('/') && !path.ends_with('/') && !path.contains("//");
+    if clean {
+        return Cow::Borrowed(path);
+    }
+    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    Cow::Owned(segments.join("/"))
 }
 
 /// Every entity a track under `root` can name, with the path that names
@@ -111,5 +124,8 @@ mod tests {
         }
         assert_eq!(resolve(&world, root, "/arm//hand/"), Some(hand));
         assert_eq!(resolve(&world, root, "leg"), None);
+        assert_eq!(canonical("/arm//hand/"), "arm/hand");
+        assert!(matches!(canonical("arm/hand"), Cow::Borrowed(_)));
+        assert_eq!(canonical("/"), "");
     }
 }
