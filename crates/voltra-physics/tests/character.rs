@@ -67,5 +67,11 @@ fn body(world: &World, entity: Entity) -> &CharacterBody2D {
 }
 
 // A crate root's modules sit beside it, so the folder is named.
+#[path = "character/push.rs"]
+mod push;
 #[path = "character/slide.rs"]
 mod slide;
+#[path = "character/slopes.rs"]
+mod slopes;
+#[path = "character/turning.rs"]
+mod turning;

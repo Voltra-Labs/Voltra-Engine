@@ -7,6 +7,8 @@ use voltra_scene::{CharacterBody2D, Collider, Transform};
 
 use crate::query::{self, QueryFilter, ShapeHit};
 
+use super::push::{record, Push};
+use super::slope::along_floor;
 use super::{Slide, STILL, TOUCH};
 
 /// What every cast of one move shares.
@@ -46,20 +48,32 @@ impl Mover<'_> {
         slide.hits.push(hit);
     }
 
-    /// The cast-and-slide loop.
+    /// The cast-and-slide loop, and the dynamic bodies it pushes.
     pub(super) fn slide(
         &self,
         body: &CharacterBody2D,
         at: &mut Transform,
         velocity: Vec2,
         delta: f32,
-    ) -> Slide {
+    ) -> (Slide, Vec<Push>) {
         let up = self.up;
         let mut velocity = velocity;
         let mut motion = velocity * delta;
+        // Walking down the slope it stands on, at constant speed: along it
+        // from the start, rather than off into the air for the snap to
+        // bring back. Up a slope is turned along it where it is met, below.
+        let floor_normal = body.contact.floor_normal;
+        let walking = body.constant_speed_on_slopes
+            && body.contact.on_floor
+            && velocity.dot(up) <= 0.0
+            && self.is_floor(floor_normal);
+        if walking && (motion - up * motion.dot(up)).dot(floor_normal) > 0.0 {
+            motion = along_floor(motion, floor_normal, up) + up * motion.dot(up);
+        }
         // Gravity alone: straight down, nothing across.
         let falling_only = motion.dot(up) < 0.0 && (motion - up * motion.dot(up)).length() < STILL;
         let mut slide = Slide::default();
+        let mut pushes = Vec::new();
         let mut previous: Option<Vec2> = None;
         for _ in 0..body.max_slides.max(1) {
             let Some(hit) = self.cast(at, motion) else {
@@ -96,6 +110,11 @@ impl Mover<'_> {
                     continue;
                 }
             }
+            if body.push_force > 0.0 {
+                if let Some(push) = self.push(at, &hit, velocity, floor) {
+                    record(&mut pushes, push);
+                }
+            }
             self.touch(&mut slide, hit);
             if floor && body.stop_on_slope && falling_only {
                 // Landing, or standing, on a slope: stay put on it.
@@ -111,8 +130,15 @@ impl Mover<'_> {
             } else {
                 hit.normal
             };
-            motion = off_surface(motion, normal);
-            velocity = off_surface(velocity, normal);
+            if floor && grounded && body.constant_speed_on_slopes && velocity.dot(up) <= 0.0 {
+                // Walking on: whatever is left across, along this floor, and
+                // the speed kept across — none of it lost to the slope.
+                motion = along_floor(motion, normal, up);
+                velocity -= up * velocity.dot(up);
+            } else {
+                motion = off_surface(motion, normal);
+                velocity = off_surface(velocity, normal);
+            }
             if let Some(before) = previous {
                 // A crease: sliding along this surface goes back into the last.
                 if motion.dot(before) < -STILL {
@@ -131,7 +157,7 @@ impl Mover<'_> {
             }
         }
         slide.velocity = velocity;
-        slide
+        (slide, pushes)
     }
 }
 

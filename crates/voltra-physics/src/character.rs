@@ -20,7 +20,13 @@
 //!
 //! Before it, the character is carried by the floor it stood on — however
 //! far that has moved and turned since (`CharacterContact::floor_pose`): a
-//! moving platform, whatever moves it.
+//! moving platform, whatever moves it — and, with `carry_rotation`, turned
+//! by as much.
+//!
+//! With `constant_speed_on_slopes`, a walk on a floor runs along it
+//! covering the same ground across as on the flat — see [`slope`]. With a
+//! `push_force`, the dynamic bodies it walks into are shoved once the move
+//! is over — see [`push`].
 //!
 //! After the move, a character that stood on a floor and is not moving up
 //! reaches down by `snap` for one, so walking down a slope or off a small
@@ -37,7 +43,9 @@ use crate::query::{QueryFilter, ShapeHit};
 
 mod carry;
 mod inflated;
+mod push;
 mod slide;
+mod slope;
 mod snap;
 mod step;
 
@@ -104,9 +112,14 @@ pub fn move_and_slide(
     // Carried first, by the floor it stood on: a platform that moved under
     // it, or into it, takes it along. Put there outright — a wall it was
     // carried into is pushed out of by the move that follows.
-    let carried = carry(world, &body.contact, at.translation);
+    let (carried, turned) = carry(world, &body.contact, at.translation);
     at.translation += carried;
-    let mut slide = mover.slide(&body, &mut at, velocity, delta);
+    if body.carry_rotation {
+        // Turned with it too: the cast below is of the turned shape, and an
+        // edge turned into the floor is pushed out of as any overlap.
+        at.rotation += turned;
+    }
+    let (mut slide, pushes) = mover.slide(&body, &mut at, velocity, delta);
     if body.contact.on_floor
         && !slide.contact.on_floor
         && body.snap > 0.0
@@ -114,6 +127,9 @@ pub fn move_and_slide(
     {
         mover.snap(&mut at, &mut slide, body.snap);
     }
+    // Once the move is over and the world is free to write: the bodies it
+    // walked into, shoved for the step that follows to move.
+    push::apply(world, &pushes, body.push_force, delta, &mut slide.velocity);
 
     slide.contact.floor_pose = slide
         .contact
@@ -128,6 +144,7 @@ pub fn move_and_slide(
 
     if let Some(transform) = world.get_mut::<Transform>(entity) {
         transform.translation = at.translation;
+        transform.rotation = at.rotation;
     }
     if let Some(body) = world.get_mut::<CharacterBody2D>(entity) {
         body.contact = slide.contact;

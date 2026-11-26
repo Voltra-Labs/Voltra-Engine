@@ -79,7 +79,13 @@ impl SolverBody {
         }
     }
 
-    fn from_body(entity: Entity, body: &RigidBody, shape: Option<(&Collider, &Transform)>) -> Self {
+    /// The solver's view of `body`: its velocities, and the mass and inertia
+    /// a contact pushes against — also what a character's push reads.
+    pub(crate) fn from_body(
+        entity: Entity,
+        body: &RigidBody,
+        shape: Option<(&Collider, &Transform)>,
+    ) -> Self {
         let (velocity, angular_velocity, inverse_mass) = match body.body_type {
             // A static body's velocity is ignored rather than trusted: the
             // component is writable and a stale value would drag the world.
