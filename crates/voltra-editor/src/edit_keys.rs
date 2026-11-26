@@ -1,5 +1,6 @@
 //! The keys that act on the selection: Delete, Ctrl+D, and the clipboard's
-//! Ctrl+C, Ctrl+X and Ctrl+V.
+//! Ctrl+C, Ctrl+X and Ctrl+V — or, with the pointer over the timeline, on
+//! its clip's keys.
 //!
 //! Heard only while no text field has the keyboard, as the undo keys are:
 //! inside one they edit its text. The clipboard's arrive as egui events
@@ -24,6 +25,29 @@ pub(crate) fn poll(editor: &mut Editor, ctx: &Context, frame: &mut UiFrame<'_>) 
             input.events.clone(),
         )
     });
+    // Over the timeline, the keys are its clip's.
+    if editor.timeline.has_keys(ctx, false) {
+        for event in events {
+            match event {
+                Event::Copy => {
+                    editor.timeline.copy_keys(frame.animation_clips);
+                }
+                Event::Cut => {
+                    if editor.timeline.copy_keys(frame.animation_clips) > 0 {
+                        editor.timeline.delete_key(frame.animation_clips);
+                    }
+                }
+                Event::Paste(_) => {
+                    editor.timeline.paste_keys(frame.animation_clips);
+                }
+                _ => {}
+            }
+        }
+        if delete {
+            editor.timeline.delete_key(frame.animation_clips);
+        }
+        return;
+    }
     for event in events {
         match event {
             Event::Copy => crate::clipboard::copy_selection(editor, ctx, frame),

@@ -61,6 +61,10 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
         });
     }
     if let Some(name) = revert {
+        // A prefab reads, and is read onto, the authored scene, not a pose.
+        editor
+            .timeline
+            .end_record(frame.world, frame.animation_clips);
         crate::instance::revert(editor, frame, entity, Some(&name));
     }
 
@@ -71,6 +75,9 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
                 .on_hover_text("write this instance over its file; every other instance follows")
                 .clicked()
             {
+                editor
+                    .timeline
+                    .end_record(frame.world, frame.animation_clips);
                 crate::instance::apply(editor, frame, root);
             }
             if ui
@@ -78,6 +85,9 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
                 .on_hover_text("every override and every deleted part back to the prefab's")
                 .clicked()
             {
+                editor
+                    .timeline
+                    .end_record(frame.world, frame.animation_clips);
                 crate::instance::revert_instance(editor, frame, root);
             }
         });
