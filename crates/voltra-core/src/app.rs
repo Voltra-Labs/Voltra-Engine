@@ -371,6 +371,9 @@ impl App {
     /// Nothing here has to inherit that: input is read at the top of the frame,
     /// so the frame that saw the key is the frame that moves.
     pub(crate) fn advance(&mut self, delta: f32) {
+        // First: the starting scene is the world every part of this frame
+        // sees, the game's first tick included.
+        self.open_requested_scenes();
         // Once per frame, before anything reads an action: the fixed tick
         // below sees the same actions as the per-frame one.
         let input = voltra_profile::scope("input");

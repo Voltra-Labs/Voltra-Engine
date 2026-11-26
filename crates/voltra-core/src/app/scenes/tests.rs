@@ -1,4 +1,4 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -244,4 +244,20 @@ fn a_scene_saved_with_an_older_copy_of_a_prefab_arrives_in_step() {
 
     let (_, sprite) = app.world.query::<Sprite>().next().expect("the coin");
     assert_eq!(sprite.color, [0.0, 0.0, 1.0, 1.0]);
+}
+
+#[test]
+fn the_starting_scene_is_in_before_the_first_tick() {
+    // What a game's own binary does: `App::load_scene`, then run. Its
+    // `Game::start` looks the scene over, as it does when the editor plays.
+    let root = root_with_levels();
+    let seen: Rc<RefCell<Vec<String>>> = Rc::default();
+    let saw = seen.clone();
+    let mut app = app_doing(&root, move |tick| *saw.borrow_mut() = names(tick.world));
+    app.load_scene(&path("scenes/level2.ron"));
+
+    app.advance(FRAME);
+
+    assert_eq!(*seen.borrow(), vec!["goal", "ground"]);
+    assert_eq!(names(&app.world), vec!["goal", "ground"]);
 }
