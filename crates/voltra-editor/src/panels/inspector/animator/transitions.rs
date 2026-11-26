@@ -7,7 +7,8 @@ use voltra_scene::StateMachines;
 /// One row per transition — where from, where to, and its fade — edited in
 /// the store, so every animator running the machine fades so at once, and
 /// written to the file by **Save** (or dropped by **Revert**), as the
-/// timeline's clips are.
+/// timeline's clips are. Save writes only the durations, into the file as
+/// written ([`StateMachines::save_durations`]): what loading dropped stays.
 ///
 /// The machine is an asset, not the scene: its edits are not in the undo
 /// history. Whether it is edited is the UI's to remember, in egui's memory
@@ -34,9 +35,12 @@ pub(super) fn show(ui: &mut Ui, machines: &mut StateMachines, path: &AssetPath) 
                         let from = transition.from.as_deref().unwrap_or("any");
                         ui.label(format!("{from} to {}", transition.to));
                         let fade = ui.add(
+                            // No upper bound: a range clamps the value it is
+                            // shown, and a long fade typed in the file would be
+                            // cut down (and marked edited) by opening this.
                             DragValue::new(&mut transition.duration)
                                 .speed(0.01)
-                                .range(0.0..=10.0)
+                                .range(0.0..=f32::INFINITY)
                                 .suffix("s"),
                         );
                         edited |= fade.changed();
@@ -45,7 +49,9 @@ pub(super) fn show(ui: &mut Ui, machines: &mut StateMachines, path: &AssetPath) 
                 });
             ui.horizontal(|ui| {
                 if ui.add_enabled(edited, egui::Button::new("Save")).clicked() {
-                    match machines.save(path) {
+                    // The durations only, into the file as written: a save
+                    // of the checked machine would delete what loading dropped.
+                    match machines.save_durations(path) {
                         Ok(()) => {
                             edited = false;
                             log::info!("saved {}", path.as_str());
