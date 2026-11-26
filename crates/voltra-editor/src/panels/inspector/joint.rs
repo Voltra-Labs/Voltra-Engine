@@ -6,6 +6,10 @@ use voltra_scene::{Joint2D, JointKind};
 use super::active;
 use super::light::optional;
 
+mod rows;
+
+use rows::{degrees, number};
+
 /// What the joint's two ends are called, worked out before the joint is
 /// borrowed out of the world.
 pub(super) struct Ends {
@@ -133,31 +137,6 @@ pub(super) fn show(ui: &mut Ui, joint: &mut Joint2D, ends: &Ends) -> Option<&'st
         }
     });
     claim
-}
-
-/// A row for an angle stored in radians, shown in degrees.
-fn degrees(ui: &mut Ui, label: &str, radians: &mut f32) -> Option<&'static str> {
-    ui.label(label);
-    let mut shown = radians.to_degrees();
-    let response = ui.add(DragValue::new(&mut shown).speed(0.5).suffix("°"));
-    if response.changed() {
-        *radians = shown.to_radians();
-    }
-    ui.end_row();
-    active(&response, "Edit joint")
-}
-
-/// A row for a plain number.
-fn number(
-    ui: &mut Ui,
-    label: &str,
-    value: &mut f32,
-    range: std::ops::RangeInclusive<f32>,
-) -> Option<&'static str> {
-    ui.label(label);
-    let response = ui.add(DragValue::new(value).speed(0.01).range(range));
-    ui.end_row();
-    active(&response, "Edit joint")
 }
 
 /// What a joint on `entity` joins, as the inspector names them.

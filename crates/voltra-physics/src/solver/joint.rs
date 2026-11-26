@@ -14,17 +14,19 @@
 //! does not move, at the anchor's world point.
 
 mod distance;
+mod ends;
 mod point;
 mod revolute;
+mod side;
 mod weld;
-
-use std::collections::HashMap;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Joint2D, JointImpulses, JointKind, SceneId, Transform};
+use voltra_scene::{Joint2D, JointImpulses, JointKind, Transform};
 
 use super::{Softness, SolverBodies};
+pub use ends::{joint_ends, JointEnds};
+use side::{spin, turn, Side};
 
 /// One joint, ready for the passes.
 #[derive(Debug, Clone)]
@@ -46,102 +48,6 @@ pub struct JointConstraint {
     /// The spring a distance joint's spring is solved at, this step.
     spring: Softness,
     impulses: JointImpulses,
-}
-
-/// One body as a joint reads it, copied out of the solver's array and back.
-#[derive(Debug, Clone, Copy, Default)]
-struct Side {
-    v: Vec2,
-    w: f32,
-    m: f32,
-    i: f32,
-    dp: Vec2,
-    dq: f32,
-}
-
-impl Side {
-    fn load(bodies: &SolverBodies, index: Option<usize>) -> Self {
-        let Some(index) = index else {
-            return Self::default();
-        };
-        let body = bodies.get(index);
-        Self {
-            v: body.velocity,
-            w: body.angular_velocity,
-            m: body.inverse_mass,
-            i: body.inverse_inertia,
-            dp: body.delta_position,
-            dq: body.delta_rotation,
-        }
-    }
-
-    fn store(self, bodies: &mut SolverBodies, index: Option<usize>) {
-        if let Some(index) = index {
-            let body = bodies.get_mut(index);
-            body.velocity = self.v;
-            body.angular_velocity = self.w;
-        }
-    }
-}
-
-/// `v` turned by `angle`.
-fn turn(angle: f32, v: Vec2) -> Vec2 {
-    Vec2::from_angle(angle).rotate(v)
-}
-
-/// 2D cross product of a scalar spin with a vector: the velocity of a point
-/// at `r` on a body turning at `w`.
-fn spin(w: f32, r: Vec2) -> Vec2 {
-    Vec2::new(-w * r.y, w * r.x)
-}
-
-/// The two bodies a joint joins, found in the world.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct JointEnds {
-    /// The entity carrying the joint.
-    pub owner: Entity,
-    /// The first body the joint joins.
-    pub a: Entity,
-    /// `None` for the world.
-    pub b: Option<Entity>,
-    /// Whether the two still collide with each other.
-    pub collide_connected: bool,
-    /// Whether a motor turns it: its island never sleeps.
-    pub driven: bool,
-}
-
-/// Every joint in `world` whose bodies are there. A joint naming a body the
-/// world does not hold, or the same body twice, joins nothing — rather than
-/// holding to the world, which nobody asked for.
-pub fn joint_ends(world: &World) -> Vec<JointEnds> {
-    let mut joints = world.query::<Joint2D>().peekable();
-    if joints.peek().is_none() {
-        return Vec::new();
-    }
-    let ids: HashMap<SceneId, Entity> = world.query::<SceneId>().map(|(e, id)| (*id, e)).collect();
-    joints
-        .filter_map(|(owner, joint)| {
-            let a = joint.a.map_or(Some(owner), |id| ids.get(&id).copied())?;
-            let b = match joint.b {
-                None => None,
-                Some(id) => Some(*ids.get(&id)?),
-            };
-            if b == Some(a) {
-                return None;
-            }
-            let driven = matches!(
-                joint.kind,
-                JointKind::Revolute { motor: Some(m), .. } if m.speed != 0.0 && m.max_torque > 0.0
-            );
-            Some(JointEnds {
-                owner,
-                a,
-                b,
-                collide_connected: joint.collide_connected,
-                driven,
-            })
-        })
-        .collect()
 }
 
 /// The joints of `ends` whose bodies the solver has, prepared for sub-steps
