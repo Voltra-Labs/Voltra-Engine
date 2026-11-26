@@ -120,11 +120,7 @@ fn grab(world: &mut World, at: Vec2) -> Option<Entity> {
         })?;
     let id = *world.get::<SceneId>(body)?;
     let mass = 1.0 / world.get::<RigidBody>(body)?.inverse_mass;
-    let on_body = world
-        .get::<Transform>(body)?
-        .matrix()
-        .inverse()
-        .transform_point2(at);
+    let on_body = Joint2D::anchor_on(world.get::<Transform>(body)?, at);
     let joint = world.spawn();
     world.insert(
         joint,
@@ -178,14 +174,36 @@ mod tests {
         }
         // Where it was pressed is where the pointer is; the rest of it
         // hangs from there as it likes.
-        let grip = world
-            .get::<Transform>(body)
-            .expect("body")
-            .matrix()
-            .transform_point2(Vec2::new(0.25, 0.0));
+        let grip = Joint2D::anchor_in_world(
+            world.get::<Transform>(body).expect("body"),
+            Vec2::new(0.25, 0.0),
+        );
         assert!(
             (grip - Vec2::new(3.25, 1.0)).length() < 0.05,
             "pulled along: {grip}"
+        );
+    }
+
+    #[test]
+    fn a_scaled_body_is_gripped_where_it_was_pressed() {
+        let mut world = World::new();
+        let body = crate_at(&mut world, Vec2::ZERO);
+        world.get_mut::<Transform>(body).expect("placed").scale = Vec2::splat(2.0);
+        let at = Vec2::new(0.4, 0.0);
+        let joint = grab(&mut world, at).expect("a body is there");
+        let held = world.get::<Joint2D>(joint).expect("the joint");
+        // The solver turns an anchor with the body and never scales it: an
+        // anchor at half the offset would be gripped at half the distance.
+        assert!((held.anchor_a - at).length() < 1e-6, "{}", held.anchor_a);
+        world.get_mut::<Joint2D>(joint).expect("joint").anchor_b = Vec2::new(2.4, 1.0);
+        let mut physics = PhysicsWorld::new();
+        for _ in 0..120 {
+            physics.step_once(&mut world, Vec2::new(0.0, -10.0));
+        }
+        let grip = Joint2D::anchor_in_world(world.get::<Transform>(body).expect("body"), at);
+        assert!(
+            (grip - Vec2::new(2.4, 1.0)).length() < 0.05,
+            "the pressed point follows the pointer: {grip}"
         );
     }
 

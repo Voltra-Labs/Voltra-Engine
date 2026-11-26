@@ -14,6 +14,7 @@ use voltra_render::glam::Vec2;
 
 use crate::scene_id::SceneId;
 
+mod anchor;
 mod impulses;
 mod kind;
 mod parts;
@@ -34,10 +35,11 @@ pub struct Joint2D {
     /// is the world, which does not move.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub b: Option<SceneId>,
-    /// Where on `a` the joint holds, in `a`'s own space.
+    /// Where on `a` the joint holds, in `a`'s own space: turned and moved
+    /// with `a`, not scaled ([`Joint2D::anchor_in_world`]).
     pub anchor_a: Vec2,
-    /// Where on `b` the joint holds, in `b`'s own space — or the point in
-    /// the world, when `b` is the world.
+    /// Where on `b` the joint holds, in `b`'s own space as `anchor_a` is in
+    /// `a`'s — or the point in the world, when `b` is the world.
     pub anchor_b: Vec2,
     /// Whether the two bodies still collide with each other. Off — Box2D's
     /// default — so a hinge's two halves can overlap where they meet.

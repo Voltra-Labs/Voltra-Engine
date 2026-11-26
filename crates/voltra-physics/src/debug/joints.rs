@@ -36,10 +36,12 @@ pub fn draw(world: &World, lines: &mut LineBatch) {
         let Some(joint) = world.get::<Joint2D>(end.owner) else {
             continue;
         };
+        // The joint's own rule: turned and moved with the body, unscaled,
+        // as the solver holds it.
         let place = |entity, anchor: Vec2| {
             world
                 .get::<Transform>(entity)
-                .map(|t| t.matrix().transform_point2(anchor))
+                .map(|t| Joint2D::anchor_in_world(t, anchor))
         };
         // What `b`'s space turns by: the world's is none.
         let b_turn = end
@@ -124,26 +126,33 @@ mod tests {
     use super::*;
     use voltra_scene::{AngleLimit, TranslationLimit};
 
-    /// The segments `kind` draws in the limits' colour, on a body at the
-    /// origin held to the world there.
-    fn limit_segments(kind: JointKind) -> Vec<(Vec2, Vec2)> {
+    /// Every segment `joint` draws, with its colour, on a body placed at
+    /// `placed` held to the world.
+    fn drawn(placed: Transform, joint: Joint2D) -> Vec<(Vec2, Vec2, [f32; 4])> {
         let mut world = World::new();
         let body = world.spawn();
-        world.insert(body, Transform::default());
-        world.insert(
-            body,
-            Joint2D {
-                kind,
-                ..Joint2D::default()
-            },
-        );
+        world.insert(body, placed);
+        world.insert(body, joint);
         let mut lines = LineBatch::default();
         draw(&world, &mut lines);
         lines
             .vertices()
             .chunks(4)
-            .filter(|quad| quad[0].color == LIMIT_COLOR)
-            .map(|quad| (Vec2::from(quad[0].a), Vec2::from(quad[0].b)))
+            .map(|quad| (Vec2::from(quad[0].a), Vec2::from(quad[0].b), quad[0].color))
+            .collect()
+    }
+
+    /// The segments `kind` draws in the limits' colour, on a body at the
+    /// origin held to the world there.
+    fn limit_segments(kind: JointKind) -> Vec<(Vec2, Vec2)> {
+        let joint = Joint2D {
+            kind,
+            ..Joint2D::default()
+        };
+        drawn(Transform::default(), joint)
+            .into_iter()
+            .filter(|&(_, _, color)| color == LIMIT_COLOR)
+            .map(|(from, to, _)| (from, to))
             .collect()
     }
 
@@ -180,5 +189,19 @@ mod tests {
     #[test]
     fn a_zero_axis_draws_no_axis() {
         assert!(limit_segments(JointKind::prismatic(Vec2::ZERO)).is_empty());
+    }
+
+    #[test]
+    fn an_anchor_on_a_scaled_body_is_drawn_unscaled_as_it_is_held() {
+        let placed = Transform::from_translation(Vec2::new(1.0, 0.0)).with_scale(Vec2::splat(2.0));
+        let joint = Joint2D {
+            anchor_a: Vec2::new(0.5, 0.0),
+            anchor_b: Vec2::new(3.0, 0.0),
+            ..Joint2D::default()
+        };
+        // Half a unit out from the centre, not the scaled unit.
+        let (from, to, _) = drawn(placed, joint)[0];
+        assert!((from - Vec2::new(1.5, 0.0)).length() < 1e-5, "{from}");
+        assert!((to - Vec2::new(3.0, 0.0)).length() < 1e-5, "{to}");
     }
 }
