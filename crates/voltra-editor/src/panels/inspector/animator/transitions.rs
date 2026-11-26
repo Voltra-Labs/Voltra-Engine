@@ -1,0 +1,70 @@
+//! The machine's transitions, each with the seconds it crossfades over.
+
+use voltra_assets::AssetPath;
+use voltra_core::egui::{self, DragValue, Id, RichText, Ui};
+use voltra_scene::StateMachines;
+
+/// One row per transition — where from, where to, and its fade — edited in
+/// the store, so every animator running the machine fades so at once, and
+/// written to the file by **Save** (or dropped by **Revert**), as the
+/// timeline's clips are.
+///
+/// The machine is an asset, not the scene: its edits are not in the undo
+/// history. Whether it is edited is the UI's to remember, in egui's memory
+/// under the machine's path.
+pub(super) fn show(ui: &mut Ui, machines: &mut StateMachines, path: &AssetPath) {
+    let handle = machines.load(path);
+    if machines.get(handle).transitions.is_empty() {
+        return;
+    }
+    let edited_id = Id::new(("animator_machine_edited", path.as_str()));
+    let mut edited: bool = ui.ctx().data(|d| d.get_temp(edited_id)).unwrap_or(false);
+    egui::CollapsingHeader::new("transitions")
+        .id_salt("animator_transitions")
+        .show(ui, |ui| {
+            ui.label(
+                RichText::new("seconds each crossfades over; 0 cuts")
+                    .weak()
+                    .small(),
+            );
+            egui::Grid::new("animator_transitions_grid")
+                .num_columns(2)
+                .show(ui, |ui| {
+                    for transition in &mut machines.get_mut(handle).transitions {
+                        let from = transition.from.as_deref().unwrap_or("any");
+                        ui.label(format!("{from} to {}", transition.to));
+                        let fade = ui.add(
+                            DragValue::new(&mut transition.duration)
+                                .speed(0.01)
+                                .range(0.0..=10.0)
+                                .suffix("s"),
+                        );
+                        edited |= fade.changed();
+                        ui.end_row();
+                    }
+                });
+            ui.horizontal(|ui| {
+                if ui.add_enabled(edited, egui::Button::new("Save")).clicked() {
+                    match machines.save(path) {
+                        Ok(()) => {
+                            edited = false;
+                            log::info!("saved {}", path.as_str());
+                        }
+                        Err(e) => log::error!("could not save {}: {e}", path.as_str()),
+                    }
+                }
+                if ui
+                    .add_enabled(edited, egui::Button::new("Revert"))
+                    .on_hover_text("reads the file back, dropping the edits")
+                    .clicked()
+                {
+                    if machines.reload(path) {
+                        edited = false;
+                    } else {
+                        log::warn!("{} could not be read back; the edits stay", path.as_str());
+                    }
+                }
+            });
+        });
+    ui.ctx().data_mut(|d| d.insert_temp(edited_id, edited));
+}
