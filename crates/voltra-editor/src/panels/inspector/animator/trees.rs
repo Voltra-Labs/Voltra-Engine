@@ -154,9 +154,9 @@ fn added(ui: &mut Ui) -> Option<AssetPath> {
         let edit = ui.push_id("tree_add", |ui| {
             let edit = path_field::show(ui, "tree_clip", "drop a clip to add it", "");
             if matches!(edit, Some(PathEdit::Set(_))) {
-                // Emptied for the next: the box keeps what it was given.
-                let buffer = ui.id().with("tree_clip");
-                ui.ctx().data_mut(|d| d.remove::<String>(buffer));
+                // Emptied for the next: the box keeps what it was given,
+                // and its committed value, empty, never moves to reseed it.
+                path_field::clear(ui, "tree_clip");
             }
             edit
         });

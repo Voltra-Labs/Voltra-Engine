@@ -20,9 +20,13 @@ pub(super) enum PathEdit {
 /// The typed text lives in egui's own per-id storage, not a field on `Editor`
 /// — the id is salted by the entity through the caller's `push_id`, so
 /// switching the selection lands on a fresh slot instead of showing the
-/// previous entity's half-typed path. Seeded once from `committed` and left
-/// alone after that: re-cloning it into the buffer every frame would erase
-/// whatever the user just typed the moment the buffer is read back.
+/// previous entity's half-typed path. Seeded from `committed` and left
+/// alone while `committed` stays what it was seeded from: re-cloning it into
+/// the buffer every frame would erase whatever the user just typed the moment
+/// the buffer is read back. When `committed` changes under the field — a
+/// Revert, a hot reload, a list whose rows shifted under one id — the box is
+/// seeded again ([`Buffer::seeded`]), so it never shows, and then commits, a
+/// path that is no longer the value.
 ///
 /// `salt` separates two fields on the same entity; without it the texture and
 /// the atlas would share one buffer and one another's text.
@@ -33,10 +37,8 @@ pub(super) fn show(
     committed: &str,
 ) -> Option<PathEdit> {
     let buffer_id = ui.id().with(salt);
-    let mut buffer = ui.ctx().data_mut(|data| {
-        data.get_temp_mut_or_insert_with::<String>(buffer_id, || committed.to_owned())
-            .clone()
-    });
+    let stored = ui.ctx().data(|data| data.get_temp::<Buffer>(buffer_id));
+    let mut buffer = Buffer::seeded(stored, committed).text;
 
     let mut edit = None;
     // The field is a drop target as well as a text box, which is how the same
@@ -103,8 +105,80 @@ pub(super) fn show(
         edit = Some(PathEdit::Set((*path).clone()));
     }
 
-    ui.ctx()
-        .data_mut(|data| data.insert_temp(buffer_id, buffer));
+    ui.ctx().data_mut(|data| {
+        data.insert_temp(
+            buffer_id,
+            Buffer {
+                from: committed.to_owned(),
+                text: buffer,
+            },
+        )
+    });
 
     edit
+}
+
+/// Forgets what the field `salt` under `ui` holds: a field that adds, its
+/// committed value always empty, starts empty again after an add.
+pub(super) fn clear(ui: &Ui, salt: &'static str) {
+    let buffer_id = ui.id().with(salt);
+    ui.ctx().data_mut(|data| data.remove::<Buffer>(buffer_id));
+}
+
+/// A field's typed text, and the committed value it was seeded from.
+#[derive(Debug, Clone, PartialEq, Default)]
+struct Buffer {
+    /// What `committed` was when the text was seeded.
+    from: String,
+    /// What the box shows.
+    text: String,
+}
+
+impl Buffer {
+    /// The buffer to show for `committed`: the one `stored` while it was
+    /// seeded from that same value — what is being typed — else a fresh one
+    /// holding `committed`.
+    fn seeded(stored: Option<Buffer>, committed: &str) -> Buffer {
+        match stored {
+            Some(buffer) if buffer.from == committed => buffer,
+            _ => Buffer {
+                from: committed.to_owned(),
+                text: committed.to_owned(),
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn typed(from: &str, text: &str) -> Option<Buffer> {
+        Some(Buffer {
+            from: from.to_owned(),
+            text: text.to_owned(),
+        })
+    }
+
+    #[test]
+    fn typing_is_kept_while_the_value_stays_and_reseeded_when_it_moves() {
+        assert_eq!(Buffer::seeded(None, "a.png").text, "a.png");
+        assert_eq!(
+            Buffer::seeded(typed("a.png", "b.pn"), "a.png").text,
+            "b.pn",
+            "half typed"
+        );
+        // Rows shifted under the id (a clip cleared above), or a Revert.
+        assert_eq!(Buffer::seeded(typed("walk", "walk"), "run").text, "run");
+        assert_eq!(
+            Buffer::seeded(typed("walk", "edited"), "walk").text,
+            "edited"
+        );
+        assert_eq!(Buffer::seeded(typed("walk", "walk"), "").text, "");
+        assert_eq!(
+            Buffer::seeded(typed("", "run"), "idle").text,
+            "idle",
+            "a row added"
+        );
+    }
 }
