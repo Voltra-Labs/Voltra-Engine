@@ -84,11 +84,14 @@ fires mid-fade fades on from what is showing, so nothing jumps. No
 `exit_time` is how much of the state's clip must play first: below `1.0` a
 point in each loop (`0.5`, half way through any loop), from `1.0` up a
 number of loops of a clip that loops — the `fidget` above waits for three
-idles. On a clip that does not loop, `1.0` and above wait for its end.
+idles. On a clip that does not loop, `1.0` and above wait for its end; a
+clip of no length (one key) never makes a transition wait.
 
 The inspector lists a machine's transitions under the animator, each with
-its fade in seconds; **Save** writes the file (as RON, without its
-comments), **Revert** reads it back. Every entity running the machine
+its fade in seconds; **Save** writes those durations into the file —
+only them: a transition the editor ignored for a typo stays in the file
+for you to fix (written as plain RON, without its comments) — and
+**Revert** reads it back. Every entity running the machine
 fades the new way at once. `crates/voltra-core/examples/character.rs` is a
 character whose idle, run, jump and fall crossfade
 (`assets/animations/hero.animator.ron`).

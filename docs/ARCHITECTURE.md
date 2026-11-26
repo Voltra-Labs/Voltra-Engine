@@ -3982,9 +3982,16 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   (the later of two equal — a crossfade switches at `w >= 0.5`). Each
   property is mixed among only the inputs that hold it, weights renormalized
   there: one only one clip animates is that clip's at full weight, never
-  pulled towards a default nobody stated. The heaviest input is the angle
-  reference, so a mix that is all one input is its value exactly. Weights
-  that are not finite and positive count as zero; all zero mixes evenly.
+  pulled towards a default nobody stated. An angle is mixed the short way
+  from the *first* input — a fixed side, so two angles exactly half a turn
+  apart sweep one way through the fade instead of flipping at `w = 0.5` —
+  then re-wound as the heaviest input is, so a fade ends on its clip's own
+  value. **Weight zero is absent**: an input that does not weigh a finite
+  positive amount is left out, and a property only such inputs hold is not
+  in the mix — a blend's weights are shares of one whole (a crossfade's
+  `1 - w` and `w`), not opacities. Layers (121) composite their result over
+  the lower ones (lerp or add by the layer's weight); they do not feed a
+  layer to `blend` as one more input.
 - **A player crossfades** (`AnimationPlayer::cross_fade(clip, seconds)`):
   the clip it played keeps playing from where it was (its own clock, its
   own speed), the new one starts, and the incoming weight runs `0 → 1`
@@ -3993,10 +4000,15 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   interrupted by another freezes the mix last written as a `Pose` and fades
   from that (Unity's interrupted transition: from what was showing, not
   from either clip). `play` and `restart` cut a fade short; a duration that
-  is not positive is `play`. A paused player holds its fade; a new clip
-  that does not loop and ends first is held on its last frame while the
-  fade runs on. The fade is never saved, like the clock. A target despawned
-  or a clip reloaded mid-fade costs only its own values, as without a fade.
+  is not positive is `play`. A paused player (`playing` off) holds its
+  fade. A new clip that does not loop and ends first is held on its last
+  frame while the fade runs on; the player is kept playing until the fade
+  is over — "ended" is the fade's own flag, so a pause is still a pause —
+  and stops then. The fade is never saved, like the clock. A target
+  despawned or a clip reloaded mid-fade costs only its own values, as
+  without a fade; a miss is warned of under the clip it is from — the
+  outgoing side's once per fade, never as the new clip's. The clocks run
+  in `keyframes/frame.rs`, the fade's state is `keyframes/fade.rs`.
 - **`played`** counts the seconds of the clip played since it started,
   through every loop — what an animator's exit time above one counts.
 - **Not yet**: record mode (an edit in the viewport keying itself), curve
@@ -4018,8 +4030,9 @@ repaired by a reload; a save read back; a sprite frame flipbook),
 a rotation the short way, a frame switching past half way, a property only
 the outgoing side animates holding, an interrupt fading from the mix, a
 target despawned and a clip reloaded mid-fade, a paused fade and an
-incoming clip ending first), `blend`'s unit tests (N inputs, bad weights,
-one-sided properties), the unit tests of eases, values, poses, properties,
+incoming clip ending first and paused while held, the outgoing side's
+miss warned of as its own), `blend`'s unit tests (N inputs, weight zero
+absent, one-sided properties, angles half a turn apart not flipping), the unit tests of eases, values, poses, properties,
 tracks, target paths and the player's clock and `played`, `app::animation` (playing only while simulating, taking a reload),
 and the editor's `timeline` (a pose lifted back to the authored values), its
 ruler's scale and its key re-sort.
@@ -4403,7 +4416,10 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
   loop, as before (`0.5`: half way through any loop); from `1.0` up, on a
   clip that loops, a number of loops (`player.played() / length`: `2.5`
   waits for two loops and a half) — Unity's normalized time. On a clip
-  that does not loop, anything from `1.0` up is its end. `1.0` on a
+  that does not loop, anything from `1.0` up is its end (Unity keeps
+  counting past the end of a clip played once; here it has ended, and
+  waiting longer is a timer's job). A clip of no length has nothing to
+  wait for: every exit time has been reached, looping or not. `1.0` on a
   looping clip used to never pass (the phase never reaches one); it is now
   one loop.
 - **The inspector lists the machine's transitions** ("idle to run", "any to
@@ -4411,8 +4427,18 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
   edit is to the store (`StateMachines::get_mut`), seen by every animator
   running the machine at once, and written by **Save** or dropped by
   **Revert** — the timeline's clip precedent; whether it is edited is kept
-  in egui's memory under the machine's path. A save writes pretty RON, so
-  the file's comments go, as a clip's do.
+  in egui's memory under the machine's path. The field has no upper
+  bound: egui clamps the value a ranged `DragValue` is shown, so a cap
+  would rewrite a long fade typed in the file just by being opened.
+- **Save writes only the durations** (`StateMachines::save_durations`):
+  the store holds the machine *checked*, without the transitions, states
+  and start loading dropped, and saving that would delete an author's
+  typo'd work. So the file is read back as written
+  (`RonStore::read_as_written`), each transition given the duration of the
+  loaded one it became (`StateMachine::take_durations`, matched in order
+  on from, to, conditions and exit time) and written (`RonStore::write`);
+  a file that no longer reads is not written over. It writes pretty RON,
+  so the file's comments go, as a clip's do.
 
 Rejected: **blending in the animator** — the mix is the keyframes layer's,
 which blend trees and layers reuse; **a machine-wide default duration** —
@@ -4433,7 +4459,9 @@ dropped, a broken file running nothing, the shipped machine reading whole
 and crossfading every move) and `animator/tests/crossfade.rs` (a fade at
 half way, a transition mid-fade fading from the mix, a duration of zero
 cutting and not being written, a bad duration cutting, a machine reloaded
-and an entity despawned mid-fade, an exit time counting loops).
+and an entity despawned mid-fade, an exit time counting loops, an exit
+time above one on a clip played once and on one of no length) and
+`animator/save.rs` (a save keeping what loading dropped).
 The `character` example's idle, run, jump and fall are a machine, each
 transition a crossfade.
 
