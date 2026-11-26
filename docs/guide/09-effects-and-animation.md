@@ -164,7 +164,10 @@ layers: [
   0.3)`. At `0` the layer writes nothing at all; in between, what it
   animates moves that fraction of the way from what is under it — also
   for a property nothing under it animates, which moves from the value it
-  had before the layer touched it.
+  had before the layer touched it. If your game moves such a property
+  itself (`translation += velocity * dt`), the layer goes over the game's
+  motion; a value the game sets outright every frame shows as set, so to
+  layer over that, move a parent instead.
 - **`blend: Additive`** adds the layer's clips' *change from their first
   frame*, times the weight, to what is under it: a breath keyed from
   `(1.0, 1.0)` to `(1.05, 1.05)` grows any state's scale by up to 0.05.
@@ -203,9 +206,12 @@ Timeline — or anywhere while recording — takes back the last change to the
 clip, a whole drag at once; elsewhere it is the scene's. **Copy** takes
 the selected key, or every key at the playhead when none is selected;
 **Paste** puts them at the playhead — one key into the selected track if
-it holds that kind of value, so a position copied off one entity can be
-pasted onto another's. `Ctrl+C`, `Ctrl+X`, `Ctrl+V` and `Delete` do the
-same with the pointer over the Timeline. **Save** writes the clip.
+it animates the same property, so a position copied off one entity can be
+pasted onto another's, and otherwise each key back into its own track.
+`Ctrl+C`, `Ctrl+X` (copy, then delete what was copied), `Ctrl+V` and
+`Delete` do the same with the pointer over the Timeline. While recording,
+**Set rest** on a bone and **Fit to sprite** on a collider use the scene's
+own values, not the pose. **Save** writes the clip.
 
 ## Bones
 

@@ -4095,10 +4095,20 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
     frame by frame, to the layer's value). So the player keeps, per
     property a layer writes, the value under the layers and the value
     written (`keyframes/underneath.rs`): while the world still holds what
-    was written, the kept value is what is under; once something else
-    writes it (a game aiming the arm, the editor, the motion starting to
-    animate it) its new value is. Unity keeps the scene's defaults for the
-    same reason (write defaults). A property no layer writes any more —
+    was written, the kept value is what is under. Once something else
+    writes it (a game, the editor), **the change it made goes under**:
+    `under + (now - written)` for a number, the value whole for a discrete
+    one. Taking `now` whole would compound with the common read-modify-
+    write (`translation += v * dt` under an additive bob put the bob under
+    itself every frame — an additive `+0.2` with the game adding `0.01`
+    ten times came to 3.3, not 1.3), and an override below one would damp
+    the game's motion. A game that *sets* the value each frame converges,
+    the same way, on showing what it sets (exactly, while the layer holds
+    still; one frame of the layer's change behind while it moves) — so a
+    layer over a property a game drives outright is effectively off for
+    it: put the game's motion on a parent. When the motion animates the
+    property, what is under is its value, fresh each frame. Unity keeps
+    the scene's defaults for a related reason (write defaults). A property no layer writes any more —
     weight 0, a state that drops it, the layer taken out, the motion
     animating it now — is **handed back**: what was under is written once,
     if nothing else wrote it since. So a weight is continuous down to 0
@@ -4137,9 +4147,13 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   scene's history looks (`timeline/record.rs`). A recorded move is one clip
   edit and no scene edit; the scene's history never sees the pose. Unity's
   record mode, keyed by the same diff; unlike Unity, where assets and
-  scenes share one undo, the key goes into the clip's history. A prefab's
-  Apply and Revert and the inspector's Delete close the recording first,
-  so they read the scene as authored. The timeline follows the player
+  scenes share one undo, the key goes into the clip's history. An action
+  that copies what the panels see into something no clip keys would author
+  the pose, so each closes the recording first (`Timeline::end_record`,
+  then acts on the authored scene): a prefab's Apply and Revert, the
+  inspector's Delete, a bone's **Set rest**, a collider's **Fit to
+  sprite**; a shadow caster's polygon from a sprite's quad (computed before
+  the click, from the frame shown) is not offered while recording. The timeline follows the player
   **above** the selection too (the nearest ancestor whose player names a
   clip), so selecting an arm keys the arm into its body's clip.
 - **A clip's own undo history (stage 121)** (`timeline/history.rs`), on
@@ -4154,9 +4168,12 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   the selected key or, with none selected, every key at the playhead (a
   column of the pose there); **Paste** puts them at the playhead, replacing
   a key already there — a single key into the selected track when that
-  track takes its kind of value (a position copied off one entity pasted
-  onto another's), otherwise each into the track of its own target and
-  property, made if missing. Ctrl+C, Ctrl+X, Ctrl+V and Delete over the
+  track animates the same property (a position copied off one entity
+  pasted onto another's; not a light's intensity into a rotation, though
+  both are numbers), otherwise each back into the track it came from, or
+  the track of its target and property, made if missing — so two tracks
+  of one target and property keep their own keys. Ctrl+C, Ctrl+X (cutting
+  what it copied: the key, or the column), Ctrl+V and Delete over the
   timeline act on keys; the clipboard is the timeline's, not the system's.
 - **Not yet**: curve editing, playing the preview in time, selecting
   several keys at once (a copy is one key or one column), a layer's own
@@ -4197,9 +4214,13 @@ layers.rs` (an override masked to an arm moving the arm and its hand and
 not the leg or the root, an additive breath added by weight with no creep
 over fifty frames, weight 0 identical to no layer, a property only a
 layer animates continuous near 0, at half and whole, and handed back at 0,
-something else writing a covered property becoming what is under, a layer
-taken out handing back, a layer played once holding its last frame, an
+a game turning a covered property step by step carrying its change under
+the layer undamped and a value set once shifting what is under, a layer
+taken out handing back, a game stepping a scale under an additive layer
+not adding it up (1.3, not 3.3), a game setting values outright each
+frame shown what it sets with no drift, a layer played once holding its last frame, an
 additive fade into a clip without a property mixing towards no change),
+`underneath.rs`'s (a number's change carried, a frame taken whole),
 `composite`'s unit tests (override exact at 0 and 1 and continuous near 0,
 the short way and the half-way switch, additive by weight and a frame
 overriding, a change from its reference and padding) and `layer.rs` (masks
@@ -4208,9 +4229,11 @@ cover their subtree, weights clamp). Timeline (stage 121):
 panels seeing the pose, a new track starting from the authored value, a
 gizmo's float noise not keyed, the scene left as authored; a drag of three
 frames one entry, undone and redone; nothing keyed without record; a key
-copied, pasted at the playhead and undone), `timeline/history.rs` and
-`timeline/clipboard.rs` (a column copied and pasted to its tracks, one key
-into the selected track of its kind).
+copied, pasted at the playhead and undone; a cut of the column at the
+playhead), `timeline/history.rs` and `timeline/clipboard.rs` (a column
+copied and pasted to its tracks, one key into the selected track of its
+property and not into another float's, keys of two tracks of one
+property going back to their own).
 
 ### Characters are cast and slid, not simulated
 
@@ -4694,10 +4717,14 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
   player's `PlayerLayer` of the same place, kept in step by
   `animator/layers.rs`: one per layer, the file's weight (or the game's,
   `Animator::set_layer_weight` — Unity's `SetLayerWeight` — kept by name
-  until `restart`), mask and blend written each frame; a layer whose name
-  moved in a reload starts over, one the machine lost is taken out and
-  hands back what it wrote; a machine without layers leaves the player's
-  layers to the game. Each layer's state is by name, as layer 0's
+  until `restart`; of two layers of one name, the first's, as
+  `layer_state` reads the first), mask and blend written each frame; a
+  layer whose name moved in a reload starts over, one the machine lost is
+  taken out and hands back what it wrote. The player remembers that an
+  animator made its layers, and they are taken out (handing back) when
+  the animator runs a machine without layers — a swap, as the inspector
+  makes with a restart — runs none, or is removed; layers a game put on a
+  player itself are its own and left alone. Each layer's state is by name, as layer 0's
   (`Animator::layer_state`). In a layer, **a state that plays nothing is
   the usual "empty" state** and is not warned of (Unity's empty state);
   in layer 0 it still is. Checked as layer 0 is, each against its own
@@ -4765,7 +4792,10 @@ weight set by the game and forgotten by a restart; a reload that renames a
 layer restarting it and one that drops them all handing back; a one-layer
 file written without `layers` and read back equal, a layered one too; a
 layer checked against its own states with its weight kept; a save writing
-the edited weight, mask, blend and a layer's fade and keeping a typo) and
+the edited weight, mask, blend and a layer's fade and keeping a typo; a
+machine swapped for a one-layer one and an animator removed taking their
+layers out, a game's own layer left; a weight by a shared name reaching
+the first layer) and
 `tree/line.rs`, `tree/plane.rs`
 (the weights' edge cases: shared thresholds and points, a line, one child,
 a square on one circle, numbers that are not finite), and
