@@ -5,6 +5,21 @@ All notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/) — before 1.0, a minor version may
 break the API.
 
+## [Unreleased]
+
+### Fixed
+Found by a pass on Windows with a real GPU (stage 119):
+- A process opening wgpu devices from several threads could deadlock in
+  NVIDIA's drivers; devices now open one at a time.
+- `Game::start` in a game's own binary ran before its starting scene was
+  loaded; the scene now opens before the first tick.
+- The editor's hierarchy, and deleting or copying a parent, were quadratic
+  in its children (7 s a frame for a parent of 100k).
+- RON files saved on Windows had CRLF line ends.
+- Seven editor icons showed as empty boxes.
+- The web page logged a `favicon.ico` 404 in desktop browsers.
+- `cargo xtask guide` ran WSL's bash on Windows.
+
 ## [0.3.0] — 2026-11-24
 
 The plan split this into 0.2 (2D polish, stages 88–110) and 0.3
