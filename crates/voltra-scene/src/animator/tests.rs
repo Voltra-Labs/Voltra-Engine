@@ -5,6 +5,7 @@ use voltra_ecs::{Entity, World};
 
 use super::*;
 use crate::keyframes::{self, AnimationClips};
+use crate::AnimationPlayer;
 use crate::Transform;
 
 const MACHINE: &str = r#"(
