@@ -182,6 +182,17 @@ mod tests {
     }
 
     #[test]
+    fn a_mouse_joint_written_short_takes_the_testbed_tuning() {
+        let joint: Joint2D = ron::from_str("(kind: Mouse())").expect("reads");
+        assert_eq!(joint.kind, JointKind::mouse());
+        let weak: Joint2D = ron::from_str("(kind: Mouse(max_force: 5.0))").expect("reads");
+        assert!(
+            matches!(weak.kind, JointKind::Mouse { max_force, hertz, .. }
+                if max_force == 5.0 && hertz == 5.0)
+        );
+    }
+
+    #[test]
     fn a_threshold_breaks_only_past_it() {
         let joint = Joint2D {
             break_force: Some(10.0),

@@ -21,7 +21,8 @@ impl Default for AngleLimit {
     }
 }
 
-/// A revolute joint's motor.
+/// A motor that turns: a revolute joint's, or a wheel's — what drives a
+/// car. A prismatic joint's slides: a [`LinearMotor`].
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Motor {
     /// The speed it drives `a` at against `b`, radians per second,

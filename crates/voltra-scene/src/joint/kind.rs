@@ -102,11 +102,16 @@ pub enum JointKind {
     Mouse {
         /// The most force it pulls with, in newtons: past it the body lags
         /// the target rather than being yanked through what is in the way.
+        /// A thousand by default ([`JointKind::mouse`]'s tuning, as each
+        /// field's default is).
+        #[serde(default = "mouse_force")]
         max_force: f32,
         /// How stiff the pull is, in hertz; `0` pulls as hard as a joint
         /// holds its anchors.
+        #[serde(default = "mouse_hertz")]
         hertz: f32,
         /// `0` overshoots and swings about the target, `1` settles on it.
+        #[serde(default = "mouse_damping")]
         damping_ratio: f32,
     },
 }
@@ -117,6 +122,21 @@ fn up() -> Vec2 {
 
 fn right() -> Vec2 {
     Vec2::X
+}
+
+/// A mouse joint's tuning: Box2D's testbed's, for a body of a kilogram or so.
+const MOUSE: (f32, f32, f32) = (1000.0, 5.0, 0.7);
+
+fn mouse_force() -> f32 {
+    MOUSE.0
+}
+
+fn mouse_hertz() -> f32 {
+    MOUSE.1
+}
+
+fn mouse_damping() -> f32 {
+    MOUSE.2
 }
 
 impl Default for JointKind {
@@ -194,9 +214,9 @@ impl JointKind {
     /// damped to settle, a thousand newtons at most.
     pub fn mouse() -> Self {
         Self::Mouse {
-            max_force: 1000.0,
-            hertz: 5.0,
-            damping_ratio: 0.7,
+            max_force: MOUSE.0,
+            hertz: MOUSE.1,
+            damping_ratio: MOUSE.2,
         }
     }
 
