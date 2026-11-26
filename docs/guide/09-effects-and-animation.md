@@ -130,6 +130,83 @@ with the fades. `crates/voltra-core/examples/character.rs` blends idle,
 walk and run by speed on the ground and crossfades to a jump or a fall
 (`assets/animations/hero.animator.ron`).
 
+## Layers
+
+A machine's states are its first layer. Under `layers` it can have more,
+each a state machine of its own — its own states, transitions and start —
+played over the ones before it and reading the same parameters:
+
+```ron
+layers: [
+    (
+        name: "upper",
+        mask: ["arm"],
+        states: [
+            (name: "rest"),
+            (name: "wave", clip: Path("animations/hero/wave.anim.ron")),
+        ],
+        transitions: [
+            (from: Some("rest"), to: "wave", conditions: [If("wave")]),
+            (from: Some("wave"), to: "rest", exit_time: Some(1.0)),
+        ],
+    ),
+    (name: "breath", blend: Additive, weight: 0.5,
+     states: [(name: "in", clip: Path("animations/hero/breath.anim.ron"))]),
+],
+```
+
+- **`mask`** lists the entities the layer may animate, by their path
+  under the animator's entity; each brings everything under it, so
+  `"arm"` is the arm and its hand. No mask is everything. The wave above
+  moves the arm, whatever its clip keys elsewhere.
+- **`weight`** (`0` to `1`, default `1`) is how much of the layer shows.
+  A game can change it while playing: `animator.set_layer_weight("upper",
+  0.3)`. At `0` the layer writes nothing at all; in between, what it
+  animates moves that fraction of the way from what is under it — also
+  for a property nothing under it animates, which moves from the value it
+  had before the layer touched it.
+- **`blend: Additive`** adds the layer's clips' *change from their first
+  frame*, times the weight, to what is under it: a breath keyed from
+  `(1.0, 1.0)` to `(1.05, 1.05)` grows any state's scale by up to 0.05.
+  Key an additive clip from where it starts, often no change at all. A
+  sprite frame cannot be added, and an additive layer's frame replaces
+  the one under it. The default, `Override`, replaces what is under it.
+- A state with neither a clip nor a tree plays nothing — in a layer, the
+  usual way to show nothing until a transition calls for something
+  (`rest` above). A layer that has played a clip to its end keeps its
+  last frame; when it stops animating something, that goes back to what
+  is under it.
+
+The inspector lists a machine's layers — weight, blend, and the mask
+(**add to mask** offers the named entities under the animator's) — and
+every layer's transitions and trees; **Save** writes them with the rest.
+The character example adds a squash on every landing with an additive
+layer, whichever state it is in.
+
+## Recording keys in the Timeline
+
+Select an entity with an **AnimationPlayer** that names a clip — or one
+of its named children — and the **Timeline** shows the clip: a row per
+track, keys as diamonds, the playhead on top. **Preview** shows the clip
+at the playhead in the viewport, without changing the scene.
+
+Press **Record** (it turns the preview on) and editing an entity under
+the player keys the clip instead of the scene: drag one with the move,
+turn or scale tool, or change a position, a colour or a frame in the
+inspector, and the new value is keyed at the playhead. A property the
+clip did not animate gets a track, starting from the value it had, so a
+move recorded at one second moves from where the entity stood. The scene
+itself keeps its values; switch Record off to edit it again.
+
+The Timeline has its own **Undo** and **Redo**: `Ctrl+Z` over the
+Timeline — or anywhere while recording — takes back the last change to the
+clip, a whole drag at once; elsewhere it is the scene's. **Copy** takes
+the selected key, or every key at the playhead when none is selected;
+**Paste** puts them at the playhead — one key into the selected track if
+it holds that kind of value, so a position copied off one entity can be
+pasted onto another's. `Ctrl+C`, `Ctrl+X`, `Ctrl+V` and `Delete` do the
+same with the pointer over the Timeline. **Save** writes the clip.
+
 ## Bones
 
 A skeleton is entities: a root marked **`Skeleton2D`**, and under it in the

@@ -432,6 +432,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 118 | `games/arena`: a networked sample, native and web | done |
 | 119 | Animator crossfades; exit time counting loops | done |
 | 120 | Blend trees: 1D and 2D directional, synced children | done |
+| 121 | Animator layers (masks, override, additive); timeline record mode, key copy, clip undo | done |
 
 ## Contributing
 

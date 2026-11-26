@@ -3951,8 +3951,8 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
 - **The clip is an asset, not the scene**: its edits are held in the store
   (`AnimationClips::get_mut`, played at once by every player of it) and
   marked unsaved until **Save** (`AnimationClips::save`, pretty RON through a
-  temporary file) or **Revert** (a reload); they are not in the undo
-  history.
+  temporary file) or **Revert** (a reload); they are not in the scene's undo
+  history — since stage 121 they are in the clip's own (below).
 - **Preview poses between frames.** The scene is drawn before the editor's
   UI, so `Timeline::pose` writes the clip at the playhead as the editor's
   last act in a frame (after the history's after side) and `Timeline::lift`
@@ -3961,7 +3961,8 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   authored, so scrubbing is never an edit — Unity's preview mode keeps
   authored values aside for the same reason; Godot, which writes the pose
   into the scene, needs a RESET track. The cost: the gizmo and the
-  inspector show the authored values while the preview is on.
+  inspector show the authored values while the preview is on — except
+  while recording (stage 121, below).
 - **Sampling is apart from writing (stage 119).** `AnimationClip::sample`
   answers a `Pose` — at most one value per (target, property), targets in
   `target::canonical` spelling so `"/arm//hand/"` and `"arm/hand"` are one
@@ -4057,8 +4058,112 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
 
   A three-clip tree on 100 entities costs less now than one clip on 100
   entities did before.
-- **Not yet**: record mode (an edit in the viewport keying itself), curve
-  editing, copying keys, a clip's undo, playing the preview in time.
+- **Layers (stage 121)**: a player plays, over its own motion, a list of
+  `PlayerLayer`s, bottom up — each a whole `AnimationPlayer` of its own
+  (a clip or a synced set, its clock, speed and fade, driven by the same
+  `play`/`cross_fade` calls; its own layers are not played), a `weight`
+  (clamped to `0..=1`, NaN is 0), a `mask` (target paths, each with
+  everything under it — `"arm"` is the arm and `"arm/hand"`; empty is all)
+  and a `blend`, `LayerBlend::Override` or `Additive`. One layer per slot,
+  not one motion and many weights, because an animator's layer has its own
+  current state, its own fades and its own clock (Unity's layers, Godot's
+  `AnimationTree` blend nodes over filtered tracks; Bevy's `AnimationGraph`
+  has additive and masks per node, the same shape below a graph).
+  - **A composite on top of `blend`, not one more input to it**
+    (`keyframes::composite`): a blend's weights are shares of a whole, so a
+    property one input holds is taken whole; a layer's weight is an
+    opacity. **Override** is `mix(property, [(under, 1-w), (layer, w)])`
+    — exactly `under` at 0, exactly the layer at 1, continuous between, an
+    angle the short way and a frame switching at `w >= 0.5`, the same rules
+    as a fade. **Additive** is `under + w · change`, numbers only; a
+    discrete property (a frame) in an additive layer overrides. Scale adds
+    too (Unity multiplies a humanoid's; a sprite's scale keyed `1 → 1.05`
+    breathes the same either way, and adding needs no rule for zero).
+  - **The change is from the clip's first frame** — Unity's default
+    reference pose: an additive clip is authored as itself, a breath from
+    rest, and needs no second clip or setting naming its reference. Each
+    clip is sampled twice (at its time and at 0) and subtracted
+    (`composite::subtract`; an angle as numbers, so a spin keyed `0 → 2π`
+    adds a turn). Inside an additive layer a clip that does not animate a
+    property adds nothing to it, so a fade or a tree mixing two changes
+    pads the side without it with a change of nothing (`composite::pad`) —
+    the shares-of-a-whole rule would otherwise hold the other side's
+    change whole until the fade ended.
+  - **What is under a property the motion does not animate** is the
+    world's value — but the world holds what the layer wrote last frame,
+    and compositing over it would compound (an override at `0.01` creeping,
+    frame by frame, to the layer's value). So the player keeps, per
+    property a layer writes, the value under the layers and the value
+    written (`keyframes/underneath.rs`): while the world still holds what
+    was written, the kept value is what is under; once something else
+    writes it (a game aiming the arm, the editor, the motion starting to
+    animate it) its new value is. Unity keeps the scene's defaults for the
+    same reason (write defaults). A property no layer writes any more —
+    weight 0, a state that drops it, the layer taken out, the motion
+    animating it now — is **handed back**: what was under is written once,
+    if nothing else wrote it since. So a weight is continuous down to 0
+    and 0 is exactly a no-op, and a weight cut to 0 leaves nothing behind.
+  - **A layer that has ended or is paused holds its pose** over what is
+    under it (sampled at its clock, which does not move): a squash played
+    once stays on its last frame instead of vanishing — the base motion's
+    "an ended player writes nothing" rule would, under a layer, remove its
+    contribution.
+  - **Layer 0 is exactly today's path**: a player with no layers (and no
+    values left to hand back) is advanced by the code it was before —
+    `advance` sorts players into plain and layered, and only the layered
+    ones pay for a second pass. The frame's sampling moved to
+    `keyframes/sample.rs` and the warnings to `keyframes/report.rs`, shared
+    by both paths; the layered frame is `keyframes/layered.rs`. A missed
+    value is warned of under the motion or layer it came from. Measured
+    with the same bench (release, best of three runs, `voltra-bench
+    compare` of before and after): the plain paths unchanged —
+    `100-playing` 183 → 183 µs, `100-blending-3` 482 → 481 µs,
+    `100-crossfading` 358 → 366 µs (+2.3%, within the run-to-run spread)
+    — and the new `100-layered` (each of 100 players an override layer
+    masked to half its parts at 0.7 and an additive breath over all, 24
+    tracks each: four clips sampled, two composites) at 1.13 ms, about
+    twice a three-clip tree.
+- **Record mode (stage 121)**: with **Record** on (it turns the preview on;
+  the preview off turns it off) the pose is laid again in the middle of the
+  editor's frame, after the hierarchy and before the inspector, so the two
+  panels that edit entities — the inspector and the viewport's gizmo —
+  show and start from what the viewport shows. Every animatable value of
+  every named entity under the player is read then; after the viewport,
+  each that moved (beyond `1e-5` relative, the float noise a gizmo's
+  world-space round trip leaves on rotation and scale) is keyed at the
+  playhead — into its track, or a new one, which starts with the
+  authored value at `0` so a move keyed half way moves *from* where the
+  entity stands — and the scene gets its authored values back before the
+  scene's history looks (`timeline/record.rs`). A recorded move is one clip
+  edit and no scene edit; the scene's history never sees the pose. Unity's
+  record mode, keyed by the same diff; unlike Unity, where assets and
+  scenes share one undo, the key goes into the clip's history. A prefab's
+  Apply and Revert and the inspector's Delete close the recording first,
+  so they read the scene as authored. The timeline follows the player
+  **above** the selection too (the nearest ancestor whose player names a
+  clip), so selecting an arm keys the arm into its body's clip.
+- **A clip's own undo history (stage 121)** (`timeline/history.rs`), on
+  the Atlas Editor's precedent: snapshots of the clip, settled per gesture
+  (nothing held, nothing typed — a key dragged or a gizmo held while
+  recording is one entry), 200 deep, one history per clip path from when it
+  is first shown. A Revert or a reload from disk is an edit like any other,
+  so it can be undone. **Ctrl+Z over the timeline is the clip's — and
+  anywhere while recording**, every edit then being a key; elsewhere the
+  scene's. Undo and Redo buttons sit beside Record.
+- **Copying keys (stage 121)** (`timeline/clipboard.rs`): **Copy** takes
+  the selected key or, with none selected, every key at the playhead (a
+  column of the pose there); **Paste** puts them at the playhead, replacing
+  a key already there — a single key into the selected track when that
+  track takes its kind of value (a position copied off one entity pasted
+  onto another's), otherwise each into the track of its own target and
+  property, made if missing. Ctrl+C, Ctrl+X, Ctrl+V and Delete over the
+  timeline act on keys; the clipboard is the timeline's, not the system's.
+- **Not yet**: curve editing, playing the preview in time, selecting
+  several keys at once (a copy is one key or one column), a layer's own
+  reference pose for additive clips (it is the clip's first frame),
+  syncing a layer's clock to the motion's (Unity's synced layers), a
+  layer fading into a state that plays nothing (it cuts: fade the layer's
+  weight), a mask per property rather than per target.
 
 Rejected: **a state machine now** — Unity's `Animator`, Godot's
 `AnimationTree` — a subsystem of its own, when a game needs one (stage 70
@@ -4066,7 +4171,13 @@ built it, beside); **curves on arbitrary fields by reflection**; **ids as
 targets**; **blending inside the animator** — the mixing is about clips
 and values, and blend trees and layers need it too; **fading by writing
 twice** (out then in, each at its weight): a value is written once, and a
-discrete property or a clamp in `Property::write` would not compose.
+discrete property or a clamp in `Property::write` would not compose;
+**a layer as one more input to `blend`** (stage 121) — a masked layer at
+`0.01` would snap what nothing under it animates to its own value;
+**compositing over the world's current value** — it compounds into a
+creep; **recording through the scene's history** — a key is not a scene
+edit, and a Ctrl+Z in the viewport taking one back would be the Atlas
+Editor's problem again.
 
 Pinned by `keyframes/tests.rs` (a clip moving its player and a named child
 with an ease, looping; a paused player leaving its entity alone; a missing
@@ -4081,7 +4192,25 @@ miss warned of as its own), `blend`'s unit tests (N inputs, weight zero
 absent, one-sided properties, angles half a turn apart not flipping), the unit tests of eases, values, poses, properties,
 tracks, target paths and the player's clock and `played`, `app::animation` (playing only while simulating, taking a reload),
 and the editor's `timeline` (a pose lifted back to the authored values), its
-ruler's scale and its key re-sort.
+ruler's scale and its key re-sort. Layers (stage 121): `keyframes/tests/
+layers.rs` (an override masked to an arm moving the arm and its hand and
+not the leg or the root, an additive breath added by weight with no creep
+over fifty frames, weight 0 identical to no layer, a property only a
+layer animates continuous near 0, at half and whole, and handed back at 0,
+something else writing a covered property becoming what is under, a layer
+taken out handing back, a layer played once holding its last frame, an
+additive fade into a clip without a property mixing towards no change),
+`composite`'s unit tests (override exact at 0 and 1 and continuous near 0,
+the short way and the half-way switch, additive by weight and a frame
+overriding, a change from its reference and padding) and `layer.rs` (masks
+cover their subtree, weights clamp). Timeline (stage 121):
+`timeline/record/tests.rs` (a recorded move keyed at the playhead with the
+panels seeing the pose, a new track starting from the authored value, a
+gizmo's float noise not keyed, the scene left as authored; a drag of three
+frames one entry, undone and redone; nothing keyed without record; a key
+copied, pasted at the playhead and undone), `timeline/history.rs` and
+`timeline/clipboard.rs` (a column copied and pasted to its tracks, one key
+into the selected track of its kind).
 
 ### Characters are cast and slid, not simulated
 
@@ -4550,6 +4679,43 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
     spaces — our animator is that game, writing the weights from its
     parameters.
 
+- **Layers (stage 121)**: a machine's top-level `states`, `transitions`
+  and `start` are **layer 0**; `layers: [...]` (optional, not written when
+  empty, so every older file reads and writes unchanged) are machines of
+  their own over it, bottom up — each a `name`, `weight` (default 1, not
+  written at 1), `mask`, `blend` (`Override` default, not written),
+  `start`, `states` and `transitions`, reading the machine's shared
+  parameters. Unity's animator layers, on Unity's shape: one parameter
+  set, a layer per body part or effect, each its own state machine.
+  `animator::evaluate` steps layer 0, then each layer in order (so a
+  trigger layer 0 spends is spent for the layers), through one stepping
+  function over a `Graph` (a borrowed view of a layer's start, states and
+  transitions; `animator/step.rs`, `graph.rs`). Each layer plays on the
+  player's `PlayerLayer` of the same place, kept in step by
+  `animator/layers.rs`: one per layer, the file's weight (or the game's,
+  `Animator::set_layer_weight` — Unity's `SetLayerWeight` — kept by name
+  until `restart`), mask and blend written each frame; a layer whose name
+  moved in a reload starts over, one the machine lost is taken out and
+  hands back what it wrote; a machine without layers leaves the player's
+  layers to the game. Each layer's state is by name, as layer 0's
+  (`Animator::layer_state`). In a layer, **a state that plays nothing is
+  the usual "empty" state** and is not warned of (Unity's empty state);
+  in layer 0 it still is. Checked as layer 0 is, each against its own
+  states (a transition naming another layer's state is dropped); a weight
+  outside `0..=1` is warned of and clamped when played, kept as written.
+  Saving writes the layers' weights, masks and blends, and every layer's
+  fades and trees, matched by place onto the file as written
+  (`take_layer_settings`, and `take_durations`/`take_trees` over every
+  layer). The inspector lists **layers** — weight (a `DragValue` that
+  does not clamp the value it is shown, so a 1.5 in the file stays until
+  dragged), blend, and the mask as rows with **remove** and a box offering
+  the named entities under the animator's — and the transitions and trees
+  of every layer, each under its layer's name; while playing, each
+  layer's state. The `character` example's machine has an additive
+  `impact` layer: an empty `steady` state and a `squash` (`hero/land.
+  anim.ron`, keyed as a change from no change) the game triggers on every
+  landing, over the ground and air states.
+
 Rejected: **blending in the animator** — the mix is the keyframes layer's,
 which blend trees and layers reuse; **a machine-wide default duration** —
 two places to look for one fade; **eased fade curves** — linear is what
@@ -4563,7 +4729,9 @@ none; **Unity's angle-sorted simple directional** — it is the Delaunay fan
 for its own layouts and undefined for others, so the triangulation is the
 general case at the same cost.
 
-- **Not yet**: layers, a visual graph editor, interruption
+- **Not yet**: of layers: synced layers (Unity's, a layer reusing
+  another's states with other clips), IK passes, a layer's own parameter
+  set, a mask per property; a visual graph editor, interruption
   rules (Unity's interruption source and ordered interruption: here any
   transition may interrupt a fade), a fade's offset into the incoming clip;
   of blend trees: a tree as a tree's child (Unity's nested trees), a speed
@@ -4590,7 +4758,15 @@ in a triangle and outside the hull; children in step and an exit time
 counting a tree's loops; an empty tree warning and playing nothing; a tree
 crossfading into a clip state and back; a reloaded tree's thresholds and
 clips taken at once, in step; a parameter that is not a float reading 0; a
-clip state written as it always was) and `tree/line.rs`, `tree/plane.rs`
+clip state written as it always was) and `animator/tests/layers.rs` (each
+layer in its own state over layer 0's, a trigger spent and the wave masked
+to the arm, an empty state playing nothing, an exit time back; a layer's
+weight set by the game and forgotten by a restart; a reload that renames a
+layer restarting it and one that drops them all handing back; a one-layer
+file written without `layers` and read back equal, a layered one too; a
+layer checked against its own states with its weight kept; a save writing
+the edited weight, mask, blend and a layer's fade and keeping a typo) and
+`tree/line.rs`, `tree/plane.rs`
 (the weights' edge cases: shared thresholds and points, a line, one child,
 a square on one circle, numbers that are not finite), and
 `keyframes/synced.rs`, `keyframes/tests/synced.rs` (the weight-averaged
@@ -4599,7 +4775,8 @@ ending, a set faded into and out of).
 The `character` example's ground state is a blend tree of idle, walk
 (`hero/walk.anim.ron`, authored for it) and run by `speed` — the
 character accelerates, so the mix passes through the walk — and its jump
-and fall clips are crossfaded to and from it.
+and fall clips are crossfaded to and from it; its `impact` layer squashes
+it on landing.
 
 ### Navigation is a grid baked from colliders, in a crate of its own
 
@@ -8043,7 +8220,7 @@ Same problem, same rule: read the source, not a tutorial.
 | Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |
 | Context menu | `Response::context_menu(\|ui\| …)` opens on a secondary click; close it from inside with `ui.close()` |
 | Strokes | `Painter::rect_stroke(rect, radius, stroke, StrokeKind)` takes a `StrokeKind` (`Inside`, `Middle`, `Outside`) |
-| `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before |
+| `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before. A range clamps the value *as shown*, edited or not; `.clamp_existing_to_range(false)` clamps only what the user drags or types (the animator's layer weight, stage 121) |
 | Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
 | Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
 
