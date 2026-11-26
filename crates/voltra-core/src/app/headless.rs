@@ -341,7 +341,7 @@ impl Headless {
         // Contacts, sleep and pending events all name entities the rebuild
         // replaced; every handle is resolved again for the new ones.
         self.app.physics_world.reset();
-        self.app.pending_events.clear();
+        self.app.pending_physics.clear();
         self.app.spawned.extend(self.app.world.entities());
         self.app.resolve_spawned();
         Ok(())

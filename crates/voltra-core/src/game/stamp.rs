@@ -204,6 +204,7 @@ fn fingerprint() -> u64 {
     mix::<voltra_scene::Sprite>(&mut hasher);
     mix::<voltra_scene::RigidBody>(&mut hasher);
     mix::<voltra_physics::CollisionEvent>(&mut hasher);
+    mix::<voltra_physics::JointBroken>(&mut hasher);
     mix::<voltra_render::glam::Vec2>(&mut hasher);
     mix::<String>(&mut hasher);
     layout::<crate::Tick<'static>>(&mut hasher);

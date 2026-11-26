@@ -356,3 +356,52 @@ fn the_tick_sees_the_contacts_of_the_last_step() {
 
     assert!(seen.get() > 0, "the body lands and the tick should see it");
 }
+
+/// A ball hung from the world on a joint too weak for it: it breaks on the
+/// first step.
+fn app_with_a_weak_joint() -> (App, Entity) {
+    let (mut app, ball) = app_with_a_falling_body();
+    app.world.insert(
+        ball,
+        voltra_scene::Joint2D {
+            break_force: Some(0.5),
+            ..voltra_scene::Joint2D::default()
+        },
+    );
+    (app, ball)
+}
+
+#[test]
+fn each_hook_is_handed_a_broken_joint_once() {
+    let (app, ball) = app_with_a_weak_joint();
+    let (frame_record, frame_seen) = log();
+    let (fixed_record, fixed_seen) = log();
+    let named = Rc::new(Cell::new(None));
+    let name = named.clone();
+    let mut app = app
+        .with_simulation()
+        .with_update(move |tick| {
+            frame_record.borrow_mut().push(tick.broken_joints.len());
+            if let Some(broken) = tick.broken_joints.first() {
+                name.set(Some(broken.entity));
+            }
+        })
+        .with_fixed_update(move |tick| fixed_record.borrow_mut().push(tick.broken_joints.len()));
+
+    app.advance(FRAME);
+    app.advance(FRAME);
+    app.advance(FRAME);
+
+    assert_eq!(
+        *frame_seen.borrow(),
+        vec![0, 1, 0],
+        "the frame after it broke"
+    );
+    assert_eq!(
+        *fixed_seen.borrow(),
+        vec![0, 1, 0],
+        "the step after it broke"
+    );
+    assert_eq!(named.get(), Some(ball));
+    assert!(app.world.get::<voltra_scene::Joint2D>(ball).is_none());
+}

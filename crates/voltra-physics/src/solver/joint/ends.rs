@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::{Joint2D, JointKind, SceneId};
+use voltra_scene::{Joint2D, SceneId};
 
 /// The two bodies a joint joins, found in the world.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -16,7 +16,8 @@ pub struct JointEnds {
     pub b: Option<Entity>,
     /// Whether the two still collide with each other.
     pub collide_connected: bool,
-    /// Whether a motor turns it: its island never sleeps.
+    /// Whether a motor drives it or a hand pulls it: its island never
+    /// sleeps.
     pub driven: bool,
 }
 
@@ -39,10 +40,7 @@ pub fn joint_ends(world: &World) -> Vec<JointEnds> {
             if b == Some(a) {
                 return None;
             }
-            let driven = matches!(
-                joint.kind,
-                JointKind::Revolute { motor: Some(m), .. } if m.speed != 0.0 && m.max_torque > 0.0
-            );
+            let driven = joint.kind.is_driven();
             Some(JointEnds {
                 owner,
                 a,

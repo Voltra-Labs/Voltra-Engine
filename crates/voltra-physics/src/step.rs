@@ -3,13 +3,15 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
+use crate::events::JointBroken;
 use crate::integrate::{integrate_positions, integrate_velocities};
 use crate::narrow::Contact;
 use crate::one_way::OneWayPasses;
 use crate::sleep::Sleep;
 use crate::solver::{
-    apply_restitution, joint_ends, prepare, prepare_joints, solve, solve_joints, store_joints,
-    warm_start, warm_start_joints, CachedImpulse, ImpulseCache, SolverBodies, SolverParams,
+    apply_restitution, break_joints, joint_ends, prepare, prepare_joints, solve, solve_joints,
+    store_joints, warm_start, warm_start_joints, CachedImpulse, ImpulseCache, SolverBodies,
+    SolverParams,
 };
 
 mod collide;
@@ -18,6 +20,16 @@ mod overlaps;
 pub(crate) use collide::collide;
 use collide::{collide_with, ordered, unjoined, Reuse};
 pub use overlaps::Overlaps;
+
+/// What a step found, and what it did besides moving bodies.
+#[derive(Debug, Default, Clone)]
+pub struct Stepped {
+    /// What overlapped as the step began.
+    pub overlaps: Overlaps,
+    /// The joints the step loaded past their `break_force` or
+    /// `break_torque`, already removed from the world.
+    pub broken: Vec<JointBroken>,
+}
 
 /// Advances the world by `dt` and returns what it found overlapping.
 ///
@@ -59,6 +71,7 @@ pub fn step(
         &mut Sleep::default(),
         &mut OneWayPasses::default(),
     )
+    .overlaps
 }
 
 /// [`step`], with bodies at rest put to sleep and left out of the solve
@@ -68,7 +81,8 @@ pub fn step(
 ///
 /// The overlaps returned still include sleeping contacts: a resting
 /// character is still standing on the floor, and an event for a pair that
-/// went to sleep touching must not say it ended.
+/// went to sleep touching must not say it ended. Beside them, the joints the
+/// step broke.
 pub fn step_sleeping(
     world: &mut World,
     cache: &mut ImpulseCache,
@@ -77,17 +91,25 @@ pub fn step_sleeping(
     dt: f32,
     sleep: &mut Sleep,
     passes: &mut OneWayPasses,
-) -> Overlaps {
+) -> Stepped {
     // A step of no time changes nothing, and dividing the sub-step by it would
     // produce an infinite speculative bias. Note the cache is left untouched:
     // a frame that owed no step must not evict contacts that are still there.
     if dt <= 0.0 {
-        return Overlaps::default();
+        return Stepped::default();
     }
 
     let collide = voltra_profile::scope("collide");
     sleep.wake_disturbed(world);
     let joints = joint_ends(world);
+    // A motor or a hand put on a sleeping body has to wake it: nothing else
+    // about the body changed for the sleep to notice.
+    for joint in joints.iter().filter(|joint| joint.driven) {
+        sleep.wake(joint.a);
+        if let Some(b) = joint.b {
+            sleep.wake(b);
+        }
+    }
     let apart = unjoined(&joints);
     let overlaps = collide_with(
         world,
@@ -237,6 +259,7 @@ pub fn step_sleeping(
     let _settle = voltra_profile::scope("settle");
     bodies.scatter(world);
     store_joints(&joint_constraints, world);
+    let broken = break_joints(&joint_constraints, world, h);
     let mut settled: Vec<(Entity, Entity)> = contacts
         .iter()
         .map(|contact| (contact.a, contact.b))
@@ -249,5 +272,5 @@ pub fn step_sleeping(
         .collect();
     sleep.settle(world, &settled, &driven, &params.sleep, dt);
 
-    overlaps
+    Stepped { overlaps, broken }
 }

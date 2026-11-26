@@ -165,7 +165,7 @@ impl App {
         // ending every old pair with an event on the next step would report
         // touches the new scene never had.
         self.physics_world.reset();
-        self.pending_events.clear();
+        self.pending_physics.clear();
         self.scenes.loaded.clear();
     }
 

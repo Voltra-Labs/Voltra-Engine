@@ -1,14 +1,15 @@
-//! A joint's kind, what it joins, its anchors and the parts of its kind.
+//! A joint's kind, what it joins, its anchors, the parts of its kind and
+//! what breaks it.
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_scene::{Joint2D, JointKind};
 
 use super::active;
-use super::light::optional;
 
+mod kinds;
 mod rows;
 
-use rows::{degrees, number};
+use rows::threshold;
 
 /// What the joint's two ends are called, worked out before the joint is
 /// borrowed out of the world.
@@ -27,21 +28,16 @@ pub(super) fn show(ui: &mut Ui, joint: &mut Joint2D, ends: &Ends) -> Option<&'st
     egui::ComboBox::from_id_salt("joint_kind")
         .selected_text(kind)
         .show_ui(ui, |ui| {
-            for name in ["revolute", "distance", "weld"] {
+            for name in JointKind::NAMES {
                 ui.selectable_value(&mut kind, name, name);
             }
         });
     if kind != joint.kind.name() {
-        joint.kind = match kind {
-            "distance" => JointKind::rod(1.0),
-            "weld" => JointKind::Weld {
-                reference_angle: 0.0,
-            },
-            _ => JointKind::default(),
-        };
+        joint.kind = JointKind::named(kind);
         joint.impulses = Default::default();
         claim = Some("Set joint kind");
     }
+    let target = matches!(joint.kind, JointKind::Mouse { .. });
 
     egui::Grid::new("joint").num_columns(2).show(ui, |ui| {
         for (label, anchor, hint) in [
@@ -51,7 +47,7 @@ pub(super) fn show(ui: &mut Ui, joint: &mut Joint2D, ends: &Ends) -> Option<&'st
                 "where on a, in its own space",
             ),
             (
-                "anchor on b",
+                if target { "target" } else { "anchor on b" },
                 &mut joint.anchor_b,
                 "where on b, in its own space — or the point in the world",
             ),
@@ -77,64 +73,21 @@ pub(super) fn show(ui: &mut Ui, joint: &mut Joint2D, ends: &Ends) -> Option<&'st
         }
         ui.end_row();
 
-        match &mut joint.kind {
-            JointKind::Revolute {
-                reference_angle,
-                limit,
-                motor,
-            } => {
-                claim = claim.or(degrees(ui, "reference", reference_angle));
-                ui.label("limit")
-                    .on_hover_text("how far a may turn against b");
-                if optional(ui, "joint_limit", limit) {
-                    claim = claim.or(Some("Toggle joint limit"));
-                }
-                ui.end_row();
-                if let Some(limit) = limit {
-                    claim = claim.or(degrees(ui, "lower", &mut limit.lower));
-                    claim = claim.or(degrees(ui, "upper", &mut limit.upper));
-                }
-                ui.label("motor")
-                    .on_hover_text("turns a against b at a speed");
-                if optional(ui, "joint_motor", motor) {
-                    claim = claim.or(Some("Toggle joint motor"));
-                }
-                ui.end_row();
-                if let Some(motor) = motor {
-                    claim = claim.or(degrees(ui, "speed /s", &mut motor.speed));
-                    claim = claim.or(number(ui, "max torque", &mut motor.max_torque, 0.0..=1e6));
-                }
-            }
-            JointKind::Distance {
-                length,
-                min,
-                max,
-                spring,
-            } => {
-                claim = claim.or(number(ui, "length", length, 0.0..=1e4));
-                claim = claim.or(number(ui, "min", min, 0.0..=1e4));
-                claim = claim.or(number(ui, "max", max, 0.0..=1e4));
-                if *min >= *max {
-                    ui.label("");
-                    ui.label(RichText::new("held at its length").weak());
-                    ui.end_row();
-                }
-                ui.label("spring").on_hover_text(
-                    "pulls towards the length instead of holding it; needs min < max",
-                );
-                if optional(ui, "joint_spring", spring) {
-                    claim = claim.or(Some("Toggle joint spring"));
-                }
-                ui.end_row();
-                if let Some(spring) = spring {
-                    claim = claim.or(number(ui, "hertz", &mut spring.hertz, 0.0..=60.0));
-                    claim = claim.or(number(ui, "damping", &mut spring.damping_ratio, 0.0..=10.0));
-                }
-            }
-            JointKind::Weld { reference_angle } => {
-                claim = claim.or(degrees(ui, "reference", reference_angle));
-            }
-        }
+        claim = claim.or(kinds::show(ui, &mut joint.kind));
+        claim = claim.or(threshold(
+            ui,
+            "break force",
+            "past this force, in newtons, the joint breaks: it is removed and the game told",
+            &mut joint.break_force,
+            1000.0,
+        ));
+        claim = claim.or(threshold(
+            ui,
+            "break torque",
+            "past this torque, in newton-metres, the joint breaks",
+            &mut joint.break_torque,
+            1000.0,
+        ));
     });
     claim
 }

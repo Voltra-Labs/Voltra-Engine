@@ -76,7 +76,10 @@ pub use global_light::GlobalLight2D;
 pub use gradient::{Gradient, GradientKey};
 pub use hierarchy::{Parent, WorldTransforms};
 pub use interpolate::Interpolate;
-pub use joint::{AngleLimit, Joint2D, JointImpulses, JointKind, Motor, Spring};
+pub use joint::{
+    AngleLimit, Joint2D, JointImpulses, JointKind, LinearMotor, Motor, RestSpring, Spring,
+    TranslationLimit,
+};
 pub use keyframes::{AnimationClip, AnimationClips, AnimationPlayer};
 pub use light::{LightCone, LightShadows, PointLight2D};
 pub use line2d::{Line2D, LineCap, LineJoint, LineTexture};

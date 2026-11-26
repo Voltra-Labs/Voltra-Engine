@@ -73,6 +73,7 @@ pub(crate) fn join_selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
             reference_angle: at.rotation - angle_b,
             limit: None,
             motor: None,
+            spring: None,
         },
         ..Joint2D::default()
     };

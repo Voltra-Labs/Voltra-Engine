@@ -4,7 +4,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use crate::clock::PhysicsClock;
-use crate::events::{CollisionEvent, Touching};
+use crate::events::{CollisionEvent, JointBroken, Touching};
 use crate::narrow::Contact;
 use crate::one_way::OneWayPasses;
 use crate::sleep::Sleep;
@@ -27,6 +27,7 @@ pub struct PhysicsWorld {
     contacts: Vec<Contact>,
     touching: Touching,
     events: Vec<CollisionEvent>,
+    broken: Vec<JointBroken>,
     sleep: Sleep,
     passes: OneWayPasses,
 }
@@ -78,6 +79,13 @@ impl PhysicsWorld {
         &self.events
     }
 
+    /// The joints the last step that ran broke, already removed from the
+    /// world. A stream like [`PhysicsWorld::events`], read the same way:
+    /// from a game's fixed tick, or gathered across a frame's steps.
+    pub fn broken_joints(&self) -> &[JointBroken] {
+        &self.broken
+    }
+
     /// Whether `entity` is asleep: at rest, and left out of the solve until
     /// something disturbs it.
     pub fn is_asleep(&self, entity: Entity) -> bool {
@@ -121,6 +129,7 @@ impl PhysicsWorld {
         // pair of a scene that is no longer loaded.
         self.touching.clear();
         self.events.clear();
+        self.broken.clear();
         self.sleep.clear();
         self.passes.clear();
         self.clock.reset();
@@ -132,7 +141,7 @@ impl PhysicsWorld {
     /// one step and no more, and [`PhysicsWorld::advance`] would run zero.
     pub fn step_once(&mut self, world: &mut World, gravity: Vec2) -> &[Contact] {
         let dt = self.clock.step();
-        let overlaps = step_sleeping(
+        let stepped = step_sleeping(
             world,
             &mut self.impulses,
             &self.params,
@@ -141,8 +150,9 @@ impl PhysicsWorld {
             &mut self.sleep,
             &mut self.passes,
         );
-        self.events = self.touching.update(overlaps.pairs());
-        self.contacts = overlaps.contacts;
+        self.events = self.touching.update(stepped.overlaps.pairs());
+        self.contacts = stepped.overlaps.contacts;
+        self.broken = stepped.broken;
         &self.contacts
     }
 

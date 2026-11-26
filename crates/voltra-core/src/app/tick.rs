@@ -14,7 +14,7 @@
 //! things and a second type would differ only in its name.
 
 use voltra_ecs::{Entity, World};
-use voltra_physics::{CollisionEvent, Contact};
+use voltra_physics::{CollisionEvent, Contact, JointBroken};
 use voltra_scene::{ComponentRegistry, Prefabs};
 
 use crate::app::tick_audio::TickAudio;
@@ -59,6 +59,10 @@ pub struct Tick<'a> {
     /// `a` is always the lower entity of the pair, so
     /// [`CollisionEvent::other`] is how a game asks what *it* touched.
     pub events: &'a [CollisionEvent],
+    /// The joints that broke under their `break_force` or `break_torque`,
+    /// handed out as [`Tick::events`] are: each once, to each hook. The
+    /// `Joint2D` is already gone from the entity.
+    pub broken_joints: &'a [JointBroken],
     /// The sound, for the one-shot a tick is usually reacting with.
     ///
     /// A field like the rest, but not a bare `&mut Audio`: playing takes a
@@ -146,11 +150,17 @@ impl App {
         };
         let mut game = self.game.take();
         if hook.is_some() || game.is_some() {
-            let events: &[CollisionEvent] = match turn {
-                Turn::Frame => &self.pending_events,
+            let (events, broken_joints): (&[CollisionEvent], &[JointBroken]) = match turn {
+                Turn::Frame => (
+                    &self.pending_physics.collisions,
+                    &self.pending_physics.broken,
+                ),
                 // The step before this one's: the step this tick precedes has
                 // not run, so there is nothing newer to hand it.
-                Turn::Fixed => self.physics_world.events(),
+                Turn::Fixed => (
+                    self.physics_world.events(),
+                    self.physics_world.broken_joints(),
+                ),
             };
             let mut tick = Tick {
                 world: &mut self.world,
@@ -168,6 +178,7 @@ impl App {
                 delta,
                 contacts: self.physics_world.contacts(),
                 events,
+                broken_joints,
                 audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
                 prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
                 registry: &self.registry,

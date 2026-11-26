@@ -1,8 +1,13 @@
-//! What began and ended touching, from one step to the next.
+//! What began and ended touching, from one step to the next — and which
+//! joints broke ([`JointBroken`]).
 
 use std::collections::BTreeMap;
 
 use voltra_ecs::Entity;
+
+mod broken;
+
+pub use broken::JointBroken;
 
 /// Whether a pair started touching or stopped.
 ///

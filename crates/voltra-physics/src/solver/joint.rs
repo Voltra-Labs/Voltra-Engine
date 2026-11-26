@@ -12,13 +12,22 @@
 //! A joint's body is anything the solver gathers — a rigid body, or a
 //! collider with none, which is immovable. The world, as `b`, is a body that
 //! does not move, at the anchor's world point.
+//!
+//! After the step, each joint's load — its impulses over the sub-step — is
+//! measured against its `break_force` and `break_torque` ([`breaking`]).
 
+pub mod breaking;
 mod distance;
 mod ends;
+mod line;
+mod mouse;
 mod point;
+mod prismatic;
 mod revolute;
 mod side;
+mod slide;
 mod weld;
+mod wheel;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
@@ -33,6 +42,8 @@ use side::{spin, turn, Side};
 pub struct JointConstraint {
     /// The entity carrying the [`Joint2D`], which the impulses go back to.
     pub owner: Entity,
+    /// The bodies it joins, as the world names them: what a break reports.
+    ends: (Entity, Option<Entity>),
     kind: JointKind,
     a: usize,
     /// `None` for the world.
@@ -45,7 +56,11 @@ pub struct JointConstraint {
     delta_center: Vec2,
     /// `a`'s rotation less `b`'s as the step began.
     angle: f32,
-    /// The spring a distance joint's spring is solved at, this step.
+    /// A wheel's or a prismatic's axis, unit length, turned into the world
+    /// with `b` as the step began; zero for the other kinds.
+    axis: Vec2,
+    /// The kind's own spring — a distance's, a revolute's, a wheel's
+    /// suspension, a prismatic's, a mouse's pull — solved at, this step.
     spring: Softness,
     impulses: JointImpulses,
 }
@@ -109,10 +124,39 @@ pub fn prepare_joints(
                 spring: Some(spring),
                 ..
             } => Softness::new(spring.hertz, spring.damping_ratio, h),
+            JointKind::Revolute {
+                spring: Some(spring),
+                ..
+            }
+            | JointKind::Wheel {
+                spring: Some(spring),
+                ..
+            }
+            | JointKind::Prismatic {
+                spring: Some(spring),
+                ..
+            } => Softness::new(spring.hertz, spring.damping_ratio, h),
+            JointKind::Mouse {
+                hertz,
+                damping_ratio,
+                ..
+            } => Softness::new(hertz, damping_ratio, h),
             _ => Softness::RIGID,
+        };
+        // A line's axis, in `b`'s space: a zero or broken one is no line,
+        // and the joint joins nothing, as one naming a missing body does.
+        let axis = match joint.kind {
+            JointKind::Wheel { axis, .. } | JointKind::Prismatic { axis, .. } => {
+                match axis.try_normalize() {
+                    Some(axis) => turn(angle_b, axis),
+                    None => continue,
+                }
+            }
+            _ => Vec2::ZERO,
         };
         out.push(JointConstraint {
             owner: end.owner,
+            ends: (end.a, end.b),
             kind: joint.kind,
             a,
             b,
@@ -120,6 +164,7 @@ pub fn prepare_joints(
             frame_b,
             delta_center: center_b - center_a,
             angle: angle_a - angle_b,
+            axis,
             spring,
             impulses: joint.impulses,
         });
@@ -139,8 +184,16 @@ pub fn warm_start_joints(joints: &[JointConstraint], bodies: &mut SolverBodies) 
         // The angular part turns `a` and `b` the other way: the joint's angle
         // is `a`'s against `b`'s.
         let (linear, angular) = match joint.kind {
-            JointKind::Revolute { .. } => (i.linear, -(i.motor + i.lower - i.upper)),
+            JointKind::Revolute { .. } => (i.linear, -(i.spring + i.motor + i.lower - i.upper)),
             JointKind::Weld { .. } => (i.linear, -i.angular),
+            JointKind::Mouse { .. } => (i.linear, 0.0),
+            JointKind::Wheel { .. } | JointKind::Prismatic { .. } => {
+                // A line's arm on `b` reaches to `a`'s anchor, not `b`'s.
+                line::warm_start(joint, &mut a, &mut b);
+                a.store(bodies, Some(joint.a));
+                b.store(bodies, joint.b);
+                continue;
+            }
             JointKind::Distance { .. } => {
                 let d = (b.dp - a.dp) + joint.delta_center + rb - ra;
                 let axis = d.normalize_or_zero();
@@ -171,9 +224,29 @@ pub fn solve_joints(
             Side::load(bodies, joint.b),
         );
         match joint.kind {
-            JointKind::Revolute { limit, motor, .. } => {
-                revolute::solve(joint, &mut a, &mut b, softness, h, use_bias, limit, motor)
+            JointKind::Revolute {
+                limit,
+                motor,
+                spring,
+                ..
+            } => revolute::solve(
+                joint,
+                &mut a,
+                &mut b,
+                revolute::Parts {
+                    limit,
+                    motor,
+                    spring,
+                },
+                softness,
+                h,
+                use_bias,
+            ),
+            JointKind::Wheel { .. } => wheel::solve(joint, &mut a, &mut b, softness, h, use_bias),
+            JointKind::Prismatic { .. } => {
+                prismatic::solve(joint, &mut a, &mut b, softness, h, use_bias)
             }
+            JointKind::Mouse { .. } => mouse::solve(joint, &mut a, &mut b, softness, h, use_bias),
             JointKind::Weld { .. } => weld::solve(joint, &mut a, &mut b, softness, use_bias),
             JointKind::Distance { .. } => {
                 distance::solve(joint, &mut a, &mut b, softness, h, use_bias)

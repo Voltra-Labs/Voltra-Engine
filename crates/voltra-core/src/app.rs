@@ -16,6 +16,7 @@ mod loading;
 mod native;
 mod net_counters;
 mod particles;
+mod pending_physics;
 mod prefab_sync;
 mod restyle;
 mod scene_draws;
@@ -147,12 +148,9 @@ pub struct App {
     /// The game's own code, run after the hooks above in both turns: one
     /// handed to `with_game`, or the one an editor's Play put in.
     game: Option<crate::game::Running>,
-    /// Collision events the per-frame tick has not been handed yet.
-    ///
-    /// A frame can owe two steps, and `PhysicsWorld` only keeps the last
-    /// step's: without this the per-frame tick would miss the pickup taken on
-    /// the first of them. Emptied once the tick has had it.
-    pending_events: Vec<CollisionEvent>,
+    /// Collision events and broken joints the per-frame tick has not been
+    /// handed yet.
+    pending_physics: pending_physics::PendingPhysics,
     clock: Clock,
     /// Seconds since the loop started, simulating or not: the clock animated
     /// tiles are drawn by, so water moves in the editor too, as in Godot.
@@ -318,6 +316,11 @@ impl App {
         self.physics_world.events()
     }
 
+    /// The joints the last physics step broke.
+    pub fn broken_joints(&self) -> &[voltra_physics::JointBroken] {
+        self.physics_world.broken_joints()
+    }
+
     /// The simulation, to tune or to reset after loading a scene.
     pub fn physics_mut(&mut self) -> &mut PhysicsWorld {
         &mut self.physics_world
@@ -432,7 +435,7 @@ impl App {
         // Spent, whether or not a game installed a tick to read them. Left to
         // pile up they would grow for the length of the session, and a game
         // that installed its hook later would be handed a backlog.
-        self.pending_events.clear();
+        self.pending_physics.clear();
         // Every frame, simulating or not: the editor draws and picks against
         // a solid layer's colliders while authoring too, and a layer painted
         // by the tick above must be solid in the step that follows it.

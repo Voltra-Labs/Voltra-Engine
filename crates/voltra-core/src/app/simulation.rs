@@ -105,8 +105,7 @@ impl App {
             }
             // Every step's events, not just the last one's: the per-frame tick
             // gets one turn per frame and a frame can owe several steps.
-            self.pending_events
-                .extend_from_slice(self.physics_world.events());
+            self.pending_physics.gather(&self.physics_world);
         }
     }
 }
