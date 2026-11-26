@@ -30,6 +30,9 @@ pub struct SyncedClips {
     phase: f32,
     /// Lengths played since it started, through every loop.
     played: f32,
+    /// Whether it last ran backwards: where a clip played through, and not
+    /// looping, is held — its start rather than its end.
+    backwards: bool,
     /// Whether a target it animates was found missing, and said so: once
     /// per set played, as a player warns once per clip.
     pub(super) reported: bool,
@@ -167,27 +170,36 @@ impl SyncedClips {
         if !audible {
             return false;
         }
+        if speed.is_finite() && speed != 0.0 {
+            self.backwards = speed < 0.0;
+        }
+        if length <= 0.0 {
+            // Held poses only: no cycle to move through, so the phase stays
+            // where it was (a weight that brings a clip with a length back
+            // finds it there); a set that does not loop has ended.
+            if !*playing || !speed.is_finite() {
+                return false;
+            }
+            *playing = looping;
+            return true;
+        }
         // In lengths: a second of a set three quarters of a second long
         // moves it one and a third.
-        let (speed, duration) = if length > 0.0 {
-            (speed / length, 1.0)
-        } else {
-            (speed, 0.0)
-        };
         clock::run_counted(
             &mut self.phase,
             &mut self.played,
             playing,
-            speed,
-            duration,
+            speed / length,
+            1.0,
             looping,
             delta,
         )
     }
 
     /// The clips to sample now, at what time and weight, onto `picks`:
-    /// each at the set's phase of its own length — or held on its end once
-    /// played through, for one that does not loop.
+    /// each at the set's phase of its own length — or held once played
+    /// through, for one that does not loop: on its end, or on its start
+    /// when the set plays backwards.
     pub(super) fn pick(&self, store: &mut AnimationClips, picks: &mut Vec<Pick>) {
         for (path, &weight) in self.clips.iter().zip(&self.weights) {
             if !weighs(weight) {
@@ -200,7 +212,11 @@ impl SyncedClips {
             }
             let length = clip.duration();
             let held = !clip.looping && self.played >= 1.0;
-            let time = if held { length } else { self.phase * length };
+            let time = match (held, self.backwards) {
+                (true, false) => length,
+                (true, true) => 0.0,
+                (false, _) => self.phase * length,
+            };
             picks.push(Pick {
                 handle,
                 time,
@@ -319,5 +335,29 @@ mod tests {
         set.pick(&mut clips, &mut picks);
         assert_eq!(picks[0].time, 1.0, "the clip played once holds its end");
         assert!((picks[1].time - 0.25).abs() < 1e-5);
+
+        set.step(&mut clips, &mut playing, -1.0, 0.1);
+        picks.clear();
+        set.pick(&mut clips, &mut picks);
+        assert_eq!(picks[0].time, 0.0, "backwards: held on its start");
+    }
+
+    #[test]
+    fn a_set_of_held_poses_keeps_its_phase() {
+        let mut clips = store(&[("walk.anim.ron", WALK), ("pose.anim.ron", POSE)]);
+        let mut set =
+            SyncedClips::new([(path("walk.anim.ron"), 1.0), (path("pose.anim.ron"), 0.0)]);
+        let mut playing = true;
+        set.step(&mut clips, &mut playing, 1.0, 0.25);
+        set.weights_mut().copy_from_slice(&[0.0, 1.0]);
+        assert!(
+            set.step(&mut clips, &mut playing, 1.0, 0.5),
+            "the pose is sampled"
+        );
+        assert_eq!(set.phase(), 0.25, "no length to move through");
+        assert!(playing, "the walk, at no weight, still loops the set");
+        set.weights_mut().copy_from_slice(&[1.0, 0.0]);
+        set.step(&mut clips, &mut playing, 1.0, 0.25);
+        assert!((set.phase() - 0.5).abs() < 1e-6, "on from where it was");
     }
 }

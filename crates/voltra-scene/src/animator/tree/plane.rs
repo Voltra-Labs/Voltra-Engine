@@ -4,8 +4,14 @@
 use super::line;
 
 /// How close, as a fraction of the children's spread, two positions are
-/// one, three points are a line, or a point is on a circle or an edge.
+/// one, or a point is on a circle or an edge.
 const EPSILON: f64 = 1e-9;
+
+/// How thin, as a fraction of the children's spread, a triangle may be
+/// before it counts as a line: a sliver's barycentric weights swing from
+/// one side to the other across a hair of input, so its corners blend
+/// along the line instead.
+const FLAT: f64 = 1e-4;
 
 /// Writes into `out` each of `n` children's weight for the input `at`,
 /// child `i` sitting at `position(i)` — Unity's simple directional blend,
@@ -117,7 +123,7 @@ fn triangulate(corners: &[usize], point: &impl Fn(usize) -> [f64; 2]) -> Option<
         for (b, &j) in corners.iter().enumerate().skip(a + 1) {
             for &k in &corners[b + 1..] {
                 let (p, q, r) = (point(i), point(j), point(k));
-                if cross(p, q, r).abs() <= EPSILON {
+                if flat(p, q, r) {
                     continue;
                 }
                 let empty = corners
@@ -180,6 +186,13 @@ fn blend_triangles(
         out[i] += 1.0 - t;
         out[j] += t;
     }
+}
+
+/// Whether `a`, `b`, `c` are as good as on one line: the triangle's height
+/// over its longest side is within [`FLAT`] of the (unit) spread.
+fn flat(a: [f64; 2], b: [f64; 2], c: [f64; 2]) -> bool {
+    let longest = distance(a, b).max(distance(b, c)).max(distance(c, a));
+    longest <= EPSILON || cross(a, b, c).abs() / longest <= FLAT
 }
 
 /// Twice the signed area of `a`, `b`, `c`: positive when anticlockwise.
@@ -301,6 +314,14 @@ mod tests {
         assert!(close(&w, &[0.0, 0.5, 0.5, 0.0]), "{w:?}");
         let all_one = [[2.0, 2.0], [2.0, 2.0]];
         assert!(close(&at(&all_one, [0.0, 0.0]), &[0.5, 0.5]));
+    }
+
+    #[test]
+    fn a_sliver_of_a_triangle_blends_as_its_line() {
+        let sliver = [[0.0, 0.0], [2.0, 0.0], [1.0, 1e-6]];
+        let (on, off) = (at(&sliver, [0.5, 0.0]), at(&sliver, [0.5, 1e-6]));
+        assert!(close(&on, &[0.5, 0.0, 0.5]), "along the line: {on:?}");
+        assert!(close(&off, &on), "no jump across a hair: {off:?}");
     }
 
     #[test]
