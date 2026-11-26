@@ -144,7 +144,7 @@ impl WorldRegions {
 
     /// The description as the text of a world file.
     pub fn to_ron(&self) -> Result<String, ron::Error> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::new())
+        ron::ser::to_string_pretty(self, voltra_assets::pretty_ron())
     }
 
     /// A grid of `columns` × `rows` regions of `cell` each, the first

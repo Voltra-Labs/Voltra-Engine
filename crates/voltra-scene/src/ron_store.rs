@@ -134,7 +134,7 @@ impl<T: RonAsset> RonStore<T> {
     /// first (and so written as it reads).
     pub fn save(&mut self, path: &AssetPath) -> Result<(), RonAssetError> {
         let handle = self.load(path);
-        let text = ron::ser::to_string_pretty(self.get(handle), ron::ser::PrettyConfig::default())
+        let text = ron::ser::to_string_pretty(self.get(handle), voltra_assets::pretty_ron())
             .map_err(RonAssetError::Serialize)?;
         let file = self.root.join(path.as_str());
         if let Some(parent) = file.parent() {

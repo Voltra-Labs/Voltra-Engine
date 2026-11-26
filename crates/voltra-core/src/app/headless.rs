@@ -289,7 +289,7 @@ impl Headless {
         let entity = entity_with_id(&self.app.world, id).ok_or(HeadlessError::NoEntity(id))?;
         let record = record_entity(&self.app.world, &self.app.registry, entity)
             .ok_or(HeadlessError::NoEntity(id))??;
-        ron::ser::to_string_pretty(&record, ron::ser::PrettyConfig::default())
+        ron::ser::to_string_pretty(&record, voltra_assets::pretty_ron())
             .map_err(|e| HeadlessError::Scene(SceneError::Serialize(e)))
     }
 

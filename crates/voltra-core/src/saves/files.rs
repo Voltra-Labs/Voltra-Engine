@@ -61,7 +61,7 @@ impl Saves {
 
     /// Writes `data` as RON to the file `name`.
     pub fn save_file<T: Serialize>(&self, name: &str, data: &T) -> Result<(), SaveError> {
-        let text = ron::ser::to_string_pretty(data, ron::ser::PrettyConfig::default())
+        let text = ron::ser::to_string_pretty(data, voltra_assets::pretty_ron())
             .map_err(SaveError::Serialize)?;
         self.write_text(name, &text)
     }

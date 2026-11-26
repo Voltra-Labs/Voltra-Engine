@@ -204,7 +204,7 @@ impl Manifest {
     /// The manifest as RON text, the form [`Manifest::from_ron`] reads back.
     pub fn to_ron(&self) -> Result<String, ManifestError> {
         ron_options()
-            .to_string_pretty(self, ron::ser::PrettyConfig::default())
+            .to_string_pretty(self, voltra_assets::pretty_ron())
             .map_err(ManifestError::Serialize)
     }
 

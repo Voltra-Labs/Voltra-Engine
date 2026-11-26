@@ -101,5 +101,5 @@ fn scene_text(count: usize) -> Option<String> {
         }
     }
     let file = to_scene_file(&world, &registry).ok()?;
-    ron::ser::to_string_pretty(&file, ron::ser::PrettyConfig::default()).ok()
+    ron::ser::to_string_pretty(&file, voltra_assets::pretty_ron()).ok()
 }

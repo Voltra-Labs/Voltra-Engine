@@ -53,10 +53,9 @@ pub struct EntityRecord {
 /// `struct_names` is off: `SceneFile(` at the top of the file tells a reader
 /// nothing they need.
 fn pretty() -> ron::ser::PrettyConfig {
-    ron::ser::PrettyConfig::new()
+    voltra_assets::pretty_ron()
         .struct_names(false)
         .indentor("    ")
-        .new_line("\n")
 }
 
 /// Every entity holding a [`SceneId`], in id order.

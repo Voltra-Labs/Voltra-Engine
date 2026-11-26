@@ -165,8 +165,7 @@ impl ActionMap {
 
     /// The map as RON, pretty-printed for a diff.
     pub fn to_ron(&self) -> Result<String, MapError> {
-        ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default())
-            .map_err(MapError::Serialize)
+        ron::ser::to_string_pretty(self, voltra_assets::pretty_ron()).map_err(MapError::Serialize)
     }
 
     /// Writes the map to `path`: a tool writing the project's own map
