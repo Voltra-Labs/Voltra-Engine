@@ -37,6 +37,8 @@ pub struct Editor {
     pub(crate) gizmo: Gizmo,
     /// The box being drawn over the viewport to select, if any.
     pub(crate) marquee: Marquee,
+    /// The body pulled with the pointer while the scene plays, if any.
+    pub(crate) grab: crate::grab::Grab,
     /// The armed paint tool and its brush. While armed with a layer selected,
     /// it has the viewport instead of the gizmo.
     pub(crate) paint: Paint,

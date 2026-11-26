@@ -178,13 +178,18 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 editor.history.claim(tool.label());
             }
 
+            // While playing, a drag that the gizmo did not take and that
+            // starts on a dynamic body pulls it, through a mouse joint.
+            let playing = editor.play.state() == PlayState::Playing;
+            let grabbing = editor.grab.update(&scene, frame, outcome.consumed, playing);
+
             // Before the click and the camera: a release that carries an asset
             // is a drop, not a selection and not the end of a pan.
             drop::drop_asset(editor, frame, ui, &scene);
 
             // Before navigation: a click and a drag are mutually exclusive in
             // egui, so this cannot swallow a pan.
-            select::update(editor, &scene, frame, outcome.consumed);
+            select::update(editor, &scene, frame, outcome.consumed || grabbing);
 
             editor.camera.navigate(ui, &scene, frame.camera);
 

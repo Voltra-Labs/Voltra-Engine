@@ -10,6 +10,7 @@ mod edit_keys;
 mod editor;
 mod game;
 mod gizmo;
+mod grab;
 mod instance;
 mod joints;
 mod marquee;

@@ -46,6 +46,10 @@ impl Editor {
         if self.play.state() == PlayState::Editing {
             return false;
         }
+        // A pulled body let go of first: the joint's entity is transient,
+        // and the restore, despawning only the scene's, would leave it
+        // pulling the restored body.
+        self.grab.release(frame.world);
         // The clients and the game first: they belong to the session the
         // restore discards.
         crate::netplay::end(self, frame);
