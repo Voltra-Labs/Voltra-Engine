@@ -9,6 +9,7 @@
 pub mod bloom;
 pub mod camera;
 pub mod context;
+pub mod device_open;
 pub mod egui_backend;
 pub mod frame_buffers;
 pub mod gpu_timer;
