@@ -3,7 +3,7 @@
 
 use voltra_render::glam::Vec2;
 
-use super::{spin, JointConstraint, Side};
+use super::{block, spin, JointConstraint, Side};
 use crate::solver::Softness;
 
 /// One solve of the anchors' constraint, `softness` the joints' spring.
@@ -41,13 +41,10 @@ pub(super) fn hold(
     let k11 = a.m + b.m + ra.y * ra.y * a.i + rb.y * rb.y * b.i;
     let k12 = -ra.y * ra.x * a.i - rb.y * rb.x * b.i;
     let k22 = a.m + b.m + ra.x * ra.x * a.i + rb.x * rb.x * b.i;
-    let det = k11 * k22 - k12 * k12;
-    if det.abs() <= f32::EPSILON {
+    let Some(solved) = block::solve(k11, k12, k22, cdot + bias) else {
         // Neither side can move: nothing to solve.
         return;
-    }
-    let rhs = cdot + bias;
-    let solved = Vec2::new(k22 * rhs.x - k12 * rhs.y, k11 * rhs.y - k12 * rhs.x) / det;
+    };
     let old = joint.impulses.linear;
     let mut total = old - mass_scale * solved - impulse_scale * old;
     // `max_impulse` infinite never caps: no length is past it.

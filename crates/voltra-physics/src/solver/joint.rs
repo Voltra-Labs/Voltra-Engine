@@ -18,6 +18,7 @@
 //! measured against its `break_force` and `break_torque` ([`breaking`]).
 
 mod active;
+mod block;
 pub mod breaking;
 mod distance;
 mod ends;

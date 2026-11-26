@@ -6,7 +6,7 @@ use voltra_render::glam::Vec2;
 use voltra_scene::JointKind;
 
 use super::line::Line;
-use super::{slide, JointConstraint, Side};
+use super::{block, slide, JointConstraint, Side};
 use crate::solver::Softness;
 
 /// One solve, in Box2D's order: the spring and the motor, the limits, then
@@ -55,12 +55,9 @@ pub(super) fn solve(
     // the block solvable.
     let turning = a.i + b.i;
     let k22 = if turning > 0.0 { turning } else { 1.0 };
-    let det = k11 * k22 - k12 * k12;
-    if det.abs() <= f32::EPSILON {
+    let Some(solved) = block::solve(k11, k12, k22, cdot + bias) else {
         return;
-    }
-    let rhs = cdot + bias;
-    let solved = Vec2::new(k22 * rhs.x - k12 * rhs.y, k11 * rhs.y - k12 * rhs.x) / det;
+    };
     let held = Vec2::new(joint.impulses.perp, joint.impulses.angular);
     let impulse = -mass_scale * solved - impulse_scale * held;
     joint.impulses.perp += impulse.x;
