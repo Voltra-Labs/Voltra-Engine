@@ -2,7 +2,8 @@
 //!
 //! Each [`Joint2D`] in the world becomes a [`JointConstraint`] at the start of
 //! the step — its two bodies found, its anchors turned into the world, its
-//! impulses from last step loaded — and then goes through the same passes a
+//! impulses from last step loaded, those of parts it no longer has reset
+//! (`active.rs`) — and then goes through the same passes a
 //! contact does: warm started, solved in every sub-step with the soft bias
 //! (`SolverParams::joint_softness`), solved once more without it, and its
 //! impulses stored back on the component for the next step. Joints are
@@ -16,6 +17,7 @@
 //! After the step, each joint's load — its impulses over the sub-step — is
 //! measured against its `break_force` and `break_torque` ([`breaking`]).
 
+mod active;
 pub mod breaking;
 mod distance;
 mod ends;
@@ -166,7 +168,7 @@ pub fn prepare_joints(
             angle: angle_a - angle_b,
             axis,
             spring,
-            impulses: joint.impulses,
+            impulses: active::active(&joint.kind, &joint.impulses, h),
         });
     }
     out
