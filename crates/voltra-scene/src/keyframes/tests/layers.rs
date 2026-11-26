@@ -196,29 +196,94 @@ fn a_property_only_a_layer_animates_is_continuous_near_zero_and_handed_back() {
 }
 
 #[test]
-fn something_else_writing_a_covered_property_is_what_the_layer_goes_over() {
+fn something_else_changing_a_covered_property_moves_what_is_under_the_layer() {
     let mut body = body();
     body.layer("wave.anim.ron", LayerBlend::Override, &["arm"], 0.5);
     body.frame(0.0);
-    assert!((body.turn(body.hand) - 0.0).abs() < 1e-6);
-    // A game aims the hand.
+    assert!(
+        (body.turn(body.hand) - 0.0).abs() < 1e-6,
+        "half way from -1 to 1"
+    );
+    // A game turns the hand a little each frame, from what it reads.
+    for _ in 0..10 {
+        if let Some(t) = body.world.get_mut::<Transform>(body.hand) {
+            t.rotation += 0.1;
+        }
+        body.frame(0.0);
+    }
+    // Under the layer the hand went from -1 to 0; half way to 1 is 0.5 —
+    // not damped to half the game's turn.
+    assert!(
+        (body.turn(body.hand) - 0.5).abs() < 1e-5,
+        "{}",
+        body.turn(body.hand)
+    );
+    // Set outright, once: the difference goes under.
     if let Some(t) = body.world.get_mut::<Transform>(body.hand) {
         t.rotation = 3.0;
     }
     body.frame(0.0);
     assert!(
-        (body.turn(body.hand) - 2.0).abs() < 1e-6,
+        (body.turn(body.hand) - 1.75).abs() < 1e-5,
         "{}",
         body.turn(body.hand)
     );
     body.player().layers_mut().clear();
     body.frame(0.0);
-    assert_eq!(
-        body.turn(body.hand),
-        3.0,
-        "a layer taken out hands back the aim"
+    assert!(
+        (body.turn(body.hand) - 2.5).abs() < 1e-5,
+        "a layer taken out hands back what is under: {}",
+        body.turn(body.hand)
     );
     assert!(!body.player().is_layered(), "and is done");
+}
+
+#[test]
+fn a_game_stepping_a_property_under_an_additive_layer_does_not_add_it_up() {
+    let mut body = body();
+    body.layer("breath.anim.ron", LayerBlend::Additive, &[], 1.0);
+    body.frame(1.0);
+    // Held at the top of the breath: a change of 0.2 to the scale.
+    body.player().layers_mut()[0].player.speed = 0.0;
+    body.frame(0.0);
+    assert!((body.transform(body.root).scale.x - 1.2).abs() < 1e-5);
+    for _ in 0..10 {
+        if let Some(t) = body.world.get_mut::<Transform>(body.root) {
+            t.scale.x += 0.01;
+        }
+        body.frame(0.0);
+    }
+    let x = body.transform(body.root).scale.x;
+    assert!(
+        (x - 1.3).abs() < 1e-5,
+        "the game's 0.1 and the breath's 0.2: {x}"
+    );
+}
+
+#[test]
+fn a_game_setting_a_property_outright_each_frame_shows_what_it_sets() {
+    let mut body = body();
+    body.layer("wave.anim.ron", LayerBlend::Override, &["arm"], 0.5);
+    body.layer("breath.anim.ron", LayerBlend::Additive, &[], 1.0);
+    // At the top of the breath, held: what the game sees settle is its own
+    // value. (While a layer moves, what is shown is the game's value plus
+    // the layer's change over the last frame.)
+    body.frame(1.0);
+    body.player().layers_mut()[1].player.speed = 0.0;
+    // An angle the layer can show at half weight: within a quarter turn
+    // of its own 1, the short way.
+    for _ in 0..40 {
+        if let Some(t) = body.world.get_mut::<Transform>(body.hand) {
+            t.rotation = 2.0;
+        }
+        if let Some(t) = body.world.get_mut::<Transform>(body.root) {
+            t.scale = Vec2::splat(2.0);
+        }
+        body.frame(0.0);
+    }
+    let (hand, scale) = (body.turn(body.hand), body.transform(body.root).scale);
+    assert!((hand - 2.0).abs() < 1e-4, "settled, no drift: {hand}");
+    assert!((scale - Vec2::splat(2.0)).length() < 1e-4, "{scale}");
 }
 
 #[test]

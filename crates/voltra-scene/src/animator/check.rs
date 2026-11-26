@@ -32,7 +32,7 @@ impl StateMachine {
         for layer in &mut layers {
             let label = format!("the layer {:?}", layer.name);
             if !names.insert(layer.name.clone()) {
-                log::warn!("{source}: a second layer named {:?}; a weight set by its name reaches the first", layer.name);
+                log::warn!("{source}: a second layer named {:?}; a weight set and a state read by its name are the first's", layer.name);
             }
             if !(0.0..=1.0).contains(&layer.weight) {
                 log::warn!(

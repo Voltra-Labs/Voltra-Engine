@@ -64,6 +64,10 @@ pub struct AnimationPlayer {
     /// What the layers cover, and what is under them there.
     #[serde(skip)]
     pub(super) underneath: Underneath,
+    /// Whether an animator made the layers, and so takes them out when it
+    /// runs a machine without layers, or goes. Never saved.
+    #[serde(skip)]
+    pub(crate) layers_from_animator: bool,
 }
 
 impl Default for AnimationPlayer {
@@ -79,6 +83,7 @@ impl Default for AnimationPlayer {
             reported: None,
             layers: Vec::new(),
             underneath: Underneath::default(),
+            layers_from_animator: false,
         }
     }
 }

@@ -62,7 +62,11 @@ impl RonAsset for StateMachine {
 /// trade places for ever inside one frame. Layer 0 first, then the layers
 /// bottom up, so a trigger layer 0 spends is spent for the layers too. An
 /// animator whose machine has no states — or will not read — does nothing.
+/// The layers an animator gave a player are taken out once it runs a
+/// machine without layers, runs none, or is removed.
 pub fn evaluate(world: &mut World, machines: &mut StateMachines, clips: &mut AnimationClips) {
+    // Layers an animator made outlive it on the player: taken out here.
+    layers::release_orphans(world);
     let animators: Vec<Entity> = world
         .query::<Animator>()
         .filter(|(_, a)| a.machine.is_some())

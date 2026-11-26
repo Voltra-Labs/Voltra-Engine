@@ -73,7 +73,7 @@ impl Animator {
         self.state.current.as_deref()
     }
 
-    /// The state the layer named `layer` is in, once it has started.
+    /// The state the (first) layer named `layer` is in, once it has started.
     pub fn layer_state(&self, layer: &str) -> Option<&str> {
         self.state
             .layers
@@ -82,7 +82,7 @@ impl Animator {
             .and_then(|l| l.current.as_deref())
     }
 
-    /// Sets the weight of the layer named `layer`, over the one its file
+    /// Sets the weight of the (first) layer named `layer`, over the one its file
     /// gives: `0` hides it, `1` shows it whole — Unity's `SetLayerWeight`.
     /// A value that is not finite is ignored; one outside `0..=1` is
     /// clamped when it plays.

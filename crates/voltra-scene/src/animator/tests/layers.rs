@@ -261,3 +261,72 @@ fn a_save_writes_the_edited_layer_settings_and_keeps_what_loading_dropped() {
     );
     assert_eq!(upper.transitions[0].duration, 0.2);
 }
+
+#[test]
+fn an_animator_given_a_machine_of_one_layer_takes_its_layers_out() {
+    let (mut rig, arm) = layered();
+    rig.frame(0.0);
+    rig.animator().trigger("wave");
+    rig.frame(0.1);
+    assert_eq!(rig.transform(arm).rotation, 2.0);
+    let root = rig.machines.root().to_path_buf();
+    std::fs::write(root.join("one.animator.ron"), MACHINE).expect("writes");
+    std::fs::write(root.join("idle.anim.ron"), STAND).expect("writes");
+    // What the inspector does when the path changes.
+    let animator = rig.animator();
+    animator.machine = Some(path("one.animator.ron"));
+    animator.restart();
+    rig.frame(0.1);
+    let player = rig.world.get::<AnimationPlayer>(rig.hero).expect("p");
+    assert!(
+        player.layers().is_empty(),
+        "the old machine's layers are gone"
+    );
+    assert_eq!(
+        rig.transform(arm).rotation,
+        0.5,
+        "the idle's arm, no wave over it"
+    );
+}
+
+#[test]
+fn an_animator_removed_takes_its_layers_out_and_a_game_s_own_stay() {
+    let (mut rig, arm) = layered();
+    rig.frame(0.0);
+    rig.animator().trigger("wave");
+    rig.frame(0.1);
+    rig.world.remove::<Animator>(rig.hero);
+    rig.frame(0.1);
+    let player = rig.world.get::<AnimationPlayer>(rig.hero).expect("p");
+    assert!(player.layers().is_empty());
+    assert_eq!(rig.transform(arm).rotation, 0.5, "handed back");
+
+    // A game's own layer on a player with no animator is its own.
+    let player = rig.world.get_mut::<AnimationPlayer>(rig.hero).expect("p");
+    let mut own = crate::keyframes::PlayerLayer::default();
+    own.player.play(path("wave.anim.ron"));
+    player.layers_mut().push(own);
+    rig.frame(0.1);
+    let player = rig.world.get::<AnimationPlayer>(rig.hero).expect("p");
+    assert_eq!(player.layers().len(), 1);
+}
+
+#[test]
+fn a_weight_set_by_a_name_two_layers_share_reaches_the_first() {
+    let twice = LAYERED.replace("name: \"breath\"", "name: \"upper\"");
+    let mut rig = Rig::with_clips(
+        &twice,
+        &[("stand", STAND), ("wave", WAVE), ("breath", BREATH)],
+    );
+    rig.frame(0.0);
+    rig.animator().set_layer_weight("upper", 0.25);
+    rig.frame(0.0);
+    let player = rig.world.get::<AnimationPlayer>(rig.hero).expect("p");
+    let weights: Vec<f32> = player.layers().iter().map(|l| l.weight).collect();
+    assert_eq!(weights, [0.25, 0.5], "the second keeps the file's");
+    assert_eq!(
+        rig.layer_state("upper").as_deref(),
+        Some("rest"),
+        "the first's state"
+    );
+}

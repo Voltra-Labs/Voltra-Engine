@@ -5,6 +5,7 @@ use std::borrow::Cow;
 
 use voltra_ecs::{Entity, World};
 
+use super::blend::Mixing;
 use super::pose::Pose;
 use super::property::Property;
 use super::target::Children;
@@ -34,9 +35,9 @@ struct Covered {
 /// override at `0.01` would creep, frame by frame, all the way to the
 /// layer's value. So the value from before the layers is kept here, and
 /// used while the world still holds what they wrote; once something else
-/// writes the property (a game, the editor, the motion starting to animate
-/// it), its new value is the one under them. Unity keeps the scene's
-/// default values for the same reason ("write defaults").
+/// writes the property (a game, the editor), the change it made is carried
+/// under them too ([`moved`]). Unity keeps the scene's default values for
+/// the same reason ("write defaults").
 ///
 /// A property no layer writes any more — its weight fell to zero, its
 /// state changed, the layer went — is handed back: what was under the
@@ -84,6 +85,9 @@ impl Underneath {
                     match (now, last) {
                         // Nothing else wrote it since: what was under stays.
                         (Some(now), Some(last)) if now == last.written => Some(last.under),
+                        // Something did: what it changed goes under the
+                        // layers too.
+                        (Some(now), Some(last)) => Some(moved(*property, last, now)),
                         (now, _) => now,
                     }
                 }
@@ -167,6 +171,32 @@ impl<'c> Resolver<'c> {
     }
 }
 
+/// What is under the layers once something other than them wrote `now`
+/// over what they last wrote.
+///
+/// For a number, the change it made goes under them: `under + (now -
+/// written)`. A game moving an entity by a step each frame
+/// (`translation += v * dt`) reads the value the layers wrote and adds to
+/// it; taking `now` whole as what is under would put the layers' own
+/// contribution under them again every frame — an additive bob would add
+/// itself up without end, and an override below one would damp the game's
+/// motion. A game that sets the value outright each frame converges, the
+/// same way, on showing exactly what it sets. A discrete value (a frame)
+/// has no difference: what was written is taken.
+fn moved(property: Property, last: &Covered, now: Value) -> Value {
+    if property.mixing() == Mixing::Discrete {
+        return now;
+    }
+    match (last.under, now, last.written) {
+        (Value::Float(u), Value::Float(n), Value::Float(w)) => Value::Float(u + (n - w)),
+        (Value::Vec2(u), Value::Vec2(n), Value::Vec2(w)) => Value::Vec2(u + (n - w)),
+        (Value::Color(u), Value::Color(n), Value::Color(w)) => {
+            Value::Color(std::array::from_fn(|i| u[i] + (n[i] - w[i])))
+        }
+        _ => now,
+    }
+}
+
 /// Writes back what was under the layers for a property they no longer
 /// write — unless the motion writes it now, or something else wrote it
 /// since the layers did.
@@ -179,5 +209,46 @@ fn hand_back(world: &mut World, find: &mut Resolver<'_>, acc: &Pose<'_>, gone: C
     };
     if gone.property.read(world, entity) == Some(gone.written) {
         gone.property.write(world, entity, gone.under);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn covered(under: Value, written: Value, property: Property) -> Covered {
+        Covered {
+            target: String::new(),
+            property,
+            under,
+            written,
+        }
+    }
+
+    #[test]
+    fn a_number_carries_the_change_under_and_a_frame_is_taken_whole() {
+        let last = covered(Value::Float(1.0), Value::Float(1.5), Property::Rotation);
+        assert_eq!(
+            moved(Property::Rotation, &last, Value::Float(1.75)),
+            Value::Float(1.25)
+        );
+        let last = covered(
+            Value::Color([0.0, 0.0, 0.0, 1.0]),
+            Value::Color([0.5, 0.5, 0.5, 1.0]),
+            Property::SpriteColor,
+        );
+        assert_eq!(
+            moved(
+                Property::SpriteColor,
+                &last,
+                Value::Color([1.0, 0.5, 0.5, 1.0])
+            ),
+            Value::Color([0.5, 0.0, 0.0, 1.0])
+        );
+        let last = covered(Value::Int(2), Value::Int(5), Property::SpriteFrame);
+        assert_eq!(
+            moved(Property::SpriteFrame, &last, Value::Int(7)),
+            Value::Int(7)
+        );
     }
 }
