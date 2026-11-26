@@ -4019,8 +4019,10 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   one, so each clip is sampled at the same fraction of its own length — a
   walk and a run keep their stride (Unity's blend-tree sync, Godot's
   blend-space `sync`). A clip of no length weighs in the mix but not the
-  length; the set loops when any of its clips does, and a clip that does
-  not, in a set that loops, holds its end after the first loop. A set with
+  length — a set whose weighted clips are all of no length keeps its phase
+  where it was rather than snapping to the start; the set loops when any of
+  its clips does, and a clip that does not, in a set that loops, holds its
+  end after the first loop (its start, playing backwards). A set with
   nothing to write (no clip that reads, at a weight) holds its clock, as an
   empty clip does. Either side of a fade may be a set; the side faded out
   keeps the weights it had. A `clip` written over a set plays (the field is
@@ -4513,7 +4515,10 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
     **barycentric** weights — at a child that child alone, on an edge its
     two ends. Outside the hull it is clamped to the nearest point on an
     edge and mixes that edge's two. One child plays alone; children all on
-    a line blend as 1D along it; coincident children share. The geometry
+    a line blend as 1D along it — and a triangle thinner than `1e-4` of
+    the children's spread counts as a line, since a sliver's weights swing
+    from one side to the other across a hair of input; coincident children
+    share. The geometry
     runs in `f64` in a frame scaled to the children's spread, so one
     epsilon serves any units. This is **Godot's `BlendSpace2D`** (auto
     triangles, barycentric) — which, for Unity's *simple directional*
@@ -4535,7 +4540,10 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
     as written, not replaced), a row per child (threshold, or `x` and `y`,
     and the clip's path field — dropped from the browser or typed; its
     **Clear** takes the child out), and an **add** field that appends a
-    child. Edited in the store and saved by the same **Save**/**Revert** as
+    child. Rows are keyed by index, so the path field (shared by every
+    inspector path) keeps the value its text was seeded from and reseeds
+    when the value moves under it — a row cleared above, a Revert, a hot
+    reload — rather than showing, and then committing, a stale path. Edited in the store and saved by the same **Save**/**Revert** as
     the fades (`animator/edits.rs`).
   - Unity's blend tree, Godot's `BlendSpace1D`/`BlendSpace2D`; Bevy's
     `AnimationGraph` blends by weights a game writes, with no blend
