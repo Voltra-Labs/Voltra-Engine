@@ -20,6 +20,7 @@ pub mod blend;
 pub mod clip;
 pub mod ease;
 mod fade;
+mod frame;
 pub mod player;
 pub mod pose;
 pub mod property;
@@ -38,10 +39,10 @@ pub use store::{AnimationClips, ClipError};
 pub use track::{Key, Track};
 pub use value::{Value, ValueKind};
 
-use voltra_assets::Handle;
 use voltra_ecs::World;
 
 use fade::Outgoing;
+use frame::{step, Source};
 
 /// Runs every playing [`AnimationPlayer`] `delta` seconds and writes its
 /// clip's values — or, while it fades, the mix of its clip and what it
@@ -101,85 +102,6 @@ pub fn advance(world: &mut World, clips: &mut AnimationClips, delta: f32) {
             missed.join(", ")
         );
     }
-}
-
-/// What one player writes this frame, found while its clocks run.
-struct Frame {
-    /// Its clip, and the time to sample it at; `None` for one that will not
-    /// read.
-    clip: Option<(Handle<AnimationClip>, f32)>,
-    /// While it fades: what it fades out, and its clip's weight.
-    fade: Option<(Source, f32)>,
-}
-
-/// The outgoing side of a fade, ready to sample.
-enum Source {
-    /// A clip, at a time.
-    Clip(Handle<AnimationClip>, f32),
-    /// A held pose, lent by the fade for the frame and given back.
-    Pose(Pose<'static>),
-}
-
-/// Runs `player`'s clocks — its clip's and, fading, the outgoing one's —
-/// and answers what to write, if anything.
-fn step(player: &mut AnimationPlayer, clips: &mut AnimationClips, delta: f32) -> Option<Frame> {
-    let incoming = player
-        .clip
-        .as_ref()
-        .map(|path| clips.load(path))
-        .filter(|&handle| !clips.get(handle).is_empty());
-    let Some(mut fade) = player.fade.take() else {
-        let handle = incoming?;
-        let clip = clips.get(handle);
-        return player
-            .step(clip.duration(), clip.looping, delta)
-            .then(|| Frame {
-                clip: Some((handle, player.time())),
-                fade: None,
-            });
-    };
-    // Paused mid-fade: everything holds, the fade too.
-    if !player.playing && !fade.held {
-        player.fade = Some(fade);
-        return None;
-    }
-    if let Some(handle) = incoming {
-        let clip = clips.get(handle);
-        let was = player.playing;
-        player.step(clip.duration(), clip.looping, delta);
-        fade.held |= was && !player.playing;
-    }
-    fade.tick(delta);
-    let clip = incoming.map(|handle| (handle, player.time()));
-    if fade.done() {
-        // The last frame of the fade is the clip alone, and the fade ends.
-        return clip.map(|clip| Frame {
-            clip: Some(clip),
-            fade: None,
-        });
-    }
-    let from = match &mut fade.from {
-        Outgoing::Clip(out) => {
-            let handle = clips.load(&out.clip);
-            let source = clips.get(handle);
-            player::run_clock(
-                &mut out.time,
-                &mut out.playing,
-                out.speed,
-                source.duration(),
-                source.looping,
-                delta,
-            );
-            Source::Clip(handle, out.time)
-        }
-        Outgoing::Pose(pose) => Source::Pose(std::mem::take(pose)),
-    };
-    let weight = fade.weight();
-    player.fade = Some(fade);
-    Some(Frame {
-        clip,
-        fade: Some((from, weight)),
-    })
 }
 
 #[cfg(test)]
