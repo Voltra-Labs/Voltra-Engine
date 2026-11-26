@@ -14,7 +14,7 @@ each chapter stands alone after that.
 7. [Export](07-export.md) — a native build and a web build.
 8. [Networking](08-networking.md) — sessions, replication, prediction, the editor's network play.
 9. [Effects and animation](09-effects-and-animation.md) — particles, lines and
-   trails, bones, skinned sprites.
+   trails, state machines and crossfades, bones, skinned sprites.
 10. [Big worlds](10-big-worlds.md) — regions streamed around the player, loading screens.
 
 Three sample games sit beside the engine in `games/`: `platformer`

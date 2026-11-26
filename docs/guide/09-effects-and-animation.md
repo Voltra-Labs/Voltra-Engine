@@ -1,6 +1,7 @@
 # 9. Effects and animation
 
-Particles, drawn lines and shapes, and characters made of bones. Every one
+Particles, drawn lines and shapes, state machines that crossfade clips,
+and characters made of bones. Every one
 of them is a component, edited in the inspector, saved in the scene file and
 drawn in painter's order with the sprites (`sort_order`, sorting layers,
 lights).
@@ -56,6 +57,41 @@ Scene ▸ Spawn line, Spawn polygon and Spawn trail make one of each:
 **Edit points** in a line's or a polygon's inspector puts handles on the
 points in the viewport: drag one, press the middle of a side to add one
 there, right-click one to remove it. `Esc` ends it.
+
+## State machines and crossfades
+
+An **`Animator`** chooses which clip an entity's `AnimationPlayer` plays.
+It runs a state machine, a `*.animator.ron` file: parameters the game sets
+(`set_float`, `set_bool`, `trigger`), states that each play a clip, and
+transitions between them. Give a transition a `duration` and the animator
+crossfades instead of cutting: for that many seconds the clip leaving keeps
+playing, the new one starts, and each property is written with their mix.
+
+```ron
+transitions: [
+    (from: Some("idle"), to: "run", conditions: [Greater("speed", 0.1)], duration: 0.15),
+    (from: Some("run"), to: "idle", conditions: [Less("speed", 0.1)], duration: 0.2),
+    (from: Some("idle"), to: "fidget", exit_time: Some(3.0)),
+],
+```
+
+Positions, scales, colours and intensities mix in proportion, rotations
+the short way round, and a sprite frame switches half way. A property only
+one of the two clips animates keeps that clip's value. A transition that
+fires mid-fade fades on from what is showing, so nothing jumps. No
+`duration` is `0`: a cut, as before.
+
+`exit_time` is how much of the state's clip must play first: below `1.0` a
+point in each loop (`0.5`, half way through any loop), from `1.0` up a
+number of loops of a clip that loops — the `fidget` above waits for three
+idles. On a clip that does not loop, `1.0` and above wait for its end.
+
+The inspector lists a machine's transitions under the animator, each with
+its fade in seconds; **Save** writes the file (as RON, without its
+comments), **Revert** reads it back. Every entity running the machine
+fades the new way at once. `crates/voltra-core/examples/character.rs` is a
+character whose idle, run, jump and fall crossfade
+(`assets/animations/hero.animator.ron`).
 
 ## Bones
 

@@ -3962,19 +3962,65 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   authored values aside for the same reason; Godot, which writes the pose
   into the scene, needs a RESET track. The cost: the gizmo and the
   inspector show the authored values while the preview is on.
+- **Sampling is apart from writing (stage 119).** `AnimationClip::sample`
+  answers a `Pose` — at most one value per (target, property), targets in
+  `target::canonical` spelling so `"/arm//hand/"` and `"arm/hand"` are one
+  entry — and `Pose::apply` writes it; `AnimationClip::apply` is the two
+  in a row. Between them, **`keyframes::blend(&[(&Pose, weight)])`** mixes
+  N weighted poses into one, so a property several clips animate is written
+  once with their mix. N inputs, not two: a crossfade is two, a blend tree
+  several, a layer one more over the rest — the mechanism lives here, below
+  the animator, because it is about values and clips, and every way of
+  playing more than one clip at once needs it. Unity's playable mixer and
+  Godot's `AnimationTree` blend nodes sit in the same place: under the
+  state machine, over the clips.
+- **How values mix is the property's** (`Property::mixing`): positions,
+  scales, colours and intensities `Linear`ly; a rotation the short way
+  round (`Angle`: `350°` and `10°` through `0°`) — not the clip's own rule,
+  where keys at `0` and `2π` are a turn, because two clips' angles are two
+  poses, not a spin; a sprite frame `Discrete`ly, the heaviest input's
+  (the later of two equal — a crossfade switches at `w >= 0.5`). Each
+  property is mixed among only the inputs that hold it, weights renormalized
+  there: one only one clip animates is that clip's at full weight, never
+  pulled towards a default nobody stated. The heaviest input is the angle
+  reference, so a mix that is all one input is its value exactly. Weights
+  that are not finite and positive count as zero; all zero mixes evenly.
+- **A player crossfades** (`AnimationPlayer::cross_fade(clip, seconds)`):
+  the clip it played keeps playing from where it was (its own clock, its
+  own speed), the new one starts, and the incoming weight runs `0 → 1`
+  linearly in unscaled seconds; the last frame writes the new clip alone
+  and the fade ends. Unity's `CrossFade`, Godot's `xfade_time`. A fade
+  interrupted by another freezes the mix last written as a `Pose` and fades
+  from that (Unity's interrupted transition: from what was showing, not
+  from either clip). `play` and `restart` cut a fade short; a duration that
+  is not positive is `play`. A paused player holds its fade; a new clip
+  that does not loop and ends first is held on its last frame while the
+  fade runs on. The fade is never saved, like the clock. A target despawned
+  or a clip reloaded mid-fade costs only its own values, as without a fade.
+- **`played`** counts the seconds of the clip played since it started,
+  through every loop — what an animator's exit time above one counts.
 - **Not yet**: record mode (an edit in the viewport keying itself), curve
   editing, copying keys, a clip's undo, playing the preview in time.
 
-Rejected: **a state machine or blending now** — Unity's `Animator`, Godot's
-`AnimationTree` — a subsystem of its own, when a game needs one; **curves
-on arbitrary fields by reflection**; **ids as targets**.
+Rejected: **a state machine now** — Unity's `Animator`, Godot's
+`AnimationTree` — a subsystem of its own, when a game needs one (stage 70
+built it, beside); **curves on arbitrary fields by reflection**; **ids as
+targets**; **blending inside the animator** — the mixing is about clips
+and values, and blend trees and layers need it too; **fading by writing
+twice** (out then in, each at its weight): a value is written once, and a
+discrete property or a clamp in `Property::write` would not compose.
 
 Pinned by `keyframes/tests.rs` (a clip moving its player and a named child
 with an ease, looping; a paused player leaving its entity alone; a missing
 child costing one track; bad keys dropped and the rest played; a broken file
-repaired by a reload; a save read back; a sprite frame flipbook), the unit
-tests of eases, values, properties, tracks, target paths and the player's
-clock, `app::animation` (playing only while simulating, taking a reload),
+repaired by a reload; a save read back; a sprite frame flipbook),
+`keyframes/tests/fade.rs` (halfway values, the outgoing clip still playing,
+a rotation the short way, a frame switching past half way, a property only
+the outgoing side animates holding, an interrupt fading from the mix, a
+target despawned and a clip reloaded mid-fade, a paused fade and an
+incoming clip ending first), `blend`'s unit tests (N inputs, bad weights,
+one-sided properties), the unit tests of eases, values, poses, properties,
+tracks, target paths and the player's clock and `played`, `app::animation` (playing only while simulating, taking a reload),
 and the editor's `timeline` (a pose lifted back to the authored values), its
 ruler's scale and its key re-sort.
 
@@ -4342,20 +4388,54 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
   versioned and spawned.
 - The browser lists `*.animator.ron` as `Animator`; the inspector edits an
   animator's machine and, while playing, its parameters.
+- **Crossfades (stage 119)**: a transition's `duration` (seconds, `serde`
+  default `0`, not written when `0`) is how long it fades; `0` cuts exactly
+  as before, so every older file plays as it did. Per transition only, with
+  no machine-wide default: one place to look — Unity's per-transition
+  duration, Godot's per-transition `xfade_time`. The animator only asks
+  (`AnimationPlayer::cross_fade`); the player mixes, through the keyframes
+  blend. The state changes at once — conditions and exit times read the
+  incoming state — and a transition taken mid-fade is an interrupt, which
+  fades from the mix showing. Entering the start state (first frame, a
+  reload that lost the state, a restart) cuts. A duration that is not a
+  time of zero or more loads as a cut, with a warning.
+- **Exit time counts loops** (stage 119): below `1.0` it is a point in each
+  loop, as before (`0.5`: half way through any loop); from `1.0` up, on a
+  clip that loops, a number of loops (`player.played() / length`: `2.5`
+  waits for two loops and a half) — Unity's normalized time. On a clip
+  that does not loop, anything from `1.0` up is its end. `1.0` on a
+  looping clip used to never pass (the phase never reaches one); it is now
+  one loop.
+- **The inspector lists the machine's transitions** ("idle to run", "any to
+  jump") with each one's fade in seconds, under a collapsed header. The
+  edit is to the store (`StateMachines::get_mut`), seen by every animator
+  running the machine at once, and written by **Save** or dropped by
+  **Revert** — the timeline's clip precedent; whether it is edited is kept
+  in egui's memory under the machine's path. A save writes pretty RON, so
+  the file's comments go, as a clip's do.
 
-Rejected: **blending and crossfades now** — two clips writing one property
-need weights per track, a subsystem of its own; **sub-state machines and
-layers**; **a graph editor now** — the file is short and hot reloads.
+Rejected: **blending in the animator** — the mix is the keyframes layer's,
+which blend trees and layers reuse; **a machine-wide default duration** —
+two places to look for one fade; **eased fade curves** — linear is what
+Unity and Godot default to, and a curve can join later as a field;
+**sub-state machines**; **a graph editor now** — the file is short and hot
+reloads.
 
-- **Not yet**: crossfades, blend trees, layers, a visual graph editor,
-  exit time counting loops of a looping clip.
+- **Not yet**: blend trees, layers, a visual graph editor, interruption
+  rules (Unity's interruption source and ordered interruption: here any
+  transition may interrupt a fade), a fade's offset into the incoming clip.
 
 Pinned by `animator/tests.rs` (starting in the start state with a player
 added, a float moving between states at a state's speed, a trigger spent
 and an any-state transition not re-entering itself, exit times waiting for
 a clip, a reload keeping a state or restarting without it, bad transitions
-dropped, a broken file running nothing, the shipped machine reading whole).
-The `character` example's idle, run, jump and fall are a machine.
+dropped, a broken file running nothing, the shipped machine reading whole
+and crossfading every move) and `animator/tests/crossfade.rs` (a fade at
+half way, a transition mid-fade fading from the mix, a duration of zero
+cutting and not being written, a bad duration cutting, a machine reloaded
+and an entity despawned mid-fade, an exit time counting loops).
+The `character` example's idle, run, jump and fall are a machine, each
+transition a crossfade.
 
 ### Navigation is a grid baked from colliders, in a crate of its own
 
