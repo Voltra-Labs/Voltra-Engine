@@ -81,7 +81,7 @@ pub fn run(workspace: &Path) -> Result<(), String> {
     for step in &steps {
         let at = format!("{}:{}", step.file.display(), step.line);
         println!("== {at}\n{}", step.script);
-        let status = Command::new("bash")
+        let status = Command::new(bash()?)
             .args(["-e", "-c", &step.script])
             .current_dir(workspace)
             .status()
@@ -94,9 +94,85 @@ pub fn run(workspace: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The bash the blocks run in.
+///
+/// On Windows `Command::new("bash")` looks in System32 before `PATH` and
+/// finds WSL's launcher, whose Linux has none of this machine's tools: the
+/// guide failed with `cargo: command not found`. The first `bash.exe` on
+/// `PATH` outside Windows' own folders is Git for Windows' — the shell a
+/// developer and CI's runner both have.
+#[cfg(windows)]
+fn bash() -> Result<PathBuf, String> {
+    let path = std::env::var_os("PATH").unwrap_or_default();
+    let system = std::env::var_os("SystemRoot").map(PathBuf::from);
+    pick_bash(
+        std::env::split_paths(&path),
+        system.as_deref(),
+        Path::is_file,
+    )
+    .ok_or_else(|| {
+        "no bash.exe on PATH outside Windows' own folders (WSL's has no cargo): \
+         install Git for Windows"
+            .to_owned()
+    })
+}
+
+/// Elsewhere `bash` on `PATH` is the one.
+#[cfg(not(windows))]
+fn bash() -> Result<PathBuf, String> {
+    Ok(PathBuf::from("bash"))
+}
+
+/// The first `bash.exe` in `dirs` that is neither under `system` (WSL's
+/// `System32\bash.exe`) nor an app-execution alias in `WindowsApps`.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn pick_bash(
+    dirs: impl IntoIterator<Item = PathBuf>,
+    system: Option<&Path>,
+    is_file: impl Fn(&Path) -> bool,
+) -> Option<PathBuf> {
+    let lower = |p: &Path| p.to_string_lossy().to_ascii_lowercase();
+    let system = system.map(lower);
+    dirs.into_iter()
+        .filter(|dir| {
+            let dir = lower(dir);
+            !system.as_ref().is_some_and(|s| dir.starts_with(s.as_str()))
+                && !dir.contains("windowsapps")
+        })
+        .map(|dir| dir.join("bash.exe"))
+        .find(|candidate| is_file(candidate))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_bash_picked_skips_wsl_s_launchers() {
+        let dirs = [
+            r"C:\WINDOWS\system32",
+            r"C:\Users\me\AppData\Local\Microsoft\WindowsApps",
+            r"C:\Tools\no-bash-here",
+            r"D:\Git\usr\bin",
+            r"E:\later\bin",
+        ]
+        .map(PathBuf::from);
+        let has_bash = |p: &Path| !p.starts_with(r"C:\Tools");
+        let picked = pick_bash(dirs, Some(Path::new(r"C:\Windows")), has_bash);
+        assert_eq!(
+            picked,
+            Some(PathBuf::from(r"D:\Git\usr\bin").join("bash.exe"))
+        );
+    }
+
+    #[test]
+    fn no_bash_outside_windows_folders_is_none() {
+        let dirs = [PathBuf::from(r"C:\Windows\System32")];
+        assert_eq!(
+            pick_bash(dirs, Some(Path::new(r"C:\Windows")), |_| true),
+            None
+        );
+    }
 
     #[test]
     fn only_marked_blocks_are_steps() {
