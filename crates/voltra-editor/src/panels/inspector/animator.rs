@@ -1,7 +1,8 @@
 //! The animator: which state machine, where it is, its parameters, and
-//! the machine's transitions and blend trees.
+//! the machine's layers, transitions and blend trees.
 
 mod edits;
+mod layers;
 mod transitions;
 mod trees;
 
@@ -32,6 +33,11 @@ pub(super) fn show(
                 "Add animator"
             });
     }
+    // What a layer's mask can name: the entities under this one.
+    let targets: Vec<String> = voltra_scene::keyframes::target::paths(world, entity)
+        .into_iter()
+        .map(|(path, _)| path)
+        .collect();
     let animator = world
         .get_mut::<Animator>(entity)
         .expect("the component is there: it was just tested for");
@@ -46,8 +52,13 @@ pub(super) fn show(
     let Some(path) = animator.machine.clone() else {
         return claim;
     };
-    edits::show(ui, machines, &path);
+    edits::show(ui, machines, &path, &targets);
     let handle = machines.load(&path);
+    for layer in &machines.get(handle).layers {
+        if let Some(state) = animator.layer_state(&layer.name) {
+            ui.label(RichText::new(format!("layer {} in {state}", layer.name)).weak());
+        }
+    }
     let parameters = machines.get(handle).parameters.clone();
     if parameters.is_empty() {
         return claim;

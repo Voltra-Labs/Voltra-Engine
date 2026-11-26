@@ -8,7 +8,7 @@ use voltra_scene::StateMachine;
 
 use crate::panels::inspector::path_field::{self, PathEdit};
 
-/// Every state's tree: its parameters, a row per clip — its threshold or
+/// Every state's tree, of every layer: its parameters, a row per clip — its threshold or
 /// point, and the clip, dropped from the browser or typed — and a field
 /// that adds one. Answers whether anything was edited.
 pub(super) fn show(ui: &mut Ui, machine: &mut StateMachine) -> bool {
@@ -27,14 +27,26 @@ pub(super) fn show(ui: &mut Ui, machine: &mut StateMachine) -> bool {
                     .weak()
                     .small(),
             );
-            for (index, state) in machine.states.iter_mut().enumerate() {
-                let Some(tree) = &mut state.tree else {
-                    continue;
-                };
-                ui.push_id(("animator_tree", index), |ui| {
-                    ui.label(RichText::new(&state.name).strong());
-                    edited |= tree_ui(ui, tree, &floats);
-                });
+            // Layer 0's states, then each layer's, under its name.
+            let layers = machine
+                .layers
+                .iter_mut()
+                .map(|l| (Some(l.name.as_str()), &mut l.states));
+            let graphs = std::iter::once((None, &mut machine.states)).chain(layers);
+            for (place, (layer, states)) in graphs.enumerate() {
+                for (index, state) in states.iter_mut().enumerate() {
+                    let Some(tree) = &mut state.tree else {
+                        continue;
+                    };
+                    ui.push_id(("animator_tree", place, index), |ui| {
+                        let name = match layer {
+                            Some(layer) => format!("{layer}: {}", state.name),
+                            None => state.name.clone(),
+                        };
+                        ui.label(RichText::new(name).strong());
+                        edited |= tree_ui(ui, tree, &floats);
+                    });
+                }
             }
         });
     edited
