@@ -3,8 +3,10 @@
 //! is stepped onto, a jump ends on a ceiling, a one-way platform is jumped
 //! up through, a lift — an animation clip — carries it, and the camera
 //! follows with slack, a lead and the level's bounds, and shakes on a hard
-//! landing. A state machine picks the character's idle, run, jump or fall
-//! clip from what the step sets.
+//! landing. A state machine picks the character's motion from what the step
+//! sets: on the ground a blend tree mixes idle, walk and run by its speed —
+//! it speeds up over a moment, so the mix passes through the walk — and in
+//! the air a jump or fall clip.
 //!
 //! Run it with `cargo run -p voltra-core --example character`. `A`/`D` or
 //! the arrow keys walk, `Space` jumps.
@@ -23,6 +25,9 @@ use voltra_scene::{
 
 /// World units per second at full tilt.
 const WALK_SPEED: f32 = 3.5;
+/// World units per second gained (or lost) each second towards the speed
+/// the stick asks for.
+const ACCELERATION: f32 = 12.0;
 /// Upward speed a jump starts with.
 const JUMP_SPEED: f32 = 6.5;
 /// World units per second squared, down.
@@ -56,11 +61,13 @@ fn main() {
                 .world
                 .get::<CharacterBody2D>(me)
                 .is_some_and(CharacterBody2D::is_on_floor);
-            velocity.x = tick
+            let wanted = tick
                 .input
                 .action_axis("move_left", "move_right")
                 .clamp(-1.0, 1.0)
                 * WALK_SPEED;
+            let step = ACCELERATION * tick.delta;
+            velocity.x += (wanted - velocity.x).clamp(-step, step);
             velocity.y -= GRAVITY * tick.delta;
             if jump.replace(false) && grounded {
                 velocity.y = JUMP_SPEED;
@@ -81,7 +88,8 @@ fn main() {
                         }
                     }
                     velocity = slide.velocity;
-                    // What the state machine reads: it picks the clip.
+                    // What the state machine reads: it picks the state, and
+                    // `speed` weighs the ground's idle, walk and run.
                     if let Some(animator) = tick.world.get_mut::<Animator>(me) {
                         animator.set_float("speed", velocity.x.abs());
                         animator.set_float("rising", velocity.y);
