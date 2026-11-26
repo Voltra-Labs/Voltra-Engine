@@ -3,6 +3,7 @@
 use voltra_assets::AssetPath;
 
 use super::pose::Pose;
+use super::synced::SyncedClips;
 
 /// A clip's clock outside a player: the side a fade fades out, which keeps
 /// playing from where it was.
@@ -24,6 +25,16 @@ pub(super) struct Playing {
 pub(super) enum Outgoing {
     /// The clip played before, still playing.
     Clip(Playing),
+    /// The synced clips played before, still playing at the weights they
+    /// had — a tree's parameters move its own set, not the one it left.
+    Synced {
+        /// The clips, their weights and clock.
+        set: SyncedClips,
+        /// The speed it was playing at.
+        speed: f32,
+        /// Whether its clock still runs.
+        playing: bool,
+    },
     /// The mix that was on screen when a fade was interrupted, held still —
     /// Unity's interrupted transition: the new fade starts from what was
     /// shown, not from either clip of the old one.

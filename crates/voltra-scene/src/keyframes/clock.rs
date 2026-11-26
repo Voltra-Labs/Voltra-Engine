@@ -10,26 +10,41 @@ impl AnimationPlayer {
     /// the phase it would have reached; a clip of no length loops on its
     /// one pose. A speed that is not finite holds still.
     pub(super) fn step(&mut self, duration: f32, looping: bool, delta: f32) -> bool {
-        let before = self.time;
-        let sampled = run_clock(
+        run_counted(
             &mut self.time,
+            &mut self.played,
             &mut self.playing,
             self.speed,
             duration,
             looping,
             delta,
-        );
-        if sampled {
-            // What the clock moved, before a wrap or a clamp took it back.
-            let moved = (delta.max(0.0) * self.speed).abs();
-            self.played += if looping {
-                moved
-            } else {
-                (self.time - before).abs()
-            };
-        }
-        sampled
+        )
     }
+}
+
+/// [`run_clock`], adding to `played` what the clock moved — before a wrap
+/// or a clamp took it back, so every loop counts: a player's clock, and a
+/// set of synced clips' in lengths.
+pub(super) fn run_counted(
+    time: &mut f32,
+    played: &mut f32,
+    playing: &mut bool,
+    speed: f32,
+    duration: f32,
+    looping: bool,
+    delta: f32,
+) -> bool {
+    let before = *time;
+    let sampled = run_clock(time, playing, speed, duration, looping, delta);
+    if sampled {
+        let moved = (delta.max(0.0) * speed).abs();
+        *played += if looping {
+            moved
+        } else {
+            (*time - before).abs()
+        };
+    }
+    sampled
 }
 
 /// [`AnimationPlayer::step`]'s clock, on its parts: a fade's outgoing clip

@@ -1,9 +1,10 @@
 //! Mixing poses by weight: what a crossfade writes, and the one mechanism
 //! anything that plays several clips at once mixes them through.
 
+use std::borrow::Cow;
 use std::f32::consts::{PI, TAU};
 
-use super::pose::Pose;
+use super::pose::{Pose, Sample};
 use super::property::Property;
 use super::value::Value;
 
@@ -21,7 +22,7 @@ pub enum Mixing {
 }
 
 /// The weighted mix of `inputs`: one value for every (target, property)
-/// some input of positive weight holds, in the order first met.
+/// some input of positive weight holds.
 ///
 /// Each property is mixed among only the inputs that hold it, their
 /// weights scaled to sum to one among those — so a property one clip
@@ -37,28 +38,70 @@ pub enum Mixing {
 /// input to it.
 pub fn blend<'a>(inputs: &[(&Pose<'a>, f32)]) -> Pose<'a> {
     let mut out = Pose::new();
-    let mut parts = Vec::with_capacity(inputs.len());
-    for (at, (pose, _)) in inputs.iter().enumerate() {
-        for sample in pose.samples() {
-            let (target, property) = (&sample.target, sample.property);
-            let earlier = inputs[..at]
-                .iter()
-                .any(|(p, _)| p.get(target, property).is_some());
-            if earlier {
-                continue;
-            }
-            parts.clear();
-            parts.extend(
-                inputs[at..]
-                    .iter()
-                    .filter_map(|(p, w)| p.get(target, property).map(|v| (v, *w))),
-            );
-            if let Some(value) = mix(property, &parts) {
-                out.set(target.clone(), property, value);
+    blend_into(inputs, &mut out);
+    out
+}
+
+/// Inputs a blend walks without allocating; more take a buffer each call.
+const FEW: usize = 8;
+
+/// [`blend`] into `out`, emptied first and its room reused — what a frame
+/// of players mixes through, one buffer for them all.
+///
+/// One pass over the inputs side by side: a pose is sorted, so the next
+/// property to mix is the least any input has not passed, and the inputs
+/// holding it are the ones there. Linear in the values held, times the
+/// inputs; nothing is allocated per property, nor for up to eight inputs.
+/// A target is borrowed from an input that borrows it, so mixing clips
+/// copies no names.
+pub fn blend_into<'a>(inputs: &[(&Pose<'a>, f32)], out: &mut Pose<'a>) {
+    out.clear();
+    let (mut few_at, mut many_at) = ([0usize; FEW], Vec::new());
+    let (mut few_parts, mut many_parts) = ([(Value::Int(0), 0.0); FEW], Vec::new());
+    let (at, parts): (&mut [usize], &mut [(Value, f32)]) = if inputs.len() <= FEW {
+        (&mut few_at[..inputs.len()], &mut few_parts[..])
+    } else {
+        many_at.resize(inputs.len(), 0);
+        many_parts.resize(inputs.len(), (Value::Int(0), 0.0));
+        (&mut many_at, &mut many_parts)
+    };
+    loop {
+        let mut next: Option<(&str, Property)> = None;
+        for (&(pose, _), &i) in inputs.iter().zip(at.iter()) {
+            if let Some(s) = pose.samples().get(i) {
+                let key = (s.target.as_ref(), s.property);
+                if next.is_none_or(|least| key < least) {
+                    next = Some(key);
+                }
             }
         }
+        let Some((target, property)) = next else {
+            return;
+        };
+        let mut held = 0;
+        let mut name: Option<&Cow<'a, str>> = None;
+        for (&(pose, weight), i) in inputs.iter().zip(at.iter_mut()) {
+            let Some(s) = pose.samples().get(*i) else {
+                continue;
+            };
+            if s.property != property || s.target != target {
+                continue;
+            }
+            parts[held] = (s.value, weight);
+            held += 1;
+            *i += 1;
+            if name.is_none_or(|n| matches!(n, Cow::Owned(_))) {
+                name = Some(&s.target);
+            }
+        }
+        if let (Some(value), Some(name)) = (mix(property, &parts[..held]), name) {
+            out.push_sorted(Sample {
+                target: name.clone(),
+                property,
+                value,
+            });
+        }
     }
-    out
 }
 
 /// `parts` — values of `property` and their weights — mixed as the
@@ -73,31 +116,30 @@ pub fn blend<'a>(inputs: &[(&Pose<'a>, f32)]) -> Pose<'a> {
 /// value exactly.
 pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
     let kind = property.kind();
-    let parts: Vec<(Value, f32)> = parts
-        .iter()
-        .filter(|(v, w)| v.kind() == kind && w.is_finite() && *w > 0.0)
-        .copied()
-        .collect();
-    let (first, rest) = parts.split_first()?;
-    if rest.is_empty() {
-        return Some(first.0);
-    }
-    // Over the heaviest first, so a sum of large weights stays finite.
-    let most = parts.iter().map(|(_, w)| *w).fold(0.0, f32::max);
-    let total: f32 = parts.iter().map(|(_, w)| w / most).sum();
-    let share = |w: f32| w / most / total;
-    let mut heaviest = *first;
-    for &(v, w) in rest {
+    let fits = |&&(v, w): &&(Value, f32)| v.kind() == kind && w.is_finite() && w > 0.0;
+    let valid = || parts.iter().filter(fits);
+    let mut iter = valid();
+    let first = *iter.next()?;
+    let mut heaviest = first;
+    let mut alone = true;
+    for &(v, w) in iter {
+        alone = false;
         if w >= heaviest.1 {
             heaviest = (v, w);
         }
     }
+    if alone {
+        return Some(first.0);
+    }
+    // Over the heaviest first, so a sum of large weights stays finite.
+    let most = valid().map(|(_, w)| *w).fold(0.0, f32::max);
+    let total: f32 = valid().map(|(_, w)| w / most).sum();
+    let share = |w: f32| w / most / total;
     let heaviest = heaviest.0;
     Some(match (property.mixing(), heaviest, first.0) {
         (Mixing::Discrete, ..) | (_, Value::Int(_), _) => heaviest,
         (Mixing::Angle, Value::Float(top), Value::Float(from)) => {
-            let turn: f32 = parts
-                .iter()
+            let turn: f32 = valid()
                 .map(|&(v, w)| match v {
                     Value::Float(a) => shortest(a - from) * share(w),
                     _ => 0.0,
@@ -108,8 +150,7 @@ pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
             Value::Float(top + shortest(from + turn - top))
         }
         (_, Value::Float(_), _) => Value::Float(
-            parts
-                .iter()
+            valid()
                 .map(|&(v, w)| match v {
                     Value::Float(a) => a * share(w),
                     _ => 0.0,
@@ -117,8 +158,7 @@ pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
                 .sum(),
         ),
         (_, Value::Vec2(_), _) => Value::Vec2(
-            parts
-                .iter()
+            valid()
                 .map(|&(v, w)| match v {
                     Value::Vec2(a) => a * share(w),
                     _ => voltra_render::glam::Vec2::ZERO,
@@ -127,7 +167,7 @@ pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
         ),
         (_, Value::Color(_), _) => {
             let mut sum = [0.0; 4];
-            for &(v, w) in &parts {
+            for &(v, w) in valid() {
                 if let Value::Color(c) = v {
                     for (s, c) in sum.iter_mut().zip(c) {
                         *s += c * share(w);

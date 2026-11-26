@@ -27,18 +27,20 @@ pub mod player;
 pub mod pose;
 pub mod property;
 pub mod store;
+pub mod synced;
 pub mod target;
 pub mod track;
 pub mod value;
 
 pub use advance::advance;
-pub use blend::{blend, Mixing};
+pub use blend::{blend, blend_into, Mixing};
 pub use clip::AnimationClip;
 pub use ease::Ease;
 pub use player::AnimationPlayer;
 pub use pose::{Pose, Sample};
 pub use property::Property;
 pub use store::{AnimationClips, ClipError};
+pub use synced::SyncedClips;
 pub use track::{Key, Track};
 pub use value::{Value, ValueKind};
 

@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use voltra_ecs::{Entity, World};
 
 use super::property::Property;
-use super::target::{self, Targets};
+use super::target::{self, Children, Targets};
 use super::value::Value;
 
 /// One property's value on one entity under a player.
@@ -31,6 +31,9 @@ pub struct Sample<'a> {
 /// animate is written once with their mix, never twice. Targets borrow
 /// from the clip they were sampled from; [`into_owned`](Self::into_owned)
 /// is a pose kept across frames, such as a fade's frozen start.
+///
+/// Kept sorted by target, then property: a lookup is a binary search, and
+/// a blend of several poses walks them side by side, once each.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Pose<'a> {
     samples: Vec<Sample<'a>>,
@@ -42,6 +45,13 @@ impl<'a> Pose<'a> {
         Self::default()
     }
 
+    /// A pose holding nothing, with room for `capacity` values.
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            samples: Vec::with_capacity(capacity),
+        }
+    }
+
     /// Sets `property` of `target` to `value`, replacing a value already
     /// there — so the later of two tracks on one property is the one kept,
     /// as writing both in order would leave it.
@@ -50,30 +60,61 @@ impl<'a> Pose<'a> {
             Cow::Borrowed(path) => target::canonical(path),
             Cow::Owned(path) => Cow::Owned(target::canonical(&path).into_owned()),
         };
-        match self
+        // A clip's tracks are mostly in order already: one comparison then.
+        let after_last = self
             .samples
-            .iter_mut()
-            .find(|s| s.property == property && s.target == target)
-        {
-            Some(sample) => sample.value = value,
-            None => self.samples.push(Sample {
+            .last()
+            .is_none_or(|last| (last.target.as_ref(), last.property) < (&*target, property));
+        if after_last {
+            self.samples.push(Sample {
                 target,
                 property,
                 value,
-            }),
+            });
+            return;
+        }
+        match self.find(&target, property) {
+            Ok(at) => self.samples[at].value = value,
+            Err(at) => self.samples.insert(
+                at,
+                Sample {
+                    target,
+                    property,
+                    value,
+                },
+            ),
         }
     }
 
     /// The value it holds for `property` of `target`.
     pub fn get(&self, target: &str, property: Property) -> Option<Value> {
         let target = target::canonical(target);
-        self.samples
-            .iter()
-            .find(|s| s.property == property && s.target == target)
-            .map(|s| s.value)
+        self.find(&target, property)
+            .ok()
+            .map(|at| self.samples[at].value)
     }
 
-    /// Every value it holds, in the order first set.
+    /// Where (`target`, `property`) is, or would go; `target` canonical.
+    fn find(&self, target: &str, property: Property) -> Result<usize, usize> {
+        self.samples
+            .binary_search_by(|s| (s.target.as_ref(), s.property).cmp(&(target, property)))
+    }
+
+    /// Appends a sample that sorts after every one held — what a blend,
+    /// walking its inputs in order, produces. The caller keeps the order.
+    pub(super) fn push_sorted(&mut self, sample: Sample<'a>) {
+        debug_assert!(self.samples.last().is_none_or(|last| {
+            (last.target.as_ref(), last.property) < (sample.target.as_ref(), sample.property)
+        }));
+        self.samples.push(sample);
+    }
+
+    /// Drops every value, keeping the room for the next frame's.
+    pub fn clear(&mut self) {
+        self.samples.clear();
+    }
+
+    /// Every value it holds, sorted by target, then property.
     pub fn samples(&self) -> &[Sample<'a>] {
         &self.samples
     }
@@ -104,12 +145,52 @@ impl<'a> Pose<'a> {
         }
     }
 
+    /// Becomes `other`, owning its targets: what a fade keeps of the mix it
+    /// last wrote. Reuses the names it holds — a fade writes the same
+    /// properties of the same targets frame after frame, so in the steady
+    /// state this copies values and allocates nothing.
+    pub fn copy_from(&mut self, other: &Pose<'_>) {
+        self.samples.truncate(other.samples.len());
+        for (mine, theirs) in self.samples.iter_mut().zip(&other.samples) {
+            if mine.target != theirs.target {
+                match &mut mine.target {
+                    Cow::Owned(name) => {
+                        name.clear();
+                        name.push_str(&theirs.target);
+                    }
+                    borrowed => *borrowed = Cow::Owned(theirs.target.to_string()),
+                }
+            }
+            mine.property = theirs.property;
+            mine.value = theirs.value;
+        }
+        let have = self.samples.len();
+        self.samples
+            .extend(other.samples[have..].iter().map(|s| Sample {
+                target: Cow::Owned(s.target.to_string()),
+                property: s.property,
+                value: s.value,
+            }));
+    }
+
     /// Writes every value onto the entity it names under `root`. Answers
     /// the values that found nothing to write to — a target no child is
     /// named, or one without the property's component; each costs only
     /// itself.
     pub fn apply(&self, world: &mut World, root: Entity) -> Vec<&Sample<'a>> {
-        let mut targets = Targets::default();
+        let children = Children::of(world);
+        self.apply_through(world, root, &children)
+    }
+
+    /// [`apply`](Self::apply), finding targets through `children` — one
+    /// index for every pose written in a frame.
+    pub(super) fn apply_through(
+        &self,
+        world: &mut World,
+        root: Entity,
+        children: &Children,
+    ) -> Vec<&Sample<'a>> {
+        let mut targets = Targets::new(children);
         let mut missed = Vec::new();
         for sample in &self.samples {
             let written = targets

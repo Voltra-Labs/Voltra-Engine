@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use voltra_ecs::{Entity, World};
 
-use crate::hierarchy::children_of;
+use crate::hierarchy::{children_of, Parent};
 use crate::name::Name;
 
 /// The entity `path` names under `root`: `""` is `root` itself, `"arm"` its
@@ -71,19 +71,67 @@ fn walk(world: &World, at: Entity, prefix: &str, found: &mut Vec<(String, Entity
     }
 }
 
-/// [`resolve`], once per distinct path for one sample of one clip: a clip's
-/// colour and position tracks on the same child walk the hierarchy once.
-#[derive(Default)]
-pub(super) struct Targets<'p> {
-    found: HashMap<&'p str, Option<Entity>>,
+/// Every entity's children, in the hierarchy's order, from one pass over
+/// the links — what resolving many paths in a frame reads, rather than
+/// scanning the world for each name ([`children_of`] does).
+#[derive(Debug, Default)]
+pub(super) struct Children(HashMap<Entity, Vec<Entity>>);
+
+impl Children {
+    /// The children of everything in `world` as it is now.
+    pub fn of(world: &World) -> Self {
+        let mut map: HashMap<Entity, Vec<Entity>> = HashMap::new();
+        for (child, link) in world.query::<Parent>() {
+            if let Some(parent) = link.entity {
+                map.entry(parent).or_default().push(child);
+            }
+        }
+        for children in map.values_mut() {
+            children.sort_unstable_by_key(Entity::index);
+        }
+        Self(map)
+    }
+
+    /// [`resolve`], reading this index for each step down.
+    pub fn resolve(&self, world: &World, root: Entity, path: &str) -> Option<Entity> {
+        let mut at = root;
+        for segment in path.split('/').filter(|s| !s.is_empty()) {
+            at = *self.0.get(&at)?.iter().find(|&&child| {
+                world
+                    .get::<Name>(child)
+                    .is_some_and(|n| n.as_str() == segment)
+            })?;
+        }
+        Some(at)
+    }
 }
 
-impl<'p> Targets<'p> {
+/// [`resolve`] for one pose written, the last path asked remembered: a
+/// pose is sorted by target, so a target's position, rotation and colour
+/// walk the hierarchy once between them, with no map to fill.
+pub(super) struct Targets<'p, 'c> {
+    children: &'c Children,
+    last: Option<(&'p str, Option<Entity>)>,
+}
+
+impl<'p, 'c> Targets<'p, 'c> {
+    /// Resolving through `children`.
+    pub fn new(children: &'c Children) -> Self {
+        Self {
+            children,
+            last: None,
+        }
+    }
+
     pub fn get(&mut self, world: &World, root: Entity, path: &'p str) -> Option<Entity> {
-        *self
-            .found
-            .entry(path)
-            .or_insert_with(|| resolve(world, root, path))
+        match self.last {
+            Some((last, found)) if last == path => found,
+            _ => {
+                let found = self.children.resolve(world, root, path);
+                self.last = Some((path, found));
+                found
+            }
+        }
     }
 }
 
@@ -123,6 +171,12 @@ mod tests {
             assert_eq!(resolve(&world, root, path), Some(*entity), "{path:?}");
         }
         assert_eq!(resolve(&world, root, "/arm//hand/"), Some(hand));
+        let index = Children::of(&world);
+        for (path, entity) in &listed {
+            assert_eq!(index.resolve(&world, root, path), Some(*entity), "{path:?}");
+        }
+        assert_eq!(index.resolve(&world, root, "/arm//hand/"), Some(hand));
+        assert_eq!(index.resolve(&world, root, "leg"), None);
         assert_eq!(resolve(&world, root, "leg"), None);
         assert_eq!(canonical("/arm//hand/"), "arm/hand");
         assert!(matches!(canonical("arm/hand"), Cow::Borrowed(_)));

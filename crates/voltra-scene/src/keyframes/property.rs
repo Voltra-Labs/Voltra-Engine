@@ -15,7 +15,7 @@ use crate::{GlobalLight2D, PointLight2D, Sprite, Text, Tilemap, Transform};
 /// kind, and its two arms in [`read`](Self::read) and
 /// [`write`](Self::write) — Godot's property tracks with the property
 /// list spelled out.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Property {
     /// `Transform::translation`, in the parent's space.
     Translation,

@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use voltra_assets::AssetPath;
 
 use super::fade::{Fade, Outgoing, Playing};
+use super::synced::SyncedClips;
 
 /// Plays [`clip`](Self::clip) on this entity, and on the children its
 /// tracks name.
@@ -13,6 +14,11 @@ use super::fade::{Fade, Outgoing, Playing};
 /// switches by writing [`play`](Self::play), as with `SpriteAnimation`, or
 /// fades into the next with [`cross_fade`](Self::cross_fade). Choosing the
 /// clip is an [`Animator`](crate::Animator)'s.
+///
+/// Instead of one clip it can play several at once, synced and mixed by
+/// weight ([`play_synced`](Self::play_synced), a [`SyncedClips`]) — what an
+/// animator's blend tree plays. A [`clip`](Self::clip) set wins: writing
+/// one plays it, whatever was synced.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AnimationPlayer {
@@ -36,6 +42,10 @@ pub struct AnimationPlayer {
     /// one runs. Never saved: a scene loads on its clip, not mid-fade.
     #[serde(skip)]
     pub(super) fade: Option<Fade>,
+    /// The clips played together while [`clip`](Self::clip) is `None`.
+    /// Never saved: a blend is what a running animator asks for.
+    #[serde(skip)]
+    pub(super) synced: Option<SyncedClips>,
     /// The clip whose missing targets were last logged, so a track naming a
     /// child that is not there warns once rather than every frame.
     #[serde(skip)]
@@ -51,6 +61,7 @@ impl Default for AnimationPlayer {
             time: 0.0,
             played: 0.0,
             fade: None,
+            synced: None,
             reported: None,
         }
     }
@@ -97,7 +108,34 @@ impl AnimationPlayer {
     /// stops being written at once. The same clip again restarts it.
     pub fn play(&mut self, clip: AssetPath) {
         self.clip = Some(clip);
+        self.synced = None;
         self.restart();
+    }
+
+    /// Plays `clips` together from their start, synced and mixed by their
+    /// weights, cutting to them — [`play`](Self::play) for a blend.
+    pub fn play_synced(&mut self, clips: SyncedClips) {
+        self.clip = None;
+        self.synced = Some(clips);
+        self.restart();
+    }
+
+    /// Plays nothing from now: no clip, no blend, no fade. What was written
+    /// stays as it was.
+    pub fn stop(&mut self) {
+        self.clip = None;
+        self.synced = None;
+        self.restart();
+    }
+
+    /// The clips it plays together, when it plays a blend.
+    pub fn synced(&self) -> Option<&SyncedClips> {
+        self.synced.as_ref().filter(|_| self.clip.is_none())
+    }
+
+    /// The clips it plays together, to change their weights as they play.
+    pub fn synced_mut(&mut self) -> Option<&mut SyncedClips> {
+        self.synced.as_mut().filter(|_| self.clip.is_none())
     }
 
     /// Plays `clip` from its start, fading into it over `duration` seconds:
@@ -108,30 +146,51 @@ impl AnimationPlayer {
     ///
     /// Called mid-fade, it fades from the mix last written, held still, so
     /// nothing jumps. A `duration` that is not a positive number, or a
-    /// player that had no clip, is [`play`](Self::play): a cut.
+    /// player that had nothing playing, is [`play`](Self::play): a cut.
     pub fn cross_fade(&mut self, clip: AssetPath, duration: f32) {
-        let fades = duration.is_finite() && duration > 0.0;
-        let from = match (fades, self.fade.take(), self.clip.take()) {
-            (false, ..) | (true, None, None) => None,
+        let from = self.outgoing(duration);
+        self.play(clip);
+        self.fade = from.map(|from| Fade::new(from, duration));
+    }
+
+    /// [`cross_fade`](Self::cross_fade) into `clips` played together: a
+    /// fade into a blend, from a clip, a blend or a fade.
+    pub fn cross_fade_synced(&mut self, clips: SyncedClips, duration: f32) {
+        let from = self.outgoing(duration);
+        self.play_synced(clips);
+        self.fade = from.map(|from| Fade::new(from, duration));
+    }
+
+    /// What a fade of `duration` seconds starting now fades out, taken out
+    /// of the player; `None` for a cut.
+    fn outgoing(&mut self, duration: f32) -> Option<Outgoing> {
+        if !(duration.is_finite() && duration > 0.0) {
+            return None;
+        }
+        let synced = self.synced.take();
+        match (self.fade.take(), self.clip.take(), synced) {
             // Interrupted after a frame of mixing: what is on screen.
             (
-                true,
                 Some(Fade {
                     last: Some(mix), ..
                 }),
-                _,
+                ..,
             ) => Some(Outgoing::Pose(mix)),
             // Interrupted before any: still all the old side.
-            (true, Some(fade), _) => Some(fade.from),
-            (true, None, Some(previous)) => Some(Outgoing::Clip(Playing {
+            (Some(fade), ..) => Some(fade.from),
+            (None, Some(previous), _) => Some(Outgoing::Clip(Playing {
                 clip: previous,
                 time: self.time,
                 speed: self.speed,
                 playing: self.playing,
             })),
-        };
-        self.play(clip);
-        self.fade = from.map(|from| Fade::new(from, duration));
+            (None, None, Some(set)) => Some(Outgoing::Synced {
+                set,
+                speed: self.speed,
+                playing: self.playing,
+            }),
+            (None, None, None) => None,
+        }
     }
 
     /// Plays from the start again, cutting any fade short.
@@ -140,6 +199,9 @@ impl AnimationPlayer {
         self.played = 0.0;
         self.playing = true;
         self.fade = None;
+        if let Some(set) = &mut self.synced {
+            set.rewind();
+        }
     }
 }
 

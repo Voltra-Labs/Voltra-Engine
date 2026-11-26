@@ -81,12 +81,20 @@ impl AnimationClip {
     /// holds nothing; of two tracks on one property, the later's value.
     pub fn sample(&self, time: f32) -> Pose<'_> {
         let mut pose = Pose::new();
+        self.sample_into(time, &mut pose);
+        pose
+    }
+
+    /// [`sample`](Self::sample) into `pose`, emptied first and its room
+    /// reused: a frame of players samples through a few buffers, not one
+    /// per clip.
+    pub fn sample_into<'a>(&'a self, time: f32, pose: &mut Pose<'a>) {
+        pose.clear();
         for track in &self.tracks {
             if let Some(value) = track.sample(time) {
                 pose.set(track.target.as_str(), track.property, value);
             }
         }
-        pose
     }
 
     /// Writes every track's value at `time` onto the entities it names under
