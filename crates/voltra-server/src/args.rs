@@ -6,9 +6,13 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+mod lobby_flags;
+
+pub use lobby_flags::LobbyFlags;
+
 use crate::{ServerOptions, DEFAULT_TICK_RATE};
 use voltra_core::net::{
-    Advertise, HostOptions, LobbyConfig, NetConfig, DEFAULT_DISCOVERY_PORT, DEFAULT_UDP_PORT,
+    Advertise, HostOptions, NetConfig, DEFAULT_DISCOVERY_PORT, DEFAULT_UDP_PORT,
     DEFAULT_WEBSOCKET_PORT,
 };
 
@@ -63,34 +67,6 @@ pub struct Args {
     /// game's server sets in [`ServerOptions::lobby`] (or the engine's
     /// default one) once the game has had its say.
     pub lobby: LobbyFlags,
-}
-
-/// The lobby flags given, each `None` when not.
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct LobbyFlags {
-    /// `--lobby`, or any other lobby flag: hold one.
-    pub on: bool,
-    /// `--min-players`.
-    pub min_players: Option<usize>,
-    /// `--max-players`.
-    pub max_players: Option<usize>,
-}
-
-impl LobbyFlags {
-    /// `options` with these flags laid over its lobby — the engine's
-    /// default one when the flags ask for a lobby and it has none.
-    pub fn apply(&self, options: &mut ServerOptions) {
-        if !self.on {
-            return;
-        }
-        let lobby = options.lobby.get_or_insert_with(LobbyConfig::default);
-        if let Some(min) = self.min_players {
-            lobby.min_players = min;
-        }
-        if let Some(max) = self.max_players {
-            lobby.max_players = max;
-        }
-    }
 }
 
 /// Everything a command line can get wrong.
@@ -230,122 +206,4 @@ fn number<T: std::str::FromStr + PartialOrd + Default>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn run(args: &[&str]) -> Result<Parsed, ArgError> {
-        parse(args.iter().map(|a| a.to_string()))
-    }
-
-    #[test]
-    fn the_defaults_host_both_transports_at_sixty_ticks() {
-        let Ok(Parsed::Run(args)) = run(&[]) else {
-            panic!("runs");
-        };
-        assert_eq!(args.options.tick_rate, 60);
-        assert_eq!(args.options.host.udp_port, Some(7777));
-        assert_eq!(args.options.host.websocket_port, Some(7778));
-        assert_eq!(
-            args.options.host.discovery.as_ref().map(|d| d.port),
-            Some(7779),
-            "found on the LAN by default"
-        );
-        assert_eq!(args.options.lobby, None, "no lobby unless asked");
-        assert_eq!(args.scene, None);
-    }
-
-    #[test]
-    fn lobby_flags_lay_over_the_lobby_a_game_set() {
-        let Ok(Parsed::Run(mut args)) = run(&["--min-players", "1", "--discovery", "off"]) else {
-            panic!("runs");
-        };
-        assert_eq!(args.options.host.discovery, None);
-        // The game's server says its lobby first; the flags win.
-        args.options.lobby = Some(LobbyConfig {
-            max_players: 4,
-            ..LobbyConfig::default()
-        });
-        args.lobby.apply(&mut args.options);
-        let lobby = args.options.lobby.expect("a lobby");
-        assert_eq!((lobby.min_players, lobby.max_players), (1, 4));
-
-        let Ok(Parsed::Run(mut plain)) = run(&["--lobby"]) else {
-            panic!("runs");
-        };
-        plain.lobby.apply(&mut plain.options);
-        assert_eq!(plain.options.lobby, Some(LobbyConfig::default()));
-    }
-
-    #[test]
-    fn every_flag_is_read() {
-        let Ok(Parsed::Run(args)) = run(&[
-            "scenes/arena.ron",
-            "--asset-root",
-            "game/assets",
-            "--bind",
-            "127.0.0.1",
-            "--udp",
-            "0",
-            "--ws",
-            "off",
-            "--tick",
-            "30",
-            "--max-clients",
-            "8",
-            "--protocol",
-            "42",
-            "--seconds",
-            "5",
-            "--port-file",
-            "ports.txt",
-            "--discovery",
-            "0",
-            "--name",
-            "Ada's server",
-            "--game",
-            "arena",
-            "--max-players",
-            "6",
-        ]) else {
-            panic!("runs");
-        };
-        assert_eq!(args.scene.as_deref(), Some("scenes/arena.ron"));
-        assert_eq!(args.asset_root, Some(PathBuf::from("game/assets")));
-        assert_eq!(args.options.host.bind, IpAddr::from([127, 0, 0, 1]));
-        assert_eq!(args.options.host.udp_port, Some(0));
-        assert_eq!(args.options.host.websocket_port, None);
-        assert_eq!(args.options.tick_rate, 30);
-        assert_eq!(args.options.host.config.max_clients, 8);
-        assert_eq!(args.options.host.config.protocol, 42);
-        assert_eq!(args.seconds, Some(Duration::from_secs(5)));
-        assert_eq!(args.port_file, Some(PathBuf::from("ports.txt")));
-        let advertise = args.options.host.discovery.as_ref().expect("on");
-        assert_eq!(advertise.port, 0);
-        assert_eq!(advertise.name, "Ada's server");
-        assert_eq!(advertise.game, "arena");
-        assert_eq!(args.lobby.max_players, Some(6));
-        assert!(args.lobby.on);
-    }
-
-    #[test]
-    fn mistakes_are_refused() {
-        assert_eq!(run(&["--tick"]), Err(ArgError::MissingValue("--tick")));
-        assert_eq!(
-            run(&["--tick", "0"]),
-            Err(ArgError::BadValue("--tick", "0".into()))
-        );
-        assert_eq!(
-            run(&["--udp", "seventy"]),
-            Err(ArgError::BadValue("--udp", "seventy".into()))
-        );
-        assert_eq!(
-            run(&["--loud"]),
-            Err(ArgError::UnknownFlag("--loud".into()))
-        );
-        assert_eq!(
-            run(&["a.ron", "b.ron"]),
-            Err(ArgError::ExtraScene("b.ron".into()))
-        );
-        assert_eq!(run(&["--help"]), Ok(Parsed::Help));
-    }
-}
+mod tests;
