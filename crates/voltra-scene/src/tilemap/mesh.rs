@@ -16,6 +16,12 @@ use crate::sprite::sheets::Sheets;
 
 /// Appends every tile of `map`, placed by `matrix`, to `batch`, with nothing
 /// kept for the next frame — a pick, a test, a one-off batch.
+///
+/// The per-tile helpers it calls, and the batch's `push_rect_on` /
+/// `append_quad` / `extend_ranges`, are `#[inline]`: left to the compiler,
+/// whether they were inlined into this loop depended on how the crate's
+/// code fell into codegen units, and an unrelated change elsewhere in the
+/// crate once made this path 30 % slower (`tilemap/mesh` bench, stage 130).
 pub fn push(batch: &mut SpriteBatch, matrix: Mat3, map: &Tilemap, sheets: Sheets<'_>) {
     let material = batch.material(map.material.as_ref(), sheets);
     for (&key, chunk) in &map.chunks {
@@ -86,6 +92,7 @@ fn in_view(map: &Tilemap, matrix: Mat3, key: ChunkKey, sheets: Sheets<'_>) -> Op
 
 /// One tile's corners in the layer's space: top-left, bottom-left,
 /// bottom-right, top-right — the order a sprite's corners and UVs are in.
+#[inline]
 pub(super) fn corners_of(map: &Tilemap, cell: IVec2) -> [Vec2; 4] {
     let origin = map.cell_origin(cell);
     let size = map.tile_size;
@@ -100,6 +107,7 @@ pub(super) fn corners_of(map: &Tilemap, cell: IVec2) -> [Vec2; 4] {
 /// What a tile drawing `texture` is drawn with: the layer's normal map over
 /// its sheet — not over the placeholder a missing frame draws, which is flat
 /// — and the layer's light layers.
+#[inline]
 pub(super) fn surface(
     map: &Tilemap,
     texture: Option<voltra_assets::Handle<voltra_render::Texture>>,
@@ -120,6 +128,7 @@ pub(super) fn surface(
 /// placeholder checker over the whole cell. A layer with no atlas at all
 /// draws its whole texture in every cell, which is what a sprite with no
 /// atlas does.
+#[inline]
 pub(super) fn sample(
     map: &Tilemap,
     tile: Tile,
