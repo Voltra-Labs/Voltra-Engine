@@ -188,3 +188,100 @@ fn a_value_is_written_at_a_place_only_where_the_tree_has_it() {
     let transform = tree(&Transform::default());
     assert_eq!(transform.at(&[]), Some(&transform));
 }
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Skippy {
+    color: u32,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    layer: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    limit: Option<f32>,
+}
+
+#[test]
+fn a_field_one_side_leaves_out_is_a_place_of_its_own() {
+    let plain = Skippy {
+        color: 1,
+        ..Skippy::default()
+    };
+    let layered = Skippy {
+        color: 2,
+        layer: "front".into(),
+        ..Skippy::default()
+    };
+    assert_eq!(
+        differences(&tree(&plain), &tree(&layered)),
+        vec![vec![Step::Field("color")], vec![Step::Field("layer")]]
+    );
+    assert_eq!(
+        differences(&tree(&layered), &tree(&plain)),
+        vec![vec![Step::Field("color")], vec![Step::Field("layer")]]
+    );
+}
+
+#[test]
+fn a_left_out_field_is_absent_and_put_adds_and_removes_it() {
+    let plain = tree(&Skippy::default());
+    let limited = tree(&Skippy {
+        limit: Some(3.0),
+        ..Skippy::default()
+    });
+    let limit = [Step::Field("limit")];
+    assert_eq!(plain.find(&limit), Found::Absent);
+    assert!(matches!(limited.find(&limit), Found::Here(_)));
+    assert_eq!(
+        plain.find(&[Step::Field("color"), Step::Index(0)]),
+        Found::Nowhere
+    );
+    assert_eq!(plain.find(&[Step::Variant("Box")]), Found::Nowhere);
+
+    // Added where it was left out, with the other fields kept.
+    let mut other = tree(&Skippy {
+        color: 7,
+        ..Skippy::default()
+    });
+    let Found::Here(value) = limited.find(&limit) else {
+        panic!("written")
+    };
+    assert!(other.put(&limit, Some(value)));
+    assert!(!other.put(&limit, Some(value)), "already so");
+    let back: Skippy = other.to_raw().expect("w").into_rust().expect("r");
+    assert_eq!((back.color, back.limit), (7, Some(3.0)));
+
+    // Taken out again: the type's default comes back on reading.
+    assert!(other.put(&limit, None));
+    assert!(!other.put(&limit, None), "already out");
+    let back: Skippy = other.to_raw().expect("w").into_rust().expect("r");
+    assert_eq!((back.color, back.limit), (7, None));
+
+    // No such place, nothing written.
+    let mut circle = tree(&Shape::Circle { radius: 1.0 });
+    assert!(!circle.put(
+        &[Step::Variant("Capsule"), Step::Field("radius")],
+        Some(&tree(&2.0_f32))
+    ));
+}
+
+#[test]
+fn a_map_is_walked_key_by_key_over_both_sides() {
+    let mut added = thing();
+    added.weights.insert("c".into(), 3.0);
+    let key = |k: &str| Step::Key(SerialTree::Str(k.into()));
+    assert_eq!(
+        differences(&tree(&thing()), &tree(&added)),
+        vec![vec![Step::Field("weights"), key("c")]]
+    );
+    let mut other = thing();
+    other.weights.insert("a".into(), 9.0);
+    let mut theirs = tree(&other);
+    let place = [Step::Field("weights"), key("c")];
+    let added = tree(&added);
+    let Found::Here(value) = added.find(&place) else {
+        panic!("there")
+    };
+    assert!(theirs.put(&place, Some(value)));
+    let back: Thing = theirs.to_raw().expect("w").into_rust().expect("r");
+    assert_eq!(back.weights.get("a"), Some(&9.0), "kept");
+    assert_eq!(back.weights.get("c"), Some(&3.0), "added");
+}
