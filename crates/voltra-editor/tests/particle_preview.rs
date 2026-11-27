@@ -55,7 +55,7 @@ fn a_curve_edited_through_the_bridge_changes_the_preview_as_one_undo_entry() {
         r#"(version: 1, entities: [(id: "019fe500-0000-7000-8000-000000000002", components: {{"Name": "Fx", "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)), "ParticleEmitter": {}}})])"#,
         emitter(0.5)
     );
-    let assets = project_with("particles", &scene);
+    let (_project, assets) = project_with("particles", &scene);
     let (_editor, mut client) = launch(&assets);
     wait_for(&mut client, "Fx");
     // Selected and not playing: the preview runs.

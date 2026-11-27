@@ -119,7 +119,7 @@ mod tests {
     use super::*;
     use voltra_audio::EffectDesc;
 
-    fn root_with(text: &str) -> std::path::PathBuf {
+    fn root_with(text: &str) -> voltra_testkit::Scratch {
         let root = voltra_testkit::scratch_root();
         std::fs::write(root.join(DEFAULT_BUS_LAYOUT), text).expect("writes");
         root
@@ -148,7 +148,8 @@ mod tests {
     #[test]
     fn no_file_keeps_the_default_buses() {
         let mut app = App::default();
-        app.load_bus_layout(&voltra_testkit::scratch_root());
+        let scratch = voltra_testkit::scratch_root();
+        app.load_bus_layout(&scratch);
         let music = app.audio.buses().find("music").expect("a default bus");
         assert!(app.audio.bus_effects(music).is_empty());
     }

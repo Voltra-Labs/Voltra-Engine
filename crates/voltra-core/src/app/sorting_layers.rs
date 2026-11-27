@@ -106,7 +106,7 @@ impl App {
 mod tests {
     use super::*;
 
-    fn root_with(text: &str) -> std::path::PathBuf {
+    fn root_with(text: &str) -> voltra_testkit::Scratch {
         let root = voltra_testkit::scratch_root();
         std::fs::write(root.join(DEFAULT_SORTING_LAYERS), text).expect("writes");
         root
@@ -123,7 +123,8 @@ mod tests {
     #[test]
     fn no_file_keeps_the_default_list() {
         let mut app = App::default();
-        app.load_sorting_layers(&voltra_testkit::scratch_root());
+        let scratch = voltra_testkit::scratch_root();
+        app.load_sorting_layers(&scratch);
         assert_eq!(app.sorting_layers.names().len(), 3);
     }
 

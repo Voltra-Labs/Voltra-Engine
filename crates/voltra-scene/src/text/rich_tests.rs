@@ -12,7 +12,7 @@ fn fonts() -> Fonts {
     let root = scratch_root();
     copy_workspace_asset(&root, DEFAULT_FONT);
     copy_workspace_asset(&root, NOTO_ARABIC);
-    Fonts::new(root)
+    Fonts::new(root.keep())
 }
 
 fn rich(fonts: &mut Fonts, content: &str) -> Text {

@@ -15,3 +15,6 @@ voltra-assets.workspace = true
 voltra-core.workspace = true
 voltra-scene.workspace = true
 log.workspace = true
+
+[dev-dependencies]
+voltra-testkit.workspace = true

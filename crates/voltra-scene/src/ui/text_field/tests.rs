@@ -166,7 +166,7 @@ mod in_visual_order {
         let root = scratch_root();
         copy_workspace_asset(&root, DEFAULT_FONT);
         copy_workspace_asset(&root, NOTO_HEBREW);
-        let mut fonts = Fonts::new(root);
+        let mut fonts = Fonts::new(root.keep());
         fonts.set_fallbacks(&[AssetPath::new(NOTO_HEBREW).expect("a path")]);
         fonts
     }

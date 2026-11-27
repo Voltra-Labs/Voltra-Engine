@@ -4029,6 +4029,7 @@ dependencies = [
  "voltra-profile",
  "voltra-render",
  "voltra-scene",
+ "voltra-testkit",
 ]
 
 [[package]]
@@ -4123,6 +4124,7 @@ dependencies = [
  "voltra-core",
  "voltra-ecs",
  "voltra-scene",
+ "voltra-testkit",
 ]
 
 [[package]]
@@ -4187,6 +4189,7 @@ dependencies = [
  "voltra-assets",
  "voltra-core",
  "voltra-scene",
+ "voltra-testkit",
 ]
 
 [[package]]
@@ -5065,6 +5068,7 @@ version = "0.3.0"
 dependencies = [
  "voltra-assets",
  "voltra-player",
+ "voltra-testkit",
 ]
 
 [[package]]

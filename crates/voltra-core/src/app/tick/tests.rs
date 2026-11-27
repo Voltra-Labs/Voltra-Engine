@@ -105,7 +105,7 @@ fn a_tick_saves_to_the_game_s_slots() {
         app.saves().load::<u32>("checkpoint").expect("reads"),
         Some(42)
     );
-    assert_eq!(app.saves().dir(), Some(dir.as_path()));
+    assert_eq!(app.saves().dir(), Some(dir.path()));
 }
 
 #[test]

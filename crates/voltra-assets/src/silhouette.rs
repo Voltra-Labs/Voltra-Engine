@@ -111,14 +111,8 @@ mod tests {
             .expect("png");
     }
 
-    fn root() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "voltra-silhouettes-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&dir);
-        dir
+    fn root() -> voltra_testkit::Scratch {
+        voltra_testkit::Scratch::new("voltra-silhouettes")
     }
 
     #[test]
@@ -153,7 +147,8 @@ mod tests {
 
     #[test]
     fn a_missing_file_traces_nothing_rather_than_failing() {
-        let mut store = Silhouettes::new(root());
+        let root = root();
+        let mut store = Silhouettes::new(&root);
         let path = AssetPath::new("sprites/absent.png").expect("valid");
         store.ensure(&path, [0, 0, 4, 4], ALPHA_THRESHOLD);
         assert_eq!(

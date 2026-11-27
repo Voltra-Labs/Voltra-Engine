@@ -83,7 +83,8 @@ fn write_long_wav(path: &Path) -> u64 {
 
 #[test]
 fn a_three_minute_file_streams_in_a_few_hundred_kilobytes() {
-    let path = voltra_testkit::scratch_root().join("long.wav");
+    let scratch = voltra_testkit::scratch_root();
+    let path = scratch.join("long.wav");
     let frames = write_long_wav(&path);
     let resident = frames as usize * usize::from(CHANNELS) * std::mem::size_of::<f32>();
 

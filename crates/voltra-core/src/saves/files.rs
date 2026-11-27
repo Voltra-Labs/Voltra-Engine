@@ -107,7 +107,8 @@ mod tests {
 
     #[test]
     fn a_file_beside_the_slots_reads_back_and_is_not_a_slot() {
-        let saves = Saves::in_dir(scratch_root());
+        let scratch = scratch_root();
+        let saves = Saves::in_dir(&scratch);
         saves
             .write_text("controls.input.ron", "(version: 1)")
             .expect("writes");
@@ -122,7 +123,8 @@ mod tests {
 
     #[test]
     fn a_value_round_trips_through_a_file() {
-        let saves = Saves::in_dir(scratch_root());
+        let scratch = scratch_root();
+        let saves = Saves::in_dir(&scratch);
         saves
             .save_file("options.settings.ron", &(1u32, true))
             .expect("saves");
@@ -140,7 +142,8 @@ mod tests {
 
     #[test]
     fn a_file_name_cannot_leave_the_folder() {
-        let saves = Saves::in_dir(scratch_root());
+        let scratch = scratch_root();
+        let saves = Saves::in_dir(&scratch);
         for bad in ["../up", "a/b", "a\\b", "..", ".hidden", "", "C:x"] {
             assert!(
                 matches!(saves.write_text(bad, "x"), Err(SaveError::BadFileName(_))),

@@ -134,15 +134,8 @@ pub const SHIPPED_ASSETS: &str = voltra_player::PACK_ASSETS;
 mod tests {
     use super::*;
 
-    fn scratch() -> PathBuf {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("after 1970")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "voltra-dist-{nanos}-{:?}",
-            std::thread::current().id()
-        ));
+    fn scratch() -> voltra_testkit::Scratch {
+        let dir = voltra_testkit::Scratch::new("voltra-dist");
         std::fs::create_dir_all(dir.join("assets/scenes")).expect("scratch dir");
         std::fs::write(dir.join("assets/scenes/start.ron"), "(version: 1)").expect("scene");
         dir

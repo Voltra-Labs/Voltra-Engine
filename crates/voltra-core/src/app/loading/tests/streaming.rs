@@ -21,7 +21,7 @@ const RADIUS: f32 = 20.0;
 const MARGIN: f32 = 6.0;
 
 /// The world file, rewritten with this test's radius and margin.
-fn world_root() -> (std::path::PathBuf, voltra_assets::AssetPath) {
+fn world_root() -> (voltra_testkit::Scratch, voltra_assets::AssetPath) {
     let root = scratch_root();
     let file = write_grid(&root, COLUMNS, ROWS, CELL, PER_REGION);
     let mut world = WorldRegions::read(&root, &file).expect("reads");

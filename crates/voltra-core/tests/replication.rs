@@ -294,7 +294,7 @@ fn an_entity_spawned_from_a_prefab_is_spawned_from_it_on_the_client() {
     let address = server_transport.address();
     let app = || {
         App::default()
-            .with_asset_root(root.clone())
+            .with_asset_root(root.to_path_buf())
             .with_replication(ReplicationConfig::default())
     };
     let mut server = Headless::new(app());

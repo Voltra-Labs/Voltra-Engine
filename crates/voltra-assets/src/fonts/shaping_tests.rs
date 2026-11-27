@@ -14,7 +14,7 @@ fn fonts() -> Fonts {
     for font in [DEFAULT_FONT, NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW] {
         copy_workspace_asset(&root, font);
     }
-    Fonts::new(root)
+    Fonts::new(root.keep())
 }
 
 /// Fonts falling back to Arabic, Devanagari and Hebrew, as a locale table

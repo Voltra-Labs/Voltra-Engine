@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use voltra_bridge::{BridgeClient, Command};
+use voltra_testkit::Scratch;
 
 pub const WAIT: Duration = Duration::from_secs(30);
 
@@ -16,15 +17,15 @@ pub const WAIT: Duration = Duration::from_secs(30);
 pub const BOX: &str = r#"(version: 1, entities: [(id: "019fe500-0000-7000-8000-000000000001", components: {"Name": "Box", "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)), "Sprite": (color:(1.0,0.5,0.2,1.0),sort_order:0)})])"#;
 
 /// A project of its own: the engine's input map, layers and font, a scene
-/// holding one box, and a `build.ron` beside the assets.
-pub fn project(name: &str) -> PathBuf {
+/// holding one box, and a `build.ron` beside the assets. Answers the
+/// project's folder, removed when dropped, and its assets folder.
+pub fn project(name: &str) -> (Scratch, PathBuf) {
     project_with(name, BOX)
 }
 
 /// [`project`] with `scene` as its `scenes/box.ron`.
-pub fn project_with(name: &str, scene: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("voltra-{name}-test-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+pub fn project_with(name: &str, scene: &str) -> (Scratch, PathBuf) {
+    let dir = Scratch::new(&format!("voltra-{name}-test"));
     let assets = dir.join("assets");
     let engine = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     for file in [
@@ -43,7 +44,7 @@ pub fn project_with(name: &str, scene: &str) -> PathBuf {
         r#"(version: 1, name: "Bridge Test", scene: "scenes/box.ron")"#,
     )
     .expect("the manifest");
-    assets
+    (dir, assets)
 }
 
 /// The editor process, killed when the test ends however it ends, and the

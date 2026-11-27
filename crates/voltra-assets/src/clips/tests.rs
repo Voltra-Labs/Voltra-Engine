@@ -168,22 +168,25 @@ fn reloading_a_path_nobody_loaded_does_nothing() {
 
 #[test]
 fn a_new_store_holds_only_silence() {
-    let clips = Clips::new(scratch_root());
+    let scratch = scratch_root();
+    let clips = Clips::new(&scratch);
     assert_eq!(clips.len(), 1);
     assert!(clips.get(clips.silent()).is_empty());
 }
 
 #[test]
 fn a_handle_from_another_store_does_not_resolve() {
-    let a = Clips::new(scratch_root());
-    let b = Clips::new(scratch_root());
+    let scratch = scratch_root();
+    let a = Clips::new(&scratch);
+    let scratch = scratch_root();
+    let b = Clips::new(&scratch);
     assert!(b.try_get(a.silent()).is_some(), "slot zero exists in both");
     assert!(b.try_get(Handle::forge(9, 0)).is_none());
 }
 
 /// A root holding `theme.wav` (one second at 8 kHz) and `theme.clip.ron`
 /// saying `settings` about it.
-fn root_with_settings(settings: &str) -> PathBuf {
+fn root_with_settings(settings: &str) -> voltra_testkit::Scratch {
     let root = scratch_root();
     std::fs::write(root.join("theme.wav"), wav(8_000)).expect("the sound writes");
     std::fs::write(root.join("theme.clip.ron"), settings).expect("the settings write");
@@ -226,7 +229,8 @@ fn settings_that_do_not_stream_decode_the_file_whole_and_keep_the_loop() {
 #[test]
 fn a_streamed_clip_in_a_mounted_pack_streams_from_the_pack_s_bytes() {
     // The web's case: there is no disk to open per voice.
-    let root = scratch_root().join("packed");
+    let scratch = scratch_root();
+    let root = scratch.join("packed");
     crate::fs::mount(
         &root,
         [

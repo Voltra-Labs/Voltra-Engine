@@ -65,7 +65,7 @@ fn body() -> Body {
     resolve_parents(&mut world);
     Body {
         world,
-        clips: AnimationClips::new(root_dir),
+        clips: AnimationClips::new(root_dir.keep()),
         root,
         arm,
         hand,

@@ -146,7 +146,7 @@ mod tests {
 
     const MAP: &str = r#"(version: 1, actions: { "jump": (bindings: [Key(Space)]) })"#;
 
-    fn root_with(name: &str, text: &str) -> PathBuf {
+    fn root_with(name: &str, text: &str) -> voltra_testkit::Scratch {
         let root = voltra_testkit::scratch_root();
         std::fs::write(root.join(name), text).expect("the fixture writes");
         root
@@ -166,7 +166,8 @@ mod tests {
     #[test]
     fn no_map_at_all_is_no_actions_and_no_error() {
         let mut app = App::default();
-        app.load_input_map(&voltra_testkit::scratch_root());
+        let scratch = voltra_testkit::scratch_root();
+        app.load_input_map(&scratch);
         assert!(app.actions().actions.is_empty());
     }
 

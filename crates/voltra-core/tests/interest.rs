@@ -647,12 +647,14 @@ fn what_a_late_joiner_swept_is_let_go_of_with_its_level() {
     let asked = change.clone();
     let peer = rig.join_with(
         |app| {
-            app.with_asset_root(root.clone()).with_update(move |tick| {
-                if asked.replace(false) {
-                    let next = voltra_assets::AssetPath::new("scenes/next.ron").expect("a path");
-                    tick.change_scene(&next, None);
-                }
-            })
+            app.with_asset_root(root.to_path_buf())
+                .with_update(move |tick| {
+                    if asked.replace(false) {
+                        let next =
+                            voltra_assets::AssetPath::new("scenes/next.ron").expect("a path");
+                        tick.change_scene(&next, None);
+                    }
+                })
         },
         level,
     );

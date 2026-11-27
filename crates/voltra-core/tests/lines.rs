@@ -16,7 +16,8 @@ const SHOT: u32 = 128;
 const PER_UNIT: f32 = 32.0;
 
 fn session() -> Headless {
-    let mut app = App::new(WindowConfig::default()).with_asset_root(voltra_testkit::scratch_root());
+    let mut app =
+        App::new(WindowConfig::default()).with_asset_root(voltra_testkit::scratch_root().keep());
     let camera = app.world.spawn();
     app.world.insert(camera, Transform::default());
     app.world.insert(camera, Camera::new(2.0));

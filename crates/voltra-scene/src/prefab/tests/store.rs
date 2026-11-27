@@ -21,7 +21,8 @@ fn a_file_on_disk_becomes_a_prefab_once() {
 
 #[test]
 fn a_prefab_that_is_not_there_spawns_nothing_rather_than_panicking() {
-    let mut prefabs = Prefabs::new(scratch_root());
+    let scratch = scratch_root();
+    let mut prefabs = Prefabs::new(&scratch);
 
     let handle = prefabs.load(&path("nowhere.ron"));
 

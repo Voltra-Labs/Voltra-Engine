@@ -94,13 +94,8 @@ mod tests {
     use super::*;
     use voltra_scene::{Name, Sprite, Transform};
 
-    fn scratch() -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "voltra-prefab-mode-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
+    fn scratch() -> voltra_testkit::Scratch {
+        let root = voltra_testkit::Scratch::new("voltra-prefab-mode");
         std::fs::create_dir_all(root.join("prefabs")).expect("a folder");
         root
     }

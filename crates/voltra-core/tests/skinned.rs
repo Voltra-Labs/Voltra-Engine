@@ -6,7 +6,7 @@
 //! sharp chamfer — and its hand lands where the lower bone carries it.
 //! Skips without a GPU adapter.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use voltra_assets::{AssetPath, Silhouettes};
 use voltra_core::{App, Headless, Screenshot, ScreenshotError, WindowConfig};
@@ -124,7 +124,7 @@ fn arm_at(shot: &Screenshot, at: Vec2) -> bool {
         .is_some_and(|p| p[0] > 200 && p[1] > 90 && p[1] < 190 && p[2] < 90)
 }
 
-fn root() -> PathBuf {
+fn root() -> voltra_testkit::Scratch {
     let root = voltra_testkit::scratch_root();
     arm_texture(&root);
     root

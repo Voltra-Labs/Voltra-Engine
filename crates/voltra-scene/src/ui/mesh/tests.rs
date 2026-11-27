@@ -17,7 +17,7 @@ const SCREEN: Vec2 = Vec2::new(800.0, 600.0);
 fn fonts() -> Fonts {
     let root = scratch_root();
     copy_bundled_font(&root, DEFAULT_FONT);
-    Fonts::new(root)
+    Fonts::new(root.keep())
 }
 
 /// A field `width` points wide at (100, 100), holding `text`.

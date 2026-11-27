@@ -176,7 +176,8 @@ mod tests {
 
     #[test]
     fn settings_round_trip_and_another_version_is_refused() {
-        let saves = Saves::in_dir(voltra_testkit::scratch_root());
+        let scratch = voltra_testkit::scratch_root();
+        let saves = Saves::in_dir(&scratch);
         assert!(Settings::load(&saves).expect("reads").is_none());
         let mut settings = Settings {
             fullscreen: Fullscreen::Borderless,
@@ -201,7 +202,8 @@ mod tests {
 
     #[test]
     fn a_file_with_fields_missing_reads_with_their_defaults() {
-        let saves = Saves::in_dir(voltra_testkit::scratch_root());
+        let scratch = voltra_testkit::scratch_root();
+        let saves = Saves::in_dir(&scratch);
         saves
             .write_text(OPTIONS_FILE, "(version: 1)")
             .expect("writes");

@@ -237,7 +237,7 @@ mod tests {
     }
 
     fn write(name: &str, bytes: &[u8]) -> std::path::PathBuf {
-        let path = scratch_root().join(name);
+        let path = scratch_root().keep().join(name);
         std::fs::write(&path, bytes).expect("the fixture writes");
         path
     }
@@ -298,7 +298,8 @@ mod tests {
 
     #[test]
     fn a_file_that_is_not_there_is_a_read_error() {
-        let path = scratch_root().join("nowhere.wav");
+        let scratch = scratch_root();
+        let path = scratch.join("nowhere.wav");
         assert!(matches!(decode(&path), Err(AudioError::Read { .. })));
     }
 

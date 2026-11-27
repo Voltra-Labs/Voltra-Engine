@@ -108,7 +108,8 @@ fn a_coin_deleted_from_a_row_cut_around_it_leaves_the_row_s_instances() {
 
 #[test]
 fn a_file_from_before_reads_its_nested_instance_as_a_part_and_keeps_it_so() {
-    let mut prefabs = Prefabs::new(scratch_root());
+    let scratch = scratch_root();
+    let mut prefabs = Prefabs::new(&scratch);
     // A level from before stage 126: no link says whether it is its own.
     let row = "019fe500-0000-7000-8000-00000000b001";
     let nested = "019fe500-0000-7000-8000-00000000b002";

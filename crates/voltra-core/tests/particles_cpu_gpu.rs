@@ -8,7 +8,7 @@
 //! each side's own generator, must cover the same region about as densely.
 //! Each skips without a GPU adapter, or one without compute shaders.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use voltra_assets::AssetPath;
 use voltra_core::{App, Headless, Screenshot, ScreenshotError, WindowConfig};
@@ -90,7 +90,7 @@ fn both(
     Some((cpu, gpu))
 }
 
-fn root() -> PathBuf {
+fn root() -> voltra_testkit::Scratch {
     voltra_testkit::scratch_root()
 }
 
@@ -345,7 +345,7 @@ fn each_emission_shape_covers_the_same_region_both_ways() {
 }
 
 /// A sheet of two 8 × 8 frames, red then green, and its slicing.
-fn flipbook_root() -> PathBuf {
+fn flipbook_root() -> voltra_testkit::Scratch {
     let root = root();
     let mut sheet = image::RgbaImage::new(16, 8);
     for (x, _, pixel) in sheet.enumerate_pixels_mut() {

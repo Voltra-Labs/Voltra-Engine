@@ -142,10 +142,8 @@ impl Drop for Running {
 
 #[test]
 fn the_binary_hosts_a_scene_and_a_client_joins_it() {
-    let dir = std::env::temp_dir().join(format!("voltra-server-test-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("a scratch dir");
+    let dir = voltra_testkit::Scratch::new("voltra-server-test");
     let ports = dir.join("ports");
-    let _ = std::fs::remove_file(&ports);
     let assets = concat!(env!("CARGO_MANIFEST_DIR"), "/../../assets");
     let _server = Running(
         Command::new(env!("CARGO_BIN_EXE_voltra-server"))

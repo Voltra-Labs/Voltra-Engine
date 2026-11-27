@@ -24,7 +24,12 @@ fn shot() -> Shot {
     for font in [DEFAULT_FONT, NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW] {
         copy_workspace_asset(&root, font);
     }
-    Shot::new(root, &[NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW], W, H)
+    Shot::new(
+        root.keep(),
+        &[NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW],
+        W,
+        H,
+    )
 }
 
 fn line(content: &str) -> Text {

@@ -6,6 +6,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_scene::hierarchy::set_parent;
 use voltra_scene::{prefab, ComponentRegistry, Name, Prefabs, SceneId, Sprite, Transform};
+use voltra_testkit::Scratch;
 
 use super::{Bench, Outcome};
 use crate::harness::{iter, measure};
@@ -20,7 +21,7 @@ pub(super) fn benches() -> Vec<Bench> {
         format!("prefab/sync-all/{INSTANCES}-instances-{FILLER}-entities"),
         20.0,
         |config| {
-            let Some((mut world, mut prefabs)) = level() else {
+            let Some((_root, mut world, mut prefabs)) = level() else {
                 return Outcome::Skipped("the coin prefab would not write".to_owned());
             };
             let registry = ComponentRegistry::with_defaults();
@@ -38,10 +39,10 @@ pub(super) fn benches() -> Vec<Bench> {
 }
 
 /// The level, and the store its coin is read through — written to a
-/// directory of its own under the system's temporary one.
-fn level() -> Option<(World, Prefabs)> {
-    let root = std::env::temp_dir().join(format!("voltra-bench-prefab-{}", std::process::id()));
-    std::fs::create_dir_all(&root).ok()?;
+/// directory of its own under the system's temporary one, removed when the
+/// answer's first element drops.
+fn level() -> Option<(Scratch, World, Prefabs)> {
+    let root = Scratch::new("voltra-bench-prefab");
     let registry = ComponentRegistry::with_defaults();
     let mut authoring = World::new();
     let coin = named(&mut authoring, "coin");
@@ -62,7 +63,7 @@ fn level() -> Option<(World, Prefabs)> {
     for _ in 0..FILLER {
         named(&mut world, "filler");
     }
-    Some((world, prefabs))
+    Some((root, world, prefabs))
 }
 
 fn named(world: &mut World, name: &str) -> voltra_ecs::Entity {

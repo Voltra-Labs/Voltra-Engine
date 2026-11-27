@@ -717,6 +717,24 @@ alternative is the same 120 lines copied per crate — it was already at two
 copies with a third due. `voltra-testkit` is `publish = false` and appears only
 under `[dev-dependencies]`, so it is not part of the shipped dependency graph.
 
+**A scratch folder goes with its test (stage 130).** `scratch_root()` answers
+a `Scratch` guard that dereferences to its `Path` and removes the folder when
+dropped — they had piled up under the temp dir until a workspace's test runs
+filled the disk. Every folder sits under `voltra-scratch/<pid>-<nanos>/`, and
+each test process holds a lock on its own `.lock` there for its life (a
+`File::try_lock` in a static, released by the system at exit); the first
+scratch folder a process makes sweeps the folders of processes whose lock it
+can take. That catches what no guard can: a test binary killed mid-run, and a
+helper that hands its folder to a store outliving it (`Scratch::keep`). Set
+`VOLTRA_KEEP_SCRATCH` (any value) to keep a failed test's folder — the guard
+then leaves it and says where on stderr — and to sweep nothing. The editor's,
+player's, server's and xtask's test helpers use `Scratch::new(prefix)`; the
+game crates have no dev-dependencies, so their two folders clean up by hand
+on the same terms. Not covered: `target/hot-reload-scratch` (the hot reload
+test's own build of the engine, kept between runs on purpose — several GB in
+debug) and what `cargo xtask guide` writes in the tree (`games/my-game`,
+`target/guide-*`, as a reader following the guide would have them).
+
 ### Hot reload swaps contents under a stable handle
 
 **`Textures::reload` replaces the texture in the slot its handle already names

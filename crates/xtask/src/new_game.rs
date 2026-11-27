@@ -162,16 +162,8 @@ pub fn next_steps(names: &Names) -> String {
 mod tests {
     use super::*;
 
-    fn scratch() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "voltra-new-game-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_or(0, |d| d.as_nanos())
-        ));
-        std::fs::create_dir_all(&dir).expect("a scratch folder");
-        dir
+    fn scratch() -> voltra_testkit::Scratch {
+        voltra_testkit::Scratch::new("voltra-new-game")
     }
 
     fn workspace() -> PathBuf {

@@ -18,7 +18,7 @@ fn shot(width: u32, height: u32) -> Shot {
     for asset in [DEFAULT_FONT, "sprites/coin.png", "sprites/coin.atlas.ron"] {
         copy_workspace_asset(&root, asset);
     }
-    Shot::new(root, &[], width, height)
+    Shot::new(root.keep(), &[], width, height)
 }
 
 fn red(p: &Rgba) -> bool {

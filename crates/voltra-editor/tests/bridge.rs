@@ -54,7 +54,7 @@ fn console_until(
 #[test]
 #[ignore = "launches the editor: needs a display and a GPU adapter"]
 fn grid_snapping_the_console_and_project_settings_through_the_bridge() {
-    let assets = project("bridge");
+    let (_project, assets) = project("bridge");
     let (_editor, mut client) = launch(&assets);
     // The scene is open once the box is there to be found.
     let start = Instant::now();

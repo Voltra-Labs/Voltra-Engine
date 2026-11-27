@@ -17,7 +17,8 @@ fn progress() -> Progress {
 
 #[test]
 fn a_save_reads_back_as_it_was_written() {
-    let saves = Saves::in_dir(scratch_root().join("saves"));
+    let scratch = scratch_root();
+    let saves = Saves::in_dir(scratch.join("saves"));
     saves.save("slot1", &progress()).expect("saves");
     assert_eq!(
         saves.load::<Progress>("slot1").expect("loads"),
@@ -27,7 +28,8 @@ fn a_save_reads_back_as_it_was_written() {
 
 #[test]
 fn an_empty_slot_is_none_not_an_error() {
-    let saves = Saves::in_dir(scratch_root());
+    let scratch = scratch_root();
+    let saves = Saves::in_dir(&scratch);
     assert_eq!(saves.load::<Progress>("never").expect("no error"), None);
 }
 
@@ -45,7 +47,8 @@ fn saving_again_replaces_and_leaves_no_temporary() {
 
 #[test]
 fn a_slot_name_cannot_leave_the_folder() {
-    let saves = Saves::in_dir(scratch_root());
+    let scratch = scratch_root();
+    let saves = Saves::in_dir(&scratch);
     for bad in ["../escape", "a/b", "C:x", "", "dots.ron", &"x".repeat(65)] {
         assert!(
             matches!(saves.save(bad, &progress()), Err(SaveError::BadSlot(_))),
@@ -90,7 +93,8 @@ fn slots_lists_only_slots_sorted() {
 
 #[test]
 fn delete_reports_whether_there_was_a_slot() {
-    let saves = Saves::in_dir(scratch_root());
+    let scratch = scratch_root();
+    let saves = Saves::in_dir(&scratch);
     saves.save("slot1", &progress()).expect("saves");
     assert!(saves.delete("slot1").expect("deletes"));
     assert!(!saves.delete("slot1").expect("nothing to delete"));

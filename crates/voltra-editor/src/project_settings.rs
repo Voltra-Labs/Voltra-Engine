@@ -110,19 +110,17 @@ pub(crate) fn write(file: SettingsFile, assets: &Path, text: &str) -> Result<Pat
 mod tests {
     use super::*;
 
-    fn project() -> PathBuf {
-        let dir = std::env::temp_dir().join(format!(
-            "voltra-settings-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
+    /// The project's folder, removed when dropped, and its `assets`.
+    fn project() -> (voltra_testkit::Scratch, PathBuf) {
+        let dir = voltra_testkit::Scratch::new("voltra-settings");
         std::fs::create_dir_all(dir.join("assets")).expect("folders");
-        dir.join("assets")
+        let assets = dir.join("assets");
+        (dir, assets)
     }
 
     #[test]
     fn layers_are_saved_and_read_back() {
-        let assets = project();
+        let (_project, assets) = project();
         let text = r#"(version: 1, layers: ["Sky", "Default", "Fx"])"#;
         let path = write(SettingsFile::SortingLayers, &assets, text).expect("saves");
         assert_eq!(path, assets.join(DEFAULT_SORTING_LAYERS));
@@ -134,7 +132,7 @@ mod tests {
 
     #[test]
     fn a_file_the_engine_would_not_read_is_refused_and_not_written() {
-        let assets = project();
+        let (_project, assets) = project();
         let error = write(
             SettingsFile::SortingLayers,
             &assets,
@@ -152,7 +150,7 @@ mod tests {
 
     #[test]
     fn buses_are_saved_read_back_and_refused_when_they_would_not_mix() {
-        let assets = project();
+        let (_project, assets) = project();
         let text = r#"(version: 1, buses: [(name: "music", effects: [Reverb(mix: 0.2)])])"#;
         let path = write(SettingsFile::Buses, &assets, text).expect("saves");
         assert_eq!(path, assets.join(DEFAULT_BUS_LAYOUT));
@@ -168,7 +166,7 @@ mod tests {
 
     #[test]
     fn the_build_manifest_is_beside_the_assets() {
-        let assets = project();
+        let (_project, assets) = project();
         let text = r#"(version: 1, name: "Game", scene: "scenes/a.ron")"#;
         let path = write(SettingsFile::Build, &assets, text).expect("saves");
         assert_eq!(path, assets.parent().expect("a parent").join("build.ron"));

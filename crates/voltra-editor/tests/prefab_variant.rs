@@ -120,7 +120,7 @@ fn sprites(read: &Value, name: &str) -> Vec<String> {
 #[test]
 #[ignore = "launches the editor: needs a display and a GPU adapter"]
 fn a_variant_and_a_nested_prefab_follow_their_base_through_the_bridge() {
-    let assets = project("prefab-variant");
+    let (_project, assets) = project("prefab-variant");
     coin(&assets);
     let (editor, mut client) = launch(&assets);
     let _ = &editor;

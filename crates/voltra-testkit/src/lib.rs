@@ -11,9 +11,13 @@
 
 #![warn(missing_docs)]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use voltra_render::wgpu;
+
+mod scratch;
+
+pub use scratch::{scratch_root, Scratch, KEEP_SCRATCH_VAR};
 
 /// One pixel read back from a texture, as 8-bit channels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,22 +181,6 @@ pub fn read_buffer(
         .to_vec();
     readback.unmap();
     bytes
-}
-
-/// A fresh directory under the system temp dir, unique per call.
-pub fn scratch_root() -> PathBuf {
-    // Unique per call so tests running in parallel cannot see each other's
-    // files. Nothing cleans these up; they are a few hundred bytes each.
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .expect("the clock is after 1970")
-        .as_nanos();
-    let dir = std::env::temp_dir().join(format!(
-        "voltra-assets-{nanos}-{:?}",
-        std::thread::current().id()
-    ));
-    std::fs::create_dir_all(&dir).expect("scratch dir");
-    dir
 }
 
 /// The default font the workspace ships, for tests that lay out text.

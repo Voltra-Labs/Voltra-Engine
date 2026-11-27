@@ -20,7 +20,7 @@ fn store(files: &[(&str, String)]) -> AnimationClips {
     for (name, text) in files {
         std::fs::write(root.join(name), text).expect("writes");
     }
-    AnimationClips::new(root)
+    AnimationClips::new(root.keep())
 }
 
 fn x(world: &World, entity: voltra_ecs::Entity) -> f32 {

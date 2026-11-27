@@ -212,7 +212,7 @@ mod tests {
     /// need. What is being tested is which voices exist and where they are,
     /// and that is decided before a sample is read.
     fn clips_with_a_coin() -> (Clips, voltra_assets::Handle<voltra_audio::Clip>) {
-        let mut clips = Clips::new(scratch_root());
+        let mut clips = Clips::new(scratch_root().keep());
         let handle = clips.load(&AssetPath::new("coin.wav").expect("a valid path"));
         (clips, handle)
     }
@@ -359,7 +359,8 @@ mod tests {
 
     #[test]
     fn a_reloaded_clip_restarts_the_sources_playing_it_and_no_others() {
-        let mut clips = Clips::new(scratch_root());
+        let root = scratch_root();
+        let mut clips = Clips::new(&root);
         let coin = clips.load(&AssetPath::new("coin.wav").expect("valid"));
         let wind = clips.load(&AssetPath::new("wind.wav").expect("valid"));
         let mut world = World::new();

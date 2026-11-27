@@ -26,6 +26,10 @@ use voltra_core::{App, Headless, WindowConfig};
 struct Server {
     child: Child,
     log: PathBuf,
+    /// The folder of its port file and log, removed with it (kept for a
+    /// failed test when `VOLTRA_KEEP_SCRATCH` is set, as
+    /// `voltra_testkit::Scratch` does: this crate has no dev-dependencies).
+    dir: PathBuf,
 }
 
 impl Server {
@@ -38,6 +42,14 @@ impl Drop for Server {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        if std::thread::panicking() && std::env::var_os("VOLTRA_KEEP_SCRATCH").is_some() {
+            eprintln!(
+                "kept the failed test's server folder {}",
+                self.dir.display()
+            );
+        } else {
+            let _ = std::fs::remove_dir_all(&self.dir);
+        }
     }
 }
 
@@ -47,7 +59,7 @@ fn assets() -> PathBuf {
 
 /// The server, its UDP port and the port it answers LAN probes on.
 fn start_server() -> (Server, u16, u16) {
-    let dir = std::env::temp_dir().join(format!("arena-match-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("voltra-arena-match-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a folder");
     let ports = dir.join("ports");
     let _ = std::fs::remove_file(&ports);
@@ -72,7 +84,7 @@ fn start_server() -> (Server, u16, u16) {
         .stderr(std::fs::File::create(&log).expect("the log"))
         .spawn()
         .expect("the server starts");
-    let server = Server { child, log };
+    let server = Server { child, log, dir };
     let start = Instant::now();
     loop {
         if let Ok(text) = std::fs::read_to_string(&ports) {

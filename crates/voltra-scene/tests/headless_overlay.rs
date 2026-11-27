@@ -19,7 +19,7 @@ const H: u32 = 200;
 fn an_open_list_and_a_tooltip_draw_over_everything() {
     let root = scratch_root();
     copy_workspace_asset(&root, DEFAULT_FONT);
-    let mut shot = Shot::new(root, &[], W, H);
+    let mut shot = Shot::new(root.to_path_buf(), &[], W, H);
 
     let dropdown = shot.text(
         Vec2::new(10.0, 10.0),

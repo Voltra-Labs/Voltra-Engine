@@ -126,7 +126,8 @@ mod tests {
 
     #[test]
     fn a_player_s_controls_round_trip_through_a_user_folder() {
-        let saves = Saves::in_dir(voltra_testkit::scratch_root().join("user"));
+        let scratch = voltra_testkit::scratch_root();
+        let saves = Saves::in_dir(scratch.join("user"));
         assert_eq!(ActionMap::load_player(&saves).expect("reads"), None);
         let mut mine = defaults();
         mine.rebind("jump", 0, Binding::Key(KeyCode::KeyJ));
@@ -146,7 +147,8 @@ mod tests {
 
     #[test]
     fn a_broken_file_is_an_error() {
-        let saves = Saves::in_dir(voltra_testkit::scratch_root());
+        let scratch = voltra_testkit::scratch_root();
+        let saves = Saves::in_dir(&scratch);
         saves
             .write_text(PLAYER_CONTROLS, "(version: 9)")
             .expect("writes");

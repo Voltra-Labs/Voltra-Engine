@@ -22,7 +22,7 @@ fn element(world: &mut World, rect: UiRect) -> Entity {
 fn fonts() -> Fonts {
     let root = scratch_root();
     copy_bundled_font(&root, DEFAULT_FONT);
-    Fonts::new(root)
+    Fonts::new(root.keep())
 }
 
 /// Resolved, prepared at `scale` and given a stand-in atlas texture.

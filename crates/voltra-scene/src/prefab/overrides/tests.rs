@@ -1,8 +1,6 @@
 //! Overrides kept up to date as an instance is edited, reverted, and an
 //! instance applied back to its file — through a real store on disk.
 
-use std::path::PathBuf;
-
 use voltra_assets::AssetPath;
 use voltra_render::glam::Vec2;
 
@@ -31,7 +29,7 @@ fn named(world: &mut World, name: &str, at: Vec2) -> Entity {
 }
 
 /// A store holding `coin.ron`: a red coin with a glow under it.
-fn store() -> (Prefabs, PathBuf) {
+fn store() -> (Prefabs, voltra_testkit::Scratch) {
     let root = voltra_testkit::scratch_root();
     let mut world = World::new();
     let coin = named(&mut world, "coin", Vec2::ZERO);

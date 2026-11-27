@@ -8,7 +8,7 @@ fn fonts() -> Fonts {
     for font in [DEFAULT_FONT, NOTO_ARABIC, NOTO_HEBREW] {
         copy_workspace_asset(&root, font);
     }
-    let mut fonts = Fonts::new(root);
+    let mut fonts = Fonts::new(root.keep());
     let fallbacks = [NOTO_HEBREW, NOTO_ARABIC].map(|p| AssetPath::new(p).expect("a path"));
     fonts.set_fallbacks(&fallbacks);
     fonts

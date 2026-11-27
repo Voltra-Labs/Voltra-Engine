@@ -24,7 +24,7 @@ fn flash_store() -> (Materials, AssetPath) {
     )
     .expect("material");
     (
-        Materials::new(root),
+        Materials::new(root.keep()),
         AssetPath::new("materials/flash.material.ron").expect("path"),
     )
 }

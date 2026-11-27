@@ -391,7 +391,7 @@ fn the_frame_a_sprite_names_is_the_cell_that_reaches_the_screen() {
     .expect("the fixture writes");
 
     let layout = texture::bind_group_layout(&device);
-    let mut textures = Textures::new(&device, &queue, &layout, root.clone());
+    let mut textures = Textures::new(&device, &queue, &layout, root.to_path_buf());
     let mut atlases = voltra_assets::Atlases::new(&root);
     let mut sprite = Sprite::default();
     sprite.set_texture(

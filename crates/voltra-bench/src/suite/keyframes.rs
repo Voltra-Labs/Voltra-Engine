@@ -14,6 +14,7 @@ use voltra_scene::{
 
 use super::{Bench, Outcome};
 use crate::harness::{iter, measure};
+use voltra_testkit::Scratch;
 
 /// Named children each clip animates: a small rig, a limb or two each.
 const TARGETS: usize = 8;
@@ -52,7 +53,7 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/advance/{PLAYERS}-playing"),
             30.0,
             |config| {
-                let Some((mut world, mut clips, _)) = crowd() else {
+                let Some((_root, mut world, mut clips, _)) = crowd() else {
                     return unwritable();
                 };
                 measure(
@@ -67,7 +68,7 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/advance/{PLAYERS}-blending-{}", CLIPS.len()),
             30.0,
             |config| {
-                let Some((mut world, mut clips, players)) = crowd() else {
+                let Some((_root, mut world, mut clips, players)) = crowd() else {
                     return unwritable();
                 };
                 for &player in &players {
@@ -90,7 +91,7 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/advance/{PLAYERS}-layered"),
             30.0,
             |config| {
-                let Some((mut world, mut clips, players)) = crowd() else {
+                let Some((_root, mut world, mut clips, players)) = crowd() else {
                     return unwritable();
                 };
                 for &player in &players {
@@ -119,7 +120,7 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/advance/{PLAYERS}-crossfading"),
             30.0,
             |config| {
-                let Some((mut world, mut clips, players)) = crowd() else {
+                let Some((_root, mut world, mut clips, players)) = crowd() else {
                     return unwritable();
                 };
                 keyframes::advance(&mut world, &mut clips, FRAME);
@@ -183,8 +184,9 @@ fn clip(n: usize) -> AnimationClip {
 
 /// [`PLAYERS`] players, each with [`TARGETS`] named children carrying a
 /// transform and a sprite, playing the first clip; the store holds every
-/// clip of the set, written to a scratch root. Answers the players too.
-fn crowd() -> Option<(World, AnimationClips, Vec<Entity>)> {
+/// clip of the set, written to a scratch root (removed when the answer's
+/// first element drops). Answers the players too.
+fn crowd() -> Option<(Scratch, World, AnimationClips, Vec<Entity>)> {
     let root = voltra_testkit::scratch_root();
     let clips = AnimationClips::new(&root);
     for (n, name) in CLIPS.iter().enumerate() {
@@ -208,5 +210,5 @@ fn crowd() -> Option<(World, AnimationClips, Vec<Entity>)> {
         players.push(player);
     }
     resolve_parents(&mut world);
-    Some((world, clips, players))
+    Some((root, world, clips, players))
 }

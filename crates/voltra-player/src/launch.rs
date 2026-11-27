@@ -120,16 +120,8 @@ mod tests {
         window: (width: 960, height: 540),
     )"#;
 
-    fn scratch_with_manifest() -> PathBuf {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("after 1970")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "voltra-launch-{nanos}-{:?}",
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&dir).expect("scratch dir");
+    fn scratch_with_manifest() -> voltra_testkit::Scratch {
+        let dir = voltra_testkit::Scratch::new("voltra-launch");
         std::fs::write(dir.join(MANIFEST_FILE), MANIFEST).expect("writes");
         dir
     }

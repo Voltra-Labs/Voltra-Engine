@@ -139,17 +139,8 @@ mod tests {
     use super::*;
 
     /// A fresh directory per test, as the editor's other file tests make.
-    fn scratch_root() -> PathBuf {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("the clock is after 1970")
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "voltra-regions-{nanos}-{:?}",
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&root).expect("scratch dir");
-        root
+    fn scratch_root() -> voltra_testkit::Scratch {
+        voltra_testkit::Scratch::new("voltra-regions")
     }
 
     fn path(raw: &str) -> AssetPath {
