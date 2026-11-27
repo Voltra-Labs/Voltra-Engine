@@ -23,7 +23,7 @@ pub(super) fn apply(
                 (None, Some(reference)) => {
                     let entity = voltra_scene::edit::find(frame.world, reference)
                         .map_err(|e| e.to_string())?;
-                    prefab_mode::source_of(frame.world, entity)
+                    prefab_mode::source_of(frame.world, frame.prefabs, entity)
                         .ok_or_else(|| format!("{reference} is not part of a prefab instance"))?
                 }
                 _ => {

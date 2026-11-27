@@ -25,7 +25,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_render::Camera2D;
 use voltra_scene::format::SceneFile;
-use voltra_scene::{prefab, PrefabInstance, SceneId};
+use voltra_scene::{prefab, PrefabInstance, Prefabs, SceneId};
 
 pub(crate) use swap::cycle_through;
 
@@ -109,8 +109,8 @@ impl PrefabMode {
 }
 
 /// The prefab an instance's entity belongs to: its instance root's file.
-pub(crate) fn source_of(world: &World, entity: Entity) -> Option<AssetPath> {
-    let root = prefab::instance_root(world, entity)?;
+pub(crate) fn source_of(world: &World, prefabs: &mut Prefabs, entity: Entity) -> Option<AssetPath> {
+    let root = prefab::instance_root(world, prefabs, entity)?;
     world
         .get::<PrefabInstance>(root)
         .map(|link| link.source.clone())

@@ -29,6 +29,7 @@ mod cycle;
 mod fragment;
 mod instances;
 mod link;
+mod membership;
 mod overrides;
 mod resolve;
 mod spawn;
@@ -45,9 +46,10 @@ use crate::format::{SceneError, SceneFile, VERSION};
 pub use apply::{apply, link};
 pub use cycle::reaches;
 pub use fragment::fragment;
-pub use instances::{sync_all, sync_source, sync_sources};
+pub use instances::{sync_all, sync_in, sync_source, sync_sources};
 pub use link::{PrefabInstance, PrefabPart};
-pub use overrides::{instance_root, note_removed, refresh_overrides, revert, revert_instance};
+pub use membership::instance_root;
+pub use overrides::{note_removed, refresh_overrides, revert, revert_instance};
 pub use resolve::{ResolveProblem, MAX_DEPTH, MAX_RECORDS};
 pub use spawn::{spawn, spawn_scene, Instance};
 pub use staged::StagedScene;
@@ -71,6 +73,9 @@ pub struct Prefab {
     source: Option<AssetPath>,
     /// Why instances stored in it were left as the file has them.
     problems: Vec<ResolveProblem>,
+    /// Whether the store followed its stored instances when it read it —
+    /// not for a file read as a level's ([`Prefabs::load_scene`]).
+    resolved: bool,
 }
 
 impl Prefab {

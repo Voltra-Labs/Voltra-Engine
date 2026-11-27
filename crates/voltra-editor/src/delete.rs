@@ -3,7 +3,7 @@
 
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
-use voltra_scene::{hierarchy, prefab, ComponentRegistry, SceneId};
+use voltra_scene::{hierarchy, prefab, ComponentRegistry, Prefabs, SceneId};
 
 use crate::editor::Editor;
 use crate::selection::Selection;
@@ -14,6 +14,7 @@ pub(crate) fn selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
     delete(
         frame.world,
         &editor.registry,
+        frame.prefabs,
         &mut editor.history,
         &mut editor.selection,
     );
@@ -24,6 +25,7 @@ pub(crate) fn selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
 fn delete(
     world: &mut World,
     registry: &ComponentRegistry,
+    prefabs: &mut Prefabs,
     history: &mut History,
     selection: &mut Selection,
 ) {
@@ -46,7 +48,7 @@ fn delete(
     going.extend(
         roots
             .iter()
-            .filter_map(|&root| prefab::instance_root(world, root).filter(|&r| r != root))
+            .filter_map(|&root| prefab::instance_root(world, prefabs, root).filter(|&r| r != root))
             .filter_map(|r| world.get::<SceneId>(r).copied()),
     );
     // Explicit rather than watched: the watcher's `after` is read at the end
@@ -63,7 +65,7 @@ fn delete(
     for root in roots {
         // A child selected with its parent went with it already.
         if world.is_alive(root) {
-            prefab::note_removed(world, root);
+            prefab::note_removed(world, prefabs, root);
             hierarchy::despawn_recursive(world, root);
         }
     }
@@ -121,7 +123,13 @@ mod tests {
         selection.add(a);
         selection.add(b);
 
-        delete(&mut host.0, &registry, &mut history, &mut selection);
+        delete(
+            &mut host.0,
+            &registry,
+            &mut Prefabs::new(std::env::temp_dir()),
+            &mut history,
+            &mut selection,
+        );
         assert!(selection.is_empty());
         assert_eq!(history.len(), 1, "one entry for both");
         for &id in &ids[..3] {
@@ -152,6 +160,7 @@ mod tests {
         delete(
             &mut world,
             &registry,
+            &mut Prefabs::new(std::env::temp_dir()),
             &mut history,
             &mut Selection::default(),
         );
@@ -178,7 +187,13 @@ mod tests {
 
         let mut selection = Selection::default();
         selection.add(part);
-        delete(&mut host.0, &registry, &mut history, &mut selection);
+        delete(
+            &mut host.0,
+            &registry,
+            &mut Prefabs::new(std::env::temp_dir()),
+            &mut history,
+            &mut selection,
+        );
         let removed = |world: &World| {
             entity_with_id(world, root_id)
                 .and_then(|r| world.get::<PrefabInstance>(r).map(|l| l.removed.clone()))

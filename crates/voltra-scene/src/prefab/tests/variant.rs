@@ -17,7 +17,8 @@ const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
 const YELLOW: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
 
 /// Writes the base coin — a sprite of `color` and a light of `intensity`,
-/// a glow under it — to `coin.prefab.ron`.
+/// a glow under it — to `coin.prefab.ron`, as an edit on disk would, for
+/// the store to [`Prefabs::reload`].
 pub(super) fn write_coin(prefabs: &mut Prefabs, color: [f32; 4], intensity: f32) -> AssetPath {
     let mut world = World::new();
     let coin = named(&mut world, "coin", Vec2::ZERO);
@@ -44,7 +45,9 @@ pub(super) fn write_coin(prefabs: &mut Prefabs, color: [f32; 4], intensity: f32)
         world.insert(entity, id);
     }
     set_parent(&mut world, glow, coin).expect("parented under the fixed id");
-    write(&world, &registry(), prefabs, coin, &target).expect("written");
+    // Written as an edit on disk is: the store finds out on its reload.
+    let file = fragment(&world, &registry(), prefabs, coin).expect("cut");
+    crate::format::write(&file, &prefabs.root().join(target.as_str())).expect("written");
     target
 }
 

@@ -34,8 +34,7 @@ impl App {
             return;
         };
         let prefabs = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
-        let handle = prefabs.load(&source);
-        match prefab::sync(&mut self.world, &self.registry, prefabs.get(handle), root) {
+        match prefab::sync_in(&mut self.world, &self.registry, prefabs, root) {
             Ok(report) => {
                 self.spawned.extend(report.touched);
                 self.resolve_spawned();

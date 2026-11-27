@@ -24,7 +24,8 @@ use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 
 use super::compare::parent_record;
-use super::sync::sync;
+use super::membership::{is_added, members};
+use super::sync::sync_with;
 use super::{Prefab, PrefabInstance};
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile};
 use crate::scene_id::SceneId;
@@ -39,6 +40,16 @@ pub const MAX_DEPTH: usize = 32;
 /// a few small files could otherwise ask for billions; past this, an
 /// instance is left as its file has it.
 pub const MAX_RECORDS: usize = 1 << 17;
+
+/// How many records of one prefab file may carry a link — be the root of an
+/// instance stored in it — before the store follows none of them. A level
+/// with this many prefab instances is read as a scene instead
+/// ([`super::Prefabs::load_scene`]), whose instances a sync brings in step.
+pub const MAX_LINKS: usize = 1 << 14;
+
+/// How many different prefabs one file may hold instances of before the
+/// store follows none of them: each is a file to read.
+pub const MAX_SOURCES: usize = 256;
 
 /// Why an instance stored in a prefab was left as its file has it rather
 /// than brought in step with its own file.
@@ -59,6 +70,14 @@ pub enum ResolveProblem {
     TooLarge {
         /// The prefab the instance would follow.
         source: AssetPath,
+    },
+    /// The file holds more stored instances than [`MAX_LINKS`], or of more
+    /// prefabs than [`MAX_SOURCES`]: none are followed.
+    TooManyLinks {
+        /// Records carrying a link.
+        links: usize,
+        /// Different prefabs they name.
+        sources: usize,
     },
     /// The instance of `source` would not come into step with it.
     Failed {
@@ -86,6 +105,11 @@ impl fmt::Display for ResolveProblem {
                 "following {} would hold more than {MAX_RECORDS} entities",
                 source.as_str()
             ),
+            Self::TooManyLinks { links, sources } => write!(
+                f,
+                "holds {links} instances of {sources} prefabs, past the {MAX_LINKS} / \
+                 {MAX_SOURCES} the store follows"
+            ),
             Self::Failed { source, error } => {
                 write!(
                     f,
@@ -98,47 +122,66 @@ impl fmt::Display for ResolveProblem {
 }
 
 /// The instances stored in `file` that are not inside another stored in
-/// it — what resolving walks, as a sync walks a scene's — by record id,
-/// with the prefab each is an instance of. Bounded: a loop of parent links
-/// in a hand-edited file ends.
+/// it — what resolving starts from, as a sync starts from a scene's
+/// outermost — by record id, with the prefab each is an instance of. Linear:
+/// each record's answer is remembered for the records under it, and a loop
+/// of parent links in a hand-edited file ends.
 pub(super) fn stored_instances(file: &SceneFile) -> Vec<(SceneId, AssetPath)> {
     let parent: HashMap<SceneId, SceneId> = file
         .entities
         .iter()
         .filter_map(|r| Some((r.id, parent_record(r)?)))
         .collect();
-    let linked: HashMap<SceneId, AssetPath> = file
-        .entities
-        .iter()
-        .filter_map(|r| {
-            let raw = r.components.get(PrefabInstance::NAME)?;
-            match raw.into_rust::<PrefabInstance>() {
-                Ok(link) => Some((r.id, link.source)),
-                Err(e) => {
-                    log::warn!("a stored prefab link could not be read: {e}");
-                    None
-                }
+    let mut unreadable = 0usize;
+    let mut linked: HashMap<SceneId, AssetPath> = HashMap::new();
+    for record in &file.entities {
+        let Some(raw) = record.components.get(PrefabInstance::NAME) else {
+            continue;
+        };
+        match raw.into_rust::<PrefabInstance>() {
+            Ok(link) => {
+                linked.entry(record.id).or_insert(link.source);
             }
-        })
-        .collect();
+            Err(_) => unreadable += 1,
+        }
+    }
+    if unreadable > 0 {
+        log::warn!("{unreadable} stored prefab link(s) could not be read");
+    }
+    // Whether a record or one above it is linked, remembered as it is found.
+    let mut linked_here_or_above: HashMap<SceneId, bool> = HashMap::new();
+    let mut above = |start: SceneId| -> bool {
+        let mut path = Vec::new();
+        let mut on_path = HashSet::new();
+        let mut at = Some(start);
+        let answer = loop {
+            let Some(id) = at else {
+                break false;
+            };
+            if let Some(&known) = linked_here_or_above.get(&id) {
+                break known;
+            }
+            if linked.contains_key(&id) {
+                break true;
+            }
+            if !on_path.insert(id) {
+                break false;
+            }
+            path.push(id);
+            at = parent.get(&id).copied();
+        };
+        for id in path {
+            linked_here_or_above.insert(id, answer);
+        }
+        answer
+    };
     let mut found = Vec::new();
     let mut seen = HashSet::new();
     for record in &file.entities {
         let Some(source) = linked.get(&record.id) else {
             continue;
         };
-        let mut up = parent.get(&record.id);
-        let mut inside = false;
-        for _ in 0..file.entities.len() {
-            let Some(at) = up else {
-                break;
-            };
-            if linked.contains_key(at) {
-                inside = true;
-                break;
-            }
-            up = parent.get(at);
-        }
+        let inside = parent.get(&record.id).is_some_and(|&p| above(p));
         if !inside && seen.insert(record.id) {
             found.push((record.id, source.clone()));
         }
@@ -176,22 +219,49 @@ pub(super) fn resolve(
 
     let mut total = stored.entities.len();
     let mut changed = false;
-    for (id, source) in &instances {
-        let Some(prefab) = sources.get(source) else {
+    let mut too_large = false;
+    // Outermost first, then what was added to each, inwards.
+    let mut queue: Vec<Entity> = instances.iter().rev().map(|(id, _)| by_id[id]).collect();
+    let mut done = HashSet::new();
+    while let Some(root) = queue.pop() {
+        if !world.is_alive(root) || !done.insert(root) {
+            continue;
+        }
+        let Some(source) = world.get::<PrefabInstance>(root).map(|l| l.source.clone()) else {
+            continue;
+        };
+        let Some(prefab) = sources.get(&source) else {
             continue;
         };
         total += prefab.len();
         if total > MAX_RECORDS {
-            problems.push(ResolveProblem::TooLarge {
-                source: source.clone(),
-            });
+            if !too_large {
+                problems.push(ResolveProblem::TooLarge { source });
+                too_large = true;
+            }
             continue;
         }
-        let root = by_id[id];
-        match sync(&mut world, registry, prefab, root) {
-            Ok(report) => changed |= !report.is_empty(),
+        let file_ids: HashSet<SceneId> = prefab
+            .file
+            .as_ref()
+            .map(|f| f.entities.iter().map(|r| r.id).collect())
+            .unwrap_or_default();
+        let (_, added) = members(&world, root, &mut |world, child| {
+            is_added(world, child, &file_ids, &mut |source, record| {
+                sources
+                    .get(source)
+                    .and_then(|p| p.file.as_ref())
+                    .is_none_or(|f| f.entities.iter().any(|r| r.id == record))
+            })
+        });
+        let added: HashSet<Entity> = added.into_iter().collect();
+        match sync_with(&mut world, registry, prefab, root, Some(&added)) {
+            Ok((report, inner)) => {
+                changed |= !report.is_empty();
+                queue.extend(inner);
+            }
             Err(error) => problems.push(ResolveProblem::Failed {
-                source: source.clone(),
+                source,
                 error: error.to_string(),
             }),
         }

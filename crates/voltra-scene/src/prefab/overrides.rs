@@ -11,30 +11,15 @@
 
 use voltra_ecs::{Entity, World};
 
+use std::collections::HashSet;
+
 use super::compare::{canonical, differences, ids_to_records};
-use super::sync::{sync, SyncReport};
+use super::instances::sync_in;
+use super::membership::{instance_root, members_in};
+use super::sync::SyncReport;
 use super::{PrefabInstance, PrefabPart, Prefabs};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy;
-
-/// The instance `entity` belongs to: the outermost of itself and its
-/// ancestors that carries a [`PrefabInstance`]. A nested instance's entities
-/// belong to the outer one, as their parts do.
-pub fn instance_root(world: &World, entity: Entity) -> Option<Entity> {
-    let mut found = world.get::<PrefabInstance>(entity).map(|_| entity);
-    let mut up = hierarchy::parent_of(world, entity);
-    // Bounded: a cycle in a hand-edited file ends.
-    for _ in 0..4096 {
-        let Some(at) = up else {
-            break;
-        };
-        if world.get::<PrefabInstance>(at).is_some() {
-            found = Some(at);
-        }
-        up = hierarchy::parent_of(world, at);
-    }
-    found
-}
 
 /// The record `entity`'s part names, in its instance's prefab, with whether
 /// the entity is that instance's root. `None` for an entity that is no part,
@@ -44,7 +29,7 @@ fn record_of<'p>(
     prefabs: &'p mut Prefabs,
     entity: Entity,
 ) -> Option<(&'p EntityRecord, bool)> {
-    let root = instance_root(world, entity)?;
+    let root = instance_root(world, prefabs, entity)?;
     let source = world.get::<PrefabInstance>(root)?.source.clone();
     let record = world.get::<PrefabPart>(entity)?.record;
     let handle = prefabs.load(&source);
@@ -66,9 +51,10 @@ pub fn refresh_overrides(
         return Ok(false);
     };
     let want = canonical(registry, record)?;
-    let to_record = instance_root(world, entity)
-        .map(|root| ids_to_records(world, root))
-        .unwrap_or_default();
+    let to_record = match instance_root(world, prefabs, entity) {
+        Some(root) => ids_to_records(world, &members_in(world, prefabs, root).0),
+        None => Default::default(),
+    };
     let differ = differences(world, registry, entity, is_root, &want, &to_record)?;
     let Some(part) = world.get_mut::<PrefabPart>(entity) else {
         return Ok(false);
@@ -89,7 +75,7 @@ pub fn revert(
     entity: Entity,
     name: Option<&str>,
 ) -> Result<SyncReport, SceneError> {
-    let Some(root) = instance_root(world, entity) else {
+    let Some(root) = instance_root(world, prefabs, entity) else {
         return Ok(SyncReport::default());
     };
     if let Some(part) = world.get_mut::<PrefabPart>(entity) {
@@ -111,7 +97,7 @@ pub fn revert_instance(
     prefabs: &mut Prefabs,
     root: Entity,
 ) -> Result<SyncReport, SceneError> {
-    for entity in std::iter::once(root).chain(hierarchy::descendants(world, root)) {
+    for entity in members_in(world, prefabs, root).0 {
         if let Some(part) = world.get_mut::<PrefabPart>(entity) {
             part.overridden.clear();
         }
@@ -128,25 +114,27 @@ fn sync_root(
     prefabs: &mut Prefabs,
     root: Entity,
 ) -> Result<SyncReport, SceneError> {
-    let Some(source) = world.get::<PrefabInstance>(root).map(|l| l.source.clone()) else {
-        return Ok(SyncReport::default());
-    };
-    let handle = prefabs.load(&source);
-    sync(world, registry, prefabs.get(handle), root)
+    sync_in(world, registry, prefabs, root)
 }
 
 /// Before `entity` is deleted from its instance: records it, and every part
-/// under it, as deleted on the instance's root, so a sync does not spawn
-/// them back. Answers the root it wrote to; nothing when `entity` is the
-/// root itself (the whole instance goes) or belongs to no instance.
-pub fn note_removed(world: &mut World, entity: Entity) -> Option<Entity> {
-    let root = instance_root(world, entity)?;
+/// of that instance under it, as deleted on the instance's root, so a sync
+/// does not spawn them back. Answers the root it wrote to; nothing when
+/// `entity` is the root itself (the whole instance goes — an instance added
+/// to another among them) or belongs to no instance.
+pub fn note_removed(world: &mut World, prefabs: &mut Prefabs, entity: Entity) -> Option<Entity> {
+    let root = instance_root(world, prefabs, entity)?;
     if root == entity {
         return None;
     }
-    let records: Vec<_> = std::iter::once(entity)
+    let (members, _) = members_in(world, prefabs, root);
+    let under: HashSet<Entity> = std::iter::once(entity)
         .chain(hierarchy::descendants(world, entity))
-        .filter_map(|e| world.get::<PrefabPart>(e).map(|part| part.record))
+        .collect();
+    let records: Vec<_> = members
+        .iter()
+        .filter(|e| under.contains(e))
+        .filter_map(|&e| world.get::<PrefabPart>(e).map(|part| part.record))
         .collect();
     let link = world.get_mut::<PrefabInstance>(root)?;
     for record in records {

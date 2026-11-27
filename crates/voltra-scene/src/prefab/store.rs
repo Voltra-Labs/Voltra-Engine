@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 
 use voltra_assets::{AssetPath, Assets, Handle};
 
-use super::resolve::{resolve, stored_instances, ResolveProblem, MAX_DEPTH};
+use super::cycle::nested_counted;
+use super::resolve::{resolve, ResolveProblem, MAX_DEPTH, MAX_LINKS, MAX_SOURCES};
 use super::Prefab;
 use crate::format::{ComponentRegistry, SceneError, SceneFile};
 
@@ -84,13 +85,19 @@ impl Prefabs {
     /// [`load`](Self::load) from inside the reading of `stack`, the
     /// prefabs whose stored instances led here, outermost first.
     fn load_at(&mut self, path: &AssetPath, stack: &mut Vec<AssetPath>) -> Handle<Prefab> {
-        if let Some(handle) = self.by_path.get(path) {
-            return *handle;
+        let mut kept = self.stale.remove(path);
+        if let Some(&handle) = self.by_path.get(path) {
+            let prefab = self.get(handle);
+            // Read as a scene's file, and now instanced: followed now.
+            if prefab.resolved || prefab.file.is_none() {
+                return handle;
+            }
+            self.by_path.remove(path);
+            kept = Some(handle);
         }
-        let kept = self.stale.remove(path);
         let stored = match kept {
             Some(handle) => self.get(handle).stored_file().cloned().ok_or(None),
-            None => self.read(path).map_err(Some),
+            None => self.read(path, Some(MAX_PREFAB_BYTES)).map_err(Some),
         };
         let prefab = match stored {
             Ok(file) => self.resolved(path, file, stack),
@@ -104,6 +111,31 @@ impl Prefabs {
         self.put(path, prefab, kept)
     }
 
+    /// The handle for the scene at `path`, read as [`load`](Self::load)
+    /// reads a prefab if this is the first time — but as a level is: the
+    /// instances it holds are not followed (a sync after the load brings
+    /// them in step, in the world) and no prefab limit applies, as none
+    /// applied to a scene before. One copy is kept. If the same file is
+    /// later [`load`](Self::load)ed as a prefab, it is followed then, under
+    /// the same handle.
+    pub fn load_scene(&mut self, path: &AssetPath) -> Handle<Prefab> {
+        if let Some(&handle) = self.by_path.get(path) {
+            return handle;
+        }
+        let prefab = match self.read(path, None) {
+            Ok(file) => Prefab {
+                file: Some(file),
+                source: Some(path.clone()),
+                ..Prefab::default()
+            },
+            Err(e) => {
+                log::warn!("scene {}: {e}; it will spawn nothing", path.as_str());
+                Prefab::empty()
+            }
+        };
+        self.put(path, prefab, None)
+    }
+
     /// `stored`, the file at `path`, with the prefabs its instances name
     /// read and its instances brought in step with them.
     fn resolved(
@@ -114,13 +146,27 @@ impl Prefabs {
     ) -> Prefab {
         let mut problems = Vec::new();
         let mut handles = Vec::new();
-        stack.push(path.clone());
-        let mut sources: Vec<AssetPath> = Vec::new();
-        for (_, source) in stored_instances(&stored) {
-            if !sources.contains(&source) {
-                sources.push(source);
-            }
+        // Every prefab a link names, not only the outermost instances': an
+        // instance added inside one is synced with its own file too.
+        let (sources, links) = nested_counted(&stored);
+        if links > MAX_LINKS || sources.len() > MAX_SOURCES {
+            let problem = ResolveProblem::TooManyLinks {
+                links,
+                sources: sources.len(),
+            };
+            log::error!(
+                "prefab {}: {problem}; left as its file has it",
+                path.as_str()
+            );
+            return Prefab {
+                file: Some(stored),
+                stored: None,
+                source: Some(path.clone()),
+                problems: vec![problem],
+                resolved: true,
+            };
         }
+        stack.push(path.clone());
         for source in sources {
             if let Some(at) = stack.iter().position(|p| *p == source) {
                 let mut chain = stack[at..].to_vec();
@@ -152,9 +198,14 @@ impl Prefabs {
             }
         };
         problems.append(&mut more);
-        for problem in &problems {
+        // Once per file, however many instances in it went wrong.
+        if let Some(first) = problems.first() {
+            let more = match problems.len() {
+                1 => String::new(),
+                n => format!(" (and {} more)", n - 1),
+            };
             log::error!(
-                "prefab {}: {problem}; left as its file has it",
+                "prefab {}: {first}{more}; left as its file has it",
                 path.as_str()
             );
         }
@@ -163,6 +214,7 @@ impl Prefabs {
             stored,
             source: Some(path.clone()),
             problems,
+            resolved: true,
         }
     }
 
@@ -235,26 +287,29 @@ impl Prefabs {
         self.store.is_empty()
     }
 
-    /// Reads and parses one file, refusing one past [`MAX_PREFAB_BYTES`]
-    /// or of another version. The only place this type touches the disk.
-    fn read(&self, path: &AssetPath) -> Result<SceneFile, SceneError> {
+    /// Reads and parses one file, refusing one past `limit` bytes (a
+    /// prefab's [`MAX_PREFAB_BYTES`]; none for a scene's) or of another
+    /// version. The only place this type touches the disk.
+    fn read(&self, path: &AssetPath, limit: Option<u64>) -> Result<SceneFile, SceneError> {
         let full = self.root.join(path.as_str());
-        let too_large = || {
+        let too_large = |limit: u64| {
             SceneError::Io(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("larger than {MAX_PREFAB_BYTES} bytes"),
+                format!("larger than {limit} bytes, the most a prefab may be"),
             ))
         };
-        if !voltra_assets::fs::is_packed(&full) {
-            if let Ok(meta) = std::fs::metadata(&full) {
-                if meta.len() > MAX_PREFAB_BYTES {
-                    return Err(too_large());
+        if let Some(limit) = limit {
+            if !voltra_assets::fs::is_packed(&full) {
+                if let Ok(meta) = std::fs::metadata(&full) {
+                    if meta.len() > limit {
+                        return Err(too_large(limit));
+                    }
                 }
             }
         }
         let text = voltra_assets::fs::read_to_string(&full)?;
-        if text.len() as u64 > MAX_PREFAB_BYTES {
-            return Err(too_large());
+        if let Some(limit) = limit.filter(|&limit| text.len() as u64 > limit) {
+            return Err(too_large(limit));
         }
         let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
         Ok(Prefab::new(file)?

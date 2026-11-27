@@ -3,9 +3,12 @@
 use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 
-use super::sync::{sync, SyncReport};
+use std::collections::HashSet;
+
+use super::membership::members_in;
+use super::sync::{sync_with, SyncReport};
 use super::{PrefabInstance, Prefabs};
-use crate::format::ComponentRegistry;
+use crate::format::{ComponentRegistry, SceneError};
 use crate::hierarchy;
 
 /// Every instance root in `world` not under another instance, with its
@@ -63,6 +66,20 @@ pub fn sync_sources(
     sync_matching(world, registry, prefabs, |path| sources.contains(path))
 }
 
+/// Syncs the instance at `root` with its file, then every instance added
+/// to it with its own, and so on inwards: the outer one first, so it never
+/// takes an added one's parts for its own.
+pub fn sync_in(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    prefabs: &mut Prefabs,
+    root: Entity,
+) -> Result<SyncReport, SceneError> {
+    let mut total = SyncReport::default();
+    sync_tree(world, registry, prefabs, root, &|_| true, &mut total)?;
+    Ok(total)
+}
+
 fn sync_matching(
     world: &mut World,
     registry: &ComponentRegistry,
@@ -70,18 +87,12 @@ fn sync_matching(
     matches: impl Fn(&AssetPath) -> bool,
 ) -> SyncReport {
     let mut total = SyncReport::default();
-    for (root, source) in instance_roots(world) {
-        if !matches(&source) || !world.is_alive(root) {
+    for (root, _) in instance_roots(world) {
+        if !world.is_alive(root) {
             continue;
         }
-        let handle = prefabs.load(&source);
-        match sync(world, registry, prefabs.get(handle), root) {
-            Ok(report) => total.add(report),
-            Err(error) => log::error!(
-                "could not bring an instance of {} in step with it: {error}",
-                source.as_str()
-            ),
-        }
+        // Logged where it failed; the rest go on.
+        sync_tree(world, registry, prefabs, root, &matches, &mut total).ok();
     }
     if !total.is_empty() {
         log::info!(
@@ -93,4 +104,49 @@ fn sync_matching(
         );
     }
     total
+}
+
+/// The instance at `root` and the ones added to it, inwards, each synced
+/// when `matches` its file. An instance that will not sync is logged and
+/// the rest go on; the first error is answered.
+fn sync_tree(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    prefabs: &mut Prefabs,
+    root: Entity,
+    matches: &dyn Fn(&AssetPath) -> bool,
+    total: &mut SyncReport,
+) -> Result<(), SceneError> {
+    let mut first_error = None;
+    let mut queue = vec![root];
+    let mut seen = HashSet::new();
+    while let Some(at) = queue.pop() {
+        if !world.is_alive(at) || !seen.insert(at) {
+            continue;
+        }
+        let Some(source) = world.get::<PrefabInstance>(at).map(|l| l.source.clone()) else {
+            continue;
+        };
+        let (_, added) = members_in(world, prefabs, at);
+        if !matches(&source) {
+            queue.extend(added);
+            continue;
+        }
+        let added: HashSet<Entity> = added.into_iter().collect();
+        let handle = prefabs.load(&source);
+        match sync_with(world, registry, prefabs.get(handle), at, Some(&added)) {
+            Ok((report, inner)) => {
+                total.add(report);
+                queue.extend(inner);
+            }
+            Err(error) => {
+                log::error!(
+                    "could not bring an instance of {} in step with it: {error}",
+                    source.as_str()
+                );
+                first_error.get_or_insert(error);
+            }
+        }
+    }
+    first_error.map_or(Ok(()), Err)
 }

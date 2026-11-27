@@ -10,7 +10,7 @@ use super::*;
 use crate::format::to_scene_file;
 use crate::hierarchy::{children_of, set_parent};
 use crate::name::Name;
-use crate::prefab::{apply, link, spawn, write};
+use crate::prefab::{apply, link, spawn, sync, write};
 use crate::scene_id::SceneId;
 use crate::{Sprite, Transform};
 
@@ -123,9 +123,9 @@ fn a_deleted_part_is_remembered_and_a_whole_revert_brings_it_back() {
     let mut scene = World::new();
     let coin = instance(&mut scene, &mut prefabs, Vec2::ZERO);
     let glow = glow_of(&scene, coin);
-    assert_eq!(note_removed(&mut scene, glow), Some(coin));
+    assert_eq!(note_removed(&mut scene, &mut prefabs, glow), Some(coin));
     assert_eq!(
-        note_removed(&mut scene, coin),
+        note_removed(&mut scene, &mut prefabs, coin),
         None,
         "the root takes the whole instance"
     );

@@ -41,6 +41,7 @@ use voltra_ecs::{Entity, World};
 
 use super::adopt::adopt;
 use super::compare::{canonical, differences, ids_to_records, parent_record, subtree, STRUCTURE};
+use super::membership::{is_added, members};
 use super::{Prefab, PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::{self, Parent};
@@ -79,37 +80,62 @@ impl SyncReport {
 }
 
 /// Keeps the instance rooted at `root` in step with `prefab`.
+///
+/// An instance added under one of its parts — linked, its part naming no
+/// record of `prefab` — is left alone, as an entity the instance added is;
+/// [`super::sync_in`] syncs it with its own file too.
 pub fn sync(
     world: &mut World,
     registry: &ComponentRegistry,
     prefab: &Prefab,
     root: Entity,
 ) -> Result<SyncReport, SceneError> {
+    sync_with(world, registry, prefab, root, None).map(|(report, _)| report)
+}
+
+/// [`sync`], told which entities under `root` are the roots of instances
+/// added to it — worked out with their own files at hand
+/// (`membership.rs`); `None` takes every linked entity whose part names no
+/// record of `prefab` as one. Answers those roots, still alive, for the
+/// caller to sync in turn.
+pub(super) fn sync_with(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    prefab: &Prefab,
+    root: Entity,
+    added: Option<&HashSet<Entity>>,
+) -> Result<(SyncReport, Vec<Entity>), SceneError> {
     let Some(file) = prefab.file.as_ref() else {
         // A file that would not read: keeping the instance as it is beats
         // despawning everything a missing record would mean.
-        return Ok(SyncReport::default());
+        return Ok((SyncReport::default(), Vec::new()));
     };
     let mut report = SyncReport::default();
     if world.get::<PrefabPart>(root).is_none() {
         report.adopted = adopt(world, registry, &file.entities, root)?;
     }
     let Some(top) = world.get::<PrefabPart>(root).map(|part| part.record) else {
-        return Ok(report);
+        return Ok((report, Vec::new()));
     };
     let records = subtree(&file.entities, top);
     if records.is_empty() {
         log::warn!("an instance's root names a record its prefab no longer has; left as it is");
-        return Ok(report);
+        return Ok((report, Vec::new()));
     }
     let removed: HashSet<SceneId> = world
         .get::<PrefabInstance>(root)
         .map(|link| link.removed.iter().copied().collect())
         .unwrap_or_default();
 
-    // The instance's parts, by record.
+    // The instance's parts, by record — not those of an instance added to
+    // it, which are its own file's.
+    let file_ids: HashSet<SceneId> = file.entities.iter().map(|r| r.id).collect();
+    let (members, added) = members(world, root, &mut |world, child| match added {
+        Some(added) => added.contains(&child),
+        None => is_added(world, child, &file_ids, &mut |_, _| true),
+    });
     let mut parts: HashMap<SceneId, Entity> = HashMap::new();
-    for entity in std::iter::once(root).chain(hierarchy::descendants(world, root)) {
+    for &entity in &members {
         if let Some(part) = world.get::<PrefabPart>(entity) {
             parts.entry(part.record).or_insert(entity);
         }
@@ -137,7 +163,7 @@ pub fn sync(
 
     // Every part put back, but for what it overrides. A value naming other
     // entities is compared in the file's ids and put back in the instance's.
-    let to_record = ids_to_records(world, root);
+    let to_record = ids_to_records(world, &members);
     let to_instance: HashMap<SceneId, SceneId> = to_record
         .iter()
         .map(|(own, record)| (*record, *own))
@@ -242,7 +268,8 @@ pub fn sync(
         hierarchy::resolve_parents(world);
     }
     report.touched.retain(|&entity| world.is_alive(entity));
-    Ok(report)
+    let added = added.into_iter().filter(|&e| world.is_alive(e)).collect();
+    Ok((report, added))
 }
 
 /// The id an entity spawned for `record` in the instance at `root` gets:

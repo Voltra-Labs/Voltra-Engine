@@ -97,6 +97,12 @@ fn a_loop_written_on_disk_reads_with_an_error_instead_of_recursing() {
     ));
     // Each still spawns what its file holds, and a reload ends too.
     assert_eq!(prefabs.get(a).len(), 1);
+    let text = std::fs::read_to_string(root.join("a.prefab.ron")).expect("there");
+    std::fs::write(
+        root.join("a.prefab.ron"),
+        text.replace("\"loop\"", "\"looped\""),
+    )
+    .expect("written");
     assert_eq!(
         prefabs.reload(&path("a.prefab.ron")),
         [path("a.prefab.ron"), path("b.prefab.ron")]
@@ -129,4 +135,46 @@ fn a_chain_deeper_than_the_limit_stops_with_an_error() {
         [ResolveProblem::TooDeep { source }] if *source == path(&name(4))
     ));
     assert!(prefabs.by_path_handle(&path(&name(4))).is_none());
+}
+
+#[test]
+fn a_loop_through_a_nested_instance_on_disk_reads_with_an_error() {
+    let root = scratch_root();
+    // `a` holds, under a plain root, an instance of `b`; `b` is a variant
+    // of `a`.
+    std::fs::write(
+        root.join("a.prefab.ron"),
+        r#"(version: 1, entities: [
+            (id: "019fe500-0000-7000-8000-0000000000a1", components: {"Name": "a"}),
+            (id: "019fe500-0000-7000-8000-0000000000a2", components: {
+                "Name": "inner",
+                "Parent": "019fe500-0000-7000-8000-0000000000a1",
+                "PrefabInstance": (source: Path("b.prefab.ron")),
+                "PrefabPart": (record: "019fe500-0000-7000-8000-0000000000d1"),
+            }),
+        ])"#,
+    )
+    .expect("written");
+    hand_written(&root, "b.prefab.ron", "a.prefab.ron");
+    let mut prefabs = Prefabs::new(&root);
+
+    let a = prefabs.load(&path("a.prefab.ron"));
+
+    let b = prefabs
+        .by_path_handle(&path("b.prefab.ron"))
+        .expect("read on the way");
+    assert!(matches!(
+        prefabs.get(b).problems(),
+        [ResolveProblem::Cycle { chain }] if chain.len() == 3
+    ));
+    assert_eq!(prefabs.get(a).len(), 2, "as its file has it");
+    let mut world = World::new();
+    spawn(
+        &mut world,
+        &registry(),
+        prefabs.get(a),
+        &Transform::default(),
+    )
+    .expect("spawns");
+    assert_eq!(world.entity_count(), 2);
 }

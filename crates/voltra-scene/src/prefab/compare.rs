@@ -79,10 +79,12 @@ pub(super) fn differences(
     Ok(differ)
 }
 
-/// The instance at `root`'s own ids, each to the record its part names.
-pub(super) fn ids_to_records(world: &World, root: Entity) -> HashMap<SceneId, SceneId> {
-    std::iter::once(root)
-        .chain(crate::hierarchy::descendants(world, root))
+/// The own ids of an instance's `members`, each to the record its part
+/// names.
+pub(super) fn ids_to_records(world: &World, members: &[Entity]) -> HashMap<SceneId, SceneId> {
+    members
+        .iter()
+        .copied()
         .filter_map(|e| {
             let own = *world.get::<SceneId>(e)?;
             let record = world.get::<PrefabPart>(e)?.record;

@@ -106,7 +106,8 @@ fn write_coin_with_spark(prefabs: &mut Prefabs) {
     let glow = children_of(&world, top)[0];
     let spark = named(&mut world, "spark", Vec2::ZERO);
     set_parent(&mut world, spark, glow).expect("a plain reparent");
-    write(&world, &registry(), prefabs, top, &coin).expect("written");
+    let file = fragment(&world, &registry(), prefabs, top).expect("cut");
+    crate::format::write(&file, &prefabs.root().join(coin.as_str())).expect("written");
 }
 
 /// The ids of every record of `file` named `name`.
@@ -219,4 +220,66 @@ fn an_outer_file_from_before_reads_as_it_was_and_follows_once_saved_again() {
     sync_sources(&mut world, &registry(), &mut prefabs, &changed);
     assert_eq!(color_of(&world, plain), GREEN);
     assert_eq!(color_of(&world, blue), BLUE);
+}
+
+/// A prefab of `name` holding, under a plain root, an instance of each of
+/// `inner`, written as an edit on disk is.
+fn write_holder(prefabs: &mut Prefabs, name: &str, inner: &[&AssetPath]) -> AssetPath {
+    let mut world = World::new();
+    let top = named(&mut world, name, Vec2::ZERO);
+    for (n, file) in inner.iter().enumerate() {
+        let handle = prefabs.load(file);
+        let at = Transform::from_translation(Vec2::new(n as f32, 0.0));
+        let one = spawn(&mut world, &registry(), prefabs.get(handle), &at)
+            .expect("spawns")
+            .root()
+            .expect("a root");
+        set_parent(&mut world, one, top).expect("a plain reparent");
+    }
+    let target = path(&format!("{name}.prefab.ron"));
+    let file = fragment(&world, &registry(), prefabs, top).expect("cut");
+    crate::format::write(&file, &prefabs.root().join(target.as_str())).expect("written");
+    target
+}
+
+#[test]
+fn a_diamond_reads_the_shared_file_once_and_reaches_both_branches() {
+    let root = scratch_root();
+    let mut prefabs = Prefabs::new(&root);
+    let coin = write_coin(&mut prefabs, RED, 1.0);
+    let left = write_holder(&mut prefabs, "left", &[&coin]);
+    let right = write_holder(&mut prefabs, "right", &[&coin]);
+    let both = write_holder(&mut prefabs, "both", &[&left, &right]);
+    let loaded = prefabs.len();
+    let handle = prefabs.load(&both);
+    assert!(prefabs.get(handle).problems().is_empty());
+    assert_eq!(prefabs.len(), loaded + 1, "only itself read anew");
+    let mut world = World::new();
+    let placed = spawn(
+        &mut world,
+        &registry(),
+        prefabs.get(handle),
+        &Transform::default(),
+    )
+    .expect("spawns")
+    .root()
+    .expect("a root");
+
+    write_coin(&mut prefabs, GREEN, 1.0);
+    let changed = prefabs.reload(&coin);
+    assert_eq!(
+        changed,
+        [coin, left, right, both],
+        "nearest first, then by path"
+    );
+    sync_sources(&mut world, &registry(), &mut prefabs, &changed);
+
+    let coins: Vec<Entity> = crate::hierarchy::descendants(&world, placed)
+        .into_iter()
+        .filter(|&e| world.get::<Name>(e).is_some_and(|n| n.as_str() == "coin"))
+        .collect();
+    assert_eq!(coins.len(), 2);
+    for one in coins {
+        assert_eq!(color_of(&world, one), GREEN);
+    }
 }

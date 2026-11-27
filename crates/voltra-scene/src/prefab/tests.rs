@@ -243,6 +243,7 @@ fn write_ship(root: &std::path::Path, name: &str) {
     crate::format::save(&world, &registry(), &root.join(name)).expect("the fixture writes");
 }
 
+mod added;
 mod link;
 mod loops;
 mod nested;

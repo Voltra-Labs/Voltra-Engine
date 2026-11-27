@@ -73,7 +73,7 @@ pub fn write(
     root: Entity,
     target: &AssetPath,
 ) -> Result<(), WriteError> {
-    let file = fragment(world, registry, root)?;
+    let file = fragment(world, registry, prefabs, root)?;
 
     if let Some(through) = reaches(prefabs, nested_in(&file), target) {
         return Err(WriteError::Cycle {

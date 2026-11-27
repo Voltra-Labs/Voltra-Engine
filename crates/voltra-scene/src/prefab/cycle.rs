@@ -26,20 +26,37 @@ impl Prefab {
 /// Every prefab a link in `file` names, each once: a root's (a variant's
 /// base) as much as a nested instance's, since the store follows both.
 pub(super) fn nested_in(file: &SceneFile) -> Vec<AssetPath> {
+    nested_counted(file).0
+}
+
+/// [`nested_in`], with how many records carry a link — what the store's
+/// [`super::MAX_LINKS`] counts. Linear; a link that will not read is warned
+/// of once per file, not once per link.
+pub(super) fn nested_counted(file: &SceneFile) -> (Vec<AssetPath>, usize) {
     let mut found = Vec::new();
+    let mut seen = HashSet::new();
+    let mut links = 0;
+    let mut unreadable = 0usize;
     for record in &file.entities {
         let Some(link) = record.components.get(PrefabInstance::NAME) else {
             continue;
         };
+        links += 1;
         match link.into_rust::<PrefabInstance>() {
-            Ok(link) if !found.contains(&link.source) => found.push(link.source),
-            Ok(_) => {}
+            Ok(link) => {
+                if seen.insert(link.source.clone()) {
+                    found.push(link.source);
+                }
+            }
             // A link that does not read is a broken record a load would
             // already refuse; it is no evidence of a cycle either way.
-            Err(e) => log::warn!("a nested prefab link could not be read: {e}"),
+            Err(_) => unreadable += 1,
         }
     }
-    found
+    if unreadable > 0 {
+        log::warn!("{unreadable} nested prefab link(s) could not be read");
+    }
+    (found, links)
 }
 
 /// The first prefab, from `sources` and everything they nest in turn, that is

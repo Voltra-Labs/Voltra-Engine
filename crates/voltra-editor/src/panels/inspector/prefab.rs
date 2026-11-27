@@ -11,7 +11,7 @@ use crate::editor::Editor;
 /// The section, for an entity that is part of an instance; nothing for one
 /// that is not. Its buttons act at once, each as its own undo entry.
 pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, entity: Entity) {
-    let Some(root) = prefab::instance_root(frame.world, entity) else {
+    let Some(root) = prefab::instance_root(frame.world, frame.prefabs, entity) else {
         return;
     };
     let Some(source) = frame

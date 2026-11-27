@@ -23,7 +23,13 @@ fn level() -> (World, Entity, Entity, Entity) {
 fn a_fragment_holds_the_root_and_what_hangs_off_it_and_nothing_above() {
     let (world, _, chest, _) = level();
 
-    let file = fragment(&world, &registry(), chest).expect("records");
+    let file = fragment(
+        &world,
+        &registry(),
+        &mut Prefabs::new(scratch_root()),
+        chest,
+    )
+    .expect("records");
 
     assert_eq!(file.entities.len(), 2);
     assert_eq!(
@@ -36,7 +42,16 @@ fn a_fragment_holds_the_root_and_what_hangs_off_it_and_nothing_above() {
 fn the_root_loses_its_parent_and_its_position_but_keeps_its_shape() {
     let (world, _, chest, _) = level();
 
-    let prefab = Prefab::new(fragment(&world, &registry(), chest).expect("records")).expect("v1");
+    let prefab = Prefab::new(
+        fragment(
+            &world,
+            &registry(),
+            &mut Prefabs::new(scratch_root()),
+            chest,
+        )
+        .expect("records"),
+    )
+    .expect("v1");
     let mut out = World::new();
     let at = Transform::from_translation(Vec2::new(-3.0, 0.0));
     let instance = spawn(&mut out, &registry(), &prefab, &at).expect("reads");
@@ -55,7 +70,13 @@ fn the_root_forgets_what_it_was_an_instance_of_and_a_child_does_not() {
     world.insert(chest, PrefabInstance::new(path("old_chest.ron")));
     world.insert(coin, PrefabInstance::new(path("coin.ron")));
 
-    let file = fragment(&world, &registry(), chest).expect("records");
+    let file = fragment(
+        &world,
+        &registry(),
+        &mut Prefabs::new(scratch_root()),
+        chest,
+    )
+    .expect("records");
 
     assert!(!file.entities[0]
         .components
