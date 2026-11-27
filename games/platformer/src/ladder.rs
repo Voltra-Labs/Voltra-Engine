@@ -44,7 +44,7 @@ pub fn climb(tick: &mut Tick<'_>, walker: Entity) {
     let mut velocity = crate::walker::velocity(tick.world, walker);
     velocity.y = direction * CLIMB_SPEED;
     tick.world
-        .insert(walker, crate::walker::Motion { velocity });
+        .insert(walker, crate::components::WalkerMotion { velocity });
     tick.world.insert(walker, Climbing);
 }
 

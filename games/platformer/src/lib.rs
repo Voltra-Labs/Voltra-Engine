@@ -55,6 +55,8 @@ pub struct Platformer {
     rebinding: bool,
     /// The pause menu or the options screen, when one is over the level.
     menu: menu::Menu,
+    /// The walker was found to be no character, and that was said.
+    warned_not_character: bool,
 }
 
 impl Game for Platformer {
@@ -123,7 +125,8 @@ impl Game for Platformer {
         if self.menu.is_open() {
             // Paused: the walker stands where it is, whatever is held.
             self.jump = false;
-            walker::halt(tick, walker);
+            let moved = walker::halt(tick, walker);
+            self.warn_unless(moved);
             return;
         }
         let worth = coins::take(tick, walker);
@@ -144,7 +147,18 @@ impl Game for Platformer {
         let jump = std::mem::take(&mut self.jump);
         walker::steer(tick, walker, jump);
         ladder::climb(tick, walker);
-        walker::step(tick, walker);
+        let moved = walker::step(tick, walker);
+        self.warn_unless(moved);
+    }
+}
+
+impl Platformer {
+    /// Says once, not every step, that the walker could not be moved.
+    fn warn_unless(&mut self, moved: bool) {
+        if !moved && !self.warned_not_character {
+            log::warn!("the walker needs a CharacterBody2D, a Collider and a Transform to move");
+        }
+        self.warned_not_character |= !moved;
     }
 }
 

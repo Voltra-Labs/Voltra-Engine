@@ -2,11 +2,28 @@
 //! shown in the editor's inspector under these names.
 
 use serde::{Deserialize, Serialize};
+use voltra_render::glam::Vec2;
 use voltra_scene::ComponentRegistry;
 
 /// The body the keys walk and jump.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct Walker;
+
+/// On the walker: the velocity it keeps between steps, which
+/// `move_and_slide` answers and the next step starts from.
+///
+/// A component, and registered, so it lives through the editor reloading
+/// the game's code mid-jump — state that must outlive an edit lives in the
+/// world, not in the game's struct. Put there by the first step, so a level
+/// file never holds one. The character's contact does not survive a
+/// reload (it names entities by handle, which a rebuilt world renumbers):
+/// the step after one finds the floor again, as after a level change.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WalkerMotion {
+    /// World units per second.
+    pub velocity: Vec2,
+}
 
 /// Something to pick up, worth `value` on the counter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -61,10 +78,12 @@ pub struct SaveButton;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct FullscreenButton;
 
-/// Names every component above, each with its default as the template the
-/// editor's "Add component" starts from.
+/// Names every component above, each but [`WalkerMotion`] with its default
+/// as the template the editor's "Add component" starts from.
 pub fn register(registry: &mut ComponentRegistry) {
     registry.register::<Walker>("Walker").with_template();
+    // No template: the walker's step puts it there, not an author.
+    registry.register::<WalkerMotion>("WalkerMotion");
     registry.register::<Coin>("Coin").with_template();
     registry.register::<Goal>("Goal").with_template();
     registry

@@ -7,27 +7,13 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{CharacterBody2D, CharacterContact, Transform};
 
-use crate::components::Walker;
+use crate::components::{Walker, WalkerMotion};
 use crate::ladder::Climbing;
 
 /// World units per second the walker travels at full tilt.
 const WALK_SPEED: f32 = 4.0;
 /// Upward speed a jump starts with, in world units per second.
 const JUMP_SPEED: f32 = 7.0;
-/// World units per second squared, down: the walker falls by its own
-/// gravity, as a character moved by the game rather than by the step.
-const GRAVITY: f32 = 9.81;
-
-/// On the walker: the velocity it keeps between steps, which
-/// `move_and_slide` answers and the next step starts from.
-///
-/// Not registered, so never saved: a save, a reload or a level change puts
-/// the walker back standing still.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Motion {
-    /// World units per second.
-    pub velocity: Vec2,
-}
 
 /// The entity the keys move: the first carrying [`Walker`].
 pub fn find(world: &World) -> Option<Entity> {
@@ -37,12 +23,12 @@ pub fn find(world: &World) -> Option<Entity> {
 /// The walker's velocity, standing still if it has none yet.
 pub fn velocity(world: &World, walker: Entity) -> Vec2 {
     world
-        .get::<Motion>(walker)
+        .get::<WalkerMotion>(walker)
         .map_or(Vec2::ZERO, |motion| motion.velocity)
 }
 
 fn set_velocity(world: &mut World, walker: Entity, velocity: Vec2) {
-    world.insert(walker, Motion { velocity });
+    world.insert(walker, WalkerMotion { velocity });
 }
 
 /// Sets the walker's velocity from the move actions, and jumps it if
@@ -67,29 +53,33 @@ pub fn steer(tick: &mut Tick<'_>, walker: Entity, jump: bool) {
     set_velocity(tick.world, walker, velocity);
 }
 
-/// Moves the walker by its velocity for one step: falling unless it is on
-/// a ladder, stopped and slid by what it meets, and shoving the crates it
-/// walks into (the level's `CharacterBody2D` sets how hard). Logs once a
-/// step if the walker is no character.
-pub fn step(tick: &mut Tick<'_>, walker: Entity) {
+/// Moves the walker by its velocity for one step: falling by the world's
+/// gravity unless it is on a ladder, stopped and slid by what it meets, and
+/// shoving the crates it walks into (the level's `CharacterBody2D` sets how
+/// hard). `false`, moving nothing, when the walker is no character — the
+/// game says so once.
+pub fn step(tick: &mut Tick<'_>, walker: Entity) -> bool {
     let mut velocity = velocity(tick.world, walker);
     if tick.world.get::<Climbing>(walker).is_none() {
-        velocity.y -= GRAVITY * tick.delta;
+        velocity += tick.gravity * tick.delta;
     }
     match move_and_slide(tick.world, walker, velocity, tick.delta) {
-        Some(slide) => set_velocity(tick.world, walker, slide.velocity),
-        None => log::error!("the walker needs a CharacterBody2D, a Collider and a Transform"),
+        Some(slide) => {
+            set_velocity(tick.world, walker, slide.velocity);
+            true
+        }
+        None => false,
     }
 }
 
 /// Stops the walker walking: under a menu. It still falls, as a paused
-/// game's character lands rather than hangs in the air.
-pub fn halt(tick: &mut Tick<'_>, walker: Entity) {
+/// game's character lands rather than hangs in the air. [`step`]'s answer.
+pub fn halt(tick: &mut Tick<'_>, walker: Entity) -> bool {
     let mut velocity = velocity(tick.world, walker);
     velocity.x = 0.0;
     velocity.y = velocity.y.min(0.0);
     set_velocity(tick.world, walker, velocity);
-    step(tick, walker);
+    step(tick, walker)
 }
 
 /// Puts the walker at `at`, standing still: after a load or a level change.
