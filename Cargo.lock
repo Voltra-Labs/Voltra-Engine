@@ -4044,6 +4044,7 @@ name = "voltra-mcp"
 version = "0.3.0"
 dependencies = [
  "base64",
+ "image",
  "log",
  "rmcp",
  "ron",

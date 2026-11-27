@@ -5698,6 +5698,13 @@ target and reads it back as RGBA (`Screenshot`, with `pixel`, `save_png`,
   shows them; a map that fails logs and answers black rather than panicking.
 - The device and the texture store are made on the first shot and reused;
   the targets resize to each shot's size.
+- **The HUD's controls need a screen.** A session without one
+  (`Headless::with_screen`) leaves the controls alone, so a shot draws
+  each button in its sprite's own colour, not its face — the platformer's
+  white Save and Fullscreen buttons, their white labels lost on them, in
+  the stage 130 dogfood pass. The MCP `run_scene` lays its HUD out on the
+  shot's size (1280 × 720 without one), as the player's window always
+  does (pinned by `voltra-mcp`'s `tools/run.rs` test).
 
 Pinned by `app/headless/tests.rs` (a red square in the middle of a 64×64
 shot through a camera, the clear colour at the corner, PNG bytes, a second

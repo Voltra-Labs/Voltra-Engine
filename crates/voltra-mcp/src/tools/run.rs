@@ -3,6 +3,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use voltra_core::{App, Headless, ScreenshotError, WindowConfig};
+use voltra_render::glam::Vec2;
 use voltra_scene::{Name, SceneId, Transform};
 
 use super::ToolError;
@@ -14,6 +15,9 @@ pub const MAX_FRAMES: u32 = 6000;
 const MAX_LOG_LINES: usize = 200;
 /// The most entities a run with no report list sums up.
 const MAX_SUMMARY: usize = 100;
+/// The screen a run with no screenshot lays its HUD out on: the size a
+/// game's window opens at by default.
+const SCREEN: (u32, u32) = (1280, 720);
 
 /// An action held down over frames of the run.
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
@@ -75,8 +79,17 @@ pub fn run_scene(project: &Project, request: &RunRequest) -> Result<RunOutcome, 
         1.0 / 60.0
     };
     let app = App::new(WindowConfig::default()).with_asset_root(project.assets());
-    let mut session =
-        Headless::open(app, &asset).map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?;
+    // A screen the HUD is laid out on, as the player's window always has:
+    // its buttons take their faces and the controls their input. Without
+    // one a shot drew every button in its sprite's own colour. The shot's
+    // size when one is asked for, so the HUD is laid out where it is drawn.
+    let (width, height) = request.screenshot.unwrap_or(SCREEN);
+    let mut session = Headless::open(app, &asset)
+        .map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?
+        .with_screen(Vec2::new(
+            width.clamp(1, 2048) as f32,
+            height.clamp(1, 2048) as f32,
+        ));
 
     // This blocking thread's recorder, emptied: a pool thread may have
     // profiled a run before.
@@ -179,4 +192,40 @@ fn summary(world: &voltra_ecs::World) -> Value {
         .collect();
     named.truncate(MAX_SUMMARY);
     Value::Array(named)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_shot_draws_the_hud_s_buttons_with_their_faces() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let project = Project::new(root, None);
+        let outcome = run_scene(
+            &project,
+            &RunRequest {
+                scene: "scenes/platformer.ron".into(),
+                frames: 2,
+                delta: 1.0 / 60.0,
+                inputs: Vec::new(),
+                report: Vec::new(),
+                screenshot: Some((640, 360)),
+                profile: false,
+            },
+        )
+        .expect("runs");
+        let Some(png) = outcome.png else {
+            // No adapter on this machine: nothing drawn to look at.
+            return;
+        };
+        let shot = image::load_from_memory(&png).expect("a png").to_rgba8();
+        // Inside the Save button, clear of its label: its face, not the
+        // sprite's own white.
+        let pixel = shot.get_pixel(20, 72).0;
+        assert!(
+            pixel[..3].iter().all(|&c| c < 160),
+            "the button's face, got {pixel:?}"
+        );
+    }
 }
