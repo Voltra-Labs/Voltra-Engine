@@ -22,12 +22,13 @@ use voltra_net::{Endpoint, NetEvent, PeerId};
 use voltra_scene::{ComponentRegistry, Prefabs, ReplicatedComponent};
 
 use crate::acks::ReceivedTicks;
-use crate::wire::{self, ClientMessage, Control, InputTick, NetId, ServerTick, Snapshot};
+use crate::wire::{Control, InputTick, NetId, ServerTick, Snapshot};
 use crate::{ReplicationConfig, Timeline};
 
 mod apply;
 mod interpolate;
 mod samples;
+mod send;
 mod spawn;
 mod stash;
 
@@ -200,23 +201,6 @@ impl ReplicationClient {
         self.stash.forget_unnumbered();
     }
 
-    /// Queues an input for the server, sent with the next few
-    /// [`send`](Self::send)s until acknowledged.
-    pub fn queue_input(&mut self, tick: InputTick, bytes: Vec<u8>) {
-        if bytes.len() > self.config.max_input_size {
-            log::warn!(
-                "an input of {} bytes is over the {}-byte limit; the server would drop it",
-                bytes.len(),
-                self.config.max_input_size
-            );
-            return;
-        }
-        self.inputs.push_back((tick, bytes));
-        while self.inputs.len() > MAX_PENDING_INPUTS {
-            self.inputs.pop_front();
-        }
-    }
-
     fn forget(&mut self) {
         self.schema = None;
         self.bound.clear();
@@ -289,30 +273,5 @@ impl ReplicationClient {
             }
         }
         made
-    }
-
-    /// Tells the server which snapshots arrived, and sends the newest
-    /// unacknowledged inputs and any entity to send whole again.
-    pub fn send(&mut self, endpoint: &mut Endpoint) {
-        if !endpoint.is_connected(PeerId::SERVER) {
-            return;
-        }
-        let skip = self
-            .inputs
-            .len()
-            .saturating_sub(self.config.input_redundancy.max(1));
-        let message = ClientMessage {
-            newest: self.received.newest,
-            mask: self.received.mask,
-            inputs: self.inputs.iter().skip(skip).cloned().collect(),
-            resync: std::mem::take(&mut self.resync),
-        };
-        if let Err(error) = endpoint.send(
-            PeerId::SERVER,
-            self.config.channels.input,
-            &wire::encode(&message),
-        ) {
-            log::warn!("replication acks not sent: {error}");
-        }
     }
 }
