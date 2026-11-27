@@ -5,6 +5,78 @@ All notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/) — before 1.0, a minor version may
 break the API.
 
+## [0.4.0] — 2026-11-27
+
+0.4 closes, stage by stage (119–131), the gaps `docs/ARCHITECTURE.md`
+listed under each subsystem's "Not yet" that a game author hits first.
+Every stage is a row in the README's roadmap and a decision in
+`docs/ARCHITECTURE.md`; the guide (`docs/guide/`) covers each from a
+user's side. 3D is not part of it: it comes next, with a plan of its own.
+
+### 2D
+- **Animation:** animator transitions crossfade over a `duration`, an
+  interrupted fade fading on from what shows, and `exit_time` counts
+  loops; blend trees (`Blend1D`, `Blend2D` simple directional) whose
+  clips play in step; animator layers with masks, a weight a game can
+  change, and override or additive blending. Clips are sampled apart
+  from writing, so every mix goes through one N-input blend.
+- **Timeline:** record mode keys what is edited under the previewing
+  player; keys copied, cut and pasted at the playhead; the clip's own
+  undo history.
+- **Physics:** wheel, prismatic and mouse joints, a revolute's return
+  spring, and `break_force` / `break_torque` on every joint, reported
+  once through `Tick::broken_joints`. In play the editor drags bodies
+  with a mouse joint. Characters push dynamic bodies (`push_force`),
+  keep their speed on slopes, and turn with a turning floor;
+  `Tick::gravity` for games moving them.
+- **Camera:** the view turns with its camera's entity — culling,
+  picking, parallax and the editor's viewport included; `CameraShake`
+  turns too (`max_angle`) and moves only the view; `CameraFollow2D`
+  frames several targets and zooms to fit them, its dead zone and bounds
+  drawn in the viewport.
+- **Editor:** the inspector edits the fields a selection shares, a field
+  that differs shown mixed and an edit writing only that field, as one
+  undo step; duplicates and pastes are numbered `Name (1)`, `Name (2)`.
+- **Prefabs:** variants (a prefab that is another with overrides,
+  "Create variant" in the asset browser); a prefab inside another follows
+  its own file without the outer one being saved again; a prefab that
+  would hold itself is refused before saving.
+- `games/platformer`'s walker is a `CharacterBody2D` that pushes crates
+  and climbs a hill; the `character` example blends idle, walk and run
+  by speed with a landing squash on an additive layer.
+
+### Networking
+- **Interest management:** each client is sent what is within a radius
+  of what it watches (its own entities, or points the game sets),
+  answered by a grid rebuilt each tick, with hysteresis; always-relevant
+  entities and a radius per entity. The Network window shows each
+  client's relevant entities.
+- **Lag compensation:** `LagCompensated` colliders' poses are kept for a
+  second; `tick.net.rewound` answers ray, cast, point and overlap queries
+  as the shooter saw them, bounded by that player's measured lag and
+  `LagCompensation::max_rewind`. The arena's zap uses it.
+- **Lobby and LAN discovery:** a server-held lobby (names, slots, ready,
+  a host who starts, late joiners refused or let in), its own channel,
+  replication only to its players; LAN servers found by a UDP probe
+  (native only — the web joins by address). A lobby screen prefab in
+  every `cargo xtask new-game`; the arena readies up in it before its
+  match; `voltra-server` gains `--lobby` and the discovery flags.
+- **Wire:** the replication wire is versioned in the handshake
+  (`REPLICATION_WIRE_VERSION` 3); a 0.3 peer is refused with
+  `ProtocolMismatch` at connect.
+
+### Fixed
+- A networked build opened its first level with fresh ids, so no client
+  entity was the server's: the arena's coin had no sprite and its bot
+  stood still. The level now keeps its file's ids with replication on.
+- A region unloading on a replication client let go of every entity the
+  first snapshot swept, not only its own.
+- The MCP `run_scene` screenshot drew HUD buttons unlaid out; the run now
+  lays the HUD out on the shot's size.
+- Test scratch folders are removed when their test ends, and the folders
+  of ended processes swept (`VOLTRA_KEEP_SCRATCH` keeps them).
+- Four new benchmarks' limits raised past their own run-to-run spread.
+
 ## [0.3.0] — 2026-11-24
 
 The plan split this into 0.2 (2D polish, stages 88–110) and 0.3
