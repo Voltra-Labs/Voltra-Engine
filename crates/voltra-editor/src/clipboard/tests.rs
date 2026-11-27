@@ -147,11 +147,12 @@ fn name_of(world: &World, entity: Entity) -> Option<String> {
 }
 
 #[test]
-fn a_duplicate_is_numbered_past_its_taken_siblings() {
+fn a_duplicate_takes_the_first_number_its_siblings_leave() {
     let registry = registry();
     let mut world = World::new();
     let coin = spawn(&mut world, "Coin", Vec2::ZERO);
     spawn(&mut world, "Coin (1)", Vec2::ZERO);
+    spawn(&mut world, "Coin (3)", Vec2::ZERO);
     let clip = copy(&world, &registry, &selecting(&[coin]))
         .expect("records")
         .expect("something to copy");
@@ -159,14 +160,14 @@ fn a_duplicate_is_numbered_past_its_taken_siblings() {
     let (_, tops) = paste(&mut world, &registry, &clip).expect("spawns");
     assert_eq!(name_of(&world, tops[0]).as_deref(), Some("Coin (2)"));
     let (_, tops) = paste(&mut world, &registry, &clip).expect("spawns");
-    assert_eq!(name_of(&world, tops[0]).as_deref(), Some("Coin (3)"));
+    assert_eq!(name_of(&world, tops[0]).as_deref(), Some("Coin (4)"));
 
-    // `Coin (3)` duplicated strips its number and goes past it.
+    // `Coin (4)` duplicated strips its number: the next free is 5.
     let clip = copy(&world, &registry, &selecting(&[tops[0]]))
         .expect("records")
         .expect("something to copy");
     let (_, again) = paste(&mut world, &registry, &clip).expect("spawns");
-    assert_eq!(name_of(&world, again[0]).as_deref(), Some("Coin (4)"));
+    assert_eq!(name_of(&world, again[0]).as_deref(), Some("Coin (5)"));
 }
 
 #[test]
