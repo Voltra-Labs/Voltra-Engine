@@ -136,16 +136,27 @@ fn entry<'a, K: PartialEq>(entries: &'a [(K, SerialTree)], key: &K) -> Option<&'
 /// `skip_serializing_if` left out of one side is a place of its own, so a
 /// sprite on its default sorting layer differs from one on another by
 /// that field alone, not as a whole.
+///
+/// A map left out on one side reads as an empty one and is walked key by
+/// key: a map is left out when it is empty (`BTreeMap::is_empty`, the
+/// only skip a map field has), so a tilemap gaining its first tile data,
+/// or losing its last, differs by that tile's key and not by the whole
+/// map. serde hands a serializer nothing of a skipped field but its name,
+/// so this is what can be known of one without its type; any other field
+/// left out is one place, written whole or left out whole.
 fn fields(
     x: &[(&'static str, SerialTree)],
     y: &[(&'static str, SerialTree)],
     path: &mut TreePath,
     out: &mut Vec<TreePath>,
 ) {
+    let empty = SerialTree::Map(Vec::new());
     for &key in union(x.iter().map(|(k, _)| k), y.iter().map(|(k, _)| k)) {
         path.push(Step::Field(key));
         match (entry(x, &key), entry(y, &key)) {
             (Some(x), Some(y)) => walk(x, y, path, out),
+            (Some(map @ T::Map(_)), None) => walk(map, &empty, path, out),
+            (None, Some(map @ T::Map(_))) => walk(&empty, map, path, out),
             _ => out.push(path.clone()),
         }
         path.pop();

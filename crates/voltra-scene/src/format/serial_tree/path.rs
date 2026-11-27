@@ -84,18 +84,28 @@ pub enum Found<'a> {
 impl SerialTree {
     /// What is at `path`: a value, a field or key left out, or no such
     /// place.
+    ///
+    /// A field left out, or a key a map does not hold, stands for its
+    /// default from there down as far as named steps go: a field under it
+    /// (`tile_data[5].shape`, with no tile data for 5) or a key of a map
+    /// left out is absent too, so writing it out takes it out where it is
+    /// set. A step into an element, a variant or an `Option` under it is
+    /// nowhere: nothing says which default that would be.
     pub fn find(&self, path: &[Step]) -> Found<'_> {
-        let Some((last, up)) = path.split_last() else {
-            return Found::Here(self);
-        };
-        let Some(parent) = self.at(up) else {
-            return Found::Nowhere;
-        };
-        match parent.child(last) {
-            Some(value) => Found::Here(value),
-            None if parent.holds_keyed(last) => Found::Absent,
-            None => Found::Nowhere,
+        let mut node = self;
+        for (i, step) in path.iter().enumerate() {
+            match node.child(step) {
+                Some(next) => node = next,
+                None if node.holds_keyed(step) => {
+                    let named = path[i + 1..]
+                        .iter()
+                        .all(|s| matches!(s, Step::Field(_) | Step::Key(_)));
+                    return if named { Found::Absent } else { Found::Nowhere };
+                }
+                None => return Found::Nowhere,
+            }
         }
+        Found::Here(node)
     }
 
     /// Makes `path` hold `value` — `None` to leave the field or key out,
@@ -112,7 +122,7 @@ impl SerialTree {
                 _ => false,
             };
         };
-        let Some(parent) = self.at_mut(up) else {
+        let Some(parent) = self.reach_mut(path, up.len(), value.is_some()) else {
             return false;
         };
         match (last, parent, value) {
@@ -130,6 +140,40 @@ impl SerialTree {
                 _ => false,
             },
             (_, _, None) => false,
+        }
+    }
+
+    /// The node at `path[..len]`, to write under. With `making`, a field
+    /// left out on the way that the next step reads as a map (a [`Step::Key`]
+    /// after it) is put back as an empty map first — a map is left out when
+    /// empty — so a key can be added where a value had none.
+    fn reach_mut(&mut self, path: &[Step], len: usize, making: bool) -> Option<&mut SerialTree> {
+        let mut node = self;
+        for (i, step) in path[..len].iter().enumerate() {
+            let map_next = matches!(path.get(i + 1), Some(Step::Key(_)));
+            if making && map_next && node.child(step).is_none() {
+                if let (
+                    Step::Field(key),
+                    T::Struct { fields, .. } | T::StructVariant { fields, .. },
+                ) = (step, &mut *node)
+                {
+                    fields.push((key, T::Map(Vec::new())));
+                }
+            }
+            node = node.child_mut(step)?;
+        }
+        Some(node)
+    }
+
+    /// The name of the enum variant this is, for any of the four variant
+    /// shapes; `None` for anything else.
+    pub fn variant(&self) -> Option<&'static str> {
+        match self {
+            T::UnitVariant { variant, .. }
+            | T::NewtypeVariant { variant, .. }
+            | T::TupleVariant { variant, .. }
+            | T::StructVariant { variant, .. } => Some(variant),
+            _ => None,
         }
     }
 

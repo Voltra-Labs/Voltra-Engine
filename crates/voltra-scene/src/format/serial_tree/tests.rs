@@ -285,3 +285,86 @@ fn a_map_is_walked_key_by_key_over_both_sides() {
     assert_eq!(back.weights.get("a"), Some(&9.0), "kept");
     assert_eq!(back.weights.get("c"), Some(&3.0), "added");
 }
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Sparse {
+    name: String,
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    data: BTreeMap<u32, Skippy>,
+}
+
+fn sparse(keys: &[u32]) -> Sparse {
+    Sparse {
+        name: "layer".into(),
+        data: keys
+            .iter()
+            .map(|&k| {
+                let value = Skippy {
+                    color: k,
+                    ..Skippy::default()
+                };
+                (k, value)
+            })
+            .collect(),
+    }
+}
+
+#[test]
+fn a_map_left_out_reads_as_empty_and_is_walked_key_by_key() {
+    let key = |k: u32| Step::Key(SerialTree::U32(k));
+    let data = Step::Field("data");
+    assert_eq!(
+        differences(&tree(&sparse(&[5])), &tree(&sparse(&[]))),
+        vec![vec![data.clone(), key(5)]]
+    );
+    assert_eq!(
+        differences(&tree(&sparse(&[])), &tree(&sparse(&[5]))),
+        vec![vec![data.clone(), key(5)]]
+    );
+
+    // An entry gone from the primary goes from theirs, the rest kept.
+    let none = tree(&sparse(&[]));
+    let place = [data.clone(), key(5)];
+    assert_eq!(none.find(&place), Found::Absent);
+    let mut theirs = tree(&sparse(&[5, 7]));
+    assert!(theirs.put(&place, None));
+    let back: Sparse = theirs.to_raw().expect("w").into_rust().expect("r");
+    assert_eq!(back.data.keys().copied().collect::<Vec<_>>(), [7]);
+
+    // A first entry added to one that has none: the map is made.
+    let one = tree(&sparse(&[5]));
+    let Found::Here(value) = one.find(&place) else {
+        panic!("there")
+    };
+    let mut empty = tree(&sparse(&[]));
+    assert!(empty.put(&place, Some(value)));
+    let back: Sparse = empty.to_raw().expect("w").into_rust().expect("r");
+    assert_eq!(back, sparse(&[5]));
+    let mut seven = tree(&sparse(&[7]));
+    assert!(seven.put(&place, Some(value)));
+    let back: Sparse = seven.to_raw().expect("w").into_rust().expect("r");
+    assert_eq!(back, sparse(&[5, 7]));
+}
+
+#[test]
+fn a_field_under_a_missing_entry_is_absent_and_deeper_steps_are_nowhere() {
+    let none = tree(&sparse(&[]));
+    let key = Step::Key(SerialTree::U32(5));
+    let named = [Step::Field("data"), key.clone(), Step::Field("limit")];
+    assert_eq!(none.find(&named), Found::Absent);
+    let deeper = [Step::Field("data"), key, Step::Field("limit"), Step::Inner];
+    assert_eq!(none.find(&deeper), Found::Nowhere);
+
+    // Absent, written out of theirs: their entry's field back to default.
+    let mut limited = sparse(&[5]);
+    if let Some(entry) = limited.data.get_mut(&5) {
+        entry.limit = Some(2.0);
+    }
+    let mut theirs = tree(&limited);
+    assert!(theirs.put(&named, None));
+    let back: Sparse = theirs.to_raw().expect("w").into_rust().expect("r");
+    assert_eq!(back, sparse(&[5]));
+    assert_eq!(tree(&Shape::Dot).variant(), Some("Dot"));
+    assert_eq!(tree(&1.0_f32).variant(), None);
+}
