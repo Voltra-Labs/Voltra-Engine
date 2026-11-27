@@ -85,11 +85,8 @@ pub fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
 mod tests {
     use super::*;
 
-    fn scratch_dir() -> PathBuf {
-        let dir =
-            std::env::temp_dir().join(format!("voltra-scene-atomic-{}", Uuid::now_v7().simple()));
-        std::fs::create_dir_all(&dir).expect("temp dir");
-        dir
+    fn scratch_dir() -> voltra_testkit::Scratch {
+        voltra_testkit::Scratch::new("voltra-scene-atomic")
     }
 
     #[test]
