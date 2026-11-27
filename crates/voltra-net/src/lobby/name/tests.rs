@@ -136,3 +136,30 @@ fn a_one_character_name_never_grows_past_its_cap() {
     assert!(name.chars().count() <= 1, "{name:?}");
     assert_eq!(unique_name("Bob", 1, |n: &str| n == "B"), "2", "cut first");
 }
+
+#[test]
+fn blank_lookalikes_are_taken_out() {
+    for blank in [
+        '\u{2800}',
+        '\u{3164}',
+        '\u{115F}',
+        '\u{1160}',
+        '\u{FFA0}',
+        '\u{FFFC}',
+        '\u{16FE4}',
+        '\u{1D159}',
+    ] {
+        assert_eq!(
+            sanitize_name(&format!("Ada{blank}"), 16),
+            "Ada",
+            "{blank:?}"
+        );
+        assert_eq!(
+            sanitize_name(&format!("{blank}{blank}"), 16),
+            "Player",
+            "{blank:?}: a blank name is no name"
+        );
+    }
+    // A Braille pattern with dots is a letter like any other.
+    assert_eq!(sanitize_name("\u{2801}", 16), "\u{2801}");
+}

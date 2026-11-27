@@ -108,9 +108,13 @@ fn draws(c: char) -> bool {
     ) && !is_blank_letter(c)
 }
 
-/// Characters of another category that draw nothing: the combining
-/// grapheme joiner, the Khmer inherent vowels, the Hangul fillers, the
-/// variation selectors other than [`VS16`] (which are marks).
+/// Characters of another category that draw nothing, or only a blank a
+/// name could hide behind ("Ada⠀" for "Ada", "⠀⠀" for no name): the
+/// combining grapheme joiner, the Khmer inherent vowels, the Mongolian
+/// free variation selectors, the Hangul fillers (U+115F, U+1160, U+3164,
+/// U+FFA0), the blank Braille pattern (U+2800), the object replacement
+/// character (rich text's icon slot), the Khitan filler, the musical null
+/// notehead, and the variation selectors other than [`VS16`].
 fn is_blank_letter(c: char) -> bool {
     matches!(
         c,
@@ -121,9 +125,13 @@ fn is_blank_letter(c: char) -> bool {
             | '\u{17B5}'
             | '\u{180B}'..='\u{180D}'
             | '\u{180F}'
+            | '\u{2800}'
             | '\u{3164}'
             | '\u{FE00}'..='\u{FE0E}'
             | '\u{FFA0}'
+            | '\u{FFFC}'
+            | '\u{16FE4}'
+            | '\u{1D159}'
             | '\u{E0100}'..='\u{E01EF}'
     )
 }
