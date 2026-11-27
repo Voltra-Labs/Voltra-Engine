@@ -235,9 +235,10 @@ fn a_server_and_two_clients_play_a_round_to_its_winner() {
     }
     // The slowed client's zaps landed where it saw its target, rewound by
     // its longer round trip (60 ms more, four ticks at 60 a second) and its
-    // interpolation delay: further back than the other client's, and never
-    // past the 200 ms bound (12 ticks). An input made before its client
-    // drew anything carries no moment, and is tested at the present.
+    // interpolation delay: further back than the other client's, and within
+    // what the lag the server measured for it allows — about ten ticks,
+    // far short of the 500 ms cap. An input made before its client drew
+    // anything carries no moment, and is tested at the present.
     let log = server.log();
     let mean = |peer: &Headless| {
         let id = peer.net().local_id().expect("joined").to_string();
