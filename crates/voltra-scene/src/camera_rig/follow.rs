@@ -70,6 +70,8 @@ pub struct FollowState {
     members: u64,
     /// The targets already said missing, so each is said once.
     missing: Vec<SceneId>,
+    /// Whether it named itself as a target last frame, so that is said once.
+    named_itself: bool,
 }
 
 /// A rectangle in the world.

@@ -5,7 +5,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_render::{Camera2D, Texture};
 
-use super::{placement, Camera, CameraTarget};
+use super::{eye, Camera, CameraTarget};
 
 /// One camera's part of a frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -14,9 +14,9 @@ pub struct Shot {
     pub entity: Entity,
     /// The camera component.
     pub camera: Camera,
-    /// Where it is in the world.
+    /// Where its view is in the world, shake and all.
     pub position: Vec2,
-    /// How far it is turned in the world, counter-clockwise, in radians.
+    /// How far it is turned, counter-clockwise, in radians, shake and all.
     pub rotation: f32,
     /// The render texture it draws into, or `None` for the screen.
     pub target: Option<Handle<Texture>>,
@@ -35,7 +35,7 @@ impl Shot {
     pub fn view(&self, width: u32, height: u32) -> Camera2D {
         let (w, h) = (width.max(1) as f32, height.max(1) as f32);
         let mut position = self.position;
-        let upright = !self.rotation.is_finite() || self.rotation == 0.0;
+        let upright = super::normalised_turn(self.rotation) == 0.0;
         if self.camera.pixel_perfect
             && upright
             && self.camera.size.is_finite()
@@ -48,7 +48,8 @@ impl Shot {
             let edge = position - half;
             position = (edge / pixel).round() * pixel + half;
         }
-        Camera2D::new(position, self.camera.zoom(), w / h).with_rotation(self.rotation)
+        Camera2D::new(position, self.camera.zoom(), w / h)
+            .with_rotation(super::normalised_turn(self.rotation))
     }
 }
 
@@ -71,7 +72,7 @@ pub fn shots(world: &World) -> Vec<Shot> {
                 Some(t) => Some(t.handle?),
                 None => None,
             };
-            let (position, rotation) = placement(world, entity);
+            let (position, rotation) = eye(world, entity);
             let shot = Shot {
                 entity,
                 camera: *camera,

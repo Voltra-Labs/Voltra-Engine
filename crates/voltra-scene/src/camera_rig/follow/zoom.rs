@@ -5,7 +5,6 @@ use voltra_render::glam::Vec2;
 
 use voltra_ecs::{Entity, World};
 
-use super::CameraFollow2D;
 use crate::Camera;
 
 /// How a following camera zooms to frame its targets — Cinemachine's
@@ -79,25 +78,27 @@ fn limits(min: f32, max: f32) -> (f32, f32) {
     )
 }
 
-/// The camera size the rig zooms to this frame, eased at `rate` and written
-/// to the entity's [`Camera`]; or the camera's size as it is without a
-/// zoom; `None` without a camera.
-pub(super) fn zoom_to(
-    world: &mut World,
-    entity: Entity,
-    rig: &CameraFollow2D,
-    present: &super::group::Present,
-    aspect: f32,
-    rotation: f32,
-    rate: f32,
-) -> Option<f32> {
+/// One frame's fit: the zoom asked for, half the box to show (the
+/// targets' box, grown by the slack the follower may sit off it), the
+/// view's aspect and turn, and how far to ease.
+pub(super) struct Fit {
+    pub zoom: Option<FollowZoom>,
+    pub half: Vec2,
+    pub aspect: f32,
+    pub rotation: f32,
+    pub rate: f32,
+}
+
+/// The camera size the rig zooms to this frame, eased at the fit's rate
+/// and written to the entity's [`Camera`]; or the camera's size as it is
+/// without a zoom; `None` without a camera.
+pub(super) fn zoom_to(world: &mut World, entity: Entity, fit: Fit) -> Option<f32> {
     let camera = world.get_mut::<Camera>(entity)?;
-    let Some(zoom) = rig.zoom else {
+    let Some(zoom) = fit.zoom else {
         return Some(camera.size);
     };
-    let half = (present.max - present.min) * 0.5;
-    if let Some(wanted) = zoom.size_for(half, aspect, rotation) {
-        let eased = camera.size + (wanted - camera.size) * rate;
+    if let Some(wanted) = zoom.size_for(fit.half, fit.aspect, fit.rotation) {
+        let eased = camera.size + (wanted - camera.size) * fit.rate;
         camera.size = if eased.is_finite() { eased } else { wanted };
     }
     Some(camera.size)

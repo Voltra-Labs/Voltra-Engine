@@ -8,15 +8,14 @@
 //! at all.
 
 use voltra_ecs::{Entity, World};
-use voltra_render::glam::Vec2;
 use voltra_render::Camera2D;
 
-use crate::hierarchy::world_matrix;
-
+mod placement;
 mod shots;
 pub mod target;
 mod viewport;
 
+pub use placement::{aspect, eye, normalised_turn, placement, UPRIGHT};
 pub use shots::{shots, Shot};
 pub use target::CameraTarget;
 pub use viewport::Viewport;
@@ -77,9 +76,18 @@ pub struct Camera {
     pub viewport: Viewport,
     /// Snaps the view to the target's pixel grid, so pixel art stays crisp
     /// and does not shimmer as the camera moves. Pair it with nearest
-    /// texture filtering. Not written when off.
+    /// texture filtering. Off while the view is turned — a turned view's
+    /// pixels do not run along the world's grid — and back once it is
+    /// upright. Not written when off.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pixel_perfect: bool,
+    /// Whether the view turns with the entity's parents as well as with its
+    /// own rotation — Godot's `ignore_rotation` the other way up. Off by
+    /// default, and not written then: a camera hung off a rolling ball or a
+    /// character turning with its floor stays upright, as every camera did
+    /// before views turned; its own rotation always turns it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub inherit_rotation: bool,
 }
 
 fn default_shadow_resolution() -> u32 {
@@ -104,6 +112,7 @@ impl Default for Camera {
             shadow_resolution: default_shadow_resolution(),
             viewport: Viewport::FULL,
             pixel_perfect: false,
+            inherit_rotation: false,
         }
     }
 }
@@ -163,25 +172,17 @@ pub fn active(world: &World) -> Option<Entity> {
 
 /// The view `entity`'s camera describes, at `aspect`.
 ///
-/// `None` if it carries no [`Camera`]. The view sits where the entity is and
-/// turns as it does in the world, through its parents — a camera hung off a
-/// turning ship turns with it. Scale is read for nothing: how much a camera
-/// shows is its [`Camera::size`], and a mirrored camera is turned, not
-/// flipped.
+/// `None` if it carries no [`Camera`]. The view sits where the entity is,
+/// turned by its own rotation — and its parents', with
+/// [`Camera::inherit_rotation`] — with its [`CameraShake`] on top ([`eye`]).
+/// Scale is read for nothing: how much a camera shows is its
+/// [`Camera::size`], and a mirrored camera is turned, not flipped.
+///
+/// [`CameraShake`]: crate::CameraShake
 pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<Camera2D> {
     let camera = *world.get::<Camera>(entity)?;
-    let (position, rotation) = placement(world, entity);
+    let (position, rotation) = eye(world, entity);
     Some(Camera2D::new(position, camera.zoom(), aspect).with_rotation(rotation))
-}
-
-/// Where `entity` is in the world and how far it is turned there, in
-/// radians: what a view through it is placed by. A turn that cannot be read
-/// off the matrix — a collapsed scale — is upright.
-pub fn placement(world: &World, entity: Entity) -> (Vec2, f32) {
-    let matrix = world_matrix(world, entity);
-    let position = matrix.transform_point2(Vec2::ZERO);
-    let rotation = crate::transform::Transform::from_matrix(matrix).rotation;
-    (position, if rotation.is_finite() { rotation } else { 0.0 })
 }
 
 /// The view the scene renders through at `aspect`: [`active`], then [`view`].
@@ -194,5 +195,7 @@ pub fn active_view(world: &World, aspect: f32) -> Option<Camera2D> {
     view(world, active(world)?, aspect)
 }
 
+#[cfg(test)]
+mod placement_tests;
 #[cfg(test)]
 mod tests;

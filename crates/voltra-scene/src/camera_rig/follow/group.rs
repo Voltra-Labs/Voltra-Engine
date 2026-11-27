@@ -29,21 +29,30 @@ impl Present {
     }
 }
 
+/// What [`gather`] found of a group: those present, the ids not in the
+/// scene, and whether the follower named itself.
+pub(super) struct Gathered {
+    present: Option<Present>,
+    missing: Vec<SceneId>,
+    itself: bool,
+}
+
 /// The targets of `group` that are in the scene, other than `follower`
-/// itself, and the ids of those that are not. `None` when none are.
-pub(super) fn gather(
-    world: &World,
-    follower: Entity,
-    group: &[SceneId],
-) -> (Option<Present>, Vec<SceneId>) {
+/// itself, and the ids of those that are not.
+pub(super) fn gather(world: &World, follower: Entity, group: &[SceneId]) -> Gathered {
     let mut found: Option<Present> = None;
     let mut missing = Vec::new();
+    let mut itself = false;
     let mut hasher = std::hash::DefaultHasher::new();
     for &id in group {
-        let Some(target) = entity_with_id(world, id).filter(|&t| t != follower) else {
+        let Some(target) = entity_with_id(world, id) else {
             missing.push(id);
             continue;
         };
+        if target == follower {
+            itself = true;
+            continue;
+        }
         let at = world_position(world, target);
         if !at.is_finite() {
             missing.push(id);
@@ -64,22 +73,30 @@ pub(super) fn gather(
         });
     }
     let members = hasher.finish();
-    (found.map(|present| Present { members, ..present }), missing)
+    Gathered {
+        present: found.map(|present| Present { members, ..present }),
+        missing,
+        itself,
+    }
 }
 
-/// Says each target newly missing once — a warning when none of the group
+/// Says once each target newly missing — a warning when none of the group
 /// is left, since then it holds still; a debug line while the rest are
 /// framed, since a member despawning (an enemy killed) is how a group
-/// usually shrinks — and remembers which are missing.
+/// usually shrinks — and once that the follower names itself, which it
+/// leaves out; remembers both, and answers those present.
 pub(super) fn say_missing(
     world: &mut World,
     entity: Entity,
-    missing: Vec<SceneId>,
-    any_left: bool,
-) {
-    let Some(rig) = world.get_mut::<CameraFollow2D>(entity) else {
-        return;
-    };
+    gathered: Gathered,
+) -> Option<Present> {
+    let Gathered {
+        present,
+        missing,
+        itself,
+    } = gathered;
+    let rig = world.get_mut::<CameraFollow2D>(entity)?;
+    let any_left = present.is_some();
     for id in missing.iter().filter(|id| !rig.state.missing.contains(id)) {
         if any_left {
             log::debug!("a follower's target {id:?} is not in the scene; it frames the rest");
@@ -87,5 +104,10 @@ pub(super) fn say_missing(
             log::warn!("a follower's target {id:?} is not in the scene; it holds still");
         }
     }
+    if itself && !rig.state.named_itself {
+        log::warn!("a follower names itself among its targets; it leaves itself out");
+    }
     rig.state.missing = missing;
+    rig.state.named_itself = itself;
+    present
 }

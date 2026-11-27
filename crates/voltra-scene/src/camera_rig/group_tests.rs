@@ -44,7 +44,7 @@ fn two_targets_are_framed_at_their_middle_and_zoomed_to_fit() {
         max_size: 20.0,
     };
     let camera = group_rig(&mut world, &[left, right], Some(zoom));
-    update(&mut world, DT, 2.0);
+    update(&mut world, DT, 2.0, None);
     assert!(near(at(&world, camera), Vec2::new(2.0, 2.0)));
     // Sixteen wide plus a unit each side: half 9, over an aspect of 2.
     assert!(
@@ -55,13 +55,13 @@ fn two_targets_are_framed_at_their_middle_and_zoomed_to_fit() {
 
     // They close in: it zooms in, down to its least size.
     world.get_mut::<Transform>(right).expect("t").translation = Vec2::new(-5.0, 1.0);
-    update(&mut world, DT, 2.0);
+    update(&mut world, DT, 2.0, None);
     assert!(near(at(&world, camera), Vec2::new(-5.5, 1.0)));
     assert_eq!(size(&world, camera), 2.0);
 
     // Far apart, out to its greatest.
     world.get_mut::<Transform>(right).expect("t").translation = Vec2::new(200.0, 1.0);
-    update(&mut world, DT, 2.0);
+    update(&mut world, DT, 2.0, None);
     assert_eq!(size(&world, camera), 20.0);
 }
 
@@ -75,10 +75,10 @@ fn the_zoom_eases_at_the_followers_smoothing() {
         .get_mut::<CameraFollow2D>(camera)
         .expect("f")
         .smoothing = 5.0;
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     let landed = size(&world, camera);
     world.get_mut::<Transform>(b).expect("t").translation = Vec2::new(10.0, 0.0);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     let eased = size(&world, camera);
     assert!(eased > landed && eased < 9.0, "{landed} → {eased}");
 }
@@ -93,11 +93,11 @@ fn a_despawned_target_drops_out_and_all_gone_holds_still() {
         .get_mut::<CameraFollow2D>(camera)
         .expect("f")
         .look_ahead = 1.0;
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     assert!(near(at(&world, camera), Vec2::new(0.0, 1.0)));
 
     world.despawn(b);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     // On the one left — and the middle's jump is not a velocity to lead by.
     assert!(
         near(at(&world, camera), Vec2::new(-4.0, 0.0)),
@@ -107,8 +107,8 @@ fn a_despawned_target_drops_out_and_all_gone_holds_still() {
 
     world.despawn(a);
     world.get_mut::<Transform>(camera).expect("c").translation = Vec2::new(7.0, 7.0);
-    update(&mut world, DT, 1.0);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
+    update(&mut world, DT, 1.0, None);
     assert_eq!(at(&world, camera), Vec2::new(7.0, 7.0));
 }
 
@@ -124,7 +124,7 @@ fn a_turned_camera_zooms_to_fit_the_group_turned() {
     };
     let camera = group_rig(&mut world, &[low, high], Some(zoom));
     world.get_mut::<Transform>(camera).expect("t").rotation = std::f32::consts::FRAC_PI_2;
-    update(&mut world, DT, 2.0);
+    update(&mut world, DT, 2.0, None);
     // Sixteen tall in the world is sixteen across the turned view: half 8
     // over an aspect of 2.
     assert!(
@@ -181,4 +181,69 @@ fn a_target_named_twice_counts_once() {
         ..CameraFollow2D::new(one)
     };
     assert_eq!(rig.group(), vec![one]);
+}
+
+#[test]
+fn a_split_screen_camera_fits_its_half_not_the_window() {
+    let mut world = World::new();
+    let left = placed(&mut world, Vec2::new(-6.0, 0.0));
+    let right = placed(&mut world, Vec2::new(6.0, 0.0));
+    let zoom = FollowZoom {
+        margin: Vec2::ZERO,
+        min_size: 0.5,
+        max_size: 50.0,
+    };
+    let camera = group_rig(&mut world, &[left, right], Some(zoom));
+    world.get_mut::<Camera>(camera).expect("c").viewport = crate::camera::Viewport::LEFT;
+    // A 2:1 window, the camera drawing into its left half: square, so
+    // twelve wide needs a size of six, not three.
+    update(&mut world, DT, 2.0, None);
+    assert!(
+        (size(&world, camera) - 6.0).abs() < 1e-4,
+        "{}",
+        size(&world, camera)
+    );
+}
+
+#[test]
+fn the_fit_makes_room_for_the_dead_zone_and_offset() {
+    let mut world = World::new();
+    let a = placed(&mut world, Vec2::new(-4.0, 0.0));
+    let b = placed(&mut world, Vec2::new(4.0, 0.0));
+    let zoom = FollowZoom {
+        margin: Vec2::ZERO,
+        min_size: 0.5,
+        max_size: 50.0,
+    };
+    let camera = group_rig(&mut world, &[a, b], Some(zoom));
+    {
+        let rig = world.get_mut::<CameraFollow2D>(camera).expect("f");
+        rig.dead_zone = Vec2::new(1.0, 0.0);
+        rig.offset = Vec2::new(-2.0, 0.0);
+    }
+    update(&mut world, DT, 1.0, None);
+    // Half the box, 4, plus a dead zone of 1 and an offset of 2 either way.
+    assert!(
+        (size(&world, camera) - 7.0).abs() < 1e-4,
+        "{}",
+        size(&world, camera)
+    );
+    // Wherever in the dead zone it sits, both stay in view.
+    let x = at(&world, camera).x;
+    assert!(x - 7.0 <= -4.0 && x + 7.0 >= 4.0);
+}
+
+#[test]
+fn a_follower_naming_itself_leaves_itself_out() {
+    let mut world = World::new();
+    let player = placed(&mut world, Vec2::new(3.0, 0.0));
+    let camera = group_rig(&mut world, &[player], None);
+    let own = id(&world, camera);
+    world
+        .get_mut::<CameraFollow2D>(camera)
+        .expect("f")
+        .targets
+        .push(own);
+    update(&mut world, DT, 1.0, None);
+    assert!(near(at(&world, camera), Vec2::new(3.0, 0.0)));
 }

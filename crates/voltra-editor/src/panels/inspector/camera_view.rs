@@ -1,5 +1,5 @@
-//! Where a camera draws: its viewport, pixel-perfect snapping, and a render
-//! texture in place of the screen.
+//! Where a camera draws: its viewport, pixel-perfect snapping, whether it
+//! turns with its parent, and a render texture in place of the screen.
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_ecs::{Entity, World};
@@ -41,10 +41,18 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
                     }
                 });
                 ui.end_row();
-                ui.label("pixel perfect")
-                    .on_hover_text("snap the view to whole pixels: pair with nearest filtering");
+                ui.label("pixel perfect").on_hover_text(
+                    "snap the view to whole pixels: pair with nearest filtering; off while the view is turned",
+                );
                 if ui.checkbox(&mut camera.pixel_perfect, "").changed() {
                     claim = claim.or(Some("Toggle pixel perfect"));
+                }
+                ui.end_row();
+                ui.label("turn with parent").on_hover_text(
+                    "the view turns with its parents too, not only with its own rotation",
+                );
+                if ui.checkbox(&mut camera.inherit_rotation, "").changed() {
+                    claim = claim.or(Some("Toggle camera turn with parent"));
                 }
                 ui.end_row();
             });

@@ -12,7 +12,7 @@ use voltra_render::glam::Vec2;
 use voltra_render::LineBatch;
 use voltra_scene::format::entity_with_id;
 use voltra_scene::hierarchy::world_matrix;
-use voltra_scene::{CameraFollow2D, CameraShake};
+use voltra_scene::CameraFollow2D;
 
 /// The dead zone: a rose no gizmo axis, overlay or the camera's amber uses.
 const DEAD_ZONE: [f32; 4] = [1.0, 0.55, 0.75, 0.9];
@@ -34,10 +34,8 @@ pub fn draw(world: &World, entity: Entity, lines: &mut LineBatch) {
     let Some(rig) = world.get::<CameraFollow2D>(entity) else {
         return;
     };
-    let shaken = world
-        .get::<CameraShake>(entity)
-        .map_or(Vec2::ZERO, CameraShake::applied_offset);
-    let here = world_matrix(world, entity).transform_point2(Vec2::ZERO) - shaken;
+    // Where it rests: a shake moves the view, never the transform.
+    let here = world_matrix(world, entity).transform_point2(Vec2::ZERO);
     let half = rig.dead_zone.max(Vec2::ZERO);
     if half != Vec2::ZERO {
         let centre = here - rig.offset;

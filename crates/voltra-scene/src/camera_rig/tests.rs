@@ -50,7 +50,7 @@ fn it_lands_on_its_target_then_eases_after_it_at_any_frame_rate() {
         let mut world = World::new();
         let player = placed(&mut world, Vec2::new(5.0, 1.0));
         let camera = rig(&mut world, player, follow.clone());
-        update(&mut world, DT, 1.0);
+        update(&mut world, DT, 1.0, None);
         assert!(
             near(at(&world, camera), Vec2::new(5.0, 1.5)),
             "snapped: {}",
@@ -61,9 +61,9 @@ fn it_lands_on_its_target_then_eases_after_it_at_any_frame_rate() {
     };
     let (mut once, camera) = scene();
     let (mut twice, _) = scene();
-    update(&mut once, 2.0 * DT, 1.0);
-    update(&mut twice, DT, 1.0);
-    update(&mut twice, DT, 1.0);
+    update(&mut once, 2.0 * DT, 1.0, None);
+    update(&mut twice, DT, 1.0, None);
+    update(&mut twice, DT, 1.0, None);
     assert!(
         near(at(&once, camera), at(&twice, camera)),
         "{} vs {}",
@@ -84,16 +84,16 @@ fn a_dead_zone_holds_until_the_target_leaves_it() {
         ..CameraFollow2D::default()
     };
     let camera = rig(&mut world, player, follow);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     world.get_mut::<Transform>(player).expect("p").translation = Vec2::new(0.8, -0.3);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     assert!(
         near(at(&world, camera), Vec2::ZERO),
         "inside: {}",
         at(&world, camera)
     );
     world.get_mut::<Transform>(player).expect("p").translation = Vec2::new(3.0, 0.0);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     assert!(
         near(at(&world, camera), Vec2::new(2.0, 0.0)),
         "to the edge: {}",
@@ -114,7 +114,7 @@ fn bounds_keep_the_view_inside_and_centre_a_view_too_big_for_them() {
     };
     let camera = rig(&mut world, player, follow);
     // A size-2 camera at aspect 1.5 shows 3 either way across, 2 up and down.
-    update(&mut world, DT, 1.5);
+    update(&mut world, DT, 1.5, None);
     assert!(
         near(at(&world, camera), Vec2::new(-7.0, 0.0)),
         "{}",
@@ -135,7 +135,7 @@ fn looking_ahead_leads_a_moving_target() {
     for i in 1..=30 {
         world.get_mut::<Transform>(player).expect("p").translation =
             Vec2::new(i as f32 * 4.0 * DT, 0.0);
-        update(&mut world, DT, 1.0);
+        update(&mut world, DT, 1.0, None);
     }
     let lead = at(&world, camera).x - at(&world, player).x;
     assert!((lead - 2.0).abs() < 1e-3, "half a second at 4 u/s: {lead}");
@@ -146,10 +146,10 @@ fn a_missing_target_holds_it_still() {
     let mut world = World::new();
     let player = placed(&mut world, Vec2::new(3.0, 0.0));
     let camera = rig(&mut world, player, CameraFollow2D::default());
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     world.despawn(player);
     world.get_mut::<Transform>(camera).expect("c").translation = Vec2::new(1.0, 1.0);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     assert_eq!(at(&world, camera), Vec2::new(1.0, 1.0));
 }
 
@@ -162,7 +162,7 @@ fn a_parented_follower_lands_in_the_world_where_it_should() {
     let camera = rig(&mut world, player, CameraFollow2D::default());
     set_parent(&mut world, camera, holder).expect("a plain reparent");
     resolve_parents(&mut world);
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     assert!(near(
         super::world_position(&world, camera),
         Vec2::new(4.0, 0.0)
@@ -175,23 +175,24 @@ fn a_shake_fades_and_leaves_the_camera_where_it_rests() {
     let player = placed(&mut world, Vec2::new(2.0, 0.0));
     let camera = rig(&mut world, player, CameraFollow2D::default());
     world.insert(camera, CameraShake::default());
-    update(&mut world, DT, 1.0);
+    update(&mut world, DT, 1.0, None);
     world
         .get_mut::<CameraShake>(camera)
         .expect("s")
         .add_trauma(1.0);
     let mut moved = 0.0f32;
     for _ in 0..120 {
-        update(&mut world, DT, 1.0);
-        moved = moved.max(at(&world, camera).distance(Vec2::new(2.0, 0.0)));
+        update(&mut world, DT, 1.0, None);
+        // The view shakes; the transform the follower writes does not.
+        assert!(near(at(&world, camera), Vec2::new(2.0, 0.0)));
+        let (eye, _) = crate::camera::eye(&world, camera);
+        moved = moved.max(eye.distance(Vec2::new(2.0, 0.0)));
     }
     assert!(moved > 0.05, "it shook: {moved}");
     assert_eq!(world.get::<CameraShake>(camera).expect("s").trauma, 0.0);
-    assert!(
-        near(at(&world, camera), Vec2::new(2.0, 0.0)),
-        "back at rest: {}",
-        at(&world, camera)
-    );
+    update(&mut world, DT, 1.0, None);
+    let (eye, _) = crate::camera::eye(&world, camera);
+    assert!(near(eye, Vec2::new(2.0, 0.0)), "back at rest: {eye}");
 }
 
 #[test]
