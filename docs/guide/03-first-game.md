@@ -27,7 +27,7 @@ pub struct MyGame;
 
 impl Game for MyGame {
     fn register(&self, registry: &mut ComponentRegistry) {
-        registry.register::<Player>("Player").with_template();
+        registry.register::<Player>(Player::NAME).with_template();
     }
 
     fn fixed_update(&mut self, tick: &mut Tick<'_>) {
@@ -35,7 +35,7 @@ impl Game for MyGame {
             tick.input.action_axis("move_left", "move_right"),
             tick.input.action_axis("move_down", "move_up"),
         );
-        for (_, transform) in tick.world.query_mut::<Transform>() {
+        for (_, transform) in tick.world.query_mut::<Transform2D>() {
             transform.translation += direction * 3.0 * tick.delta;
         }
     }
@@ -45,7 +45,9 @@ voltra_core::export_game!(MyGame);
 ```
 
 - **`register`** names the game's components, so scenes can hold them and
-  the inspector can add and edit them. A component is any `Serialize +
+  the inspector can add and edit them. The name is what a scene file
+  stores; write it once, as the type's `NAME` const, so renaming one is a
+  single line. A component is any `Serialize +
   Deserialize` struct; state that must survive a reload — a score — lives
   on one.
 - **`update`** runs once a frame: read input edges (`pressed()`), update
@@ -79,6 +81,32 @@ engine and settings before it loads it, and says why when it refuses.
 ```sh
 cargo run -p my-game
 ```
+
+## Coming from 0.4
+
+0.5 adds 3D beside 2D, and a 2D type whose 3D twin arrives is named for its
+dimension: `Transform` is `Transform2D`, the scene's `Camera` is `Camera2D`,
+`Sprite` is `Sprite2D`, `RigidBody` and `Collider` are `RigidBody2D` and
+`Collider2D`, `WorldTransforms` is `WorldTransforms2D`, and the hierarchy's
+`world_matrix`, `world_transform`, `set_world_transform` and
+`parent_matrix` end in `_2d`. In `voltra-render`, `Camera2D` is `View2D`,
+`Vertex` is `Vertex2D` and `Mesh` is `Mesh2D`. The old names still compile
+for 0.5, with a warning naming the new one (except `View2D`'s, which would
+clash with the scene's `Camera2D`).
+
+Scene files are version 2: the same file with the components under their
+new names. A 0.4 scene, prefab or clip still loads — renamed as it is read,
+overrides included — and the editor says in the Console that its next save
+writes version 2. To rewrite a whole project at once:
+
+```sh
+cargo xtask migrate              # every build.ron's asset root
+cargo xtask migrate my/assets    # or a folder
+cargo xtask migrate --check      # list what is out of date, change nothing
+```
+
+Clip properties follow (`Translation2D`, `Rotation2D`, `Scale2D`,
+`PointLight2DColor`/`Intensity`/`Radius`); the old names still read.
 
 ## Test it
 

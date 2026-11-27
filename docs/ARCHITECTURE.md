@@ -142,8 +142,11 @@ one frame, which is not visible; the alternative is two egui passes per frame.
 
 ## 3D: a parallel subsystem (stage 132+)
 
-**Designed, not yet built.** This section is the shape 0.5 builds, stage by
-stage, from `docs/superpowers/specs/0.5-3d.md`. Each stage that lands writes
+**Designed, being built.** This section is the shape 0.5 builds, stage by
+stage, from `docs/superpowers/specs/0.5-3d.md`. **Built so far**: stage 132 —
+the paired names ("Naming") and format version 2 ("The migration"), see
+*2D types are named for their dimension, and scene files are version 2*
+under Decisions. Everything else below is still a plan. Each stage that lands writes
 its detail as a Decisions entry of its own and edits this section to say what
 is built; until then, every sentence here about 3D is a plan. It replaces
 the direction recorded in "When 3D arrives: one world, two render paths",
@@ -279,7 +282,7 @@ new-game --3d` sets, like every other default it changes.
 
 ### The migration: format version 2
 
-Stage 132 bumps the scene format (`format::VERSION`) from 1 to 2. Version 2
+**Built (stage 132).** Stage 132 bumps the scene format (`format::VERSION`) from 1 to 2. Version 2
 is version 1 with the components renamed; nothing else changes.
 
 - **The loader migrates, the writer writes the current version.** A
@@ -9689,6 +9692,100 @@ to meet in throwaway probes — kept as tests where they found something.
   shake in the editor's three-client network play was read, not run — a
   shake is per camera entity and view-only, each client's world its own.
 
+### 2D types are named for their dimension, and scene files are version 2 (stage 132)
+
+The first 0.5 stage: no 3D yet, only the names that leave room for it and
+the format change that carries existing files across. The shape is the
+"Naming" and "The migration" parts of "3D: a parallel subsystem"; this is
+what was built and where it differs.
+
+- **One spelling per registered name.** Every component type the engine
+  registers has `pub const NAME` (the sample games' and the `new-game`
+  template's do too), and the registry, the prefab compare/apply/fragment/
+  adopt code, `format/texture_paths.rs`, the inspector, the MCP server and
+  the replication client's stash name components through it.
+  `tests/registered_names.rs` scans every crate's and game's sources (test
+  modules aside) for a quoted registered name outside its const; the few
+  that are not the component — a new text's content, the editor's default
+  entity names, the lobby's "Name" field — are listed in the test with why.
+  The migration table is the one other place, on purpose: it is history.
+- **The renames** (ARCHITECTURE "Naming", the table): `Transform2D`,
+  `Camera2D`, `Sprite2D`, `RigidBody2D`, `Collider2D`, `WorldTransforms2D`,
+  `world_matrix_2d`/`world_transform_2d`/`set_world_transform_2d`/
+  `parent_matrix_2d`; in `voltra-render` `View2D`, `Vertex2D`, `Mesh2D`;
+  clip properties `Translation2D`/`Rotation2D`/`Scale2D` and
+  `PointLight2DColor`/`Intensity`/`Radius` with `#[serde(alias)]` for the
+  old names. Done by a token-aware rename (code, backticked doc mentions
+  and doc links; never strings, never another enum's variant —
+  `CasterShape::Sprite`, `SceneDraw::Mesh` and egui's `Mesh`/`Vertex` keep
+  theirs), in commits of their own. The 0.4 names are `#[deprecated]`
+  aliases for 0.5 only — types in `voltra_scene::renamed`, re-exported at
+  the crate root, the hierarchy functions as thin wrappers — and
+  `voltra_render::{Vertex, Mesh}`; `Camera2D` in `voltra-render` has none.
+  Enum variants named after a component (`CasterShape::Sprite`) and the
+  editor's default entity names ("Sprite", "Camera") are not component
+  names and did not change.
+- **`format/migrate.rs`**: `VERSION = 2`, `OLDEST = 1`, and `RENAMES:
+  &[(u32, &[(&str, &str)])]`, one row per version. `upgrade` renames each
+  record's keys and each `PrefabPart::overridden` — the one place a
+  component name is a value; a variant's overrides are parts too, and a
+  clip's track `target` is an entity path, not a component — then bumps
+  the version, step by step. A version outside `OLDEST..=VERSION` is
+  `UnsupportedVersion` (0 included: no release wrote it). An old file that
+  holds both a component and its new name (a game's own component that
+  took the name first) is refused, naming the entity, rather than one
+  dropped. A part whose overrides name nothing renamed keeps its text.
+  `format::parse` (read + upgrade) is the only way the tree turns text into
+  a `SceneFile`: `load`, the prefab store, `StagedScene::read`, the MCP
+  server's `scene_read` and asset check, and the editor's clipboard (a
+  copy from an older editor); `from_scene_file`, `Prefab::new` and
+  `StagedScene::new` upgrade whatever they are handed, so a `SceneFile`
+  built in memory at version 1 works too.
+- **The editor** opens through `load_versioned` and, for a version 1 file,
+  logs once to the Console (Info) that its next save writes version 2; the
+  document is not marked dirty.
+- **`cargo xtask migrate [FOLDER]... [--check]`** (`crates/xtask/src/migrate.rs`):
+  with no folder, the asset root of every `build.ron`/`*.build.ron` at the
+  root and each game's. A file is a scene or prefab when its name is a
+  scene's (`watch::is_scene`) and it has `version` and `entities` (so a
+  theme or a material is skipped, and a broken scene is an error); a clip
+  by `.anim.ron`. A scene is loaded into a world and saved
+  (`to_scene_file` → `format::to_text`), a clip read and written with the
+  clip store's `ron_store::to_text` — what an editor save writes. Two
+  differences, both deliberate: the file's leading comment block is kept
+  (the shipped samples explain themselves there, and a rewrite must not
+  delete that), and a component the engine does not register — a game's —
+  is written back as the file had it, since xtask does not link the game.
+  `--check` prints each out-of-date file and fails; CI runs it. Ran over
+  `assets/` and `games/` in a commit of its own: every scene, prefab and
+  clip is version 2 / new names, comments kept.
+- **Tests**: `format/migrate/tests.rs` (renames reach registered names, a
+  row per version, unknown components and untouched overrides survive,
+  v0/v3 refused, both names refused); `tests/format_v1.rs` over
+  `tests/fixtures/v1` and its `v2` twin (a scene with every renamed
+  component, instances of a prefab and its variant overriding them, a clip
+  with every old property): each v1 file loads into the world its twin
+  does, saves byte-identical to it, syncs its instances with the old
+  prefabs as with the new, staged-loads, and a v3 copy is refused;
+  `tests/shipped_files.rs`: every shipped scene and prefab is current on
+  disk, every key and override names something registered (the engine or
+  a game's `NAME`), and a load-and-save loses no component; every shipped
+  clip keeps every track and key. xtask's `migrate/tests.rs`: `--check`
+  fails on the v1 fixtures and passes after a migration, whose output is
+  the v2 twins byte for byte. Replication of `Transform2D` round-trips in
+  `voltra-core/tests/replication.rs` under the new name.
+- **Why Godot's names**: its users can guess ours, and its two-tree split
+  is the shape 0.5 takes; Unity's `Rigidbody`/`Rigidbody2D` leaves the
+  unsuffixed name to 3D, which would have made every 0.4 file's
+  `RigidBody` silently mean a different component. Bevy's one `Transform`
+  is the shape rejected in "When 3D arrives".
+- **Not yet**: the editor's `t:` search takes the new names only (`t:Sprite`
+  matches nothing now; no alias lookup for old names typed by habit); a
+  game's own component renamed has no migration hook (the table is the
+  engine's; a game renaming one edits its files); the bridge and MCP take
+  only the new names in tool arguments (a v1 file is read in new names);
+  `migrate` cannot normalise a game's components without linking the game.
+
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
 Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
@@ -10592,6 +10689,7 @@ Both differ from most training data and from every tutorial written against
 | --- | --- |
 | Untyped numbers are quadratic (**fixed in 0.12.3**, which the workspace pins since stage 108: the search is bounded to the number's own characters) | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
 | `ron::Value` loses names | `deserialize_any` reads `Box(half_extents: ..)` as an anonymous struct: the struct and variant names are dropped, so a `Value` written back no longer reads as the enum. To edit a value field by field, record the type's own `Serialize` calls (`serial_tree`) instead |
+| `#[serde(alias)]` on an enum variant (0.12.3) | A unit variant read by RON accepts its alias as well as its name, and writes only its name: the clip properties renamed in stage 132 read the 0.4 spelling (`Property` tests pin it) |
 | `RawValue` whitespace (0.12.3) | Non-comment whitespace around a nested `RawValue` is trimmed when it is read, so a pretty-printed file read and written again no longer grows blank space around unknown components |
 
 ### `glam` 0.33 projection notes

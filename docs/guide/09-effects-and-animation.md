@@ -17,7 +17,7 @@ out in the order an effect is built:
   spread, acceleration (gravity, wind).
 - **The emission shape**: a `Point`, a `Circle` or a `Ring`, a `Box`, an
   `Edge` (a line along the emitter's x), or the `Outline` of the entity's
-  own `Collider` — sparks off the rim of whatever it is.
+  own `Collider2D` — sparks off the rim of whatever it is.
 - **The look over a life**: a texture; a size, and a size curve and a speed
   curve multiplying it over the particle's life; start and end colours, or
   a gradient; an alpha curve; a rotation and a spin.
@@ -216,7 +216,7 @@ own values, not the pose. **Save** writes the clip.
 ## Bones
 
 A skeleton is entities: a root marked **`Skeleton2D`**, and under it in the
-hierarchy entities with a **`Bone2D`** — each bone's own `Transform` is its
+hierarchy entities with a **`Bone2D`** — each bone's own `Transform2D` is its
 pose relative to its parent, pointing along its x, and `length` is how far
 its tip is. Scene ▸ Spawn skeleton makes a root and one bone; a bone's
 inspector has **Add child bone** (at its tip), **Set rest** (the current

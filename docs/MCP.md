@@ -58,7 +58,11 @@ names from a root: `"Player"`, `"Player/Arm"`.
 **Components** are RON as scene files hold them. Some components take only the
 fields that differ from their defaults; others need every field — start from
 `components_list`'s template and change what you need. A value that does not
-read is refused with the format's own message.
+read is refused with the format's own message. Names are the registered ones
+`components_list` gives — `Transform2D`, `Sprite2D`, `Collider2D` since 0.5;
+a scene written by 0.4 (`Transform`, `Sprite`, …) is read through the
+engine's loader, so `scene_read` answers it in the new names, and the next
+edit saves it as version 2.
 
 **Every edit is saved at once, or not at all**: a failed edit leaves the file
 byte-identical.

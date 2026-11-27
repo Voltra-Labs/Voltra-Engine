@@ -49,7 +49,7 @@ fn register(&self, registry: &mut ComponentRegistry) {
 }
 ```
 
-`Transform` is replicated already. An entity spawned from a prefab is
+`Transform2D` is replicated already. An entity spawned from a prefab is
 spawned from the same prefab on each client — its sprite, collider and
 children never cross the network — and an entity of the level the client
 also loaded is adopted by its id. Each client gets only what changed since
@@ -93,7 +93,7 @@ hierarchy is. Your own player is always sent to you.
 Some things every player must see wherever they are — the score, the
 objective. Tick **always relevant** on their `Replicated` component in the
 inspector (`always_relevant: true` in the file), or give one entity a
-radius of its own (`relevance_radius`). An entity with no `Transform`, like
+radius of its own (`relevance_radius`). An entity with no `Transform2D`, like
 a match's state, is sent to everyone. The Network window shows how many
 entities each client is sent and draws its radius on its map.
 
@@ -131,7 +131,7 @@ server that tested the shot against where the target is now would make
 every player on a slow link lead their targets. Instead it rewinds: mark
 what can be shot **lag compensated** (the checkbox under *Replicated* in
 the inspector, `"LagCompensated": ()` in the file — it needs a
-`Collider`), and in the server's fixed tick ask the world as the shooter
+`Collider2D`), and in the server's fixed tick ask the world as the shooter
 saw it when it made this step's input:
 
 ```rust

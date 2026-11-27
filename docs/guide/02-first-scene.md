@@ -24,7 +24,7 @@ cargo run -p voltra-editor
 
 1. Scene ▸ New.
 2. Drag `sprites/checker.png` from the assets into the viewport: a sprite.
-3. In the inspector, tint it — `Sprite ▸ colour` — and scale it.
+3. In the inspector, tint it — `Sprite2D ▸ colour` — and scale it.
 4. Physics ▸ Spawn falling body, twice; then press **Play** in the toolbar.
    The bodies fall and land. **Stop** puts everything back.
 5. Scene ▸ Save As… `scenes/first.ron`.
@@ -44,7 +44,7 @@ inspector edits what they share:
   section names its differing fields in a line under its rule. Edit a
   field and only that field is written to all of them: select three
   sprites of three colours, tick `flip x`, and each keeps its colour.
-- A component only some have is listed, greyed, as `Collider (2 of 3)`,
+- A component only some have is listed, greyed, as `Collider2D (2 of 3)`,
   and not edited; **add to the rest** gives it to the others, and then
   it is. Adding a component none has adds it to all.
 - Picking a value from a dropdown, ticking a box, or typing a number into
@@ -77,7 +77,7 @@ code of your own.
 
 The hierarchy and the asset browser each have a search box, with Unity's
 syntax: words a name holds (every word, case aside), and `t:` for a type.
-In the hierarchy `t:` is a component — `t:Camera`, `t:Sprite t:Collider`
+In the hierarchy `t:` is a component — `t:Camera2D`, `t:Sprite2D t:Collider2D`
 (both) — and a match's parents stay in the tree, dimmed, so you see where
 it lives. In the asset browser the search covers every folder, and `t:` is
 a kind of file: `texture`, `atlas`, `sound`, `font`, `scene`, `prefab`,
@@ -177,7 +177,7 @@ game reads off it, are in [chapter 4](04-physics.md#tiles).
 
 ## Cameras
 
-A scene is drawn through its **active `Camera`** with the highest
+A scene is drawn through its **active `Camera2D`** with the highest
 priority: Scene ▸ Spawn camera, or add the component to any entity. Its
 `size` is half the height of world it shows; the Game toggle on the
 viewport shows the scene through it. **Turn** the camera's entity, and the

@@ -2,9 +2,9 @@
 
 Three components make a body:
 
-- **`Collider`** — its shape: `Box`, `Circle`, `Capsule` or a convex
-  `Polygon` (Inspector ▸ Collider ▸ Fit to sprite traces one).
-- **`RigidBody`** — how it moves: `Static` (walls), `Kinematic` (moved by
+- **`Collider2D`** — its shape: `Box`, `Circle`, `Capsule` or a convex
+  `Polygon` (Inspector ▸ Collider2D ▸ Fit to sprite traces one).
+- **`RigidBody2D`** — how it moves: `Static` (walls), `Kinematic` (moved by
   its velocity, pushes but is not pushed), `Dynamic` (gravity, mass,
   impulses). `bullet: true` keeps a fast body from tunnelling.
 - **`PhysicsMaterial`** — `friction` and `restitution` (bounce).
@@ -34,7 +34,7 @@ bounce of one, bricks taken on `Began`.
 
 ## Characters
 
-`CharacterBody2D` goes on a collider with no `RigidBody`: the physics
+`CharacterBody2D` goes on a collider with no `RigidBody2D`: the physics
 step does not move it (to the bodies it moves, it is a wall), the game does,
 with `move_and_slide`, which slides it along what it hits, with a floor,
 slopes and steps — what a platformer's walker wants instead of a dynamic

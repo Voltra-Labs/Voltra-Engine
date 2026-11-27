@@ -124,8 +124,8 @@ per collision layer, on the row it is on and on the rows it looks at. Sensors
 are drawn in their own colour in the debug overlay, since a trigger volume is
 otherwise an invisible rectangle.
 
-Physics and parenting do not mix yet: an entity carrying a `RigidBody` or a
-`Collider` cannot be parented, because the solver reads its transform as a
+Physics and parenting do not mix yet: an entity carrying a `RigidBody2D` or a
+`Collider2D` cannot be parented, because the solver reads its transform as a
 world-space value. The refusal is logged rather than silent.
 
 The bottom panel is the asset browser: everything under the asset root, one
@@ -187,7 +187,7 @@ as it does in Unity and Unreal, because the bare keys belong to the tools.
 
 The player is what a shipped game is: a scene, a window, and no editor in the
 binary at all. It takes the scene as its one argument, simulates from the first
-frame, and draws through the `Camera` the scene authored — with no active
+frame, and draws through the `Camera2D` the scene authored — with no active
 camera it keeps the default framing and says so in the log.
 
 ```sh
@@ -272,7 +272,7 @@ Voltra-Engine/
 │   ├── voltra-assets/    # handles, paths, the texture cache, hot reload
 │   ├── voltra-render/    # GPU layer: passes, render targets, egui backend  (owns wgpu)
 │   ├── voltra-audio/     # mixer, buses and effects, streaming, the device  (owns cpal, symphonia)
-│   ├── voltra-scene/     # Transform, Sprite, and the geometry they become
+│   ├── voltra-scene/     # Transform2D, Sprite2D, and the geometry they become
 │   ├── voltra-physics/   # rigid bodies, integration, contact detection
 │   ├── voltra-nav/       # navigation grids baked from colliders, A* paths
 │   ├── voltra-net/       # datagram transports (UDP, WebSocket) and connections
@@ -467,6 +467,7 @@ a row is added below as each stage lands.
 | 129 | A lobby and LAN discovery; a lobby screen in new games | done |
 | 130 | Dogfood pass: the 0.4 stages played together | done |
 | 131 | Version 0.4: guide chapters for 119–129, the changelog | done |
+| 132 | Paired names (`Transform2D`, `Camera2D`, …), scene format version 2, `cargo xtask migrate` | done |
 
 ## Contributing
 
