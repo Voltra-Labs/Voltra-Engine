@@ -8243,7 +8243,9 @@ replication message.
   `radius` of one of the client's *interest points* — where the entities
   it owns (`NetOwner`) are, plus the points the game sets for it
   (`tick.net.set_interest_points(peer, points)`: a spectator's camera, a
-  scout's sight; replaced by the next call, dropped when the peer leaves)
+  scout's sight; replaced by the next call, dropped when the peer leaves,
+  refused for a peer not joined, at most `MAX_INTEREST_POINTS` (16) —
+  each is a grid query every snapshot)
   — or when it is `Replicated { always_relevant: true }`, or it has no
   `Transform` (the match's state has nowhere to be far from). A
   `Replicated::relevance_radius` replaces the session's radius for one

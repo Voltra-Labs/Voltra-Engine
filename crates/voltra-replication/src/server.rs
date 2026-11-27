@@ -26,6 +26,11 @@ mod view;
 use snapshot::Tracked;
 use view::ClientView;
 
+/// The most interest points the game may set for one client
+/// ([`ReplicationServer::set_interest_points`]): each is a query of the
+/// grid every snapshot, so a few cameras or sights, not a path of them.
+pub const MAX_INTEREST_POINTS: usize = 16;
+
 /// What the server knows of one client's replication, for a profiler, a
 /// stats overlay or a test.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -138,13 +143,31 @@ impl ReplicationServer {
     /// Sets the points `peer` is sent the world around, besides the
     /// entities it owns — a spectator's camera, a scout's sight, a level's
     /// area of play. Replaces the last it was given; kept until replaced or
-    /// the peer leaves. Without interest management it changes nothing.
-    pub fn set_interest_points(&mut self, peer: PeerId, points: Vec<Vec2>) {
+    /// the peer leaves. At most [`MAX_INTEREST_POINTS`]: the rest are
+    /// dropped, with a warning. Without interest management it changes
+    /// nothing.
+    ///
+    /// `false`, and nothing kept, for a peer that is not a client of this
+    /// server (not yet joined, or gone): points for it would outlive it.
+    pub fn set_interest_points(&mut self, peer: PeerId, mut points: Vec<Vec2>) -> bool {
+        if !self.clients.contains_key(&peer) {
+            self.points.remove(&peer);
+            return false;
+        }
+        if points.len() > MAX_INTEREST_POINTS {
+            log::warn!(
+                "{peer}: {} interest points, over the {MAX_INTEREST_POINTS} a client may have; \
+                 the first are kept",
+                points.len()
+            );
+            points.truncate(MAX_INTEREST_POINTS);
+        }
         if points.is_empty() {
             self.points.remove(&peer);
         } else {
             self.points.insert(peer, points);
         }
+        true
     }
 
     /// Every point `peer` was sent the world around at the last snapshot:

@@ -346,6 +346,25 @@ fn with_its_owner_gone_a_client_sees_what_the_game_watches_for_it() {
         .interest_points(peer)
         .to_vec();
     assert_eq!(points, [Vec2::new(98.0, 0.0)]);
+
+    // Capped, and refused for a peer that is not there.
+    let many = vec![Vec2::new(98.0, 0.0); 100];
+    assert!(rig.server.net_mut().set_interest_points(peer, many));
+    rig.step(2);
+    let server = rig
+        .server
+        .net()
+        .replication()
+        .and_then(|r| r.server())
+        .expect("a server");
+    assert_eq!(
+        server.interest_points(peer).len(),
+        voltra_core::replication::MAX_INTEREST_POINTS
+    );
+    assert!(!rig
+        .server
+        .net_mut()
+        .set_interest_points(PeerId(999), vec![Vec2::ZERO]));
 }
 
 #[test]

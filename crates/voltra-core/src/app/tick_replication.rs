@@ -78,8 +78,10 @@ impl Net {
 
     /// Sets the points `peer` is sent the world around on a server, besides
     /// the entities it owns: a spectator's camera, say. Replaces the last
-    /// it was given, until the peer leaves; `false` off a replicating
-    /// server. Changes nothing without
+    /// it was given, until the peer leaves; at most
+    /// [`MAX_INTEREST_POINTS`](voltra_replication::MAX_INTEREST_POINTS).
+    /// `false` off a replicating server or for a peer not joined to it.
+    /// Changes nothing without
     /// [`ReplicationConfig::interest`](voltra_replication::ReplicationConfig::interest).
     pub fn set_interest_points(
         &mut self,
@@ -87,10 +89,7 @@ impl Net {
         points: Vec<voltra_render::glam::Vec2>,
     ) -> bool {
         match self.replication.as_mut().and_then(Replication::server_mut) {
-            Some(server) => {
-                server.set_interest_points(peer, points);
-                true
-            }
+            Some(server) => server.set_interest_points(peer, points),
             None => false,
         }
     }
