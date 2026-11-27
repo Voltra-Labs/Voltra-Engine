@@ -24,7 +24,7 @@
 //! a region unloaded, its own alone — a region's entities have fresh ids
 //! the server never sends, so they would otherwise stay).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use voltra_ecs::{Entity, World};
 use voltra_scene::format::{record_entity, spawn_records, EntityRecord};
@@ -51,6 +51,9 @@ pub(crate) struct KeepIds<'a> {
 pub(crate) struct Stash {
     kept: HashMap<SceneId, (Option<NetId>, Vec<EntityRecord>)>,
     by_net: HashMap<NetId, SceneId>,
+    /// The ids among `kept` that a scene load set aside
+    /// ([`keep_records`](Self::keep_records)), not interest.
+    level: HashSet<SceneId>,
 }
 
 impl Stash {
@@ -118,6 +121,7 @@ impl Stash {
             if let Some(net) = net {
                 self.by_net.insert(net, id);
             }
+            self.level.remove(&id);
             self.kept.insert(id, (net, records));
         }
         for child in staying {
@@ -137,6 +141,7 @@ impl Stash {
         id: SceneId,
     ) -> Option<Vec<Entity>> {
         let (net, records) = self.kept.remove(&id)?;
+        self.level.remove(&id);
         if let Some(net) = net {
             self.by_net.remove(&net);
         }
@@ -152,7 +157,7 @@ impl Stash {
 
     /// Sets aside a level's replicated entities before anything of them is
     /// spawned: `records` are what a client's scene load left out — each
-    /// replicated record and what hangs under it, parents first — kept
+    /// replicated record and what hangs under it, in any order — kept
     /// under their own ids with no number, to be spawned back by
     /// [`restore`](Self::restore) when the server's spawn of each arrives.
     /// So the server's copy is the level's, sprite and children and all,
@@ -167,34 +172,54 @@ impl Stash {
         held: &dyn Fn(SceneId) -> bool,
     ) {
         // Each record's group: its own id for a replicated one, its
-        // nearest replicated ancestor's for the rest.
-        let mut group_of: HashMap<SceneId, SceneId> = HashMap::new();
+        // nearest replicated ancestor's for the rest — found by walking the
+        // links, so the records may come in any order.
+        let parent_of: HashMap<SceneId, SceneId> = records
+            .iter()
+            .filter_map(|record| {
+                let link = record.components.get(PARENT)?;
+                Some((record.id, link.into_rust::<Parent>().ok()?.id))
+            })
+            .collect();
+        let replicas: HashSet<SceneId> = records
+            .iter()
+            .filter(|record| record.components.contains_key(Replicated::NAME))
+            .map(|record| record.id)
+            .collect();
+        let top_of = |mut id: SceneId| {
+            // Bounded by the records: a loop of links has no top.
+            for _ in 0..=records.len() {
+                if replicas.contains(&id) {
+                    return Some(id);
+                }
+                id = *parent_of.get(&id)?;
+            }
+            None
+        };
+        let tops: Vec<Option<SceneId>> = records.iter().map(|record| top_of(record.id)).collect();
         let mut groups: Vec<(SceneId, Vec<EntityRecord>)> = Vec::new();
         let mut at: HashMap<SceneId, usize> = HashMap::new();
-        for mut record in records {
-            let top = if record.components.contains_key(Replicated::NAME) {
+        for (mut record, top) in records.into_iter().zip(tops) {
+            let Some(top) = top else {
+                log::debug!("a level record left out with no replicated entity above it");
+                continue;
+            };
+            if top == record.id {
                 for name in replicated {
                     record.components.remove(*name);
                 }
-                record.id
-            } else {
-                let parent = record
-                    .components
-                    .get(PARENT)
-                    .and_then(|link| link.into_rust::<Parent>().ok())
-                    .and_then(|link| group_of.get(&link.id).copied());
-                let Some(top) = parent else {
-                    log::debug!("a level record left out with no replicated entity above it");
-                    continue;
-                };
-                top
-            };
-            group_of.insert(record.id, top);
+            }
             let index = *at.entry(top).or_insert_with(|| {
                 groups.push((top, Vec::new()));
                 groups.len() - 1
             });
             groups[index].1.push(record);
+        }
+        // The top first in each group: what `restore` answers first.
+        for (top, records) in &mut groups {
+            if let Some(index) = records.iter().position(|record| record.id == *top) {
+                records.swap(0, index);
+            }
         }
         for (id, records) in groups {
             if held(id) {
@@ -206,6 +231,7 @@ impl Stash {
                 self.by_net.remove(&net);
             }
             self.kept.insert(id, (None, records));
+            self.level.insert(id);
         }
     }
 
@@ -213,6 +239,7 @@ impl Stash {
     pub(crate) fn forget(&mut self, net: NetId) {
         if let Some(id) = self.by_net.remove(&net) {
             self.kept.remove(&id);
+            self.level.remove(&id);
         }
     }
 
@@ -220,6 +247,8 @@ impl Stash {
     /// the level entities swept, never sent.
     pub(crate) fn forget_unnumbered(&mut self) {
         self.kept.retain(|_, (net, _)| net.is_some());
+        let kept = &self.kept;
+        self.level.retain(|id| kept.contains_key(id));
     }
 
     /// [`forget_unnumbered`](Self::forget_unnumbered), of `ids` alone: the
@@ -228,19 +257,31 @@ impl Stash {
         for id in ids {
             if let Some((None, _)) = self.kept.get(id) {
                 self.kept.remove(id);
+                self.level.remove(id);
             }
         }
     }
 
-    /// Lets go of everything: a new session.
-    pub(crate) fn clear(&mut self) {
-        self.kept.clear();
+    /// Lets go of what a session set aside — out of interest, swept — but
+    /// keeps what the loaded level set aside: a level loaded before its
+    /// session connects (a game's opening one) is the next session's
+    /// still.
+    pub(crate) fn clear_session(&mut self) {
+        let level = &self.level;
+        self.kept.retain(|id, _| level.contains(id));
         self.by_net.clear();
     }
 
-    /// How many entities are set aside.
+    /// How many entities are set aside out of interest (or swept at the
+    /// first complete snapshot), the ones a scene load set aside apart.
     pub(crate) fn len(&self) -> usize {
-        self.kept.len()
+        self.kept.len() - self.level.len()
+    }
+
+    /// How many of a level's replicated entities a scene load set aside,
+    /// waiting for the server to send each.
+    pub(crate) fn level_len(&self) -> usize {
+        self.level.len()
     }
 }
 

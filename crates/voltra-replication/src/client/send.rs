@@ -49,7 +49,7 @@ impl ReplicationClient {
             newest: self.received.newest,
             mask: self.received.mask,
             inputs: self.inputs.iter().skip(skip).cloned().collect(),
-            resync: std::mem::take(&mut self.resync),
+            resync: self.resync.listed(),
         };
         if let Err(error) = endpoint.send(
             PeerId::SERVER,

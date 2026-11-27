@@ -12,7 +12,7 @@ use voltra_scene::{hierarchy, ComponentRegistry, Prefabs, Replicated};
 use super::samples::Samples;
 use super::stash::KeepIds;
 use super::{spawn, Bound, Correction, ReplicationClient, Schema};
-use crate::wire::{Snapshot, MAX_LISTED};
+use crate::wire::Snapshot;
 use crate::Timeline;
 
 impl ReplicationClient {
@@ -111,6 +111,7 @@ impl ReplicationClient {
 
         for id in snapshot.despawned {
             self.stash.forget(id);
+            self.resync.settle(id);
             if let Some(bound) = self.bound.remove(&id) {
                 self.by_entity.remove(&bound.entity);
                 if world.is_alive(bound.entity) {
@@ -138,9 +139,7 @@ impl ReplicationClient {
                 }
                 let Some(spawn) = update.spawn.as_ref() else {
                     // Spawned before, gone here: the game despawned it.
-                    if self.resync.len() < MAX_LISTED && !self.resync.contains(&update.id) {
-                        self.resync.push(update.id);
-                    }
+                    self.resync.want(update.id);
                     continue;
                 };
                 let by_entity = &self.by_entity;
@@ -157,6 +156,7 @@ impl ReplicationClient {
                     },
                     made,
                 );
+                self.resync.settle(update.id);
                 self.by_entity.insert(entity, update.id);
                 self.bound.insert(
                     update.id,

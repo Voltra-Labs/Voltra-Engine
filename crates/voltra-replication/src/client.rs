@@ -28,6 +28,7 @@ use crate::{ReplicationConfig, Timeline, ViewTime};
 mod apply;
 mod interpolate;
 mod level;
+mod resync;
 mod samples;
 mod send;
 mod spawn;
@@ -63,8 +64,12 @@ pub struct ReplicaStats {
     /// Replicated entities it has.
     pub entities: usize,
     /// Entities out of its interest, despawned and set aside until the
-    /// server sends them again.
+    /// server sends them again (and level entities the first complete
+    /// snapshot swept, never sent).
     pub out_of_interest: usize,
+    /// A level's replicated entities its scene load set aside, waiting for
+    /// the server to send each ([`ReplicationClient::keep_level`]).
+    pub level_waiting: usize,
     /// How far behind the newest snapshot remote entities are drawn.
     pub delay: Duration,
     /// The measured jitter the delay is sized from.
@@ -103,7 +108,7 @@ pub struct ReplicationClient {
     received: ReceivedTicks,
     input_ack: InputTick,
     inputs: VecDeque<(InputTick, Option<ViewTime>, Vec<u8>)>,
-    resync: Vec<NetId>,
+    resync: resync::Resync,
     predicted: Option<NetId>,
     correction: Option<Correction>,
     local: Option<PeerId>,
@@ -129,7 +134,7 @@ impl ReplicationClient {
             received: ReceivedTicks::default(),
             input_ack: 0,
             inputs: VecDeque::new(),
-            resync: Vec::new(),
+            resync: resync::Resync::default(),
             predicted: None,
             correction: None,
             local: None,
@@ -144,6 +149,7 @@ impl ReplicationClient {
         ReplicaStats {
             entities: self.bound.len(),
             out_of_interest: self.stash.len(),
+            level_waiting: self.stash.level_len(),
             delay: self.timeline.delay(),
             jitter: self.timeline.jitter(),
             ..self.stats
@@ -205,7 +211,7 @@ impl ReplicationClient {
         self.predicted = None;
         self.correction = None;
         self.swept = false;
-        self.stash.clear();
+        self.stash.clear_session();
     }
 
     /// Applies what the endpoint's receive brought: the schema, then each

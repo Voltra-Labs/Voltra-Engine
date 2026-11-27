@@ -116,7 +116,8 @@ fn a_level_s_records_are_kept_by_their_replicated_tops_and_spawned_back() {
 
     let mut stash = Stash::default();
     stash.keep_records(records, &["Transform"], &|id| id == crate_id);
-    assert_eq!(stash.len(), 1, "the coin; the crate is held");
+    assert_eq!(stash.level_len(), 1, "the coin; the crate is held");
+    assert_eq!(stash.len(), 0, "nothing out of interest");
 
     let mut world = World::new();
     let back = stash.restore(&mut world, &registry, coin_id).expect("kept");
