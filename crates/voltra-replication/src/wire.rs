@@ -10,6 +10,19 @@
 use serde::{Deserialize, Serialize};
 use voltra_scene::SceneId;
 
+/// The version of what this module lays on the wire. **Bump it on any
+/// change to a replication message** — a field added to [`Control`],
+/// [`SnapshotHeader`], [`EntityUpdate`], [`Spawn`] or [`ClientMessage`],
+/// one reordered, a meaning changed: postcard is positional, and a peer
+/// built before the change would decode garbage or nothing. It goes into
+/// the session's [`NetConfig::layer_version`](voltra_net::NetConfig), which
+/// the handshake's fingerprint covers, so such a peer is refused at the
+/// door with `ProtocolMismatch`.
+///
+/// `1`: stage 114's (0.3). `2`: stage 127's interest — the schema's
+/// `interest` flag and the snapshot's `culled` list.
+pub const REPLICATION_WIRE_VERSION: u32 = 2;
+
 /// A replicated entity's number in a session: given by the server, never
 /// reused while it runs, and far smaller on the wire than a [`SceneId`].
 pub type NetId = u32;

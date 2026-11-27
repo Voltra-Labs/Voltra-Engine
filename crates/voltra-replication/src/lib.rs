@@ -53,7 +53,7 @@ pub use owner::NetOwner;
 pub use prediction::{Prediction, PredictionStats};
 pub use server::{ClientReplicationStats, ReplicationServer};
 pub use timeline::Timeline;
-pub use wire::{InputTick, NetId, ServerTick};
+pub use wire::{InputTick, NetId, ServerTick, REPLICATION_WIRE_VERSION};
 
 /// Replication for one session: the server's half or a client's.
 pub enum Replication {

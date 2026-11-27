@@ -109,16 +109,20 @@ impl Default for ReplicationConfig {
 }
 
 impl ReplicationConfig {
-    /// `base` with replication's channels in place: extended with the
+    /// `base` with replication's channels in place — extended with the
     /// game's own channel kinds kept, the three put where
-    /// [`channels`](Self::channels) says. Both ends must make their
+    /// [`channels`](Self::channels) says — and its wire version
+    /// ([`REPLICATION_WIRE_VERSION`](crate::REPLICATION_WIRE_VERSION)) as
+    /// the session's `layer_version`. Both ends must make their
     /// session's config this way — the handshake's fingerprint covers the
-    /// channel layout, so a client without them is refused at the door.
+    /// channel layout and the layer version, so a client without them, or
+    /// with another build's replication wire, is refused at the door.
     ///
     /// A game channel already at one of those ids is overwritten, with a
     /// warning: pick other ids for replication if a game needs more than
     /// the default three.
     pub fn net_config(&self, mut base: NetConfig) -> NetConfig {
+        base.layer_version = crate::REPLICATION_WIRE_VERSION;
         for (id, kind) in self.channels.kinds() {
             let index = usize::from(id.0);
             if base.channels.len() <= index {
@@ -149,6 +153,7 @@ mod tests {
         assert_eq!(net.channels.len(), 6);
         assert_eq!(&net.channels[..3], &DEFAULT_CHANNELS);
         assert!(config.channels.fit(&net));
+        assert_eq!(net.layer_version, crate::REPLICATION_WIRE_VERSION);
         assert!(!config.channels.fit(&NetConfig::default()));
         // Idempotent.
         assert_eq!(config.net_config(net.clone()), net);

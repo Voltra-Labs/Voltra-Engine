@@ -337,3 +337,46 @@ fn an_entity_spawned_from_a_prefab_is_spawned_from_it_on_the_client() {
     }
     assert_eq!(client.world().query::<Name>().count(), 0);
 }
+
+#[test]
+fn a_peer_on_another_replication_wire_is_refused_at_the_door() {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use voltra_core::net::{DisconnectReason, NetEvent};
+    use voltra_core::replication::REPLICATION_WIRE_VERSION;
+
+    let network = MemoryNetwork::new();
+    let transport = network.endpoint();
+    let address = transport.address();
+    let config = ReplicationConfig::default();
+    let mut server = Headless::new(App::default().with_replication(config.clone()));
+    server.net_mut().host_on(transport, NetConfig::default());
+
+    // A build from before the wire last changed: replication's channels,
+    // the old version. Replication is off here only so the config is
+    // joined with as it is.
+    let mut old = config.net_config(NetConfig::default());
+    assert_eq!(old.layer_version, REPLICATION_WIRE_VERSION);
+    old.layer_version = REPLICATION_WIRE_VERSION - 1;
+    let events = Rc::new(RefCell::new(Vec::new()));
+    let seen = events.clone();
+    let mut client = Headless::new(
+        App::default()
+            .with_update(move |tick| seen.borrow_mut().extend(tick.net.events().to_vec())),
+    );
+    client.net_mut().join_on(network.endpoint(), address, old);
+    for _ in 0..60 {
+        server.step(1, FRAME);
+        client.step(1, FRAME);
+    }
+    assert_eq!(client.net().local_id(), None, "never let in");
+    assert!(server.net().peers().next().is_none());
+    assert!(
+        events.borrow().contains(&NetEvent::Disconnected {
+            peer: voltra_core::net::PeerId::SERVER,
+            reason: DisconnectReason::ProtocolMismatch,
+        }),
+        "refused as another protocol: {:?}",
+        events.borrow()
+    );
+}
