@@ -4059,7 +4059,13 @@ and there was no prefab *of* a prefab.
   nearest link, then outwards through every one it is a nested part of, to
   the first in its own right. Apply writes an added instance into the file
   as a stored one (it is a nested part of the instance from then on), and
-  refuses one of the file itself as the cycle it is.
+  refuses one of the file itself as the cycle it is. Its records are
+  written under `SceneId::derived(added root, the record its part names)`,
+  and a sync never spawns a record an instance added there already stands
+  for under that id — so undoing the Apply (the dropped instance back as
+  it was, its own; the file still written) and syncing leaves one copy, not
+  the dropped one and the file's beside it, and Apply again writes the same
+  records.
 - **Cost.** One children map per `sync_all` / `sync_in` / resolve, not one
   per instance; outermost roots found by walking up, not by comparing every
   pair; `refresh_overrides` walks only upwards, and looks an entity a value
@@ -4173,7 +4179,9 @@ Pinned by:
   saving it so, its outermost root marked its own.
 - `prefab::tests::store`: a level past the prefab limit read as a scene and
   refused as a prefab, whichever is asked for first.
-- `prefab::tests::added`: one whose file is gone kept through syncs; a
+- `prefab::tests::added`: an Apply with a dropped gem undone, synced twice,
+  redone, and applied again — one gem each time, and in a fresh instance;
+  one whose file is gone kept through syncs; a
   prefab dropped under a variant's root in its
   mode kept by the save, a second save, and following its own file; one
   dropped under a scene instance of a variant surviving `sync_all`,

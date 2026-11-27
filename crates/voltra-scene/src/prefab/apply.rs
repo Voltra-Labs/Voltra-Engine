@@ -13,7 +13,7 @@ use voltra_ecs::{Entity, World};
 
 use super::cycle::{nested_in, reaches};
 use super::instances::sync_sources;
-use super::membership::{members, Children};
+use super::membership::{instance_root, members, Children};
 use super::write::WriteError;
 use super::{PrefabInstance, PrefabPart, Prefabs, SyncReport};
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile, VERSION};
@@ -82,16 +82,30 @@ pub fn apply(
         .into_iter()
         .collect();
     // Which record each entity is: its part's, where the file has that
-    // record; its own id otherwise — what the instance added, and what an
-    // instance dropped into it brought, is a record of its own from now on.
-    let record_of = |world: &World, entity: Entity| {
-        world
-            .get::<PrefabPart>(entity)
-            .filter(|_| belongs.contains(&entity))
-            .map(|p| p.record)
-            .filter(|record| known.contains(record))
-            .or_else(|| world.get::<SceneId>(entity).copied())
-    };
+    // record; its own id for what the instance added. A part of an
+    // instance dropped into this one becomes the record derived from that
+    // instance's root and the record it names in its own file — the same
+    // every time, so a scene that has the Apply undone (the dropped instance
+    // back as it was, the file still written) is one a sync matches to the
+    // file rather than given a second copy.
+    let mut ids: HashMap<Entity, SceneId> = HashMap::with_capacity(entities.len());
+    for &entity in &entities {
+        let Some(&own) = world.get::<SceneId>(entity) else {
+            continue;
+        };
+        let part = world.get::<PrefabPart>(entity).map(|p| p.record);
+        let id = if belongs.contains(&entity) {
+            part.filter(|record| known.contains(record)).unwrap_or(own)
+        } else {
+            let holder = instance_root(world, entity).and_then(|h| world.get::<SceneId>(h));
+            match (part, holder) {
+                (Some(record), Some(&holder)) => SceneId::derived(holder, record),
+                _ => own,
+            }
+        };
+        ids.insert(entity, id);
+    }
+    let record_of = |_: &World, entity: Entity| ids.get(&entity).copied();
     let file_root_transform = record_of(world, root)
         .and_then(|top| resolved.entities.iter().find(|r| r.id == top))
         .and_then(|r| r.components.get("Transform").cloned());
@@ -178,12 +192,12 @@ pub fn apply(
                 link.own = false;
             }
         }
-        let own = !belongs.contains(&entity)
-            || !world
+        let names_its_record = belongs.contains(&entity)
+            && world
                 .get::<PrefabPart>(entity)
                 .is_some_and(|part| known.contains(&part.record));
-        match (own, world.get::<SceneId>(entity).copied()) {
-            (true, Some(id)) => {
+        match (names_its_record, ids.get(&entity)) {
+            (false, Some(&id)) => {
                 world.insert(entity, PrefabPart::new(id));
             }
             _ => {

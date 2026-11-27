@@ -98,5 +98,7 @@ fn a_level_past_the_prefab_limit_reads_as_a_scene_whichever_is_asked_first() {
         assert_eq!(prefabs.get(scene).len(), 1, "a level has no limit");
         assert!(prefabs.get(prefab).is_empty(), "a prefab has one");
         assert_ne!(scene, prefab);
+        // Not left behind: it is the one large file the suite writes.
+        let _ = std::fs::remove_dir_all(&root);
     }
 }

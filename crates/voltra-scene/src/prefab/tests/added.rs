@@ -178,3 +178,66 @@ fn a_prefab_added_whose_file_is_gone_is_kept() {
     assert!(world.is_alive(dropped), "and through the coin's edit");
     assert_eq!(color_of(&world, coin), GREEN);
 }
+
+/// The scene as an undo puts it back: the world written before, read again.
+fn snapshot(world: &World) -> crate::format::SceneFile {
+    crate::format::to_scene_file(world, &registry()).expect("records")
+}
+
+fn restored(file: &crate::format::SceneFile) -> World {
+    let mut world = World::new();
+    crate::format::from_scene_file(file, &registry(), &mut world).expect("loads");
+    world
+}
+
+fn gems(world: &World) -> usize {
+    world
+        .query::<Name>()
+        .filter(|(_, n)| n.as_str() == "gem")
+        .count()
+}
+
+#[test]
+fn an_apply_undone_or_redone_leaves_one_copy_of_what_it_wrote() {
+    let root = scratch_root();
+    let mut prefabs = Prefabs::new(&root);
+    let base = write_coin(&mut prefabs, RED, 1.0);
+    let gem = write_gem(&mut prefabs, YELLOW);
+    let mut world = World::new();
+    let coin = spawned(&mut world, &mut prefabs, &base);
+    let dropped = spawned(&mut world, &mut prefabs, &gem);
+    set_parent(&mut world, dropped, coin).expect("a plain reparent");
+    let before = snapshot(&world);
+
+    apply(&mut world, &registry(), &mut prefabs, coin).expect("applied");
+    assert_eq!(gems(&world), 1);
+    let after = snapshot(&world);
+
+    // Undone: the scene as it was, the file still holding the gem.
+    let mut undone = restored(&before);
+    sync_all(&mut undone, &registry(), &mut prefabs);
+    assert_eq!(gems(&undone), 1, "undone: not a second gem beside it");
+    sync_all(&mut undone, &registry(), &mut prefabs);
+    assert_eq!(gems(&undone), 1, "and still one on the next sync");
+
+    // Redone: the scene as the Apply left it.
+    let mut redone = restored(&after);
+    sync_all(&mut redone, &registry(), &mut prefabs);
+    assert_eq!(gems(&redone), 1, "redone");
+
+    // A fresh instance of the coin has it once.
+    let mut fresh = World::new();
+    spawned(&mut fresh, &mut prefabs, &base);
+    assert_eq!(gems(&fresh), 1);
+
+    // Applied again from the undone scene: the same records, still one.
+    let top = undone
+        .query::<PrefabInstance>()
+        .find(|(_, l)| l.source == base)
+        .map(|(e, _)| e)
+        .expect("the coin");
+    apply(&mut undone, &registry(), &mut prefabs, top).expect("applied again");
+    assert_eq!(gems(&undone), 1);
+    let handle = prefabs.load(&base);
+    assert_eq!(prefabs.get(handle).len(), 3, "coin, glow, one gem");
+}

@@ -199,10 +199,32 @@ pub(super) fn sync_with(
 
     // What the file gained.
     let mut spawned = Vec::new();
+    // A record an instance added here already stands for — its parts as an
+    // Apply writes them into this file, `SceneId::derived` from its root and
+    // the record each names — is not spawned a second time beside it: an
+    // Apply undone leaves the added instance as it was and the file written.
+    let mut covered: HashSet<SceneId> = HashSet::new();
+    let mut holders = added.clone();
+    let mut seen_holders = HashSet::new();
+    while let Some(at) = holders.pop() {
+        if !seen_holders.insert(at) {
+            continue;
+        }
+        let Some(&holder) = world.get::<SceneId>(at) else {
+            continue;
+        };
+        let (inside, deeper) = super::membership::members(world, at, children);
+        for entity in inside {
+            if let Some(part) = world.get::<PrefabPart>(entity) {
+                covered.insert(SceneId::derived(holder, part.record));
+            }
+        }
+        holders.extend(deeper);
+    }
     let missing: Vec<&EntityRecord> = records
         .iter()
         .copied()
-        .filter(|r| wanted(r) && !parts.contains_key(&r.id))
+        .filter(|r| wanted(r) && !parts.contains_key(&r.id) && !covered.contains(&r.id))
         .collect();
     let mut ids = fresh_ids(world, root, !missing.is_empty());
     for record in missing {
