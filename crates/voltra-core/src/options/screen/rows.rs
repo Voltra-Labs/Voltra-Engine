@@ -1,37 +1,10 @@
-//! The screen's parts found by name, and its lists stamped out from the
-//! prefab's template rows: one slider per bus, one row per action.
-
-use std::collections::HashMap;
+//! The screen's lists stamped out from the prefab's template rows: one
+//! slider per bus, one row per action.
 
 use voltra_ecs::{Entity, World};
 use voltra_scene::{hierarchy, Name, Text, UiRect, UiStack};
 
 use crate::app::Tick;
-
-/// Every entity of the screen by name; the first of a name wins.
-pub(super) struct Parts(HashMap<String, Entity>);
-
-impl Parts {
-    pub(super) fn of(world: &World, entities: &[Entity]) -> Self {
-        let mut named = HashMap::new();
-        for &entity in entities {
-            if let Some(name) = world.get::<Name>(entity) {
-                named.entry(name.as_str().to_owned()).or_insert(entity);
-            }
-        }
-        Self(named)
-    }
-
-    /// The part called `name`, or `None` with a warning: a prefab restyled
-    /// without one loses that row, not the screen.
-    pub(super) fn get(&self, name: &str) -> Option<Entity> {
-        let found = self.0.get(name).copied();
-        if found.is_none() {
-            log::warn!("the options prefab has no part named {name:?}; that row is left out");
-        }
-        found
-    }
-}
 
 /// One copy of the template row.
 #[derive(Debug)]

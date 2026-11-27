@@ -10,6 +10,7 @@ pub mod game;
 pub mod input;
 pub mod logging;
 pub mod options;
+mod prefab_parts;
 pub mod saves;
 pub mod start;
 mod storage;
