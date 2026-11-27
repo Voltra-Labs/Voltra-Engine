@@ -1,7 +1,7 @@
 //! A dedicated server and two clients on the loopback — one over UDP, one
 //! over a WebSocket as a browser would come — both join, one leaves, the
 //! other is kicked, and the server sees each event; then the binary itself
-//! is started and joined.
+//! is started, found on the LAN (probed over loopback) and joined.
 
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -21,6 +21,7 @@ fn loopback() -> ServerOptions {
             ..HostOptions::default()
         },
         tick_rate: 60,
+        lobby: None,
     }
 }
 
@@ -154,6 +155,10 @@ fn the_binary_hosts_a_scene_and_a_client_joins_it() {
                 assets,
                 "--bind",
                 "127.0.0.1",
+                "--discovery",
+                "0",
+                "--name",
+                "Sandbox",
             ])
             .args(["--udp", "0", "--ws", "0", "--seconds", "30", "--port-file"])
             .arg(&ports)
@@ -162,17 +167,43 @@ fn the_binary_hosts_a_scene_and_a_client_joins_it() {
     );
 
     let start = Instant::now();
-    let mut udp_port = None;
-    while udp_port.is_none() && start.elapsed() < Duration::from_secs(20) {
-        if let Ok(text) = std::fs::read_to_string(&ports) {
-            udp_port = text
-                .lines()
-                .find_map(|line| line.strip_prefix("udp "))
-                .and_then(|port| port.trim().parse::<u16>().ok());
-        }
+    let read = |kind: &str| {
+        let text = std::fs::read_to_string(&ports).ok()?;
+        text.lines()
+            .find_map(|line| line.strip_prefix(kind))
+            .and_then(|port| port.trim().parse::<u16>().ok())
+    };
+    // The file is written whole once the server listens: the probe port's
+    // line is its last.
+    while read("discovery ").is_none() && start.elapsed() < Duration::from_secs(20) {
         std::thread::sleep(Duration::from_millis(20));
     }
-    let port = udp_port.expect("the server wrote its ports");
+    let port = read("udp ").expect("the server wrote its ports");
+    let probe_port = read("discovery ").expect("the server answers probes");
+
+    let mut search = net::LanSearch::start(net::SearchOptions {
+        broadcast: false,
+        targets: vec![([127, 0, 0, 1], probe_port).into()],
+        timeout: Duration::from_secs(5),
+        ..net::SearchOptions::default()
+    })
+    .expect("a socket");
+    let start = Instant::now();
+    while search.servers().is_empty() && !search.is_finished() {
+        search.poll(start.elapsed());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let found = search
+        .servers()
+        .first()
+        .expect("the server answered")
+        .clone();
+    assert_eq!(found.name, "Sandbox");
+    assert!(
+        found.compatible,
+        "a client of no game's protocol: {found:?}"
+    );
+    assert_eq!(found.udp, Some(format!("udp://127.0.0.1:{port}")));
 
     let mut client =
         net::join(&format!("udp://127.0.0.1:{port}"), NetConfig::default()).expect("dials");

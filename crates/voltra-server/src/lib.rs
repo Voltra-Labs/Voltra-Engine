@@ -40,6 +40,12 @@ pub struct ServerOptions {
     /// Ticks a second: each one frame of the scene, its fixed steps, and
     /// one receive and one flush of the network. At least 1.
     pub tick_rate: u32,
+    /// A lobby before the match, turned on for the game's session before it
+    /// hosts. `None` leaves the game's own choice (an app built
+    /// [`with_lobby`](App::with_lobby) keeps its lobby). The server has no
+    /// player, so the lobby's host is its first player in, passed on in
+    /// join order; the server's game may start the match itself too.
+    pub lobby: Option<voltra_core::net::LobbyConfig>,
 }
 
 impl Default for ServerOptions {
@@ -47,6 +53,7 @@ impl Default for ServerOptions {
         Self {
             host: HostOptions::default(),
             tick_rate: DEFAULT_TICK_RATE,
+            lobby: None,
         }
     }
 }
@@ -98,6 +105,9 @@ impl Server {
             listen: false,
             ..options.host.clone()
         };
+        if let Some(lobby) = &options.lobby {
+            session.net_mut().enable_lobby(lobby.clone());
+        }
         session
             .net_mut()
             .host(&host)
@@ -169,6 +179,11 @@ impl Server {
             .endpoint()
             .map(|e| e.local_addrs())
             .unwrap_or_default()
+    }
+
+    /// Where the server answers LAN probes, if it does.
+    pub fn discovery_addr(&self) -> Option<std::net::SocketAddr> {
+        self.session.net().discovery_addr()
     }
 
     /// Ticks run so far.
