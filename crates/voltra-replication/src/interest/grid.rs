@@ -8,11 +8,42 @@
 //! Godot and Unity Netcode leave it to a per-pair visibility callback.
 
 use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasherDefault, Hasher};
 
 use glam::Vec2;
 
 use super::Interest;
 use crate::NetId;
+
+/// A cell's coordinates hashed with one multiply per word: SipHash's
+/// defence against chosen keys buys nothing for cells the server computes
+/// itself, and costs a third of a rebuild.
+#[derive(Debug, Default, Clone, Copy)]
+struct CellHasher(u64);
+
+impl Hasher for CellHasher {
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.mix(u64::from(byte));
+        }
+    }
+
+    fn write_i32(&mut self, value: i32) {
+        self.mix(u64::from(value as u32));
+    }
+
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+impl CellHasher {
+    fn mix(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(26) ^ word).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+}
+
+type Cells = HashMap<(i32, i32), Vec<u32>, BuildHasherDefault<CellHasher>>;
 
 /// One entity as the grid holds it.
 #[derive(Debug, Clone, Copy)]
@@ -26,7 +57,11 @@ struct Entry {
 #[derive(Debug, Clone)]
 pub struct InterestGrid {
     interest: Interest,
-    cells: HashMap<(i32, i32), Vec<u32>>,
+    /// Kept across rebuilds with their lists emptied, so a world whose
+    /// entities stay in their cells allocates nothing.
+    cells: Cells,
+    /// The cells holding an entry since the last clear.
+    occupied: usize,
     entries: Vec<Entry>,
     /// Entries relevant further than the session's radius: no cell range
     /// around a point covers them, so every query reads them all. Few in
@@ -39,7 +74,8 @@ impl InterestGrid {
     pub fn new(interest: Interest) -> Self {
         Self {
             interest,
-            cells: HashMap::new(),
+            cells: Cells::default(),
+            occupied: 0,
             entries: Vec::new(),
             wide: Vec::new(),
         }
@@ -47,7 +83,14 @@ impl InterestGrid {
 
     /// Empties it for the next snapshot.
     pub fn clear(&mut self) {
-        self.cells.clear();
+        if self.cells.len() > 4 * self.occupied + 64 {
+            // Entities moved on: let go of the cells they left.
+            self.cells.retain(|_, indices| !indices.is_empty());
+        }
+        for indices in self.cells.values_mut() {
+            indices.clear();
+        }
+        self.occupied = 0;
         self.entries.clear();
         self.wide.clear();
     }
@@ -78,7 +121,11 @@ impl InterestGrid {
         if radius > self.interest.radius {
             self.wide.push(index);
         } else {
-            self.cells.entry(self.cell(at)).or_default().push(index);
+            let indices = self.cells.entry(self.cell(at)).or_default();
+            if indices.is_empty() {
+                self.occupied += 1;
+            }
+            indices.push(index);
         }
     }
 
@@ -101,7 +148,7 @@ impl InterestGrid {
             let (x0, y0) = self.cell(point - Vec2::splat(reach));
             let (x1, y1) = self.cell(point + Vec2::splat(reach));
             let span = (i64::from(x1) - i64::from(x0) + 1) * (i64::from(y1) - i64::from(y0) + 1);
-            if span > self.cells.len() as i64 {
+            if span > self.occupied as i64 {
                 // A cell size far below the radius: fewer cells are
                 // occupied than the range holds, so read those instead.
                 for indices in self.cells.values() {
@@ -206,5 +253,18 @@ mod tests {
     fn negative_coordinates_fall_in_their_own_cells() {
         let grid = grid(&[(1, Vec2::new(-0.5, -0.5)), (2, Vec2::new(-19.0, -1.0))]);
         assert_eq!(query(&grid, &[Vec2::new(-10.0, 0.0)], &[]), [1, 2]);
+    }
+
+    #[test]
+    fn a_rebuild_forgets_where_entities_were() {
+        let mut grid = grid(&[(1, Vec2::new(1.0, 0.0))]);
+        for step in 0..200 {
+            grid.clear();
+            grid.insert(1, Vec2::new(step as f32 * 15.0, 0.0), None);
+        }
+        assert_eq!(grid.len(), 1);
+        assert!(query(&grid, &[Vec2::ZERO], &[]).is_empty());
+        assert_eq!(query(&grid, &[Vec2::new(2985.0, 0.0)], &[]), [1]);
+        assert!(grid.cells.len() < 200, "left cells let go of");
     }
 }

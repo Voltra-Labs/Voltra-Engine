@@ -71,6 +71,15 @@ impl ReplicationServer {
             .interest
             .and_then(Interest::checked)
             .map(|interest| (interest, InterestGrid::new(interest)));
+        if let Some((interest, _)) = &interest {
+            log::info!(
+                "replication: each client sent what is within {} units of its interest \
+                 (cells of {}, leaving at {})",
+                interest.radius,
+                interest.cell_size,
+                interest.leave_radius(interest.radius)
+            );
+        }
         Self {
             config,
             interest,
