@@ -1,0 +1,16 @@
+// A version 1 clip (0.4): every property 0.5 renamed, under its old name.
+(
+    looping: true,
+    tracks: [
+        (property: Translation, keys: [
+            (time: 0.0, value: Vec2((0.0, 0.0)), ease: EaseInOut),
+            (time: 1.0, value: Vec2((0.0, 0.5))),
+        ]),
+        (property: Rotation, keys: [(time: 0.0, value: Float(0.0)), (time: 1.0, value: Float(0.5))]),
+        (property: Scale, keys: [(time: 0.5, value: Vec2((1.1, 0.9)))]),
+        (target: "Glow", property: LightColor, keys: [(time: 0.0, value: Color((1.0, 0.8, 0.4, 1.0)))]),
+        (target: "Glow", property: LightIntensity, keys: [(time: 0.0, value: Float(0.5)), (time: 1.0, value: Float(1.5))]),
+        (target: "Glow", property: LightRadius, keys: [(time: 0.0, value: Float(2.0))]),
+        (property: SpriteColor, keys: [(time: 0.0, value: Color((1.0, 1.0, 1.0, 1.0)))]),
+    ],
+)

@@ -2,6 +2,7 @@
 
 use super::*;
 use crate::format::save::{save, to_scene_file};
+use crate::format::VERSION;
 use crate::{CollisionLayers, Sensor, Sprite2D, Transform2D};
 use voltra_render::glam::Vec2;
 
@@ -214,7 +215,7 @@ fn a_wrong_version_is_refused() {
     let registry = ComponentRegistry::with_defaults();
     let mut components = std::collections::BTreeMap::new();
     components.insert(
-        "Sprite".to_owned(),
+        "Sprite2D".to_owned(),
         ron::value::RawValue::from_ron("(color: (1.0, 1.0, 1.0, 1.0), sort_order: 0)")
             .expect("valid RON")
             .to_owned(),
@@ -397,7 +398,7 @@ fn records_spawn_under_their_own_ids_and_resolve_once_asked() {
     // All or nothing.
     let mut broken = records.clone();
     broken[1].components.insert(
-        "Transform".to_owned(),
+        "Transform2D".to_owned(),
         ron::value::RawValue::from_ron("7").expect("ron").to_owned(),
     );
     let mut empty = World::new();

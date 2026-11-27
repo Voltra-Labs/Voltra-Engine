@@ -6,7 +6,9 @@ use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
 use super::registry::ComponentRegistry;
-use super::save::{EntityRecord, SceneFile, VERSION};
+#[cfg(doc)]
+use super::save::VERSION;
+use super::save::{EntityRecord, SceneFile};
 #[cfg(test)]
 use crate::scene_id::SceneId;
 
@@ -31,13 +33,9 @@ pub fn from_scene_file(
     registry: &ComponentRegistry,
     world: &mut World,
 ) -> Result<(), SceneError> {
-    if file.version != VERSION {
-        return Err(SceneError::UnsupportedVersion {
-            found: file.version,
-            supported: VERSION,
-        });
-    }
-
+    // An older file is renamed into a copy first; a current one is read as
+    // it is.
+    let file = super::migrate::current(file)?;
     let (spawned, result) = spawn_entities(&file.entities, registry, world);
     if let Err(error) = result {
         for entity in spawned {
@@ -125,14 +123,28 @@ fn spawn_entities(
 }
 
 /// Reads `path` and spawns its entities into `world`.
+///
+/// A file of an older version is migrated as it is read; the file itself
+/// is left as it is.
 pub fn load(
     path: &Path,
     registry: &ComponentRegistry,
     world: &mut World,
 ) -> Result<(), SceneError> {
+    load_versioned(path, registry, world).map(|_| ())
+}
+
+/// [`load`], answering the version the file was written in: below
+/// [`VERSION`], its next save writes it anew — which an editor says.
+pub fn load_versioned(
+    path: &Path,
+    registry: &ComponentRegistry,
+    world: &mut World,
+) -> Result<u32, SceneError> {
     let text = voltra_assets::fs::read_to_string(path)?;
-    let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
-    from_scene_file(&file, registry, world)
+    let (file, written) = super::migrate::parse_versioned(&text)?;
+    from_scene_file(&file, registry, world)?;
+    Ok(written)
 }
 
 #[cfg(test)]

@@ -139,7 +139,7 @@ fn to_text(clip: &Clip) -> Result<String, ron::Error> {
 }
 
 /// The clip in clipboard `text`; `None` for text that is not one.
-fn from_text(text: &str) -> Option<Result<Clip, ron::error::SpannedError>> {
+fn from_text(text: &str) -> Option<Result<Clip, String>> {
     if text.len() > MAX_TEXT {
         return None;
     }
@@ -147,7 +147,13 @@ fn from_text(text: &str) -> Option<Result<Clip, ron::error::SpannedError>> {
     let body = text
         .strip_prefix(HEADER)
         .or_else(|| text.strip_prefix(&HEADER.replace('\n', "\r\n")))?;
-    Some(ron::from_str(body))
+    let clip = ron::from_str::<Clip>(body).map_err(|e| e.to_string());
+    // Copied in an older editor: its components under their old names.
+    Some(clip.and_then(|clip| {
+        let scene =
+            voltra_scene::format::migrate::upgrade(clip.scene).map_err(|e| e.to_string())?;
+        Ok(Clip { scene, ..clip })
+    }))
 }
 
 /// Puts the selection on the system clipboard. Nothing in the scene

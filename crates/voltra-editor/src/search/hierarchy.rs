@@ -34,8 +34,8 @@ pub(crate) fn label(world: &World, entity: Entity) -> String {
 }
 
 /// Every scene entity `query` matches: its label holds every word, and it
-/// has a component of every `t:` type — all of them, so `t:Sprite
-/// t:Collider` narrows rather than widens. A type is the registered name,
+/// has a component of every `t:` type — all of them, so `t:Sprite2D
+/// t:Collider2D` narrows rather than widens. A type is the registered name,
 /// case aside; one no component is called matches nothing and is reported.
 pub(crate) fn filter(
     world: &World,
@@ -122,13 +122,13 @@ mod tests {
         let (world, [_, _, gold, boxed]) = scene();
         let registry = ComponentRegistry::with_defaults();
 
-        let sprites = filter(&world, &registry, &Query::parse("t:sprite"));
+        let sprites = filter(&world, &registry, &Query::parse("t:sprite2d"));
         assert_eq!(sprites.matched, HashSet::from([gold, boxed]));
 
-        let solid = filter(&world, &registry, &Query::parse("t:Sprite t:Collider"));
+        let solid = filter(&world, &registry, &Query::parse("t:Sprite2D t:Collider2D"));
         assert_eq!(solid.matched, HashSet::from([boxed]));
 
-        let named_too = filter(&world, &registry, &Query::parse("t:Sprite coin"));
+        let named_too = filter(&world, &registry, &Query::parse("t:Sprite2D coin"));
         assert_eq!(named_too.matched, HashSet::from([gold]));
     }
 

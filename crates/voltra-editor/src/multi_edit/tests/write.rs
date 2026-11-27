@@ -54,7 +54,7 @@ fn a_field_an_entity_does_not_have_is_left_alone_and_a_new_shape_is_written_whol
     world.insert(selected[2], boxed);
 
     let edit = begin(&world, &registry, &selected);
-    assert!(edit.is_mixed("Collider", &[]), "two shapes");
+    assert!(edit.is_mixed("Collider2D", &[]), "two shapes");
     let grown = Collider2D::Box {
         half_extents: Vec2::new(3.0, 1.0),
     };
@@ -104,7 +104,7 @@ fn a_component_done_for_each_is_not_copied_from_the_primary() {
     let (mut world, selected) = three([RED, GREEN, BLUE]);
     let mut edit = begin(&world, &registry, &selected);
     world.get_mut::<Sprite2D>(selected[2]).expect("s").flip_y = true;
-    edit.done_for_each("Sprite");
+    edit.done_for_each("Sprite2D");
     assert!(edit.finish(&mut world, &registry).is_empty());
     assert!(!world.get::<Sprite2D>(selected[0]).expect("s").flip_y);
 }
@@ -233,7 +233,7 @@ fn a_touched_field_is_written_even_as_the_primary_had_it() {
         .sort_order = 4;
     let mut edit = begin(&world, &registry, &selected);
     // The primary's own value, chosen again: nothing moved on it.
-    edit.touch("Sprite", vec![Step::Field("sort_order")], Touch::Value);
+    edit.touch("Sprite2D", vec![Step::Field("sort_order")], Touch::Value);
     edit.touch("Parent", vec![], Touch::Value);
     let written = edit.finish(&mut world, &registry);
     assert_eq!(written, [selected[0]], "only the one that differed");
@@ -248,7 +248,7 @@ fn a_touched_field_is_written_even_as_the_primary_had_it() {
         .expect("s")
         .sorting_layer = "Front".into();
     let mut edit = begin(&world, &registry, &selected);
-    edit.touch("Sprite", vec![Step::Field("sorting_layer")], Touch::Value);
+    edit.touch("Sprite2D", vec![Step::Field("sorting_layer")], Touch::Value);
     edit.finish(&mut world, &registry);
     let default = Sprite2D::default().sorting_layer;
     assert_eq!(

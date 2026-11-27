@@ -40,10 +40,10 @@ fn a_base_instance_and_a_variant_instance_edited_together_keep_their_layers() {
     assert_eq!(color(&world, plain), GREEN, "written across");
     assert_eq!(intensity(&world, plain), 1.0, "the base's light kept");
     assert_eq!(intensity(&world, varied), 3.0, "the variant's light kept");
-    assert_eq!(overridden(&world, plain), ["Sprite"]);
+    assert_eq!(overridden(&world, plain), ["Sprite2D"]);
     assert_eq!(
         overridden(&world, varied),
-        ["Sprite"],
+        ["Sprite2D"],
         "against the variant: its light is the variant's, not an override"
     );
 

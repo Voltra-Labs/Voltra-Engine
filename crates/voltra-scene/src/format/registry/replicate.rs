@@ -274,7 +274,7 @@ mod tests {
         let replicated = registry.replicated();
         let transform = replicated
             .iter()
-            .find(|c| c.name == "Transform")
+            .find(|c| c.name == "Transform2D")
             .expect("Transform replicates");
         assert!(transform.interpolated);
     }

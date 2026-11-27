@@ -94,7 +94,7 @@ async fn a_run_reports_named_entities_in_full_and_says_which_actions_are_unbound
     assert!(run["entities"][0]["ron"]
         .as_str()
         .expect("ron")
-        .contains("Transform"));
+        .contains("Transform2D"));
     assert_eq!(run["unbound_actions"], json!(["no such action"]));
     let too_long = call(
         &client,

@@ -51,6 +51,13 @@ impl fmt::Display for RonAssetError {
 
 impl std::error::Error for RonAssetError {}
 
+/// `value` as [`RonStore::write`] puts it in its file: what a save of it
+/// would make, for a caller comparing a file with that.
+pub fn to_text<T: Serialize>(value: &T) -> Result<String, RonAssetError> {
+    ron::ser::to_string_pretty(value, ron::ser::PrettyConfig::default())
+        .map_err(RonAssetError::Serialize)
+}
+
 /// Reads `T`s from an asset root and hands out shared handles to them.
 #[derive(Debug)]
 pub struct RonStore<T: RonAsset> {
@@ -147,8 +154,7 @@ impl<T: RonAsset> RonStore<T> {
     /// Writes `value` to `path`'s file as [`save`](Self::save) does,
     /// leaving what is loaded as it is; the watcher's reload reads it back.
     pub fn write(&self, path: &AssetPath, value: &T) -> Result<(), RonAssetError> {
-        let text = ron::ser::to_string_pretty(value, ron::ser::PrettyConfig::default())
-            .map_err(RonAssetError::Serialize)?;
+        let text = to_text(value)?;
         let file = self.root.join(path.as_str());
         if let Some(parent) = file.parent() {
             std::fs::create_dir_all(parent).map_err(RonAssetError::Io)?;

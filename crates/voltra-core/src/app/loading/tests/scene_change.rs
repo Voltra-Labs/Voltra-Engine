@@ -236,7 +236,7 @@ fn a_broken_component_is_found_before_anything_is_swept() {
     let bad = ron::value::RawValue::from_ron("(translation: \"left\")").expect("valid ron");
     file.entities[0]
         .components
-        .insert("Transform".to_owned(), bad.to_owned());
+        .insert("Transform2D".to_owned(), bad.to_owned());
     std::fs::write(
         root.join("scenes/broken.ron"),
         ron::to_string(&file).expect("serialises"),

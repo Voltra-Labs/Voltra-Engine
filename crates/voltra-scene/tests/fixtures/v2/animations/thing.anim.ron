@@ -1,0 +1,86 @@
+// The version 2 twin of v1/animations/thing.anim.ron: what `cargo xtask
+// migrate` (and an editor save) writes from it.
+(
+    looping: true,
+    tracks: [
+        (
+            property: Translation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Vec2((0.0, 0.0)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.0,
+                    value: Vec2((0.0, 0.5)),
+                ),
+            ],
+        ),
+        (
+            property: Rotation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(0.0),
+                ),
+                (
+                    time: 1.0,
+                    value: Float(0.5),
+                ),
+            ],
+        ),
+        (
+            property: Scale2D,
+            keys: [
+                (
+                    time: 0.5,
+                    value: Vec2((1.1, 0.9)),
+                ),
+            ],
+        ),
+        (
+            target: "Glow",
+            property: PointLight2DColor,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Color((1.0, 0.8, 0.4, 1.0)),
+                ),
+            ],
+        ),
+        (
+            target: "Glow",
+            property: PointLight2DIntensity,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(0.5),
+                ),
+                (
+                    time: 1.0,
+                    value: Float(1.5),
+                ),
+            ],
+        ),
+        (
+            target: "Glow",
+            property: PointLight2DRadius,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(2.0),
+                ),
+            ],
+        ),
+        (
+            property: SpriteColor,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Color((1.0, 1.0, 1.0, 1.0)),
+                ),
+            ],
+        ),
+    ],
+)

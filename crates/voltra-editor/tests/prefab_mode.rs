@@ -106,7 +106,7 @@ fn named(read: &Value, name: &str) -> Vec<Value> {
 fn sprite_of(read: &Value, name: &str) -> String {
     let found = named(read, name);
     assert_eq!(found.len(), 1, "one {name} in {read}");
-    found[0]["components"]["Sprite"]
+    found[0]["components"]["Sprite2D"]
         .as_str()
         .expect("a sprite")
         .to_owned()
@@ -248,7 +248,7 @@ fn a_prefab_edited_in_its_mode_and_the_searches_through_the_bridge() {
         &mut client,
         Command::ComponentSet {
             entity: "Coin".into(),
-            component: "Sprite".into(),
+            component: "Sprite2D".into(),
             ron: "(color:(0.0,1.0,0.0,1.0),sort_order:0)".into(),
         },
     );
@@ -262,7 +262,7 @@ fn a_prefab_edited_in_its_mode_and_the_searches_through_the_bridge() {
             name: Some("Glint".into()),
             parent: Some("Coin".into()),
             components: [(
-                "Transform".to_owned(),
+                "Transform2D".to_owned(),
                 "(translation:(0.2,0.2),rotation:0.0,scale:(1.0,1.0))".to_owned(),
             )]
             .into_iter()
@@ -332,7 +332,7 @@ fn a_prefab_edited_in_its_mode_and_the_searches_through_the_bridge() {
         &mut client,
         Command::ComponentSet {
             entity: "Coin".into(),
-            component: "Sprite".into(),
+            component: "Sprite2D".into(),
             ron: "(color:(1.0,1.0,0.0,1.0),sort_order:0)".into(),
         },
     );

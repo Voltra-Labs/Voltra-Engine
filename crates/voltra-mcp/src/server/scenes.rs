@@ -21,7 +21,7 @@ pub struct SpawnArgs {
     #[serde(default)]
     pub parent: Option<String>,
     /// Its components: registered name → RON, as `components_list`'s
-    /// templates are written ({"Transform": "(translation: (0.0, 1.0), rotation: 0.0, scale: (1.0, 1.0))"}).
+    /// templates are written ({"Transform2D": "(translation: (0.0, 1.0), rotation: 0.0, scale: (1.0, 1.0))"}).
     #[serde(default)]
     pub components: Map<String, Value>,
 }
@@ -55,7 +55,7 @@ pub struct RenameArgs {
 pub struct ComponentSetArgs {
     pub scene: String,
     pub entity: String,
-    /// The component's registered name ("Sprite").
+    /// The component's registered name ("Sprite2D").
     pub component: String,
     /// Its value as RON, the whole component — start from its template.
     pub ron: String,

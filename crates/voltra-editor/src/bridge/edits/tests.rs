@@ -41,7 +41,7 @@ fn spawn(name: &str, parent: Option<&str>) -> Command {
         name: Some(name.into()),
         parent: parent.map(str::to_owned),
         components: BTreeMap::from([(
-            "Transform".to_owned(),
+            "Transform2D".to_owned(),
             "(translation: (1.0, 2.0), rotation: 0.0, scale: (1.0, 1.0))".to_owned(),
         )]),
     }
@@ -117,7 +117,7 @@ fn a_refused_edit_records_nothing() {
     let bad = Command::Spawn {
         name: Some("Bad".into()),
         parent: None,
-        components: BTreeMap::from([("Transform".to_owned(), "(oops)".to_owned())]),
+        components: BTreeMap::from([("Transform2D".to_owned(), "(oops)".to_owned())]),
     };
     assert!(apply(&mut editor, &mut host.world, &mut prefabs(), &bad).is_err());
     assert!(apply(

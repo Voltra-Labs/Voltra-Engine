@@ -78,7 +78,7 @@ impl Default for Collider2D {
 
 impl Collider2D {
     /// The registered name a scene file stores it under.
-    pub const NAME: &'static str = "Collider";
+    pub const NAME: &'static str = "Collider2D";
 
     /// The shape's name, as the inspector and the logs show it.
     pub fn kind(&self) -> &'static str {

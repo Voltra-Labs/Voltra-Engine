@@ -30,7 +30,7 @@ fn an_entity_comes_back_as_it_was_but_for_what_the_wire_brings() {
         net_id: &net,
         stays: &|_| false,
     };
-    stash.keep(&mut world, &registry, &["Transform"], ship, &ids);
+    stash.keep(&mut world, &registry, &["Transform2D"], ship, &ids);
     assert_eq!(world.entity_count(), 0, "despawned, all of it");
     assert_eq!(stash.len(), 2, "the ship and its turret, each its own");
 
@@ -115,7 +115,7 @@ fn a_level_s_records_are_kept_by_their_replicated_tops_and_spawned_back() {
     assert_eq!(records.len(), 3);
 
     let mut stash = Stash::default();
-    stash.keep_records(records, &["Transform"], &|id| id == crate_id);
+    stash.keep_records(records, &["Transform2D"], &|id| id == crate_id);
     assert_eq!(stash.level_len(), 1, "the coin; the crate is held");
     assert_eq!(stash.len(), 0, "nothing out of interest");
 

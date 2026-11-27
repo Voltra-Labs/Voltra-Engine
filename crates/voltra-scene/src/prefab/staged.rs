@@ -24,7 +24,7 @@ use std::path::Path;
 use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 
-use crate::format::{ComponentRegistry, EntityRecord, SceneError, SceneFile, VERSION};
+use crate::format::{ComponentRegistry, EntityRecord, SceneError, SceneFile};
 use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 
@@ -56,12 +56,8 @@ impl StagedScene {
     /// `file` with its spawn order worked out, or the version error that
     /// makes it unusable. Needs no world: safe on a worker.
     pub fn new(file: SceneFile) -> Result<Self, SceneError> {
-        if file.version != VERSION {
-            return Err(SceneError::UnsupportedVersion {
-                found: file.version,
-                supported: VERSION,
-            });
-        }
+        // An older file is renamed as a prefab's is: one path for both.
+        let file = crate::format::migrate::upgrade(file)?;
         let mut staged = Self {
             records: file.entities,
             fresh: Vec::new(),
@@ -79,8 +75,7 @@ impl StagedScene {
     /// asset reads (the pack, in a browser).
     pub fn read(root: &Path, path: &AssetPath) -> Result<Self, SceneError> {
         let text = voltra_assets::fs::read_to_string(&root.join(path.as_str()))?;
-        let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
-        Self::new(file)
+        Self::new(crate::format::parse(&text)?)
     }
 
     /// Leaves out every record `skip` picks, and everything under it in the

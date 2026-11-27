@@ -185,7 +185,7 @@ mod tests {
 
         assert_eq!(record.id, id);
         let names: Vec<_> = record.components.keys().cloned().collect();
-        assert_eq!(names, vec!["Sprite".to_owned(), "Transform".to_owned()]);
+        assert_eq!(names, vec!["Sprite2D".to_owned(), "Transform2D".to_owned()]);
     }
 
     #[test]
@@ -242,7 +242,7 @@ mod tests {
         let mut record = record_entity(&world, &registry, entity)
             .expect("has an id")
             .expect("serializes");
-        record.components.remove("Sprite");
+        record.components.remove("Sprite2D");
 
         apply_record(&mut world, &registry, &record).expect("apply");
 

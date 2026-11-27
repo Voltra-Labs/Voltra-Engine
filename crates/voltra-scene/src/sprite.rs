@@ -161,7 +161,7 @@ impl Default for Sprite2D {
 
 impl Sprite2D {
     /// The registered name a scene file stores it under.
-    pub const NAME: &'static str = "Sprite";
+    pub const NAME: &'static str = "Sprite2D";
 
     /// Half the width and height of the quad a sprite covers, before its
     /// transform is applied.

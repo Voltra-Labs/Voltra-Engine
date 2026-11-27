@@ -1,7 +1,6 @@
 //! A scene file, as entities with their components in RON.
 
 use serde_json::{json, Map, Value};
-use voltra_scene::format::SceneFile;
 use voltra_scene::{Name, Parent};
 
 use super::{ToolError, ToolResult};
@@ -14,8 +13,10 @@ pub fn scene_read(project: &Project, path: &str) -> ToolResult {
     let (asset, full) = project.resolve(path).map_err(ToolError::from_cause)?;
     let text = std::fs::read_to_string(&full)
         .map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?;
-    let file: SceneFile =
-        ron::from_str(&text).map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?;
+    // Through the engine's reader, so an older file answers with the names
+    // a component tool takes now.
+    let file = voltra_scene::format::parse(&text)
+        .map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?;
     let entities: Vec<Value> = file
         .entities
         .iter()

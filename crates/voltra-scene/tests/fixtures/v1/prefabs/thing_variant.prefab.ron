@@ -1,0 +1,30 @@
+// A version 1 variant of thing.prefab.ron (0.4): its records under ids of
+// its own, overriding the root's sprite and collider and the shine's
+// transform — the names a variant's overrides hold are migrated too.
+(
+    version: 1,
+    entities: [
+        (
+            id: "019fe900-0000-7000-8000-000000000201",
+            components: {
+                "Name": "Thing",
+                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+                "Sprite": (color:(0.25,0.5,1.0,1.0),sort_order:1),
+                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:1.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.05,lock_rotation:false),
+                "Collider": Circle(radius:0.5),
+                "PrefabInstance": (source:Path("prefabs/thing.prefab.ron"),own:true),
+                "PrefabPart": (record:"019fe900-0000-7000-8000-000000000101",overridden:["Collider","Sprite"]),
+            },
+        ),
+        (
+            id: "019fe900-0000-7000-8000-000000000202",
+            components: {
+                "Name": "Shine",
+                "Parent": "019fe900-0000-7000-8000-000000000201",
+                "Transform": (translation:(0.0,0.5),rotation:0.0,scale:(0.5,0.5)),
+                "Sprite": (color:(1.0,1.0,1.0,0.5),sort_order:2),
+                "PrefabPart": (record:"019fe900-0000-7000-8000-000000000102",overridden:["Transform"]),
+            },
+        ),
+    ],
+)

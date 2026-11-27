@@ -16,8 +16,8 @@ fn world_with_one_sprite() -> (World, Entity) {
 fn the_defaults_cover_the_built_in_components() {
     let registry = ComponentRegistry::with_defaults();
     let names: Vec<_> = registry.names().collect();
-    assert!(names.contains(&"Transform"), "got {names:?}");
-    assert!(names.contains(&"Sprite"), "got {names:?}");
+    assert!(names.contains(&"Transform2D"), "got {names:?}");
+    assert!(names.contains(&"Sprite2D"), "got {names:?}");
 }
 
 #[test]
@@ -35,14 +35,14 @@ fn a_registered_component_round_trips_through_a_value() {
     let registry = ComponentRegistry::with_defaults();
 
     let value = registry
-        .save_one(&world, entity, "Sprite")
+        .save_one(&world, entity, "Sprite2D")
         .expect("Sprite is registered")
         .expect("saving a valid Sprite cannot fail");
 
     let mut target = World::new();
     let copy = target.spawn();
     registry
-        .load_one(&mut target, copy, "Sprite", &value)
+        .load_one(&mut target, copy, "Sprite2D", &value)
         .expect("Sprite is registered")
         .expect("the value came from a Sprite, so it must load as one");
 
@@ -74,7 +74,7 @@ fn an_entity_without_the_component_saves_nothing() {
     let mut world = World::new();
     let bare = world.spawn();
     let registry = ComponentRegistry::with_defaults();
-    assert!(registry.save_one(&world, bare, "Sprite").is_none());
+    assert!(registry.save_one(&world, bare, "Sprite2D").is_none());
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn a_registered_component_with_wrong_data_is_an_error() {
     let nonsense = RawValue::from_ron("\"not a sprite\"").expect("valid RON");
 
     let result = registry
-        .load_one(&mut world, entity, "Sprite", nonsense)
+        .load_one(&mut world, entity, "Sprite2D", nonsense)
         .expect("Sprite is registered");
     assert!(
         matches!(result, Err(SceneError::Component { .. })),
@@ -100,7 +100,7 @@ fn remove_one_takes_the_component_off() {
     let (mut world, entity) = world_with_one_sprite();
     let registry = ComponentRegistry::with_defaults();
 
-    assert!(registry.remove_one(&mut world, entity, "Sprite"));
+    assert!(registry.remove_one(&mut world, entity, "Sprite2D"));
 
     assert_eq!(world.get::<Sprite2D>(entity), None);
     assert!(
@@ -120,8 +120,8 @@ fn remove_one_is_false_for_an_unregistered_name() {
 fn has_asks_the_world_by_name() {
     let (world, entity) = world_with_one_sprite();
     let registry = ComponentRegistry::with_defaults();
-    assert_eq!(registry.has(&world, entity, "Sprite"), Some(true));
-    assert_eq!(registry.has(&world, entity, "Collider"), Some(false));
+    assert_eq!(registry.has(&world, entity, "Sprite2D"), Some(true));
+    assert_eq!(registry.has(&world, entity, "Collider2D"), Some(false));
     assert_eq!(
         registry.has(&world, entity, "Physics"),
         None,
@@ -137,7 +137,7 @@ fn removing_a_component_the_entity_lacks_is_not_an_error() {
     let mut world = World::new();
     let bare = world.spawn();
     let registry = ComponentRegistry::with_defaults();
-    assert!(registry.remove_one(&mut world, bare, "Sprite"));
+    assert!(registry.remove_one(&mut world, bare, "Sprite2D"));
 }
 
 #[test]
@@ -153,10 +153,10 @@ fn the_component_error_names_the_registered_name_not_the_rust_path() {
     let nonsense = RawValue::from_ron("\"not a sprite\"").expect("valid RON");
 
     let result = registry
-        .load_one(&mut world, entity, "Sprite", nonsense)
+        .load_one(&mut world, entity, "Sprite2D", nonsense)
         .expect("Sprite is registered");
     match result {
-        Err(SceneError::Component { name, .. }) => assert_eq!(name, "Sprite"),
+        Err(SceneError::Component { name, .. }) => assert_eq!(name, "Sprite2D"),
         other => panic!("expected a Component error, got {other:?}"),
     }
 }
@@ -201,7 +201,7 @@ fn describe_says_which_name_entities_and_template_asks_only_for_known_names() {
             .unwrap_or_else(|| panic!("{name} is registered"))
     };
     assert!(info("Joint2D").has_refs && info("CameraFollow2D").has_refs);
-    assert!(!info("Sprite").has_refs);
+    assert!(!info("Sprite2D").has_refs);
     assert!(registry.template("Physics").is_none());
     assert!(registry.template("Parent").is_none());
 }
@@ -261,9 +261,9 @@ fn a_tree_is_none_for_an_unregistered_name_or_a_missing_component() {
     let (mut world, entity) = world_with_one_sprite();
     let registry = ComponentRegistry::with_defaults();
     assert!(registry.save_tree(&world, entity, "Physics").is_none());
-    assert!(registry.save_tree(&world, entity, "Camera").is_none());
+    assert!(registry.save_tree(&world, entity, "Camera2D").is_none());
     let tree = registry
-        .save_tree(&world, entity, "Sprite")
+        .save_tree(&world, entity, "Sprite2D")
         .expect("held")
         .expect("records");
     assert!(registry
@@ -271,7 +271,7 @@ fn a_tree_is_none_for_an_unregistered_name_or_a_missing_component() {
         .is_none());
     // A sprite's tree is no transform.
     assert!(matches!(
-        registry.load_tree(&mut world, entity, "Transform", &tree),
+        registry.load_tree(&mut world, entity, "Transform2D", &tree),
         Some(Err(_))
     ));
 }

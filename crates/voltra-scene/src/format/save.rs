@@ -12,11 +12,13 @@ use super::error::SceneError;
 use super::registry::ComponentRegistry;
 use crate::scene_id::SceneId;
 
-/// The only scene format version this build writes or reads.
+/// The scene format version this build writes, and the newest it reads.
 ///
-/// Written from the first release. Adding a version field later means guessing
-/// what a file without one meant.
-pub const VERSION: u32 = 1;
+/// Written from the first release: adding a version field later would mean
+/// guessing what a file without one meant. Version 2 is version 1 with the
+/// 2D components named for their dimension (`Transform2D`, …); an older
+/// file is brought up to it as it is read ([`super::migrate`]).
+pub const VERSION: u32 = 2;
 
 /// A scene as it appears on disk.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -93,6 +95,12 @@ pub fn save(world: &World, registry: &ComponentRegistry, path: &Path) -> Result<
     write(&to_scene_file(world, registry)?, path)
 }
 
+/// `file` as every save writes it: the text [`write`] puts on disk, for a
+/// caller comparing a file with what a save would make of it.
+pub fn to_text(file: &SceneFile) -> Result<String, SceneError> {
+    ron::ser::to_string_pretty(file, pretty()).map_err(SceneError::Serialize)
+}
+
 /// Writes `file` to `path` with the one formatting every save uses, with the
 /// same all-or-nothing guarantee as [`save`].
 ///
@@ -100,7 +108,7 @@ pub fn save(world: &World, registry: &ComponentRegistry, path: &Path) -> Result<
 /// selection is a [`SceneFile`] too, and has to come out byte-for-byte the
 /// way a scene saved with the same entities would.
 pub fn write(file: &SceneFile, path: &Path) -> Result<(), SceneError> {
-    let text = ron::ser::to_string_pretty(file, pretty()).map_err(SceneError::Serialize)?;
+    let text = to_text(file)?;
     atomic::replace(path, text.as_bytes())?;
     log::info!(
         "saved {} entities to {}",
@@ -169,7 +177,7 @@ mod tests {
             .expect("saving cannot fail here");
 
         let keys: Vec<_> = file.entities[0].components.keys().cloned().collect();
-        assert_eq!(keys, vec!["Sprite".to_owned(), "Transform".to_owned()]);
+        assert_eq!(keys, vec!["Sprite2D".to_owned(), "Transform2D".to_owned()]);
     }
 
     #[test]

@@ -87,7 +87,7 @@ fn an_edit_is_an_override_until_it_is_taken_back() {
 
     scene.insert(coin, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
     assert!(refresh(&mut scene, &mut prefabs));
-    assert_eq!(overridden(&scene, coin), ["Sprite"]);
+    assert_eq!(overridden(&scene, coin), ["Sprite2D"]);
     assert!(!refresh(&mut scene, &mut prefabs), "no change, no write");
 
     scene.insert(coin, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
@@ -103,9 +103,16 @@ fn a_revert_puts_one_component_or_all_of_them_back() {
     scene.insert(coin, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
     scene.insert(coin, Name::new("mine"));
     refresh_overrides(&mut scene, &registry(), &mut prefabs, coin).expect("compares");
-    assert_eq!(overridden(&scene, coin), ["Name", "Sprite"]);
+    assert_eq!(overridden(&scene, coin), ["Name", "Sprite2D"]);
 
-    revert(&mut scene, &registry(), &mut prefabs, coin, Some("Sprite")).expect("reverts");
+    revert(
+        &mut scene,
+        &registry(),
+        &mut prefabs,
+        coin,
+        Some("Sprite2D"),
+    )
+    .expect("reverts");
     assert_eq!(
         scene.get::<Sprite2D>(coin).expect("s").color,
         [1.0, 0.0, 0.0, 1.0]

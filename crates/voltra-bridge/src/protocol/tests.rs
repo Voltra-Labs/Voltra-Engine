@@ -8,7 +8,7 @@ fn a_command_reads_back_from_its_line() {
         id: 7,
         command: Command::ComponentSet {
             entity: "Player".into(),
-            component: "Sprite".into(),
+            component: "Sprite2D".into(),
             ron: "(color: (1.0, 0.0, 0.0, 1.0))".into(),
         },
     };

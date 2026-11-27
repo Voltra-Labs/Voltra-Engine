@@ -41,7 +41,7 @@ mod write;
 
 use voltra_assets::AssetPath;
 
-use crate::format::{SceneError, SceneFile, VERSION};
+use crate::format::{SceneError, SceneFile};
 
 pub use apply::{apply, link};
 pub use cycle::reaches;
@@ -76,17 +76,13 @@ pub struct Prefab {
 }
 
 impl Prefab {
-    /// A prefab holding `file`, or the version error that makes it unusable.
+    /// A prefab holding `file`, brought up to the current version, or the
+    /// version error that makes it unusable.
     ///
     /// Checked here rather than at every spawn: a bullet prefab is spawned a
     /// hundred times a second, and the answer does not change between them.
     pub fn new(file: SceneFile) -> Result<Self, SceneError> {
-        if file.version != VERSION {
-            return Err(SceneError::UnsupportedVersion {
-                found: file.version,
-                supported: VERSION,
-            });
-        }
+        let file = crate::format::migrate::upgrade(file)?;
         Ok(Self {
             file: Some(file),
             ..Self::default()

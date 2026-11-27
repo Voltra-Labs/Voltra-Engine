@@ -62,19 +62,19 @@ fn a_component_is_set_by_name_from_text_and_read_back() {
     session
         .set_component(
             body,
-            "Transform",
+            "Transform2D",
             "(translation: (0.0, 50.0), rotation: 0.0, scale: (1.0, 1.0))",
         )
         .expect("a transform reads");
     assert_eq!(height(&session, body), 50.0);
     let text = session.entity_ron(body).expect("written");
     assert!(
-        text.contains("Transform") && text.contains("50.0"),
+        text.contains("Transform2D") && text.contains("50.0"),
         "{text}"
     );
 
     assert!(matches!(
-        session.set_component(body, "Transform", "(translation: oops)"),
+        session.set_component(body, "Transform2D", "(translation: oops)"),
         Err(HeadlessError::Scene(_))
     ));
     assert!(matches!(
@@ -82,7 +82,7 @@ fn a_component_is_set_by_name_from_text_and_read_back() {
         Err(HeadlessError::NoComponent(_))
     ));
     assert!(matches!(
-        session.set_component(SceneId::new(), "Transform", "()"),
+        session.set_component(SceneId::new(), "Transform2D", "()"),
         Err(HeadlessError::NoEntity(_))
     ));
 }

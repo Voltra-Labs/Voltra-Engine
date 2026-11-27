@@ -83,7 +83,7 @@ pub(crate) fn open(
     // `previous` and goes, so the file's copy wins.
     let previous: Vec<Entity> = frame.world.query::<SceneId>().map(|(e, _)| e).collect();
     let file = file_of(frame, path);
-    voltra_scene::format::load(&file, &editor.registry, frame.world)
+    let written = voltra_scene::format::load_versioned(&file, &editor.registry, frame.world)
         .map_err(|e| format!("could not open {}: {e}", path.as_str()))?;
     // As for a new scene: the world the scenes set aside belong under is
     // going.
@@ -98,6 +98,15 @@ pub(crate) fn open(
     frame.resolve_scene_assets();
     replaced(editor, Some(path.clone()));
     log::info!("opened {}", path.as_str());
+    // Said, not done: the file stays as it is, and the scene is not dirty,
+    // until the author saves (or runs `cargo xtask migrate`).
+    if written < voltra_scene::format::VERSION {
+        log::info!(
+            "{} is a version {written} scene; saving it writes version {}",
+            path.as_str(),
+            voltra_scene::format::VERSION
+        );
+    }
     Ok(())
 }
 

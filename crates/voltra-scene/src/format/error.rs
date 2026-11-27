@@ -16,7 +16,8 @@ pub enum SceneError {
     Parse(ron::error::SpannedError),
     /// The scene could not be turned into RON.
     Serialize(ron::Error),
-    /// The file was written by a newer engine than this one.
+    /// The file was written by a newer engine than this one (or claims a
+    /// version no release wrote).
     UnsupportedVersion {
         /// The version the file declares.
         found: u32,
@@ -44,7 +45,8 @@ impl fmt::Display for SceneError {
             Self::Serialize(e) => write!(f, "could not write the scene: {e}"),
             Self::UnsupportedVersion { found, supported } => write!(
                 f,
-                "scene file is version {found}, this build supports {supported}"
+                "scene file is version {found}, this build reads versions {} to {supported}",
+                super::migrate::OLDEST
             ),
             Self::Component { name, source } => {
                 write!(f, "component `{name}` could not be read: {source}")

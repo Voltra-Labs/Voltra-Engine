@@ -16,7 +16,7 @@ use serde_json::Value;
 use voltra_bridge::{BridgeClient, Command};
 
 fn transform_of(answer: &Value) -> String {
-    answer["components"]["Transform"]
+    answer["components"]["Transform2D"]
         .as_str()
         .expect("a transform")
         .to_owned()
@@ -145,7 +145,7 @@ fn grid_snapping_the_console_and_project_settings_through_the_bridge() {
             name: Some("Missing".to_owned()),
             parent: None,
             components: [(
-                "Sprite".to_owned(),
+                "Sprite2D".to_owned(),
                 r#"(color:(1.0,1.0,1.0,1.0),sort_order:0,texture:Some(Path("nope.png")))"#
                     .to_owned(),
             )]

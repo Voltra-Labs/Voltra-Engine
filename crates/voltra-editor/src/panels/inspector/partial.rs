@@ -92,7 +92,7 @@ mod tests {
         world.insert(with, shaped);
         world.insert(without, Sprite2D::default());
 
-        let added = add_where_missing(&mut world, &registry, [with, without], "Collider");
+        let added = add_where_missing(&mut world, &registry, [with, without], "Collider2D");
 
         assert_eq!(added, [without]);
         assert_eq!(world.get::<Collider2D>(with), Some(&shaped), "kept its own");

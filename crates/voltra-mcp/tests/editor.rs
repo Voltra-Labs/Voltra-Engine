@@ -59,7 +59,7 @@ async fn tools_reach_the_editor_and_carry_its_answers_back() {
     let spawned = call(
         &client,
         "editor_spawn",
-        json!({ "name": "Box", "components": { "Sprite": "()" } }),
+        json!({ "name": "Box", "components": { "Sprite2D": "()" } }),
     )
     .await;
     assert_ne!(spawned.is_error, Some(true), "{}", text_of(&spawned));

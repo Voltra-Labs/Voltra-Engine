@@ -27,14 +27,6 @@ const NOT_THE_COMPONENT: &[(&str, &str)] = &[
     // New entities' default names in the editor.
     (
         "crates/voltra-editor/src/panels/menu_bar/spawn_items.rs",
-        r#"spawn::sprite(frame, "Sprite""#,
-    ),
-    (
-        "crates/voltra-editor/src/panels/menu_bar/spawn_items.rs",
-        r#"spawn::camera(frame, "Camera""#,
-    ),
-    (
-        "crates/voltra-editor/src/panels/menu_bar/spawn_items.rs",
         r#"spawn::tilemap(frame, "Tilemap""#,
     ),
     (
@@ -128,6 +120,10 @@ fn no_code_spells_a_registered_name() {
             let code = line.trim_start();
             if code.starts_with("//") || code.contains("const NAME: &'static str") {
                 continue;
+            }
+            // The migration table spells each name as its version did.
+            if relative == "crates/voltra-scene/src/format/migrate.rs" {
+                break;
             }
             let allowed = NOT_THE_COMPONENT
                 .iter()

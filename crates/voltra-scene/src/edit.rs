@@ -205,7 +205,7 @@ mod tests {
             &registry,
             Some("Bad"),
             None,
-            [("Transform", "(oops)")]
+            [("Transform2D", "(oops)")]
         )
         .is_err());
         assert_eq!(

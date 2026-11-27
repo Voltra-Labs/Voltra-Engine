@@ -109,7 +109,7 @@ fn sprites(read: &Value, name: &str) -> Vec<String> {
         .iter()
         .filter(|e| e["name"] == name)
         .map(|e| {
-            e["components"]["Sprite"]
+            e["components"]["Sprite2D"]
                 .as_str()
                 .expect("a sprite")
                 .to_owned()
@@ -161,7 +161,7 @@ fn a_variant_and_a_nested_prefab_follow_their_base_through_the_bridge() {
         &mut client,
         Command::ComponentSet {
             entity: "Coin".into(),
-            component: "Sprite".into(),
+            component: "Sprite2D".into(),
             ron: "(color:(0.0,0.0,1.0,1.0),sort_order:0)".into(),
         },
     );
@@ -199,7 +199,7 @@ fn a_variant_and_a_nested_prefab_follow_their_base_through_the_bridge() {
         &mut client,
         Command::ComponentSet {
             entity: "Coin/Shine".into(),
-            component: "Sprite".into(),
+            component: "Sprite2D".into(),
             ron: "(color:(0.0,1.0,0.0,1.0),sort_order:1)".into(),
         },
     );

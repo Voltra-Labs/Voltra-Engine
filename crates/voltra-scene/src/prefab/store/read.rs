@@ -35,7 +35,7 @@ impl Prefabs {
         if let Some(limit) = limit.filter(|&limit| text.len() as u64 > limit) {
             return Err(too_large(limit));
         }
-        let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
+        let file = crate::format::parse(&text)?;
         Ok(Prefab::new(file)?
             .file
             .expect("Prefab::new keeps the file it checked"))

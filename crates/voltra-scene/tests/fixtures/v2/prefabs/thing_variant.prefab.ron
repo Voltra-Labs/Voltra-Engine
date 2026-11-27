@@ -1,0 +1,29 @@
+// The version 2 twin of v1/prefabs/thing_variant.prefab.ron: what `cargo
+// xtask migrate` (and an editor save) writes from it.
+(
+    version: 2,
+    entities: [
+        (
+            id: "019fe900-0000-7000-8000-000000000201",
+            components: {
+                "Collider2D": Circle(radius:0.5),
+                "Name": "Thing",
+                "PrefabInstance": (source:Path("prefabs/thing.prefab.ron"),own:true),
+                "PrefabPart": (record:"019fe900-0000-7000-8000-000000000101",overridden:["Collider2D","Sprite2D"]),
+                "RigidBody2D": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:1.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.05,lock_rotation:false,can_sleep:true,bullet:false),
+                "Sprite2D": (color:(0.25,0.5,1.0,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe900-0000-7000-8000-000000000202",
+            components: {
+                "Name": "Shine",
+                "Parent": "019fe900-0000-7000-8000-000000000201",
+                "PrefabPart": (record:"019fe900-0000-7000-8000-000000000102",overridden:["Transform2D"]),
+                "Sprite2D": (color:(1.0,1.0,1.0,0.5),sort_order:2,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,0.5),rotation:0.0,scale:(0.5,0.5)),
+            },
+        ),
+    ],
+)

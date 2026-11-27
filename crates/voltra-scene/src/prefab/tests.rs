@@ -5,6 +5,7 @@ use voltra_render::glam::Vec2;
 
 use super::*;
 use crate::format::ComponentRegistry;
+use crate::format::VERSION;
 use crate::format::{to_scene_file, EntityRecord};
 use crate::hierarchy::Parent;
 use crate::hierarchy::{children_of, parent_of, set_parent};
@@ -148,7 +149,7 @@ fn a_component_that_will_not_read_spawns_nothing_at_all() {
     let mut world = World::new();
     let mut components = BTreeMap::new();
     components.insert(
-        "Transform".to_owned(),
+        "Transform2D".to_owned(),
         ron::value::RawValue::from_boxed_ron("\"not a transform\"".into()).expect("valid ron"),
     );
     let file = SceneFile {

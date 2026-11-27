@@ -149,7 +149,7 @@ fn what_the_instance_made_its_own_is_kept() {
     scene.insert(root, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
     scene.insert(root, crate::Sensor);
     let part = scene.get_mut::<PrefabPart>(root).expect("a part");
-    part.overridden.insert("Sprite".to_owned());
+    part.overridden.insert("Sprite2D".to_owned());
     part.overridden.insert("Sensor".to_owned());
 
     made.world
@@ -224,7 +224,7 @@ fn an_instance_saved_before_parts_is_adopted_without_a_change() {
     );
     let part = scene.get::<PrefabPart>(root).expect("adopted");
     assert!(
-        part.overridden.contains("Sprite"),
+        part.overridden.contains("Sprite2D"),
         "its edit is now an override"
     );
     assert!(

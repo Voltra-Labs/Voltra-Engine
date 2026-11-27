@@ -250,7 +250,7 @@ fn a_variant_instance_duplicated_is_one_of_the_variant_numbered_apart() {
     assert_eq!(intensity(&world, copy), 3.0);
     let mut over = overridden(&world, copy);
     over.sort();
-    assert_eq!(over, ["Name", "Sprite"]);
+    assert_eq!(over, ["Name", "Sprite2D"]);
     assert_eq!(hierarchy::children_of(&world, copy).len(), 1, "its glow");
 
     // The variant's light changes: the copy follows it.

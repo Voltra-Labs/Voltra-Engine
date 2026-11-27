@@ -262,19 +262,19 @@ mod tests {
         flipped.flip_x = true;
         world.insert(there, flipped);
         let multi = MultiEdit::begin(&world, &registry, there, [here, there]);
-        let fields = Fields::of(&multi, "Transform");
+        let fields = Fields::of(&multi, "Transform2D");
         assert!(fields.at(&[Step::Field("translation"), Step::Index(0)]));
         assert!(!fields.at(&[Step::Field("translation"), Step::Index(1)]));
-        assert!(Fields::of(&multi, "Sprite").field("flip_x"));
+        assert!(Fields::of(&multi, "Sprite2D").field("flip_x"));
 
         let ctx = Context::default();
         let mut transform = *world.get::<Transform2D>(there).expect("t");
         let mut flip = true;
         for _ in 0..2 {
             let _ = ctx.run_ui(Default::default(), |ui| {
-                marker(ui, &multi, &["Transform", "Sprite"]);
+                marker(ui, &multi, &["Transform2D", "Sprite2D"]);
                 let _ = super::super::transform::show(ui, &mut transform, fields);
-                let sprite = Fields::of(&multi, "Sprite");
+                let sprite = Fields::of(&multi, "Sprite2D");
                 let _ = checkbox(ui, &mut flip, "x", sprite, vec![Step::Field("flip_x")]);
                 let _ = label(ui, "colour", true);
             });
@@ -283,13 +283,13 @@ mod tests {
         assert!(flip);
         let _ = ctx.run_ui(Default::default(), |ui| {
             assert!(take_touched(ui).is_empty(), "nothing committed");
-            touch(ui, "Sprite", vec![Step::Field("flip_x")]);
-            touch_variant(ui, "Collider", Vec::new());
+            touch(ui, "Sprite2D", vec![Step::Field("flip_x")]);
+            touch_variant(ui, "Collider2D", Vec::new());
             assert_eq!(
                 take_touched(ui),
                 [
-                    ("Sprite", vec![Step::Field("flip_x")], Touch::Value),
-                    ("Collider", Vec::new(), Touch::Variant),
+                    ("Sprite2D", vec![Step::Field("flip_x")], Touch::Value),
+                    ("Collider2D", Vec::new(), Touch::Variant),
                 ]
             );
             assert!(take_touched(ui).is_empty(), "taken");

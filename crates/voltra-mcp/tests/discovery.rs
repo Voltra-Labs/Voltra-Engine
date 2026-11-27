@@ -36,7 +36,7 @@ async fn components_come_with_templates_that_name_their_fields() {
             .cloned()
             .unwrap_or_else(|| panic!("{name} is there"))
     };
-    assert!(find("Sprite")["template"]
+    assert!(find("Sprite2D")["template"]
         .as_str()
         .expect("a template")
         .contains("color"));
@@ -81,7 +81,7 @@ async fn assets_and_scenes_are_listed_and_a_scene_reads_as_entities() {
     assert!(!entities.is_empty());
     assert!(entities
         .iter()
-        .any(|e| e["components"]["Transform"].is_string()));
+        .any(|e| e["components"]["Transform2D"].is_string()));
 }
 
 #[tokio::test]

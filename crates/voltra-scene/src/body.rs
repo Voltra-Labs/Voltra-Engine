@@ -90,7 +90,7 @@ impl Default for RigidBody2D {
 
 impl RigidBody2D {
     /// The registered name a scene file stores it under.
-    pub const NAME: &'static str = "RigidBody";
+    pub const NAME: &'static str = "RigidBody2D";
 
     /// A dynamic body of `mass`.
     ///

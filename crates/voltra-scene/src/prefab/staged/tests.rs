@@ -2,6 +2,7 @@ use voltra_render::glam::Vec2;
 
 use super::*;
 use crate::format::to_scene_file;
+use crate::format::VERSION;
 use crate::hierarchy::{parent_of, set_parent};
 use crate::{Name, Replicated, Transform2D};
 
@@ -131,7 +132,7 @@ fn a_component_that_will_not_read_stops_the_spawn_with_its_error() {
     let bad = ron::value::RawValue::from_ron("(translation: \"left\")").expect("valid ron");
     file.entities[3]
         .components
-        .insert("Transform".to_owned(), bad.to_owned());
+        .insert("Transform2D".to_owned(), bad.to_owned());
     let mut staged = StagedScene::new(file).expect("this version");
     let mut world = World::new();
 
@@ -158,7 +159,7 @@ fn check_finds_the_broken_component_without_a_world() {
     let bad = ron::value::RawValue::from_ron("(translation: \"left\")").expect("valid ron");
     file.entities[1]
         .components
-        .insert("Transform".to_owned(), bad.to_owned());
+        .insert("Transform2D".to_owned(), bad.to_owned());
     let staged = StagedScene::new(file).expect("this version");
     assert!(matches!(
         staged.check(&registry()),

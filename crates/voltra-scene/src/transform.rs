@@ -30,7 +30,7 @@ impl Default for Transform2D {
 
 impl Transform2D {
     /// The registered name a scene file stores it under.
-    pub const NAME: &'static str = "Transform";
+    pub const NAME: &'static str = "Transform2D";
 
     /// A transform at `translation`, unrotated and unscaled.
     pub fn from_translation(translation: Vec2) -> Self {

@@ -35,7 +35,7 @@ async fn a_scene_is_made_filled_edited_and_read_back() {
         .as_array()
         .expect("a list")
         .iter()
-        .find(|c| c["name"] == "Sprite")
+        .find(|c| c["name"] == "Sprite2D")
         .and_then(|c| c["template"].as_str())
         .expect("a template")
         .to_owned();
@@ -49,14 +49,14 @@ async fn a_scene_is_made_filled_edited_and_read_back() {
                 "scene": "scenes/made.ron",
                 "name": "Player",
                 "components": {
-                    "Transform": "(translation: (1.0, 2.0), rotation: 0.0, scale: (1.0, 1.0))",
-                    "Sprite": red,
+                    "Transform2D": "(translation: (1.0, 2.0), rotation: 0.0, scale: (1.0, 1.0))",
+                    "Sprite2D": red,
                 },
             }),
         )
         .await,
     ));
-    assert!(player["components"]["Sprite"]
+    assert!(player["components"]["Sprite2D"]
         .as_str()
         .expect("ron")
         .contains("color:(1.0,0.0,0.0,1.0)"));
@@ -65,7 +65,7 @@ async fn a_scene_is_made_filled_edited_and_read_back() {
             &client,
             "entity_spawn",
             json!({ "scene": "scenes/made.ron", "name": "Arm", "parent": "Player",
-                    "components": { "Transform": "(translation: (0.5, 0.0), rotation: 0.0, scale: (1.0, 1.0))" } }),
+                    "components": { "Transform2D": "(translation: (0.5, 0.0), rotation: 0.0, scale: (1.0, 1.0))" } }),
         )
         .await,
     ));
@@ -131,7 +131,7 @@ async fn a_failed_edit_leaves_the_file_as_it_was() {
     for (tool, args) in [
         (
             "component_set",
-            json!({ "scene": "scenes/sandbox.ron", "entity": id, "component": "Transform", "ron": "(translation: oops)" }),
+            json!({ "scene": "scenes/sandbox.ron", "entity": id, "component": "Transform2D", "ron": "(translation: oops)" }),
         ),
         (
             "component_set",
@@ -147,7 +147,7 @@ async fn a_failed_edit_leaves_the_file_as_it_was() {
         ),
         (
             "entity_spawn",
-            json!({ "scene": "scenes/sandbox.ron", "components": { "Sprite": 3 } }),
+            json!({ "scene": "scenes/sandbox.ron", "components": { "Sprite2D": 3 } }),
         ),
     ] {
         let result = call(&client, tool, args).await;
@@ -172,7 +172,7 @@ async fn deleting_takes_the_subtree_and_reparenting_to_nothing_makes_a_root() {
     .await;
     for (name, parent) in [("A", None), ("B", Some("A")), ("C", Some("A/B"))] {
         let mut args = json!({ "scene": "scenes/tree.ron", "name": name,
-                               "components": { "Transform": "(translation: (0.0, 0.0), rotation: 0.0, scale: (1.0, 1.0))" } });
+                               "components": { "Transform2D": "(translation: (0.0, 0.0), rotation: 0.0, scale: (1.0, 1.0))" } });
         if let Some(parent) = parent {
             args["parent"] = json!(parent);
         }
@@ -239,7 +239,7 @@ async fn a_prefab_is_placed_in_a_scene_linked_to_its_file() {
         .as_str()
         .expect("linked")
         .contains("coin.ron"));
-    assert!(entity["components"]["Transform"]
+    assert!(entity["components"]["Transform2D"]
         .as_str()
         .expect("placed")
         .contains("3.0"));

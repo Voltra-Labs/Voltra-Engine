@@ -259,7 +259,7 @@ mod tests {
                 reshape(collider, "Box");
             }
         }
-        multi.done_for_each("Collider");
+        multi.done_for_each("Collider2D");
         assert!(multi.finish(&mut world, &registry).is_empty());
         let sizes: Vec<_> = entities
             .iter()

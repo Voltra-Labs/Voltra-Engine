@@ -5,7 +5,6 @@ use serde_json::json;
 use voltra_assets::atlas::{is_atlas, AtlasFile};
 use voltra_assets::browse::EntryKind;
 use voltra_assets::watch::{is_animation, is_animator, is_input_map, is_scene, is_sorting_layers};
-use voltra_scene::format::SceneFile;
 use voltra_scene::{AnimationClip, Prefab, StateMachine};
 
 use super::{ToolError, ToolResult};
@@ -73,7 +72,9 @@ fn check(name: &str, text: &str) -> Result<EntryKind, ToolError> {
         |e: &dyn std::fmt::Display| ToolError(format!("{name} does not read as {kind:?}: {e}"));
     match kind {
         EntryKind::Scene => {
-            let file: SceneFile = ron::from_str(text).map_err(|e| fail(&e))?;
+            // Any version the engine reads: an older one is migrated as
+            // the player loads it.
+            let file = voltra_scene::format::parse(text).map_err(|e| fail(&e))?;
             Prefab::new(file).map_err(|e| fail(&e))?;
         }
         EntryKind::Animation => {
