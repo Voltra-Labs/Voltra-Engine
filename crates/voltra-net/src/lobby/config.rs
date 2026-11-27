@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use super::wire::{largest_snapshot, ENTRY_FIXED, SNAPSHOT_FIXED};
+#[cfg(test)]
+use super::wire::largest_snapshot;
+use super::wire::{ENTRY_FIXED, SNAPSHOT_FIXED};
 use crate::{ChannelId, ChannelKind, NetConfig, DEFAULT_CHANNELS};
 
 /// The most entries a lobby holds, whatever its config says.
@@ -40,9 +42,11 @@ pub enum LateJoin {
 }
 
 /// How the lobby runs. Both ends make their session's config through
-/// [`net_config`](Self::net_config); only the server's rules (slots, the
-/// minimum, late joins) are read, and a client reads its own
-/// [`name`](Self::name).
+/// [`net_config`](Self::net_config), and must agree on its
+/// [`channel`](Self::channel) — what `net_config` adds to the session
+/// depends on nothing else, so ends with other rules still meet. Only the
+/// server's rules (slots, the minimum, names, late joins, the join
+/// deadline) are applied; a client reads its own [`name`](Self::name).
 #[derive(Debug, Clone, PartialEq)]
 pub struct LobbyConfig {
     /// The lobby's channel: reliable-ordered, its own, so the game's
@@ -103,13 +107,15 @@ impl LobbyConfig {
     ///
     /// A game channel already at [`channel`](Self::channel) of another kind
     /// is overwritten, with a warning; a
-    /// [`max_message_size`](NetConfig::max_message_size) too small for
-    /// the lobby's largest snapshot is raised to it.
+    /// [`max_message_size`](NetConfig::max_message_size) under
+    /// [`MAX_LOBBY_SNAPSHOT`] — the largest snapshot any lobby config can
+    /// call for — is raised to it. The raise is the constant, not this
+    /// config's own largest snapshot: the limit is in the fingerprint, so
+    /// a client and a server with other slots or name lengths must get
+    /// the same one.
     pub fn net_config(&self, mut base: NetConfig) -> NetConfig {
         base.lobby_version = crate::LOBBY_WIRE_VERSION;
-        let rules = self.clone().validated();
-        let largest = largest_snapshot(rules.max_players, rules.max_name_chars);
-        base.max_message_size = base.max_message_size.max(largest);
+        base.max_message_size = base.max_message_size.max(MAX_LOBBY_SNAPSHOT);
         let index = usize::from(self.channel.0);
         if base.channels.len() <= index {
             base.channels
@@ -174,6 +180,38 @@ mod tests {
         };
         assert!(!lobby.fits(&other_build));
         assert_ne!(with.fingerprint(), other_build.fingerprint());
+    }
+
+    #[test]
+    fn ends_with_other_rules_make_the_same_session() {
+        let small = NetConfig {
+            max_message_size: 1024,
+            ..NetConfig::default()
+        };
+        let server = LobbyConfig {
+            max_players: MAX_LOBBY_PLAYERS,
+            max_name_chars: MAX_NAME_CHARS,
+            min_players: 4,
+            ..LobbyConfig::default()
+        };
+        let client = LobbyConfig {
+            max_players: 2,
+            max_name_chars: 3,
+            name: "Ada".into(),
+            ..LobbyConfig::default()
+        };
+        for base in [small, NetConfig::default()] {
+            let (a, b) = (server.net_config(base.clone()), client.net_config(base));
+            assert_eq!(a.fingerprint(), b.fingerprint());
+            assert!(a.max_message_size >= MAX_LOBBY_SNAPSHOT);
+        }
+        assert_eq!(
+            LobbyConfig::default()
+                .net_config(NetConfig::default())
+                .max_message_size,
+            NetConfig::default().max_message_size,
+            "the default limit already fits"
+        );
     }
 
     #[test]

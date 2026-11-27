@@ -1,5 +1,6 @@
 //! The lobby's messages, as they travel (serde over `postcard`). Any
-//! change here bumps [`LOBBY_WIRE_VERSION`](crate::LOBBY_WIRE_VERSION).
+//! change here after a release bumps
+//! [`LOBBY_WIRE_VERSION`](crate::LOBBY_WIRE_VERSION).
 
 use serde::{Deserialize, Serialize};
 
@@ -21,7 +22,9 @@ pub(crate) const SNAPSHOT_FIXED: usize = 32;
 pub(crate) const ENTRY_FIXED: usize = 8;
 
 /// The largest snapshot of a lobby of `players` slots whose names are at
-/// most `chars` characters, each at most four bytes of UTF-8.
+/// most `chars` characters, each at most four bytes of UTF-8: what
+/// `config::name_cap` keeps under `MAX_LOBBY_SNAPSHOT`, checked here.
+#[cfg(test)]
 pub(crate) fn largest_snapshot(players: usize, chars: usize) -> usize {
     SNAPSHOT_FIXED + players * (ENTRY_FIXED + 4 * chars)
 }
