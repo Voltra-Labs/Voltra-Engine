@@ -198,7 +198,16 @@ impl ReplicationServer {
                 self.tick,
             );
             for id in update.resync.into_iter().take(MAX_LISTED) {
-                view.resync(id, self.components.len(), self.tick.wrapping_add(1));
+                if self.tracked.contains_key(&id) {
+                    view.resync(id, self.components.len(), self.tick.wrapping_add(1));
+                } else {
+                    // Gone, or never ours: said as a despawn, which is in
+                    // every snapshot until acknowledged — or the client,
+                    // whose copy went while its view was being started
+                    // over (no spawn sent, so no despawn owed), would ask
+                    // for it for good.
+                    view.despawned.insert(id);
+                }
             }
         }
     }

@@ -371,3 +371,71 @@ fn a_level_entity_asked_for_again_comes_back_though_the_asks_are_lost() {
         Some(7)
     );
 }
+
+#[test]
+fn an_ask_for_an_entity_the_server_despawned_meanwhile_is_answered() {
+    use voltra_core::net::{Conditioned, LinkConditions};
+
+    let root = scratch_root();
+    write_level(&root, "b", Some(SceneId::new()));
+    let network = MemoryNetwork::new();
+    let link = Conditioned::new(network.endpoint(), LinkConditions::default(), 3);
+    let control = link.control();
+    let address = link.inner().address();
+    let app = || {
+        let mut app = App::default()
+            .with_asset_root(&root)
+            .with_replication(ReplicationConfig::default());
+        app.load_scene(&scene("b"));
+        app
+    };
+    let mut server = Headless::new(app());
+    server.net_mut().host_on(link, NetConfig::default());
+    let mut client = Headless::new(app());
+    client
+        .net_mut()
+        .join_on(network.endpoint(), address, NetConfig::default());
+    step(&mut server, &mut client, 90);
+    let pending = |client: &Headless| {
+        client
+            .net()
+            .replication()
+            .and_then(|r| r.client())
+            .map(|c| c.resync_pending())
+    };
+
+    // The client's copy goes (the game despawned it), and the server's
+    // next update of it makes the client ask for it whole again.
+    for coin in replicated(&client) {
+        client.world_mut().despawn(coin);
+    }
+    let theirs: Vec<Entity> = server
+        .world()
+        .query::<Replicated>()
+        .map(|(e, _)| e)
+        .collect();
+    for &coin in &theirs {
+        if let Some(t) = server.world_mut().get_mut::<Transform>(coin) {
+            t.translation.x += 1.0;
+        }
+    }
+    step(&mut server, &mut client, 1);
+    assert_eq!(pending(&client), Some(1), "asked");
+
+    // The answer is lost while the server starts the coin over, and the
+    // coin is despawned before any of it lands: no spawn was ever sent,
+    // so no despawn is owed — but the ask is still answered.
+    control.set(LinkConditions {
+        loss: 1.0,
+        ..LinkConditions::default()
+    });
+    step(&mut server, &mut client, 10);
+    for &coin in &theirs {
+        voltra_scene::hierarchy::despawn_recursive(server.world_mut(), coin);
+    }
+    step(&mut server, &mut client, 1);
+    control.set(LinkConditions::default());
+    step(&mut server, &mut client, 180);
+    assert_eq!(pending(&client), Some(0), "the ask settled");
+    assert!(replicated(&client).is_empty());
+}

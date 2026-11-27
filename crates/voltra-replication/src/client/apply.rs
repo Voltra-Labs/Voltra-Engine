@@ -88,6 +88,9 @@ impl ReplicationClient {
             .filter_map(|id| self.bound.get(id).map(|b| b.entity))
             .collect();
         for id in snapshot.culled {
+            // Out of interest: what it asked to be sent again will come
+            // back with its spawn when it is relevant again, unasked.
+            self.resync.settle(id);
             let Some(bound) = self.bound.remove(&id) else {
                 continue;
             };
