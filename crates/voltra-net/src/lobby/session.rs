@@ -48,21 +48,51 @@ impl LobbySession {
     /// The lobby for `endpoint`'s session: a server's (empty, its host's
     /// own player joining with the next receive on a listen server) or a
     /// client's (asking in under [`LobbyConfig::name`] once connected).
+    /// Made on a session already under way, it catches up: a listen
+    /// host's player is in at once, a connected client asks in at the
+    /// next send, and a server gives the clients already connected the
+    /// join deadline from now.
     pub fn new(config: LobbyConfig, endpoint: &Endpoint) -> Self {
         let config = config.validated();
+        let mut lobby = Lobby::new(&config);
+        let mut pending = Vec::new();
         let role = if endpoint.is_server() {
-            Role::Server(Server {
+            let mut server = Server {
                 join_timeout: config.join_deadline(endpoint.config()),
                 ..Server::default()
-            })
+            };
+            // Made on a session already hosting: its own player is in now,
+            // not at a `Connected` this lobby will never see. Clients
+            // already connected are given the join deadline from here.
+            if endpoint.host_plays() {
+                server.listen = true;
+                let before = lobby.clone();
+                if let Err(refusal) = lobby.join(PeerId::SERVER, &config.name, &config) {
+                    log::warn!("the host's own player is not in the lobby: {refusal}");
+                }
+                lobby.make_host(PeerId::SERVER);
+                server.dirty = true;
+                changes(&before, &lobby, &mut pending);
+            }
+            Role::Server(server)
         } else {
-            Role::Client(Client::default())
+            let mut client = Client::default();
+            // Made on a session already connected: ask in now, as the
+            // `Connected` it missed would have.
+            if endpoint.is_connected(PeerId::SERVER) {
+                client.connected = true;
+                client.me = endpoint.local_id();
+                client.outbox.push(ToServer::Hello {
+                    name: config.name.clone(),
+                });
+            }
+            Role::Client(client)
         };
         Self {
-            lobby: Lobby::new(&config),
+            lobby,
             config,
             events: Vec::new(),
-            pending: Vec::new(),
+            pending,
             role,
         }
     }

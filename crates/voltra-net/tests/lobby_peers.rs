@@ -218,3 +218,64 @@ fn an_outage_the_session_survives_does_not_cost_the_join() {
     );
     assert_eq!(server.lobby.lobby().len(), 1);
 }
+
+#[test]
+fn a_lobby_made_on_a_session_under_way_catches_up() {
+    let network = MemoryNetwork::new();
+    let transport = network.endpoint();
+    let address = transport.address();
+    let config = rules().net_config(NetConfig::default());
+    let mut host = Endpoint::server(transport, config.clone());
+    host.set_host_plays(true);
+    let mut guest = Endpoint::client(network.endpoint(), address, config);
+
+    // The session connects, its events read and gone, with no lobby yet.
+    let mut now = Duration::ZERO;
+    for _ in 0..30 {
+        now += TICK;
+        host.receive(now);
+        host.flush(now);
+        guest.receive(now);
+        guest.flush(now);
+    }
+    assert!(guest.is_connected(PeerId::SERVER));
+
+    let mut on_host = LobbySession::new(
+        LobbyConfig {
+            name: "Host".into(),
+            ..rules()
+        },
+        &host,
+    );
+    let mut on_guest = LobbySession::new(
+        LobbyConfig {
+            name: "Guest".into(),
+            ..rules()
+        },
+        &guest,
+    );
+    assert!(
+        on_host.is_in() && on_host.is_host(),
+        "the host's own player is in at once"
+    );
+    for _ in 0..30 {
+        now += TICK;
+        host.receive(now);
+        on_host.receive(&mut host, now);
+        on_host.send(&mut host);
+        host.flush(now);
+        guest.receive(now);
+        on_guest.receive(&mut guest, now);
+        on_guest.send(&mut guest);
+        guest.flush(now);
+    }
+    let names: Vec<&str> = on_host
+        .lobby()
+        .entries()
+        .iter()
+        .map(|e| e.name.as_str())
+        .collect();
+    assert_eq!(names, ["Host", "Guest"], "the connected guest asked in");
+    assert!(on_guest.is_in());
+    assert_eq!(on_guest.lobby(), on_host.lobby());
+}
