@@ -2,7 +2,7 @@
 //! frames whose lighting reads them.
 
 use super::Renderer;
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 use crate::normals::{NormalPass, NORMAL_FORMAT};
 use crate::scene_draw::SceneDraw;
 use crate::target::RenderTarget;
@@ -17,7 +17,7 @@ impl Renderer {
         &mut self,
         encoder: &mut wgpu::CommandEncoder,
         (width, height): (u32, u32),
-        mesh: Option<&Mesh>,
+        mesh: Option<&Mesh2D>,
         draws: &[SceneDraw<'_>],
     ) -> bool {
         if !self.lighting.uses_normals() || !NormalPass::needed(draws) {

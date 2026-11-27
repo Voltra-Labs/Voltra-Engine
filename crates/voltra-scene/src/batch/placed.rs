@@ -2,7 +2,7 @@
 //! against the view.
 
 use voltra_render::glam::{Mat3, Vec2};
-use voltra_render::{QuadInstance, Vertex};
+use voltra_render::{QuadInstance, Vertex2D};
 
 use crate::sprite::sheets::Sheets;
 
@@ -15,7 +15,7 @@ pub(crate) fn placed_corners(
     corners: [Vec2; 4],
     uvs: [[f32; 2]; 4],
     color: [f32; 4],
-) -> Option<[Vertex; 4]> {
+) -> Option<[Vertex2D; 4]> {
     let world = corners.map(|corner| matrix.transform_point2(corner));
     let min = world.iter().copied().fold(Vec2::INFINITY, Vec2::min);
     let max = world.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);
@@ -24,7 +24,7 @@ pub(crate) fn placed_corners(
     }
     let mut corner = 0;
     Some(world.map(|at| {
-        let vertex = Vertex::new([at.x, at.y], color, uvs[corner]);
+        let vertex = Vertex2D::new([at.x, at.y], color, uvs[corner]);
         corner += 1;
         vertex
     }))

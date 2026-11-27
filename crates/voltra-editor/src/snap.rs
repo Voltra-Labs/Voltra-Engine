@@ -2,7 +2,7 @@
 //! whole angles, scales to whole increments.
 
 use voltra_render::glam::Vec2;
-use voltra_render::{Camera2D, LineBatch};
+use voltra_render::{LineBatch, View2D};
 use voltra_scene::Transform;
 
 use crate::tool::Tool;
@@ -90,7 +90,7 @@ impl Snap {
 
     /// The grid's lines across what `camera` shows — sparser when zoomed
     /// out so it never takes more than about a hundred lines a side.
-    pub fn draw_grid(&self, camera: &Camera2D, lines: &mut LineBatch) {
+    pub fn draw_grid(&self, camera: &View2D, lines: &mut LineBatch) {
         if !self.show_grid || !(self.step.is_finite() && self.step > 0.0) {
             return;
         }
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn the_grid_stays_sparse_however_far_out() {
         let mut lines = LineBatch::default();
-        let far = Camera2D::new(Vec2::ZERO, 0.001, 1.0);
+        let far = View2D::new(Vec2::ZERO, 0.001, 1.0);
         on().draw_grid(&far, &mut lines);
         assert!(lines.len() <= 2 * 104, "{} lines", lines.len());
     }

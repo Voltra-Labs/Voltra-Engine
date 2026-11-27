@@ -13,7 +13,7 @@ use glam::{Mat4, Vec2, Vec3};
 /// before there was a camera at all. Doubling `zoom` halves what fits on
 /// screen, which is the direction people expect a zoom control to move.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Camera2D {
+pub struct View2D {
     /// World position at the centre of the view.
     pub position: Vec2,
     /// Private because `half_extents` divides by it. Write through
@@ -27,7 +27,7 @@ pub struct Camera2D {
     pub rotation: f32,
 }
 
-impl Default for Camera2D {
+impl Default for View2D {
     fn default() -> Self {
         Self {
             position: Vec2::ZERO,
@@ -38,7 +38,7 @@ impl Default for Camera2D {
     }
 }
 
-impl Camera2D {
+impl View2D {
     /// A camera at `position`; `zoom` is clamped by [`Self::set_zoom`].
     pub fn new(position: Vec2, zoom: f32, aspect: f32) -> Self {
         let mut camera = Self {
@@ -211,9 +211,9 @@ impl Camera2D {
 /// The matrix for drawing in a target's own pixels: origin top-left, **y
 /// down**, one unit per pixel - what screen-space UI is laid out in.
 ///
-/// Not a [`Camera2D`]: its zoom is clamped for navigation, and a
+/// Not a [`View2D`]: its zoom is clamped for navigation, and a
 /// 1080-pixel-tall target would need a zoom far below that floor. The same
-/// `directx` projection as [`Camera2D::view_projection`], with bottom and top
+/// `directx` projection as [`View2D::view_projection`], with bottom and top
 /// swapped so y runs down.
 pub fn screen_projection(width: f32, height: f32) -> Mat4 {
     rh::proj::directx::orthographic(0.0, width.max(1.0), height.max(1.0), 0.0, -1.0, 1.0)

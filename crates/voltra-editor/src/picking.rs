@@ -1,6 +1,6 @@
 //! Turning a click on the scene image into a selection.
 //!
-//! The conversion is the reason `Camera2D::viewport_to_world` exists: egui
+//! The conversion is the reason `View2D::viewport_to_world` exists: egui
 //! reports a pointer in screen points, the world is in world units, and the
 //! camera is the only thing that knows the mapping between them.
 

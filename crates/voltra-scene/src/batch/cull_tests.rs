@@ -98,8 +98,8 @@ fn a_box_with_a_non_finite_edge_is_kept_rather_than_guessed_away() {
 
 /// A wide view — ten by two — turned 45°: the box around it reaches
 /// `6 / √2` each way.
-fn turned_view() -> voltra_render::Camera2D {
-    voltra_render::Camera2D::new(Vec2::ZERO, 1.0, 5.0).with_rotation(std::f32::consts::FRAC_PI_4)
+fn turned_view() -> voltra_render::View2D {
+    voltra_render::View2D::new(Vec2::ZERO, 1.0, 5.0).with_rotation(std::f32::consts::FRAC_PI_4)
 }
 
 #[test]
@@ -113,7 +113,7 @@ fn a_view_turned_45_degrees_culls_by_the_box_around_its_turned_rect() {
     let turned = Sheets::default().through(&turned_view());
     assert_eq!(SpriteBatch::from_world(&world, turned).sprite_count(), 1);
 
-    let upright = Sheets::default().through(&voltra_render::Camera2D::new(Vec2::ZERO, 1.0, 5.0));
+    let upright = Sheets::default().through(&voltra_render::View2D::new(Vec2::ZERO, 1.0, 5.0));
     let mut kept = World::new();
     sprite_at(&mut kept, Vec2::new(3.0, 3.0));
     assert_eq!(
@@ -134,7 +134,7 @@ fn a_parallax_layer_turns_with_the_world_about_the_turned_camera() {
     world.insert(sky, Transform::default());
     world.insert(sky, Sprite::default());
     world.insert(sky, Parallax::new(Vec2::ZERO));
-    let view = voltra_render::Camera2D::new(Vec2::new(40.0, -7.0), 1.0, 1.0).with_rotation(0.8);
+    let view = voltra_render::View2D::new(Vec2::new(40.0, -7.0), 1.0, 1.0).with_rotation(0.8);
     let drawn = crate::hierarchy::WorldTransforms::seen_from(&world, view.position)
         .matrix(sky)
         .transform_point2(Vec2::ZERO);

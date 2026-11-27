@@ -114,11 +114,11 @@ impl<'a> Sheets<'a> {
 
     /// The same stores seen through `view`: from its position, for
     /// parallax, and drawing only what falls inside the world box around
-    /// what it shows ([`Camera2D::visible_bounds`]) — the turned rect's box
+    /// what it shows ([`View2D::visible_bounds`]) — the turned rect's box
     /// when the view is turned. What every draw through a camera takes.
     ///
-    /// [`Camera2D::visible_bounds`]: voltra_render::Camera2D::visible_bounds
-    pub fn through(self, view: &voltra_render::Camera2D) -> Self {
+    /// [`View2D::visible_bounds`]: voltra_render::View2D::visible_bounds
+    pub fn through(self, view: &voltra_render::View2D) -> Self {
         let (min, max) = view.visible_bounds();
         self.seen_from(view.position).visible_in(min, max)
     }

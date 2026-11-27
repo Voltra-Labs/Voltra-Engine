@@ -13,11 +13,11 @@ mod buffers;
 /// A single vertex of 2D geometry.
 ///
 /// `repr(C)` is not cosmetic: the GPU reads this struct by byte offset, so the
-/// field order must be exactly what [`Vertex::LAYOUT`] declares. Rust makes no
+/// field order must be exactly what [`Vertex2D::LAYOUT`] declares. Rust makes no
 /// layout promise without it.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
-pub struct Vertex {
+pub struct Vertex2D {
     /// Where it is, in the space of the camera drawing it.
     pub position: [f32; 2],
     /// Multiplied with the texture, alpha included: an alpha below one
@@ -29,7 +29,7 @@ pub struct Vertex {
     pub uv: [f32; 2],
 }
 
-impl Vertex {
+impl Vertex2D {
     /// Attribute layout matching the `@location` bindings in the WGSL.
     pub const LAYOUT: wgpu::VertexBufferLayout<'static> = wgpu::VertexBufferLayout {
         array_stride: size_of::<Self>() as wgpu::BufferAddress,
@@ -47,7 +47,7 @@ impl Vertex {
     }
 }
 
-/// What one draw of a [`Mesh`] covers: a range of its triangle indices, or
+/// What one draw of a [`Mesh2D`] covers: a range of its triangle indices, or
 /// a range of its quad instances.
 ///
 /// One kind a draw, because the two go through different pipelines (the
@@ -77,7 +77,7 @@ impl Primitives {
 
 /// Geometry uploaded to the GPU: triangles, drawn directly or through
 /// indices, and quads drawn as instances ([`QuadInstance`]).
-pub struct Mesh {
+pub struct Mesh2D {
     /// `None` when the mesh is quads alone.
     vertices: Option<wgpu::Buffer>,
     /// `None` means a non-indexed draw.
@@ -94,7 +94,7 @@ pub struct Mesh {
 /// dropped buffer's memory waits for JavaScript's collector, and meshes are
 /// built afresh every frame (see `frame_buffers.rs`). A mesh owns its
 /// buffers alone, and is dropped after the frame that drew it is submitted.
-impl Drop for Mesh {
+impl Drop for Mesh2D {
     fn drop(&mut self) {
         for buffer in [&self.vertices, &self.indices, &self.quads]
             .into_iter()
@@ -105,7 +105,7 @@ impl Drop for Mesh {
     }
 }
 
-impl Mesh {
+impl Mesh2D {
     /// A mesh of nothing, which [`MeshBuffers`] fills.
     fn empty() -> Self {
         Self {
@@ -137,9 +137,9 @@ impl Mesh {
     /// indices as `Uint32` for the same reason. The cost is four bytes per
     /// index instead of two.
     ///
-    /// Generic over the vertex type because a `Mesh` is buffers and a count:
+    /// Generic over the vertex type because a `Mesh2D` is buffers and a count:
     /// what the bytes mean is the pipeline's business, declared by whichever
-    /// [`wgpu::VertexBufferLayout`] it was built with. [`Vertex`] and
+    /// [`wgpu::VertexBufferLayout`] it was built with. [`Vertex2D`] and
     /// `LineVertex` are two such meanings, and there is no third structure to
     /// justify.
     pub fn indexed<V: Pod>(
@@ -262,20 +262,20 @@ fn init<T: Pod>(
 }
 
 /// The built-in triangle, wound counter-clockwise in clip space.
-pub const TRIANGLE: [Vertex; 3] = [
-    Vertex::new([0.0, 0.5], [1.0, 0.0, 0.0, 1.0], [0.5, 0.0]),
-    Vertex::new([-0.5, -0.5], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
-    Vertex::new([0.5, -0.5], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
+pub const TRIANGLE: [Vertex2D; 3] = [
+    Vertex2D::new([0.0, 0.5], [1.0, 0.0, 0.0, 1.0], [0.5, 0.0]),
+    Vertex2D::new([-0.5, -0.5], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    Vertex2D::new([0.5, -0.5], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
 ];
 
 /// A full-clip-space quad as four vertices, drawn with [`QUAD_INDICES`].
 ///
 /// V runs opposite to Y: clip space points up, image rows go down.
-pub const QUAD: [Vertex; 4] = [
-    Vertex::new([-1.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
-    Vertex::new([-1.0, -1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
-    Vertex::new([1.0, -1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
-    Vertex::new([1.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, 0.0]),
+pub const QUAD: [Vertex2D; 4] = [
+    Vertex2D::new([-1.0, 1.0], [1.0, 0.0, 0.0, 1.0], [0.0, 0.0]),
+    Vertex2D::new([-1.0, -1.0], [0.0, 1.0, 0.0, 1.0], [0.0, 1.0]),
+    Vertex2D::new([1.0, -1.0], [0.0, 0.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex2D::new([1.0, 1.0], [1.0, 1.0, 0.0, 1.0], [1.0, 0.0]),
 ];
 
 /// Two triangles sharing the diagonal, so four vertices cover a quad.
@@ -287,13 +287,16 @@ mod tests {
 
     #[test]
     fn layout_stride_matches_the_struct() {
-        assert_eq!(Vertex::LAYOUT.array_stride as usize, size_of::<Vertex>());
-        assert_eq!(size_of::<Vertex>(), 8 * size_of::<f32>());
+        assert_eq!(
+            Vertex2D::LAYOUT.array_stride as usize,
+            size_of::<Vertex2D>()
+        );
+        assert_eq!(size_of::<Vertex2D>(), 8 * size_of::<f32>());
     }
 
     #[test]
     fn attributes_are_contiguous_and_ordered() {
-        let attrs = Vertex::LAYOUT.attributes;
+        let attrs = Vertex2D::LAYOUT.attributes;
         assert_eq!(attrs.len(), 3);
         let f32_size = size_of::<f32>() as wgpu::BufferAddress;
 

@@ -7,7 +7,7 @@ use crate::camera::screen_projection;
 use crate::context::GpuContext;
 use crate::graph::{RenderGraph, Slot, TexturePool};
 use crate::lights::{LightPass, Lighting};
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 use crate::pass;
 use crate::post::PostPass;
 use crate::post::PostSettings;
@@ -23,7 +23,7 @@ impl Renderer {
     /// the frame.
     pub fn render_mesh(
         &mut self,
-        mesh: Option<&Mesh>,
+        mesh: Option<&Mesh2D>,
         draws: &[SceneDraw<'_>],
         ui: Layer<'_>,
         post: &PostSettings,
@@ -112,7 +112,7 @@ impl Renderer {
         &mut self,
         target: &RenderTarget,
         output: &RenderTarget,
-        mesh: Option<&Mesh>,
+        mesh: Option<&Mesh2D>,
         draws: &[SceneDraw<'_>],
         ui: Layer<'_>,
         post: &PostSettings,
@@ -206,7 +206,7 @@ impl Renderer {
         &self,
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::TextureView,
-        mesh: Option<&Mesh>,
+        mesh: Option<&Mesh2D>,
         draws: &[SceneDraw<'_>],
     ) {
         // Uploaded every frame rather than on change: one 64-byte write is

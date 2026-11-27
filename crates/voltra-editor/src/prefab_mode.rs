@@ -23,7 +23,7 @@ use voltra_assets::AssetPath;
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_render::Camera2D;
+use voltra_render::View2D;
 use voltra_scene::format::SceneFile;
 use voltra_scene::{prefab, PrefabInstance, SceneId};
 
@@ -42,7 +42,7 @@ struct Parked {
     document: SceneDocument,
     history: History,
     selected: Vec<SceneId>,
-    camera: Camera2D,
+    camera: View2D,
 }
 
 /// What a panel asked prefab mode to do, taken next frame.

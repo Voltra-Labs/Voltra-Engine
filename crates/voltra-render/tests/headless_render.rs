@@ -11,9 +11,9 @@
 //! The test skips itself when no GPU adapter is available so CI machines
 //! without one still pass.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
-use voltra_render::mesh::{self, Mesh, Vertex};
+use voltra_render::mesh::{self, Mesh2D, Vertex2D};
 use voltra_render::pass::MeshDraw;
 use voltra_render::texture::{self, Filter, Texture};
 use voltra_render::{pass, pipeline, wgpu};
@@ -27,8 +27,8 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 fn render_to_pixels(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    mesh: &Mesh,
-    camera: &Camera2D,
+    mesh: &Mesh2D,
+    camera: &View2D,
 ) -> Vec<Rgba> {
     render_textured(device, queue, mesh, camera, &Texture::white(device, queue))
 }
@@ -37,8 +37,8 @@ fn render_to_pixels(
 fn render_textured(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    mesh: &Mesh,
-    camera: &Camera2D,
+    mesh: &Mesh2D,
+    camera: &View2D,
     albedo: &Texture,
 ) -> Vec<Rgba> {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -92,8 +92,8 @@ fn triangle_rasterises_and_interpolates() {
         return;
     };
 
-    let triangle = Mesh::new(&device, "test-triangle", &mesh::TRIANGLE);
-    let pixels = render_to_pixels(&device, &queue, &triangle, &Camera2D::default());
+    let triangle = Mesh2D::new(&device, "test-triangle", &mesh::TRIANGLE);
+    let pixels = render_to_pixels(&device, &queue, &triangle, &View2D::default());
 
     // The top-left corner is outside the triangle, so it must still hold the
     // clear colour. 0.1 linear encodes to roughly 89 in an sRGB texture.
@@ -131,11 +131,11 @@ fn indexed_quad_covers_every_pixel() {
         return;
     };
 
-    let quad = Mesh::indexed(&device, "test-quad", &mesh::QUAD, &mesh::QUAD_INDICES);
+    let quad = Mesh2D::indexed(&device, "test-quad", &mesh::QUAD, &mesh::QUAD_INDICES);
     assert!(quad.is_indexed());
     assert_eq!(quad.count(), mesh::QUAD_INDICES.len() as u32);
 
-    let pixels = render_to_pixels(&device, &queue, &quad, &Camera2D::default());
+    let pixels = render_to_pixels(&device, &queue, &quad, &View2D::default());
 
     // The quad spans the whole of clip space, so the clear colour must be
     // completely painted over. If the index buffer were ignored or mis-typed,
@@ -164,16 +164,16 @@ fn moving_the_camera_moves_the_geometry() {
         return;
     };
 
-    let triangle = Mesh::new(&device, "test-triangle", &mesh::TRIANGLE);
+    let triangle = Mesh2D::new(&device, "test-triangle", &mesh::TRIANGLE);
 
-    let centred = render_to_pixels(&device, &queue, &triangle, &Camera2D::default());
+    let centred = render_to_pixels(&device, &queue, &triangle, &View2D::default());
     // Pushing the camera two units right puts the triangle entirely off the
     // left edge of a viewport that only spans [-1, 1].
     let panned = render_to_pixels(
         &device,
         &queue,
         &triangle,
-        &Camera2D::new(Vec2::new(2.0, 0.0), 1.0, 1.0),
+        &View2D::new(Vec2::new(2.0, 0.0), 1.0, 1.0),
     );
 
     let centre_before = at(&centred, SIZE / 2, SIZE / 2);
@@ -196,11 +196,11 @@ fn moving_the_camera_moves_the_geometry() {
 
 /// A full-screen quad with white vertex colours, so the texture is the only
 /// thing deciding the output.
-const WHITE_QUAD: [voltra_render::Vertex; 4] = [
-    voltra_render::Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
-    voltra_render::Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
-    voltra_render::Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
-    voltra_render::Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
+const WHITE_QUAD: [voltra_render::Vertex2D; 4] = [
+    voltra_render::Vertex2D::new([-1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
+    voltra_render::Vertex2D::new([-1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
+    voltra_render::Vertex2D::new([1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    voltra_render::Vertex2D::new([1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
 ];
 
 #[test]
@@ -219,8 +219,8 @@ fn texture_is_sampled_the_right_way_up() {
     let checker = Texture::from_rgba8(&device, &queue, "checker", &texels, 2, 2, Filter::Nearest)
         .expect("2x2 RGBA is 16 bytes");
 
-    let quad = Mesh::indexed(&device, "white-quad", &WHITE_QUAD, &mesh::QUAD_INDICES);
-    let pixels = render_textured(&device, &queue, &quad, &Camera2D::default(), &checker);
+    let quad = Mesh2D::indexed(&device, "white-quad", &WHITE_QUAD, &mesh::QUAD_INDICES);
+    let pixels = render_textured(&device, &queue, &quad, &View2D::default(), &checker);
 
     // Sample well inside each quadrant to stay clear of the texel boundary.
     let q = SIZE / 4;
@@ -259,12 +259,12 @@ fn white_texture_leaves_vertex_colour_alone() {
     let white = Texture::white(&device, &queue);
     assert_eq!((white.width(), white.height()), (1, 1));
 
-    let triangle = Mesh::new(&device, "test-triangle", &mesh::TRIANGLE);
+    let triangle = Mesh2D::new(&device, "test-triangle", &mesh::TRIANGLE);
     let textured = render_textured(
         &device,
         &queue,
         &triangle,
-        &Camera2D::default(),
+        &View2D::default(),
         &Texture::white(&device, &queue),
     );
 
@@ -301,11 +301,11 @@ fn zooming_out_shrinks_the_geometry() {
         return;
     };
 
-    let quad = Mesh::indexed(&device, "test-quad", &mesh::QUAD, &mesh::QUAD_INDICES);
+    let quad = Mesh2D::indexed(&device, "test-quad", &mesh::QUAD, &mesh::QUAD_INDICES);
 
     // At zoom 0.5 the viewport covers four units, so the two-unit quad only
     // fills the middle and the clear colour survives around it.
-    let pixels = render_to_pixels(&device, &queue, &quad, &Camera2D::new(Vec2::ZERO, 0.5, 1.0));
+    let pixels = render_to_pixels(&device, &queue, &quad, &View2D::new(Vec2::ZERO, 0.5, 1.0));
 
     let corner = at(&pixels, 1, 1);
     let centre = at(&pixels, SIZE / 2, SIZE / 2);
@@ -319,15 +319,15 @@ fn zooming_out_shrinks_the_geometry() {
 /// Two side-by-side quads sharing one vertex/index buffer: x in `[-1, 0]` for
 /// the first, `[0, 1]` for the second. Each is its own indexed range so
 /// [`pass::draw_mesh_batches`] can bind a different texture per half.
-const TWO_HALVES: [Vertex; 8] = [
-    Vertex::new([-1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
-    Vertex::new([-1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
-    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
-    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
-    Vertex::new([0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
-    Vertex::new([0.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
-    Vertex::new([1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
-    Vertex::new([1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
+const TWO_HALVES: [Vertex2D; 8] = [
+    Vertex2D::new([-1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
+    Vertex2D::new([-1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex2D::new([0.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex2D::new([0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
+    Vertex2D::new([0.0, 1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 0.0]),
+    Vertex2D::new([0.0, -1.0], [1.0, 1.0, 1.0, 1.0], [0.0, 1.0]),
+    Vertex2D::new([1.0, -1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 1.0]),
+    Vertex2D::new([1.0, 1.0], [1.0, 1.0, 1.0, 1.0], [1.0, 0.0]),
 ];
 const TWO_HALVES_INDICES: [u32; 12] = [0, 1, 2, 0, 2, 3, 4, 5, 6, 4, 6, 7];
 
@@ -355,7 +355,7 @@ fn draw_mesh_batches_binds_a_different_texture_per_range() {
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
     let camera_binding = CameraBinding::new(&device);
-    camera_binding.upload(&queue, &Camera2D::default());
+    camera_binding.upload(&queue, &View2D::default());
     let texture_layout = texture::bind_group_layout(&device);
     let render_pipeline =
         pipeline::create_flat_color(&device, FORMAT, camera_binding.layout(), &texture_layout);
@@ -373,7 +373,7 @@ fn draw_mesh_batches_binds_a_different_texture_per_range() {
     .expect("1x1 RGBA is 4 bytes")
     .create_bind_group(&device, &texture_layout);
 
-    let mesh = Mesh::indexed(&device, "two-halves", &TWO_HALVES, &TWO_HALVES_INDICES);
+    let mesh = Mesh2D::indexed(&device, "two-halves", &TWO_HALVES, &TWO_HALVES_INDICES);
     let draws = [
         MeshDraw {
             texture: &white,
@@ -445,11 +445,11 @@ fn draw_mesh_batches_with_no_draws_only_clears() {
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
     let camera_binding = CameraBinding::new(&device);
-    camera_binding.upload(&queue, &Camera2D::default());
+    camera_binding.upload(&queue, &View2D::default());
     let texture_layout = texture::bind_group_layout(&device);
     let render_pipeline =
         pipeline::create_flat_color(&device, FORMAT, camera_binding.layout(), &texture_layout);
-    let mesh = Mesh::indexed(&device, "two-halves", &TWO_HALVES, &TWO_HALVES_INDICES);
+    let mesh = Mesh2D::indexed(&device, "two-halves", &TWO_HALVES, &TWO_HALVES_INDICES);
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("headless-encoder"),

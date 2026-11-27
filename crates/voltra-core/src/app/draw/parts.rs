@@ -81,7 +81,7 @@ pub(super) fn mesh_draws<'a>(
 /// are traced first, through `silhouettes`, when there are any.
 pub(super) fn lighting(
     world: &World,
-    camera: &voltra_render::Camera2D,
+    camera: &voltra_render::View2D,
     sheets: Sheets<'_>,
     silhouettes: Option<&mut voltra_assets::Silhouettes>,
     textures: &voltra_assets::Textures,

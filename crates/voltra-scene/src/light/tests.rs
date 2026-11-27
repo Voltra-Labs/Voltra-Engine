@@ -253,8 +253,8 @@ fn a_view_turned_45_degrees_gathers_by_the_box_around_its_turned_rect() {
     let mut world = World::new();
     lit_camera(&mut world, Some([0.1; 3]));
     // Ten by two, turned 45°: its box reaches about 4.24 each way.
-    let view = voltra_render::Camera2D::new(Vec2::ZERO, 1.0, 5.0)
-        .with_rotation(std::f32::consts::FRAC_PI_4);
+    let view =
+        voltra_render::View2D::new(Vec2::ZERO, 1.0, 5.0).with_rotation(std::f32::consts::FRAC_PI_4);
     let (min, max) = view.visible_bounds();
     // Up the turned view's long axis, well above where it would reach
     // upright (radius 3 from y = 7 reaches down to 4 > 1).

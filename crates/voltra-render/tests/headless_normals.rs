@@ -6,13 +6,13 @@
 //!
 //! Skips itself when no GPU adapter is available.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, TexturePool};
 use voltra_render::normals::{NormalPass, NORMAL_FORMAT};
 use voltra_render::{
-    pass, pipeline, texture, wgpu, Filter, LightPass, Lighting, Mesh, MeshDraw, PointLight,
-    PostPass, PostSettings, RenderTarget, SceneDraw, Texture, Vertex,
+    pass, pipeline, texture, wgpu, Filter, LightPass, Lighting, Mesh2D, MeshDraw, PointLight,
+    PostPass, PostSettings, RenderTarget, SceneDraw, Texture, Vertex2D,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
@@ -34,16 +34,16 @@ enum Surface {
 
 /// The quad covering the camera's -1..1, its UVs mirrored left to right when
 /// `mirrored` — a flipped sprite.
-fn quad(device: &wgpu::Device, mirrored: bool) -> Mesh {
+fn quad(device: &wgpu::Device, mirrored: bool) -> Mesh2D {
     let (u0, u1) = if mirrored { (1.0, 0.0) } else { (0.0, 1.0) };
     let white = [1.0; 4];
     let vertices = [
-        Vertex::new([-1.0, 1.0], white, [u0, 0.0]),
-        Vertex::new([-1.0, -1.0], white, [u0, 1.0]),
-        Vertex::new([1.0, -1.0], white, [u1, 1.0]),
-        Vertex::new([1.0, 1.0], white, [u1, 0.0]),
+        Vertex2D::new([-1.0, 1.0], white, [u0, 0.0]),
+        Vertex2D::new([-1.0, -1.0], white, [u0, 1.0]),
+        Vertex2D::new([1.0, -1.0], white, [u1, 1.0]),
+        Vertex2D::new([1.0, 1.0], white, [u1, 0.0]),
     ];
-    Mesh::indexed(device, "normals-quad", &vertices, &[0, 1, 2, 2, 3, 0])
+    Mesh2D::indexed(device, "normals-quad", &vertices, &[0, 1, 2, 2, 3, 0])
 }
 
 /// The frame, lit by `lamp` with no ambient, the quad drawn with `surface`.
@@ -60,7 +60,7 @@ fn frame(surface: Surface, mirrored: bool, lamp: PointLight) -> Option<Vec<Rgba>
         Filter::Nearest,
     );
     let camera = CameraBinding::new(&device);
-    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let layout = texture::bind_group_layout(&device);
     let sprites = pipeline::create_flat_color(&device, FORMAT, camera.layout(), &layout);
     let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);

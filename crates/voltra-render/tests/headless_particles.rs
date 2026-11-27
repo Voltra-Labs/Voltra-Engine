@@ -4,13 +4,13 @@
 //!
 //! Skips itself when no GPU adapter is available.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::particles::PARTICLE_SIZE;
 use voltra_render::scene_draw::{draw_scene, SceneDraw};
 use voltra_render::{
-    pipeline, texture, wgpu, Filter, GpuParticles, LayerPass, Mesh, MeshDraw, ParticleLook,
-    ParticlePipelines, ParticleTables, RenderTarget, SimStep, Texture, Vertex,
+    pipeline, texture, wgpu, Filter, GpuParticles, LayerPass, Mesh2D, MeshDraw, ParticleLook,
+    ParticlePipelines, ParticleTables, RenderTarget, SimStep, Texture, Vertex2D,
 };
 use voltra_testkit::{headless_device, read_buffer, read_texture};
 
@@ -166,22 +166,22 @@ fn particles_draw_between_the_sprites_around_them() {
         Filter::Linear,
     );
     let (pipelines, camera, layout) = pipelines(&device);
-    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);
     let sprites = pipeline::create_flat_color(&device, FORMAT, camera.layout(), &layout);
 
     // Blue fills the left half behind; green covers the right half in front.
     let quad = |x0: f32, x1: f32, color: [f32; 4]| {
         [
-            Vertex::new([x0, 1.0], color, [0.0, 0.0]),
-            Vertex::new([x0, -1.0], color, [0.0, 1.0]),
-            Vertex::new([x1, -1.0], color, [1.0, 1.0]),
-            Vertex::new([x1, 1.0], color, [1.0, 0.0]),
+            Vertex2D::new([x0, 1.0], color, [0.0, 0.0]),
+            Vertex2D::new([x0, -1.0], color, [0.0, 1.0]),
+            Vertex2D::new([x1, -1.0], color, [1.0, 1.0]),
+            Vertex2D::new([x1, 1.0], color, [1.0, 0.0]),
         ]
     };
     let mut vertices = quad(-1.0, 0.0, [0.0, 0.0, 1.0, 1.0]).to_vec();
     vertices.extend(quad(0.0, 1.0, [0.0, 1.0, 0.0, 1.0]));
-    let mesh = Mesh::indexed(
+    let mesh = Mesh2D::indexed(
         &device,
         "sprites",
         &vertices,
@@ -279,16 +279,16 @@ fn particles_are_drawn_into_the_light_layers_on_their_emitter_s() {
         Filter::Nearest,
     );
     let (pipelines, camera, layout) = pipelines(&device);
-    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);
     let opaque = [1.0; 4];
     let vertices = [
-        Vertex::new([-1.0, 1.0], opaque, [0.0, 0.0]),
-        Vertex::new([-1.0, -1.0], opaque, [0.0, 1.0]),
-        Vertex::new([1.0, -1.0], opaque, [1.0, 1.0]),
-        Vertex::new([1.0, 1.0], opaque, [1.0, 0.0]),
+        Vertex2D::new([-1.0, 1.0], opaque, [0.0, 0.0]),
+        Vertex2D::new([-1.0, -1.0], opaque, [0.0, 1.0]),
+        Vertex2D::new([1.0, -1.0], opaque, [1.0, 1.0]),
+        Vertex2D::new([1.0, 1.0], opaque, [1.0, 0.0]),
     ];
-    let mesh = Mesh::indexed(&device, "backdrop", &vertices, &[0, 1, 2, 0, 2, 3]);
+    let mesh = Mesh2D::indexed(&device, "backdrop", &vertices, &[0, 1, 2, 0, 2, 3]);
 
     // One particle a unit across, over the middle.
     let mut particles = GpuParticles::new(&device, &queue, &pipelines, 4);

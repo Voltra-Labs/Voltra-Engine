@@ -1,11 +1,11 @@
 //! A sprite-batch pipeline as the pair it is: one for the batch's
 //! triangles, one for its quad instances, sharing a fragment stage.
 
-use crate::mesh::{Primitives, Vertex};
+use crate::mesh::{Primitives, Vertex2D};
 use crate::quad::QuadInstance;
 
 /// The two pipelines one sprite-batch shader is drawn through: its
-/// triangles read [`Vertex::LAYOUT`], its quads [`QuadInstance::LAYOUT`]
+/// triangles read [`Vertex2D::LAYOUT`], its quads [`QuadInstance::LAYOUT`]
 /// with corners made in the vertex stage. Everything else — layout,
 /// fragment stage, blending, target — is the same, so a range picks its
 /// pipeline by what it draws ([`for_primitives`](Self::for_primitives)) and
@@ -26,7 +26,7 @@ pub struct SpritePipelineDescriptor<'a> {
     pub layout: &'a wgpu::PipelineLayout,
     /// The module holding both vertex entry points and the fragment one.
     pub module: &'a wgpu::ShaderModule,
-    /// The vertex entry point reading [`Vertex`]es.
+    /// The vertex entry point reading [`Vertex2D`]s.
     pub triangles_entry: &'a str,
     /// The vertex entry point reading [`QuadInstance`]s and the vertex index.
     pub quads_entry: &'a str,
@@ -71,7 +71,7 @@ impl SpritePipeline {
             })
         };
         Self {
-            triangles: make(desc.label, desc.triangles_entry, &[Some(Vertex::LAYOUT)]),
+            triangles: make(desc.label, desc.triangles_entry, &[Some(Vertex2D::LAYOUT)]),
             quads: make(
                 &format!("{}-quads", desc.label),
                 desc.quads_entry,

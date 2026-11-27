@@ -12,7 +12,7 @@
 //! game gets" is legible without opening the inspector.
 
 use voltra_ecs::{Entity, World};
-use voltra_render::{Camera2D, LineBatch};
+use voltra_render::{LineBatch, View2D};
 use voltra_scene::camera;
 
 /// The rectangle the game gets. Warm, and unused by the gizmos (red, green,
@@ -44,7 +44,7 @@ pub fn draw(world: &World, entity: Entity, aspect: f32, lines: &mut LineBatch) {
 }
 
 /// The four edges of what `view` covers, turned as it is.
-fn rect(view: &Camera2D, color: [f32; 4], lines: &mut LineBatch) {
+fn rect(view: &View2D, color: [f32; 4], lines: &mut LineBatch) {
     let corners = view.corners();
     for i in 0..corners.len() {
         lines.push(corners[i], corners[(i + 1) % corners.len()], WIDTH, color);
@@ -91,7 +91,7 @@ mod tests {
     fn the_rectangle_is_the_region_the_camera_covers() {
         // Every corner of the drawn rectangle has to be a corner of the view,
         // or the overlay is describing a framing the game will not get.
-        let view = Camera2D::new(Vec2::new(1.0, -1.0), 0.5, 2.0);
+        let view = View2D::new(Vec2::new(1.0, -1.0), 0.5, 2.0);
         let mut lines = LineBatch::default();
 
         rect(&view, ACTIVE_COLOR, &mut lines);

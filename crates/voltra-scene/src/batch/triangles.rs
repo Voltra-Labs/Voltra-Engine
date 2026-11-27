@@ -3,7 +3,7 @@
 //! painter's order as the sprites.
 
 use voltra_render::glam::{Mat3, Vec2};
-use voltra_render::Vertex;
+use voltra_render::Vertex2D;
 
 use super::{SpriteBatch, Surface};
 use crate::sprite::sheets::Sheets;
@@ -102,7 +102,7 @@ impl SpriteBatch {
             mesh.vertices
                 .iter()
                 .zip(&placed)
-                .map(|(v, at)| Vertex::new([at.x, at.y], v.color, v.uv)),
+                .map(|(v, at)| Vertex2D::new([at.x, at.y], v.color, v.uv)),
         );
         let start = self.indices.len() as u32;
         self.indices.extend(mesh.indices.iter().map(|i| base + i));

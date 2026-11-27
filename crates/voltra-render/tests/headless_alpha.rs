@@ -3,10 +3,10 @@
 //!
 //! Skips itself when no GPU adapter is available.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::pass::{self, MeshDraw};
-use voltra_render::{pipeline, texture, wgpu, Mesh, Texture, Vertex};
+use voltra_render::{pipeline, texture, wgpu, Mesh2D, Texture, Vertex2D};
 use voltra_testkit::{headless_device, read_texture};
 
 const SIZE: u32 = 8;
@@ -35,19 +35,19 @@ fn half_alpha_red_over_black_is_half_red() {
     let view = target.create_view(&wgpu::TextureViewDescriptor::default());
 
     let camera = CameraBinding::new(&device);
-    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let layout = texture::bind_group_layout(&device);
     let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);
     let pipeline = pipeline::create_flat_color(&device, FORMAT, camera.layout(), &layout);
 
     let red = [1.0, 0.0, 0.0, 0.5];
     let vertices = [
-        Vertex::new([-1.0, 1.0], red, [0.0, 0.0]),
-        Vertex::new([-1.0, -1.0], red, [0.0, 1.0]),
-        Vertex::new([1.0, -1.0], red, [1.0, 1.0]),
-        Vertex::new([1.0, 1.0], red, [1.0, 0.0]),
+        Vertex2D::new([-1.0, 1.0], red, [0.0, 0.0]),
+        Vertex2D::new([-1.0, -1.0], red, [0.0, 1.0]),
+        Vertex2D::new([1.0, -1.0], red, [1.0, 1.0]),
+        Vertex2D::new([1.0, 1.0], red, [1.0, 0.0]),
     ];
-    let mesh = Mesh::indexed(&device, "alpha-quad", &vertices, &[0, 1, 2, 0, 2, 3]);
+    let mesh = Mesh2D::indexed(&device, "alpha-quad", &vertices, &[0, 1, 2, 0, 2, 3]);
     let draws = [MeshDraw {
         texture: &white,
         normal: None,

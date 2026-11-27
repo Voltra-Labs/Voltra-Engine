@@ -5,11 +5,11 @@
 //!
 //! Skips itself when no GPU adapter is available.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::{Mat3, Vec2};
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{
-    pipeline, texture, wgpu, Filter, Mesh, MeshBuffers, Primitives, QuadInstance, Texture,
+    pipeline, texture, wgpu, Filter, Mesh2D, MeshBuffers, Primitives, QuadInstance, Texture,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
@@ -47,7 +47,7 @@ impl Scene {
         });
         let view = target.create_view(&wgpu::TextureViewDescriptor::default());
         let camera = CameraBinding::new(&device);
-        camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+        camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
         let layout = texture::bind_group_layout(&device);
         let pipeline = pipeline::create_flat_color(&device, FORMAT, camera.layout(), &layout);
         #[rustfmt::skip]
@@ -72,14 +72,14 @@ impl Scene {
         })
     }
 
-    fn draw(&self, mesh: Option<&Mesh>, primitives: &[Primitives]) -> Vec<Rgba> {
+    fn draw(&self, mesh: Option<&Mesh2D>, primitives: &[Primitives]) -> Vec<Rgba> {
         self.draw_with(&self.checker, mesh, primitives)
     }
 
     fn draw_with(
         &self,
         texture: &wgpu::BindGroup,
-        mesh: Option<&Mesh>,
+        mesh: Option<&Mesh2D>,
         primitives: &[Primitives],
     ) -> Vec<Rgba> {
         let draws: Vec<MeshDraw<'_>> = primitives
@@ -139,15 +139,15 @@ fn an_instance_draws_what_its_two_triangles_draw() {
         return;
     };
     let quad = turned(Vec2::ZERO, 0.7, 0.4, [1.0; 4]);
-    let instanced = Mesh::batch(
+    let instanced = Mesh2D::batch(
         &scene.device,
         "quads",
-        &[] as &[voltra_render::Vertex],
+        &[] as &[voltra_render::Vertex2D],
         &[],
         &[quad],
     );
     let by_quads = scene.draw(Some(&instanced), &[Primitives::Quads(0..1)]);
-    let triangles = Mesh::indexed(
+    let triangles = Mesh2D::indexed(
         &scene.device,
         "triangles",
         &quad.corners(),
@@ -186,7 +186,7 @@ fn quads_and_triangles_keep_painters_order_between_them() {
     let red = turned(Vec2::ZERO, 2.0, 0.0, [1.0, 0.0, 0.0, 1.0]);
     let blue = turned(Vec2::new(-0.75, 0.75), 0.25, 0.0, [0.0, 0.0, 1.0, 1.0]);
     let green = turned(Vec2::ZERO, 0.25, 0.0, [0.0, 1.0, 0.0, 1.0]).corners();
-    let mesh = Mesh::batch(
+    let mesh = Mesh2D::batch(
         &scene.device,
         "mixed",
         &green,
@@ -218,7 +218,7 @@ fn kept_buffers_grow_shrink_and_draw_the_last_write() {
         return;
     };
     let mut buffers = MeshBuffers::new("kept");
-    let none: &[voltra_render::Vertex] = &[];
+    let none: &[voltra_render::Vertex2D] = &[];
     assert!(
         buffers
             .write(&scene.device, &scene.queue, none, &[], &[])

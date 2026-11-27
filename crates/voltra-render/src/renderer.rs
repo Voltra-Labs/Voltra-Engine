@@ -3,13 +3,13 @@
 use wgpu::SurfaceTarget;
 
 use crate::bloom::BloomPass;
-use crate::camera::{Camera2D, CameraBinding};
+use crate::camera::{CameraBinding, View2D};
 use crate::context::GpuContext;
 use crate::graph::TexturePool;
 use crate::light_layers::LayerPass;
 use crate::lights::{LightPass, Lighting};
 use crate::lines::ViewportBinding;
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 use crate::normals::NormalPass;
 use crate::particles::{GpuParticles, ParticleLook, ParticlePipelines, SimStep};
 use crate::pass::MeshDraw;
@@ -74,7 +74,7 @@ pub struct Renderer {
     /// The size the line shader widens against, rewritten every frame.
     viewport_binding: ViewportBinding,
     /// The world camera, rewritten into its uniform every frame.
-    pub camera: Camera2D,
+    pub camera: View2D,
     /// What the next frame is lit by; unlit by default. Set before each
     /// frame, as [`camera`](Self::camera) is.
     pub lighting: Lighting,
@@ -165,7 +165,7 @@ impl Renderer {
         );
 
         let camera = {
-            let mut camera = Camera2D::default();
+            let mut camera = View2D::default();
             camera.aspect = aspect_of(width, height);
             camera
         };
@@ -293,7 +293,7 @@ impl Renderer {
 #[derive(Clone, Copy)]
 pub struct Layer<'a> {
     /// The mesh the draws index into, or `None` for nothing.
-    pub mesh: Option<&'a Mesh>,
+    pub mesh: Option<&'a Mesh2D>,
     /// The index ranges to draw, in order.
     pub draws: &'a [MeshDraw<'a>],
 }

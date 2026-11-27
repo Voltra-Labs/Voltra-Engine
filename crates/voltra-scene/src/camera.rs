@@ -8,7 +8,7 @@
 //! at all.
 
 use voltra_ecs::{Entity, World};
-use voltra_render::Camera2D;
+use voltra_render::View2D;
 
 mod placement;
 mod shots;
@@ -34,7 +34,7 @@ pub struct Camera {
     /// Half the world-space height the camera shows.
     ///
     /// Unity's `orthographicSize`, and stored the way Unity stores it rather
-    /// than as [`Camera2D::zoom`]'s reciprocal: "this camera sees five units
+    /// than as [`View2D::zoom`]'s reciprocal: "this camera sees five units
     /// of world" is a sentence about the scene, while a zoom factor is a
     /// sentence about a viewport. `view` converts.
     pub size: f32,
@@ -102,7 +102,7 @@ impl Default for Camera {
     fn default() -> Self {
         Self {
             // One world unit above and below the centre, which is exactly what
-            // `Camera2D::default` shows. A camera dropped into a scene frames
+            // `View2D::default` shows. A camera dropped into a scene frames
             // what the editor was already framing at its home zoom.
             size: 1.0,
             priority: 0,
@@ -121,15 +121,15 @@ impl Camera {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "Camera";
 
-    /// Bounds on [`Self::size`], mirroring [`Camera2D`]'s on zoom.
+    /// Bounds on [`Self::size`], mirroring [`View2D`]'s on zoom.
     ///
     /// The reciprocal of the pair over there, because that is the same
-    /// constraint written in this type's units: `Camera2D::set_zoom` clamps
+    /// constraint written in this type's units: `View2D::set_zoom` clamps
     /// whatever `view` hands it, so these exist to say what the field means,
     /// and so a UI can stop a drag at the wall rather than at infinity.
-    pub const MIN_SIZE: f32 = 1.0 / Camera2D::MAX_ZOOM;
+    pub const MIN_SIZE: f32 = 1.0 / View2D::MAX_ZOOM;
     /// The largest [`Self::size`] the camera's zoom limit allows.
-    pub const MAX_SIZE: f32 = 1.0 / Camera2D::MIN_ZOOM;
+    pub const MAX_SIZE: f32 = 1.0 / View2D::MIN_ZOOM;
 
     /// A camera with `size` and every other field at its default.
     pub fn new(size: f32) -> Self {
@@ -145,10 +145,10 @@ impl Camera {
         self
     }
 
-    /// The zoom [`Camera2D`] wants for this size.
+    /// The zoom [`View2D`] wants for this size.
     ///
     /// A zero or negative size produces an infinity, and a `NaN` size produces
-    /// a `NaN`. Both are handed straight to `Camera2D::set_zoom`, which clamps
+    /// a `NaN`. Both are handed straight to `View2D::set_zoom`, which clamps
     /// the first and refuses the second — guarding again here would mean two
     /// places deciding what a broken camera does.
     pub fn zoom(&self) -> f32 {
@@ -182,10 +182,10 @@ pub fn active(world: &World) -> Option<Entity> {
 /// [`Camera::size`], and a mirrored camera is turned, not flipped.
 ///
 /// [`CameraShake`]: crate::CameraShake
-pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<Camera2D> {
+pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<View2D> {
     let camera = *world.get::<Camera>(entity)?;
     let (position, rotation) = eye(world, entity);
-    Some(Camera2D::new(position, camera.zoom(), aspect).with_rotation(rotation))
+    Some(View2D::new(position, camera.zoom(), aspect).with_rotation(rotation))
 }
 
 /// The view the scene renders through at `aspect`: [`active`], then [`view`].
@@ -194,7 +194,7 @@ pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<Camera2D> {
 /// answer for — the editor's game view keeps the last framing and says so in
 /// words, and the player keeps the default framing and logs it once. They
 /// answer it differently, so this composes the two lookups and nothing more.
-pub fn active_view(world: &World, aspect: f32) -> Option<Camera2D> {
+pub fn active_view(world: &World, aspect: f32) -> Option<View2D> {
     view(world, active(world)?, aspect)
 }
 

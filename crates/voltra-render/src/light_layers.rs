@@ -14,7 +14,7 @@ use std::sync::{Mutex, PoisonError};
 
 use wgpu::util::DeviceExt;
 
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 use crate::particles::ParticlePipelines;
 use crate::pipeline::{SpritePipeline, SpritePipelineDescriptor};
 use crate::scene_draw::SceneDraw;
@@ -116,7 +116,7 @@ impl LayerPass {
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         camera: &wgpu::BindGroup,
-        mesh: Option<&Mesh>,
+        mesh: Option<&Mesh2D>,
         draws: &[SceneDraw<'_>],
     ) {
         let mut groups = self.groups.lock().unwrap_or_else(PoisonError::into_inner);

@@ -11,7 +11,7 @@ use voltra_assets::{Atlases, Clips, Fonts, Handle, Textures};
 use voltra_audio::Audio;
 use voltra_ecs::{Entity, World};
 use voltra_physics::Contact;
-use voltra_render::{wgpu, Camera2D, LineBatch, Texture};
+use voltra_render::{wgpu, LineBatch, Texture, View2D};
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{AudioSource, Prefabs, Sprite, Tilemap};
 
@@ -30,7 +30,7 @@ pub struct UiFrame<'a> {
     /// The scene. Panels add, remove and edit entities through it.
     pub world: &'a mut World,
     /// The camera the scene was drawn with, so a viewport panel can pan it.
-    pub camera: &'a mut Camera2D,
+    pub camera: &'a mut View2D,
     /// Loaded textures, shared with the renderer's draws for this frame.
     ///
     /// A panel that edits a sprite's texture path resolves through this —

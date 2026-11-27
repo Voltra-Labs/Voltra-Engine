@@ -4,13 +4,13 @@
 //! the swapchain, an offscreen texture for a headless test, and — later — the
 //! editor viewport.
 
-use crate::mesh::{Mesh, Primitives};
+use crate::mesh::{Mesh2D, Primitives};
 use crate::pipeline::SpritePipeline;
 
 /// Records a clear followed by all of `mesh`, if there is one.
 ///
 /// The whole-mesh path, and the only one that can draw geometry with no index
-/// buffer: [`draw_mesh_batches`] goes through [`Mesh::draw_range`], which is
+/// buffer: [`draw_mesh_batches`] goes through [`Mesh2D::draw_range`], which is
 /// indexed by construction. Sprites take the batched path because they are
 /// split into per-texture ranges over one buffer; anything drawn in a single
 /// call against a single bind group belongs here.
@@ -27,7 +27,7 @@ pub fn draw_mesh(
     pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
     texture: &wgpu::BindGroup,
-    mesh: Option<&Mesh>,
+    mesh: Option<&Mesh2D>,
     clear: wgpu::Color,
 ) {
     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -159,7 +159,7 @@ pub fn draw_mesh_batches(
     view: &wgpu::TextureView,
     pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
-    mesh: Option<&Mesh>,
+    mesh: Option<&Mesh2D>,
     draws: &[MeshDraw<'_>],
     clear: wgpu::Color,
 ) {
@@ -184,7 +184,7 @@ pub fn draw_mesh_batches_over(
     view: &wgpu::TextureView,
     pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
-    mesh: Option<&Mesh>,
+    mesh: Option<&Mesh2D>,
     draws: &[MeshDraw<'_>],
 ) {
     if mesh.is_none() || draws.is_empty() {
@@ -206,7 +206,7 @@ fn record_batches(
     view: &wgpu::TextureView,
     pipeline: &SpritePipeline,
     camera: &wgpu::BindGroup,
-    mesh: Option<&Mesh>,
+    mesh: Option<&Mesh2D>,
     draws: &[MeshDraw<'_>],
     load: wgpu::LoadOp<wgpu::Color>,
 ) {
@@ -260,7 +260,7 @@ pub fn draw_lines(
     pipeline: &wgpu::RenderPipeline,
     camera: &wgpu::BindGroup,
     viewport: &wgpu::BindGroup,
-    mesh: Option<&Mesh>,
+    mesh: Option<&Mesh2D>,
 ) {
     let Some(mesh) = mesh else {
         return;

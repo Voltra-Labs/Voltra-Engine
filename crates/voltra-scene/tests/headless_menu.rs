@@ -15,7 +15,7 @@ use std::path::Path;
 
 use voltra_assets::{AssetPath, Atlases, Fonts, Textures, DEFAULT_FONT};
 use voltra_ecs::{Entity, World};
-use voltra_render::camera::{screen_projection, Camera2D, CameraBinding};
+use voltra_render::camera::{screen_projection, CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Texture};
@@ -402,7 +402,7 @@ fn render(
     });
     let view = target.create_view(&wgpu::TextureViewDescriptor::default());
     let camera = CameraBinding::new(device);
-    camera.upload(queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     camera.upload_matrix(queue, screen_projection(SIZE as f32, SIZE as f32));
     let white = Texture::white(device, queue).create_bind_group(device, layout);
     let render_pipeline = pipeline::create_flat_color(device, FORMAT, camera.layout(), layout);

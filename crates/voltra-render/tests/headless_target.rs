@@ -6,8 +6,8 @@
 //! invisible from the API side — a target can be created, bound and drawn to
 //! with no validation error and still hand back an empty texture.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
-use voltra_render::mesh::{self, Mesh};
+use voltra_render::camera::{CameraBinding, View2D};
+use voltra_render::mesh::{self, Mesh2D};
 use voltra_render::target::RenderTarget;
 use voltra_render::texture::{self, Filter, Texture};
 use voltra_render::{pass, pipeline, wgpu};
@@ -78,12 +78,12 @@ fn the_scene_ends_up_in_the_target_texture() {
     let target = RenderTarget::new(&device, "viewport", FORMAT, size, size, Filter::Linear);
 
     let camera_binding = CameraBinding::new(&device);
-    camera_binding.upload(&queue, &Camera2D::default());
+    camera_binding.upload(&queue, &View2D::default());
     let texture_layout = texture::bind_group_layout(&device);
     let white = Texture::white(&device, &queue).create_bind_group(&device, &texture_layout);
     let render_pipeline =
         pipeline::create_flat_color(&device, FORMAT, camera_binding.layout(), &texture_layout);
-    let quad = Mesh::indexed(&device, "quad", &mesh::QUAD, &mesh::QUAD_INDICES);
+    let quad = Mesh2D::indexed(&device, "quad", &mesh::QUAD, &mesh::QUAD_INDICES);
 
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("target-encoder"),

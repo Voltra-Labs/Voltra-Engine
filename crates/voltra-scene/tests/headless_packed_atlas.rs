@@ -13,7 +13,7 @@ use std::path::Path;
 use image::{Rgba, RgbaImage};
 use voltra_assets::packer::{pack_folder, PackOptions};
 use voltra_assets::{AssetPath, Atlases, Textures};
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::{UVec2, Vec2};
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Filter, Texture};
@@ -106,7 +106,7 @@ fn render(
     });
     let view = target.create_view(&wgpu::TextureViewDescriptor::default());
     // One world unit to one pixel: the view is `SIZE` units tall.
-    let camera = Camera2D::new(Vec2::ZERO, 2.0 / SIZE as f32, 1.0);
+    let camera = View2D::new(Vec2::ZERO, 2.0 / SIZE as f32, 1.0);
     let camera_binding = CameraBinding::new(device);
     camera_binding.upload(queue, &camera);
     let layout = texture::bind_group_layout(device);

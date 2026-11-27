@@ -2,7 +2,7 @@
 //! editor's line overlay and the window's own layer.
 
 use super::Renderer;
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 use crate::pass;
 use crate::target::RenderTarget;
 
@@ -17,7 +17,7 @@ impl Renderer {
     ///
     /// The widths in `mesh` are in pixels, so the size uploaded here is the
     /// target's, not the window's.
-    pub fn render_lines(&mut self, target: &RenderTarget, mesh: Option<&Mesh>) {
+    pub fn render_lines(&mut self, target: &RenderTarget, mesh: Option<&Mesh2D>) {
         if mesh.is_none() {
             return;
         }

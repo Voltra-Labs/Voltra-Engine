@@ -1,7 +1,7 @@
 //! One quad as one instance: the sprite batch's unit of geometry, its four
 //! corners made by the vertex shader instead of written by the CPU.
 //!
-//! A quad drawn through [`Vertex`] costs four vertices and six indices,
+//! A quad drawn through [`Vertex2D`] costs four vertices and six indices,
 //! 152 bytes written and uploaded; as a [`QuadInstance`] it costs 64. A
 //! sprite is a parallelogram under any 2D affine transform, so a corner,
 //! the two edges leaving it and the same three for its texture
@@ -16,7 +16,7 @@
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::mesh::Vertex;
+use crate::mesh::Vertex2D;
 
 /// A quad of 2D geometry as one instance of a six-vertex draw.
 ///
@@ -38,7 +38,7 @@ pub struct QuadInstance {
     pub uv_across: [f32; 2],
     /// From corner 0's texture coordinates to corner 1's.
     pub uv_down: [f32; 2],
-    /// Multiplied with the texture, as [`Vertex::color`] is; one for the
+    /// Multiplied with the texture, as [`Vertex2D::color`] is; one for the
     /// whole quad.
     pub color: [f32; 4],
 }
@@ -92,11 +92,11 @@ impl QuadInstance {
 
     /// The four corners as vertices, in corner order, computed as the
     /// vertex shader computes them.
-    pub fn corners(&self) -> [Vertex; 4] {
+    pub fn corners(&self) -> [Vertex2D; 4] {
         // (along across, along down) for each corner.
         const AT: [(f32, f32); 4] = [(0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0)];
         AT.map(|(s, t)| {
-            Vertex::new(
+            Vertex2D::new(
                 along(self.origin, self.across, self.down, s, t),
                 self.color,
                 along(self.uv_origin, self.uv_across, self.uv_down, s, t),

@@ -4,11 +4,11 @@
 //! to put the answer in and a second camera — its own — to fall back to. A
 //! shipped game has neither, so the platform layer applies the scene's own
 //! camera itself: without this the window would draw through
-//! [`Camera2D::default`] forever and a camera authored into the scene would be
+//! [`View2D::default`] forever and a camera authored into the scene would be
 //! a component nothing reads once the editor is gone.
 
 use voltra_ecs::World;
-use voltra_render::Camera2D;
+use voltra_render::View2D;
 
 /// Applies the scene's active camera to the frame, and complains once when
 /// there is none.
@@ -31,7 +31,7 @@ impl SceneFraming {
     /// here, so the log carries the same sentence and the window keeps the
     /// default framing rather than going black — a picture with a cause named
     /// in the log is more use than an empty one.
-    pub(super) fn apply(&mut self, world: &World, camera: &mut Camera2D) {
+    pub(super) fn apply(&mut self, world: &World, camera: &mut View2D) {
         let Some(view) = voltra_scene::camera::active_view(world, camera.aspect) else {
             if !self.warned {
                 log::warn!("no active camera in the scene: drawing through the default view");
@@ -62,7 +62,7 @@ mod tests {
     #[test]
     fn the_scene_camera_takes_the_frame() {
         let world = world_with_camera(Camera::new(4.0), Vec2::new(3.0, -2.0));
-        let mut camera = Camera2D::new(Vec2::ZERO, 1.0, 1.5);
+        let mut camera = View2D::new(Vec2::ZERO, 1.0, 1.5);
 
         SceneFraming::default().apply(&world, &mut camera);
 
@@ -75,7 +75,7 @@ mod tests {
         // The camera stores a size, not a shape: how wide that is belongs to
         // the window, and a resize must not be undone by the next frame.
         let world = world_with_camera(Camera::new(2.0), Vec2::ZERO);
-        let mut camera = Camera2D::new(Vec2::ZERO, 1.0, 2.25);
+        let mut camera = View2D::new(Vec2::ZERO, 1.0, 2.25);
 
         SceneFraming::default().apply(&world, &mut camera);
 
@@ -91,7 +91,7 @@ mod tests {
             },
             Vec2::new(9.0, 9.0),
         );
-        let before = Camera2D::new(Vec2::new(1.0, 2.0), 3.0, 1.5);
+        let before = View2D::new(Vec2::new(1.0, 2.0), 3.0, 1.5);
         let mut camera = before;
 
         SceneFraming::default().apply(&world, &mut camera);
@@ -103,7 +103,7 @@ mod tests {
     #[test]
     fn the_complaint_is_latched_and_cleared_by_a_camera() {
         let mut framing = SceneFraming::default();
-        let mut camera = Camera2D::default();
+        let mut camera = View2D::default();
 
         framing.apply(&World::new(), &mut camera);
         assert!(framing.warned, "the first frame without a camera complains");

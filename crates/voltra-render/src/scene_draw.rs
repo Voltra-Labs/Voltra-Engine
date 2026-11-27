@@ -1,7 +1,7 @@
 //! The world's pass: sprite ranges and GPU particle emitters in one painter's
 //! order.
 
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 use crate::particles::{GpuParticles, ParticlePipelines};
 use crate::pass::{Binder, MeshDraw};
 use crate::skinning::{SkinPipeline, SkinnedMesh};
@@ -52,7 +52,7 @@ pub fn draw_scene(
     sprites: &crate::pipeline::SpritePipeline,
     particles: Option<&ParticlePipelines>,
     camera: &wgpu::BindGroup,
-    mesh: Option<&Mesh>,
+    mesh: Option<&Mesh2D>,
     draws: &[SceneDraw<'_>],
     clear: wgpu::Color,
 ) {

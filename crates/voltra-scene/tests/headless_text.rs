@@ -11,7 +11,7 @@
 
 use voltra_assets::{Fonts, Textures, DEFAULT_FONT};
 use voltra_ecs::World;
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Texture};
@@ -48,7 +48,7 @@ fn render(
     let view = target.create_view(&wgpu::TextureViewDescriptor::default());
 
     // Four world units across the frame: sixteen pixels per unit.
-    let camera = Camera2D::new(Vec2::ZERO, 0.5, 1.0);
+    let camera = View2D::new(Vec2::ZERO, 0.5, 1.0);
     let camera_binding = CameraBinding::new(device);
     camera_binding.upload(queue, &camera);
     let white = Texture::white(device, queue).create_bind_group(device, layout);

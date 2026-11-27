@@ -2,7 +2,7 @@
 
 use voltra_assets::Handle;
 use voltra_render::glam::{Mat3, Vec2};
-use voltra_render::{MeshBuffers, Primitives, QuadInstance, Texture, Vertex};
+use voltra_render::{MeshBuffers, Primitives, QuadInstance, Texture, Vertex2D};
 
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
@@ -78,7 +78,7 @@ pub struct SpriteBatch {
     /// One instance per quad, in draw order.
     pub quads: Vec<QuadInstance>,
     /// The corners of triangle meshes, in draw order.
-    pub vertices: Vec<Vertex>,
+    pub vertices: Vec<Vertex2D>,
     /// Triangle indices into `vertices`, three a triangle.
     pub indices: Vec<u32>,
     /// Draw-order runs of same-surface quads or triangles, covering all of
@@ -233,7 +233,7 @@ impl SpriteBatch {
     }
 
     /// Appends four corners as two triangles.
-    fn append_corners(&mut self, vertices: [Vertex; 4], surface: Surface) {
+    fn append_corners(&mut self, vertices: [Vertex2D; 4], surface: Surface) {
         // Every quad's indices are relative to its own first vertex; without
         // this offset each one would redraw the first. `u32` because a
         // batch holds a world, not one object's geometry.
@@ -312,11 +312,11 @@ impl SpriteBatch {
     /// nothing to draw. For a one-off draw — a screenshot, a test; a draw
     /// path building a batch every frame writes it into kept buffers with
     /// [`upload_into`](Self::upload_into) instead.
-    pub fn upload(&self, device: &voltra_render::wgpu::Device) -> Option<voltra_render::Mesh> {
+    pub fn upload(&self, device: &voltra_render::wgpu::Device) -> Option<voltra_render::Mesh2D> {
         if self.is_empty() {
             return None;
         }
-        Some(voltra_render::Mesh::batch(
+        Some(voltra_render::Mesh2D::batch(
             device,
             "sprite-batch",
             &self.vertices,
@@ -333,7 +333,7 @@ impl SpriteBatch {
         device: &voltra_render::wgpu::Device,
         queue: &voltra_render::wgpu::Queue,
         buffers: &'b mut MeshBuffers,
-    ) -> Option<&'b voltra_render::Mesh> {
+    ) -> Option<&'b voltra_render::Mesh2D> {
         buffers.write(device, queue, &self.vertices, &self.indices, &self.quads)
     }
 
@@ -345,7 +345,7 @@ impl SpriteBatch {
 
     /// Every quad's four corners as vertices, in draw order: what the
     /// vertex shader makes of [`quads`](Self::quads), for asserting on.
-    pub fn quad_vertices(&self) -> Vec<Vertex> {
+    pub fn quad_vertices(&self) -> Vec<Vertex2D> {
         self.quads.iter().flat_map(QuadInstance::corners).collect()
     }
 }

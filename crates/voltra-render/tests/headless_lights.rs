@@ -5,7 +5,7 @@
 //!
 //! Skips itself when no GPU adapter is available.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, TexturePool};
 use voltra_render::{
@@ -33,7 +33,7 @@ fn lit_by(
     let scene = RenderTarget::new(&device, "scene", FORMAT, SIZE, SIZE, Filter::Linear);
     let output = RenderTarget::new(&device, "output", FORMAT, SIZE, SIZE, Filter::Linear);
     let camera = CameraBinding::new(&device);
-    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let sprites = voltra_render::pipeline::create_flat_color(
         &device,
         FORMAT,

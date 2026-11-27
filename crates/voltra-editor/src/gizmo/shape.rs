@@ -11,7 +11,7 @@
 //! targets for a cursor that does not change size.
 
 use voltra_render::glam::Vec2;
-use voltra_render::Camera2D;
+use voltra_render::View2D;
 use voltra_scene::Transform;
 
 use super::handle::{Axes, AXIS_LENGTH, CENTRE_HALF, RING_RADIUS, TIP_HALF};
@@ -38,7 +38,7 @@ pub type Segment = (Vec2, Vec2, [f32; 4]);
 /// The gizmo `tool` draws over an entity at `transform`.
 pub fn segments(
     tool: Tool,
-    camera: &Camera2D,
+    camera: &View2D,
     viewport: Vec2,
     transform: &Transform,
 ) -> Vec<Segment> {
@@ -121,12 +121,12 @@ mod tests {
 
     const VIEWPORT: Vec2 = Vec2::new(800.0, 600.0);
 
-    fn camera(zoom: f32) -> Camera2D {
-        Camera2D::new(Vec2::ZERO, zoom, VIEWPORT.x / VIEWPORT.y)
+    fn camera(zoom: f32) -> View2D {
+        View2D::new(Vec2::ZERO, zoom, VIEWPORT.x / VIEWPORT.y)
     }
 
     /// How long a segment is once projected back to the screen.
-    fn screen_length(camera: &Camera2D, a: Vec2, b: Vec2) -> f32 {
+    fn screen_length(camera: &View2D, a: Vec2, b: Vec2) -> f32 {
         camera
             .world_to_viewport(a, VIEWPORT)
             .distance(camera.world_to_viewport(b, VIEWPORT))
@@ -152,7 +152,7 @@ mod tests {
         // The whole reason the layout happens in screen space. A gizmo laid out
         // in world units doubles on screen when the camera zooms in.
         for zoom in [0.1, 0.5, 1.0, 4.0, 25.0] {
-            let camera = Camera2D::new(Vec2::new(3.0, -2.0), zoom, VIEWPORT.x / VIEWPORT.y);
+            let camera = View2D::new(Vec2::new(3.0, -2.0), zoom, VIEWPORT.x / VIEWPORT.y);
             let drawn = segments(Tool::Translate, &camera, VIEWPORT, &at(Vec2::new(1.0, 1.0)));
 
             let length = screen_length(&camera, drawn[0].0, drawn[0].1);
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn the_arms_start_at_the_selection() {
-        let camera = Camera2D::new(Vec2::new(-4.0, 7.0), 2.0, VIEWPORT.x / VIEWPORT.y);
+        let camera = View2D::new(Vec2::new(-4.0, 7.0), 2.0, VIEWPORT.x / VIEWPORT.y);
         let origin = Vec2::new(2.5, -1.5);
         let drawn = segments(Tool::Translate, &camera, VIEWPORT, &at(origin));
 

@@ -26,7 +26,7 @@
 use bytemuck::{Pod, Zeroable};
 use glam::Vec2;
 
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 
 /// Shortest segment worth drawing, in world units.
 ///
@@ -208,13 +208,13 @@ impl LineBatch {
 
     /// Uploads the batch, or `None` when there is nothing in it.
     ///
-    /// `None` rather than an empty [`Mesh`]: wgpu rejects a zero-sized buffer,
+    /// `None` rather than an empty [`Mesh2D`]: wgpu rejects a zero-sized buffer,
     /// and the passes already treat `None` as "draw nothing".
-    pub fn upload(&self, device: &wgpu::Device) -> Option<Mesh> {
+    pub fn upload(&self, device: &wgpu::Device) -> Option<Mesh2D> {
         if self.is_empty() {
             return None;
         }
-        Some(Mesh::indexed(
+        Some(Mesh2D::indexed(
             device,
             "lines",
             &self.vertices,

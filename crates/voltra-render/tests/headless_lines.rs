@@ -8,7 +8,7 @@
 
 use voltra_render::glam::Vec2;
 use voltra_render::wgpu;
-use voltra_render::{lines::LineBatch, pass, pipeline, Camera2D, CameraBinding, ViewportBinding};
+use voltra_render::{lines::LineBatch, pass, pipeline, CameraBinding, View2D, ViewportBinding};
 use voltra_testkit::{headless_device, read_texture, Rgba, CLEAR};
 
 const SIZE: u32 = 64;
@@ -46,7 +46,7 @@ fn render(device: &wgpu::Device, queue: &wgpu::Queue, batch: &LineBatch, zoom: f
     let view = target.create_view(&wgpu::TextureViewDescriptor::default());
 
     let camera_binding = CameraBinding::new(device);
-    camera_binding.upload(queue, &Camera2D::new(Vec2::ZERO, zoom, 1.0));
+    camera_binding.upload(queue, &View2D::new(Vec2::ZERO, zoom, 1.0));
 
     let viewport = ViewportBinding::new(device);
     viewport.upload(queue, SIZE, SIZE);

@@ -3,7 +3,7 @@
 
 use super::{Layer, Renderer};
 use crate::camera::screen_projection;
-use crate::mesh::{Mesh, Vertex};
+use crate::mesh::{Mesh2D, Vertex2D};
 use crate::pass::{self, MeshDraw};
 use crate::target::RenderTarget;
 
@@ -59,14 +59,14 @@ impl Renderer {
         (width, height): (u32, u32),
         pictures: &[Placed<'_>],
         ui: Layer<'_>,
-    ) -> Option<Mesh> {
+    ) -> Option<Mesh2D> {
         let device = self.ctx.device();
         let mut vertices = Vec::with_capacity(pictures.len() * 4);
         let mut indices = Vec::with_capacity(pictures.len() * 6);
         for (i, placed) in pictures.iter().enumerate() {
             let [x, y, w, h] = placed.rect;
             let base = (i * 4) as u32;
-            let corner = |px: f32, py: f32, u: f32, v: f32| Vertex {
+            let corner = |px: f32, py: f32, u: f32, v: f32| Vertex2D {
                 position: [px, py],
                 color: [1.0; 4],
                 uv: [u, v],
@@ -79,8 +79,8 @@ impl Renderer {
             ]);
             indices.extend([base, base + 1, base + 2, base, base + 2, base + 3]);
         }
-        let mesh =
-            (!vertices.is_empty()).then(|| Mesh::indexed(device, "composite", &vertices, &indices));
+        let mesh = (!vertices.is_empty())
+            .then(|| Mesh2D::indexed(device, "composite", &vertices, &indices));
         // The sRGB view: sampled as linear and written back encoded, as the
         // sprite pipeline writes everything else.
         let groups: Vec<wgpu::BindGroup> = pictures

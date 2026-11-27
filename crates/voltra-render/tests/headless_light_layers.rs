@@ -5,13 +5,13 @@
 //!
 //! Skips itself when no GPU adapter is available.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, TexturePool};
 use voltra_render::light_layers::LAYER_FORMAT;
 use voltra_render::{
-    pass, pipeline, texture, wgpu, Filter, GlobalLight, LayerPass, LightPass, Lighting, Mesh,
-    MeshDraw, PointLight, PostPass, PostSettings, RenderTarget, SceneDraw, Texture, Vertex,
+    pass, pipeline, texture, wgpu, Filter, GlobalLight, LayerPass, LightPass, Lighting, Mesh2D,
+    MeshDraw, PointLight, PostPass, PostSettings, RenderTarget, SceneDraw, Texture, Vertex2D,
     ALL_LIGHT_LAYERS,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
@@ -21,18 +21,18 @@ const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 /// Two quads filling the left and right of -1..1, a gap of nothing at the
 /// top for the background.
-fn quads(device: &wgpu::Device) -> Mesh {
+fn quads(device: &wgpu::Device) -> Mesh2D {
     let white = [1.0; 4];
     let quad = |x0: f32, x1: f32| {
         [
-            Vertex::new([x0, 0.5], white, [0.0, 0.0]),
-            Vertex::new([x0, -1.0], white, [0.0, 1.0]),
-            Vertex::new([x1, -1.0], white, [1.0, 1.0]),
-            Vertex::new([x1, 0.5], white, [1.0, 0.0]),
+            Vertex2D::new([x0, 0.5], white, [0.0, 0.0]),
+            Vertex2D::new([x0, -1.0], white, [0.0, 1.0]),
+            Vertex2D::new([x1, -1.0], white, [1.0, 1.0]),
+            Vertex2D::new([x1, 0.5], white, [1.0, 0.0]),
         ]
     };
-    let vertices: Vec<Vertex> = quad(-1.0, 0.0).into_iter().chain(quad(0.0, 1.0)).collect();
-    Mesh::indexed(
+    let vertices: Vec<Vertex2D> = quad(-1.0, 0.0).into_iter().chain(quad(0.0, 1.0)).collect();
+    Mesh2D::indexed(
         device,
         "layer-quads",
         &vertices,
@@ -55,7 +55,7 @@ fn lit_by(lamp: Option<u32>, globals: Vec<GlobalLight>, left: u32) -> Option<Vec
     let layer_target =
         RenderTarget::new(&device, "layers", LAYER_FORMAT, SIZE, SIZE, Filter::Nearest);
     let camera = CameraBinding::new(&device);
-    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let layout = texture::bind_group_layout(&device);
     let sprites = pipeline::create_flat_color(&device, FORMAT, camera.layout(), &layout);
     let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);

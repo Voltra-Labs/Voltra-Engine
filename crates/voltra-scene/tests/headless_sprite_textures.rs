@@ -13,7 +13,7 @@
 use std::path::Path;
 
 use voltra_assets::{AssetPath, Textures};
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Texture};
@@ -64,7 +64,7 @@ fn render_batch(
     queue: &wgpu::Queue,
     batch: &SpriteBatch,
     textures: &Textures,
-    camera: &Camera2D,
+    camera: &View2D,
 ) -> Vec<Rgba> {
     let target = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("headless-sprite-target"),
@@ -128,7 +128,7 @@ fn at(pixels: &[Rgba], x: u32, y: u32) -> Rgba {
 
 /// A camera wide enough that two sprites a unit apart land in opposite halves.
 ///
-/// Built through `Camera2D::new`: `zoom` is a private field with a clamping
+/// Built through `View2D::new`: `zoom` is a private field with a clamping
 /// setter, precisely so nobody writes a zero into it.
 ///
 /// Zoom 0.25 (the plan's original value) makes the visible region 8 world
@@ -137,13 +137,13 @@ fn at(pixels: &[Rgba], x: u32, y: u32) -> Rgba {
 /// nothing lands there. 0.4 shrinks the visible region enough that both
 /// sprites' quads straddle their sampled column while still leaving a clear
 /// gap between them at the centre.
-fn wide_camera() -> Camera2D {
-    Camera2D::new(Vec2::ZERO, 0.4, 1.0)
+fn wide_camera() -> View2D {
+    View2D::new(Vec2::ZERO, 0.4, 1.0)
 }
 
 /// Tight enough that one sprite at the origin fills most of the frame.
-fn close_camera() -> Camera2D {
-    Camera2D::new(Vec2::ZERO, 0.5, 1.0)
+fn close_camera() -> View2D {
+    View2D::new(Vec2::ZERO, 0.5, 1.0)
 }
 
 /// A sprite at `x`, optionally naming `path`, resolved through `textures`.

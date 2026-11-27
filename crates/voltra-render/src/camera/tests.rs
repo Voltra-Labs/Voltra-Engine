@@ -3,14 +3,14 @@
 use super::*;
 
 /// Projecting a world point and dividing by w, as the GPU does.
-pub(super) fn project(camera: &Camera2D, point: Vec2) -> Vec2 {
+pub(super) fn project(camera: &View2D, point: Vec2) -> Vec2 {
     let clip = camera.view_projection() * glam::Vec4::new(point.x, point.y, 0.0, 1.0);
     Vec2::new(clip.x / clip.w, clip.y / clip.w)
 }
 
 #[test]
 fn default_camera_is_identity_over_clip_space() {
-    let camera = Camera2D::default();
+    let camera = View2D::default();
     // At zoom 1 and aspect 1 the visible region is exactly clip space, so
     // geometry authored before the camera existed must not move.
     assert!((project(&camera, Vec2::new(0.0, 0.5)) - Vec2::new(0.0, 0.5)).length() < 1e-6);
@@ -19,7 +19,7 @@ fn default_camera_is_identity_over_clip_space() {
 
 #[test]
 fn moving_the_camera_shifts_geometry_the_other_way() {
-    let camera = Camera2D::new(Vec2::new(1.0, 0.0), 1.0, 1.0);
+    let camera = View2D::new(Vec2::new(1.0, 0.0), 1.0, 1.0);
     // The camera moved right, so the origin must appear to the left.
     let origin = project(&camera, Vec2::ZERO);
     assert!(
@@ -30,7 +30,7 @@ fn moving_the_camera_shifts_geometry_the_other_way() {
 
 #[test]
 fn zoom_shrinks_the_visible_region() {
-    let camera = Camera2D::new(Vec2::ZERO, 2.0, 1.0);
+    let camera = View2D::new(Vec2::ZERO, 2.0, 1.0);
     assert_eq!(camera.half_extents(), Vec2::new(0.5, 0.5));
     // A point at the old edge is now past the edge of the screen.
     assert!(project(&camera, Vec2::new(0.0, 1.0)).y > 1.0);
@@ -38,7 +38,7 @@ fn zoom_shrinks_the_visible_region() {
 
 #[test]
 fn aspect_widens_the_visible_region_horizontally() {
-    let camera = Camera2D::new(Vec2::ZERO, 1.0, 2.0);
+    let camera = View2D::new(Vec2::ZERO, 1.0, 2.0);
     assert_eq!(camera.half_extents(), Vec2::new(2.0, 1.0));
     // Twice as wide means x is compressed by half in clip space.
     let p = project(&camera, Vec2::new(1.0, 0.0));
@@ -47,7 +47,7 @@ fn aspect_widens_the_visible_region_horizontally() {
 
 #[test]
 fn uniform_is_the_matrix_in_column_major_order() {
-    let camera = Camera2D::new(Vec2::new(3.0, 4.0), 1.5, 1.25);
+    let camera = View2D::new(Vec2::new(3.0, 4.0), 1.5, 1.25);
     let uniform = CameraUniform::from(&camera);
     assert_eq!(
         uniform.view_proj,
@@ -62,8 +62,8 @@ pub(super) fn viewport() -> Vec2 {
     Vec2::new(800.0, 600.0)
 }
 
-pub(super) fn camera_for(viewport: Vec2) -> Camera2D {
-    Camera2D::new(Vec2::new(3.0, -2.0), 1.5, viewport.x / viewport.y)
+pub(super) fn camera_for(viewport: Vec2) -> View2D {
+    View2D::new(Vec2::new(3.0, -2.0), 1.5, viewport.x / viewport.y)
 }
 
 #[test]
@@ -96,8 +96,8 @@ fn viewport_top_left_is_up_and_to_the_left() {
 #[test]
 fn viewport_and_world_round_trip() {
     let viewport = viewport();
-    for zoom in [Camera2D::MIN_ZOOM, 0.25, 1.0, 7.5, Camera2D::MAX_ZOOM] {
-        let camera = Camera2D::new(Vec2::new(-4.0, 9.0), zoom, viewport.x / viewport.y);
+    for zoom in [View2D::MIN_ZOOM, 0.25, 1.0, 7.5, View2D::MAX_ZOOM] {
+        let camera = View2D::new(Vec2::new(-4.0, 9.0), zoom, viewport.x / viewport.y);
         for point in [
             Vec2::ZERO,
             viewport,
@@ -146,18 +146,18 @@ fn zoom_around_keeps_the_anchor_world_point_still() {
 
 #[test]
 fn set_zoom_clamps_both_ends() {
-    let mut camera = Camera2D::default();
+    let mut camera = View2D::default();
     camera.set_zoom(f32::INFINITY);
-    assert_eq!(camera.zoom(), Camera2D::MAX_ZOOM);
+    assert_eq!(camera.zoom(), View2D::MAX_ZOOM);
     camera.set_zoom(0.0);
-    assert_eq!(camera.zoom(), Camera2D::MIN_ZOOM);
+    assert_eq!(camera.zoom(), View2D::MIN_ZOOM);
     camera.set_zoom(-5.0);
-    assert_eq!(camera.zoom(), Camera2D::MIN_ZOOM);
+    assert_eq!(camera.zoom(), View2D::MIN_ZOOM);
 }
 
 #[test]
 fn set_zoom_ignores_nan() {
-    let mut camera = Camera2D::default();
+    let mut camera = View2D::default();
     camera.set_zoom(2.0);
     camera.set_zoom(f32::NAN);
     assert_eq!(camera.zoom(), 2.0, "NaN must leave the previous zoom alone");
@@ -166,14 +166,14 @@ fn set_zoom_ignores_nan() {
 #[test]
 fn zoom_around_at_the_clamp_does_not_drift() {
     let viewport = viewport();
-    let mut camera = Camera2D::new(Vec2::ZERO, Camera2D::MAX_ZOOM, viewport.x / viewport.y);
+    let mut camera = View2D::new(Vec2::ZERO, View2D::MAX_ZOOM, viewport.x / viewport.y);
     let anchor = Vec2::new(10.0, 20.0);
 
     camera.zoom_around(anchor, viewport, 2.0);
 
     // Zoom was already at the ceiling, so nothing may move. Without this
     // the camera slides sideways every notch once the user hits the limit.
-    assert_eq!(camera.zoom(), Camera2D::MAX_ZOOM);
+    assert_eq!(camera.zoom(), View2D::MAX_ZOOM);
     assert!(
         camera.position.length() < 1e-6,
         "drifted to {}",
@@ -184,21 +184,15 @@ fn zoom_around_at_the_clamp_does_not_drift() {
 #[test]
 fn new_clamps_its_zoom() {
     // The constructor is a second door onto the same invariant. Leaving it
-    // unclamped means `Camera2D::new(pos, 0.0, 1.0)` produces infinities in
+    // unclamped means `View2D::new(pos, 0.0, 1.0)` produces infinities in
     // half_extents with no warning anywhere.
-    assert_eq!(
-        Camera2D::new(Vec2::ZERO, 0.0, 1.0).zoom(),
-        Camera2D::MIN_ZOOM
-    );
-    assert_eq!(
-        Camera2D::new(Vec2::ZERO, 1e9, 1.0).zoom(),
-        Camera2D::MAX_ZOOM
-    );
+    assert_eq!(View2D::new(Vec2::ZERO, 0.0, 1.0).zoom(), View2D::MIN_ZOOM);
+    assert_eq!(View2D::new(Vec2::ZERO, 1e9, 1.0).zoom(), View2D::MAX_ZOOM);
 }
 
 #[test]
 fn a_degenerate_viewport_stays_finite() {
-    let camera = Camera2D::default();
+    let camera = View2D::default();
     let world = camera.viewport_to_world(Vec2::ZERO, Vec2::ZERO);
     assert!(world.is_finite(), "got {world}");
 }

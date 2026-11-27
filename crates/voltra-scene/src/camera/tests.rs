@@ -127,13 +127,13 @@ fn an_entity_without_a_camera_has_no_view() {
 #[test]
 fn a_degenerate_size_still_produces_a_finite_view() {
     // A size dragged to zero, or typed as one into the inspector. The
-    // clamp lives in `Camera2D::set_zoom`; this is the test that the path
+    // clamp lives in `View2D::set_zoom`; this is the test that the path
     // through this type actually reaches it.
     let mut world = World::new();
     let entity = spawn(&mut world, Camera::new(0.0), Vec2::ZERO);
 
     let view = view(&world, entity, 1.0).expect("it has a camera");
-    assert_eq!(view.zoom(), Camera2D::MAX_ZOOM);
+    assert_eq!(view.zoom(), View2D::MAX_ZOOM);
     assert!(view.half_extents().is_finite());
 }
 
@@ -151,8 +151,8 @@ fn a_nan_size_leaves_a_usable_view() {
 
 #[test]
 fn the_size_bounds_are_the_zoom_bounds_the_other_way_up() {
-    assert!((Camera::new(Camera::MAX_SIZE).zoom() - Camera2D::MIN_ZOOM).abs() < 1e-9);
-    assert!((Camera::new(Camera::MIN_SIZE).zoom() - Camera2D::MAX_ZOOM).abs() < 1e-3);
+    assert!((Camera::new(Camera::MAX_SIZE).zoom() - View2D::MIN_ZOOM).abs() < 1e-9);
+    assert!((Camera::new(Camera::MIN_SIZE).zoom() - View2D::MAX_ZOOM).abs() < 1e-3);
 }
 
 #[test]

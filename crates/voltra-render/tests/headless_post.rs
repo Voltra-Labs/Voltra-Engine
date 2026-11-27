@@ -140,10 +140,10 @@ fn saturation_zero_is_grey_and_exposure_scales() {
 /// `Renderer::render_scene` records, with the same pipelines and formats.
 #[test]
 fn the_hud_drawn_after_the_grade_is_not_graded() {
-    use voltra_render::camera::{screen_projection, Camera2D, CameraBinding};
+    use voltra_render::camera::{screen_projection, CameraBinding, View2D};
     use voltra_render::glam::Vec2;
     use voltra_render::pass::{self, MeshDraw};
-    use voltra_render::{pipeline, texture, Mesh, Texture, Vertex};
+    use voltra_render::{pipeline, texture, Mesh2D, Texture, Vertex2D};
 
     let Some((device, queue)) = headless_device() else {
         eprintln!("no GPU adapter; skipping");
@@ -153,7 +153,7 @@ fn the_hud_drawn_after_the_grade_is_not_graded() {
     let graded = RenderTarget::new(&device, "graded", FORMAT, SIZE, SIZE, Filter::Linear);
     let post = PostPass::new(&device, FORMAT);
     let world_camera = CameraBinding::new(&device);
-    world_camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    world_camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let ui_camera = world_camera.sharing_layout(&device);
     ui_camera.upload_matrix(&queue, screen_projection(SIZE as f32, SIZE as f32));
     let layout = texture::bind_group_layout(&device);
@@ -164,12 +164,12 @@ fn the_hud_drawn_after_the_grade_is_not_graded() {
     let red = [1.0, 0.0, 0.0, 1.0];
     let half = SIZE as f32 / 2.0;
     let hud = [
-        Vertex::new([0.0, 0.0], red, [0.0, 0.0]),
-        Vertex::new([0.0, half], red, [0.0, 1.0]),
-        Vertex::new([half, half], red, [1.0, 1.0]),
-        Vertex::new([half, 0.0], red, [1.0, 0.0]),
+        Vertex2D::new([0.0, 0.0], red, [0.0, 0.0]),
+        Vertex2D::new([0.0, half], red, [0.0, 1.0]),
+        Vertex2D::new([half, half], red, [1.0, 1.0]),
+        Vertex2D::new([half, 0.0], red, [1.0, 0.0]),
     ];
-    let hud_mesh = Mesh::indexed(&device, "hud", &hud, &[0, 1, 2, 0, 2, 3]);
+    let hud_mesh = Mesh2D::indexed(&device, "hud", &hud, &[0, 1, 2, 0, 2, 3]);
     let draws = [MeshDraw {
         texture: &white,
         normal: None,

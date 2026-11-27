@@ -3,7 +3,7 @@
 use bytemuck::{Pod, Zeroable};
 use glam::Mat4;
 
-use super::Camera2D;
+use super::View2D;
 
 /// The camera matrix as the GPU sees it.
 #[repr(C)]
@@ -12,15 +12,15 @@ pub struct CameraUniform {
     pub(super) view_proj: [[f32; 4]; 4],
 }
 
-impl From<&Camera2D> for CameraUniform {
-    fn from(camera: &Camera2D) -> Self {
+impl From<&View2D> for CameraUniform {
+    fn from(camera: &View2D) -> Self {
         Self {
             view_proj: camera.view_projection().to_cols_array_2d(),
         }
     }
 }
 
-/// Uniform buffer, layout and bind group for a [`Camera2D`].
+/// Uniform buffer, layout and bind group for a [`View2D`].
 ///
 /// The layout is created here rather than derived from the shader so the
 /// pipeline can be built before any camera exists.
@@ -85,7 +85,7 @@ impl CameraBinding {
     }
 
     /// Writes the camera matrix to the GPU. Cheap enough to call every frame.
-    pub fn upload(&self, queue: &wgpu::Queue, camera: &Camera2D) {
+    pub fn upload(&self, queue: &wgpu::Queue, camera: &View2D) {
         let uniform = CameraUniform::from(camera);
         queue.write_buffer(&self.buffer, 0, bytemuck::bytes_of(&uniform));
     }

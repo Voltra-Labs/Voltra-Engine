@@ -32,7 +32,7 @@ use crate::transform::Transform;
 /// statement about the sprite's on-screen area, not about its width or height
 /// individually. A uniform scale of `1e-6` gives a determinant of `1e-12`: a
 /// sprite a millionth of a world unit on a side, far below a pixel under any
-/// zoom worth supporting (this crate has no `Camera2D` — that type lives in
+/// zoom worth supporting (this crate has no `View2D` — that type lives in
 /// `voltra-editor` and has no business being named here). An anisotropic
 /// transform can reach the same determinant a different way, say `1e-4` on one
 /// axis against `1e-8` on the other, and is rejected for the same reason:

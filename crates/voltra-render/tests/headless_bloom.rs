@@ -4,13 +4,13 @@
 //!
 //! Skips itself when no GPU adapter is available.
 
-use voltra_render::camera::{Camera2D, CameraBinding};
+use voltra_render::camera::{CameraBinding, View2D};
 use voltra_render::glam::Vec2;
 use voltra_render::graph::{RenderGraph, Slot, TexturePool};
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{
-    pipeline, texture, wgpu, BloomPass, BloomSettings, Filter, Mesh, PostPass, PostSettings,
-    RenderTarget, Texture, Vertex,
+    pipeline, texture, wgpu, BloomPass, BloomSettings, Filter, Mesh2D, PostPass, PostSettings,
+    RenderTarget, Texture, Vertex2D,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
@@ -24,19 +24,19 @@ fn frame(post: PostSettings) -> Option<(Vec<Rgba>, usize)> {
     let scene = RenderTarget::new(&device, "scene", FORMAT, SIZE, SIZE, Filter::Linear);
     let output = RenderTarget::new(&device, "output", FORMAT, SIZE, SIZE, Filter::Linear);
     let camera = CameraBinding::new(&device);
-    camera.upload(&queue, &Camera2D::new(Vec2::ZERO, 1.0, 1.0));
+    camera.upload(&queue, &View2D::new(Vec2::ZERO, 1.0, 1.0));
     let layout = texture::bind_group_layout(&device);
     let white = Texture::white(&device, &queue).create_bind_group(&device, &layout);
     let sprites = pipeline::create_flat_color(&device, FORMAT, camera.layout(), &layout);
     let c = [1.0; 4];
     let h = 0.125;
     let square = [
-        Vertex::new([-h, h], c, [0.0, 0.0]),
-        Vertex::new([-h, -h], c, [0.0, 1.0]),
-        Vertex::new([h, -h], c, [1.0, 1.0]),
-        Vertex::new([h, h], c, [1.0, 0.0]),
+        Vertex2D::new([-h, h], c, [0.0, 0.0]),
+        Vertex2D::new([-h, -h], c, [0.0, 1.0]),
+        Vertex2D::new([h, -h], c, [1.0, 1.0]),
+        Vertex2D::new([h, h], c, [1.0, 0.0]),
     ];
-    let mesh = Mesh::indexed(&device, "square", &square, &[0, 1, 2, 0, 2, 3]);
+    let mesh = Mesh2D::indexed(&device, "square", &square, &[0, 1, 2, 0, 2, 3]);
 
     let bloom = BloomPass::new(&device);
     let grade = PostPass::new(&device, FORMAT);

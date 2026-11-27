@@ -20,7 +20,7 @@ pub mod regions;
 pub mod selection;
 
 use voltra_ecs::World;
-use voltra_render::Camera2D;
+use voltra_render::View2D;
 use voltra_scene::camera;
 
 /// Which camera the viewport shows the scene through.
@@ -61,7 +61,7 @@ impl ViewMode {
 #[derive(Debug, Default)]
 pub struct View {
     mode: ViewMode,
-    parked: Option<Camera2D>,
+    parked: Option<View2D>,
 }
 
 impl View {
@@ -78,7 +78,7 @@ impl View {
     /// Idempotent: setting the mode already in effect parks nothing, so two
     /// clicks on the same button cannot overwrite the parked camera with the
     /// game one.
-    pub fn set_mode(&mut self, mode: ViewMode, camera: &mut Camera2D) {
+    pub fn set_mode(&mut self, mode: ViewMode, camera: &mut View2D) {
         if mode == self.mode {
             return;
         }
@@ -105,7 +105,7 @@ impl View {
     /// Returns whether there was one. `false` leaves `camera` untouched: the
     /// last framing on screen is more use than a black rectangle while the
     /// author works out which camera to enable, and the panel says so in words.
-    pub fn show_game_camera(&self, world: &World, camera: &mut Camera2D) -> bool {
+    pub fn show_game_camera(&self, world: &World, camera: &mut View2D) -> bool {
         let Some(view) = camera::active_view(world, camera.aspect) else {
             return false;
         };
@@ -120,8 +120,8 @@ mod tests {
     use voltra_render::glam::Vec2;
     use voltra_scene::{Camera, Transform};
 
-    fn editor_camera() -> Camera2D {
-        Camera2D::new(Vec2::new(7.0, -3.0), 4.0, 1.5)
+    fn editor_camera() -> View2D {
+        View2D::new(Vec2::new(7.0, -3.0), 4.0, 1.5)
     }
 
     fn scene_with_camera(at: Vec2, size: f32) -> World {

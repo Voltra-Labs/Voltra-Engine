@@ -3,7 +3,7 @@
 use voltra_assets::Handle;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_render::{Camera2D, Texture};
+use voltra_render::{Texture, View2D};
 
 use super::{eye, Camera, CameraTarget};
 
@@ -32,7 +32,7 @@ impl Shot {
     /// than the world's grid, so no shift lines the two up, and a sprite
     /// seen turned is resampled whatever the camera does. The snap comes
     /// back once the camera is upright again.
-    pub fn view(&self, width: u32, height: u32) -> Camera2D {
+    pub fn view(&self, width: u32, height: u32) -> View2D {
         let (w, h) = (width.max(1) as f32, height.max(1) as f32);
         let mut position = self.position;
         let upright = super::normalised_turn(self.rotation) == 0.0;
@@ -48,7 +48,7 @@ impl Shot {
             let edge = position - half;
             position = (edge / pixel).round() * pixel + half;
         }
-        Camera2D::new(position, self.camera.zoom(), w / h)
+        View2D::new(position, self.camera.zoom(), w / h)
             .with_rotation(super::normalised_turn(self.rotation))
     }
 }

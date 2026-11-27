@@ -6,7 +6,7 @@
 //! no light that needs them pays nothing — the pass is not recorded. See
 //! `sprite_normals.wgsl` for the encoding and the tangent frame.
 
-use crate::mesh::Mesh;
+use crate::mesh::Mesh2D;
 use crate::pipeline::{SpritePipeline, SpritePipelineDescriptor};
 use crate::scene_draw::SceneDraw;
 use crate::texture::Texture;
@@ -100,7 +100,7 @@ impl NormalPass {
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
         camera: &wgpu::BindGroup,
-        mesh: Option<&Mesh>,
+        mesh: Option<&Mesh2D>,
         draws: &[SceneDraw<'_>],
     ) {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

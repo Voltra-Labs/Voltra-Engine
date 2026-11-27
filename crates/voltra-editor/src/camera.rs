@@ -24,7 +24,7 @@
 
 use voltra_core::egui::{Key, PointerButton, Response, Ui};
 use voltra_render::glam::Vec2;
-use voltra_render::Camera2D;
+use voltra_render::View2D;
 
 /// Bindings and tunables for navigating the scene viewport.
 pub struct ViewportCamera {
@@ -55,7 +55,7 @@ impl Default for ViewportCamera {
 
 impl ViewportCamera {
     /// Applies one frame of navigation. `response` is the scene image's.
-    pub fn navigate(&self, ui: &Ui, response: &Response, camera: &mut Camera2D) {
+    pub fn navigate(&self, ui: &Ui, response: &Response, camera: &mut View2D) {
         let viewport = Vec2::new(response.rect.width(), response.rect.height());
 
         if response.dragged_by(PointerButton::Middle) {
@@ -115,7 +115,7 @@ impl ViewportCamera {
     }
 
     /// Grab-and-drag: the camera travels opposite the pointer.
-    fn pan(&self, camera: &mut Camera2D, delta: Vec2, viewport: Vec2) {
+    fn pan(&self, camera: &mut View2D, delta: Vec2, viewport: Vec2) {
         // Anchoring on the world point under the pointer rather than scaling by
         // a hand-derived factor means pan and zoom cannot disagree about what a
         // point is worth.
@@ -145,7 +145,7 @@ mod tests {
     fn pan_moves_the_camera_opposite_the_drag_x() {
         let nav = ViewportCamera::default();
         let vp = viewport();
-        let mut camera = Camera2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
+        let mut camera = View2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
 
         // Dragging the pointer right must move the camera left.
         nav.pan(&mut camera, Vec2::new(10.0, 0.0), vp);
@@ -160,7 +160,7 @@ mod tests {
     fn pan_moves_the_camera_opposite_the_drag_y() {
         let nav = ViewportCamera::default();
         let vp = viewport();
-        let mut camera = Camera2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
+        let mut camera = View2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
 
         // The drag delta is Y-down (screen space); world space is Y-up, so
         // dragging the pointer down must move the camera's position.y
@@ -179,10 +179,10 @@ mod tests {
         let vp = viewport();
         let drag = Vec2::new(20.0, 0.0);
 
-        let mut base = Camera2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
+        let mut base = View2D::new(Vec2::ZERO, 1.0, vp.x / vp.y);
         nav.pan(&mut base, drag, vp);
 
-        let mut doubled = Camera2D::new(Vec2::ZERO, 2.0, vp.x / vp.y);
+        let mut doubled = View2D::new(Vec2::ZERO, 2.0, vp.x / vp.y);
         nav.pan(&mut doubled, drag, vp);
 
         assert!(

@@ -33,7 +33,7 @@ pub mod target;
 pub mod texture;
 
 pub use bloom::{BloomPass, BloomSettings};
-pub use camera::{screen_projection, Camera2D, CameraBinding};
+pub use camera::{screen_projection, CameraBinding, View2D};
 pub use context::GpuContext;
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
 pub use frame_buffers::FrameBuffers;
@@ -44,7 +44,7 @@ pub use lights::{
     ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
 };
 pub use lines::{LineBatch, LineVertex, ViewportBinding};
-pub use mesh::{Mesh, MeshBuffers, Primitives, Vertex};
+pub use mesh::{Mesh2D, MeshBuffers, Primitives, Vertex2D};
 pub use normals::NormalPass;
 pub use particles::{
     FrameTiming, GpuParticles, ParticleCollider, ParticleLook, ParticlePipelines, ParticleResponse,
@@ -60,6 +60,19 @@ pub use scene_draw::SceneDraw;
 pub use skinning::{SkinPipeline, SkinVertex, SkinnedMesh};
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};
+
+// The names 0.4 used, for out-of-tree code moving to 0.5: each compiles with
+// a warning naming its replacement, and goes in 0.6. Nothing in the tree uses
+// them. `Camera2D` has none: it is `voltra_scene::Camera2D` now, and an alias
+// here would make a glob import of both crates ambiguous.
+
+/// Renamed [`Vertex2D`] in 0.5.
+#[deprecated(since = "0.5.0", note = "renamed `Vertex2D`")]
+pub type Vertex = Vertex2D;
+
+/// Renamed [`Mesh2D`] in 0.5.
+#[deprecated(since = "0.5.0", note = "renamed `Mesh2D`")]
+pub type Mesh = Mesh2D;
 
 // Re-exported so downstream crates never declare their own `wgpu` dependency
 // and can't drift onto a different version.

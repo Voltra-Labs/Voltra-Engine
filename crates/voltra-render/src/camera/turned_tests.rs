@@ -6,8 +6,8 @@ use super::*;
 
 /// A view turned a quarter turn and a bit, off the origin, on a viewport
 /// that is not square: nothing lines up by coincidence.
-fn turned() -> Camera2D {
-    Camera2D::new(Vec2::new(3.0, -2.0), 1.5, 800.0 / 600.0).with_rotation(1.9)
+fn turned() -> View2D {
+    View2D::new(Vec2::new(3.0, -2.0), 1.5, 800.0 / 600.0).with_rotation(1.9)
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn turning_the_view_turns_the_world_the_other_way() {
     // The view turned a quarter turn left, the world turns right on
     // screen: a point to the world's right of the camera shows below the
     // centre.
-    let camera = Camera2D::default().with_rotation(std::f32::consts::FRAC_PI_2);
+    let camera = View2D::default().with_rotation(std::f32::consts::FRAC_PI_2);
     let on_screen = project(&camera, Vec2::new(0.5, 0.0));
     assert!(
         on_screen.abs_diff_eq(Vec2::new(0.0, -0.5), 1e-6),
@@ -60,7 +60,7 @@ fn turning_the_view_turns_the_world_the_other_way() {
 #[test]
 fn a_view_at_45_degrees_sees_the_box_around_its_turned_rect() {
     let camera =
-        Camera2D::new(Vec2::new(1.0, 1.0), 1.0, 5.0).with_rotation(std::f32::consts::FRAC_PI_4);
+        View2D::new(Vec2::new(1.0, 1.0), 1.0, 5.0).with_rotation(std::f32::consts::FRAC_PI_4);
     // Half extents 5 × 1, turned 45°: the box reaches (5 + 1) / √2 each way.
     let (min, max) = camera.visible_bounds();
     let reach = 6.0 / 2f32.sqrt();
@@ -70,7 +70,7 @@ fn a_view_at_45_degrees_sees_the_box_around_its_turned_rect() {
     for corner in camera.corners() {
         assert!(corner.cmpge(min - 1e-5).all() && corner.cmple(max + 1e-5).all());
     }
-    let upright = Camera2D::new(Vec2::new(1.0, 1.0), 1.0, 5.0);
+    let upright = View2D::new(Vec2::new(1.0, 1.0), 1.0, 5.0);
     assert_eq!(
         upright.visible_bounds(),
         (Vec2::new(-4.0, 0.0), Vec2::new(6.0, 2.0))

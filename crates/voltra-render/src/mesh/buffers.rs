@@ -2,7 +2,7 @@
 //! `Queue::write_buffer` each frame, grown when the frame needs more.
 //!
 //! The sprite batch changes every frame, and making it fresh buffers every
-//! frame (what [`Mesh::batch`] does) pays a buffer allocation, its zeroing
+//! frame (what [`Mesh2D::batch`] does) pays a buffer allocation, its zeroing
 //! and a staging copy for each — milliseconds for a 100k-sprite batch, and
 //! on the web memory only JavaScript's collector frees. Bevy keeps its
 //! sprite instances in a `RawBufferVec` rewritten each frame and Godot its
@@ -16,7 +16,7 @@
 
 use bytemuck::Pod;
 
-use super::{Mesh, QuadInstance};
+use super::{Mesh2D, QuadInstance};
 
 /// The smallest buffer made: a few hundred quads.
 const MIN_BYTES: u64 = 16 * 1024;
@@ -24,10 +24,10 @@ const MIN_BYTES: u64 = 16 * 1024;
 /// Under this share of its capacity in use, a buffer is made anew, smaller.
 const SHRINK_BELOW: u64 = 4;
 
-/// A [`Mesh`] kept from frame to frame. Empty until first written.
+/// A [`Mesh2D`] kept from frame to frame. Empty until first written.
 pub struct MeshBuffers {
     label: &'static str,
-    mesh: Mesh,
+    mesh: Mesh2D,
 }
 
 /// Labelled for what kept buffers are, most often.
@@ -42,14 +42,14 @@ impl MeshBuffers {
     pub fn new(label: &'static str) -> Self {
         Self {
             label,
-            mesh: Mesh::empty(),
+            mesh: Mesh2D::empty(),
         }
     }
 
     /// The mesh drawing `vertices` through `indices` and `quads`, written
     /// into the kept buffers — made or remade only when they are too small
     /// or far too large. `None` when there is nothing to draw, as
-    /// [`Mesh::batch`] has nothing to upload.
+    /// [`Mesh2D::batch`] has nothing to upload.
     ///
     /// The writes are queued and land before the next submission's
     /// commands, after the previous one's: last frame's draws read last
@@ -62,7 +62,7 @@ impl MeshBuffers {
         vertices: &[V],
         indices: &[u32],
         quads: &[QuadInstance],
-    ) -> Option<&Mesh> {
+    ) -> Option<&Mesh2D> {
         let mesh = &mut self.mesh;
         let triangles = !indices.is_empty();
         if triangles {
