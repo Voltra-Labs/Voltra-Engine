@@ -11,8 +11,11 @@ cargo test -p my-game
 
 `new-game` writes `games/my-game/`: its `Cargo.toml`, `src/lib.rs`, a
 `src/main.rs`, a first scene in `assets/scenes/main.ron`, the engine's
-starting assets, a `build.ron`, and a test that loads the library as the
-editor does. The test passing means the game builds and plays.
+starting assets — among them the options and lobby screens
+([chapter 5](05-ui.md#an-options-screen),
+[chapter 8](08-networking.md#before-the-match-a-lobby)) — a `build.ron`,
+and tests: one loads the library as the editor does, one walks the lobby
+screen from host to start. Their passing means the game builds and plays.
 
 ## The game
 
