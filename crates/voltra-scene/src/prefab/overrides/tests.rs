@@ -10,7 +10,7 @@ use crate::hierarchy::{children_of, set_parent};
 use crate::name::Name;
 use crate::prefab::{apply, link, spawn, sync, write};
 use crate::scene_id::SceneId;
-use crate::{Sprite, Transform};
+use crate::{Sprite2D, Transform2D};
 
 fn registry() -> ComponentRegistry {
     ComponentRegistry::with_defaults()
@@ -24,7 +24,7 @@ fn named(world: &mut World, name: &str, at: Vec2) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Name::new(name));
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     entity
 }
 
@@ -33,9 +33,9 @@ fn store() -> (Prefabs, voltra_testkit::Scratch) {
     let root = voltra_testkit::scratch_root();
     let mut world = World::new();
     let coin = named(&mut world, "coin", Vec2::ZERO);
-    world.insert(coin, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    world.insert(coin, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
     let glow = named(&mut world, "glow", Vec2::new(0.0, 0.2));
-    world.insert(glow, Sprite::default());
+    world.insert(glow, Sprite2D::default());
     set_parent(&mut world, glow, coin).expect("a plain reparent");
     let file = to_scene_file(&world, &registry()).expect("saves");
     crate::format::write(&file, &root.join("coin.ron")).expect("writes");
@@ -48,7 +48,7 @@ fn instance(world: &mut World, prefabs: &mut Prefabs, at: Vec2) -> Entity {
         world,
         &registry(),
         prefabs.get(handle),
-        &Transform::from_translation(at),
+        &Transform2D::from_translation(at),
     )
     .expect("spawns")
     .root()
@@ -85,12 +85,12 @@ fn an_edit_is_an_override_until_it_is_taken_back() {
         "fresh, and placed: nothing"
     );
 
-    scene.insert(coin, Sprite::new([0.0, 1.0, 0.0, 1.0]));
+    scene.insert(coin, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
     assert!(refresh(&mut scene, &mut prefabs));
     assert_eq!(overridden(&scene, coin), ["Sprite"]);
     assert!(!refresh(&mut scene, &mut prefabs), "no change, no write");
 
-    scene.insert(coin, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    scene.insert(coin, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
     assert!(refresh(&mut scene, &mut prefabs));
     assert!(overridden(&scene, coin).is_empty(), "back to the prefab's");
 }
@@ -100,14 +100,14 @@ fn a_revert_puts_one_component_or_all_of_them_back() {
     let (mut prefabs, _root) = store();
     let mut scene = World::new();
     let coin = instance(&mut scene, &mut prefabs, Vec2::ZERO);
-    scene.insert(coin, Sprite::new([0.0, 1.0, 0.0, 1.0]));
+    scene.insert(coin, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
     scene.insert(coin, Name::new("mine"));
     refresh_overrides(&mut scene, &registry(), &mut prefabs, coin).expect("compares");
     assert_eq!(overridden(&scene, coin), ["Name", "Sprite"]);
 
     revert(&mut scene, &registry(), &mut prefabs, coin, Some("Sprite")).expect("reverts");
     assert_eq!(
-        scene.get::<Sprite>(coin).expect("s").color,
+        scene.get::<Sprite2D>(coin).expect("s").color,
         [1.0, 0.0, 0.0, 1.0]
     );
     assert_eq!(scene.get::<Name>(coin).expect("n").as_str(), "mine");
@@ -144,7 +144,7 @@ fn applying_an_instance_writes_it_over_the_prefab_and_the_others_follow() {
     let edited = instance(&mut scene, &mut prefabs, Vec2::new(5.0, 0.0));
     let other = instance(&mut scene, &mut prefabs, Vec2::new(-5.0, 0.0));
     // The edit: blue, and a shine of its own under it.
-    scene.insert(edited, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+    scene.insert(edited, Sprite2D::new([0.0, 0.0, 1.0, 1.0]));
     let shine = named(&mut scene, "shine", Vec2::new(0.1, 0.0));
     set_parent(&mut scene, shine, edited).expect("a plain reparent");
     refresh_overrides(&mut scene, &registry(), &mut prefabs, edited).expect("compares");
@@ -152,7 +152,7 @@ fn applying_an_instance_writes_it_over_the_prefab_and_the_others_follow() {
     let report = apply(&mut scene, &registry(), &mut prefabs, edited).expect("applies");
     assert_eq!(report.spawned, 1, "the other instance gets the shine");
     assert_eq!(
-        scene.get::<Sprite>(other).expect("s").color,
+        scene.get::<Sprite2D>(other).expect("s").color,
         [0.0, 0.0, 1.0, 1.0]
     );
     assert_eq!(children_of(&scene, other).len(), 2);
@@ -161,7 +161,7 @@ fn applying_an_instance_writes_it_over_the_prefab_and_the_others_follow() {
         "it is the prefab now"
     );
     assert_eq!(
-        scene.get::<Transform>(other).expect("t").translation,
+        scene.get::<Transform2D>(other).expect("t").translation,
         Vec2::new(-5.0, 0.0),
         "placements stay their own"
     );
@@ -171,11 +171,11 @@ fn applying_an_instance_writes_it_over_the_prefab_and_the_others_follow() {
     let mut again = World::new();
     let copy = instance(&mut again, &mut fresh, Vec2::ZERO);
     assert_eq!(
-        again.get::<Transform>(copy).expect("t").translation,
+        again.get::<Transform2D>(copy).expect("t").translation,
         Vec2::ZERO
     );
     assert_eq!(
-        again.get::<Sprite>(copy).expect("s").color,
+        again.get::<Sprite2D>(copy).expect("s").color,
         [0.0, 0.0, 1.0, 1.0]
     );
 }
@@ -185,7 +185,7 @@ fn a_selection_written_and_linked_is_already_in_step() {
     let (mut prefabs, _root) = store();
     let mut scene = World::new();
     let lamp = named(&mut scene, "lamp", Vec2::new(3.0, 3.0));
-    scene.insert(lamp, Sprite::default());
+    scene.insert(lamp, Sprite2D::default());
     let target = AssetPath::new("lamp.ron").expect("valid");
     write(&scene, &registry(), &mut prefabs, lamp, &target).expect("writes");
     link(&mut scene, lamp, target.clone());
@@ -194,7 +194,7 @@ fn a_selection_written_and_linked_is_already_in_step() {
     let report = sync(&mut scene, &registry(), prefabs.get(handle), lamp).expect("syncs");
     assert!(report.is_empty(), "{report:?}");
     assert_eq!(
-        scene.get::<Transform>(lamp).expect("t").translation,
+        scene.get::<Transform2D>(lamp).expect("t").translation,
         Vec2::new(3.0, 3.0)
     );
 }

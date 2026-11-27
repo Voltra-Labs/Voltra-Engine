@@ -2,7 +2,7 @@
 
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_scene::{PhysicsMaterial, Transform};
+use voltra_scene::{PhysicsMaterial, Transform2D};
 
 use super::body::SolverBodies;
 use super::cache::{ContactKey, ImpulseCache};
@@ -238,7 +238,7 @@ pub(super) fn perpendicular(angular_velocity: f32, arm: Vec2) -> Vec2 {
 /// this engine offsets a collider from its entity.
 fn centre(world: &World, entity: voltra_ecs::Entity) -> Vec2 {
     world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .map(|transform| transform.translation)
         .unwrap_or_default()
 }
@@ -249,25 +249,25 @@ mod tests {
     use crate::solver::cache::CachedImpulse;
     use crate::solver::params::SolverParams;
     use voltra_ecs::Entity;
-    use voltra_scene::{Collider, RigidBody};
+    use voltra_scene::{Collider2D, RigidBody2D};
 
     /// A floor and a ball overlapping by 0.25, and the contact between them.
     fn scene() -> (World, Entity, Entity) {
         let mut world = World::new();
 
         let floor = world.spawn();
-        world.insert(floor, Transform::from_translation(Vec2::new(0.0, -1.0)));
+        world.insert(floor, Transform2D::from_translation(Vec2::new(0.0, -1.0)));
         world.insert(
             floor,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::new(10.0, 1.0),
             },
         );
 
         let ball = world.spawn();
-        world.insert(ball, Transform::from_translation(Vec2::new(0.0, 0.25)));
-        world.insert(ball, Collider::Circle { radius: 0.5 });
-        world.insert(ball, RigidBody::new_dynamic(1.0));
+        world.insert(ball, Transform2D::from_translation(Vec2::new(0.0, 0.25)));
+        world.insert(ball, Collider2D::Circle { radius: 0.5 });
+        world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
         (world, floor, ball)
     }
@@ -277,23 +277,23 @@ mod tests {
         let mut world = World::new();
 
         let floor = world.spawn();
-        world.insert(floor, Transform::from_translation(Vec2::new(0.0, -1.0)));
+        world.insert(floor, Transform2D::from_translation(Vec2::new(0.0, -1.0)));
         world.insert(
             floor,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::new(10.0, 1.0),
             },
         );
 
         let crate_ = world.spawn();
-        world.insert(crate_, Transform::from_translation(Vec2::new(0.0, 0.4)));
+        world.insert(crate_, Transform2D::from_translation(Vec2::new(0.0, 0.4)));
         world.insert(
             crate_,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::splat(0.5),
             },
         );
-        world.insert(crate_, RigidBody::new_dynamic(1.0));
+        world.insert(crate_, RigidBody2D::new_dynamic(1.0));
 
         (world, floor, crate_)
     }
@@ -335,8 +335,8 @@ mod tests {
     #[test]
     fn an_anchor_is_the_contact_point_relative_to_each_centre() {
         let (world, floor, ball) = stacked();
-        let centre_a = world.get::<Transform>(floor).expect("floor").translation;
-        let centre_b = world.get::<Transform>(ball).expect("crate").translation;
+        let centre_a = world.get::<Transform2D>(floor).expect("floor").translation;
+        let centre_b = world.get::<Transform2D>(ball).expect("crate").translation;
 
         let constraints = constraints_of(&world, &ImpulseCache::default(), true);
 
@@ -418,7 +418,7 @@ mod tests {
         // ends of one manifold close at different rates.
         let (mut world, _, crate_) = stacked();
         world
-            .get_mut::<RigidBody>(crate_)
+            .get_mut::<RigidBody2D>(crate_)
             .expect("the crate")
             .angular_velocity = 3.0;
 
@@ -514,11 +514,11 @@ mod tests {
     fn two_immovable_bodies_have_nothing_to_solve() {
         let mut world = World::new();
         let a = world.spawn();
-        world.insert(a, Transform::default());
-        world.insert(a, Collider::Circle { radius: 1.0 });
+        world.insert(a, Transform2D::default());
+        world.insert(a, Collider2D::Circle { radius: 1.0 });
         let b = world.spawn();
-        world.insert(b, Transform::from_translation(Vec2::new(1.0, 0.0)));
-        world.insert(b, Collider::Circle { radius: 1.0 });
+        world.insert(b, Transform2D::from_translation(Vec2::new(1.0, 0.0)));
+        world.insert(b, Collider2D::Circle { radius: 1.0 });
 
         assert!(constraints_of(&world, &ImpulseCache::default(), true).is_empty());
     }

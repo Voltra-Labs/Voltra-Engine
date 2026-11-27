@@ -2,7 +2,7 @@
 
 use voltra_scene::format::serial_tree::Step;
 use voltra_scene::format::ComponentRegistry;
-use voltra_scene::{Collider, Sprite};
+use voltra_scene::{Collider2D, Sprite2D};
 
 use super::{begin, color, three, BLUE, GREEN, RED};
 
@@ -48,8 +48,8 @@ fn floats_are_mixed_by_their_exact_value_and_nan_matches_nan() {
 fn a_component_only_some_have_is_partial_and_not_editable() {
     let registry = ComponentRegistry::with_defaults();
     let (mut world, selected) = three([RED, RED, RED]);
-    world.insert(selected[0], Collider::default());
-    world.insert(selected[2], Collider::default());
+    world.insert(selected[0], Collider2D::default());
+    world.insert(selected[2], Collider2D::default());
     let edit = begin(&world, &registry, &selected);
     assert_eq!(edit.partial(), [("Collider", 2)]);
     assert!(!edit.editable(&["Collider"]));
@@ -67,11 +67,11 @@ fn one_entity_is_not_a_multi_edit() {
     assert!(!edit.is_multi());
     assert!(edit.mixed("Sprite").is_empty());
     assert!(edit.editable(&["Collider"]));
-    if let Some(s) = world.get_mut::<Sprite>(selected[2]) {
+    if let Some(s) = world.get_mut::<Sprite2D>(selected[2]) {
         s.flip_x = true;
     }
     assert!(edit.finish(&mut world, &registry).is_empty());
-    assert!(!world.get::<Sprite>(selected[0]).expect("s").flip_x);
+    assert!(!world.get::<Sprite2D>(selected[0]).expect("s").flip_x);
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn one_sprite_on_another_layer_mixes_the_layer_alone() {
     let registry = ComponentRegistry::with_defaults();
     let (mut world, selected) = three([RED, RED, RED]);
     world
-        .get_mut::<Sprite>(selected[0])
+        .get_mut::<Sprite2D>(selected[0])
         .expect("s")
         .sorting_layer = "Front".into();
     let edit = begin(&world, &registry, &selected);

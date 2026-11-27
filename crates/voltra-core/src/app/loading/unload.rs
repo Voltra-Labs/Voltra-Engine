@@ -137,12 +137,12 @@ fn plan(world: &mut World, entities: &[Entity]) -> Vec<Entity> {
 mod tests {
     use super::*;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{SceneId, Transform};
+    use voltra_scene::{SceneId, Transform2D};
 
     fn spawn(world: &mut World, at: Vec2) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         entity
     }
 
@@ -205,7 +205,7 @@ mod tests {
         assert!(!world.is_alive(platform));
         assert!(world.is_alive(key));
         assert!(hierarchy::parent_of(&world, key).is_none());
-        let at = world.get::<Transform>(key).expect("kept").translation;
+        let at = world.get::<Transform2D>(key).expect("kept").translation;
         assert_eq!(at, Vec2::new(11.0, 0.0));
     }
 

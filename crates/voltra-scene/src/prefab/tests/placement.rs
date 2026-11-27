@@ -7,18 +7,18 @@ use super::*;
 #[test]
 fn the_roots_are_placed_and_the_children_keep_their_offsets() {
     let mut world = World::new();
-    let at = Transform::from_translation(Vec2::new(10.0, 5.0));
+    let at = Transform2D::from_translation(Vec2::new(10.0, 5.0));
 
     let instance = spawn(&mut world, &registry(), &ship(), &at).expect("reads");
 
     let hull = instance.root().expect("one root");
     let gun = children_of(&world, hull)[0];
     assert_eq!(
-        world.get::<Transform>(hull).map(|t| t.translation),
+        world.get::<Transform2D>(hull).map(|t| t.translation),
         Some(Vec2::new(10.0, 5.0))
     );
     assert_eq!(
-        world.get::<Transform>(gun).map(|t| t.translation),
+        world.get::<Transform2D>(gun).map(|t| t.translation),
         Some(Vec2::new(1.0, 0.0)),
         "local to the hull, which moved it"
     );
@@ -27,13 +27,13 @@ fn the_roots_are_placed_and_the_children_keep_their_offsets() {
 #[test]
 fn a_rotated_placement_turns_the_root_about_its_own_origin() {
     let mut world = World::new();
-    let at =
-        Transform::from_translation(Vec2::new(3.0, 0.0)).with_rotation(std::f32::consts::FRAC_PI_2);
+    let at = Transform2D::from_translation(Vec2::new(3.0, 0.0))
+        .with_rotation(std::f32::consts::FRAC_PI_2);
 
     let instance = spawn(&mut world, &registry(), &ship(), &at).expect("reads");
 
     let hull = world
-        .get::<Transform>(instance.root().expect("one root"))
+        .get::<Transform2D>(instance.root().expect("one root"))
         .copied()
         .expect("authored with one");
     assert!((hull.translation - Vec2::new(3.0, 0.0)).length() < 1e-5);
@@ -50,13 +50,13 @@ fn a_root_authored_off_the_origin_keeps_its_offset_from_the_placement() {
         &mut world,
         &registry(),
         &prefab_of(&source),
-        &Transform::from_translation(Vec2::new(0.0, 7.0)),
+        &Transform2D::from_translation(Vec2::new(0.0, 7.0)),
     )
     .expect("reads");
 
     assert_eq!(
         world
-            .get::<Transform>(instance.root().expect("one root"))
+            .get::<Transform2D>(instance.root().expect("one root"))
             .map(|t| t.translation),
         Some(Vec2::new(2.0, 7.0))
     );
@@ -74,11 +74,11 @@ fn a_root_with_no_transform_is_not_given_one() {
         &mut world,
         &registry(),
         &prefab_of(&source),
-        &Transform::from_translation(Vec2::ONE),
+        &Transform2D::from_translation(Vec2::ONE),
     )
     .expect("reads");
 
     assert!(world
-        .get::<Transform>(instance.root().expect("one root"))
+        .get::<Transform2D>(instance.root().expect("one root"))
         .is_none());
 }

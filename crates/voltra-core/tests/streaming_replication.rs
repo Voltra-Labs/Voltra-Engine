@@ -14,7 +14,7 @@ use voltra_core::{App, Headless};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    ComponentRegistry, Name, Persistent, Replicated, SceneId, StreamingAnchor, Transform,
+    ComponentRegistry, Name, Persistent, Replicated, SceneId, StreamingAnchor, Transform2D,
     WorldRegions,
 };
 use voltra_testkit::scratch_root;
@@ -37,12 +37,12 @@ fn write_world(root: &Path) -> AssetPath {
         let wall = scene.spawn();
         scene.insert(wall, SceneId::new());
         scene.insert(wall, Name::new(format!("wall {column}")));
-        scene.insert(wall, Transform::from_translation(region.center()));
+        scene.insert(wall, Transform2D::from_translation(region.center()));
         if column == 1 {
             let crate_ = scene.spawn();
             scene.insert(crate_, SceneId::new());
             scene.insert(crate_, Name::new("crate"));
-            scene.insert(crate_, Transform::from_translation(region.center()));
+            scene.insert(crate_, Transform2D::from_translation(region.center()));
             scene.insert(crate_, Replicated::default());
         }
         let file = voltra_scene::format::to_scene_file(&scene, &ComponentRegistry::with_defaults())
@@ -64,7 +64,7 @@ fn write_world(root: &Path) -> AssetPath {
 
 fn anchor(world: &mut World, at: Vec2) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(entity, StreamingAnchor::default());
     world.insert(entity, Persistent);
     entity
@@ -147,9 +147,10 @@ fn the_server_owns_a_regions_replicated_entities_and_a_client_takes_its_copy() {
 
     // The player walks off: the server lets the region go, and its crate
     // with it — on the client too, whose own region stays in.
-    server
-        .world_mut()
-        .insert(player, Transform::from_translation(Vec2::new(-100.0, 0.0)));
+    server.world_mut().insert(
+        player,
+        Transform2D::from_translation(Vec2::new(-100.0, 0.0)),
+    );
     step(&mut server, &mut client, 120);
 
     assert_eq!(count_replicated(server.world()), 0);
@@ -170,7 +171,7 @@ fn write_lone_region(root: &Path, at: Vec2) -> AssetPath {
     scene.insert(crate_, Name::new("crate"));
     scene.insert(
         crate_,
-        Transform::from_translation(world.regions[0].center()),
+        Transform2D::from_translation(world.regions[0].center()),
     );
     scene.insert(crate_, Replicated::default());
     let file = voltra_scene::format::to_scene_file(&scene, &ComponentRegistry::with_defaults())
@@ -191,7 +192,7 @@ fn write_lone_region(root: &Path, at: Vec2) -> AssetPath {
 #[test]
 fn a_region_unloaded_lets_go_of_what_was_swept_of_it_and_no_more() {
     use voltra_core::replication::{Interest, NetOwner};
-    use voltra_scene::Sprite;
+    use voltra_scene::Sprite2D;
 
     let root = scratch_root();
     let far = Vec2::new(500.0, 500.0);
@@ -206,9 +207,9 @@ fn a_region_unloaded_lets_go_of_what_was_swept_of_it_and_no_more() {
     let level = move |world: &mut World| {
         let door = world.spawn();
         world.insert(door, door_id);
-        world.insert(door, Transform::from_translation(Vec2::new(60.0, 0.0)));
+        world.insert(door, Transform2D::from_translation(Vec2::new(60.0, 0.0)));
         world.insert(door, Replicated::default());
-        world.insert(door, Sprite::default().with_sort_order(9));
+        world.insert(door, Sprite2D::default().with_sort_order(9));
         door
     };
     let network = MemoryNetwork::new();
@@ -249,7 +250,7 @@ fn a_region_unloaded_lets_go_of_what_was_swept_of_it_and_no_more() {
     server.world_mut().insert(player, SceneId::new());
     server
         .world_mut()
-        .insert(player, Transform::from_translation(Vec2::ZERO));
+        .insert(player, Transform2D::from_translation(Vec2::ZERO));
     server.world_mut().insert(player, Replicated::default());
     server.world_mut().insert(player, NetOwner(peer));
     step(&mut server, &mut client, 60);
@@ -266,16 +267,17 @@ fn a_region_unloaded_lets_go_of_what_was_swept_of_it_and_no_more() {
 
     // The client walks off: its region unloads, and what was swept of it
     // goes. The level's door is still the level's.
-    client
-        .world_mut()
-        .insert(anchor, Transform::from_translation(Vec2::new(-1000.0, 0.0)));
+    client.world_mut().insert(
+        anchor,
+        Transform2D::from_translation(Vec2::new(-1000.0, 0.0)),
+    );
     step(&mut server, &mut client, 60);
     assert_eq!(set_aside(&client), 1, "the door, kept");
 
     // The door swings to the client: the level's own copy comes back.
     server
         .world_mut()
-        .insert(door, Transform::from_translation(Vec2::new(2.0, 0.0)));
+        .insert(door, Transform2D::from_translation(Vec2::new(2.0, 0.0)));
     step(&mut server, &mut client, 60);
     let back = client
         .world()
@@ -284,7 +286,7 @@ fn a_region_unloaded_lets_go_of_what_was_swept_of_it_and_no_more() {
         .map(|(entity, _)| entity)
         .expect("relevant now");
     assert_eq!(
-        client.world().get::<Sprite>(back).map(|s| s.sort_order),
+        client.world().get::<Sprite2D>(back).map(|s| s.sort_order),
         Some(9),
         "with the sprite the level gave it"
     );

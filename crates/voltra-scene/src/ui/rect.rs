@@ -72,8 +72,8 @@ impl Rect {
 /// positive number there.
 ///
 /// An entity with a `UiRect` is drawn by the screen-space pass only: its
-/// `Sprite` fills the rect and its `Text` is laid out inside it, and its
-/// `Transform`, if any, is ignored.
+/// `Sprite2D` fills the rect and its `Text` is laid out inside it, and its
+/// `Transform2D`, if any, is ignored.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct UiRect {
     /// Where in the parent the box's top-left corner is anchored: `(0, 0)` is the parent's top-left, `(1, 1)` its bottom-right.

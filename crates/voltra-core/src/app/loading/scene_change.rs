@@ -28,7 +28,7 @@ use std::collections::HashSet;
 
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
-use voltra_scene::{hierarchy, prefab, Persistent, Transform};
+use voltra_scene::{hierarchy, prefab, Persistent, Transform2D};
 
 use super::budget::FrameBudget;
 use super::build::{Replicas, SceneBuild, Step};
@@ -258,7 +258,7 @@ impl App {
             &mut self.world,
             &self.registry,
             prefabs.get(handle),
-            &Transform::default(),
+            &Transform2D::default(),
         ) {
             Ok(instance) => {
                 self.spawned.extend_from_slice(&instance.entities);

@@ -102,14 +102,14 @@ impl CollisionLayers {
 /// A collider carrying this reports what overlaps it and stops there: no
 /// constraint, no impulse, nothing in the solver's contacts. Unity's
 /// `isTrigger` and Box2D's sensor fixture, as a marker component rather than a
-/// flag — [`Collider`] is an enum, and a flag on it would be repeated in every
+/// flag — [`Collider2D`] is an enum, and a flag on it would be repeated in every
 /// variant and in every shape added later. Godot's answer, a separate `Area2D`
 /// node, has no equivalent here: this engine has components, not nodes.
 ///
-/// A sensor still needs a [`Collider`] to have a shape, and its
+/// A sensor still needs a [`Collider2D`] to have a shape, and its
 /// [`CollisionLayers`] still decide what it can detect.
 ///
-/// [`Collider`]: crate::Collider
+/// [`Collider2D`]: crate::Collider2D
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Sensor;
 

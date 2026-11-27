@@ -22,15 +22,15 @@ pub use viewport::Viewport;
 
 /// A camera authored into the scene.
 ///
-/// Its position comes from the entity's [`Transform`], composed through any
+/// Its position comes from the entity's [`Transform2D`], composed through any
 /// parents, so a camera can be hung off the thing it follows without a follow
-/// system existing yet. An entity with a `Camera` and no `Transform` sits at
+/// system existing yet. An entity with a `Camera2D` and no `Transform2D` sits at
 /// the world origin, which is what the identity matrix already means
 /// everywhere else.
 ///
-/// [`Transform`]: crate::transform::Transform
+/// [`Transform2D`]: crate::transform::Transform2D
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Camera {
+pub struct Camera2D {
     /// Half the world-space height the camera shows.
     ///
     /// Unity's `orthographicSize`, and stored the way Unity stores it rather
@@ -41,9 +41,9 @@ pub struct Camera {
     /// Which camera wins when more than one is active. Higher takes the frame.
     ///
     /// Unity's `depth` and Bevy's `order`. An `i32` rather than an `f32` so
-    /// ties are exact, the same reason [`Sprite::sort_order`] is one.
+    /// ties are exact, the same reason [`Sprite2D::sort_order`] is one.
     ///
-    /// [`Sprite::sort_order`]: crate::sprite::Sprite::sort_order
+    /// [`Sprite2D::sort_order`]: crate::sprite::Sprite2D::sort_order
     pub priority: i32,
     /// Whether this camera is a candidate at all.
     ///
@@ -98,7 +98,7 @@ fn is_default_shadow_resolution(texels: &u32) -> bool {
     *texels == default_shadow_resolution()
 }
 
-impl Default for Camera {
+impl Default for Camera2D {
     fn default() -> Self {
         Self {
             // One world unit above and below the centre, which is exactly what
@@ -117,7 +117,7 @@ impl Default for Camera {
     }
 }
 
-impl Camera {
+impl Camera2D {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "Camera";
 
@@ -139,7 +139,7 @@ impl Camera {
         }
     }
 
-    /// Sets the draw order among cameras; see [`Camera::priority`].
+    /// Sets the draw order among cameras; see [`Camera2D::priority`].
     pub fn with_priority(mut self, priority: i32) -> Self {
         self.priority = priority;
         self
@@ -167,7 +167,7 @@ impl Camera {
 /// query order. Priority is the control for when the tie matters.
 pub fn active(world: &World) -> Option<Entity> {
     world
-        .query::<Camera>()
+        .query::<Camera2D>()
         .filter(|(_, camera)| camera.active)
         .min_by_key(|(entity, camera)| (-camera.priority, entity.index()))
         .map(|(entity, _)| entity)
@@ -175,15 +175,15 @@ pub fn active(world: &World) -> Option<Entity> {
 
 /// The view `entity`'s camera describes, at `aspect`.
 ///
-/// `None` if it carries no [`Camera`]. The view sits where the entity is,
+/// `None` if it carries no [`Camera2D`]. The view sits where the entity is,
 /// turned by its own rotation — and its parents', with
-/// [`Camera::inherit_rotation`] — with its [`CameraShake`] on top ([`eye`]).
+/// [`Camera2D::inherit_rotation`] — with its [`CameraShake`] on top ([`eye`]).
 /// Scale is read for nothing: how much a camera shows is its
-/// [`Camera::size`], and a mirrored camera is turned, not flipped.
+/// [`Camera2D::size`], and a mirrored camera is turned, not flipped.
 ///
 /// [`CameraShake`]: crate::CameraShake
 pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<View2D> {
-    let camera = *world.get::<Camera>(entity)?;
+    let camera = *world.get::<Camera2D>(entity)?;
     let (position, rotation) = eye(world, entity);
     Some(View2D::new(position, camera.zoom(), aspect).with_rotation(rotation))
 }

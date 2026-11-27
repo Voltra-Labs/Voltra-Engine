@@ -3,7 +3,7 @@
 //!
 //! The components are in `voltra-scene`, not here: `ComponentRegistry` lives
 //! there, and registering physics components from there would need
-//! `voltra-scene → voltra-physics`, while integration needs `Transform` and so
+//! `voltra-scene → voltra-physics`, while integration needs `Transform2D` and so
 //! needs the edge back. This crate is the simulation over those components and
 //! holds nothing a scene file contains.
 //!
@@ -23,7 +23,7 @@
 //!
 //! A fast body stops at what it meets instead of passing through it in one
 //! step: against static geometry always, against moving bodies when it is a
-//! `RigidBody::bullet` — continuous collision, by speculative contacts ahead
+//! `RigidBody2D::bullet` — continuous collision, by speculative contacts ahead
 //! of the solve and a time of impact after it (`continuous`).
 //!
 //! What is not simulated yet, so that its absence is not mistaken for a bug:

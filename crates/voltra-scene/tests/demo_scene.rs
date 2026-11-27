@@ -17,7 +17,7 @@ use voltra_assets::AssetPath;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_scene::format::{load, save, VERSION};
-use voltra_scene::{ComponentRegistry, SceneId, Sprite, Transform};
+use voltra_scene::{ComponentRegistry, SceneId, Sprite2D, Transform2D};
 
 /// The repository's `assets` directory, from this crate's manifest.
 fn assets_dir() -> PathBuf {
@@ -47,12 +47,12 @@ fn demo_world() -> World {
 
     let left = world.spawn();
     world.insert(left, SceneId::new());
-    world.insert(left, Transform::from_translation(Vec2::new(-1.2, 0.0)));
+    world.insert(left, Transform2D::from_translation(Vec2::new(-1.2, 0.0)));
     world.insert(
         left,
-        Sprite {
+        Sprite2D {
             texture: Some(checker.clone()),
-            ..Sprite::default().with_sort_order(0)
+            ..Sprite2D::default().with_sort_order(0)
         },
     );
 
@@ -60,24 +60,24 @@ fn demo_world() -> World {
     world.insert(middle, SceneId::new());
     world.insert(
         middle,
-        Transform::from_translation(Vec2::new(0.0, 0.0)).with_scale(Vec2::splat(1.5)),
+        Transform2D::from_translation(Vec2::new(0.0, 0.0)).with_scale(Vec2::splat(1.5)),
     );
     world.insert(
         middle,
-        Sprite {
+        Sprite2D {
             color: [1.0, 0.4, 0.2, 1.0],
-            ..Sprite::default().with_sort_order(1)
+            ..Sprite2D::default().with_sort_order(1)
         },
     );
 
     let right = world.spawn();
     world.insert(right, SceneId::new());
-    world.insert(right, Transform::from_translation(Vec2::new(1.2, 0.0)));
+    world.insert(right, Transform2D::from_translation(Vec2::new(1.2, 0.0)));
     world.insert(
         right,
-        Sprite {
+        Sprite2D {
             texture: Some(checker),
-            ..Sprite::default().with_sort_order(2)
+            ..Sprite2D::default().with_sort_order(2)
         },
     );
 
@@ -129,13 +129,13 @@ fn the_committed_demo_scene_loads() {
     let mut world = World::new();
     load(&demo_scene(), &registry, &mut world).expect("the committed demo scene must load");
 
-    let sprites: Vec<Sprite> = world
-        .query::<Sprite>()
+    let sprites: Vec<Sprite2D> = world
+        .query::<Sprite2D>()
         .map(|(_, sprite)| sprite.clone())
         .collect();
     assert_eq!(sprites.len(), 3, "got {sprites:?}");
 
-    let textured: Vec<&Sprite> = sprites.iter().filter(|s| s.texture.is_some()).collect();
+    let textured: Vec<&Sprite2D> = sprites.iter().filter(|s| s.texture.is_some()).collect();
     assert_eq!(textured.len(), 2, "two sprites must name the checker");
     assert_eq!(
         textured[0].texture, textured[1].texture,

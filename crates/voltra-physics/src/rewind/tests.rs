@@ -1,7 +1,7 @@
 //! A target moving along x one unit a tick, recorded, and asked about.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, LagCompensated, Transform};
+use voltra_scene::{Collider2D, LagCompensated, Transform2D};
 
 use super::*;
 use crate::query::{self, QueryFilter};
@@ -15,10 +15,10 @@ fn up_at(rewound: &Rewound<'_>, x: f32) -> Option<Entity> {
 
 fn target(world: &mut World, x: f32) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(Vec2::new(x, 0.0)));
+    world.insert(entity, Transform2D::from_translation(Vec2::new(x, 0.0)));
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.25),
         },
     );
@@ -27,7 +27,7 @@ fn target(world: &mut World, x: f32) -> Entity {
 }
 
 fn move_to(world: &mut World, entity: Entity, x: f32) {
-    if let Some(transform) = world.get_mut::<Transform>(entity) {
+    if let Some(transform) = world.get_mut::<Transform2D>(entity) {
         transform.translation.x = x;
     }
 }
@@ -56,7 +56,7 @@ fn a_ray_hits_the_past_pose_and_misses_the_present_one() {
     assert_eq!(up_at(&now, 10.0), Some(entity));
     // The world itself was never moved.
     assert_eq!(
-        world.get::<Transform>(entity).map(|t| t.translation.x),
+        world.get::<Transform2D>(entity).map(|t| t.translation.x),
         Some(10.0)
     );
 }
@@ -150,8 +150,8 @@ fn the_newest_tick_or_later_and_an_empty_history_are_the_live_world() {
 fn an_entity_not_marked_is_queried_where_it_is() {
     let (mut world, _, history) = moving();
     let wall = world.spawn();
-    world.insert(wall, Transform::from_translation(Vec2::new(-5.0, 0.0)));
-    world.insert(wall, Collider::default());
+    world.insert(wall, Transform2D::from_translation(Vec2::new(-5.0, 0.0)));
+    world.insert(wall, Collider2D::default());
     let past = history.rewound(&world, 3.0);
     assert_eq!(up_at(&past, -5.0), Some(wall));
     assert!(past.compensated().all(|e| e != wall));
@@ -168,11 +168,11 @@ fn every_query_reads_the_past() {
         past.overlap_aabb(Vec2::new(2.5, -1.0), Vec2::new(3.5, 1.0), filter),
         vec![entity]
     );
-    let probe = Collider::Circle { radius: 0.1 };
+    let probe = Collider2D::Circle { radius: 0.1 };
     let hit = past
         .cast(
             &probe,
-            &Transform::from_translation(Vec2::new(3.0, -5.0)),
+            &Transform2D::from_translation(Vec2::new(3.0, -5.0)),
             Vec2::new(0.0, 10.0),
             filter,
         )
@@ -198,7 +198,7 @@ fn the_shape_is_the_one_it_had() {
     // over it now and met it before.
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(0.25, 0.1),
         },
     );

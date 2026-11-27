@@ -14,7 +14,7 @@ use std::time::Instant;
 use voltra_ecs::World;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{Sprite, SpriteBatch, Tile, TileMeshCache, Tilemap, Transform};
+use voltra_scene::{Sprite2D, SpriteBatch, Tile, TileMeshCache, Tilemap, Transform2D};
 
 fn level() -> World {
     let mut world = World::new();
@@ -25,15 +25,15 @@ fn level() -> World {
         }
     }
     let layer = world.spawn();
-    world.insert(layer, Transform::default());
+    world.insert(layer, Transform2D::default());
     world.insert(layer, map);
     for i in 0..5000 {
         let sprite = world.spawn();
         world.insert(
             sprite,
-            Transform::from_translation(Vec2::new(i as f32 * 0.4 - 1000.0, (i % 7) as f32)),
+            Transform2D::from_translation(Vec2::new(i as f32 * 0.4 - 1000.0, (i % 7) as f32)),
         );
-        world.insert(sprite, Sprite::default());
+        world.insert(sprite, Sprite2D::default());
     }
     world
 }
@@ -57,7 +57,7 @@ fn main() {
     // The parts of it that do not depend on what is in view.
     let start = Instant::now();
     for _ in 0..runs {
-        std::hint::black_box(voltra_scene::WorldTransforms::from_world(&world));
+        std::hint::black_box(voltra_scene::WorldTransforms2D::from_world(&world));
     }
     let ms = start.elapsed().as_secs_f64() * 1000.0 / runs as f64;
     println!("  of which composing transforms {ms:7.3} ms");
@@ -114,7 +114,7 @@ fn main() {
 /// The level's tilemap layer and nothing else.
 fn tilemap_only() -> World {
     let mut world = level();
-    let sprites: Vec<_> = world.query::<Sprite>().map(|(e, _)| e).collect();
+    let sprites: Vec<_> = world.query::<Sprite2D>().map(|(e, _)| e).collect();
     for e in sprites {
         world.despawn(e);
     }

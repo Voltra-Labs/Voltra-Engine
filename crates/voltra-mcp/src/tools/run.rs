@@ -4,7 +4,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use voltra_core::{App, Headless, ScreenshotError, WindowConfig};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Name, SceneId, Transform};
+use voltra_scene::{Name, SceneId, Transform2D};
 
 use super::ToolError;
 use crate::Project;
@@ -188,7 +188,7 @@ fn summary(world: &voltra_ecs::World) -> Value {
         .filter_map(|(entity, name)| {
             let id = world.get::<SceneId>(entity)?;
             let at = world
-                .get::<Transform>(entity)
+                .get::<Transform2D>(entity)
                 .map(|t| [t.translation.x, t.translation.y]);
             Some(json!({ "id": id.0.to_string(), "name": name.as_str(), "position": at }))
         })

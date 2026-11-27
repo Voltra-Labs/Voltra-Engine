@@ -3,13 +3,13 @@ use voltra_render::glam::Vec2;
 
 use super::*;
 use crate::sprite::sheets::Sheets;
-use crate::{SpriteBatch, Transform};
+use crate::{SpriteBatch, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
 fn emitter_at(world: &mut World, at: Vec2, emitter: ParticleEmitter) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(entity, emitter);
     entity
 }
@@ -103,7 +103,7 @@ fn world_space_particles_stay_behind_a_moving_emitter() {
         .burst(1);
     advance(&mut world, FRAME, false);
     world
-        .get_mut::<Transform>(e)
+        .get_mut::<Transform2D>(e)
         .expect("transform")
         .translation = Vec2::new(10.0, 0.0);
     advance(&mut world, FRAME, false);

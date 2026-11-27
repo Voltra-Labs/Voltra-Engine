@@ -205,7 +205,7 @@ mod tests {
     use super::*;
     use voltra_render::glam::Vec2;
     use voltra_scene::keyframes::Track;
-    use voltra_scene::Transform;
+    use voltra_scene::Transform2D;
 
     #[test]
     fn a_pose_is_lifted_back_to_what_was_authored() {
@@ -220,9 +220,9 @@ mod tests {
 
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(Vec2::new(1.0, 1.0)));
+        world.insert(entity, Transform2D::from_translation(Vec2::new(1.0, 1.0)));
         world.insert(entity, AnimationPlayer::new(path));
-        let at = |world: &World| world.get::<Transform>(entity).expect("t").translation;
+        let at = |world: &World| world.get::<Transform2D>(entity).expect("t").translation;
 
         let mut timeline = Timeline {
             playhead: 0.5,

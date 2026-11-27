@@ -2,7 +2,7 @@
 //! with the physics step moving it between moves, as a game's tick does.
 
 use voltra_physics::PhysicsWorld;
-use voltra_scene::RigidBody;
+use voltra_scene::RigidBody2D;
 
 use super::*;
 
@@ -11,7 +11,7 @@ const STEP_GRAVITY: Vec2 = Vec2::new(0.0, GRAVITY);
 /// A dynamic box of `mass`, `half` either way of `at`.
 fn crate_box(world: &mut World, at: Vec2, half: Vec2, mass: f32) -> Entity {
     let entity = block(world, at, half, 0.0);
-    world.insert(entity, RigidBody::new_dynamic(mass));
+    world.insert(entity, RigidBody2D::new_dynamic(mass));
     entity
 }
 
@@ -55,7 +55,7 @@ fn walking_into_a_crate_pushes_it_and_keeps_walking() {
     assert!(moved.x > 1.5, "pushed along: {moved}");
     assert!(moved.y.abs() < 0.02, "along the floor: {moved}");
     // Never faster than the character walks into it.
-    let speed = world.get::<RigidBody>(crate_).expect("a body").velocity.x;
+    let speed = world.get::<RigidBody2D>(crate_).expect("a body").velocity.x;
     assert!(speed <= 2.0 + 1e-3, "{speed}");
     // A light crate hardly slows the character: it walks on at the speed
     // the crate made, which is its own less one step of the floor's
@@ -120,7 +120,10 @@ fn a_crate_against_a_wall_is_not_pushed_through_it() {
 #[test]
 fn a_crate_stood_on_goes_to_sleep() {
     let (mut world, mut physics, me, crate_) = crate_ahead(1.0, 40.0);
-    world.get_mut::<Transform>(me).expect("placed").translation = Vec2::new(1.0, 0.9);
+    world
+        .get_mut::<Transform2D>(me)
+        .expect("placed")
+        .translation = Vec2::new(1.0, 0.9);
     play(&mut world, &mut physics, me, 0.0, 180);
     assert_eq!(body(&world, me).contact.floor, Some(crate_));
     assert!(physics.is_asleep(crate_), "pressed only by landing on it");
@@ -141,7 +144,7 @@ fn a_crate_pushed_low_turns_and_one_pushed_square_does_not() {
         );
         pushing(&mut world, me, 40.0);
         move_and_slide(&mut world, me, Vec2::new(2.0, 0.0), DT).expect("a character");
-        let body = world.get::<RigidBody>(crate_).expect("a body");
+        let body = world.get::<RigidBody2D>(crate_).expect("a body");
         assert!(body.velocity.x > 0.1, "pushed: {}", body.velocity);
         assert_eq!(
             body.angular_velocity.abs() > 0.1,
@@ -164,7 +167,10 @@ fn a_crate_despawned_mid_push_leaves_it_walking_on() {
 
     // Standing on one that goes is the same: it falls, and lands.
     let (mut world, mut physics, me, crate_) = crate_ahead(1.0, 40.0);
-    world.get_mut::<Transform>(me).expect("placed").translation = Vec2::new(1.0, 1.0);
+    world
+        .get_mut::<Transform2D>(me)
+        .expect("placed")
+        .translation = Vec2::new(1.0, 1.0);
     play(&mut world, &mut physics, me, 0.0, 30);
     assert_eq!(body(&world, me).contact.floor, Some(crate_));
     world.despawn(crate_);

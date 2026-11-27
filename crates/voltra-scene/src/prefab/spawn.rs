@@ -9,7 +9,7 @@ use super::{Prefab, PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 
 /// The name a parent link is stored under in a scene file.
 const PARENT: &str = Parent::NAME;
@@ -48,7 +48,7 @@ impl Instance {
 /// - **Roots are placed by `at`**, composed in front of their own transform,
 ///   so a prefab authored around the origin lands around `at` and keeps the
 ///   offsets it was authored with. Children are left alone: they are local to
-///   their parent, and moving the root moved them. A root with no `Transform`
+///   their parent, and moving the root moved them. A root with no `Transform2D`
 ///   is not positional and is not given one.
 /// - **Every root is linked to the prefab's source** with a
 ///   [`PrefabInstance`], replacing whatever link the record itself carried:
@@ -64,7 +64,7 @@ pub fn spawn(
     world: &mut World,
     registry: &ComponentRegistry,
     prefab: &Prefab,
-    at: &Transform,
+    at: &Transform2D,
 ) -> Result<Instance, SceneError> {
     spawn_copy(
         world,
@@ -176,7 +176,7 @@ fn spawn_copy(
     world: &mut World,
     registry: &ComponentRegistry,
     prefab: &Prefab,
-    at: Option<&Transform>,
+    at: Option<&Transform2D>,
     ids: Ids,
     skipped: &HashSet<SceneId>,
 ) -> Result<Instance, SceneError> {
@@ -271,7 +271,7 @@ fn spawn_copy(
 
     if let Some(at) = at {
         for &root in &roots {
-            if let Some(transform) = world.get_mut::<Transform>(root) {
+            if let Some(transform) = world.get_mut::<Transform2D>(root) {
                 *transform = place(at, transform);
             }
             if let Some(source) = &prefab.source {
@@ -287,14 +287,14 @@ fn spawn_copy(
 ///
 /// A placement that only moves is applied as an addition rather than through
 /// a matrix: it is the common case — a bullet at the muzzle, a coin on a tile
-/// — and the decomposition [`Transform::from_matrix`] does would put float
+/// — and the decomposition [`Transform2D::from_matrix`] does would put float
 /// noise into an authored rotation and scale that nothing asked to change.
-fn place(at: &Transform, local: &Transform) -> Transform {
+fn place(at: &Transform2D, local: &Transform2D) -> Transform2D {
     if at.rotation == 0.0 && at.scale == voltra_render::glam::Vec2::ONE {
-        return Transform {
+        return Transform2D {
             translation: local.translation + at.translation,
             ..*local
         };
     }
-    Transform::from_matrix(at.matrix() * local.matrix())
+    Transform2D::from_matrix(at.matrix() * local.matrix())
 }

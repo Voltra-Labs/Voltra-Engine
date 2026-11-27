@@ -6,9 +6,9 @@ use super::pose::{bone_segments, deformed, skin_pose};
 use super::weights::automatic;
 use super::*;
 use crate::hierarchy::{set_parent, world_matrix};
-use crate::{Bone2D, ComponentRegistry, Name, SceneId, Skeleton2D, Transform};
+use crate::{Bone2D, ComponentRegistry, Name, SceneId, Skeleton2D, Transform2D};
 
-fn named(world: &mut World, name: &str, transform: Transform) -> Entity {
+fn named(world: &mut World, name: &str, transform: Transform2D) -> Entity {
     let e = world.spawn();
     world.insert(e, SceneId::new());
     world.insert(e, Name::new(name));
@@ -20,13 +20,13 @@ fn named(world: &mut World, name: &str, transform: Transform) -> Entity {
 /// lower bone each a unit long, and the skinned arm — a quarter wide, two
 /// long — on the root, weighted automatically.
 fn arm(world: &mut World, at: Vec2) -> (Entity, Entity, Entity) {
-    let root = named(world, "Rig", Transform::from_translation(at));
+    let root = named(world, "Rig", Transform2D::from_translation(at));
     world.insert(root, Skeleton2D::default());
-    let down = Transform::default().with_rotation(-std::f32::consts::FRAC_PI_2);
+    let down = Transform2D::default().with_rotation(-std::f32::consts::FRAC_PI_2);
     let upper = named(world, "upper", down);
     world.insert(upper, Bone2D::new(1.0, down));
     set_parent(world, upper, root).expect("parented");
-    let below = Transform::from_translation(Vec2::X);
+    let below = Transform2D::from_translation(Vec2::X);
     let lower = named(world, "lower", below);
     world.insert(lower, Bone2D::new(1.0, below));
     set_parent(world, lower, upper).expect("parented");
@@ -71,7 +71,7 @@ fn at_rest_every_bone_is_the_mesh_s_own_placement() {
 fn bending_the_lower_bone_carries_the_forearm_and_shares_the_elbow() {
     let mut world = World::new();
     let (root, _, lower) = arm(&mut world, Vec2::ZERO);
-    if let Some(t) = world.get_mut::<Transform>(lower) {
+    if let Some(t) = world.get_mut::<Transform2D>(lower) {
         t.rotation = std::f32::consts::FRAC_PI_2;
     }
     let (skinned, pose) = pose_of(&world, root);

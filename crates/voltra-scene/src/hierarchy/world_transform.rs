@@ -1,10 +1,10 @@
 //! Where a parented entity actually is.
 //!
-//! A [`Transform`] is local to its parent. Everything that draws, picks or
+//! A [`Transform2D`] is local to its parent. Everything that draws, picks or
 //! points at an entity needs the composed matrix instead, and there are two
 //! shapes of that need: one entity at a time (a gizmo, an inspector) and every
 //! entity at once (a frame of sprites). [`world_matrix`] serves the first by
-//! walking up the chain; [`WorldTransforms`] serves the second by composing the
+//! walking up the chain; [`WorldTransforms2D`] serves the second by composing the
 //! whole world once, so a deep tree costs one multiply per entity rather than
 //! one per entity per level.
 
@@ -13,7 +13,7 @@ use voltra_render::glam::Mat3;
 
 use super::link::{ancestors, parent_of};
 use super::parent::Parent;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 
 /// Below this a parent's frame has collapsed and cannot be inverted.
 ///
@@ -43,29 +43,29 @@ pub fn world_matrix(world: &World, entity: Entity) -> Mat3 {
 /// Where `entity` is in world space, as a transform.
 ///
 /// Decomposed, so it is what a gizmo can drag and an overlay can draw. See
-/// [`Transform::from_matrix`] for what a chain of parents can express that this
+/// [`Transform2D::from_matrix`] for what a chain of parents can express that this
 /// cannot.
-pub fn world_transform(world: &World, entity: Entity) -> Transform {
-    Transform::from_matrix(world_matrix(world, entity))
+pub fn world_transform(world: &World, entity: Entity) -> Transform2D {
+    Transform2D::from_matrix(world_matrix(world, entity))
 }
 
 /// Puts `entity` at `target` in **world** space, writing its local transform.
 ///
 /// The inverse of [`world_transform`], and the way a drag that computed a
 /// world-space answer lands on a child. Returns whether it was written: an
-/// entity with no `Transform` has nowhere to put one, and a parent whose own
+/// entity with no `Transform2D` has nowhere to put one, and a parent whose own
 /// frame has collapsed to a point (a zero scale) gives no way back from world
 /// space at all. Both leave the entity exactly as it was rather than writing a
 /// NaN that would make it disappear.
-pub fn set_world_transform(world: &mut World, entity: Entity, target: &Transform) -> bool {
+pub fn set_world_transform(world: &mut World, entity: Entity, target: &Transform2D) -> bool {
     let parent = parent_matrix(world, entity);
     if parent.determinant().abs() < MIN_DETERMINANT {
         log::warn!("{entity:?} sits under a collapsed parent; leaving its transform alone");
         return false;
     }
 
-    let local = Transform::from_matrix(parent.inverse() * target.matrix());
-    match world.get_mut::<Transform>(entity) {
+    let local = Transform2D::from_matrix(parent.inverse() * target.matrix());
+    match world.get_mut::<Transform2D>(entity) {
         Some(transform) => {
             *transform = local;
             true
@@ -85,7 +85,7 @@ pub fn set_world_transform(world: &mut World, entity: Entity, target: &Transform
 /// simply misses — [`matrix`](Self::matrix) answers identity for anything it
 /// does not hold, which is the same answer a root with no transform gets.
 #[derive(Debug, Default, Clone)]
-pub struct WorldTransforms {
+pub struct WorldTransforms2D {
     /// Indexed by [`Entity::index`]: the entity it was composed for (so a
     /// recycled index with a new generation misses) and its matrix. Dense,
     /// because the ECS hands out indices densely; a lookup is an index and
@@ -94,8 +94,8 @@ pub struct WorldTransforms {
     len: usize,
 }
 
-impl WorldTransforms {
-    /// Composes every entity with a [`Transform`] in one pass.
+impl WorldTransforms2D {
+    /// Composes every entity with a [`Transform2D`] in one pass.
     ///
     /// Each chain is walked up only until it meets an ancestor already
     /// composed, so every matrix is multiplied once however deep the tree.
@@ -127,7 +127,7 @@ impl WorldTransforms {
         let mut chain: Vec<Entity> = Vec::new();
         // Each set found once, not once per entity asked.
         let parents = world.components::<Parent>();
-        let Some(transforms) = world.components::<Transform>() else {
+        let Some(transforms) = world.components::<Transform2D>() else {
             return;
         };
         for (entity, transform) in transforms.iter() {
@@ -167,7 +167,7 @@ impl WorldTransforms {
                     // A grouping node without a transform adds no frame.
                     transforms
                         .get(link)
-                        .map_or(Mat3::IDENTITY, Transform::matrix)
+                        .map_or(Mat3::IDENTITY, Transform2D::matrix)
                 };
                 this.insert(link, above);
             }
@@ -239,8 +239,8 @@ impl WorldTransforms {
 /// the identity is exactly what "adds no frame of its own" means.
 fn local_matrix(world: &World, entity: Entity) -> Mat3 {
     world
-        .get::<Transform>(entity)
-        .map(Transform::matrix)
+        .get::<Transform2D>(entity)
+        .map(Transform2D::matrix)
         .unwrap_or(Mat3::IDENTITY)
 }
 
@@ -260,15 +260,15 @@ mod tests {
     use std::f32::consts::FRAC_PI_2;
     use voltra_render::glam::Vec2;
 
-    fn spawn(world: &mut World, transform: Transform) -> Entity {
+    fn spawn(world: &mut World, transform: Transform2D) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
         world.insert(entity, transform);
         entity
     }
 
-    fn at(x: f32, y: f32) -> Transform {
-        Transform::from_translation(Vec2::new(x, y))
+    fn at(x: f32, y: f32) -> Transform2D {
+        Transform2D::from_translation(Vec2::new(x, y))
     }
 
     fn position(world: &World, entity: Entity) -> Vec2 {
@@ -302,7 +302,7 @@ mod tests {
         let mut world = World::new();
         let parent = spawn(
             &mut world,
-            Transform::default()
+            Transform2D::default()
                 .with_rotation(FRAC_PI_2)
                 .with_scale(Vec2::splat(2.0)),
         );
@@ -335,7 +335,7 @@ mod tests {
         let mut world = World::new();
         let parent = spawn(
             &mut world,
-            Transform::from_translation(Vec2::new(4.0, -1.0))
+            Transform2D::from_translation(Vec2::new(4.0, -1.0))
                 .with_rotation(0.7)
                 .with_scale(Vec2::new(2.0, 2.0)),
         );
@@ -344,7 +344,7 @@ mod tests {
         set_parent(&mut world, child, parent).expect("a plain reparent");
         set_parent(&mut world, grandchild, child).expect("a plain reparent");
 
-        let cache = WorldTransforms::from_world(&world);
+        let cache = WorldTransforms2D::from_world(&world);
 
         for entity in [parent, child, grandchild] {
             let walked = world_matrix(&world, entity);
@@ -364,7 +364,7 @@ mod tests {
         let bare = world.spawn();
         world.insert(bare, SceneId::new());
 
-        let cache = WorldTransforms::from_world(&world);
+        let cache = WorldTransforms2D::from_world(&world);
 
         assert_eq!(cache.len(), 2);
         assert_eq!(cache.get(bare), None);
@@ -386,7 +386,7 @@ mod tests {
         world.insert(a, Parent::resolved(b_id, b));
         world.insert(b, Parent::resolved(a_id, a));
 
-        let cache = WorldTransforms::from_world(&world);
+        let cache = WorldTransforms2D::from_world(&world);
 
         assert_eq!(cache.len(), 2, "both are composed, neither hangs");
     }
@@ -400,7 +400,7 @@ mod tests {
 
         assert!(set_world_transform(&mut world, child, &at(12.0, 3.0)));
 
-        let local = world.get::<Transform>(child).expect("still has one");
+        let local = world.get::<Transform2D>(child).expect("still has one");
         assert!((local.translation - Vec2::new(2.0, 3.0)).length() < 1e-5);
         assert!((position(&world, child) - Vec2::new(12.0, 3.0)).length() < 1e-5);
     }
@@ -412,7 +412,7 @@ mod tests {
 
         assert!(set_world_transform(&mut world, entity, &at(5.0, 5.0)));
 
-        let local = world.get::<Transform>(entity).expect("still has one");
+        let local = world.get::<Transform2D>(entity).expect("still has one");
         assert_eq!(local.translation, Vec2::new(5.0, 5.0));
     }
 
@@ -421,14 +421,14 @@ mod tests {
         let mut world = World::new();
         let parent = spawn(
             &mut world,
-            Transform::from_translation(Vec2::new(3.0, -2.0))
+            Transform2D::from_translation(Vec2::new(3.0, -2.0))
                 .with_rotation(0.9)
                 .with_scale(Vec2::splat(1.5)),
         );
         let child = spawn(&mut world, at(0.0, 0.0));
         set_parent(&mut world, child, parent).expect("a plain reparent");
 
-        let target = Transform::from_translation(Vec2::new(-4.0, 6.0))
+        let target = Transform2D::from_translation(Vec2::new(-4.0, 6.0))
             .with_rotation(0.2)
             .with_scale(Vec2::splat(3.0));
         assert!(set_world_transform(&mut world, child, &target));
@@ -444,13 +444,13 @@ mod tests {
         // A zero-scaled parent maps every point to its origin, so no world
         // position has a local answer. Writing one anyway means NaN.
         let mut world = World::new();
-        let parent = spawn(&mut world, Transform::default().with_scale(Vec2::ZERO));
+        let parent = spawn(&mut world, Transform2D::default().with_scale(Vec2::ZERO));
         let child = spawn(&mut world, at(1.0, 1.0));
         set_parent(&mut world, child, parent).expect("a plain reparent");
 
         assert!(!set_world_transform(&mut world, child, &at(5.0, 5.0)));
 
-        let local = world.get::<Transform>(child).expect("still has one");
+        let local = world.get::<Transform2D>(child).expect("still has one");
         assert_eq!(local.translation, Vec2::new(1.0, 1.0));
     }
 

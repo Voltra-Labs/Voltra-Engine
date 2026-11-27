@@ -26,7 +26,7 @@ fn holds(machine: &str) -> Rig {
 impl Rig {
     fn x(&self) -> f32 {
         self.world
-            .get::<Transform>(self.hero)
+            .get::<Transform2D>(self.hero)
             .expect("a transform")
             .translation
             .x

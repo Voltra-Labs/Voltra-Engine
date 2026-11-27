@@ -5,7 +5,7 @@ use voltra_ecs::{Entity, World};
 
 use super::blend::Mixing;
 use super::value::{Value, ValueKind};
-use crate::{GlobalLight2D, PointLight2D, Sprite, Text, Tilemap, Transform};
+use crate::{GlobalLight2D, PointLight2D, Sprite2D, Text, Tilemap, Transform2D};
 
 /// One animatable field.
 ///
@@ -17,16 +17,16 @@ use crate::{GlobalLight2D, PointLight2D, Sprite, Text, Tilemap, Transform};
 /// list spelled out.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Property {
-    /// `Transform::translation`, in the parent's space.
+    /// `Transform2D::translation`, in the parent's space.
     Translation,
-    /// `Transform::rotation`, radians. Not wrapped: keys at `0` and `2π`
+    /// `Transform2D::rotation`, radians. Not wrapped: keys at `0` and `2π`
     /// are a whole turn, which is what an author keying a spin means.
     Rotation,
-    /// `Transform::scale`.
+    /// `Transform2D::scale`.
     Scale,
-    /// `Sprite::color`.
+    /// `Sprite2D::color`.
     SpriteColor,
-    /// `Sprite::frame`, an index into its atlas.
+    /// `Sprite2D::frame`, an index into its atlas.
     SpriteFrame,
     /// `Text::color`.
     TextColor,
@@ -114,11 +114,11 @@ impl Property {
     pub fn read(self, world: &World, entity: Entity) -> Option<Value> {
         let rgb = |c: [f32; 3]| Value::Color([c[0], c[1], c[2], 1.0]);
         Some(match self {
-            Self::Translation => Value::Vec2(world.get::<Transform>(entity)?.translation),
-            Self::Rotation => Value::Float(world.get::<Transform>(entity)?.rotation),
-            Self::Scale => Value::Vec2(world.get::<Transform>(entity)?.scale),
-            Self::SpriteColor => Value::Color(world.get::<Sprite>(entity)?.color),
-            Self::SpriteFrame => Value::Int(i64::from(world.get::<Sprite>(entity)?.frame)),
+            Self::Translation => Value::Vec2(world.get::<Transform2D>(entity)?.translation),
+            Self::Rotation => Value::Float(world.get::<Transform2D>(entity)?.rotation),
+            Self::Scale => Value::Vec2(world.get::<Transform2D>(entity)?.scale),
+            Self::SpriteColor => Value::Color(world.get::<Sprite2D>(entity)?.color),
+            Self::SpriteFrame => Value::Int(i64::from(world.get::<Sprite2D>(entity)?.frame)),
             Self::TextColor => Value::Color(world.get::<Text>(entity)?.color),
             Self::LightColor => rgb(world.get::<PointLight2D>(entity)?.color),
             Self::LightIntensity => Value::Float(world.get::<PointLight2D>(entity)?.intensity),
@@ -140,19 +140,19 @@ impl Property {
     pub fn write(self, world: &mut World, entity: Entity, value: Value) -> bool {
         let written = match (self, value) {
             (Self::Translation, Value::Vec2(v)) => world
-                .get_mut::<Transform>(entity)
+                .get_mut::<Transform2D>(entity)
                 .map(|t| t.translation = v),
             (Self::Rotation, Value::Float(v)) => {
-                world.get_mut::<Transform>(entity).map(|t| t.rotation = v)
+                world.get_mut::<Transform2D>(entity).map(|t| t.rotation = v)
             }
             (Self::Scale, Value::Vec2(v)) => {
-                world.get_mut::<Transform>(entity).map(|t| t.scale = v)
+                world.get_mut::<Transform2D>(entity).map(|t| t.scale = v)
             }
             (Self::SpriteColor, Value::Color(c)) => {
-                world.get_mut::<Sprite>(entity).map(|s| s.color = c)
+                world.get_mut::<Sprite2D>(entity).map(|s| s.color = c)
             }
             (Self::SpriteFrame, Value::Int(i)) => world
-                .get_mut::<Sprite>(entity)
+                .get_mut::<Sprite2D>(entity)
                 .map(|s| s.frame = i.clamp(0, i64::from(u32::MAX)) as u32),
             (Self::TextColor, Value::Color(c)) => {
                 world.get_mut::<Text>(entity).map(|t| t.color = c)
@@ -189,8 +189,8 @@ mod tests {
     fn every_property_reads_back_what_it_wrote() {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
-        world.insert(entity, Sprite::default());
+        world.insert(entity, Transform2D::default());
+        world.insert(entity, Sprite2D::default());
         world.insert(entity, Text::default());
         world.insert(entity, PointLight2D::default());
         world.insert(entity, GlobalLight2D::default());

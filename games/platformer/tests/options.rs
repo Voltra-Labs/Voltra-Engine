@@ -10,7 +10,7 @@ use voltra_ecs::{Entity, World};
 use voltra_platformer::components::Walker;
 use voltra_platformer::{Platformer, FIRST_LEVEL};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Name, Text, Transform};
+use voltra_scene::{Name, Text, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -63,7 +63,7 @@ fn height(session: &Headless) -> f32 {
         .expect("the level has a walker");
     session
         .world()
-        .get::<Transform>(walker)
+        .get::<Transform2D>(walker)
         .expect("a transform")
         .translation
         .y

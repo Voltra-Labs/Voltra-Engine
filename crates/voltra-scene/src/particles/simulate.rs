@@ -8,8 +8,8 @@ use voltra_render::ParticleCollider;
 use super::collide::{collide, Space};
 use super::rng::Rng;
 use super::{shape, EmitShape, Obstacles, Particle, ParticleEmitter, Simulation, MAX_PARTICLES};
-use crate::hierarchy::WorldTransforms;
-use crate::Collider;
+use crate::hierarchy::WorldTransforms2D;
+use crate::Collider2D;
 
 /// The longest step simulated at once. A frame that stalls for a second must
 /// not fire a second's worth of particles in one place.
@@ -39,7 +39,7 @@ pub fn advance_where(
         return Vec::new();
     }
     let dt = dt.min(MAX_STEP);
-    let transforms = WorldTransforms::from_world(world);
+    let transforms = WorldTransforms2D::from_world(world);
     // Gathered only when some emitter collides: a scene of plain fountains
     // pays nothing for the tiles it never looks at.
     let obstacles = if world
@@ -58,7 +58,7 @@ pub fn advance_where(
         .map(|(entity, _)| {
             (
                 entity,
-                shape::collider_outline(world.get::<Collider>(entity)),
+                shape::collider_outline(world.get::<Collider2D>(entity)),
             )
         })
         .collect();

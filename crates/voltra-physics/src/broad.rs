@@ -14,7 +14,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{BodyType, Collider, CollisionLayers, RigidBody, Sensor, Transform};
+use voltra_scene::{BodyType, Collider2D, CollisionLayers, RigidBody2D, Sensor, Transform2D};
 
 /// A collider's world bounds, what it may touch, and whether a pair with it
 /// can matter on its own.
@@ -52,9 +52,9 @@ pub fn candidate_pairs(world: &World) -> Vec<(Entity, Entity)> {
 /// [`candidate_pairs`], with the number of bounds tests it took.
 pub fn sweep(world: &World) -> Sweep {
     let mut candidates: Vec<Candidate> = world
-        .query::<Collider>()
+        .query::<Collider2D>()
         .filter_map(|(entity, collider)| {
-            let transform = world.get::<Transform>(entity)?;
+            let transform = world.get::<Transform2D>(entity)?;
             let (min, max) = collider.world_aabb(transform);
             // A NaN edge would sort nowhere and overlap nothing; dropping it
             // keeps one bad transform from disturbing the sweep for the rest.
@@ -67,7 +67,7 @@ pub fn sweep(world: &World) -> Sweep {
                 max,
                 layers: world.get::<CollisionLayers>(entity).copied(),
                 dynamic: world
-                    .get::<RigidBody>(entity)
+                    .get::<RigidBody2D>(entity)
                     .is_some_and(|body| body.body_type == BodyType::Dynamic),
                 sensor: world.get::<Sensor>(entity).is_some(),
             })
@@ -119,16 +119,16 @@ mod tests {
     /// A dynamic box: a pair needs a dynamic side to be worth testing.
     fn spawn(world: &mut World, at: Vec2, half: f32) -> Entity {
         let entity = spawn_static(world, at, half);
-        world.insert(entity, RigidBody::new_dynamic(1.0));
+        world.insert(entity, RigidBody2D::new_dynamic(1.0));
         entity
     }
 
     fn spawn_static(world: &mut World, at: Vec2, half: f32) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(
             entity,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::splat(half),
             },
         );
@@ -224,7 +224,7 @@ mod tests {
         let mut world = World::new();
         spawn(&mut world, Vec2::ZERO, 1.0);
         let bare = world.spawn();
-        world.insert(bare, Transform::default());
+        world.insert(bare, Transform2D::default());
 
         assert!(candidate_pairs(&world).is_empty());
     }
@@ -237,7 +237,7 @@ mod tests {
         let mut world = World::new();
         spawn(&mut world, Vec2::ZERO, 1.0);
         let floating = world.spawn();
-        world.insert(floating, Collider::Circle { radius: 5.0 });
+        world.insert(floating, Collider2D::Circle { radius: 5.0 });
 
         assert!(candidate_pairs(&world).is_empty());
     }
@@ -287,9 +287,9 @@ mod tests {
         let platform = spawn_static(&mut world, Vec2::new(0.5, 0.0), 1.0);
         world.insert(
             platform,
-            RigidBody {
+            RigidBody2D {
                 body_type: BodyType::Kinematic,
-                ..RigidBody::new_static()
+                ..RigidBody2D::new_static()
             },
         );
         assert!(candidate_pairs(&world).is_empty());

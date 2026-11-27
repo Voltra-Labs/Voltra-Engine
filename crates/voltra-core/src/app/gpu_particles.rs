@@ -4,7 +4,7 @@
 use voltra_ecs::hash::FastMap;
 use voltra_ecs::Entity;
 use voltra_render::{GpuParticles, ParticleLook, SimStep};
-use voltra_scene::hierarchy::WorldTransforms;
+use voltra_scene::hierarchy::WorldTransforms2D;
 use voltra_scene::ParticleEmitter;
 
 use super::App;
@@ -42,7 +42,7 @@ impl App {
         let Some(pipelines) = renderer.particle_pipelines() else {
             return;
         };
-        let transforms = WorldTransforms::seen_from(&self.world, renderer.camera.position);
+        let transforms = WorldTransforms2D::seen_from(&self.world, renderer.camera.position);
         let mut owed: Vec<(Entity, SimStep, ParticleLook)> = Vec::new();
         for (entity, emitter) in self.world.query_mut::<ParticleEmitter>() {
             let Some(capacity) = emitter.gpu_capacity() else {

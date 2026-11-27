@@ -11,7 +11,7 @@ use voltra_render::glam::{UVec2, Vec2};
 use voltra_render::Texture;
 
 use super::sheets::Sheets;
-use super::Sprite;
+use super::Sprite2D;
 
 /// The whole of a texture, as every sprite sampled before frames existed.
 pub(crate) const WHOLE: ([f32; 2], [f32; 2]) = ([0.0, 0.0], [1.0, 1.0]);
@@ -62,7 +62,7 @@ impl Quad {
 }
 
 /// The quad `sprite` covers, resolved against the loaded sheets.
-pub fn quad(sprite: &Sprite, sheets: Sheets<'_>) -> Quad {
+pub fn quad(sprite: &Sprite2D, sheets: Sheets<'_>) -> Quad {
     let (size, uv, texture, placing) = match slice(sprite, sheets) {
         Slice::Whole => (
             sheets.size(sprite.texture_handle),
@@ -159,7 +159,7 @@ impl Placing {
 /// The size in texels of what `sprite` draws — its frame, its region or
 /// its whole texture — or `None` when that is not known: no texture store
 /// to ask, or a frame that is not there and draws the placeholder.
-pub fn texels(sprite: &Sprite, sheets: Sheets<'_>) -> Option<UVec2> {
+pub fn texels(sprite: &Sprite2D, sheets: Sheets<'_>) -> Option<UVec2> {
     match slice(sprite, sheets) {
         Slice::Whole => sheets.size(sprite.texture_handle),
         Slice::Cut { size, .. } => Some(size),
@@ -169,7 +169,7 @@ pub fn texels(sprite: &Sprite, sheets: Sheets<'_>) -> Option<UVec2> {
 
 /// Whether `sprite` asks for a frame that is not there, and so draws the
 /// placeholder: what a caster shaped by its sprite must not trace.
-pub(crate) fn frame_missing(sprite: &Sprite, sheets: Sheets<'_>) -> bool {
+pub(crate) fn frame_missing(sprite: &Sprite2D, sheets: Sheets<'_>) -> bool {
     matches!(slice(sprite, sheets), Slice::Missing)
 }
 
@@ -188,7 +188,7 @@ enum Slice {
     Missing,
 }
 
-fn slice(sprite: &Sprite, sheets: Sheets<'_>) -> Slice {
+fn slice(sprite: &Sprite2D, sheets: Sheets<'_>) -> Slice {
     // The atlas wins over `region`: a sprite that names one is asking for its
     // frames, and a leftover region under it is not a second opinion.
     if sprite.atlas.is_some() {
@@ -232,12 +232,12 @@ fn cut(frame: Frame, sheet: UVec2, placing: Option<Placing>) -> Slice {
 /// well, rather than sending an infinity to the vertex buffer.
 fn half_extents(pixels_per_unit: Option<f32>, size: Option<UVec2>) -> Vec2 {
     let (Some(rate), Some(size)) = (pixels_per_unit, size) else {
-        return Vec2::splat(Sprite::HALF_EXTENT);
+        return Vec2::splat(Sprite2D::HALF_EXTENT);
     };
     if !rate.is_finite() || rate <= 0.0 {
-        return Vec2::splat(Sprite::HALF_EXTENT);
+        return Vec2::splat(Sprite2D::HALF_EXTENT);
     }
-    size.as_vec2() / rate * Sprite::HALF_EXTENT
+    size.as_vec2() / rate * Sprite2D::HALF_EXTENT
 }
 
 /// The pair, swapped when the sprite is mirrored on that axis.
@@ -305,8 +305,8 @@ mod tests {
         (atlases, AssetPath::new("coin.atlas.ron").expect("valid"))
     }
 
-    fn sprite_on(atlases: &mut Atlases, path: &AssetPath, frame: u32) -> Sprite {
-        let mut sprite = Sprite::default();
+    fn sprite_on(atlases: &mut Atlases, path: &AssetPath, frame: u32) -> Sprite2D {
+        let mut sprite = Sprite2D::default();
         sprite.set_atlas(Some(path.clone()), atlases);
         sprite.frame = frame;
         sprite
@@ -314,7 +314,7 @@ mod tests {
 
     #[test]
     fn a_sprite_with_no_sheet_is_the_unit_quad_it_always_was() {
-        let quad = quad(&Sprite::default(), Sheets::default());
+        let quad = quad(&Sprite2D::default(), Sheets::default());
 
         assert_eq!(quad.half_extents, Vec2::splat(0.5));
         assert_eq!(quad.uvs, [[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0]]);
@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn a_region_becomes_the_uvs_it_covers_on_a_non_square_sheet() {
         let sizes = Sizes::wide();
-        let sprite = Sprite {
+        let sprite = Sprite2D {
             texture_handle: Some(Sizes::texture()),
             region: Some(Frame::new(16, 0, 16, 16)),
             ..Default::default()
@@ -409,7 +409,7 @@ mod tests {
     #[test]
     fn pixels_per_unit_sizes_the_quad_from_the_frame() {
         let sizes = Sizes::wide();
-        let sprite = Sprite {
+        let sprite = Sprite2D {
             texture_handle: Some(Sizes::texture()),
             region: Some(Frame::new(0, 0, 32, 16)),
             pixels_per_unit: Some(16.0),
@@ -492,7 +492,7 @@ mod tests {
     #[test]
     fn an_atlas_that_never_resolved_draws_the_placeholder_too() {
         let sizes = Sizes::wide();
-        let sprite = Sprite {
+        let sprite = Sprite2D {
             atlas: Some(AssetPath::new("gone.atlas.ron").expect("valid")),
             texture_handle: Some(Sizes::texture()),
             ..Default::default()

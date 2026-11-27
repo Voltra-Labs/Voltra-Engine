@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
-use crate::hierarchy::{self, WorldTransforms};
+use crate::hierarchy::{self, WorldTransforms2D};
 
 /// Draws this entity and everything under it as if the camera had moved by
 /// only `factor` of how far it really did: `1` moves with the world, `0` is
@@ -106,7 +106,7 @@ impl Parallax {
 /// Displaces every composed matrix under a [`Parallax`] for a camera at
 /// `camera`. A world with no `Parallax` is left untouched at the cost of
 /// one empty query.
-pub(crate) fn apply(transforms: &mut WorldTransforms, world: &World, camera: Vec2) {
+pub(crate) fn apply(transforms: &mut WorldTransforms2D, world: &World, camera: Vec2) {
     if world.query::<Parallax>().next().is_none() || camera == Vec2::ZERO {
         return;
     }
@@ -159,17 +159,17 @@ fn nearest_offset(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{SceneId, Transform};
+    use crate::{SceneId, Transform2D};
 
     fn spawn(world: &mut World, at: Vec2) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         entity
     }
 
     fn drawn_at(world: &World, entity: Entity, camera: Vec2) -> Vec2 {
-        WorldTransforms::seen_from(world, camera)
+        WorldTransforms2D::seen_from(world, camera)
             .matrix(entity)
             .transform_point2(Vec2::ZERO)
     }
@@ -272,11 +272,11 @@ mod tests {
     #[test]
     fn a_repeating_layer_is_drawn_once_per_copy_in_the_batch() {
         use crate::sprite::sheets::Sheets;
-        use crate::{Sprite, SpriteBatch};
+        use crate::{Sprite2D, SpriteBatch};
 
         let mut world = World::new();
         let hill = spawn(&mut world, Vec2::ZERO);
-        world.insert(hill, Sprite::default());
+        world.insert(hill, Sprite2D::default());
         world.insert(
             hill,
             Parallax::new(Vec2::ONE).repeating(Vec2::new(10.0, 0.0)),
@@ -296,11 +296,11 @@ mod tests {
     fn the_draw_and_the_pick_agree_on_where_a_layer_is() {
         use crate::pick::entity_at;
         use crate::sprite::sheets::Sheets;
-        use crate::{Sprite, SpriteBatch};
+        use crate::{Sprite2D, SpriteBatch};
 
         let mut world = World::new();
         let hill = spawn(&mut world, Vec2::ZERO);
-        world.insert(hill, Sprite::default());
+        world.insert(hill, Sprite2D::default());
         world.insert(hill, Parallax::new(Vec2::ZERO));
         let sheets = Sheets::default().seen_from(Vec2::new(20.0, 0.0));
 

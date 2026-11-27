@@ -90,7 +90,7 @@ pub struct Line2D {
     /// How the texture lies along the line.
     #[serde(default)]
     pub texture_mode: LineTexture,
-    /// Draw order among sprites. See [`Sprite::sort_order`](crate::Sprite::sort_order).
+    /// Draw order among sprites. See [`Sprite2D::sort_order`](crate::Sprite2D::sort_order).
     #[serde(default)]
     pub sort_order: i32,
     /// The named layer it draws on. See [`SortingLayers`](crate::sorting::SortingLayers).
@@ -165,7 +165,7 @@ impl Line2D {
     }
 
     /// Sets or clears the texture path and refreshes its handle, as
-    /// [`Sprite::set_texture`](crate::Sprite::set_texture) does.
+    /// [`Sprite2D::set_texture`](crate::Sprite2D::set_texture) does.
     pub fn set_texture(
         &mut self,
         path: Option<AssetPath>,

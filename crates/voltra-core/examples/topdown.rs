@@ -13,7 +13,9 @@ use voltra_core::nav::{NavGrid, NavSettings, Path};
 use voltra_core::{move_and_slide, App, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Camera, CameraFollow2D, CharacterBody2D, Collider, SceneId, Sprite, Transform};
+use voltra_scene::{
+    Camera2D, CameraFollow2D, CharacterBody2D, Collider2D, SceneId, Sprite2D, Transform2D,
+};
 
 const PLAYER_SPEED: f32 = 4.0;
 const CHASER_SPEED: f32 = 2.6;
@@ -66,7 +68,7 @@ fn main() {
 
             let at = |entity: Entity| {
                 tick.world
-                    .get::<Transform>(entity)
+                    .get::<Transform2D>(entity)
                     .map_or(Vec2::ZERO, |t| t.translation)
             };
             let (here, target) = (at(chaser), at(player));
@@ -88,13 +90,13 @@ fn wall(app: &mut App, at: Vec2, half: Vec2) {
     let entity = app.world.spawn();
     app.world.insert(
         entity,
-        Transform::from_translation(at).with_scale(half * 2.0),
+        Transform2D::from_translation(at).with_scale(half * 2.0),
     );
     app.world
-        .insert(entity, Sprite::new([0.35, 0.37, 0.45, 1.0]));
+        .insert(entity, Sprite2D::new([0.35, 0.37, 0.45, 1.0]));
     app.world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
@@ -120,12 +122,12 @@ fn mover(app: &mut App, at: Vec2, half: f32, color: [f32; 4]) -> Entity {
     app.world.insert(entity, SceneId::new());
     app.world.insert(
         entity,
-        Transform::from_translation(at).with_scale(Vec2::splat(half * 2.0)),
+        Transform2D::from_translation(at).with_scale(Vec2::splat(half * 2.0)),
     );
-    app.world.insert(entity, Sprite::new(color));
+    app.world.insert(entity, Sprite2D::new(color));
     app.world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
@@ -146,8 +148,8 @@ fn spawn_camera(app: &mut App, player: Entity) {
         return;
     };
     let camera = app.world.spawn();
-    app.world.insert(camera, Transform::default());
-    app.world.insert(camera, Camera::new(6.0));
+    app.world.insert(camera, Transform2D::default());
+    app.world.insert(camera, Camera2D::new(6.0));
     app.world.insert(
         camera,
         CameraFollow2D {

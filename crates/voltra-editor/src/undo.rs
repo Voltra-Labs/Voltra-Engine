@@ -31,7 +31,7 @@ pub trait UndoHost {
     fn reset_physics(&mut self);
     /// Re-resolves every sprite's GPU handle from its path.
     ///
-    /// A record carries the path and `Sprite::texture_handle` is
+    /// A record carries the path and `Sprite2D::texture_handle` is
     /// `#[serde(skip)]`, so without this an undone texture edit draws flat
     /// white.
     fn resolve_scene_assets(&mut self);

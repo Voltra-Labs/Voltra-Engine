@@ -18,7 +18,7 @@
 use crate::hash::{FastMap, FastSet};
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::{BodyType, Collider, RigidBody, Transform};
+use voltra_scene::{BodyType, Collider2D, RigidBody2D, Transform2D};
 
 use crate::narrow::Contact;
 
@@ -56,7 +56,7 @@ impl Default for SleepParams {
 /// How a sleeping body was left, to tell whether it has been disturbed.
 #[derive(Debug, Clone, PartialEq)]
 struct Rest {
-    at: Transform,
+    at: Transform2D,
     /// Everything it was in contact with, and where each was: a support that
     /// goes away, moves or wakes wakes it rather than leaving it hanging.
     ///
@@ -64,7 +64,7 @@ struct Rest {
     /// still reported. Two boxes resting edge to edge flicker in and out of
     /// contact from one step to the next; waking on that would keep a whole
     /// level of crates awake for nothing.
-    partners: Vec<(Entity, Option<Transform>)>,
+    partners: Vec<(Entity, Option<Transform2D>)>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -158,19 +158,19 @@ impl Sleep {
     pub fn wake_disturbed(&mut self, world: &World) {
         let mut woken: Vec<Entity> = Vec::new();
         self.bodies.retain(|&entity, sleep| {
-            let Some(body) = world.get::<RigidBody>(entity) else {
+            let Some(body) = world.get::<RigidBody2D>(entity) else {
                 return false;
             };
             let Some(rest) = &sleep.asleep else {
                 return true;
             };
-            let moved = world.get::<Transform>(entity) != Some(&rest.at);
+            let moved = world.get::<Transform2D>(entity) != Some(&rest.at);
             // A partner that woke and stayed is still in contact, and the
             // island pass wakes this one through it; one that woke and left
             // has moved, which its stored transform catches.
             let lost_support = rest.partners.iter().any(|(partner, was_at)| {
-                world.get::<Collider>(*partner).is_none()
-                    || world.get::<Transform>(*partner) != was_at.as_ref()
+                world.get::<Collider2D>(*partner).is_none()
+                    || world.get::<Transform2D>(*partner) != was_at.as_ref()
             });
             let disturbed = body.body_type != BodyType::Dynamic
                 || !body.can_sleep
@@ -251,7 +251,7 @@ impl Sleep {
         let linear = params.linear_tolerance * params.linear_tolerance;
         let angular = params.angular_tolerance * params.angular_tolerance;
 
-        for (entity, body) in world.query::<RigidBody>() {
+        for (entity, body) in world.query::<RigidBody2D>() {
             if body.body_type != BodyType::Dynamic {
                 self.bodies.remove(&entity);
                 continue;
@@ -302,18 +302,18 @@ impl Sleep {
             .map(|(entity, _)| *entity)
             .collect();
         for entity in falling_asleep {
-            let Some(at) = world.get::<Transform>(entity).copied() else {
+            let Some(at) = world.get::<Transform2D>(entity).copied() else {
                 continue;
             };
-            if let Some(body) = world.get_mut::<RigidBody>(entity) {
+            if let Some(body) = world.get_mut::<RigidBody2D>(entity) {
                 body.velocity = voltra_render::glam::Vec2::ZERO;
                 body.angular_velocity = 0.0;
             }
-            let mut partners: Vec<(Entity, Option<Transform>)> = partners
+            let mut partners: Vec<(Entity, Option<Transform2D>)> = partners
                 .get(&entity)
                 .map(|set| {
                     set.iter()
-                        .map(|p| (*p, world.get::<Transform>(*p).copied()))
+                        .map(|p| (*p, world.get::<Transform2D>(*p).copied()))
                         .collect()
                 })
                 .unwrap_or_default();
@@ -337,12 +337,12 @@ fn partners_of(contacts: &[(Entity, Entity)]) -> FastMap<Entity, FastSet<Entity>
 
 fn is_dynamic(world: &World, entity: Entity) -> bool {
     world
-        .get::<RigidBody>(entity)
+        .get::<RigidBody2D>(entity)
         .is_some_and(|b| b.body_type == BodyType::Dynamic)
 }
 
 fn is_moving_kinematic(world: &World, entity: Entity) -> bool {
-    world.get::<RigidBody>(entity).is_some_and(|b| {
+    world.get::<RigidBody2D>(entity).is_some_and(|b| {
         b.body_type == BodyType::Kinematic
             && (b.velocity != voltra_render::glam::Vec2::ZERO || b.angular_velocity != 0.0)
     })

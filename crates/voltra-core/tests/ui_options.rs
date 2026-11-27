@@ -10,7 +10,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::ui::{Edges, UiStack};
 use voltra_scene::{
-    hierarchy, Align, Name, SceneId, Sprite, Text, UiButton, UiControls, UiRect, UiScroll,
+    hierarchy, Align, Name, SceneId, Sprite2D, Text, UiButton, UiControls, UiRect, UiScroll,
     UiSlider, UiSliderPart, UiTextField, UiToggle,
 };
 
@@ -65,7 +65,7 @@ fn options(world: &mut World) -> Screen {
     );
 
     let volume = spawn(world, "Volume", tall(20.0, 0));
-    world.insert(volume, Sprite::new([0.1, 0.1, 0.1, 1.0]));
+    world.insert(volume, Sprite2D::new([0.1, 0.1, 0.1, 1.0]));
     world.insert(
         volume,
         UiSlider {
@@ -81,18 +81,18 @@ fn options(world: &mut World) -> Screen {
         "Handle",
         UiRect::pinned(Vec2::ZERO, Vec2::new(-5.0, 0.0), Vec2::new(10.0, 20.0)),
     );
-    world.insert(handle, Sprite::default());
+    world.insert(handle, Sprite2D::default());
     world.insert(handle, UiSliderPart::Handle);
     hierarchy::set_parent(world, handle, volume).expect("parents");
 
     let fullscreen = spawn(world, "Fullscreen", tall(30.0, 1));
-    world.insert(fullscreen, Sprite::default());
+    world.insert(fullscreen, Sprite2D::default());
     world.insert(fullscreen, UiButton::default());
     world.insert(fullscreen, UiToggle::default());
     label(world, fullscreen, "Fullscreen");
 
     let name = spawn(world, "Name", tall(30.0, 2));
-    world.insert(name, Sprite::new([0.05, 0.05, 0.05, 1.0]));
+    world.insert(name, Sprite2D::new([0.05, 0.05, 0.05, 1.0]));
     world.insert(name, Text::new(""));
     world.insert(
         name,
@@ -103,7 +103,7 @@ fn options(world: &mut World) -> Screen {
     );
 
     let saves = spawn(world, "Saves", tall(120.0, 3));
-    world.insert(saves, Sprite::new([0.1, 0.1, 0.12, 1.0]));
+    world.insert(saves, Sprite2D::new([0.1, 0.1, 0.12, 1.0]));
     world.insert(saves, UiScroll::default());
     world.insert(
         saves,
@@ -116,7 +116,7 @@ fn options(world: &mut World) -> Screen {
     let rows = (0..6)
         .map(|i| {
             let row = spawn(world, &format!("Save {i}"), tall(40.0, i));
-            world.insert(row, Sprite::default());
+            world.insert(row, Sprite2D::default());
             world.insert(row, UiButton::default());
             label(world, row, &format!("Save {i}"));
             hierarchy::set_parent(world, row, saves).expect("parents");

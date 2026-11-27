@@ -2,10 +2,10 @@
 
 use super::ComponentRegistry;
 use crate::{
-    AudioListener, AudioSource, Camera, Collider, CollisionLayers, GlobalLight2D, Name, Parallax,
-    Parent, ParticleEmitter, Persistent, PhysicsMaterial, PointLight2D, PrefabInstance, RigidBody,
-    Sensor, ShadowCaster2D, Sprite, SpriteAnimation, Text, Tilemap, Transform, UiButton, UiRect,
-    UiScroll, UiSlice, UiSlider, UiSliderPart, UiStack, UiTextField, UiToggle,
+    AudioListener, AudioSource, Camera2D, Collider2D, CollisionLayers, GlobalLight2D, Name,
+    Parallax, Parent, ParticleEmitter, Persistent, PhysicsMaterial, PointLight2D, PrefabInstance,
+    RigidBody2D, Sensor, ShadowCaster2D, Sprite2D, SpriteAnimation, Text, Tilemap, Transform2D,
+    UiButton, UiRect, UiScroll, UiSlice, UiSlider, UiSliderPart, UiStack, UiTextField, UiToggle,
 };
 
 impl ComponentRegistry {
@@ -22,7 +22,7 @@ impl ComponentRegistry {
         // networked game sends, and remote copies are drawn between
         // snapshots rather than snapped to each.
         registry
-            .register::<Transform>(Transform::NAME)
+            .register::<Transform2D>(Transform2D::NAME)
             .with_template()
             .replicated_interpolated();
         registry
@@ -34,7 +34,9 @@ impl ComponentRegistry {
         // Stored as the parent's `SceneId`; the live `Entity` is resolved after
         // the whole file is in, by `hierarchy::resolve_parents`.
         registry.register::<Parent>(Parent::NAME);
-        registry.register::<Sprite>(Sprite::NAME).with_template();
+        registry
+            .register::<Sprite2D>(Sprite2D::NAME)
+            .with_template();
         registry
             .register::<SpriteAnimation>(SpriteAnimation::NAME)
             .with_template();
@@ -44,7 +46,9 @@ impl ComponentRegistry {
         registry
             .register::<crate::AnimationPlayer>(crate::AnimationPlayer::NAME)
             .with_template();
-        registry.register::<Camera>(Camera::NAME).with_template();
+        registry
+            .register::<Camera2D>(Camera2D::NAME)
+            .with_template();
         registry
             .register_with_refs::<crate::CameraFollow2D>(crate::CameraFollow2D::NAME)
             .with_template();
@@ -58,10 +62,10 @@ impl ComponentRegistry {
             .register::<AudioListener>(AudioListener::NAME)
             .with_template();
         registry
-            .register::<RigidBody>(RigidBody::NAME)
+            .register::<RigidBody2D>(RigidBody2D::NAME)
             .with_template();
         registry
-            .register::<Collider>(Collider::NAME)
+            .register::<Collider2D>(Collider2D::NAME)
             .with_template();
         registry
             .register::<PhysicsMaterial>(PhysicsMaterial::NAME)

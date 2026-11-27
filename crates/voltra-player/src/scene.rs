@@ -46,7 +46,7 @@ pub fn describe(world: &World, path: &Path) {
 mod tests {
     use super::*;
     use std::path::PathBuf;
-    use voltra_scene::{Collider, RigidBody};
+    use voltra_scene::{Collider2D, RigidBody2D};
 
     /// The sample this repository ships, resolved from the crate rather than
     /// from the working directory, which `cargo test` does not promise.
@@ -63,10 +63,10 @@ mod tests {
             "the sample is what a build is run against: it has to frame itself"
         );
         assert!(
-            world.query::<RigidBody>().count() >= 2,
+            world.query::<RigidBody2D>().count() >= 2,
             "and it has to move, or it demonstrates nothing about a running game"
         );
-        assert!(world.query::<Collider>().count() >= 2);
+        assert!(world.query::<Collider2D>().count() >= 2);
     }
 
     #[test]

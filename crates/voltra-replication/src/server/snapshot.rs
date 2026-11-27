@@ -40,7 +40,7 @@ pub(crate) struct Place {
     /// itself. A child is relevant exactly when its root is, so a client
     /// never has half a hierarchy.
     pub(crate) root: NetId,
-    /// Its position in the world, if it has a `Transform`.
+    /// Its position in the world, if it has a `Transform2D`.
     pub(crate) at: Option<glam::Vec2>,
     /// [`Replicated::always_relevant`](voltra_scene::Replicated).
     pub(crate) always: bool,

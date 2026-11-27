@@ -6,7 +6,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::texture;
 use voltra_scene::camera::{self, CameraTarget};
-use voltra_scene::{camera_rig, Camera, CameraFollow2D, FollowZoom, SceneId, Transform};
+use voltra_scene::{camera_rig, Camera2D, CameraFollow2D, FollowZoom, SceneId, Transform2D};
 use voltra_testkit::{headless_device, scratch_root};
 
 #[test]
@@ -30,13 +30,13 @@ fn a_render_texture_camera_zooms_to_fit_its_texture() {
         let e = world.spawn();
         let id = SceneId::new();
         world.insert(e, id);
-        world.insert(e, Transform::from_translation(Vec2::new(x, 0.0)));
+        world.insert(e, Transform2D::from_translation(Vec2::new(x, 0.0)));
         ids.push(id);
     }
     let eye = world.spawn();
     world.insert(eye, SceneId::new());
-    world.insert(eye, Transform::default());
-    world.insert(eye, Camera::new(1.0));
+    world.insert(eye, Transform2D::default());
+    world.insert(eye, Camera2D::new(1.0));
     world.insert(
         eye,
         CameraTarget::new(AssetPath::new("map.rendertexture.ron").expect("a path")),
@@ -58,6 +58,6 @@ fn a_render_texture_camera_zooms_to_fit_its_texture() {
     assert_eq!(camera::aspect(&world, eye, 1.0, Some(&textures)), 4.0);
     // A square window, a 4:1 texture: sixteen wide needs a size of two.
     camera_rig::update(&mut world, 1.0 / 60.0, 1.0, Some(&textures));
-    let size = world.get::<Camera>(eye).expect("a camera").size;
+    let size = world.get::<Camera2D>(eye).expect("a camera").size;
     assert!((size - 2.0).abs() < 1e-4, "{size}");
 }

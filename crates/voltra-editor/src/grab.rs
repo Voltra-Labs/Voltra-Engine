@@ -17,7 +17,7 @@ use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_physics::{query, QueryFilter};
 use voltra_render::glam::Vec2;
-use voltra_scene::{BodyType, Joint2D, JointKind, RigidBody, SceneId, Transform};
+use voltra_scene::{BodyType, Joint2D, JointKind, RigidBody2D, SceneId, Transform2D};
 
 use crate::picking::world_at;
 
@@ -114,13 +114,13 @@ fn grab(world: &mut World, at: Vec2) -> Option<Entity> {
         .into_iter()
         .find(|&entity| {
             world
-                .get::<RigidBody>(entity)
+                .get::<RigidBody2D>(entity)
                 .is_some_and(|body| body.body_type == BodyType::Dynamic && body.inverse_mass > 0.0)
                 && world.get::<SceneId>(entity).is_some()
         })?;
     let id = *world.get::<SceneId>(body)?;
-    let mass = 1.0 / world.get::<RigidBody>(body)?.inverse_mass;
-    let on_body = Joint2D::anchor_on(world.get::<Transform>(body)?, at);
+    let mass = 1.0 / world.get::<RigidBody2D>(body)?.inverse_mass;
+    let on_body = Joint2D::anchor_on(world.get::<Transform2D>(body)?, at);
     let joint = world.spawn();
     world.insert(
         joint,
@@ -143,19 +143,19 @@ fn grab(world: &mut World, at: Vec2) -> Option<Entity> {
 mod tests {
     use super::*;
     use voltra_physics::PhysicsWorld;
-    use voltra_scene::Collider;
+    use voltra_scene::Collider2D;
 
     fn crate_at(world: &mut World, at: Vec2) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(
             entity,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::splat(0.5),
             },
         );
-        world.insert(entity, RigidBody::new_dynamic(2.0));
+        world.insert(entity, RigidBody2D::new_dynamic(2.0));
         entity
     }
 
@@ -175,7 +175,7 @@ mod tests {
         // Where it was pressed is where the pointer is; the rest of it
         // hangs from there as it likes.
         let grip = Joint2D::anchor_in_world(
-            world.get::<Transform>(body).expect("body"),
+            world.get::<Transform2D>(body).expect("body"),
             Vec2::new(0.25, 0.0),
         );
         assert!(
@@ -188,7 +188,7 @@ mod tests {
     fn a_scaled_body_is_gripped_where_it_was_pressed() {
         let mut world = World::new();
         let body = crate_at(&mut world, Vec2::ZERO);
-        world.get_mut::<Transform>(body).expect("placed").scale = Vec2::splat(2.0);
+        world.get_mut::<Transform2D>(body).expect("placed").scale = Vec2::splat(2.0);
         let at = Vec2::new(0.4, 0.0);
         let joint = grab(&mut world, at).expect("a body is there");
         let held = world.get::<Joint2D>(joint).expect("the joint");
@@ -200,7 +200,7 @@ mod tests {
         for _ in 0..120 {
             physics.step_once(&mut world, Vec2::new(0.0, -10.0));
         }
-        let grip = Joint2D::anchor_in_world(world.get::<Transform>(body).expect("body"), at);
+        let grip = Joint2D::anchor_in_world(world.get::<Transform2D>(body).expect("body"), at);
         assert!(
             (grip - Vec2::new(2.4, 1.0)).length() < 0.05,
             "the pressed point follows the pointer: {grip}"
@@ -211,7 +211,7 @@ mod tests {
     fn empty_ground_and_a_static_body_grab_nothing() {
         let mut world = World::new();
         let floor = crate_at(&mut world, Vec2::ZERO);
-        world.insert(floor, RigidBody::new_static());
+        world.insert(floor, RigidBody2D::new_static());
         assert!(grab(&mut world, Vec2::ZERO).is_none());
         assert!(grab(&mut world, Vec2::new(5.0, 0.0)).is_none());
     }

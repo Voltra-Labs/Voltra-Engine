@@ -7,7 +7,7 @@ use common::*;
 use voltra_ecs::World;
 use voltra_physics::{step, ImpulseCache, SolverParams};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, RigidBody, Transform};
+use voltra_scene::{Collider2D, RigidBody2D, Transform2D};
 
 #[test]
 fn the_cache_forgets_a_body_that_was_despawned() {
@@ -36,7 +36,7 @@ fn the_cache_forgets_a_pair_that_separated() {
     assert!(!cache.is_empty());
 
     world
-        .get_mut::<Transform>(ball)
+        .get_mut::<Transform2D>(ball)
         .expect("transform")
         .translation = Vec2::new(0.0, 50.0);
     run(&mut world, &mut cache, Vec2::ZERO, 1);
@@ -108,8 +108,8 @@ fn a_zero_length_step_changes_nothing() {
 fn a_body_with_no_collider_moves_and_never_collides() {
     let mut world = World::new();
     let entity = world.spawn();
-    world.insert(entity, Transform::default());
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, Transform2D::default());
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
 
     let mut cache = ImpulseCache::default();
     let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;
@@ -122,20 +122,20 @@ fn a_body_with_no_collider_moves_and_never_collides() {
 fn a_collider_with_no_body_is_static_geometry() {
     let mut world = World::new();
     let wall = world.spawn();
-    world.insert(wall, Transform::default());
+    world.insert(wall, Transform2D::default());
     world.insert(
         wall,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
     );
 
     let ball = world.spawn();
-    world.insert(ball, Transform::from_translation(Vec2::new(0.5, 0.0)));
-    world.insert(ball, Collider::Circle { radius: 0.5 });
+    world.insert(ball, Transform2D::from_translation(Vec2::new(0.5, 0.0)));
+    world.insert(ball, Collider2D::Circle { radius: 0.5 });
     // Dynamic: two static shapes are never a pair, so the wall needs
     // something that can be pushed off it to show up in a contact.
-    world.insert(ball, RigidBody::new_dynamic(1.0));
+    world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
     let mut cache = ImpulseCache::default();
     let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;
@@ -152,12 +152,12 @@ fn a_collider_with_no_body_is_static_geometry() {
 fn the_contact_names_the_entities_it_is_between() {
     let mut world = World::new();
     let a = world.spawn();
-    world.insert(a, Transform::default());
-    world.insert(a, Collider::Circle { radius: 1.0 });
+    world.insert(a, Transform2D::default());
+    world.insert(a, Collider2D::Circle { radius: 1.0 });
     let b = world.spawn();
-    world.insert(b, Transform::from_translation(Vec2::new(1.0, 0.0)));
-    world.insert(b, Collider::Circle { radius: 1.0 });
-    world.insert(b, RigidBody::new_dynamic(1.0));
+    world.insert(b, Transform2D::from_translation(Vec2::new(1.0, 0.0)));
+    world.insert(b, Collider2D::Circle { radius: 1.0 });
+    world.insert(b, RigidBody2D::new_dynamic(1.0));
 
     let mut cache = ImpulseCache::default();
     let contacts = step(&mut world, &mut cache, &SolverParams::default(), G, DT).contacts;
@@ -173,11 +173,11 @@ fn a_scene_of_immovable_shapes_reports_the_same_contacts_every_step() {
     // change.
     let mut world = World::new();
     let a = world.spawn();
-    world.insert(a, Transform::default());
-    world.insert(a, Collider::Circle { radius: 1.0 });
+    world.insert(a, Transform2D::default());
+    world.insert(a, Collider2D::Circle { radius: 1.0 });
     let b = world.spawn();
-    world.insert(b, Transform::from_translation(Vec2::new(1.0, 0.0)));
-    world.insert(b, Collider::Circle { radius: 1.0 });
+    world.insert(b, Transform2D::from_translation(Vec2::new(1.0, 0.0)));
+    world.insert(b, Collider2D::Circle { radius: 1.0 });
 
     let mut cache = ImpulseCache::default();
     let params = SolverParams::default();

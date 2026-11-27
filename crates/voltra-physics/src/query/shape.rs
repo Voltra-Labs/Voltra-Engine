@@ -19,7 +19,7 @@
 use voltra_ecs::Entity;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, OneWay, Transform};
+use voltra_scene::{Collider2D, OneWay, Transform2D};
 
 use super::{colliders, Poses, QueryFilter};
 use crate::narrow::manifold;
@@ -66,8 +66,8 @@ pub struct ShapeHit {
 /// length finds only overlaps.
 pub fn cast(
     world: &World,
-    shape: &Collider,
-    at: &Transform,
+    shape: &Collider2D,
+    at: &Transform2D,
     motion: Vec2,
     filter: QueryFilter,
 ) -> Option<ShapeHit> {
@@ -78,8 +78,8 @@ pub fn cast(
 pub(crate) fn cast_among(
     world: &World,
     poses: Option<&Poses>,
-    shape: &Collider,
-    at: &Transform,
+    shape: &Collider2D,
+    at: &Transform2D,
     motion: Vec2,
     filter: QueryFilter,
 ) -> Option<ShapeHit> {
@@ -115,17 +115,17 @@ pub(crate) fn cast_among(
 }
 
 /// The bounds of `shape` over the whole motion.
-fn swept_bounds(shape: &Collider, at: &Transform, motion: Vec2) -> (Vec2, Vec2) {
+fn swept_bounds(shape: &Collider2D, at: &Transform2D, motion: Vec2) -> (Vec2, Vec2) {
     let (min, max) = shape.world_aabb(at);
     (min.min(min + motion), max.max(max + motion))
 }
 
 fn hit(
-    shape: &Collider,
-    at: &Transform,
+    shape: &Collider2D,
+    at: &Transform2D,
     motion: Vec2,
-    collider: &Collider,
-    transform: &Transform,
+    collider: &Collider2D,
+    transform: &Transform2D,
     entity: Entity,
 ) -> Option<ShapeHit> {
     let (enter, normal) = sweep((shape, at), motion, (collider, transform))?;

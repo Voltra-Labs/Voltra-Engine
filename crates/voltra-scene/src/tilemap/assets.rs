@@ -7,7 +7,7 @@ use super::Tilemap;
 
 impl Tilemap {
     /// Sets or clears the sheet path and refreshes its handle, as
-    /// [`Sprite::set_texture`](crate::Sprite::set_texture) does.
+    /// [`Sprite2D::set_texture`](crate::Sprite2D::set_texture) does.
     pub fn set_texture(
         &mut self,
         path: Option<AssetPath>,
@@ -20,7 +20,7 @@ impl Tilemap {
     }
 
     /// Sets or clears the normal map's path and refreshes its handle, as
-    /// [`Sprite::set_normal_map`](crate::Sprite::set_normal_map) does.
+    /// [`Sprite2D::set_normal_map`](crate::Sprite2D::set_normal_map) does.
     pub fn set_normal_map(
         &mut self,
         path: Option<AssetPath>,
@@ -42,7 +42,7 @@ impl Tilemap {
     }
 
     /// Sets or clears the atlas path and refreshes its handle, as
-    /// [`Sprite::set_atlas`](crate::Sprite::set_atlas) does.
+    /// [`Sprite2D::set_atlas`](crate::Sprite2D::set_atlas) does.
     pub fn set_atlas(&mut self, path: Option<AssetPath>, atlases: &mut Atlases) {
         self.atlas_handle = path.as_ref().map(|path| atlases.load(path));
         self.atlas = path;

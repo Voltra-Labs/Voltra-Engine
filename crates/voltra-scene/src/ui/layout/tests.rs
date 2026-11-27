@@ -1,6 +1,6 @@
 use super::*;
 use crate::ui::UiScroll;
-use crate::{SceneId, Transform};
+use crate::{SceneId, Transform2D};
 
 fn ui(world: &mut World, rect: UiRect) -> Entity {
     let entity = world.spawn();
@@ -48,7 +48,7 @@ fn an_ancestor_without_a_rect_is_passed_over() {
     );
     let group = world.spawn();
     world.insert(group, SceneId::new());
-    world.insert(group, Transform::default());
+    world.insert(group, Transform2D::default());
     let label = ui(&mut world, UiRect::stretched(0.0));
     hierarchy::set_parent(&mut world, group, panel).expect("parents");
     hierarchy::set_parent(&mut world, label, group).expect("parents");

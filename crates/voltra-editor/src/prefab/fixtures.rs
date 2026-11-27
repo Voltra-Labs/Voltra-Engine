@@ -8,7 +8,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::format::ComponentRegistry;
 use voltra_scene::{
-    hierarchy, prefab, Name, PointLight2D, PrefabPart, Prefabs, SceneId, Sprite, Transform,
+    hierarchy, prefab, Name, PointLight2D, PrefabPart, Prefabs, SceneId, Sprite2D, Transform2D,
 };
 
 /// The base, `coin.prefab.ron`.
@@ -39,8 +39,8 @@ pub(crate) fn write_coin(
         ),
     );
     world.insert(coin, Name::new("coin"));
-    world.insert(coin, Transform::default());
-    world.insert(coin, Sprite::new(color));
+    world.insert(coin, Transform2D::default());
+    world.insert(coin, Sprite2D::new(color));
     world.insert(
         coin,
         PointLight2D {
@@ -58,8 +58,8 @@ pub(crate) fn write_coin(
         ),
     );
     world.insert(glow, Name::new("glow"));
-    world.insert(glow, Transform::from_translation(Vec2::new(0.0, 0.2)));
-    world.insert(glow, Sprite::default().with_sort_order(1));
+    world.insert(glow, Transform2D::from_translation(Vec2::new(0.0, 0.2)));
+    world.insert(glow, Sprite2D::default().with_sort_order(1));
     hierarchy::set_parent(&mut world, glow, coin).expect("parents");
     prefab::write(&world, registry, prefabs, coin, &path(BASE)).expect("written");
 }
@@ -98,10 +98,15 @@ pub(crate) fn spawned(
     file: &AssetPath,
 ) -> Entity {
     let handle = prefabs.load(file);
-    prefab::spawn(world, registry, prefabs.get(handle), &Transform::default())
-        .expect("spawns")
-        .root()
-        .expect("a root")
+    prefab::spawn(
+        world,
+        registry,
+        prefabs.get(handle),
+        &Transform2D::default(),
+    )
+    .expect("spawns")
+    .root()
+    .expect("a root")
 }
 
 pub(crate) fn overridden(world: &World, entity: Entity) -> Vec<String> {
@@ -122,7 +127,7 @@ pub(crate) fn intensity(world: &World, entity: Entity) -> f32 {
 }
 
 pub(crate) fn color(world: &World, entity: Entity) -> [f32; 4] {
-    world.get::<Sprite>(entity).expect("a sprite").color
+    world.get::<Sprite2D>(entity).expect("a sprite").color
 }
 
 /// A store at `root` holding the base (red, its light at 1) and the

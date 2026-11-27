@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use crate::Player;
 
@@ -64,14 +64,14 @@ impl Steer {
 /// Moves `entity` one step of `step` seconds by `steer`, inside its
 /// player's bounds.
 ///
-/// Reads nothing but the entity's own [`Player`] and `Transform` (both
+/// Reads nothing but the entity's own [`Player`] and `Transform2D` (both
 /// replicated), the input and the step, so a client's replay of it lands
 /// where the server's run did. A zap moves nothing.
 pub fn walk(world: &mut World, entity: Entity, steer: &Steer, step: f32) {
     let Some(player) = world.get::<Player>(entity).copied() else {
         return;
     };
-    if let Some(transform) = world.get_mut::<Transform>(entity) {
+    if let Some(transform) = world.get_mut::<Transform2D>(entity) {
         let moved = transform.translation + steer.direction() * player.speed * step;
         transform.translation = moved.clamp(-player.bounds, player.bounds);
     }

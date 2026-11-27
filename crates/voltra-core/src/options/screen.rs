@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
-use voltra_scene::{hierarchy, PrefabInstance, PrefabPart, Text, Transform};
+use voltra_scene::{hierarchy, PrefabInstance, PrefabPart, Text, Transform2D};
 use voltra_scene::{UiButton, UiDropdown, UiSlider, UiToggle};
 
 use super::settings::Settings;
@@ -82,7 +82,7 @@ impl OptionsScreen {
             .map_err(|_| OptionsError::BadPath(config.prefab.clone()))?;
         let prefab = tick.prefab(&path);
         let instance = tick
-            .spawn(prefab, &Transform::default())
+            .spawn(prefab, &Transform2D::default())
             .map_err(OptionsError::Spawn)?;
         let root = instance
             .root()

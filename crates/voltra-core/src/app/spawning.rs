@@ -13,8 +13,8 @@ use voltra_assets::{AssetPath, Atlases, Clips, Fonts, Handle, Textures};
 use voltra_ecs::{Entity, World};
 use voltra_render::wgpu;
 use voltra_scene::{
-    prefab, AudioSource, ComponentRegistry, Instance, Prefab, Prefabs, SceneError, Sprite, Text,
-    Tilemap, Transform,
+    prefab, AudioSource, ComponentRegistry, Instance, Prefab, Prefabs, SceneError, Sprite2D, Text,
+    Tilemap, Transform2D,
 };
 
 use crate::app::tick::Tick;
@@ -41,7 +41,7 @@ impl Tick<'_> {
     pub fn spawn(
         &mut self,
         prefab: Handle<Prefab>,
-        at: &Transform,
+        at: &Transform2D,
     ) -> Result<Instance, SceneError> {
         let Some(prefab) = self.prefabs.try_get(prefab) else {
             log::warn!("spawning a prefab handle this store never issued; nothing spawned");
@@ -61,7 +61,7 @@ impl Tick<'_> {
     pub fn duplicate(&mut self, entity: Entity) -> Result<Instance, SceneError> {
         let file = prefab::fragment(self.world, self.registry, entity)?;
         let copy = Prefab::new(file)?;
-        let instance = prefab::spawn(self.world, self.registry, &copy, &Transform::default())?;
+        let instance = prefab::spawn(self.world, self.registry, &copy, &Transform2D::default())?;
         for &made in &instance.entities {
             self.world.remove::<voltra_scene::PrefabInstance>(made);
             self.world.remove::<voltra_scene::PrefabPart>(made);
@@ -115,7 +115,7 @@ pub(super) fn resolve_entity(
 ) {
     let mut atlases = atlases;
     let mut gpu = gpu;
-    if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+    if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
         if let Some(atlases) = atlases.as_deref_mut() {
             let path = sprite.atlas.clone();
             sprite.set_atlas(path, atlases);
@@ -246,7 +246,7 @@ impl App {
     /// — and nothing needs to be: the loop resolves the whole world when it
     /// resumes, which is what it already does for every entity a game
     /// inserted by hand.
-    pub fn spawn(&mut self, path: &AssetPath, at: &Transform) -> Result<Instance, SceneError> {
+    pub fn spawn(&mut self, path: &AssetPath, at: &Transform2D) -> Result<Instance, SceneError> {
         let prefabs = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = prefabs.load(path);
         let instance = prefab::spawn(&mut self.world, &self.registry, prefabs.get(handle), at)?;

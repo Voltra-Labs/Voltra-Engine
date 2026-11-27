@@ -11,7 +11,7 @@ use super::PointLight2D;
 
 impl PointLight2D {
     /// Sets or clears the cookie's path and refreshes its handle, as
-    /// [`Sprite::set_texture`](crate::Sprite::set_texture) does for a
+    /// [`Sprite2D::set_texture`](crate::Sprite2D::set_texture) does for a
     /// sprite: the same store, the image's colour read as colour.
     pub fn set_cookie(
         &mut self,

@@ -4,7 +4,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_physics::move_and_slide;
 use voltra_render::glam::Vec2;
-use voltra_scene::{CharacterBody2D, Collider, Transform};
+use voltra_scene::{CharacterBody2D, Collider2D, Transform2D};
 
 const DT: f32 = 1.0 / 60.0;
 const GRAVITY: f32 = -9.81;
@@ -13,9 +13,9 @@ fn block(world: &mut World, at: Vec2, half: Vec2, rotation: f32) -> Entity {
     let entity = world.spawn();
     world.insert(
         entity,
-        Transform::from_translation(at).with_rotation(rotation),
+        Transform2D::from_translation(at).with_rotation(rotation),
     );
-    world.insert(entity, Collider::Box { half_extents: half });
+    world.insert(entity, Collider2D::Box { half_extents: half });
     entity
 }
 
@@ -26,10 +26,10 @@ fn floor(world: &mut World) -> Entity {
 
 fn character(world: &mut World, at: Vec2) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.25),
         },
     );
@@ -59,7 +59,10 @@ fn run(
 }
 
 fn at(world: &World, entity: Entity) -> Vec2 {
-    world.get::<Transform>(entity).expect("placed").translation
+    world
+        .get::<Transform2D>(entity)
+        .expect("placed")
+        .translation
 }
 
 fn body(world: &World, entity: Entity) -> &CharacterBody2D {

@@ -49,19 +49,19 @@ impl SceneFraming {
 mod tests {
     use super::*;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Camera, Transform};
+    use voltra_scene::{Camera2D, Transform2D};
 
-    fn world_with_camera(camera: Camera, at: Vec2) -> World {
+    fn world_with_camera(camera: Camera2D, at: Vec2) -> World {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(entity, camera);
         world
     }
 
     #[test]
     fn the_scene_camera_takes_the_frame() {
-        let world = world_with_camera(Camera::new(4.0), Vec2::new(3.0, -2.0));
+        let world = world_with_camera(Camera2D::new(4.0), Vec2::new(3.0, -2.0));
         let mut camera = View2D::new(Vec2::ZERO, 1.0, 1.5);
 
         SceneFraming::default().apply(&world, &mut camera);
@@ -74,7 +74,7 @@ mod tests {
     fn the_aspect_of_the_window_survives_the_framing() {
         // The camera stores a size, not a shape: how wide that is belongs to
         // the window, and a resize must not be undone by the next frame.
-        let world = world_with_camera(Camera::new(2.0), Vec2::ZERO);
+        let world = world_with_camera(Camera2D::new(2.0), Vec2::ZERO);
         let mut camera = View2D::new(Vec2::ZERO, 1.0, 2.25);
 
         SceneFraming::default().apply(&world, &mut camera);
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn no_active_camera_leaves_the_framing_alone() {
         let world = world_with_camera(
-            Camera {
+            Camera2D {
                 active: false,
                 ..Default::default()
             },
@@ -111,7 +111,7 @@ mod tests {
         framing.apply(&World::new(), &mut camera);
         assert!(framing.warned, "the second one does not complain again");
 
-        let world = world_with_camera(Camera::default(), Vec2::ZERO);
+        let world = world_with_camera(Camera2D::default(), Vec2::ZERO);
         framing.apply(&world, &mut camera);
         assert!(
             !framing.warned,

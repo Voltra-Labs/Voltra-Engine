@@ -5,7 +5,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 
 use super::*;
-use crate::Transform;
+use crate::Transform2D;
 
 /// The motion: the player at x 1, its arm turned 0.5, its leg 0.25. The
 /// hand is not animated.
@@ -44,7 +44,7 @@ fn named(world: &mut World, name: &str, parent: Entity) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Name::new(name));
-    world.insert(entity, Transform::default().with_rotation(-1.0));
+    world.insert(entity, Transform2D::default().with_rotation(-1.0));
     set_parent(world, entity, parent).expect("a plain reparent");
     entity
 }
@@ -57,7 +57,7 @@ fn body() -> Body {
     let mut world = World::new();
     let root = world.spawn();
     world.insert(root, SceneId::new());
-    world.insert(root, Transform::default());
+    world.insert(root, Transform2D::default());
     world.insert(root, AnimationPlayer::new(path("base.anim.ron")));
     let arm = named(&mut world, "arm", root);
     let hand = named(&mut world, "hand", arm);
@@ -96,8 +96,8 @@ impl Body {
         advance(&mut self.world, &mut self.clips, delta);
     }
 
-    fn transform(&self, entity: Entity) -> Transform {
-        *self.world.get::<Transform>(entity).expect("a transform")
+    fn transform(&self, entity: Entity) -> Transform2D {
+        *self.world.get::<Transform2D>(entity).expect("a transform")
     }
 
     fn turn(&self, entity: Entity) -> f32 {
@@ -206,7 +206,7 @@ fn something_else_changing_a_covered_property_moves_what_is_under_the_layer() {
     );
     // A game turns the hand a little each frame, from what it reads.
     for _ in 0..10 {
-        if let Some(t) = body.world.get_mut::<Transform>(body.hand) {
+        if let Some(t) = body.world.get_mut::<Transform2D>(body.hand) {
             t.rotation += 0.1;
         }
         body.frame(0.0);
@@ -219,7 +219,7 @@ fn something_else_changing_a_covered_property_moves_what_is_under_the_layer() {
         body.turn(body.hand)
     );
     // Set outright, once: the difference goes under.
-    if let Some(t) = body.world.get_mut::<Transform>(body.hand) {
+    if let Some(t) = body.world.get_mut::<Transform2D>(body.hand) {
         t.rotation = 3.0;
     }
     body.frame(0.0);
@@ -248,7 +248,7 @@ fn a_game_stepping_a_property_under_an_additive_layer_does_not_add_it_up() {
     body.frame(0.0);
     assert!((body.transform(body.root).scale.x - 1.2).abs() < 1e-5);
     for _ in 0..10 {
-        if let Some(t) = body.world.get_mut::<Transform>(body.root) {
+        if let Some(t) = body.world.get_mut::<Transform2D>(body.root) {
             t.scale.x += 0.01;
         }
         body.frame(0.0);
@@ -273,10 +273,10 @@ fn a_game_setting_a_property_outright_each_frame_shows_what_it_sets() {
     // An angle the layer can show at half weight: within a quarter turn
     // of its own 1, the short way.
     for _ in 0..40 {
-        if let Some(t) = body.world.get_mut::<Transform>(body.hand) {
+        if let Some(t) = body.world.get_mut::<Transform2D>(body.hand) {
             t.rotation = 2.0;
         }
-        if let Some(t) = body.world.get_mut::<Transform>(body.root) {
+        if let Some(t) = body.world.get_mut::<Transform2D>(body.root) {
             t.scale = Vec2::splat(2.0);
         }
         body.frame(0.0);

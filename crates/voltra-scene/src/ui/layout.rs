@@ -24,12 +24,12 @@ struct Placed {
 /// The screen box of every entity with a [`UiRect`], how many UI ancestors
 /// it has, and the part of it a scroll above it lets show.
 ///
-/// Computed once per frame for the whole world, as [`WorldTransforms`] is,
+/// Computed once per frame for the whole world, as [`WorldTransforms2D`] is,
 /// so a deep panel tree costs one walk rather than one per element per
 /// question. Rebuilt from the screen size each time, which is what makes a
 /// resize — a window dragged, an editor panel resized — just the next frame.
 ///
-/// [`WorldTransforms`]: crate::WorldTransforms
+/// [`WorldTransforms2D`]: crate::WorldTransforms2D
 #[derive(Debug, Clone, Default)]
 pub struct UiLayout {
     /// Hashed with the ECS's fast hasher, as every entity-keyed map

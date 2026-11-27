@@ -5,7 +5,7 @@ use voltra_ecs::World;
 use voltra_render::glam::{IVec2, Mat3, Vec2};
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::tilemap::mesh;
-use voltra_scene::{SpriteBatch, Tile, TileMeshCache, Tilemap, Transform};
+use voltra_scene::{SpriteBatch, Tile, TileMeshCache, Tilemap, Transform2D};
 
 use super::Bench;
 use crate::harness::{iter, measure};
@@ -32,7 +32,7 @@ pub(super) fn benches() -> Vec<Bench> {
         Bench::new("tilemap/cached/256x256", 30.0, |config| {
             let mut world = World::new();
             let entity = world.spawn();
-            world.insert(entity, Transform::default());
+            world.insert(entity, Transform2D::default());
             world.insert(entity, layer());
             let mut batch = SpriteBatch::default();
             let mut tiles = TileMeshCache::default();

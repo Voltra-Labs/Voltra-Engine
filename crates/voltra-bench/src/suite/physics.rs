@@ -3,7 +3,7 @@
 use voltra_ecs::World;
 use voltra_physics::PhysicsWorld;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, RigidBody, Transform};
+use voltra_scene::{Collider2D, RigidBody2D, Transform2D};
 
 use super::Bench;
 use crate::harness::{iter_batched, measure};
@@ -51,17 +51,17 @@ pub(super) fn benches() -> Vec<Bench> {
 
 fn floor(world: &mut World, at: Vec2, half_extents: Vec2) {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Box { half_extents });
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Box { half_extents });
 }
 
 fn crate_at(world: &mut World, at: Vec2) {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );

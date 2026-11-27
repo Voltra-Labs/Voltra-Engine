@@ -21,14 +21,14 @@ fn write_row(prefabs: &mut Prefabs) -> AssetPath {
     let mut world = World::new();
     let row = named(&mut world, "row", Vec2::ZERO);
     for (n, x) in [-1.0, 1.0].into_iter().enumerate() {
-        let at = Transform::from_translation(Vec2::new(x, 0.0));
+        let at = Transform2D::from_translation(Vec2::new(x, 0.0));
         let one = spawn(&mut world, &registry(), prefabs.get(handle), &at)
             .expect("spawns")
             .root()
             .expect("a root");
         set_parent(&mut world, one, row).expect("a plain reparent");
         if n == 1 {
-            world.insert(one, Sprite::new(BLUE));
+            world.insert(one, Sprite2D::new(BLUE));
             refresh_overrides(&mut world, &registry(), prefabs, one).expect("compared");
         }
     }
@@ -41,14 +41,18 @@ fn write_row(prefabs: &mut Prefabs) -> AssetPath {
 fn coins(world: &World, row: Entity) -> Vec<Entity> {
     let mut coins = children_of(world, row);
     coins.sort_by(|a, b| {
-        let x = |e: &Entity| world.get::<Transform>(*e).map_or(0.0, |t| t.translation.x);
+        let x = |e: &Entity| {
+            world
+                .get::<Transform2D>(*e)
+                .map_or(0.0, |t| t.translation.x)
+        };
         x(a).total_cmp(&x(b))
     });
     coins
 }
 
 fn color_of(world: &World, entity: Entity) -> [f32; 4] {
-    world.get::<Sprite>(entity).expect("a sprite").color
+    world.get::<Sprite2D>(entity).expect("a sprite").color
 }
 
 fn row_instance(world: &mut World, prefabs: &mut Prefabs, row: &AssetPath) -> Entity {
@@ -57,7 +61,7 @@ fn row_instance(world: &mut World, prefabs: &mut Prefabs, row: &AssetPath) -> En
         world,
         &registry(),
         prefabs.get(handle),
-        &Transform::default(),
+        &Transform2D::default(),
     )
     .expect("spawns")
     .root()
@@ -169,7 +173,7 @@ fn apply_on_an_instance_of_the_outer_keeps_its_inner_instances_linked() {
     let row = write_row(&mut prefabs);
     let mut world = World::new();
     let placed = row_instance(&mut world, &mut prefabs, &row);
-    world.insert(placed, Sprite::new(RED));
+    world.insert(placed, Sprite2D::new(RED));
     refresh_overrides(&mut world, &registry(), &mut prefabs, placed).expect("compared");
 
     apply(&mut world, &registry(), &mut prefabs, placed).expect("applied");
@@ -229,7 +233,7 @@ fn write_holder(prefabs: &mut Prefabs, name: &str, inner: &[&AssetPath]) -> Asse
     let top = named(&mut world, name, Vec2::ZERO);
     for (n, file) in inner.iter().enumerate() {
         let handle = prefabs.load(file);
-        let at = Transform::from_translation(Vec2::new(n as f32, 0.0));
+        let at = Transform2D::from_translation(Vec2::new(n as f32, 0.0));
         let one = spawn(&mut world, &registry(), prefabs.get(handle), &at)
             .expect("spawns")
             .root()
@@ -259,7 +263,7 @@ fn a_diamond_reads_the_shared_file_once_and_reaches_both_branches() {
         &mut world,
         &registry(),
         prefabs.get(handle),
-        &Transform::default(),
+        &Transform2D::default(),
     )
     .expect("spawns")
     .root()

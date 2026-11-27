@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use voltra_assets::AssetPath;
 
 use super::save::EntityRecord;
-use crate::{ParticleEmitter, PointLight2D, Sprite, Tilemap};
+use crate::{ParticleEmitter, PointLight2D, Sprite2D, Tilemap};
 
 /// Every texture `records` name, each once, in the order first named.
 /// A component that will not read names nothing here; spawning it is what
@@ -30,8 +30,8 @@ pub fn texture_paths<'a>(records: impl IntoIterator<Item = &'a EntityRecord>) ->
     for record in records {
         for (name, value) in &record.components {
             match name.as_str() {
-                Sprite::NAME => {
-                    if let Ok(sprite) = value.into_rust::<Sprite>() {
+                Sprite2D::NAME => {
+                    if let Ok(sprite) = value.into_rust::<Sprite2D>() {
                         add(sprite.texture);
                         add(sprite.normal_map);
                     }
@@ -76,9 +76,9 @@ mod tests {
         for texture in ["a.png", "b.png", "a.png"] {
             let entity = world.spawn();
             world.insert(entity, SceneId::new());
-            let sprite = Sprite {
+            let sprite = Sprite2D {
                 texture: Some(path(texture)),
-                ..Sprite::default()
+                ..Sprite2D::default()
             };
             world.insert(entity, sprite);
         }

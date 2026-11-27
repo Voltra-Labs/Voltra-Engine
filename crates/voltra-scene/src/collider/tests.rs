@@ -4,10 +4,10 @@ use super::*;
 fn a_rotated_box_is_bounded_by_a_larger_aabb() {
     use std::f32::consts::{FRAC_PI_4, SQRT_2};
 
-    let collider = Collider::Box {
+    let collider = Collider2D::Box {
         half_extents: Vec2::splat(1.0),
     };
-    let transform = Transform::default().with_rotation(FRAC_PI_4);
+    let transform = Transform2D::default().with_rotation(FRAC_PI_4);
 
     let (min, max) = collider.world_aabb(&transform);
 
@@ -20,10 +20,10 @@ fn a_rotated_box_is_bounded_by_a_larger_aabb() {
 fn the_corners_follow_the_rotation_counter_clockwise() {
     use std::f32::consts::FRAC_PI_2;
 
-    let collider = Collider::Box {
+    let collider = Collider2D::Box {
         half_extents: Vec2::splat(1.0),
     };
-    let corners = collider.corners(&Transform::default().with_rotation(FRAC_PI_2));
+    let corners = collider.corners(&Transform2D::default().with_rotation(FRAC_PI_2));
 
     // (+1,+1) turned a quarter turn is (-1,+1).
     assert!(
@@ -43,10 +43,10 @@ fn the_corners_follow_the_rotation_counter_clockwise() {
 
 #[test]
 fn the_corners_follow_the_translation_and_scale() {
-    let collider = Collider::Box {
+    let collider = Collider2D::Box {
         half_extents: Vec2::splat(1.0),
     };
-    let transform = Transform::from_translation(Vec2::new(5.0, 0.0)).with_scale(Vec2::splat(2.0));
+    let transform = Transform2D::from_translation(Vec2::new(5.0, 0.0)).with_scale(Vec2::splat(2.0));
 
     let corners = collider.corners(&transform);
 
@@ -62,18 +62,18 @@ fn the_corners_follow_the_translation_and_scale() {
 
 #[test]
 fn a_circle_has_no_corners_but_still_answers() {
-    let collider = Collider::Circle { radius: 2.0 };
-    let transform = Transform::from_translation(Vec2::new(1.0, 1.0));
+    let collider = Collider2D::Circle { radius: 2.0 };
+    let transform = Transform2D::from_translation(Vec2::new(1.0, 1.0));
 
     assert_eq!(collider.corners(&transform), [transform.translation; 4]);
 }
 
 #[test]
 fn a_box_spans_twice_its_half_extents() {
-    let collider = Collider::Box {
+    let collider = Collider2D::Box {
         half_extents: Vec2::new(2.0, 3.0),
     };
-    let (min, max) = collider.world_aabb(&Transform::default());
+    let (min, max) = collider.world_aabb(&Transform2D::default());
 
     assert_eq!(min, Vec2::new(-2.0, -3.0));
     assert_eq!(max, Vec2::new(2.0, 3.0));
@@ -81,10 +81,10 @@ fn a_box_spans_twice_its_half_extents() {
 
 #[test]
 fn a_box_follows_the_transform_translation() {
-    let collider = Collider::Box {
+    let collider = Collider2D::Box {
         half_extents: Vec2::splat(1.0),
     };
-    let transform = Transform::from_translation(Vec2::new(10.0, -4.0));
+    let transform = Transform2D::from_translation(Vec2::new(10.0, -4.0));
     let (min, max) = collider.world_aabb(&transform);
 
     assert_eq!(min, Vec2::new(9.0, -5.0));
@@ -96,10 +96,10 @@ fn a_collider_is_scaled_by_its_transform() {
     // A scaled sprite with an unscaled collider is a bug that looks like a
     // physics bug: the outline and the picture disagree and neither is
     // obviously the wrong one.
-    let collider = Collider::Box {
+    let collider = Collider2D::Box {
         half_extents: Vec2::splat(1.0),
     };
-    let transform = Transform::default().with_scale(Vec2::new(3.0, 5.0));
+    let transform = Transform2D::default().with_scale(Vec2::new(3.0, 5.0));
     let (min, max) = collider.world_aabb(&transform);
 
     assert_eq!(min, Vec2::new(-3.0, -5.0));
@@ -110,10 +110,10 @@ fn a_collider_is_scaled_by_its_transform() {
 fn a_negative_scale_still_gives_a_min_below_its_max() {
     // A mirrored sprite is a negative scale, and an AABB whose min exceeds
     // its max overlaps nothing — the collider would silently stop working.
-    let collider = Collider::Box {
+    let collider = Collider2D::Box {
         half_extents: Vec2::splat(2.0),
     };
-    let transform = Transform::default().with_scale(Vec2::new(-1.0, 1.0));
+    let transform = Transform2D::default().with_scale(Vec2::new(-1.0, 1.0));
     let (min, max) = collider.world_aabb(&transform);
 
     assert!(min.x <= max.x && min.y <= max.y, "got {min:?}..{max:?}");
@@ -124,16 +124,16 @@ fn a_circle_takes_the_larger_axis_of_a_non_uniform_scale() {
     // A true ellipse is a different shape, not a parameter. Taking the
     // larger axis keeps the collider covering the sprite rather than
     // cutting into it.
-    let collider = Collider::Circle { radius: 1.0 };
-    let transform = Transform::default().with_scale(Vec2::new(2.0, 5.0));
+    let collider = Collider2D::Circle { radius: 1.0 };
+    let transform = Transform2D::default().with_scale(Vec2::new(2.0, 5.0));
 
     assert_eq!(collider.world_radius(&transform), 5.0);
 }
 
 #[test]
 fn a_circles_aabb_is_its_bounding_square() {
-    let collider = Collider::Circle { radius: 2.0 };
-    let (min, max) = collider.world_aabb(&Transform::default());
+    let collider = Collider2D::Circle { radius: 2.0 };
+    let (min, max) = collider.world_aabb(&Transform2D::default());
 
     assert_eq!(min, Vec2::splat(-2.0));
     assert_eq!(max, Vec2::splat(2.0));
@@ -141,22 +141,22 @@ fn a_circles_aabb_is_its_bounding_square() {
 
 #[test]
 fn a_zero_or_negative_shape_is_degenerate() {
-    let t = Transform::default();
+    let t = Transform2D::default();
 
-    assert!(Collider::Circle { radius: 0.0 }.is_degenerate(&t));
-    assert!(Collider::Circle { radius: -1.0 }.is_degenerate(&t));
-    assert!(Collider::Box {
+    assert!(Collider2D::Circle { radius: 0.0 }.is_degenerate(&t));
+    assert!(Collider2D::Circle { radius: -1.0 }.is_degenerate(&t));
+    assert!(Collider2D::Box {
         half_extents: Vec2::ZERO
     }
     .is_degenerate(&t));
-    assert!(!Collider::Circle { radius: 1.0 }.is_degenerate(&t));
+    assert!(!Collider2D::Circle { radius: 1.0 }.is_degenerate(&t));
 }
 
 #[test]
 fn a_shape_scaled_to_nothing_is_degenerate() {
-    let flat = Transform::default().with_scale(Vec2::new(1.0, 0.0));
+    let flat = Transform2D::default().with_scale(Vec2::new(1.0, 0.0));
 
-    assert!(Collider::Box {
+    assert!(Collider2D::Box {
         half_extents: Vec2::splat(1.0)
     }
     .is_degenerate(&flat));
@@ -165,19 +165,19 @@ fn a_shape_scaled_to_nothing_is_degenerate() {
 #[test]
 fn a_collider_round_trips_through_ron() {
     for collider in [
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(1.0, 2.0),
         },
-        Collider::Circle { radius: 3.0 },
+        Collider2D::Circle { radius: 3.0 },
     ] {
         let text = ron::to_string(&collider).expect("serialise");
-        let back: Collider = ron::from_str(&text).expect("deserialise");
+        let back: Collider2D = ron::from_str(&text).expect("deserialise");
         assert_eq!(back, collider);
     }
 }
 
-fn triangle() -> Collider {
-    Collider::Polygon {
+fn triangle() -> Collider2D {
+    Collider2D::Polygon {
         points: ConvexPolygon::new(&[
             Vec2::new(-1.0, -1.0),
             Vec2::new(1.0, -1.0),
@@ -190,18 +190,18 @@ fn triangle() -> Collider {
 
 #[test]
 fn a_capsule_is_two_cap_centres_and_a_radius() {
-    let capsule = Collider::Capsule {
+    let capsule = Collider2D::Capsule {
         half_height: 1.0,
         radius: 0.25,
     };
-    let shape = capsule.world_shape(&Transform::from_translation(Vec2::new(2.0, 0.0)));
+    let shape = capsule.world_shape(&Transform2D::from_translation(Vec2::new(2.0, 0.0)));
 
     assert_eq!(
         shape.vertices(),
         &[Vec2::new(2.0, -0.75), Vec2::new(2.0, 0.75)]
     );
     assert_eq!(shape.radius(), 0.25);
-    let (min, max) = capsule.world_aabb(&Transform::from_translation(Vec2::new(2.0, 0.0)));
+    let (min, max) = capsule.world_aabb(&Transform2D::from_translation(Vec2::new(2.0, 0.0)));
     assert!((min - Vec2::new(1.75, -1.0)).length() < 1e-6, "{min:?}");
     assert!((max - Vec2::new(2.25, 1.0)).length() < 1e-6, "{max:?}");
 }
@@ -210,11 +210,11 @@ fn a_capsule_is_two_cap_centres_and_a_radius() {
 fn a_capsule_turns_and_scales_across_and_along() {
     use std::f32::consts::FRAC_PI_2;
 
-    let capsule = Collider::Capsule {
+    let capsule = Collider2D::Capsule {
         half_height: 1.0,
         radius: 0.5,
     };
-    let turned = Transform::default()
+    let turned = Transform2D::default()
         .with_rotation(FRAC_PI_2)
         .with_scale(Vec2::new(2.0, 3.0));
     let shape = capsule.world_shape(&turned);
@@ -230,19 +230,19 @@ fn a_capsule_turns_and_scales_across_and_along() {
 
 #[test]
 fn a_capsule_no_taller_than_wide_is_a_circle() {
-    let capsule = Collider::Capsule {
+    let capsule = Collider2D::Capsule {
         half_height: 0.2,
         radius: 0.5,
     };
-    let shape = capsule.world_shape(&Transform::default());
+    let shape = capsule.world_shape(&Transform2D::default());
 
     assert_eq!(shape.vertices().len(), 1);
-    assert!(!capsule.is_degenerate(&Transform::default()));
+    assert!(!capsule.is_degenerate(&Transform2D::default()));
 }
 
 #[test]
 fn a_polygon_is_placed_by_its_transform() {
-    let at = Transform::from_translation(Vec2::new(0.0, 5.0)).with_scale(Vec2::splat(2.0));
+    let at = Transform2D::from_translation(Vec2::new(0.0, 5.0)).with_scale(Vec2::splat(2.0));
     let shape = triangle().world_shape(&at);
 
     assert!(shape.vertices().contains(&Vec2::new(0.0, 7.0)), "{shape:?}");
@@ -252,7 +252,7 @@ fn a_polygon_is_placed_by_its_transform() {
 
 #[test]
 fn a_mirrored_polygon_still_winds_counter_clockwise() {
-    let mirrored = Transform::default().with_scale(Vec2::new(-1.0, 1.0));
+    let mirrored = Transform2D::default().with_scale(Vec2::new(-1.0, 1.0));
     let shape = triangle().world_shape(&mirrored);
     let v = shape.vertices();
     let area: f32 = (0..v.len())
@@ -264,14 +264,14 @@ fn a_mirrored_polygon_still_winds_counter_clockwise() {
 
 #[test]
 fn new_shapes_are_degenerate_when_they_have_no_area() {
-    let t = Transform::default();
-    assert!(Collider::Capsule {
+    let t = Transform2D::default();
+    assert!(Collider2D::Capsule {
         half_height: 1.0,
         radius: 0.0
     }
     .is_degenerate(&t));
     assert!(triangle().is_degenerate(&t.with_scale(Vec2::new(1.0, 0.0))));
-    assert!(Collider::Polygon {
+    assert!(Collider2D::Polygon {
         points: ConvexPolygon::rectangle(Vec2::ONE).expect("a square"),
         radius: -1.0
     }
@@ -282,20 +282,20 @@ fn new_shapes_are_degenerate_when_they_have_no_area() {
 #[test]
 fn new_shapes_round_trip_through_ron_and_old_text_still_loads() {
     for collider in [
-        Collider::Capsule {
+        Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.5,
         },
         triangle(),
     ] {
         let text = ron::to_string(&collider).expect("serialise");
-        let back: Collider = ron::from_str(&text).expect("deserialise");
+        let back: Collider2D = ron::from_str(&text).expect("deserialise");
         assert_eq!(back, collider);
     }
 
     // Written before polygons had a rounding, and before capsules existed.
-    let sharp: Collider = ron::from_str("Polygon(points:[(-1,-1),(1,-1),(0,1)])").expect("loads");
+    let sharp: Collider2D = ron::from_str("Polygon(points:[(-1,-1),(1,-1),(0,1)])").expect("loads");
     assert_eq!(sharp, triangle());
-    let old: Collider = ron::from_str("Box(half_extents:(0.5,0.5))").expect("loads");
-    assert_eq!(old, Collider::default());
+    let old: Collider2D = ron::from_str("Box(half_extents:(0.5,0.5))").expect("loads");
+    assert_eq!(old, Collider2D::default());
 }

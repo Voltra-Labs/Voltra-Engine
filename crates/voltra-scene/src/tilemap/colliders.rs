@@ -37,7 +37,7 @@ use voltra_render::glam::{Mat3, Vec2};
 use super::{solid_boxes, Tilemap};
 use crate::collider::ConvexPolygon;
 use crate::hierarchy::world_matrix;
-use crate::{Collider, CollisionLayers, PhysicsMaterial, RigidBody, Sensor, Transform};
+use crate::{Collider2D, CollisionLayers, PhysicsMaterial, RigidBody2D, Sensor, Transform2D};
 
 /// Marks a collider generated from a solid tilemap layer.
 ///
@@ -149,13 +149,13 @@ fn build(world: &mut World, layer: Entity, inputs: Inputs) {
     if inputs.tile_size.x == 0.0 || inputs.tile_size.y == 0.0 {
         return;
     }
-    let mut shapes: Vec<(Vec2, Collider)> = solid_boxes(map)
+    let mut shapes: Vec<(Vec2, Collider2D)> = solid_boxes(map)
         .into_iter()
         .map(|cells| {
             let min = cells.min.as_vec2() * inputs.tile_size;
             let max = cells.max.as_vec2() * inputs.tile_size;
             let half_extents = ((max - min) * 0.5).abs();
-            ((min + max) * 0.5, Collider::Box { half_extents })
+            ((min + max) * 0.5, Collider2D::Box { half_extents })
         })
         .collect();
     shapes.extend(polygons(map, inputs.tile_size));
@@ -165,12 +165,12 @@ fn build(world: &mut World, layer: Entity, inputs: Inputs) {
         // the shape turns and scales with the layer, and its extents stay in
         // the layer's units for the transform's scale to apply, as any
         // collider's do.
-        let mut transform = Transform::from_matrix(inputs.world);
+        let mut transform = Transform2D::from_matrix(inputs.world);
         transform.translation = inputs.world.transform_point2(centre);
 
         let entity = world.spawn();
         world.insert(entity, transform);
-        world.insert(entity, RigidBody::new_static());
+        world.insert(entity, RigidBody2D::new_static());
         world.insert(entity, collider);
         if let Some(layers) = inputs.layers {
             world.insert(entity, layers);
@@ -194,7 +194,7 @@ fn build(world: &mut World, layer: Entity, inputs: Inputs) {
 /// One polygon per tile whose shape is neither full nor empty, centred on
 /// its cell, in the layer's units. An outline that is not a convex polygon
 /// of at most eight points is skipped with a warning naming its frame.
-fn polygons(map: &Tilemap, tile_size: Vec2) -> Vec<(Vec2, Collider)> {
+fn polygons(map: &Tilemap, tile_size: Vec2) -> Vec<(Vec2, Collider2D)> {
     let mut out = Vec::new();
     let mut warned = Vec::new();
     for (cell, tile) in map.tiles() {
@@ -213,7 +213,7 @@ fn polygons(map: &Tilemap, tile_size: Vec2) -> Vec<(Vec2, Collider)> {
         match ConvexPolygon::new(&points) {
             Ok(points) => out.push((
                 centre,
-                Collider::Polygon {
+                Collider2D::Polygon {
                     points,
                     radius: 0.0,
                 },

@@ -10,7 +10,7 @@
 //! floor.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use crate::query::ShapeHit;
 
@@ -19,7 +19,7 @@ use super::TOUCH;
 
 /// Where a step leaves the character, and the floor it landed on.
 pub(super) struct Step {
-    pub at: Transform,
+    pub at: Transform2D,
     /// The part of the motion the step covered, across.
     pub covered: Vec2,
     pub landing: ShapeHit,
@@ -29,7 +29,7 @@ impl Mover<'_> {
     /// Tries stepping `across` — the motion less its part along `up` — from
     /// `at`, up to `height` high. `None` when there is no room to lift, no
     /// progress from up there, or no floor to come down on.
-    pub(super) fn step_up(&self, at: &Transform, across: Vec2, height: f32) -> Option<Step> {
+    pub(super) fn step_up(&self, at: &Transform2D, across: Vec2, height: f32) -> Option<Step> {
         let length = across.length();
         if height <= 0.0 || length <= TOUCH {
             return None;

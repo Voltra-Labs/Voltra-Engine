@@ -2,7 +2,7 @@
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_ecs::{Entity, World};
-use voltra_scene::{Sprite, SpriteAnimation};
+use voltra_scene::{Sprite2D, SpriteAnimation};
 
 use super::active;
 
@@ -127,7 +127,7 @@ fn frames_ui(
 fn add_button(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
     // Only for something that can show a frame. An animation on an entity with
     // no sprite has nothing to write to.
-    world.get::<Sprite>(entity)?;
+    world.get::<Sprite2D>(entity)?;
 
     ui.button("Add animation").clicked().then(|| {
         world.insert(entity, SpriteAnimation::default());

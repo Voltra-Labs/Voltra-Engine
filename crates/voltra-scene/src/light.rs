@@ -2,7 +2,7 @@
 //! from the world.
 //!
 //! A frame is lit when the camera it is seen through has an
-//! [`ambient`](crate::Camera::ambient) colour — Godot's `CanvasModulate`,
+//! [`ambient`](crate::Camera2D::ambient) colour — Godot's `CanvasModulate`,
 //! Unity's global `Light2D` — and then every [`PointLight2D`] in view adds
 //! to it. Without one the frame is unlit, as drawn, and lights cost
 //! nothing: a scene that never asked for lighting does not go dark the day
@@ -19,8 +19,8 @@ use voltra_render::{
     Cone, Lighting, PointLight, Shadow, Texture, ALL_LIGHT_LAYERS, DEFAULT_LIGHT_LAYERS,
 };
 
-use crate::camera::{self, Camera};
-use crate::hierarchy::WorldTransforms;
+use crate::camera::{self, Camera2D};
+use crate::hierarchy::WorldTransforms2D;
 
 mod cookies;
 
@@ -52,7 +52,7 @@ pub struct PointLight2D {
     /// How far above the scene it sits, in its entity's units (scaled with
     /// it, as the radius is) — Godot's `Light2D` height. With one, what it
     /// lights is shaded by the angle it reaches it at: through a sprite's
-    /// [`normal_map`](crate::Sprite::normal_map), or facing the screen where
+    /// [`normal_map`](crate::Sprite2D::normal_map), or facing the screen where
     /// there is none, so mapped and plain sprites agree. Lower rakes across
     /// the bumps and dims what is far from it; higher lights from the front.
     /// `None` — the default, and not written — ignores normals.
@@ -60,7 +60,7 @@ pub struct PointLight2D {
     pub height: Option<f32>,
     /// The light layers it lights — Godot's item cull mask: a sprite or
     /// tilemap is lit by it only if its
-    /// [`light_layers`](crate::Sprite::light_layers) share a bit with these.
+    /// [`light_layers`](crate::Sprite2D::light_layers) share a bit with these.
     /// Every bit — the default, and not written — lights everything.
     #[serde(
         default = "all_light_layers",
@@ -211,7 +211,8 @@ pub fn gather(
     sprites: Option<crate::shadow_caster::SpriteShapes<'_>>,
     textures: Option<&Textures>,
 ) -> Lighting {
-    let Some(camera) = camera::active(world).and_then(|entity| world.get::<Camera>(entity)) else {
+    let Some(camera) = camera::active(world).and_then(|entity| world.get::<Camera2D>(entity))
+    else {
         return Lighting::default();
     };
     gather_through(world, camera, view_min, view_max, sprites, textures)
@@ -221,7 +222,7 @@ pub fn gather(
 /// draws, each with its own ambient colour and shadow resolution.
 pub fn gather_through(
     world: &World,
-    camera: &Camera,
+    camera: &Camera2D,
     view_min: Vec2,
     view_max: Vec2,
     sprites: Option<crate::shadow_caster::SpriteShapes<'_>>,
@@ -231,7 +232,7 @@ pub fn gather_through(
     if ambient.is_none() {
         return Lighting::default();
     }
-    let transforms = WorldTransforms::from_world(world);
+    let transforms = WorldTransforms2D::from_world(world);
     let mut cookies = Cookies::new(textures);
     let lights = world
         .query::<PointLight2D>()

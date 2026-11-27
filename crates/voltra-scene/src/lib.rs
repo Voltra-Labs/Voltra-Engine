@@ -40,6 +40,7 @@ pub mod pick;
 pub mod polygon2d;
 pub mod post;
 pub mod prefab;
+pub mod renamed;
 pub mod replicated;
 pub mod ron_store;
 pub mod scene_id;
@@ -65,17 +66,17 @@ pub use animator::{Animator, StateMachine, StateMachines};
 pub use audio_listener::AudioListener;
 pub use audio_source::AudioSource;
 pub use batch::{GpuEmitterDraw, MeshVertex, SpriteBatch, SpriteRange, Surface, TriangleMesh};
-pub use body::{BodyType, RigidBody};
-pub use camera::{Camera, CameraTarget, Viewport};
+pub use body::{BodyType, RigidBody2D};
+pub use camera::{Camera2D, CameraTarget, Viewport};
 pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds, FollowZoom};
 pub use character::{CharacterBody2D, CharacterContact};
-pub use collider::{Collider, ConvexPolygon, PolygonError, WorldShape};
+pub use collider::{Collider2D, ConvexPolygon, PolygonError, WorldShape};
 pub use curve::{Curve, CurveKey};
 pub use filter::{CollisionLayers, Sensor};
 pub use format::{ComponentRegistry, ReplicateError, ReplicatedComponent, SceneError};
 pub use global_light::GlobalLight2D;
 pub use gradient::{Gradient, GradientKey};
-pub use hierarchy::{Parent, WorldTransforms};
+pub use hierarchy::{Parent, WorldTransforms2D};
 pub use interpolate::Interpolate;
 pub use joint::{
     AngleLimit, Joint2D, JointImpulses, JointKind, LinearMotor, Motor, RestSpring, Spring,
@@ -95,20 +96,22 @@ pub use persistent::Persistent;
 pub use polygon2d::Polygon2D;
 pub use post::PostProcess;
 pub use prefab::{Instance, Prefab, PrefabInstance, PrefabPart, Prefabs};
+#[allow(deprecated)] // The 0.4 names, re-exported where 0.4 had them.
+pub use renamed::{Camera, Collider, RigidBody, Sprite, Transform, WorldTransforms};
 pub use replicated::Replicated;
 pub use scene_id::{SceneId, UnknownComponents};
 pub use shadow_caster::{CasterShape, ShadowCaster2D};
 pub use skeleton::{Bone2D, Skeleton2D, TwoBoneIk};
 pub use skinned::SkinnedSprite;
 pub use sorting::SortingLayers;
-pub use sprite::{draw_key, Sprite};
+pub use sprite::{draw_key, Sprite2D};
 pub use sprite_material::SpriteMaterial;
 pub use streaming_anchor::StreamingAnchor;
 pub use text::{Align, Text};
 pub use tilemap::{Tile, TileMeshCache, Tilemap};
 pub use timer::{TimerId, Timers};
 pub use trail2d::Trail2D;
-pub use transform::Transform;
+pub use transform::Transform2D;
 pub use tween::{TweenId, Tweens};
 pub use ui::{
     UiButton, UiControls, UiDropdown, UiHidden, UiLayout, UiOwnStyle, UiRect, UiScroll, UiSlice,

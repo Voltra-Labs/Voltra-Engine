@@ -8,7 +8,7 @@
 use voltra_core::Tick;
 use voltra_ecs::{Entity, World};
 use voltra_scene::tilemap::query::custom_under;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 /// World units per second the walker climbs at.
 const CLIMB_SPEED: f32 = 3.0;
@@ -19,7 +19,7 @@ pub struct Climbing;
 
 /// Whether the walker's middle is over a ladder tile.
 pub fn on_ladder(world: &World, walker: Entity) -> bool {
-    let Some(transform) = world.get::<Transform>(walker) else {
+    let Some(transform) = world.get::<Transform2D>(walker) else {
         return false;
     };
     custom_under(world, transform.translation, "ladder").is_some_and(|(_, _, value)| value.truthy())
@@ -68,14 +68,14 @@ mod tests {
             .custom
             .insert("ladder".into(), TileValue::Bool(true));
         let layer = world.spawn();
-        world.insert(layer, Transform::default());
+        world.insert(layer, Transform2D::default());
         world.insert(layer, map);
         let walker = world.spawn();
-        world.insert(walker, Transform::from_translation(Vec2::new(0.25, 0.25)));
+        world.insert(walker, Transform2D::from_translation(Vec2::new(0.25, 0.25)));
 
         assert!(on_ladder(&world, walker));
         world
-            .get_mut::<Transform>(walker)
+            .get_mut::<Transform2D>(walker)
             .expect("placed")
             .translation = Vec2::new(0.75, 0.25);
         assert!(!on_ladder(&world, walker));

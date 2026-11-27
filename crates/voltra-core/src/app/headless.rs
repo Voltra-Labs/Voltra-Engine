@@ -263,7 +263,7 @@ impl Headless {
     pub fn spawn(
         &mut self,
         path: &AssetPath,
-        at: &voltra_scene::Transform,
+        at: &voltra_scene::Transform2D,
     ) -> Result<voltra_scene::Instance, SceneError> {
         self.app.spawn(path, at)
     }

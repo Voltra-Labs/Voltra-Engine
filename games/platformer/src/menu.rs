@@ -5,7 +5,7 @@ use voltra_assets::AssetPath;
 use voltra_core::options::{OptionsConfig, OptionsScreen, Outcome};
 use voltra_core::Tick;
 use voltra_ecs::Entity;
-use voltra_scene::{hierarchy, Name, PrefabInstance, PrefabPart, Transform};
+use voltra_scene::{hierarchy, Name, PrefabInstance, PrefabPart, Transform2D};
 
 /// The pause menu's prefab, under the asset root.
 pub const PAUSE_PREFAB: &str = "prefabs/pause.prefab.ron";
@@ -107,7 +107,7 @@ fn open_pause(tick: &mut Tick<'_>) -> Menu {
         }
     };
     let prefab = tick.prefab(&path);
-    let instance = match tick.spawn(prefab, &Transform::default()) {
+    let instance = match tick.spawn(prefab, &Transform2D::default()) {
         Ok(instance) => instance,
         Err(e) => {
             log::error!("the pause menu would not spawn: {e}");

@@ -38,7 +38,7 @@ use std::time::Duration;
 
 use voltra_ecs::{Entity, World};
 use voltra_scene::interpolate::Interpolate;
-use voltra_scene::{Collider, LagCompensated, Transform};
+use voltra_scene::{Collider2D, LagCompensated, Transform2D};
 
 use crate::query::Poses;
 
@@ -50,11 +50,11 @@ pub use rewound::Rewound;
 #[derive(Debug, Clone)]
 struct Entry {
     tick: u32,
-    poses: Vec<(Entity, Collider, Transform)>,
+    poses: Vec<(Entity, Collider2D, Transform2D)>,
 }
 
 impl Entry {
-    fn find(&self, entity: Entity) -> Option<&(Entity, Collider, Transform)> {
+    fn find(&self, entity: Entity) -> Option<&(Entity, Collider2D, Transform2D)> {
         self.poses
             .binary_search_by_key(&entity, |(e, _, _)| *e)
             .ok()
@@ -120,8 +120,8 @@ impl PoseHistory {
         self.entries.clear();
     }
 
-    /// Records where every [`LagCompensated`] entity with a [`Collider`]
-    /// and a [`Transform`] is, as `tick`. Call it once a tick, after the
+    /// Records where every [`LagCompensated`] entity with a [`Collider2D`]
+    /// and a [`Transform2D`] is, as `tick`. Call it once a tick, after the
     /// step that moved them. A tick not after the newest held starts the
     /// history again — a session restarted, a clock reset — rather than
     /// muddling two timelines; the oldest tick goes once the ring is full,
@@ -143,8 +143,8 @@ impl PoseHistory {
             Vec::new()
         };
         poses.extend(world.query::<LagCompensated>().filter_map(|(entity, _)| {
-            let collider = world.get::<Collider>(entity)?;
-            let transform = world.get::<Transform>(entity)?;
+            let collider = world.get::<Collider2D>(entity)?;
+            let transform = world.get::<Transform2D>(entity)?;
             Some((entity, *collider, *transform))
         }));
         poses.sort_unstable_by_key(|(entity, _, _)| *entity);
@@ -186,7 +186,7 @@ impl PoseHistory {
 
         let mut poses = Poses::default();
         for (entity, _) in world.query::<LagCompensated>() {
-            if world.get::<Collider>(entity).is_none() {
+            if world.get::<Collider2D>(entity).is_none() {
                 continue;
             }
             let pose = from.find(entity).map(|(_, collider, before)| {

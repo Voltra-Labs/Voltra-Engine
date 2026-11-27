@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::{hierarchy, ComponentRegistry, PrefabInstance, Replicated, SceneId, Transform};
+use voltra_scene::{
+    hierarchy, ComponentRegistry, PrefabInstance, Replicated, SceneId, Transform2D,
+};
 
 use super::snapshot::{Place, Tracked};
 use super::view::Value;
@@ -140,7 +142,7 @@ impl ReplicationServer {
             .and_then(|above| self.ids.get(&above).copied())
             .unwrap_or(id);
         let at = world
-            .get::<Transform>(entity)
+            .get::<Transform2D>(entity)
             .is_some()
             .then(|| hierarchy::world_transform(world, entity).translation);
         if let Some(tracked) = self.tracked.get_mut(&id) {

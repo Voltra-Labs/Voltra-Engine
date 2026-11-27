@@ -126,12 +126,12 @@ mod tests {
         use super::super::*;
         use crate::pick::entity_at;
         use crate::sprite::sheets::Sheets;
-        use crate::{Sprite, SpriteBatch, Transform};
+        use crate::{Sprite2D, SpriteBatch, Transform2D};
 
         fn sprite_on(world: &mut World, layer: &str, order: i32, color: [f32; 4]) -> Entity {
             let e = world.spawn();
-            world.insert(e, Transform::default());
-            let mut sprite = Sprite::new(color).with_sort_order(order);
+            world.insert(e, Transform2D::default());
+            let mut sprite = Sprite2D::new(color).with_sort_order(order);
             sprite.sorting_layer = layer.to_owned();
             world.insert(e, sprite);
             e
@@ -177,9 +177,9 @@ mod tests {
 
         #[test]
         fn the_default_layer_is_not_written_and_an_old_sprite_reads_on_it() {
-            let text = ron::to_string(&Sprite::default()).expect("writes");
+            let text = ron::to_string(&Sprite2D::default()).expect("writes");
             assert!(!text.contains("sorting_layer"));
-            let back: Sprite = ron::from_str(&text).expect("reads");
+            let back: Sprite2D = ron::from_str(&text).expect("reads");
             assert_eq!(back.sorting_layer, DEFAULT_LAYER);
         }
     }

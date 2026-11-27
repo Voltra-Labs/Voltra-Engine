@@ -19,7 +19,7 @@ use super::{PrefabInstance, PrefabPart, Prefabs, SyncReport};
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile, VERSION};
 use crate::hierarchy::{self, Parent};
 use crate::scene_id::SceneId;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 
 /// Makes `root` and everything under it an instance of `source`, a file
 /// [`super::write`] has just cut from them: the root linked, and each entity
@@ -108,7 +108,7 @@ pub fn apply(
     let record_of = |_: &World, entity: Entity| ids.get(&entity).copied();
     let file_root_transform = record_of(world, root)
         .and_then(|top| resolved.entities.iter().find(|r| r.id == top))
-        .and_then(|r| r.components.get(Transform::NAME).cloned());
+        .and_then(|r| r.components.get(Transform2D::NAME).cloned());
 
     // A reference between the instance's entities — a joint, a camera's
     // target — names their records in the file.
@@ -141,7 +141,7 @@ pub fn apply(
             let placement = match &file_root_transform {
                 Some(kept) => kept.clone(),
                 None => {
-                    let at_origin = world.get::<Transform>(entity).map(|t| Transform {
+                    let at_origin = world.get::<Transform2D>(entity).map(|t| Transform2D {
                         translation: voltra_render::glam::Vec2::ZERO,
                         ..*t
                     });
@@ -153,7 +153,7 @@ pub fn apply(
             };
             record
                 .components
-                .insert(Transform::NAME.to_owned(), placement);
+                .insert(Transform2D::NAME.to_owned(), placement);
         } else if let Some(parent) = hierarchy::parent_of(world, entity) {
             if let Some(parent_record) = record_of(world, parent) {
                 let link = Parent {

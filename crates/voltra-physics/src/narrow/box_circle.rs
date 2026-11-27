@@ -62,7 +62,7 @@ mod tests {
     use crate::narrow::tests::{at, boxed, circle};
     use std::f32::consts::FRAC_PI_2;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Collider, Transform};
+    use voltra_scene::{Collider2D, Transform2D};
 
     #[test]
     fn a_circle_beside_a_box_pushes_out_of_the_nearest_face() {
@@ -82,17 +82,17 @@ mod tests {
         // A tall box and a circle beside it: clear of the narrow side, well
         // inside the long one. A quarter turn swaps which is which, and an
         // axis-aligned test would answer the same both times.
-        let tall = Collider::Box {
+        let tall = Collider2D::Box {
             half_extents: Vec2::new(0.5, 2.0),
         };
         let ball = circle(0.5);
 
         assert!(
-            manifold((&tall, &Transform::default()), (&ball, &at(1.2, 0.0))).is_none(),
+            manifold((&tall, &Transform2D::default()), (&ball, &at(1.2, 0.0))).is_none(),
             "0.7 clear of the narrow side"
         );
 
-        let turned = Transform::default().with_rotation(FRAC_PI_2);
+        let turned = Transform2D::default().with_rotation(FRAC_PI_2);
         let m = manifold((&tall, &turned), (&ball, &at(1.2, 0.0))).expect("now the long side");
 
         assert!(m.points()[0].separation < 0.0, "{m:?}");

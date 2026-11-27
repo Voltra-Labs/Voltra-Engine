@@ -7,7 +7,7 @@
 //! coin, the zaps (`zap.rs`: each tested where its shooter saw its target,
 //! by the engine's lag compensation), the round. A client only predicts
 //! its own player ([`Prediction`]) and lets replication bring the rest: the players'
-//! `Transform`, [`Player`] and [`Score`], the coin's place and the
+//! `Transform2D`, [`Player`] and [`Score`], the coin's place and the
 //! [`Round`]. The same [`walk`] moves a player on both, which is what
 //! makes the prediction land where the server says.
 //!

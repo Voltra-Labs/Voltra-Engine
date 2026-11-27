@@ -2,9 +2,9 @@
 
 use voltra_ecs::World;
 
-use crate::sprite::Sprite;
+use crate::sprite::Sprite2D;
 
-/// A clock that writes [`Sprite::frame`].
+/// A clock that writes [`Sprite2D::frame`].
 ///
 /// Deliberately not a state machine. Unity's `Animator` graph and Godot's
 /// `AnimationTree` are a subsystem of their own — transitions, conditions,
@@ -138,7 +138,7 @@ impl SpriteAnimation {
     }
 }
 
-/// Advances every playing animation by `delta` and writes [`Sprite::frame`].
+/// Advances every playing animation by `delta` and writes [`Sprite2D::frame`].
 ///
 /// Per *frame*, not per physics step: what is drawn is not what is simulated,
 /// and an animation on the fixed clock would stutter on any frame owing two
@@ -152,7 +152,7 @@ pub fn advance(world: &mut World, delta: f32) {
         .collect();
 
     for (entity, frame) in frames {
-        if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+        if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
             sprite.frame = frame;
         }
     }
@@ -239,12 +239,12 @@ mod tests {
     fn advancing_a_world_writes_the_sprites_frame() {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Sprite::default());
+        world.insert(entity, Sprite2D::default());
         world.insert(entity, clip());
 
         advance(&mut world, 0.3);
 
-        assert_eq!(world.get::<Sprite>(entity).expect("the sprite").frame, 1);
+        assert_eq!(world.get::<Sprite2D>(entity).expect("the sprite").frame, 1);
     }
 
     #[test]
@@ -255,7 +255,7 @@ mod tests {
 
         advance(&mut world, 0.3);
 
-        assert!(world.get::<Sprite>(entity).is_none());
+        assert!(world.get::<Sprite2D>(entity).is_none());
     }
 
     #[test]

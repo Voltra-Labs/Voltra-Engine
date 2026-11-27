@@ -6,7 +6,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::ParticleCollider;
 
-use crate::{Collider, CollisionLayers, Sensor, Transform};
+use crate::{Collider2D, CollisionLayers, Sensor, Transform2D};
 
 /// One collider a particle can hit.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,16 +25,16 @@ pub struct Obstacles {
 
 impl Obstacles {
     /// Every solid collider in `world`, placed as the physics places it:
-    /// by the entity's own [`Transform`]. A [`Sensor`] is left out — it is
+    /// by the entity's own [`Transform2D`]. A [`Sensor`] is left out — it is
     /// detected, never solid — and so is a shape with no area or a
     /// transform that is not a number.
     pub fn gather(world: &World) -> Self {
         let mut all = Vec::new();
-        for (entity, collider) in world.query::<Collider>() {
+        for (entity, collider) in world.query::<Collider2D>() {
             if world.get::<Sensor>(entity).is_some() {
                 continue;
             }
-            let Some(transform) = world.get::<Transform>(entity) else {
+            let Some(transform) = world.get::<Transform2D>(entity) else {
                 continue;
             };
             if collider.is_degenerate(transform) {
@@ -94,13 +94,13 @@ impl Obstacles {
 /// Particles test boxes and circles only, on the CPU and on the GPU alike,
 /// and a polygon is the one shape that is not a union of them; its bounding
 /// box keeps particles off it at the price of a corner that is too square.
-fn shapes(collider: &Collider, transform: &Transform) -> [Option<ParticleCollider>; 3] {
+fn shapes(collider: &Collider2D, transform: &Transform2D) -> [Option<ParticleCollider>; 3] {
     let circle = |center| ParticleCollider::Circle {
         center,
         radius: collider.world_radius(transform),
     };
     match collider {
-        Collider::Box { .. } => [
+        Collider2D::Box { .. } => [
             Some(ParticleCollider::Box {
                 center: transform.translation,
                 rotation: transform.rotation,
@@ -109,8 +109,8 @@ fn shapes(collider: &Collider, transform: &Transform) -> [Option<ParticleCollide
             None,
             None,
         ],
-        Collider::Circle { .. } => [Some(circle(transform.translation)), None, None],
-        Collider::Capsule { .. } => {
+        Collider2D::Circle { .. } => [Some(circle(transform.translation)), None, None],
+        Collider2D::Capsule { .. } => {
             let shape = collider.world_shape(transform);
             match *shape.vertices() {
                 [low, high] => [
@@ -125,7 +125,7 @@ fn shapes(collider: &Collider, transform: &Transform) -> [Option<ParticleCollide
                 _ => [Some(circle(transform.translation)), None, None],
             }
         }
-        Collider::Polygon { points, .. } => {
+        Collider2D::Polygon { points, .. } => {
             let scaled = points.points().iter().map(|p| *p * transform.scale);
             let (lo, hi) = scaled.fold(
                 (Vec2::splat(f32::INFINITY), Vec2::splat(f32::NEG_INFINITY)),
@@ -151,10 +151,10 @@ mod tests {
     use super::*;
     use crate::ConvexPolygon;
 
-    fn gathered(collider: Collider) -> Vec<ParticleCollider> {
+    fn gathered(collider: Collider2D) -> Vec<ParticleCollider> {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(Vec2::new(1.0, 0.0)));
+        world.insert(entity, Transform2D::from_translation(Vec2::new(1.0, 0.0)));
         world.insert(entity, collider);
         let obstacles = Obstacles::gather(&world);
         let mut near = Vec::new();
@@ -164,7 +164,7 @@ mod tests {
 
     #[test]
     fn a_capsule_is_its_middle_box_and_its_two_caps() {
-        let shapes = gathered(Collider::Capsule {
+        let shapes = gathered(Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.25,
         });
@@ -188,7 +188,7 @@ mod tests {
             Vec2::new(2.0, 0.0),
             Vec2::new(0.0, 1.0),
         ];
-        let shapes = gathered(Collider::Polygon {
+        let shapes = gathered(Collider2D::Polygon {
             points: ConvexPolygon::new(&points).expect("a triangle"),
             radius: 0.0,
         });

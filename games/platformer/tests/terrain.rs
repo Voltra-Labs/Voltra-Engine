@@ -7,7 +7,7 @@ use voltra_ecs::Entity;
 use voltra_platformer::ladder::Climbing;
 use voltra_platformer::{walker, Platformer, FIRST_LEVEL};
 use voltra_render::glam::Vec2;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -23,7 +23,7 @@ fn level() -> (Headless, Entity) {
 fn at(session: &Headless, walker: Entity) -> Vec2 {
     session
         .world()
-        .get::<Transform>(walker)
+        .get::<Transform2D>(walker)
         .expect("placed")
         .translation
 }

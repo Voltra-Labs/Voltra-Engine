@@ -5,7 +5,7 @@
 use voltra_ecs::World;
 use voltra_physics::{query, PoseHistory, QueryFilter};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, LagCompensated, Transform};
+use voltra_scene::{Collider2D, LagCompensated, Transform2D};
 
 use super::Bench;
 use crate::harness::{iter, measure};
@@ -78,11 +78,11 @@ fn recorded() -> (World, PoseHistory) {
             let entity = world.spawn();
             world.insert(
                 entity,
-                Transform::from_translation(Vec2::new(n as f32 - 50.0, 0.0)),
+                Transform2D::from_translation(Vec2::new(n as f32 - 50.0, 0.0)),
             );
             world.insert(
                 entity,
-                Collider::Box {
+                Collider2D::Box {
                     half_extents: Vec2::splat(0.3),
                 },
             );
@@ -94,14 +94,14 @@ fn recorded() -> (World, PoseHistory) {
         let wall = world.spawn();
         world.insert(
             wall,
-            Transform::from_translation(Vec2::new(n as f32 * 10.0 - 50.0, 20.0)),
+            Transform2D::from_translation(Vec2::new(n as f32 * 10.0 - 50.0, 20.0)),
         );
-        world.insert(wall, Collider::default());
+        world.insert(wall, Collider2D::default());
     }
     let mut history = PoseHistory::new(TICKS as usize + 1);
     for tick in 1..=TICKS {
         for (n, &entity) in movers.iter().enumerate() {
-            if let Some(t) = world.get_mut::<Transform>(entity) {
+            if let Some(t) = world.get_mut::<Transform2D>(entity) {
                 t.translation.y = (tick as f32 * 0.1 + n as f32).sin();
             }
         }

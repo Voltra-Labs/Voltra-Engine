@@ -4,7 +4,7 @@ use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{RigidBody, SceneId};
+use voltra_scene::{RigidBody2D, SceneId};
 
 use crate::editor::Editor;
 use crate::play::PlayState;
@@ -36,12 +36,12 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     editor.stop_play(frame);
                     // Predicate is identity, not appearance: `SceneId` is what
                     // makes an entity part of the scene — the same rule `save`
-                    // uses to decide what gets written. Querying `Sprite`
+                    // uses to decide what gets written. Querying `Sprite2D`
                     // instead would miss an identity-carrying entity with no
-                    // `Sprite` (loadable from a file, just not this build's
+                    // `Sprite2D` (loadable from a file, just not this build's
                     // demo/menu spawners) and leave it behind after a Clear
                     // that looked complete, only for it to resurface on the
-                    // next Save. A `Sprite` with no `SceneId` is deliberately
+                    // next Save. A `Sprite2D` with no `SceneId` is deliberately
                     // transient and Clear should leave it alone, which this
                     // predicate does for free.
                     let all: Vec<Entity> = frame.world.query::<SceneId>().map(|(e, _)| e).collect();
@@ -178,7 +178,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 ui.separator();
 
                 // The only way to author a body today: the inspector edits a
-                // `Transform` and a `Sprite` and nothing else yet. Two
+                // `Transform2D` and a `Sprite2D` and nothing else yet. Two
                 // spawners rather than one because a falling body on its own
                 // demonstrates gravity but nothing about detection — the
                 // contact needs something to be against.
@@ -194,7 +194,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             Vec2::new(0.0, 1.5),
                             Vec2::splat(0.4),
                             0.3,
-                            RigidBody::new_dynamic(1.0),
+                            RigidBody2D::new_dynamic(1.0),
                             [1.0, 0.8, 0.3, 1.0],
                         )
                     });
@@ -222,7 +222,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                             Vec2::new(0.0, -1.2),
                             Vec2::new(3.0, 0.3),
                             0.0,
-                            RigidBody::new_static(),
+                            RigidBody2D::new_static(),
                             [0.5, 0.5, 0.55, 1.0],
                         )
                     });

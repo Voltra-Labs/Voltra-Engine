@@ -2,7 +2,7 @@
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_ecs::{Entity, World};
-use voltra_scene::{CharacterBody2D, Collider, RigidBody};
+use voltra_scene::{CharacterBody2D, Collider2D, RigidBody2D};
 
 use super::active;
 
@@ -13,7 +13,7 @@ use super::active;
 /// moved twice.
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
     if world.get::<CharacterBody2D>(entity).is_none() {
-        if world.get::<Collider>(entity).is_none() || world.get::<RigidBody>(entity).is_some() {
+        if world.get::<Collider2D>(entity).is_none() || world.get::<RigidBody2D>(entity).is_some() {
             return None;
         }
         ui.separator();
@@ -28,7 +28,7 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
                 "Make character"
             });
     }
-    let doubled = world.get::<RigidBody>(entity).is_some();
+    let doubled = world.get::<RigidBody2D>(entity).is_some();
     let body = world
         .get_mut::<CharacterBody2D>(entity)
         .expect("the component is there: it was just tested for");

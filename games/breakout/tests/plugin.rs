@@ -7,7 +7,7 @@ use breakout::FIRST_SCENE;
 use voltra_assets::AssetPath;
 use voltra_core::game::library::{library_file, GameLibrary};
 use voltra_core::{App, Headless};
-use voltra_scene::{Name, Transform};
+use voltra_scene::{Name, Transform2D};
 
 /// The library cargo built for this run: beside the binary after a
 /// `cargo build`, beside the `rlib` the test links after a `cargo test`.
@@ -51,7 +51,7 @@ fn the_editor_can_load_and_play_the_game() {
         .expect("the scene has a paddle");
     let at = session
         .world()
-        .get::<Transform>(paddle)
+        .get::<Transform2D>(paddle)
         .expect("placed")
         .translation;
     assert!(at.x > 1.0, "the paddle moved right: {at}");

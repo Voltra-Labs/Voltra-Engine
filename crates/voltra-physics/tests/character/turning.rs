@@ -17,10 +17,10 @@ fn a_turning_floor_turns_the_character_only_when_it_carries_rotation() {
         assert!(body(&world, me).is_on_floor());
 
         for _ in 0..10 {
-            world.get_mut::<Transform>(lift).expect("lift").rotation += 0.03;
+            world.get_mut::<Transform2D>(lift).expect("lift").rotation += 0.03;
             velocity = run(&mut world, me, velocity, None, 1);
         }
-        let turned = world.get::<Transform>(me).expect("placed").rotation;
+        let turned = world.get::<Transform2D>(me).expect("placed").rotation;
         if carried {
             assert!((turned - 0.3).abs() < 1e-4, "{turned}");
         } else {
@@ -38,7 +38,7 @@ fn a_turning_floor_turns_the_character_only_when_it_carries_rotation() {
         // Off the floor, nothing turns it.
         world.despawn(lift);
         run(&mut world, me, velocity, None, 5);
-        let after = world.get::<Transform>(me).expect("placed").rotation;
+        let after = world.get::<Transform2D>(me).expect("placed").rotation;
         assert_eq!(after, turned);
     }
 }
@@ -54,9 +54,9 @@ fn a_floor_turning_through_a_half_turn_turns_it_the_short_way() {
     let velocity = run(&mut world, me, Vec2::ZERO, None, 60);
     assert!(body(&world, me).is_on_floor());
     // From 3.1 on to -3.1: 0.083 further round, written the other way.
-    world.get_mut::<Transform>(lift).expect("lift").rotation = -3.1;
+    world.get_mut::<Transform2D>(lift).expect("lift").rotation = -3.1;
     run(&mut world, me, velocity, None, 1);
-    let turned = world.get::<Transform>(me).expect("placed").rotation;
+    let turned = world.get::<Transform2D>(me).expect("placed").rotation;
     let expected = 2.0 * PI - 6.2;
     assert!((turned - expected).abs() < 1e-4, "{turned}");
 }

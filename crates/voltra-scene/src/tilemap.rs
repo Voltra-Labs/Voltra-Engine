@@ -8,7 +8,7 @@
 //! reason; one entity per *chunk* makes painting across a chunk border an
 //! entity spawn. A layer is the thing an author thinks about — "the ground",
 //! "the decoration in front" — so a layer is the entity, and it has a
-//! `Transform`, a `sort_order` and a place in the hierarchy like a sprite.
+//! `Transform2D`, a `sort_order` and a place in the hierarchy like a sprite.
 //!
 //! **Sparse chunks, dense cells.** A map is the chunks that hold a tile, each
 //! a fixed [`CHUNK`]×[`CHUNK`] square. Painting off any edge, at negative
@@ -105,7 +105,7 @@ pub struct Tilemap {
     )]
     pub sorting_layer: String,
     /// The light layers its tiles are on, as a sprite's
-    /// [`light_layers`](crate::Sprite::light_layers) are.
+    /// [`light_layers`](crate::Sprite2D::light_layers) are.
     #[serde(
         default = "crate::light::default_light_layers",
         skip_serializing_if = "crate::light::is_default_light_layers"
@@ -130,7 +130,7 @@ pub struct Tilemap {
     pub texture_handle: Option<Handle<Texture>>,
     /// A normal map laid out as the sheet is — the same frames at the same
     /// texels — for lights with a [`height`](crate::PointLight2D::height),
-    /// as a sprite's [`normal_map`](crate::Sprite::normal_map) is. Every tile
+    /// as a sprite's [`normal_map`](crate::Sprite2D::normal_map) is. Every tile
     /// samples it where it samples the sheet; a tile drawing the placeholder
     /// is flat. `None` — the default, and not written — is a flat layer.
     #[serde(default, skip_serializing_if = "Option::is_none")]

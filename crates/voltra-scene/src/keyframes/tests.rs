@@ -8,7 +8,7 @@ use super::*;
 use crate::hierarchy::{resolve_parents, set_parent};
 use crate::name::Name;
 use crate::scene_id::SceneId;
-use crate::{PointLight2D, Sprite, Transform};
+use crate::{PointLight2D, Sprite2D, Transform2D};
 
 const BOB: &str = r#"(
     looping: true,
@@ -39,7 +39,7 @@ fn store_with(name: &str, text: &str) -> AnimationClips {
 fn rig(world: &mut World, clip: &str) -> (Entity, Entity) {
     let root = world.spawn();
     world.insert(root, SceneId::new());
-    world.insert(root, Transform::default());
+    world.insert(root, Transform2D::default());
     world.insert(root, AnimationPlayer::new(path(clip)));
     let lamp = world.spawn();
     world.insert(lamp, SceneId::new());
@@ -57,7 +57,7 @@ fn a_clip_moves_its_player_and_the_child_it_names() {
     let (root, lamp) = rig(&mut world, "bob.anim.ron");
 
     advance(&mut world, &mut clips, 0.5);
-    let at = world.get::<Transform>(root).expect("t").translation;
+    let at = world.get::<Transform2D>(root).expect("t").translation;
     assert!((at - Vec2::new(0.0, 0.5)).length() < 1e-5, "eased: {at}");
     assert!((world.get::<PointLight2D>(lamp).expect("l").intensity - 1.0).abs() < 1e-5);
 
@@ -73,10 +73,10 @@ fn a_paused_player_leaves_its_entity_alone() {
     let mut world = World::new();
     let (root, _) = rig(&mut world, "bob.anim.ron");
     world.get_mut::<AnimationPlayer>(root).expect("p").playing = false;
-    world.get_mut::<Transform>(root).expect("t").translation = Vec2::new(9.0, 9.0);
+    world.get_mut::<Transform2D>(root).expect("t").translation = Vec2::new(9.0, 9.0);
     advance(&mut world, &mut clips, 0.5);
     assert_eq!(
-        world.get::<Transform>(root).expect("t").translation,
+        world.get::<Transform2D>(root).expect("t").translation,
         Vec2::new(9.0, 9.0)
     );
 }
@@ -88,7 +88,7 @@ fn a_missing_child_or_component_costs_only_its_own_track() {
     let (root, lamp) = rig(&mut world, "bob.anim.ron");
     world.remove::<PointLight2D>(lamp);
     advance(&mut world, &mut clips, 1.0);
-    assert!((world.get::<Transform>(root).expect("t").translation.y - 2.0).abs() < 1e-5);
+    assert!((world.get::<Transform2D>(root).expect("t").translation.y - 2.0).abs() < 1e-5);
     let player = world.get::<AnimationPlayer>(root).expect("p");
     assert_eq!(player.reported, player.clip, "warned, once");
 }
@@ -110,7 +110,7 @@ fn bad_keys_are_dropped_and_the_rest_play() {
     let mut world = World::new();
     let (root, _) = rig(&mut world, "spin.anim.ron");
     advance(&mut world, &mut clips, 5.0);
-    assert_eq!(world.get::<Transform>(root).expect("t").rotation, 2.0);
+    assert_eq!(world.get::<Transform2D>(root).expect("t").rotation, 2.0);
     assert!(
         !world.get::<AnimationPlayer>(root).expect("p").playing,
         "not looping: ended on its last key"
@@ -124,14 +124,14 @@ fn a_clip_that_will_not_read_animates_nothing_until_it_is_fixed() {
     let (root, _) = rig(&mut world, "bob.anim.ron");
     advance(&mut world, &mut clips, 0.5);
     assert_eq!(
-        world.get::<Transform>(root).expect("t").translation,
+        world.get::<Transform2D>(root).expect("t").translation,
         Vec2::ZERO
     );
 
     std::fs::write(clips.root().join("bob.anim.ron"), BOB).expect("writes");
     assert!(clips.reload(&path("bob.anim.ron")));
     advance(&mut world, &mut clips, 0.5);
-    assert!(world.get::<Transform>(root).expect("t").translation.y > 0.0);
+    assert!(world.get::<Transform2D>(root).expect("t").translation.y > 0.0);
 }
 
 #[test]
@@ -153,9 +153,9 @@ fn sprite_frames_count_through_as_a_flipbook() {
     let mut clips = store_with("walk.anim.ron", text);
     let mut world = World::new();
     let (root, _) = rig(&mut world, "walk.anim.ron");
-    world.insert(root, Sprite::default());
+    world.insert(root, Sprite2D::default());
     advance(&mut world, &mut clips, 0.6);
-    assert_eq!(world.get::<Sprite>(root).expect("s").frame, 2);
+    assert_eq!(world.get::<Sprite2D>(root).expect("s").frame, 2);
 }
 
 #[test]

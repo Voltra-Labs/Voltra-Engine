@@ -55,11 +55,11 @@ fn rect(view: &View2D, color: [f32; 4], lines: &mut LineBatch) {
 mod tests {
     use super::*;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Camera, Transform};
+    use voltra_scene::{Camera2D, Transform2D};
 
-    fn spawn(world: &mut World, camera: Camera, at: Vec2) -> Entity {
+    fn spawn(world: &mut World, camera: Camera2D, at: Vec2) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(entity, camera);
         entity
     }
@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn a_camera_draws_four_edges() {
         let mut world = World::new();
-        let entity = spawn(&mut world, Camera::new(2.0), Vec2::ZERO);
+        let entity = spawn(&mut world, Camera2D::new(2.0), Vec2::ZERO);
         let mut lines = LineBatch::default();
 
         draw(&world, entity, 1.0, &mut lines);
@@ -79,7 +79,7 @@ mod tests {
     fn an_entity_without_a_camera_draws_nothing() {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         let mut lines = LineBatch::default();
 
         draw(&world, entity, 1.0, &mut lines);
@@ -119,9 +119,9 @@ mod tests {
         let entity = world.spawn();
         world.insert(
             entity,
-            Transform::from_translation(Vec2::ZERO).with_rotation(std::f32::consts::FRAC_PI_2),
+            Transform2D::from_translation(Vec2::ZERO).with_rotation(std::f32::consts::FRAC_PI_2),
         );
-        world.insert(entity, Camera::new(1.0));
+        world.insert(entity, Camera2D::new(1.0));
         let mut lines = LineBatch::default();
 
         draw(&world, entity, 2.0, &mut lines);

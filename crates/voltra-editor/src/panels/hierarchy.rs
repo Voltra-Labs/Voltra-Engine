@@ -67,8 +67,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 
             // Predicate is identity, not appearance — the same rule `Clear`
             // and `save` use for what counts as "in the scene". Querying
-            // `Sprite` would hide an identity-carrying entity that has no
-            // `Sprite` (loadable from a hand-edited file today, a future
+            // `Sprite2D` would hide an identity-carrying entity that has no
+            // `Sprite2D` (loadable from a hand-edited file today, a future
             // light or camera entity tomorrow) even though it is savable,
             // loadable and clearable; this list, and only this list, would
             // then disagree about what the scene contains.

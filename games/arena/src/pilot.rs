@@ -3,7 +3,7 @@
 
 use voltra_core::Input;
 use voltra_ecs::{Entity, World};
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use crate::{zap, Coin, Steer};
 
@@ -42,10 +42,10 @@ impl Pilot {
                 input.action_axis("move_down", "move_up"),
             )),
             Self::Bot => {
-                let at = world.get::<Transform>(player).map(|t| t.translation);
+                let at = world.get::<Transform2D>(player).map(|t| t.translation);
                 let coin = world
                     .query::<Coin>()
-                    .find_map(|(coin, _)| world.get::<Transform>(coin))
+                    .find_map(|(coin, _)| world.get::<Transform2D>(coin))
                     .map(|t| t.translation);
                 match (at, coin) {
                     (Some(at), Some(coin)) if at.distance(coin) > 0.05 => {

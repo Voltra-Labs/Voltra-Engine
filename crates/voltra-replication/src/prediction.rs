@@ -35,7 +35,7 @@ use std::collections::VecDeque;
 
 use serde::Serialize;
 use voltra_ecs::{Entity, World};
-use voltra_scene::{ComponentRegistry, Transform};
+use voltra_scene::{ComponentRegistry, Transform2D};
 
 use crate::wire::{InputTick, NetId};
 use crate::ReplicationClient;
@@ -134,7 +134,7 @@ impl<I: Serialize> Prediction<I> {
         }
 
         if let Some(correction) = client.take_correction() {
-            let before = world.get::<Transform>(entity).copied();
+            let before = world.get::<Transform2D>(entity).copied();
             for (component, bytes) in &correction.state {
                 if let Err(error) = registry.apply_replicated(*component, world, entity, bytes) {
                     log::warn!("correcting {}: {error}", component.name);
@@ -152,7 +152,7 @@ impl<I: Serialize> Prediction<I> {
             }
             self.stats.corrections += 1;
             self.stats.replayed += self.history.len() as u64;
-            let after = world.get::<Transform>(entity).copied();
+            let after = world.get::<Transform2D>(entity).copied();
             if let (Some(before), Some(after)) = (before, after) {
                 self.stats.last_error = before.translation.distance(after.translation);
                 self.stats.max_error = self.stats.max_error.max(self.stats.last_error);

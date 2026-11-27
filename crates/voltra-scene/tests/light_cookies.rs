@@ -10,7 +10,7 @@ use voltra_assets::{AssetPath, Textures};
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::texture;
-use voltra_scene::{light, Camera, PointLight2D, Transform};
+use voltra_scene::{light, Camera2D, PointLight2D, Transform2D};
 use voltra_testkit::{headless_device, scratch_root};
 
 /// A 2×1 PNG at `path`: black on the left, white on the right.
@@ -30,12 +30,12 @@ fn write_halves(path: &Path) {
 fn lit_world() -> World {
     let mut world = World::new();
     let camera = world.spawn();
-    world.insert(camera, Transform::default());
+    world.insert(camera, Transform2D::default());
     world.insert(
         camera,
-        Camera {
+        Camera2D {
             ambient: Some([0.1; 3]),
-            ..Camera::default()
+            ..Camera2D::default()
         },
     );
     world
@@ -45,9 +45,9 @@ fn lamp(world: &mut World, at: Vec2, rotation: f32) -> voltra_ecs::Entity {
     let lamp = world.spawn();
     world.insert(
         lamp,
-        Transform {
+        Transform2D {
             rotation,
-            ..Transform::from_translation(at)
+            ..Transform2D::from_translation(at)
         },
     );
     world.insert(lamp, PointLight2D::default());

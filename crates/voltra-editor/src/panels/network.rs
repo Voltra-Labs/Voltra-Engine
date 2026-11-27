@@ -9,7 +9,7 @@
 use voltra_core::egui::{self, Color32, Sense, Ui, Vec2};
 use voltra_core::net::PeerId;
 use voltra_core::{Headless, UiFrame};
-use voltra_scene::{Replicated, Transform};
+use voltra_scene::{Replicated, Transform2D};
 
 use crate::editor::Editor;
 use crate::netplay::MAX_CLIENTS;
@@ -174,7 +174,7 @@ fn map(ui: &mut Ui, client: &Headless, frame: &UiFrame<'_>) {
     let positions = |world: &voltra_ecs::World| -> Vec<voltra_render::glam::Vec2> {
         world
             .query::<Replicated>()
-            .filter_map(|(entity, _)| world.get::<Transform>(entity))
+            .filter_map(|(entity, _)| world.get::<Transform2D>(entity))
             .map(|t| t.translation)
             .collect()
     };

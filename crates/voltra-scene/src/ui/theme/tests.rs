@@ -6,7 +6,7 @@ use crate::ui::{
     UiButton, UiControls, UiDropdown, UiInput, UiLayout, UiRect, UiSlider, UiSliderPart, UiStack,
     UiTab, UiTabs, UiTextField, UiToggle, UiTooltip,
 };
-use crate::{hierarchy, Name, SceneId, Sprite, Text};
+use crate::{hierarchy, Name, SceneId, Sprite2D, Text};
 
 /// A theme whose every colour is `shade` grey, with a font and a skin.
 fn theme(shade: f32, font: &str) -> UiTheme {
@@ -62,36 +62,36 @@ struct Screen {
 
 fn screen(world: &mut World) -> Screen {
     let panel = element(world, "Panel", None);
-    world.insert(panel, Sprite::default());
+    world.insert(panel, Sprite2D::default());
     world.insert(panel, UiStack::default());
     world.insert(panel, UiTabs::default());
     world.insert(panel, UiTooltip::default());
     let button = element(world, "Button", Some(panel));
-    world.insert(button, Sprite::default());
+    world.insert(button, Sprite2D::default());
     world.insert(button, UiButton::default());
     let label = element(world, "Label", Some(button));
     world.insert(label, Text::new("Play"));
     let toggle = element(world, "Toggle", Some(panel));
-    world.insert(toggle, Sprite::default());
+    world.insert(toggle, Sprite2D::default());
     world.insert(toggle, UiButton::default());
     world.insert(toggle, UiToggle::default());
     let slider = element(world, "Slider", Some(panel));
-    world.insert(slider, Sprite::default());
+    world.insert(slider, Sprite2D::default());
     world.insert(slider, UiSlider::default());
     let handle = element(world, "Handle", Some(slider));
-    world.insert(handle, Sprite::default());
+    world.insert(handle, Sprite2D::default());
     world.insert(handle, UiSliderPart::Handle);
     let field = element(world, "Field", Some(panel));
-    world.insert(field, Sprite::default());
+    world.insert(field, Sprite2D::default());
     world.insert(field, Text::new(""));
     world.insert(field, UiTextField::default());
     let dropdown = element(world, "Dropdown", Some(panel));
-    world.insert(dropdown, Sprite::default());
+    world.insert(dropdown, Sprite2D::default());
     world.insert(dropdown, UiButton::default());
     world.insert(dropdown, UiDropdown::default());
     world.insert(dropdown, Text::new(""));
     let tab = element(world, "Tab", Some(panel));
-    world.insert(tab, Sprite::default());
+    world.insert(tab, Sprite2D::default());
     world.insert(tab, UiButton::default());
     world.insert(tab, UiToggle::default());
     world.insert(
@@ -101,7 +101,7 @@ fn screen(world: &mut World) -> Screen {
         },
     );
     let own = element(world, "Own", Some(panel));
-    world.insert(own, Sprite::default());
+    world.insert(own, Sprite2D::default());
     world.insert(own, UiButton::default());
     world.insert(own, UiOwnStyle);
     Screen {
@@ -130,7 +130,7 @@ fn styled_as(world: &World, s: &Screen, shade: f32, font: &str) {
     assert_eq!(button.normal, c);
     assert_eq!(
         world
-            .get::<Sprite>(s.button)
+            .get::<Sprite2D>(s.button)
             .and_then(|sp| sp.texture.as_ref())
             .map(|p| p.as_str().to_owned()),
         Some(format!("ui/{font}.png")),
@@ -142,9 +142,9 @@ fn styled_as(world: &World, s: &Screen, shade: f32, font: &str) {
     assert_eq!(label.font.as_ref().map(|p| p.as_str()), Some(font));
     assert_eq!(world.get::<UiToggle>(s.toggle).map(|t| t.on_tint), Some(c));
     assert_eq!(world.get::<UiToggle>(s.tab).map(|t| t.on_tint), Some(c));
-    assert_eq!(world.get::<Sprite>(s.slider).map(|sp| sp.color), Some(c));
-    assert_eq!(world.get::<Sprite>(s.handle).map(|sp| sp.color), Some(c));
-    assert_eq!(world.get::<Sprite>(s.field).map(|sp| sp.color), Some(c));
+    assert_eq!(world.get::<Sprite2D>(s.slider).map(|sp| sp.color), Some(c));
+    assert_eq!(world.get::<Sprite2D>(s.handle).map(|sp| sp.color), Some(c));
+    assert_eq!(world.get::<Sprite2D>(s.field).map(|sp| sp.color), Some(c));
     assert_eq!(
         world.get::<UiTextField>(s.field).map(|f| f.selection_color),
         Some(c)
@@ -156,7 +156,7 @@ fn styled_as(world: &World, s: &Screen, shade: f32, font: &str) {
         (tooltip.background, tooltip.color, tooltip.size),
         (c, c, 11.0)
     );
-    assert_eq!(world.get::<Sprite>(s.panel).map(|sp| sp.color), Some(c));
+    assert_eq!(world.get::<Sprite2D>(s.panel).map(|sp| sp.color), Some(c));
     let stack = world.get::<UiStack>(s.panel).expect("a stack");
     assert_eq!(stack.spacing, shade);
     assert_eq!(stack.padding.left, shade);
@@ -218,7 +218,7 @@ fn a_colour_set_after_the_theme_stands() {
 
     // An element spawned later is themed on its first frame.
     let late = element(&mut world, "Late", None);
-    world.insert(late, Sprite::default());
+    world.insert(late, Sprite2D::default());
     world.insert(late, UiButton::default());
     frame(&mut world, &mut controls);
     assert_eq!(

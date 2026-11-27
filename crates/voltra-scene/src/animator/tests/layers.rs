@@ -63,7 +63,7 @@ fn layered() -> (Rig, Entity) {
     let arm = rig.world.spawn();
     rig.world.insert(arm, SceneId::new());
     rig.world.insert(arm, Name::new("arm"));
-    rig.world.insert(arm, Transform::default());
+    rig.world.insert(arm, Transform2D::default());
     set_parent(&mut rig.world, arm, rig.hero).expect("a plain reparent");
     resolve_parents(&mut rig.world);
     (rig, arm)
@@ -75,8 +75,8 @@ impl Rig {
         animator.layer_state(layer).map(str::to_owned)
     }
 
-    fn transform(&self, entity: Entity) -> Transform {
-        *self.world.get::<Transform>(entity).expect("a transform")
+    fn transform(&self, entity: Entity) -> Transform2D {
+        *self.world.get::<Transform2D>(entity).expect("a transform")
     }
 }
 

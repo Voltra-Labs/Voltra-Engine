@@ -5,7 +5,7 @@
 //! components, [`CameraFollow2D`] on any entity, so a light can follow the
 //! player the way a camera does, and [`CameraShake`] on a camera, whose
 //! view it shakes. Neither is a field of
-//! [`Camera`](crate::Camera): a camera that does not move is the common
+//! [`Camera2D`](crate::Camera2D): a camera that does not move is the common
 //! authored case, and its file should not carry a rig.
 //!
 //! [`update`] runs once per frame, while the game runs: what is followed is
@@ -21,7 +21,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 
 use crate::hierarchy::{parent_matrix, world_matrix};
-use crate::Transform;
+use crate::Transform2D;
 
 /// Moves every following entity towards its target, then runs every
 /// shake, by `delta` seconds. A camera's view is as wide as what it draws
@@ -60,7 +60,7 @@ fn set_world_position(world: &mut World, entity: voltra_ecs::Entity, position: V
     } else {
         position
     };
-    if let Some(transform) = world.get_mut::<Transform>(entity) {
+    if let Some(transform) = world.get_mut::<Transform2D>(entity) {
         transform.translation = local;
     }
 }

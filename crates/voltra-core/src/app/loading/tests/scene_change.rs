@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Name, Persistent, RigidBody, Transform};
+use voltra_scene::{Collider2D, Name, Persistent, RigidBody2D, Transform2D};
 use voltra_testkit::scratch_root;
 
 use super::{named, path, run_frame, write_scene, write_world, BudgetCheck};
@@ -86,8 +86,8 @@ fn progress_runs_from_zero_to_one_behind_the_screen_and_the_new_scene_appears() 
     // half built.
     let body = named(&mut app.world, "player", Vec2::new(0.0, 5.0));
     app.world.insert(body, Persistent);
-    app.world.insert(body, RigidBody::new_dynamic(1.0));
-    app.world.insert(body, Collider::default());
+    app.world.insert(body, RigidBody2D::new_dynamic(1.0));
+    app.world.insert(body, Collider2D::default());
     app.gravity = Vec2::new(0.0, -9.81);
 
     let mut height_while_loading = Vec::new();
@@ -101,7 +101,7 @@ fn progress_runs_from_zero_to_one_behind_the_screen_and_the_new_scene_appears() 
         {
             let y = app
                 .world
-                .get::<Transform>(body)
+                .get::<Transform2D>(body)
                 .expect("kept")
                 .translation
                 .y;
@@ -159,7 +159,7 @@ fn progress_runs_from_zero_to_one_behind_the_screen_and_the_new_scene_appears() 
     // And steps again after.
     let before = app
         .world
-        .get::<Transform>(body)
+        .get::<Transform2D>(body)
         .expect("kept")
         .translation
         .y;
@@ -168,7 +168,7 @@ fn progress_runs_from_zero_to_one_behind_the_screen_and_the_new_scene_appears() 
     }
     let after = app
         .world
-        .get::<Transform>(body)
+        .get::<Transform2D>(body)
         .expect("kept")
         .translation
         .y;

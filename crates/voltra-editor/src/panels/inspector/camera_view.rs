@@ -3,14 +3,14 @@
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_ecs::{Entity, World};
-use voltra_scene::{Camera, CameraTarget, Viewport};
+use voltra_scene::{Camera2D, CameraTarget, Viewport};
 
 use super::active;
 use super::path_field::{self, PathEdit};
 
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
     let mut claim = None;
-    if let Some(camera) = world.get_mut::<Camera>(entity) {
+    if let Some(camera) = world.get_mut::<Camera2D>(entity) {
         ui.label(RichText::new("Draws into").strong())
             .on_hover_text("the part of the screen, or a render texture, this camera draws");
         egui::Grid::new("camera_view")

@@ -2,7 +2,7 @@
 //! phase, with sleeping pairs reused and jointed ones left out.
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::{Collider, Sensor, Transform};
+use voltra_scene::{Collider2D, Sensor, Transform2D};
 
 use super::Overlaps;
 use crate::broad::candidate_pairs;
@@ -85,9 +85,9 @@ pub(super) fn collide_with(
 }
 
 /// The shape `entity` collides with, if it has one and sits somewhere.
-fn shape(world: &World, entity: Entity) -> Option<(&Collider, &Transform)> {
+fn shape(world: &World, entity: Entity) -> Option<(&Collider2D, &Transform2D)> {
     Some((
-        world.get::<Collider>(entity)?,
-        world.get::<Transform>(entity)?,
+        world.get::<Collider2D>(entity)?,
+        world.get::<Transform2D>(entity)?,
     ))
 }

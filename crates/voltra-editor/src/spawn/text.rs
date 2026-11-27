@@ -4,7 +4,7 @@ use voltra_assets::AssetPath;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Name, SceneId, Text, Transform};
+use voltra_scene::{Name, SceneId, Text, Transform2D};
 
 /// Drops a label at `at` in `font` — the default font when `None` — named
 /// after the font file it was dropped from, or `name` otherwise.
@@ -20,7 +20,9 @@ pub(crate) fn text(
     frame.world.insert(entity, SceneId::new());
     let name = font.map_or_else(|| name.to_owned(), super::name_of);
     frame.world.insert(entity, Name::new(name));
-    frame.world.insert(entity, Transform::from_translation(at));
+    frame
+        .world
+        .insert(entity, Transform2D::from_translation(at));
     let mut text = Text::default();
     text.set_font(font.cloned(), frame.fonts);
     frame.world.insert(entity, text);

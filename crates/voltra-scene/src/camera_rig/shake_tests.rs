@@ -8,12 +8,12 @@ use voltra_render::glam::Vec2;
 use super::tests::{placed, DT};
 use super::*;
 use crate::camera::eye;
-use crate::{Camera, Transform};
+use crate::{Camera2D, Transform2D};
 
 fn shaking_camera(world: &mut World, at: Vec2, rotation: f32) -> Entity {
     let camera = placed(world, at);
-    world.get_mut::<Transform>(camera).expect("t").rotation = rotation;
-    world.insert(camera, Camera::new(3.0));
+    world.get_mut::<Transform2D>(camera).expect("t").rotation = rotation;
+    world.insert(camera, Camera2D::new(3.0));
     world.insert(
         camera,
         CameraShake {
@@ -29,8 +29,8 @@ fn shaking_camera(world: &mut World, at: Vec2, rotation: f32) -> Entity {
     camera
 }
 
-fn transform(world: &mut World, camera: Entity) -> &mut Transform {
-    world.get_mut::<Transform>(camera).expect("t")
+fn transform(world: &mut World, camera: Entity) -> &mut Transform2D {
+    world.get_mut::<Transform2D>(camera).expect("t")
 }
 
 /// Runs until the trauma is spent, and a frame more so the view rests.
@@ -119,7 +119,7 @@ fn the_offset_runs_along_the_turned_view() {
 fn a_shake_without_a_max_angle_never_turns_and_is_not_written() {
     let mut world = World::new();
     let camera = placed(&mut world, Vec2::ZERO);
-    world.insert(camera, Camera::default());
+    world.insert(camera, Camera2D::default());
     world.insert(camera, CameraShake::default());
     world
         .get_mut::<CameraShake>(camera)

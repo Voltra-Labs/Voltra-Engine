@@ -6,7 +6,7 @@ use common::*;
 use voltra_ecs::World;
 use voltra_physics::{step, ImpulseCache, SolverParams};
 use voltra_render::glam::Vec2;
-use voltra_scene::{PhysicsMaterial, RigidBody};
+use voltra_scene::{PhysicsMaterial, RigidBody2D};
 
 #[test]
 fn friction_stops_a_sliding_body() {
@@ -18,7 +18,7 @@ fn friction_stops_a_sliding_body() {
         Vec2::splat(0.5),
         Some(1.0),
     );
-    world.get_mut::<RigidBody>(crate_).expect("body").velocity = Vec2::new(10.0, 0.0);
+    world.get_mut::<RigidBody2D>(crate_).expect("body").velocity = Vec2::new(10.0, 0.0);
 
     let mut cache = ImpulseCache::default();
     run(&mut world, &mut cache, G, 600);
@@ -43,7 +43,7 @@ fn a_frictionless_body_keeps_sliding() {
         Some(1.0),
     );
     world.insert(puck, slippery);
-    world.get_mut::<RigidBody>(puck).expect("body").velocity = Vec2::new(10.0, 0.0);
+    world.get_mut::<RigidBody2D>(puck).expect("body").velocity = Vec2::new(10.0, 0.0);
 
     let mut cache = ImpulseCache::default();
     run(&mut world, &mut cache, G, 300);

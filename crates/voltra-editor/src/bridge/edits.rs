@@ -160,7 +160,7 @@ fn run(
                 "scale" => crate::tool::Tool::Scale,
                 other => return Err(format!("{other:?} is not move, rotate or scale")),
             };
-            if world.get::<voltra_scene::Transform>(target).is_none() {
+            if world.get::<voltra_scene::Transform2D>(target).is_none() {
                 return Err("it has no transform to drag".into());
             }
             let start = voltra_scene::hierarchy::world_transform(world, target);

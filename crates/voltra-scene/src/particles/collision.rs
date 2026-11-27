@@ -2,7 +2,7 @@
 //! answer.
 //!
 //! Unity's particle Collision module in its "World" mode, cut to the 2D
-//! subset: particles hit the scene's [`Collider`](crate::Collider)s — boxes,
+//! subset: particles hit the scene's [`Collider2D`](crate::Collider2D)s — boxes,
 //! circles and the boxes generated from solid tiles — and bounce, slide or
 //! die. Godot's `GPUParticles2D` collides against an SDF baked from light
 //! occluders instead; this engine has colliders already, and a second set of

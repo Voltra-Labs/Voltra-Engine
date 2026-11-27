@@ -3,7 +3,7 @@
 use voltra_assets::AssetPath;
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_ecs::{Entity, World};
-use voltra_scene::{AnimationPlayer, Transform};
+use voltra_scene::{AnimationPlayer, Transform2D};
 
 use super::active;
 use super::path_field::{self, PathEdit};
@@ -17,7 +17,7 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
     if world.get::<AnimationPlayer>(entity).is_none() {
         // Anything placed can be animated: every property moves an entity
         // with a transform, or something drawn on one.
-        world.get::<Transform>(entity)?;
+        world.get::<Transform2D>(entity)?;
         ui.separator();
         return ui.button("Add animation player").clicked().then(|| {
             world.insert(entity, AnimationPlayer::default());

@@ -2,7 +2,7 @@
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_scene::format::serial_tree::Step;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use super::active;
 use super::mixed::{self, Fields};
@@ -10,10 +10,10 @@ use super::mixed::{self, Fields};
 /// The three rows; an axis that differs across the selection reads `—`.
 pub(super) fn show(
     ui: &mut Ui,
-    transform: &mut Transform,
+    transform: &mut Transform2D,
     mixed: Fields<'_>,
 ) -> Option<&'static str> {
-    ui.label(RichText::new(Transform::NAME).strong());
+    ui.label(RichText::new(Transform2D::NAME).strong());
 
     let mut claim = None;
     egui::Grid::new("transform").num_columns(2).show(ui, |ui| {

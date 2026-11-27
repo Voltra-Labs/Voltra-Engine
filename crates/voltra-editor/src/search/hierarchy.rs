@@ -80,13 +80,13 @@ pub(crate) fn filter(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_scene::{Collider, Sprite, Transform};
+    use voltra_scene::{Collider2D, Sprite2D, Transform2D};
 
     fn named(world: &mut World, name: &str) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
         world.insert(entity, Name::new(name));
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         entity
     }
 
@@ -97,9 +97,9 @@ mod tests {
         let coins = named(&mut world, "Coins");
         let gold = named(&mut world, "Gold coin");
         let boxed = named(&mut world, "Box");
-        world.insert(gold, Sprite::default());
-        world.insert(boxed, Sprite::default());
-        world.insert(boxed, Collider::default());
+        world.insert(gold, Sprite2D::default());
+        world.insert(boxed, Sprite2D::default());
+        world.insert(boxed, Collider2D::default());
         hierarchy::set_parent(&mut world, coins, level).expect("a parent");
         hierarchy::set_parent(&mut world, gold, coins).expect("a parent");
         (world, [level, coins, gold, boxed])

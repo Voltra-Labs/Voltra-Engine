@@ -81,7 +81,7 @@ fn delete(
 mod tests {
     use voltra_render::glam::Vec2;
     use voltra_scene::format::entity_with_id;
-    use voltra_scene::Transform;
+    use voltra_scene::Transform2D;
 
     use super::*;
     use crate::gizmo::Gizmo;
@@ -100,7 +100,7 @@ mod tests {
     fn spawn(world: &mut World, x: f32) -> Entity {
         let e = world.spawn();
         world.insert(e, SceneId::new());
-        world.insert(e, Transform::from_translation(Vec2::new(x, 0.0)));
+        world.insert(e, Transform2D::from_translation(Vec2::new(x, 0.0)));
         e
     }
 

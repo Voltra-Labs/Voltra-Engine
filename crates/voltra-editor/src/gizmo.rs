@@ -23,7 +23,7 @@ use voltra_core::egui::{PointerButton, Response};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{hierarchy, Transform};
+use voltra_scene::{hierarchy, Transform2D};
 
 use crate::selection::Selection;
 use crate::tool::Tool;
@@ -37,7 +37,7 @@ pub struct Gizmo {
     drag: Option<Drag>,
     /// The rest of the selection, carried by the drag, with their world
     /// transforms when it began. See [`follow`].
-    followers: Vec<(Entity, Transform)>,
+    followers: Vec<(Entity, Transform2D)>,
 }
 
 /// What one frame of gizmo interaction did.
@@ -129,7 +129,7 @@ impl Gizmo {
             // the one conversion between the two, and it is why the drag
             // arithmetic needs to know nothing about the hierarchy.
             if !hierarchy::set_world_transform(frame.world, entity, &updated) {
-                // Despawned mid-drag, its Transform removed, or its parent
+                // Despawned mid-drag, its Transform2D removed, or its parent
                 // collapsed to a point. Ending the drag is the whole response:
                 // there is nothing left to transform.
                 self.cancel_drag();
@@ -157,7 +157,7 @@ impl Gizmo {
         let Some(entity) = selection.live_primary(frame.world) else {
             return GizmoOutcome::default();
         };
-        if frame.world.get::<Transform>(entity).is_none() {
+        if frame.world.get::<Transform2D>(entity).is_none() {
             return GizmoOutcome::default();
         }
         // Where the entity is drawn, not what it stores: the handles are over
@@ -191,7 +191,7 @@ impl Gizmo {
         let Some(entity) = selected else {
             return;
         };
-        if frame.world.get::<Transform>(entity).is_none() {
+        if frame.world.get::<Transform2D>(entity).is_none() {
             return;
         }
         let transform = hierarchy::world_transform(frame.world, entity);
@@ -212,7 +212,7 @@ impl Gizmo {
 }
 
 /// The handle `tool` offers at `cursor`, in viewport-local pixels.
-fn grab_handle(tool: Tool, cursor: Vec2, origin: Vec2, transform: &Transform) -> Option<Handle> {
+fn grab_handle(tool: Tool, cursor: Vec2, origin: Vec2, transform: &Transform2D) -> Option<Handle> {
     match tool {
         Tool::Translate => Handle::on_arms(cursor, origin, Axes::WORLD),
         Tool::Rotate => Handle::on_ring(cursor, origin),
@@ -234,11 +234,11 @@ mod tests;
 pub(crate) fn drag_to(
     entity: voltra_ecs::Entity,
     tool: Tool,
-    start: Transform,
+    start: Transform2D,
     from: Vec2,
     to: Vec2,
     snap: &crate::snap::Snap,
-) -> Transform {
+) -> Transform2D {
     let handle = match tool {
         Tool::Rotate => handle::Handle::Ring,
         Tool::Translate | Tool::Scale => handle::Handle::Both,

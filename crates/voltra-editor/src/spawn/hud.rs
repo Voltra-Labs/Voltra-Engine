@@ -4,8 +4,8 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, Align, Name, ParticleEmitter, SceneId, Sprite, Text, Transform, UiButton, UiRect,
-    UiStack,
+    hierarchy, Align, Name, ParticleEmitter, SceneId, Sprite2D, Text, Transform2D, UiButton,
+    UiRect, UiStack,
 };
 
 /// Size a new HUD label's text is, in points.
@@ -13,7 +13,7 @@ const HUD_TEXT_SIZE: f32 = 24.0;
 
 /// Drops a HUD label in the top-left corner, in the default font.
 ///
-/// No `Transform`: a `UiRect` places it, and a transform would only offer
+/// No `Transform2D`: a `UiRect` places it, and a transform would only offer
 /// the gizmo something that moves nothing.
 pub(crate) fn hud_text(frame: &mut UiFrame<'_>, name: &str) -> Entity {
     let entity = spawn(frame, name);
@@ -31,7 +31,7 @@ pub(crate) fn hud_panel(frame: &mut UiFrame<'_>, name: &str) -> Entity {
     let entity = spawn(frame, name);
     frame.world.insert(
         entity,
-        Sprite::new([0.08, 0.09, 0.12, 1.0]).with_sort_order(-1),
+        Sprite2D::new([0.08, 0.09, 0.12, 1.0]).with_sort_order(-1),
     );
     entity
 }
@@ -53,7 +53,7 @@ pub(crate) fn hud_column(frame: &mut UiFrame<'_>, name: &str) -> Entity {
 /// button to select.
 pub(crate) fn hud_button(frame: &mut UiFrame<'_>, name: &str) -> (Vec<Entity>, Option<Entity>) {
     let button = spawn(frame, name);
-    frame.world.insert(button, Sprite::default());
+    frame.world.insert(button, Sprite2D::default());
     frame.world.insert(button, UiButton::default());
     let label = spawn(frame, "Label");
     frame.world.insert(label, UiRect::stretched(6.0));
@@ -76,7 +76,9 @@ pub(crate) fn particles(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
     frame.world.insert(entity, Name::new(name));
-    frame.world.insert(entity, Transform::from_translation(at));
+    frame
+        .world
+        .insert(entity, Transform2D::from_translation(at));
     frame.world.insert(entity, ParticleEmitter::default());
     entity
 }

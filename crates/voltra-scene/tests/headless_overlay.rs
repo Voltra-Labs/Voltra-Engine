@@ -9,7 +9,7 @@ mod text_shot;
 use text_shot::Shot;
 use voltra_assets::DEFAULT_FONT;
 use voltra_render::glam::Vec2;
-use voltra_scene::{SceneId, Sprite, Text, UiButton, UiDropdown, UiRect, UiTooltip};
+use voltra_scene::{SceneId, Sprite2D, Text, UiButton, UiDropdown, UiRect, UiTooltip};
 use voltra_testkit::{copy_workspace_asset, scratch_root};
 
 const W: u32 = 200;
@@ -29,7 +29,7 @@ fn an_open_list_and_a_tooltip_draw_over_everything() {
             ..Text::new("One")
         },
     );
-    shot.world.insert(dropdown, Sprite::default());
+    shot.world.insert(dropdown, Sprite2D::default());
     shot.world.insert(dropdown, UiButton::default());
     shot.world.insert(
         dropdown,
@@ -50,9 +50,9 @@ fn an_open_list_and_a_tooltip_draw_over_everything() {
     );
     shot.world.insert(
         panel,
-        Sprite {
+        Sprite2D {
             sort_order: 10_000,
-            ..Sprite::new([1.0, 0.0, 0.0, 1.0])
+            ..Sprite2D::new([1.0, 0.0, 0.0, 1.0])
         },
     );
     // And a tooltip shown on a button lower down.
@@ -62,7 +62,7 @@ fn an_open_list_and_a_tooltip_draw_over_everything() {
         helped,
         UiRect::pinned(Vec2::ZERO, Vec2::new(10.0, 130.0), Vec2::new(60.0, 20.0)),
     );
-    shot.world.insert(helped, Sprite::default());
+    shot.world.insert(helped, Sprite2D::default());
     shot.world.insert(
         helped,
         UiTooltip {

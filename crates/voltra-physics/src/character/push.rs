@@ -16,7 +16,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{BodyType, Collider, RigidBody, Transform, WorldShape};
+use voltra_scene::{BodyType, Collider2D, RigidBody2D, Transform2D, WorldShape};
 
 use crate::query::ShapeHit;
 use crate::solver::SolverBody;
@@ -51,7 +51,7 @@ impl Mover<'_> {
     /// a body presses it.
     pub(super) fn push(
         &self,
-        at: &Transform,
+        at: &Transform2D,
         hit: &ShapeHit,
         velocity: Vec2,
         floor: bool,
@@ -64,15 +64,15 @@ impl Mover<'_> {
         if speed.is_nan() || speed <= 0.0 {
             return None;
         }
-        let body = self.world.get::<RigidBody>(hit.entity)?;
+        let body = self.world.get::<RigidBody2D>(hit.entity)?;
         if body.body_type != BodyType::Dynamic
             || body.inverse_mass.is_nan()
             || body.inverse_mass <= 0.0
         {
             return None;
         }
-        let collider = self.world.get::<Collider>(hit.entity)?;
-        let transform = self.world.get::<Transform>(hit.entity)?;
+        let collider = self.world.get::<Collider2D>(hit.entity)?;
+        let transform = self.world.get::<Transform2D>(hit.entity)?;
         let point = contact_point(
             &self.shape.world_shape(at),
             &collider.world_shape(transform),
@@ -136,9 +136,9 @@ pub(super) fn apply(
 /// step has stopped a body pinned against something. `None` when the body
 /// is gone or cannot be moved.
 fn shove(world: &mut World, push: &Push, limit: f32) -> Option<f32> {
-    let collider = world.get::<Collider>(push.entity).copied();
-    let transform = *world.get::<Transform>(push.entity)?;
-    let body = world.get::<RigidBody>(push.entity)?;
+    let collider = world.get::<Collider2D>(push.entity).copied();
+    let transform = *world.get::<Transform2D>(push.entity)?;
+    let body = world.get::<RigidBody2D>(push.entity)?;
     let solver = SolverBody::from_body(
         push.entity,
         body,
@@ -155,7 +155,7 @@ fn shove(world: &mut World, push: &Push, limit: f32) -> Option<f32> {
     let wanted = push.speed - moving;
     let impulse = (wanted / resistance).clamp(0.0, limit);
     if impulse > 0.0 {
-        let body = world.get_mut::<RigidBody>(push.entity)?;
+        let body = world.get_mut::<RigidBody2D>(push.entity)?;
         body.velocity += into * (impulse * solver.inverse_mass);
         body.angular_velocity += solver.inverse_inertia * lever * impulse;
     }
@@ -202,12 +202,12 @@ fn span(values: impl Iterator<Item = f32>) -> (f32, f32) {
 mod tests {
     use super::*;
 
-    fn shape(collider: Collider, at: Vec2, rotation: f32) -> WorldShape {
-        collider.world_shape(&Transform::from_translation(at).with_rotation(rotation))
+    fn shape(collider: Collider2D, at: Vec2, rotation: f32) -> WorldShape {
+        collider.world_shape(&Transform2D::from_translation(at).with_rotation(rotation))
     }
 
-    fn square(half: f32) -> Collider {
-        Collider::Box {
+    fn square(half: f32) -> Collider2D {
+        Collider2D::Box {
             half_extents: Vec2::splat(half),
         }
     }
@@ -222,7 +222,7 @@ mod tests {
 
         // Taller than the body: the body's own side, centred.
         let mover = shape(
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::new(0.25, 3.0),
             },
             Vec2::new(-1.25, 0.0),
@@ -244,7 +244,7 @@ mod tests {
         let point = contact_point(&mover, &body, Vec2::NEG_X);
         assert!(point.distance(Vec2::new(-1.0, 0.0)) < 1e-4, "{point}");
 
-        let ball = shape(Collider::Circle { radius: 0.5 }, Vec2::new(2.0, 0.0), 0.0);
+        let ball = shape(Collider2D::Circle { radius: 0.5 }, Vec2::new(2.0, 0.0), 0.0);
         let mover = shape(square(0.25), Vec2::new(1.25, 0.0), 0.0);
         let point = contact_point(&mover, &ball, Vec2::NEG_X);
         assert!(point.distance(Vec2::new(1.5, 0.0)) < 1e-5, "{point}");

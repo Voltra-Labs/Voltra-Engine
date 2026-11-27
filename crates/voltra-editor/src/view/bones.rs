@@ -10,7 +10,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_render::LineBatch;
-use voltra_scene::hierarchy::WorldTransforms;
+use voltra_scene::hierarchy::WorldTransforms2D;
 use voltra_scene::skeleton::placed_bones;
 
 /// A cool cyan: not a gizmo axis, the camera's amber, the caster's violet,
@@ -24,7 +24,7 @@ const WIDTH: f32 = 1.5;
 /// Pushes every bone in `world` into `lines`, `selected` lit. `per_pixel`
 /// is world units per screen pixel, which caps how wide a kite is drawn.
 pub fn draw(world: &World, selected: Option<Entity>, per_pixel: f32, lines: &mut LineBatch) {
-    let transforms = WorldTransforms::from_world(world);
+    let transforms = WorldTransforms2D::from_world(world);
     for bone in placed_bones(world, &transforms) {
         let along = bone.end - bone.start;
         let length = along.length();

@@ -3,7 +3,7 @@ use voltra_testkit::scratch_root;
 
 #[test]
 fn a_default_sprite_has_no_slicing_at_all() {
-    let sprite = Sprite::default();
+    let sprite = Sprite2D::default();
 
     assert!(sprite.atlas.is_none());
     assert!(sprite.atlas_handle.is_none());
@@ -19,14 +19,14 @@ fn a_scene_written_before_atlases_existed_still_loads() {
     // on disk must open unchanged and draw exactly as it did.
     let text = "(color:(1.0,1.0,1.0,1.0),sort_order:0)";
 
-    let sprite: Sprite = ron::from_str(text).expect("old scene shape");
+    let sprite: Sprite2D = ron::from_str(text).expect("old scene shape");
 
-    assert_eq!(sprite, Sprite::default());
+    assert_eq!(sprite, Sprite2D::default());
 }
 
 #[test]
 fn the_slicing_round_trips_without_its_handle() {
-    let sprite = Sprite {
+    let sprite = Sprite2D {
         atlas: Some(AssetPath::new("sprites/coin.atlas.ron").expect("valid")),
         frame: 3,
         flip_x: true,
@@ -40,7 +40,7 @@ fn the_slicing_round_trips_without_its_handle() {
         !text.contains("atlas_handle"),
         "handle leaked into RON: {text}"
     );
-    let back: Sprite = ron::from_str(&text).expect("deserialize");
+    let back: Sprite2D = ron::from_str(&text).expect("deserialize");
     assert_eq!(back, sprite);
     assert!(back.atlas_handle.is_none(), "handle must not deserialize");
 }
@@ -54,7 +54,7 @@ fn setting_an_atlas_resolves_a_handle_and_clearing_it_drops_both() {
     )
     .expect("the fixture writes");
     let mut atlases = Atlases::new(&root);
-    let mut sprite = Sprite::default();
+    let mut sprite = Sprite2D::default();
 
     sprite.set_atlas(
         Some(AssetPath::new("coin.atlas.ron").expect("valid")),

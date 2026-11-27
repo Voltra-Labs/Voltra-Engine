@@ -4,7 +4,9 @@
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{hierarchy, Collider, Joint2D, JointKind, Name, RigidBody, SceneId, Transform};
+use voltra_scene::{
+    hierarchy, Collider2D, Joint2D, JointKind, Name, RigidBody2D, SceneId, Transform2D,
+};
 
 use crate::editor::Editor;
 use crate::spawn;
@@ -13,7 +15,7 @@ use crate::undo::SceneView;
 /// Whether the solver would take `entity` as a body: a rigid body, or a
 /// collider, which is immovable.
 fn is_body(world: &World, entity: Entity) -> bool {
-    world.get::<RigidBody>(entity).is_some() || world.get::<Collider>(entity).is_some()
+    world.get::<RigidBody2D>(entity).is_some() || world.get::<Collider2D>(entity).is_some()
 }
 
 /// The joint `join_selection` would make, and whether it can: the primary
@@ -72,7 +74,7 @@ pub(crate) fn join_selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
         frame.world.insert(holder, Name::new("Joint"));
         frame
             .world
-            .insert(holder, Transform::from_translation(at.translation));
+            .insert(holder, Transform2D::from_translation(at.translation));
         frame.world.insert(holder, joint);
         editor.selection.set(Some(holder));
         made.push(id);
@@ -130,7 +132,7 @@ pub(crate) fn spawn_pendulum(editor: &mut Editor, frame: &mut UiFrame<'_>) {
             pivot + Vec2::new(1.2, 0.0),
             Vec2::splat(0.3),
             0.0,
-            RigidBody::new_dynamic(1.0),
+            RigidBody2D::new_dynamic(1.0),
             [0.4, 0.8, 1.0, 1.0],
         );
         frame.world.insert(
@@ -153,21 +155,21 @@ mod tests {
     fn a_hinge_to_a_scaled_body_holds_where_the_two_meet() {
         let mut world = World::new();
         let door = world.spawn();
-        world.insert(door, Transform::from_translation(Vec2::new(1.0, 0.0)));
-        world.insert(door, RigidBody::new_dynamic(1.0));
+        world.insert(door, Transform2D::from_translation(Vec2::new(1.0, 0.0)));
+        world.insert(door, RigidBody2D::new_dynamic(1.0));
         let frame = world.spawn();
         let id = SceneId::new();
         world.insert(frame, id);
         world.insert(
             frame,
-            Transform::from_translation(Vec2::new(0.0, 1.0)).with_scale(Vec2::splat(2.0)),
+            Transform2D::from_translation(Vec2::new(0.0, 1.0)).with_scale(Vec2::splat(2.0)),
         );
-        world.insert(frame, RigidBody::new_static());
+        world.insert(frame, RigidBody2D::new_static());
         let joint = hinge(&world, door, Some(frame), true);
         assert_eq!(joint.b, Some(id));
         // The door's centre in the frame's space, unscaled: what the solver
         // turns back into the world at the door, not halfway to it.
-        let placed = world.get::<Transform>(frame).expect("placed");
+        let placed = world.get::<Transform2D>(frame).expect("placed");
         let held = Joint2D::anchor_in_world(placed, joint.anchor_b);
         assert!((held - Vec2::new(1.0, 0.0)).length() < 1e-5, "{held}");
         assert!((joint.anchor_b - Vec2::new(1.0, -1.0)).length() < 1e-5);

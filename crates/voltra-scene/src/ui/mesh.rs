@@ -10,7 +10,7 @@ use super::UiRect;
 use crate::batch::SpriteBatch;
 use crate::sprite::quad::{quad, texels};
 use crate::sprite::sheets::Sheets;
-use crate::sprite::Sprite;
+use crate::sprite::Sprite2D;
 use crate::text::{shape, ui_px, Text};
 
 mod clip;
@@ -23,11 +23,11 @@ type ElementKey = (i32, u32, u32, u8);
 /// What one screen-space element draws.
 enum Element<'a> {
     /// With the 9-slice it is drawn as, if it has one.
-    Sprite(&'a Sprite, Option<&'a UiSlice>),
+    Sprite(&'a Sprite2D, Option<&'a UiSlice>),
     Text(&'a Text),
 }
 
-/// Every element with a [`UiRect`] and a `Sprite` or `Text`, as a batch in
+/// Every element with a [`UiRect`] and a `Sprite2D` or `Text`, as a batch in
 /// physical pixels for [`screen_projection`](voltra_render::screen_projection).
 ///
 /// `layout` is in points; `scale` is physical pixels per point — the
@@ -37,7 +37,7 @@ enum Element<'a> {
 pub fn batch(world: &World, sheets: Sheets<'_>, layout: &UiLayout, scale: f32) -> SpriteBatch {
     let mut elements: Vec<(ElementKey, Entity, Element<'_>)> = Vec::new();
     for (entity, _) in world.query::<UiRect>() {
-        if let Some(sprite) = world.get::<Sprite>(entity) {
+        if let Some(sprite) = world.get::<Sprite2D>(entity) {
             let (order, depth, index) = layout.draw_key(entity, sprite.sort_order);
             let slice = world.get::<UiSlice>(entity);
             elements.push((
@@ -110,7 +110,7 @@ impl Target<'_> {
 fn push_sprite(
     mut target: Target<'_>,
     rect: Rect,
-    sprite: &Sprite,
+    sprite: &Sprite2D,
     slice: Option<&UiSlice>,
     sheets: Sheets<'_>,
     scale: f32,

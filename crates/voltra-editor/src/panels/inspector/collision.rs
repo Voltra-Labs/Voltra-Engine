@@ -136,7 +136,7 @@ pub(super) fn bits(ui: &mut Ui, id: &str, mask: &mut u32) -> bool {
 mod tests {
     use super::*;
     use voltra_core::egui::Context;
-    use voltra_scene::Collider;
+    use voltra_scene::Collider2D;
 
     #[test]
     fn drawing_the_widget_writes_nothing_by_itself() {
@@ -145,7 +145,7 @@ mod tests {
         // opening the inspector gains a component that says nothing.
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Collider::Circle { radius: 1.0 });
+        world.insert(entity, Collider2D::Circle { radius: 1.0 });
         let mut claim = Some("unset");
 
         let ctx = Context::default();

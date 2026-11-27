@@ -11,8 +11,8 @@ use voltra_ecs::{Entity, World};
 use voltra_physics::ImpulseCache;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    AngleLimit, Collider, Joint2D, JointKind, LinearMotor, Motor, RestSpring, RigidBody, SceneId,
-    Transform, TranslationLimit,
+    AngleLimit, Collider2D, Joint2D, JointKind, LinearMotor, Motor, RestSpring, RigidBody2D,
+    SceneId, Transform2D, TranslationLimit,
 };
 
 /// A dynamic ball of radius 0.2 and a kilogram at the origin, `kind` on it,
@@ -20,9 +20,9 @@ use voltra_scene::{
 fn held_ball(world: &mut World, kind: JointKind) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
-    world.insert(entity, Transform::default());
-    world.insert(entity, Collider::Circle { radius: 0.2 });
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, Transform2D::default());
+    world.insert(entity, Collider2D::Circle { radius: 0.2 });
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
     world.insert(
         entity,
         Joint2D {

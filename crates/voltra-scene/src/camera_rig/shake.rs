@@ -11,7 +11,7 @@ use voltra_render::glam::Vec2;
 /// camera is placed, the same way): the offset — along the view's own
 /// axes — and the turn are added where the view is worked out, and the
 /// transform stays where the game, a follower or a tween put it. On an
-/// entity without a [`Camera`](crate::Camera) there is no view to shake.
+/// entity without a [`Camera2D`](crate::Camera2D) there is no view to shake.
 ///
 /// Squirrel Eiserloh's model ("Juicing Your Cameras With Math", GDC 2016):
 /// a game adds trauma when something hits, it fades on its own, and the

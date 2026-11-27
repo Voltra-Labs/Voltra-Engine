@@ -6,8 +6,8 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, ui, ParticleEmitter, Sprite, Text, Tilemap, Transform, UiButton, UiLayout, UiRect,
-    UiStack,
+    hierarchy, ui, ParticleEmitter, Sprite2D, Text, Tilemap, Transform2D, UiButton, UiLayout,
+    UiRect, UiStack,
 };
 
 use super::super::mixed::{self, Fields};
@@ -30,12 +30,12 @@ pub(in crate::panels::inspector) fn show(
 ) -> Option<&'static str> {
     let mut claim = None;
     if let Some(transform) = gate(
-        frame.world.get_mut::<Transform>(entity),
+        frame.world.get_mut::<Transform2D>(entity),
         multi,
-        Transform::NAME,
+        Transform2D::NAME,
     ) {
-        mixed::marker(ui, multi, &[Transform::NAME]);
-        let fields = Fields::of(multi, Transform::NAME);
+        mixed::marker(ui, multi, &[Transform2D::NAME]);
+        let fields = Fields::of(multi, Transform2D::NAME);
         claim = claim.or(transform::show(ui, transform, fields));
     }
     let parent_rect = ui_parent_rect(ui, frame, entity);
@@ -45,7 +45,7 @@ pub(in crate::panels::inspector) fn show(
         mixed::marker(ui, multi, &[UiRect::NAME]);
         claim = claim.or(ui_rect::show(ui, rect, parent_rect, stacked));
     }
-    let shown = frame.world.get::<Sprite>(entity).map_or(0, |s| s.frame);
+    let shown = frame.world.get::<Sprite2D>(entity).map_or(0, |s| s.frame);
     if let Some(button) = gate(
         frame.world.get_mut::<UiButton>(entity),
         multi,
@@ -66,29 +66,29 @@ pub(in crate::panels::inspector) fn show(
     // asking `frame` anything else.
     let preview = frame
         .world
-        .get::<Sprite>(entity)
+        .get::<Sprite2D>(entity)
         .and_then(|sprite| sprite.texture_handle)
         .and_then(|handle| frame.thumbnail(handle));
     let frames_in_atlas = frame
         .world
-        .get::<Sprite>(entity)
+        .get::<Sprite2D>(entity)
         .and_then(|sprite| sprite.atlas_handle)
         .and_then(|handle| frame.atlases.try_get(handle))
         .map(|atlas| atlas.len())
         .unwrap_or(0);
 
-    let sprite_shared = multi.editable(&[Sprite::NAME]);
+    let sprite_shared = multi.editable(&[Sprite2D::NAME]);
     if let Some(sprite) = frame
         .world
-        .get_mut::<Sprite>(entity)
+        .get_mut::<Sprite2D>(entity)
         .filter(|_| sprite_shared)
     {
         ui.separator();
-        mixed::marker(ui, multi, &[Sprite::NAME]);
+        mixed::marker(ui, multi, &[Sprite2D::NAME]);
         claim = claim.or(sprite::show(
             ui,
             sprite,
-            Fields::of(multi, Sprite::NAME),
+            Fields::of(multi, Sprite2D::NAME),
             particles::Stores {
                 textures: frame.textures,
                 atlases: frame.atlases,
@@ -100,7 +100,7 @@ pub(in crate::panels::inspector) fn show(
     }
     if let Some(sprite) = frame
         .world
-        .get_mut::<Sprite>(entity)
+        .get_mut::<Sprite2D>(entity)
         .filter(|_| sprite_shared)
     {
         let materials = frame.materials.as_deref_mut();
@@ -110,8 +110,8 @@ pub(in crate::panels::inspector) fn show(
         mixed::marker(ui, multi, &[voltra_scene::UiSlice::NAME]);
         claim = claim.or(ui_slice::show(ui, frame.world, entity));
     }
-    if frame.world.get::<Sprite>(entity).is_some()
-        && multi.editable(&[Sprite::NAME, voltra_scene::SpriteAnimation::NAME])
+    if frame.world.get::<Sprite2D>(entity).is_some()
+        && multi.editable(&[Sprite2D::NAME, voltra_scene::SpriteAnimation::NAME])
     {
         ui.separator();
         mixed::marker(ui, multi, &[voltra_scene::SpriteAnimation::NAME]);

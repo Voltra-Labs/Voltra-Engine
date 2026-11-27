@@ -12,7 +12,7 @@ use voltra_core::replication::{NetOwner, Prediction, ReplicationConfig};
 use voltra_core::{App, Headless, Net};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Replicated, SceneId, Transform};
+use voltra_scene::{Replicated, SceneId, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 const SPEED: f32 = 3.0;
@@ -27,7 +27,7 @@ struct Stick {
 /// The one movement both ends run: the server for real, the client ahead
 /// of it and again on every correction.
 fn walk(world: &mut World, entity: Entity, stick: &Stick, step: f32) {
-    if let Some(transform) = world.get_mut::<Transform>(entity) {
+    if let Some(transform) = world.get_mut::<Transform2D>(entity) {
         transform.translation += Vec2::new(f32::from(stick.x), f32::from(stick.y)) * SPEED * step;
     }
 }
@@ -56,7 +56,7 @@ fn server_game() -> App {
                     let world = &mut *tick.world;
                     let player = world.spawn();
                     world.insert(player, SceneId::new());
-                    world.insert(player, Transform::default());
+                    world.insert(player, Transform2D::default());
                     world.insert(player, Replicated::with_priority(4.0));
                     world.insert(player, NetOwner(peer));
                 }
@@ -116,7 +116,7 @@ fn the_local_player_moves_at_once_and_ends_where_the_server_says() {
     let theirs = Net::owned_by(server.world(), local_id).expect("the server's copy");
     let at = |game: &Headless, entity: Entity| {
         game.world()
-            .get::<Transform>(entity)
+            .get::<Transform2D>(entity)
             .expect("a transform")
             .translation
     };
@@ -202,7 +202,7 @@ fn a_misprediction_is_corrected_to_the_servers_state() {
     let theirs = Net::owned_by(server.world(), local_id).expect("the server's copy");
     server
         .world_mut()
-        .get_mut::<Transform>(theirs)
+        .get_mut::<Transform2D>(theirs)
         .expect("a transform")
         .translation
         .y = 2.0;
@@ -213,7 +213,7 @@ fn a_misprediction_is_corrected_to_the_servers_state() {
     let mine = prediction.borrow().entity().expect("predicting");
     let y = client
         .world()
-        .get::<Transform>(mine)
+        .get::<Transform2D>(mine)
         .expect("a transform")
         .translation
         .y;

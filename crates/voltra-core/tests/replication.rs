@@ -11,7 +11,7 @@ use voltra_core::replication::ReplicationConfig;
 use voltra_core::{App, Headless};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Name, Replicated, SceneId, Transform};
+use voltra_scene::{Name, Replicated, SceneId, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -65,7 +65,7 @@ impl Rig {
 }
 
 /// Every replicated entity's id and transform.
-fn replicated(world: &World) -> BTreeMap<SceneId, Transform> {
+fn replicated(world: &World) -> BTreeMap<SceneId, Transform2D> {
     world
         .query::<Replicated>()
         .map(|(entity, _)| {
@@ -73,7 +73,7 @@ fn replicated(world: &World) -> BTreeMap<SceneId, Transform> {
                 *world
                     .get::<SceneId>(entity)
                     .expect("a replicated entity has an id"),
-                *world.get::<Transform>(entity).expect("and a transform"),
+                *world.get::<Transform2D>(entity).expect("and a transform"),
             )
         })
         .collect()
@@ -82,7 +82,7 @@ fn replicated(world: &World) -> BTreeMap<SceneId, Transform> {
 fn spawn(world: &mut World, at: Vec2, priority: f32) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(entity, Replicated::with_priority(priority));
     entity
 }
@@ -97,7 +97,7 @@ fn two_clients_see_the_servers_world_after_spawns_moves_and_despawns_under_loss(
         let world = game.world_mut();
         let entity = world.spawn();
         world.insert(entity, level_id);
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         world.insert(entity, Replicated::default());
         world.insert(entity, Name::new("door"));
     }
@@ -118,7 +118,7 @@ fn two_clients_see_the_servers_world_after_spawns_moves_and_despawns_under_loss(
         for (n, &entity) in moving.iter().enumerate() {
             let angle = frame as f32 * 0.05 + n as f32;
             let at = Vec2::new(angle.cos(), angle.sin()) * (3.0 + n as f32);
-            if let Some(transform) = server.world_mut().get_mut::<Transform>(entity) {
+            if let Some(transform) = server.world_mut().get_mut::<Transform2D>(entity) {
                 transform.translation = at;
                 transform.rotation = angle;
             }
@@ -146,7 +146,7 @@ fn two_clients_see_the_servers_world_after_spawns_moves_and_despawns_under_loss(
         .expect("the door");
     rig.server
         .world_mut()
-        .insert(door, Transform::from_translation(Vec2::new(5.0, 5.0)));
+        .insert(door, Transform2D::from_translation(Vec2::new(5.0, 5.0)));
     rig.step(180, |_, _| {});
 
     let truth = replicated(rig.server.world());
@@ -202,7 +202,7 @@ fn snapshots_stay_inside_the_budget_and_priorities_share_it() {
     for frame in 0..240u32 {
         let world = rig.server.world_mut();
         for (n, &entity) in crowd.iter().chain([&star]).enumerate() {
-            if let Some(t) = world.get_mut::<Transform>(entity) {
+            if let Some(t) = world.get_mut::<Transform2D>(entity) {
                 t.translation.y = (frame as f32 * 0.1 + n as f32).sin();
             }
         }
@@ -312,7 +312,7 @@ fn an_entity_spawned_from_a_prefab_is_spawned_from_it_on_the_client() {
 
     let path = voltra_assets::AssetPath::new("prefabs/ship.prefab.ron").expect("a path");
     let ship = server
-        .spawn(&path, &Transform::from_translation(Vec2::new(4.0, 2.0)))
+        .spawn(&path, &Transform2D::from_translation(Vec2::new(4.0, 2.0)))
         .expect("spawns")
         .root()
         .expect("a root");

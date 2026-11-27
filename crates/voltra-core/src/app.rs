@@ -342,10 +342,10 @@ impl App {
     /// Deliberately empty of camera *navigation*. How a scene is flown around
     /// is the editor's business, not the platform layer's; `voltra-editor`
     /// does it from the viewport panel. A game reads [`Input`] and moves its
-    /// own camera — or authors a [`Camera`] into the scene, which the no-UI
+    /// own camera — or authors a [`Camera2D`] into the scene, which the no-UI
     /// draw path frames through.
     ///
-    /// [`Camera`]: voltra_scene::Camera
+    /// [`Camera2D`]: voltra_scene::Camera2D
     fn update(&mut self) {
         // The frame before this one ends here, its draw and present included.
         voltra_profile::end_frame();

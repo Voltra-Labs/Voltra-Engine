@@ -6,7 +6,7 @@ use voltra_render::{MeshBuffers, Primitives, QuadInstance, Texture, Vertex2D};
 
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
-use crate::sprite::Sprite;
+use crate::sprite::Sprite2D;
 use crate::text::{shape, Text};
 
 pub use material_use::MaterialUse;
@@ -101,7 +101,7 @@ pub struct SpriteBatch {
     pub materials: Vec<MaterialUse>,
     /// The world's matrices as last composed, kept so the next build
     /// composes into the same storage.
-    transforms: crate::hierarchy::WorldTransforms,
+    transforms: crate::hierarchy::WorldTransforms2D,
     /// How many drawables the last build sorted: the next one's list is
     /// made that large up front.
     drawn_hint: usize,
@@ -110,10 +110,10 @@ pub struct SpriteBatch {
 impl SpriteBatch {
     /// Appends one quad, extending or starting a [`SpriteRange`] to match.
     ///
-    /// Takes the sprite's **world** matrix, not its [`Transform`]: a parented
+    /// Takes the sprite's **world** matrix, not its [`Transform2D`]: a parented
     /// entity's transform is local to its parent, and composing the chain is
-    /// [`WorldTransforms`](crate::hierarchy::WorldTransforms)'s job. Passing a matrix rather than a composed
-    /// `Transform` also keeps the shear a chain of parents can produce, which
+    /// [`WorldTransforms2D`](crate::hierarchy::WorldTransforms2D)'s job. Passing a matrix rather than a composed
+    /// `Transform2D` also keeps the shear a chain of parents can produce, which
     /// three fields cannot hold.
     ///
     /// Grows the last range when this sprite's handle matches it, so two
@@ -122,7 +122,7 @@ impl SpriteBatch {
     /// texture that reappears later still gets its own run — the same
     /// painter's-order-over-batching rule `from_world`'s sort already commits
     /// to.
-    pub fn push(&mut self, matrix: Mat3, sprite: &Sprite, sheets: Sheets<'_>) {
+    pub fn push(&mut self, matrix: Mat3, sprite: &Sprite2D, sheets: Sheets<'_>) {
         // One `quad` call, shared with `pick::sprite_at`. A second opinion
         // about where a sprite's corners are is a click that misses the pixels
         // it lands on, and nothing reports it.

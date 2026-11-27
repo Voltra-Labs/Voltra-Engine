@@ -3,13 +3,13 @@
 use super::*;
 use crate::hierarchy::link::set_parent;
 use crate::scene_id::SceneId;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 use voltra_render::glam::Vec2;
 
-pub(super) fn spawn(world: &mut World, camera: Camera, at: Vec2) -> Entity {
+pub(super) fn spawn(world: &mut World, camera: Camera2D, at: Vec2) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(entity, camera);
     entity
 }
@@ -24,20 +24,24 @@ fn a_scene_without_a_camera_has_no_active_one() {
 #[test]
 fn the_only_camera_is_the_active_one() {
     let mut world = World::new();
-    let camera = spawn(&mut world, Camera::default(), Vec2::ZERO);
+    let camera = spawn(&mut world, Camera2D::default(), Vec2::ZERO);
     assert_eq!(active(&world), Some(camera));
 }
 
 #[test]
 fn the_highest_priority_wins() {
     let mut world = World::new();
-    spawn(&mut world, Camera::default(), Vec2::ZERO);
+    spawn(&mut world, Camera2D::default(), Vec2::ZERO);
     let winner = spawn(
         &mut world,
-        Camera::default().with_priority(5),
+        Camera2D::default().with_priority(5),
         Vec2::new(3.0, 0.0),
     );
-    spawn(&mut world, Camera::default().with_priority(-1), Vec2::ZERO);
+    spawn(
+        &mut world,
+        Camera2D::default().with_priority(-1),
+        Vec2::ZERO,
+    );
 
     assert_eq!(active(&world), Some(winner));
 }
@@ -45,12 +49,12 @@ fn the_highest_priority_wins() {
 #[test]
 fn an_inactive_camera_is_never_chosen() {
     let mut world = World::new();
-    let low = spawn(&mut world, Camera::default(), Vec2::ZERO);
+    let low = spawn(&mut world, Camera2D::default(), Vec2::ZERO);
     spawn(
         &mut world,
-        Camera {
+        Camera2D {
             active: false,
-            ..Camera::default().with_priority(100)
+            ..Camera2D::default().with_priority(100)
         },
         Vec2::ZERO,
     );
@@ -61,8 +65,8 @@ fn an_inactive_camera_is_never_chosen() {
 #[test]
 fn a_tie_breaks_on_the_lower_entity_index() {
     let mut world = World::new();
-    let first = spawn(&mut world, Camera::default(), Vec2::ZERO);
-    let second = spawn(&mut world, Camera::default(), Vec2::ZERO);
+    let first = spawn(&mut world, Camera2D::default(), Vec2::ZERO);
+    let second = spawn(&mut world, Camera2D::default(), Vec2::ZERO);
 
     assert!(first.index() < second.index());
     assert_eq!(
@@ -75,7 +79,7 @@ fn a_tie_breaks_on_the_lower_entity_index() {
 #[test]
 fn the_view_sits_where_the_transform_says() {
     let mut world = World::new();
-    let entity = spawn(&mut world, Camera::default(), Vec2::new(3.0, -4.0));
+    let entity = spawn(&mut world, Camera2D::default(), Vec2::new(3.0, -4.0));
 
     let view = view(&world, entity, 1.5).expect("it has a camera");
     assert_eq!(view.position, Vec2::new(3.0, -4.0));
@@ -85,7 +89,7 @@ fn the_view_sits_where_the_transform_says() {
 #[test]
 fn a_size_is_half_the_world_height_the_view_covers() {
     let mut world = World::new();
-    let entity = spawn(&mut world, Camera::new(5.0), Vec2::ZERO);
+    let entity = spawn(&mut world, Camera2D::new(5.0), Vec2::ZERO);
 
     let view = view(&world, entity, 2.0).expect("it has a camera");
     assert!((view.half_extents().y - 5.0).abs() < 1e-5);
@@ -98,8 +102,8 @@ fn a_size_is_half_the_world_height_the_view_covers() {
 #[test]
 fn a_parented_camera_is_where_its_parent_put_it() {
     let mut world = World::new();
-    let rig = spawn(&mut world, Camera::default(), Vec2::new(10.0, 0.0));
-    let entity = spawn(&mut world, Camera::default(), Vec2::new(1.0, 2.0));
+    let rig = spawn(&mut world, Camera2D::default(), Vec2::new(10.0, 0.0));
+    let entity = spawn(&mut world, Camera2D::default(), Vec2::new(1.0, 2.0));
     set_parent(&mut world, entity, rig).expect("a plain reparent");
 
     let view = view(&world, entity, 1.0).expect("it has a camera");
@@ -110,7 +114,7 @@ fn a_parented_camera_is_where_its_parent_put_it() {
 fn a_camera_without_a_transform_sits_at_the_origin() {
     let mut world = World::new();
     let entity = world.spawn();
-    world.insert(entity, Camera::default());
+    world.insert(entity, Camera2D::default());
 
     let view = view(&world, entity, 1.0).expect("it has a camera");
     assert_eq!(view.position, Vec2::ZERO);
@@ -120,7 +124,7 @@ fn a_camera_without_a_transform_sits_at_the_origin() {
 fn an_entity_without_a_camera_has_no_view() {
     let mut world = World::new();
     let entity = world.spawn();
-    world.insert(entity, Transform::default());
+    world.insert(entity, Transform2D::default());
     assert!(view(&world, entity, 1.0).is_none());
 }
 
@@ -130,7 +134,7 @@ fn a_degenerate_size_still_produces_a_finite_view() {
     // clamp lives in `View2D::set_zoom`; this is the test that the path
     // through this type actually reaches it.
     let mut world = World::new();
-    let entity = spawn(&mut world, Camera::new(0.0), Vec2::ZERO);
+    let entity = spawn(&mut world, Camera2D::new(0.0), Vec2::ZERO);
 
     let view = view(&world, entity, 1.0).expect("it has a camera");
     assert_eq!(view.zoom(), View2D::MAX_ZOOM);
@@ -140,7 +144,7 @@ fn a_degenerate_size_still_produces_a_finite_view() {
 #[test]
 fn a_nan_size_leaves_a_usable_view() {
     let mut world = World::new();
-    let entity = spawn(&mut world, Camera::new(f32::NAN), Vec2::ZERO);
+    let entity = spawn(&mut world, Camera2D::new(f32::NAN), Vec2::ZERO);
 
     let view = view(&world, entity, 1.0).expect("it has a camera");
     assert!(
@@ -151,17 +155,17 @@ fn a_nan_size_leaves_a_usable_view() {
 
 #[test]
 fn the_size_bounds_are_the_zoom_bounds_the_other_way_up() {
-    assert!((Camera::new(Camera::MAX_SIZE).zoom() - View2D::MIN_ZOOM).abs() < 1e-9);
-    assert!((Camera::new(Camera::MIN_SIZE).zoom() - View2D::MAX_ZOOM).abs() < 1e-3);
+    assert!((Camera2D::new(Camera2D::MAX_SIZE).zoom() - View2D::MIN_ZOOM).abs() < 1e-9);
+    assert!((Camera2D::new(Camera2D::MIN_SIZE).zoom() - View2D::MAX_ZOOM).abs() < 1e-3);
 }
 
 #[test]
 fn the_active_view_frames_the_camera_that_wins() {
     let mut world = World::new();
-    spawn(&mut world, Camera::new(2.0), Vec2::new(-5.0, 0.0));
+    spawn(&mut world, Camera2D::new(2.0), Vec2::new(-5.0, 0.0));
     spawn(
         &mut world,
-        Camera::new(4.0).with_priority(1),
+        Camera2D::new(4.0).with_priority(1),
         Vec2::new(7.0, -3.0),
     );
 
@@ -176,7 +180,7 @@ fn a_scene_without_an_active_camera_has_no_active_view() {
     let mut world = World::new();
     spawn(
         &mut world,
-        Camera {
+        Camera2D {
             active: false,
             ..Default::default()
         },

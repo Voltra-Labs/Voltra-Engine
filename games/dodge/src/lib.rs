@@ -14,7 +14,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::keyframes::{Ease, Property, Value};
 use voltra_scene::{
-    Collider, ComponentRegistry, RigidBody, Sensor, Sprite, Text, TimerId, Transform,
+    Collider2D, ComponentRegistry, RigidBody2D, Sensor, Sprite2D, Text, TimerId, Transform2D,
 };
 
 /// The first scene, under the game's asset root.
@@ -160,7 +160,7 @@ impl Game for Dodge {
                 0.5,
                 Ease::EaseOut,
             );
-            if let Some(body) = tick.world.get_mut::<RigidBody>(player) {
+            if let Some(body) = tick.world.get_mut::<RigidBody2D>(player) {
                 body.velocity = Vec2::ZERO;
             }
         }
@@ -207,17 +207,20 @@ impl Dodge {
         world.insert(rock, Rock);
         world.insert(
             rock,
-            Transform::from_translation(Vec2::new(x, fall.top)).with_scale(Vec2::splat(size)),
+            Transform2D::from_translation(Vec2::new(x, fall.top)).with_scale(Vec2::splat(size)),
         );
-        world.insert(rock, Sprite::new([0.6, 0.5, 0.45, 1.0]).with_sort_order(1));
-        world.insert(rock, Collider::Circle { radius: 0.5 });
+        world.insert(
+            rock,
+            Sprite2D::new([0.6, 0.5, 0.45, 1.0]).with_sort_order(1),
+        );
+        world.insert(rock, Collider2D::Circle { radius: 0.5 });
         world.insert(rock, Sensor);
         world.insert(
             rock,
-            RigidBody {
+            RigidBody2D {
                 body_type: voltra_scene::body::BodyType::Kinematic,
                 velocity: Vec2::new(0.0, -speed),
-                ..RigidBody::default()
+                ..RigidBody2D::default()
             },
         );
         self.dropped += 1;
@@ -241,7 +244,7 @@ fn steer(tick: &mut Tick<'_>) {
     .clamp_length_max(1.0);
     let at = tick
         .world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .map_or(Vec2::ZERO, |t| t.translation);
     let mut velocity = wish * player.speed;
     // Not out of the arena: a kinematic body is stopped by nothing.
@@ -252,7 +255,7 @@ fn steer(tick: &mut Tick<'_>) {
             velocity[axis] = 0.0;
         }
     }
-    if let Some(body) = tick.world.get_mut::<RigidBody>(entity) {
+    if let Some(body) = tick.world.get_mut::<RigidBody2D>(entity) {
         body.velocity = velocity;
     }
 }
@@ -263,7 +266,7 @@ fn clear_fallen(world: &mut World, fall: Rockfall) {
         .query::<Rock>()
         .filter(|(e, _)| {
             world
-                .get::<Transform>(*e)
+                .get::<Transform2D>(*e)
                 .is_some_and(|t| t.translation.y < -fall.top)
         })
         .map(|(e, _)| e)

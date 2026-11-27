@@ -97,7 +97,7 @@ fn a_missing_file_yields_a_checker_of_its_own() {
         &AssetPath::new("sprites/absent.png").expect("valid"),
     );
 
-    // Its own slot, not the shared placeholder handle: a `Sprite` stores the
+    // Its own slot, not the shared placeholder handle: a `Sprite2D` stores the
     // handle it was given and nothing re-resolves it, so sharing one would
     // make a broken path unfixable by hot reload.
     assert_ne!(handle, textures.placeholder());

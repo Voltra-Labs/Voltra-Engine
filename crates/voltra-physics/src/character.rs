@@ -37,7 +37,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{CharacterBody2D, CharacterContact, Collider, CollisionLayers, Transform};
+use voltra_scene::{CharacterBody2D, CharacterContact, Collider2D, CollisionLayers, Transform2D};
 
 use crate::query::{QueryFilter, ShapeHit};
 
@@ -75,7 +75,7 @@ pub struct Slide {
 /// Moves the character `entity` by `velocity` for `delta` seconds.
 ///
 /// `None`, moving nothing, unless the entity has a [`CharacterBody2D`], a
-/// [`Collider`] and a [`Transform`]. It looks at the layers its
+/// [`Collider2D`] and a [`Transform2D`]. It looks at the layers its
 /// `CollisionLayers` mask names, as a body would, and never at itself or at
 /// sensors.
 pub fn move_and_slide(
@@ -85,8 +85,8 @@ pub fn move_and_slide(
     delta: f32,
 ) -> Option<Slide> {
     let body = world.get::<CharacterBody2D>(entity)?.clone();
-    let collider = *world.get::<Collider>(entity)?;
-    let transform = *world.get::<Transform>(entity)?;
+    let collider = *world.get::<Collider2D>(entity)?;
+    let transform = *world.get::<Transform2D>(entity)?;
     let mask = world
         .get::<CollisionLayers>(entity)
         .map_or(CollisionLayers::ALL, |l| l.mask);
@@ -134,7 +134,7 @@ pub fn move_and_slide(
     slide.contact.floor_pose = slide
         .contact
         .floor
-        .and_then(|floor| world.get::<Transform>(floor))
+        .and_then(|floor| world.get::<Transform2D>(floor))
         .map(|floor| (floor.translation, floor.rotation));
     slide.contact.platform_velocity = if delta > 0.0 {
         carried / delta
@@ -142,7 +142,7 @@ pub fn move_and_slide(
         Vec2::ZERO
     };
 
-    if let Some(transform) = world.get_mut::<Transform>(entity) {
+    if let Some(transform) = world.get_mut::<Transform2D>(entity) {
         transform.translation = at.translation;
         transform.rotation = at.rotation;
     }

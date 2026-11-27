@@ -37,13 +37,13 @@ pub fn draw(outlines: &[Occluder], lines: &mut LineBatch) {
 #[cfg(test)]
 mod tests {
     use voltra_render::glam::Vec2;
-    use voltra_scene::{CasterShape, ShadowCaster2D, Transform};
+    use voltra_scene::{CasterShape, ShadowCaster2D, Transform2D};
 
     use super::*;
 
     fn caster(world: &mut World, closed: bool) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         world.insert(
             entity,
             ShadowCaster2D {
@@ -77,7 +77,7 @@ mod tests {
     fn an_entity_that_casts_nothing_draws_nothing() {
         let mut world = World::new();
         let plain = world.spawn();
-        world.insert(plain, Transform::default());
+        world.insert(plain, Transform2D::default());
         let mut lines = LineBatch::default();
         draw(&shadow_caster::outlines_of(&world, plain, None), &mut lines);
         assert!(lines.is_empty());

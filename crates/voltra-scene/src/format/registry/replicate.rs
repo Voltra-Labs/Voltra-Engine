@@ -3,7 +3,7 @@
 //!
 //! A scene file stores a component as RON — readable, merged in git, and
 //! about three times the size of the value. On the wire the same value is
-//! `postcard`: varints and raw floats, no field names, so a `Transform` is
+//! `postcard`: varints and raw floats, no field names, so a `Transform2D` is
 //! 20 bytes. Both conversions are captured at registration, as the RON ones
 //! are, so replication walks the registry and never names a type.
 
@@ -143,7 +143,7 @@ where
 impl ComponentRegistry {
     /// Marks the registered type `T` as replicated: on an entity carrying
     /// [`Replicated`](crate::Replicated), the server sends its value to
-    /// every client when it changes. `Transform` is by default.
+    /// every client when it changes. `Transform2D` is by default.
     ///
     /// Opt-in per type, as Unreal's `UPROPERTY(Replicated)` and Bevy
     /// replicon's `replicate::<C>()` are: most components (a sprite's
@@ -262,7 +262,7 @@ impl ComponentRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Transform;
+    use crate::Transform2D;
     use voltra_render::glam::Vec2;
 
     #[derive(Debug, PartialEq, Serialize, serde::Deserialize)]
@@ -285,7 +285,7 @@ mod tests {
         let transform = registry.replicated()[0];
         let mut world = World::new();
         let a = world.spawn();
-        world.insert(a, Transform::from_translation(Vec2::new(2.0, 4.0)));
+        world.insert(a, Transform2D::from_translation(Vec2::new(2.0, 4.0)));
 
         let bytes = registry
             .encode_replicated(transform, &world, a)
@@ -296,14 +296,14 @@ mod tests {
         registry
             .apply_replicated(transform, &mut world, b, &bytes)
             .expect("decodes");
-        assert_eq!(world.get::<Transform>(b), world.get::<Transform>(a));
+        assert_eq!(world.get::<Transform2D>(b), world.get::<Transform2D>(a));
 
-        let zero = postcard::to_allocvec(&Transform::default()).expect("encodes");
+        let zero = postcard::to_allocvec(&Transform2D::default()).expect("encodes");
         let half = registry
             .lerp_replicated(transform, &zero, &bytes, 0.5)
             .expect("interpolated")
             .expect("lerps");
-        let half: Transform = decode(&half).expect("decodes");
+        let half: Transform2D = decode(&half).expect("decodes");
         assert_eq!(half.translation, Vec2::new(1.0, 2.0));
     }
 

@@ -205,28 +205,28 @@ mod tests {
     use crate::narrow::manifold;
     use crate::narrow::tests::{at, boxed};
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Collider, ConvexPolygon, Transform};
+    use voltra_scene::{Collider2D, ConvexPolygon, Transform2D};
 
-    fn polygon(points: &[(f32, f32)], radius: f32) -> Collider {
+    fn polygon(points: &[(f32, f32)], radius: f32) -> Collider2D {
         let points: Vec<Vec2> = points.iter().map(|(x, y)| Vec2::new(*x, *y)).collect();
-        Collider::Polygon {
+        Collider2D::Polygon {
             points: ConvexPolygon::new(&points).expect("a polygon"),
             radius,
         }
     }
 
-    fn square_polygon(half: f32) -> Collider {
-        Collider::Polygon {
+    fn square_polygon(half: f32) -> Collider2D {
+        Collider2D::Polygon {
             points: ConvexPolygon::rectangle(Vec2::splat(half)).expect("a square"),
             radius: 0.0,
         }
     }
 
     /// A wide floor whose top face is at y = 0, as a polygon.
-    fn floor() -> (Collider, Transform) {
+    fn floor() -> (Collider2D, Transform2D) {
         (
             polygon(&[(-5.0, -1.0), (5.0, -1.0), (5.0, 0.0), (-5.0, 0.0)], 0.0),
-            Transform::default(),
+            Transform2D::default(),
         )
     }
 
@@ -254,9 +254,9 @@ mod tests {
         let mut compared = 0;
         for _ in 0..400 {
             let b_at =
-                Transform::from_translation(Vec2::new(next() * 3.0 - 1.5, next() * 3.0 - 1.5))
+                Transform2D::from_translation(Vec2::new(next() * 3.0 - 1.5, next() * 3.0 - 1.5))
                     .with_rotation(next() * std::f32::consts::TAU);
-            let a_at = Transform::default().with_rotation(next() * std::f32::consts::TAU);
+            let a_at = Transform2D::default().with_rotation(next() * std::f32::consts::TAU);
             let as_boxes = manifold((&boxed(1.0), &a_at), (&boxed(0.7), &b_at));
             let as_polygons =
                 manifold((&square_polygon(1.0), &a_at), (&square_polygon(0.7), &b_at));
@@ -281,7 +281,7 @@ mod tests {
     fn a_rounded_polygon_counts_its_rounding() {
         let (floor, floor_at) = floor();
         // A unit square rounded by 0.25 whose core's bottom is 0.15 up.
-        let rounded = Collider::Polygon {
+        let rounded = Collider2D::Polygon {
             points: ConvexPolygon::rectangle(Vec2::splat(0.5)).expect("a square"),
             radius: 0.25,
         };
@@ -297,7 +297,7 @@ mod tests {
 
     #[test]
     fn a_rounded_corner_over_a_corner_is_one_point_along_the_diagonal() {
-        let a = Collider::Polygon {
+        let a = Collider2D::Polygon {
             points: ConvexPolygon::rectangle(Vec2::splat(0.5)).expect("a square"),
             radius: 0.5,
         };
@@ -316,11 +316,11 @@ mod tests {
     #[test]
     fn a_capsule_lying_on_a_floor_touches_it_twice_and_standing_once() {
         let (floor, floor_at) = floor();
-        let capsule = Collider::Capsule {
+        let capsule = Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.25,
         };
-        let lying = Transform::from_translation(Vec2::new(0.0, 0.2))
+        let lying = Transform2D::from_translation(Vec2::new(0.0, 0.2))
             .with_rotation(std::f32::consts::FRAC_PI_2);
         let m = manifold((&capsule, &lying), (&floor, &floor_at)).expect("lying");
         assert_eq!(m.points().len(), 2, "{m:?}");

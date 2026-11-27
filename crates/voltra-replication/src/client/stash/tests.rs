@@ -1,7 +1,7 @@
 //! The tests of `stash`.
 
 use super::*;
-use voltra_scene::{Name, Sprite, Transform};
+use voltra_scene::{Name, Sprite2D, Transform2D};
 
 #[test]
 fn an_entity_comes_back_as_it_was_but_for_what_the_wire_brings() {
@@ -11,8 +11,8 @@ fn an_entity_comes_back_as_it_was_but_for_what_the_wire_brings() {
     let ship_id = SceneId::new();
     world.insert(ship, ship_id);
     world.insert(ship, Replicated::default());
-    world.insert(ship, Transform::default());
-    world.insert(ship, Sprite::default().with_sort_order(4));
+    world.insert(ship, Transform2D::default());
+    world.insert(ship, Sprite2D::default().with_sort_order(4));
     let flame = world.spawn();
     world.insert(flame, SceneId::new());
     world.insert(flame, Name::new("flame"));
@@ -21,7 +21,7 @@ fn an_entity_comes_back_as_it_was_but_for_what_the_wire_brings() {
     let turret_id = SceneId::new();
     world.insert(turret, turret_id);
     world.insert(turret, Replicated::default());
-    world.insert(turret, Transform::default());
+    world.insert(turret, Transform2D::default());
     hierarchy::set_parent(&mut world, turret, ship).expect("parents");
 
     let mut stash = Stash::default();
@@ -37,12 +37,12 @@ fn an_entity_comes_back_as_it_was_but_for_what_the_wire_brings() {
     let back = stash.restore(&mut world, &registry, ship_id).expect("kept");
     assert_eq!(back.len(), 2, "the ship and its flame");
     assert_eq!(
-        world.get::<Sprite>(back[0]).map(|s| s.sort_order),
+        world.get::<Sprite2D>(back[0]).map(|s| s.sort_order),
         Some(4),
         "its own state kept"
     );
     assert!(
-        world.get::<Transform>(back[0]).is_none(),
+        world.get::<Transform2D>(back[0]).is_none(),
         "the replicated one comes with the spawn"
     );
     hierarchy::resolve_parents(&mut world);
@@ -99,8 +99,8 @@ fn a_level_s_records_are_kept_by_their_replicated_tops_and_spawned_back() {
     let coin_id = SceneId::new();
     level.insert(coin, coin_id);
     level.insert(coin, Replicated::default());
-    level.insert(coin, Transform::default());
-    level.insert(coin, Sprite::default().with_sort_order(7));
+    level.insert(coin, Transform2D::default());
+    level.insert(coin, Sprite2D::default().with_sort_order(7));
     let glow = level.spawn();
     level.insert(glow, SceneId::new());
     level.insert(glow, Name::new("glow"));
@@ -123,12 +123,12 @@ fn a_level_s_records_are_kept_by_their_replicated_tops_and_spawned_back() {
     let back = stash.restore(&mut world, &registry, coin_id).expect("kept");
     assert_eq!(back.len(), 2, "the coin and its glow");
     assert_eq!(
-        world.get::<Sprite>(back[0]).map(|s| s.sort_order),
+        world.get::<Sprite2D>(back[0]).map(|s| s.sort_order),
         Some(7),
         "the level's own"
     );
     assert!(
-        world.get::<Transform>(back[0]).is_none(),
+        world.get::<Transform2D>(back[0]).is_none(),
         "the wire brings it"
     );
     hierarchy::resolve_parents(&mut world);

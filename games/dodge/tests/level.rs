@@ -5,7 +5,7 @@
 use dodge::{Dodge, Rock, Run, FIRST_SCENE};
 use voltra_assets::AssetPath;
 use voltra_core::{App, Headless};
-use voltra_scene::{Name, Transform};
+use voltra_scene::{Name, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -34,7 +34,7 @@ fn rocks_fall_and_the_clock_runs() {
     let p = player(&session);
     session
         .world_mut()
-        .get_mut::<Transform>(p)
+        .get_mut::<Transform2D>(p)
         .expect("placed")
         .translation = voltra_render::glam::Vec2::new(-30.0, 30.0);
     session.step(60 * 2, FRAME);
@@ -52,7 +52,7 @@ fn a_rock_on_the_player_ends_the_run_and_fades_it() {
     let p = player(&session);
     let at = session
         .world()
-        .get::<Transform>(p)
+        .get::<Transform2D>(p)
         .expect("placed")
         .translation;
     let rock = session.world_mut().spawn();
@@ -60,16 +60,16 @@ fn a_rock_on_the_player_ends_the_run_and_fades_it() {
     world.insert(rock, Rock);
     world.insert(
         rock,
-        Transform::from_translation(at + voltra_render::glam::Vec2::new(0.0, 0.6)),
+        Transform2D::from_translation(at + voltra_render::glam::Vec2::new(0.0, 0.6)),
     );
-    world.insert(rock, voltra_scene::Collider::Circle { radius: 0.5 });
+    world.insert(rock, voltra_scene::Collider2D::Circle { radius: 0.5 });
     world.insert(rock, voltra_scene::Sensor);
     world.insert(
         rock,
-        voltra_scene::RigidBody {
+        voltra_scene::RigidBody2D {
             body_type: voltra_scene::body::BodyType::Kinematic,
             velocity: voltra_render::glam::Vec2::new(0.0, -5.0),
-            ..voltra_scene::RigidBody::default()
+            ..voltra_scene::RigidBody2D::default()
         },
     );
     session.step(30, FRAME);
@@ -80,7 +80,7 @@ fn a_rock_on_the_player_ends_the_run_and_fades_it() {
     assert_eq!(run(&session).seconds, seconds, "the clock stopped");
     let alpha = session
         .world()
-        .get::<voltra_scene::Sprite>(p)
+        .get::<voltra_scene::Sprite2D>(p)
         .expect("a sprite")
         .color[3];
     assert!(alpha < 0.05, "faded out: {alpha}");

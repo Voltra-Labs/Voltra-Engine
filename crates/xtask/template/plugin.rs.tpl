@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use voltra_assets::AssetPath;
 use voltra_core::game::library::{library_file, GameLibrary};
 use voltra_core::{App, Headless};
-use voltra_scene::{Name, Transform};
+use voltra_scene::{Name, Transform2D};
 use {{crate}}::FIRST_SCENE;
 
 /// The library cargo built for this run: beside the binary after a
@@ -42,6 +42,6 @@ fn the_editor_can_load_and_play_the_game() {
         .query::<Name>()
         .find(|(_, name)| name.as_str() == "Player")
         .expect("the scene has a player");
-    let at = session.world().get::<Transform>(player).expect("placed").translation;
+    let at = session.world().get::<Transform2D>(player).expect("placed").translation;
     assert!(at.x > 1.0, "the player walked right: {at}");
 }

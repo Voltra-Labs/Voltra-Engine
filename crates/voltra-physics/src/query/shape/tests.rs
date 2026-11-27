@@ -7,25 +7,25 @@ use voltra_scene::Sensor;
 
 const NEAR: f32 = 1e-4;
 
-fn solid(world: &mut World, at: Vec2, collider: Collider) -> Entity {
+fn solid(world: &mut World, at: Vec2, collider: Collider2D) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(entity, collider);
     entity
 }
 
-fn square(half: f32) -> Collider {
-    Collider::Box {
+fn square(half: f32) -> Collider2D {
+    Collider2D::Box {
         half_extents: Vec2::splat(half),
     }
 }
 
-fn ball(radius: f32) -> Collider {
-    Collider::Circle { radius }
+fn ball(radius: f32) -> Collider2D {
+    Collider2D::Circle { radius }
 }
 
-fn at(x: f32, y: f32) -> Transform {
-    Transform::from_translation(Vec2::new(x, y))
+fn at(x: f32, y: f32) -> Transform2D {
+    Transform2D::from_translation(Vec2::new(x, y))
 }
 
 fn near(a: Vec2, b: Vec2) -> bool {
@@ -55,10 +55,10 @@ fn a_box_stops_at_a_wall_face_on() {
 fn a_box_falls_onto_a_turned_floor_by_its_slope() {
     let mut world = World::new();
     let slope = world.spawn();
-    world.insert(slope, Transform::default().with_rotation(FRAC_PI_4));
+    world.insert(slope, Transform2D::default().with_rotation(FRAC_PI_4));
     world.insert(
         slope,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(10.0, 0.5),
         },
     );
@@ -89,12 +89,12 @@ fn sliding_along_a_floor_it_touches_does_not_hit_the_floor() {
     solid(
         &mut world,
         Vec2::new(0.0, -1.0),
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(10.0, 0.5),
         },
     );
     let standing = at(0.0, 0.0);
-    let shape = Collider::Box {
+    let shape = Collider2D::Box {
         half_extents: Vec2::splat(0.5),
     };
     assert!(cast(
@@ -134,7 +134,7 @@ fn a_shape_starting_inside_reports_the_way_out() {
     solid(
         &mut world,
         Vec2::new(0.0, -1.0),
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(10.0, 0.5),
         },
     );
@@ -263,7 +263,7 @@ fn a_fast_cast_does_not_tunnel_and_a_short_one_falls_short() {
     solid(
         &mut world,
         Vec2::new(50.0, 0.0),
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(0.01, 1.0),
         },
     );
@@ -299,7 +299,7 @@ fn a_one_way_collider_is_met_only_from_its_solid_side() {
     let ledge = solid(
         &mut world,
         Vec2::ZERO,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(2.0, 0.1),
         },
     );

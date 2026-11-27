@@ -195,10 +195,10 @@ fn a_v_shaped_corner_stops_it_without_sinking_in() {
     assert!(settled.x.abs() < 0.05, "{settled}");
     let manifold_free = voltra_physics::query::cast(
         &world,
-        &Collider::Box {
+        &Collider2D::Box {
             half_extents: Vec2::splat(0.25),
         },
-        &Transform::from_translation(settled),
+        &Transform2D::from_translation(settled),
         Vec2::ZERO,
         voltra_physics::QueryFilter::new().excluding(me),
     );
@@ -212,7 +212,7 @@ fn a_v_shaped_corner_stops_it_without_sinking_in() {
 fn an_entity_that_is_not_a_character_is_not_moved() {
     let mut world = World::new();
     let plain = world.spawn();
-    world.insert(plain, Transform::default());
+    world.insert(plain, Transform2D::default());
     assert!(move_and_slide(&mut world, plain, Vec2::X, DT).is_none());
 }
 

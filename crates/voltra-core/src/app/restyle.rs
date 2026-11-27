@@ -1,7 +1,7 @@
 //! Handles for what a UI theme wrote into elements: a skin's texture, a
 //! font, named by path and left for the loop to load.
 
-use voltra_scene::{Sprite, Text, UiRect};
+use voltra_scene::{Sprite2D, Text, UiRect};
 
 use super::App;
 
@@ -17,7 +17,7 @@ impl App {
             .map(|(e, _)| e)
             .filter(|&e| {
                 self.world
-                    .get::<Sprite>(e)
+                    .get::<Sprite2D>(e)
                     .is_some_and(|s| s.texture.is_some() && s.texture_handle.is_none())
                     || self
                         .world
@@ -41,7 +41,7 @@ impl App {
         let context = self.renderer.as_ref().map(|renderer| renderer.context());
         if let (Some(textures), Some(context)) = (self.textures.as_mut(), context) {
             for &entity in &waiting {
-                if let Some(sprite) = self.world.get_mut::<Sprite>(entity) {
+                if let Some(sprite) = self.world.get_mut::<Sprite2D>(entity) {
                     if sprite.texture_handle.is_none() {
                         let path = sprite.texture.clone();
                         sprite.set_texture(path, textures, context.device(), context.queue());

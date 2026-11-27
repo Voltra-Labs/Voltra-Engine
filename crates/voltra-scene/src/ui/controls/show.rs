@@ -5,7 +5,7 @@ use voltra_ecs::{Entity, World};
 
 use super::UiControls;
 use crate::hierarchy;
-use crate::sprite::Sprite;
+use crate::sprite::Sprite2D;
 use crate::text::Text;
 use crate::ui::button::{State, UiButton};
 use crate::ui::layout::UiLayout;
@@ -32,7 +32,7 @@ impl UiControls {
                 State::Normal
             };
             let toggle = world.get::<UiToggle>(entity).copied();
-            if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+            if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
                 button.show(state, toggle.as_ref(), sprite);
             }
         }

@@ -42,7 +42,7 @@ use editor::Editor;
 use voltra_assets::AssetPath;
 use voltra_core::{App, WindowConfig};
 use voltra_render::glam::Vec2;
-use voltra_scene::{SceneId, Sprite, Transform};
+use voltra_scene::{SceneId, Sprite2D, Transform2D};
 
 /// The sample texture this repository ships, under the asset root.
 const CHECKER: &str = "sprites/checker.png";
@@ -162,11 +162,11 @@ fn spawn_demo_scene(app: &mut App) {
         app.world.insert(entity, SceneId::new());
         app.world.insert(
             entity,
-            Transform::from_translation(position)
+            Transform2D::from_translation(position)
                 .with_scale(Vec2::splat(0.4))
                 .with_rotation(rotation),
         );
-        let mut sprite = Sprite::new(color);
+        let mut sprite = Sprite2D::new(color);
         // Only the path. The handle is `None` until `resumed` resolves it,
         // because there is no device to upload with until a window exists.
         sprite.texture = Some(AssetPath::new(CHECKER).expect("a valid asset path"));

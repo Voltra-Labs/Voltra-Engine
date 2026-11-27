@@ -6,7 +6,7 @@ use voltra_ecs::{Entity, World};
 use super::*;
 use crate::keyframes::{self, AnimationClips};
 use crate::AnimationPlayer;
-use crate::Transform;
+use crate::Transform2D;
 
 const MACHINE: &str = r#"(
     parameters: [
@@ -66,7 +66,7 @@ impl Rig {
         }
         let mut world = World::new();
         let hero = world.spawn();
-        world.insert(hero, Transform::default());
+        world.insert(hero, Transform2D::default());
         world.insert(hero, Animator::new(path("hero.animator.ron")));
         Self {
             world,

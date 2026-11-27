@@ -13,11 +13,11 @@ use voltra_core::replication::{Interest, NetOwner, ReplicationConfig};
 use voltra_core::{App, Game, Headless};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{hierarchy, ComponentRegistry, Replicated, SceneId, Sprite, Transform};
+use voltra_scene::{hierarchy, ComponentRegistry, Replicated, SceneId, Sprite2D, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
-/// A replicated component besides `Transform`, to change while away.
+/// A replicated component besides `Transform2D`, to change while away.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 struct Health(u32);
 
@@ -136,7 +136,7 @@ fn spawn(world: &mut World, at: Vec2) -> (Entity, SceneId) {
     let entity = world.spawn();
     let id = SceneId::new();
     world.insert(entity, id);
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(entity, Replicated::default());
     (entity, id)
 }
@@ -149,7 +149,7 @@ fn owned(world: &mut World, at: Vec2, peer: PeerId) -> Entity {
 
 fn place(world: &mut World, entity: Entity, at: Vec2) {
     world
-        .get_mut::<Transform>(entity)
+        .get_mut::<Transform2D>(entity)
         .expect("a transform")
         .translation = at;
 }
@@ -163,13 +163,13 @@ fn copy(world: &World, id: SceneId) -> Option<Entity> {
 }
 
 /// Every replicated entity's id and transform.
-fn replicated(world: &World) -> BTreeMap<SceneId, Transform> {
+fn replicated(world: &World) -> BTreeMap<SceneId, Transform2D> {
     world
         .query::<Replicated>()
         .filter_map(|(entity, _)| {
             Some((
                 *world.get::<SceneId>(entity)?,
-                *world.get::<Transform>(entity)?,
+                *world.get::<Transform2D>(entity)?,
             ))
         })
         .collect()
@@ -228,7 +228,7 @@ fn an_entity_enters_at_the_radius_and_leaves_past_it_under_loss() {
     assert_eq!(
         rig.clients[0]
             .world()
-            .get::<Transform>(back)
+            .get::<Transform2D>(back)
             .map(|t| t.translation),
         Some(Vec2::new(-4.0, 3.0))
     );
@@ -375,10 +375,10 @@ fn an_entity_back_in_interest_carries_what_changed_and_keeps_what_was_its_own() 
     let level = move |world: &mut World| {
         let entity = world.spawn();
         world.insert(entity, crate_id);
-        world.insert(entity, Transform::from_translation(Vec2::new(2.0, 0.0)));
+        world.insert(entity, Transform2D::from_translation(Vec2::new(2.0, 0.0)));
         world.insert(entity, Replicated::default());
         world.insert(entity, Health(10));
-        world.insert(entity, Sprite::default().with_sort_order(7));
+        world.insert(entity, Sprite2D::default().with_sort_order(7));
         entity
     };
     let on_server = level(rig.world());
@@ -402,7 +402,7 @@ fn an_entity_back_in_interest_carries_what_changed_and_keeps_what_was_its_own() 
     assert!(copy(rig.clients[0].world(), crate_id).is_none());
     rig.world().insert(on_server, Health(3));
     rig.world()
-        .get_mut::<Transform>(on_server)
+        .get_mut::<Transform2D>(on_server)
         .expect("a transform")
         .rotation = 1.5;
     rig.world().remove::<Health>(shield);
@@ -416,12 +416,12 @@ fn an_entity_back_in_interest_carries_what_changed_and_keeps_what_was_its_own() 
     assert_eq!(client.get::<Health>(back), Some(&Health(3)), "what changed");
     assert_eq!(
         client
-            .get::<Transform>(back)
+            .get::<Transform2D>(back)
             .map(|t| (t.translation, t.rotation)),
         Some((Vec2::new(4.0, 0.0), 1.5))
     );
     assert_eq!(
-        client.get::<Sprite>(back).map(|s| s.sort_order),
+        client.get::<Sprite2D>(back).map(|s| s.sort_order),
         Some(7),
         "the level's sprite, the client's own, kept"
     );
@@ -461,7 +461,7 @@ fn relevant_entities_share_the_budget_and_far_ones_cost_nothing() {
     let mut cut = 0;
     for frame in 0..120 {
         for (n, &entity) in far.iter().chain(&near).enumerate() {
-            if let Some(t) = rig.world().get_mut::<Transform>(entity) {
+            if let Some(t) = rig.world().get_mut::<Transform2D>(entity) {
                 t.translation.y = (frame as f32 * 0.1 + n as f32).sin();
             }
         }
@@ -506,7 +506,7 @@ fn interest_covering_everything_sends_what_none_does() {
         let mut bytes = Vec::new();
         for frame in 0..90 {
             for (n, &entity) in movers.iter().enumerate() {
-                if let Some(t) = rig.world().get_mut::<Transform>(entity) {
+                if let Some(t) = rig.world().get_mut::<Transform2D>(entity) {
                     t.translation = Vec2::new(n as f32 * 3.0, (frame as f32 * 0.2).sin());
                 }
             }
@@ -524,7 +524,7 @@ fn interest_covering_everything_sends_what_none_does() {
             bytes.push((stats.snapshot_bytes, stats.relevant));
         }
         // Ids are fresh each run: the world compared by what is in it.
-        let mut seen: Vec<Transform> = replicated(rig.clients[0].world()).into_values().collect();
+        let mut seen: Vec<Transform2D> = replicated(rig.clients[0].world()).into_values().collect();
         seen.sort_by(|a, b| {
             (a.translation.x, a.translation.y)
                 .partial_cmp(&(b.translation.x, b.translation.y))
@@ -548,9 +548,9 @@ fn a_client_joining_late_is_sent_what_is_near_it_and_finds_its_level_again() {
     let level = move |world: &mut World| {
         let door = world.spawn();
         world.insert(door, door_id);
-        world.insert(door, Transform::from_translation(Vec2::new(60.0, 0.0)));
+        world.insert(door, Transform2D::from_translation(Vec2::new(60.0, 0.0)));
         world.insert(door, Replicated::default());
-        world.insert(door, Sprite::default().with_sort_order(9));
+        world.insert(door, Sprite2D::default().with_sort_order(9));
         door
     };
     let door = level(rig.world());
@@ -578,7 +578,7 @@ fn a_client_joining_late_is_sent_what_is_near_it_and_finds_its_level_again() {
     rig.step(120);
     let client = rig.clients[1].world();
     let back = copy(client, door_id).expect("relevant now");
-    assert_eq!(client.get::<Sprite>(back).map(|s| s.sort_order), Some(9));
+    assert_eq!(client.get::<Sprite2D>(back).map(|s| s.sort_order), Some(9));
 }
 
 #[test]
@@ -589,11 +589,11 @@ fn a_child_moved_off_its_parent_on_the_server_stays_when_the_parent_goes() {
     let level = move |world: &mut World| {
         let tank = world.spawn();
         world.insert(tank, tank_id);
-        world.insert(tank, Transform::from_translation(Vec2::new(2.0, 0.0)));
+        world.insert(tank, Transform2D::from_translation(Vec2::new(2.0, 0.0)));
         world.insert(tank, Replicated::default());
         let turret = world.spawn();
         world.insert(turret, turret_id);
-        world.insert(turret, Transform::from_translation(Vec2::new(0.0, 1.0)));
+        world.insert(turret, Transform2D::from_translation(Vec2::new(0.0, 1.0)));
         world.insert(turret, Replicated::default());
         hierarchy::set_parent(world, turret, tank).expect("parents");
         (tank, turret)
@@ -621,7 +621,7 @@ fn a_child_moved_off_its_parent_on_the_server_stays_when_the_parent_goes() {
     );
     assert_eq!(hierarchy::parent_of(client, before), None);
     assert_eq!(
-        client.get::<Transform>(before).map(|t| t.translation),
+        client.get::<Transform2D>(before).map(|t| t.translation),
         Some(Vec2::new(2.0, 1.0))
     );
 }
@@ -639,7 +639,7 @@ fn what_a_late_joiner_swept_is_let_go_of_with_its_level() {
     let level = move |world: &mut World| {
         let door = world.spawn();
         world.insert(door, door_id);
-        world.insert(door, Transform::from_translation(Vec2::new(60.0, 0.0)));
+        world.insert(door, Transform2D::from_translation(Vec2::new(60.0, 0.0)));
         world.insert(door, Replicated::default());
     };
     level(rig.world());

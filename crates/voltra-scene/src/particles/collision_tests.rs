@@ -7,17 +7,17 @@ use voltra_render::glam::Vec2;
 use voltra_render::ParticleCollider;
 
 use super::*;
-use crate::{Collider, CollisionLayers, Sensor, Transform};
+use crate::{Collider2D, CollisionLayers, Sensor, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
 /// A wide floor whose top is at y = -1.
 fn floor(world: &mut World) -> Entity {
     let floor = world.spawn();
-    world.insert(floor, Transform::from_translation(Vec2::new(0.0, -2.0)));
+    world.insert(floor, Transform2D::from_translation(Vec2::new(0.0, -2.0)));
     world.insert(
         floor,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(50.0, 1.0),
         },
     );
@@ -28,7 +28,7 @@ fn floor(world: &mut World) -> Entity {
 /// enough to land and rest.
 fn rain(world: &mut World, collision: Option<ParticleCollision>, simulation: Simulation) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::default());
+    world.insert(entity, Transform2D::default());
     let mut emitter = ParticleEmitter {
         emitting: false,
         speed: (4.0, 4.0),
@@ -140,8 +140,8 @@ fn a_gpu_emitter_is_handed_only_the_shapes_it_can_reach() {
     // Far past anything a particle living five seconds at these speeds
     // can reach.
     let far = world.spawn();
-    world.insert(far, Transform::from_translation(Vec2::new(1000.0, 0.0)));
-    world.insert(far, Collider::Circle { radius: 1.0 });
+    world.insert(far, Transform2D::from_translation(Vec2::new(1000.0, 0.0)));
+    world.insert(far, Collider2D::Circle { radius: 1.0 });
     let e = rain(&mut world, landing(), Simulation::Gpu);
     run(&mut world, 1);
     let colliders = world

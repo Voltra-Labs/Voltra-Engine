@@ -9,7 +9,7 @@ use voltra_core::{App, Headless, MouseButton};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::text::ui_px;
-use voltra_scene::{hierarchy, Name, SceneId, Sprite, Text, UiButton, UiLayout, UiRect};
+use voltra_scene::{hierarchy, Name, SceneId, Sprite2D, Text, UiButton, UiLayout, UiRect};
 use voltra_testkit::{copy_bundled_font, scratch_root};
 
 const FRAME: f32 = 1.0 / 60.0;
@@ -69,7 +69,7 @@ fn dialogue(world: &mut World) -> (Entity, Entity, Entity) {
             Vec2::new(WIDTH + 32.0, 160.0),
         ),
     );
-    world.insert(panel, Sprite::new([0.05, 0.05, 0.08, 0.9]));
+    world.insert(panel, Sprite2D::new([0.05, 0.05, 0.08, 0.9]));
     let speaker = spawn(
         world,
         "Speaker",
@@ -90,7 +90,7 @@ fn dialogue(world: &mut World) -> (Entity, Entity, Entity) {
         "Spanish",
         UiRect::pinned(Vec2::ZERO, Vec2::splat(16.0), Vec2::new(120.0, 36.0)),
     );
-    world.insert(button, Sprite::default());
+    world.insert(button, Sprite2D::default());
     world.insert(button, UiButton::default());
     world.insert(button, keyed("button.spanish", 16.0));
     (speaker, line, button)

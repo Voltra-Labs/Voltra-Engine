@@ -155,7 +155,7 @@ pub fn apply_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Sprite, Transform};
+    use crate::{Sprite2D, Transform2D};
     use voltra_render::glam::Vec2;
 
     fn world_with_sprite() -> (World, Entity, SceneId) {
@@ -163,8 +163,8 @@ mod tests {
         let entity = world.spawn();
         let id = SceneId::new();
         world.insert(entity, id);
-        world.insert(entity, Transform::from_translation(Vec2::new(1.0, 2.0)));
-        world.insert(entity, Sprite::default().with_sort_order(3));
+        world.insert(entity, Transform2D::from_translation(Vec2::new(1.0, 2.0)));
+        world.insert(entity, Sprite2D::default().with_sort_order(3));
         (world, entity, id)
     }
 
@@ -172,7 +172,7 @@ mod tests {
     fn an_entity_without_a_scene_id_has_no_record() {
         let mut world = World::new();
         let bare = world.spawn();
-        world.insert(bare, Transform::default());
+        world.insert(bare, Transform2D::default());
         assert!(record_entity(&world, &ComponentRegistry::with_defaults(), bare).is_none());
     }
 
@@ -201,10 +201,13 @@ mod tests {
 
         assert_eq!(target.get::<SceneId>(spawned), Some(&id));
         assert_eq!(
-            target.get::<Transform>(spawned),
-            source.get::<Transform>(entity)
+            target.get::<Transform2D>(spawned),
+            source.get::<Transform2D>(entity)
         );
-        assert_eq!(target.get::<Sprite>(spawned), source.get::<Sprite>(entity));
+        assert_eq!(
+            target.get::<Sprite2D>(spawned),
+            source.get::<Sprite2D>(entity)
+        );
     }
 
     #[test]
@@ -216,7 +219,7 @@ mod tests {
             .expect("serializes");
 
         world
-            .get_mut::<Transform>(entity)
+            .get_mut::<Transform2D>(entity)
             .expect("it has one")
             .translation = Vec2::new(9.0, 9.0);
         let same = apply_record(&mut world, &registry, &record).expect("apply");
@@ -224,7 +227,7 @@ mod tests {
         assert_eq!(same, entity, "the id must not gain a second entity");
         assert_eq!(world.entity_count(), 1);
         assert_eq!(
-            world.get::<Transform>(entity).map(|t| t.translation),
+            world.get::<Transform2D>(entity).map(|t| t.translation),
             Some(Vec2::new(1.0, 2.0)),
             "the record's value must win"
         );
@@ -243,9 +246,9 @@ mod tests {
 
         apply_record(&mut world, &registry, &record).expect("apply");
 
-        assert_eq!(world.get::<Sprite>(entity), None);
+        assert_eq!(world.get::<Sprite2D>(entity), None);
         assert!(
-            world.get::<Transform>(entity).is_some(),
+            world.get::<Transform2D>(entity).is_some(),
             "and only that one"
         );
     }

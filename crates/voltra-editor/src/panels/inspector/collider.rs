@@ -3,7 +3,7 @@
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, ConvexPolygon};
+use voltra_scene::{Collider2D, ConvexPolygon};
 
 mod kind;
 
@@ -26,7 +26,7 @@ pub(super) struct Outcome {
 
 /// `collider` turned into `kind` at about the size it had; whether it was
 /// another kind.
-pub(super) fn reshape(collider: &mut Collider, kind: &str) -> bool {
+pub(super) fn reshape(collider: &mut Collider2D, kind: &str) -> bool {
     if collider.kind() == kind {
         return false;
     }
@@ -35,9 +35,9 @@ pub(super) fn reshape(collider: &mut Collider, kind: &str) -> bool {
 }
 
 /// The collider's kind and sizes. `textured_sprite` offers the fit.
-pub(super) fn show(ui: &mut Ui, collider: &mut Collider, textured_sprite: bool) -> Outcome {
+pub(super) fn show(ui: &mut Ui, collider: &mut Collider2D, textured_sprite: bool) -> Outcome {
     let mut outcome = Outcome::default();
-    ui.label(RichText::new(Collider::NAME).strong())
+    ui.label(RichText::new(Collider2D::NAME).strong())
         .on_hover_text("the shape it collides as, in the entity's space");
 
     let mut kind = collider.kind();
@@ -56,14 +56,14 @@ pub(super) fn show(ui: &mut Ui, collider: &mut Collider, textured_sprite: bool) 
     }
 
     let claim = match collider {
-        Collider::Box { half_extents } => pair(
+        Collider2D::Box { half_extents } => pair(
             ui,
             "half size",
             half_extents,
             "the box's half width and height",
         ),
-        Collider::Circle { radius } => length(ui, "radius", radius, "the circle's radius"),
-        Collider::Capsule {
+        Collider2D::Circle { radius } => length(ui, "radius", radius, "the circle's radius"),
+        Collider2D::Capsule {
             half_height,
             radius,
         } => {
@@ -80,7 +80,7 @@ pub(super) fn show(ui: &mut Ui, collider: &mut Collider, textured_sprite: bool) 
                 "the caps' radius, and half the width",
             ))
         }
-        Collider::Polygon { points, radius } => {
+        Collider2D::Polygon { points, radius } => {
             let claim = length(
                 ui,
                 "rounding",
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn drawing_every_kind_changes_nothing_by_itself() {
-        let kinds = KINDS.map(|kind| converted(&Collider::default(), kind));
+        let kinds = KINDS.map(|kind| converted(&Collider2D::default(), kind));
         for textured in [false, true] {
             for kind in kinds {
                 let mut collider = kind;
@@ -241,10 +241,10 @@ mod tests {
 
         let registry = ComponentRegistry::with_defaults();
         let mut world = World::new();
-        let boxed = |x: f32| Collider::Box {
+        let boxed = |x: f32| Collider2D::Box {
             half_extents: Vec2::splat(x),
         };
-        let entities: Vec<_> = [boxed(1.0), Collider::Circle { radius: 2.0 }, boxed(3.0)]
+        let entities: Vec<_> = [boxed(1.0), Collider2D::Circle { radius: 2.0 }, boxed(3.0)]
             .into_iter()
             .map(|collider| {
                 let e = world.spawn();
@@ -255,7 +255,7 @@ mod tests {
         let mut multi = MultiEdit::begin(&world, &registry, entities[2], entities.clone());
         // "Box" picked again on the primary, as the inspector does it.
         for &each in &entities {
-            if let Some(collider) = world.get_mut::<Collider>(each) {
+            if let Some(collider) = world.get_mut::<Collider2D>(each) {
                 reshape(collider, "Box");
             }
         }
@@ -263,7 +263,7 @@ mod tests {
         assert!(multi.finish(&mut world, &registry).is_empty());
         let sizes: Vec<_> = entities
             .iter()
-            .map(|&e| world.get::<Collider>(e).copied())
+            .map(|&e| world.get::<Collider2D>(e).copied())
             .collect();
         assert_eq!(
             sizes,

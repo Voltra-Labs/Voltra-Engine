@@ -28,7 +28,7 @@ pub struct Polygon2D {
     /// What `texture` resolves to in this session's textures. Never written.
     #[serde(skip)]
     pub texture_handle: Option<Handle<Texture>>,
-    /// Draw order among sprites. See [`Sprite::sort_order`](crate::Sprite::sort_order).
+    /// Draw order among sprites. See [`Sprite2D::sort_order`](crate::Sprite2D::sort_order).
     #[serde(default)]
     pub sort_order: i32,
     /// The named layer it draws on. See [`SortingLayers`](crate::sorting::SortingLayers).
@@ -100,7 +100,7 @@ impl Polygon2D {
     }
 
     /// Sets or clears the texture path and refreshes its handle, as
-    /// [`Sprite::set_texture`](crate::Sprite::set_texture) does.
+    /// [`Sprite2D::set_texture`](crate::Sprite2D::set_texture) does.
     pub fn set_texture(
         &mut self,
         path: Option<AssetPath>,

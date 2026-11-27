@@ -4,7 +4,9 @@ use voltra_render::glam::{IVec2, Vec2};
 use super::*;
 use crate::format::to_scene_file;
 use crate::hierarchy::set_parent;
-use crate::{Collider, CollisionLayers, ComponentRegistry, PhysicsMaterial, SceneId, Transform};
+use crate::{
+    Collider2D, CollisionLayers, ComponentRegistry, PhysicsMaterial, SceneId, Transform2D,
+};
 
 fn solid_layer(world: &mut World, at: Vec2, cells: &[(i32, i32)]) -> Entity {
     let mut map = Tilemap::new(Vec2::splat(0.5));
@@ -13,19 +15,21 @@ fn solid_layer(world: &mut World, at: Vec2, cells: &[(i32, i32)]) -> Entity {
         map.set(IVec2::new(x, y), Some(Tile::new(0)));
     }
     let layer = world.spawn();
-    world.insert(layer, Transform::from_translation(at));
+    world.insert(layer, Transform2D::from_translation(at));
     world.insert(layer, map);
     layer
 }
 
-fn generated(world: &World) -> Vec<(Entity, Transform, Collider)> {
+fn generated(world: &World) -> Vec<(Entity, Transform2D, Collider2D)> {
     let mut found: Vec<_> = world
         .query::<TileCollider>()
         .map(|(entity, _)| {
             (
                 entity,
-                *world.get::<Transform>(entity).expect("generated with one"),
-                *world.get::<Collider>(entity).expect("generated with one"),
+                *world
+                    .get::<Transform2D>(entity)
+                    .expect("generated with one"),
+                *world.get::<Collider2D>(entity).expect("generated with one"),
             )
         })
         .collect();
@@ -33,9 +37,9 @@ fn generated(world: &World) -> Vec<(Entity, Transform, Collider)> {
     found
 }
 
-fn half(collider: &Collider) -> Vec2 {
+fn half(collider: &Collider2D) -> Vec2 {
     match collider {
-        Collider::Box { half_extents } => *half_extents,
+        Collider2D::Box { half_extents } => *half_extents,
         other => panic!("tiles generate boxes, not a {}", other.kind()),
     }
 }
@@ -59,7 +63,7 @@ fn a_solid_row_becomes_one_static_box_where_the_tiles_are() {
     assert_eq!(transform.translation, Vec2::new(11.0, 2.25));
     assert_eq!(half(&collider), Vec2::new(1.0, 0.25));
     assert!(world
-        .get::<crate::RigidBody>(entity)
+        .get::<crate::RigidBody2D>(entity)
         .is_some_and(|body| body.inverse_mass == 0.0));
     assert_eq!(
         world.get::<TileCollider>(entity).map(|c| c.layer),
@@ -112,7 +116,7 @@ fn moving_the_layer_moves_its_boxes() {
     sync_colliders(&mut world);
 
     world
-        .get_mut::<Transform>(layer)
+        .get_mut::<Transform2D>(layer)
         .expect("a layer")
         .translation = Vec2::new(0.0, 3.0);
     sync_colliders(&mut world);
@@ -128,7 +132,7 @@ fn a_parented_layer_puts_its_boxes_in_world_space() {
     // from the layer's local one would sit wherever the parent is not.
     let mut world = World::new();
     let parent = world.spawn();
-    world.insert(parent, Transform::from_translation(Vec2::new(100.0, 0.0)));
+    world.insert(parent, Transform2D::from_translation(Vec2::new(100.0, 0.0)));
     world.insert(parent, SceneId::new());
     let layer = solid_layer(&mut world, Vec2::ZERO, &row(2));
     set_parent(&mut world, layer, parent).expect("no cycle");
@@ -142,7 +146,7 @@ fn a_parented_layer_puts_its_boxes_in_world_space() {
 fn a_turned_and_scaled_layer_turns_and_scales_its_boxes() {
     let mut world = World::new();
     let layer = solid_layer(&mut world, Vec2::ZERO, &row(2));
-    *world.get_mut::<Transform>(layer).expect("a layer") = Transform::default()
+    *world.get_mut::<Transform2D>(layer).expect("a layer") = Transform2D::default()
         .with_rotation(std::f32::consts::FRAC_PI_2)
         .with_scale(Vec2::splat(2.0));
 
@@ -287,14 +291,14 @@ fn a_shaped_tile_is_a_polygon_beside_the_merged_full_ones() {
     );
     let (_, transform, collider) = found
         .iter()
-        .find(|(_, _, c)| matches!(c, Collider::Polygon { .. }))
+        .find(|(_, _, c)| matches!(c, Collider2D::Polygon { .. }))
         .expect("the slope");
     assert_eq!(
         transform.translation,
         Vec2::new(1.75, 0.25),
         "centred on its cell"
     );
-    let Collider::Polygon { points, .. } = collider else {
+    let Collider2D::Polygon { points, .. } = collider else {
         unreachable!()
     };
     assert_eq!(points.points().len(), 3);
@@ -329,7 +333,7 @@ fn a_shape_changed_without_a_cell_rebuilds_the_colliders() {
     assert_eq!(found.len(), 2, "each half tile its own polygon");
     assert!(found
         .iter()
-        .all(|(_, _, c)| matches!(c, Collider::Polygon { .. })));
+        .all(|(_, _, c)| matches!(c, Collider2D::Polygon { .. })));
 }
 
 #[test]

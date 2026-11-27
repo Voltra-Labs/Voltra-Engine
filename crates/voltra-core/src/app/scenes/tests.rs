@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
-use voltra_scene::{hierarchy, ComponentRegistry, Name, Persistent, SceneId, Transform};
+use voltra_scene::{hierarchy, ComponentRegistry, Name, Persistent, SceneId, Transform2D};
 use voltra_testkit::scratch_root;
 
 use crate::app::App;
@@ -22,7 +22,7 @@ fn write_scene(root: &Path, name: &str, entities: &[&str]) {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
         world.insert(entity, Name::new(*entity_name));
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
     }
     let file = voltra_scene::format::to_scene_file(&world, &ComponentRegistry::with_defaults())
         .expect("saves");
@@ -74,7 +74,7 @@ fn a_scene_change_replaces_every_root_with_the_new_scene() {
     named(&mut app.world, "old");
     // Made in code with no id: a scene change must still take it away.
     let bare = app.world.spawn();
-    app.world.insert(bare, Transform::default());
+    app.world.insert(bare, Transform2D::default());
 
     app.advance(FRAME);
 
@@ -215,7 +215,7 @@ fn the_platformer_s_second_level_loads_with_every_component_known() {
 
 #[test]
 fn a_scene_saved_with_an_older_copy_of_a_prefab_arrives_in_step() {
-    use voltra_scene::{PrefabInstance, PrefabPart, Sprite};
+    use voltra_scene::{PrefabInstance, PrefabPart, Sprite2D};
     let root = scratch_root();
     let registry = ComponentRegistry::with_defaults();
     let write = |name: &str, world: &World| {
@@ -227,14 +227,14 @@ fn a_scene_saved_with_an_older_copy_of_a_prefab_arrives_in_step() {
     // The prefab as it is now: a blue coin.
     let mut prefab = World::new();
     let coin = named(&mut prefab, "coin");
-    prefab.insert(coin, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+    prefab.insert(coin, Sprite2D::new([0.0, 0.0, 1.0, 1.0]));
     let record = *prefab.get::<SceneId>(coin).expect("an id");
     write("prefabs/coin.ron", &prefab);
     // A level saved when it was red.
     let mut level = World::new();
     let copy = named(&mut level, "coin");
-    level.insert(copy, Transform::default());
-    level.insert(copy, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    level.insert(copy, Transform2D::default());
+    level.insert(copy, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
     level.insert(copy, PrefabInstance::new(path("prefabs/coin.ron")));
     level.insert(copy, PrefabPart::new(record));
     write("scenes/level.ron", &level);
@@ -242,6 +242,6 @@ fn a_scene_saved_with_an_older_copy_of_a_prefab_arrives_in_step() {
     let mut app = app_doing(&root, |tick| tick.load_scene(&path("scenes/level.ron")));
     app.advance(FRAME);
 
-    let (_, sprite) = app.world.query::<Sprite>().next().expect("the coin");
+    let (_, sprite) = app.world.query::<Sprite2D>().next().expect("the coin");
     assert_eq!(sprite.color, [0.0, 0.0, 1.0, 1.0]);
 }

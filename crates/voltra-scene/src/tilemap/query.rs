@@ -39,7 +39,7 @@ pub fn custom_under<'w>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Tile, Transform};
+    use crate::{Tile, Transform2D};
 
     #[test]
     fn a_point_finds_the_ladder_tile_it_is_on() {
@@ -52,7 +52,7 @@ mod tests {
             .custom
             .insert("ladder".into(), TileValue::Bool(true));
         let layer = world.spawn();
-        world.insert(layer, Transform::from_translation(Vec2::new(10.0, 0.0)));
+        world.insert(layer, Transform2D::from_translation(Vec2::new(10.0, 0.0)));
         world.insert(layer, map);
 
         let found = custom_under(&world, Vec2::new(10.7, 0.2), "ladder");

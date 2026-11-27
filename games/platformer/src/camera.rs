@@ -2,7 +2,7 @@
 
 use voltra_core::Tick;
 use voltra_ecs::Entity;
-use voltra_scene::{Camera, Transform};
+use voltra_scene::{Camera2D, Transform2D};
 
 /// How much of the distance to the walker the camera closes per second.
 ///
@@ -16,15 +16,15 @@ const FOLLOW: f32 = 6.0;
 /// than what is simulated — and because a camera that moved on the physics
 /// clock would judder on any frame that owed two steps.
 pub fn follow(tick: &mut Tick<'_>, target: Entity) {
-    let Some(&Transform { translation, .. }) = tick.world.get::<Transform>(target) else {
+    let Some(&Transform2D { translation, .. }) = tick.world.get::<Transform2D>(target) else {
         return;
     };
-    let cameras: Vec<Entity> = tick.world.query::<Camera>().map(|(e, _)| e).collect();
+    let cameras: Vec<Entity> = tick.world.query::<Camera2D>().map(|(e, _)| e).collect();
     // Frame-rate independent easing: the fraction closed per second is the
     // constant, not the fraction closed per frame.
     let t = 1.0 - (-FOLLOW * tick.delta).exp();
     for camera in cameras {
-        if let Some(transform) = tick.world.get_mut::<Transform>(camera) {
+        if let Some(transform) = tick.world.get_mut::<Transform2D>(camera) {
             transform.translation.x += (translation.x - transform.translation.x) * t;
         }
     }

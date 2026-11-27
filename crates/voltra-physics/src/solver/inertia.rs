@@ -6,24 +6,24 @@
 //! parallel axis theorem, as it would pinned there.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider2D, Transform2D};
 
 use crate::geometry::Hull;
 
 /// `I / m` for `collider` placed by `transform`. Zero when the shape has no
 /// extent to turn.
-pub(super) fn unit_inertia(collider: &Collider, transform: &Transform) -> f32 {
+pub(super) fn unit_inertia(collider: &Collider2D, transform: &Transform2D) -> f32 {
     match collider {
         // `m(hx² + hy²)/3` and `m·r²/2`, the standard two.
-        Collider::Box { .. } => {
+        Collider2D::Box { .. } => {
             let half = collider.world_half_extents(transform);
             (half.x * half.x + half.y * half.y) / 3.0
         }
-        Collider::Circle { .. } => {
+        Collider2D::Circle { .. } => {
             let radius = collider.world_radius(transform);
             radius * radius / 2.0
         }
-        Collider::Capsule { .. } => {
+        Collider2D::Capsule { .. } => {
             let hull = Hull::of(collider, transform);
             let length = match *hull.vertices() {
                 [low, high] => low.distance(high),
@@ -31,7 +31,7 @@ pub(super) fn unit_inertia(collider: &Collider, transform: &Transform) -> f32 {
             };
             capsule(length, hull.radius)
         }
-        Collider::Polygon { .. } => {
+        Collider2D::Polygon { .. } => {
             let hull = Hull::of(collider, transform);
             let around: Vec<Vec2> = hull
                 .vertices()
@@ -105,13 +105,16 @@ mod tests {
     #[test]
     fn a_square_polygon_turns_like_a_box() {
         let half = Vec2::new(1.0, 2.0);
-        let as_box = unit_inertia(&Collider::Box { half_extents: half }, &Transform::default());
+        let as_box = unit_inertia(
+            &Collider2D::Box { half_extents: half },
+            &Transform2D::default(),
+        );
         let as_polygon = unit_inertia(
-            &Collider::Polygon {
+            &Collider2D::Polygon {
                 points: ConvexPolygon::rectangle(half).expect("a box"),
                 radius: 0.0,
             },
-            &Transform::default(),
+            &Transform2D::default(),
         );
         assert!((as_box - as_polygon).abs() < 1e-4, "{as_box} {as_polygon}");
     }
@@ -122,13 +125,16 @@ mod tests {
         let shifted: Vec<Vec2> = [(1.0, 1.0), (-1.0, 1.0), (-1.0, -1.0), (1.0, -1.0)]
             .map(|(x, y)| Vec2::new(x + 3.0, y))
             .to_vec();
-        let centred = unit_inertia(&Collider::Box { half_extents: half }, &Transform::default());
+        let centred = unit_inertia(
+            &Collider2D::Box { half_extents: half },
+            &Transform2D::default(),
+        );
         let off = unit_inertia(
-            &Collider::Polygon {
+            &Collider2D::Polygon {
                 points: ConvexPolygon::new(&shifted).expect("a box"),
                 radius: 0.0,
             },
-            &Transform::default(),
+            &Transform2D::default(),
         );
         assert!((off - (centred + 9.0)).abs() < 1e-3, "{off}");
     }

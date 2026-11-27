@@ -10,15 +10,15 @@ use crate::particles::{self, ParticleEmitter};
 use crate::polygon2d::Polygon2D;
 use crate::skinned::{pose, SkinnedSprite};
 use crate::sprite::sheets::Sheets;
-use crate::sprite::{draw_key, Sprite};
+use crate::sprite::{draw_key, Sprite2D};
 use crate::text::Text;
 use crate::tilemap::{mesh, TileMeshCache, Tilemap};
 use crate::trail2d::Trail2D;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 
 /// What the batch draws one of: every kind sorts by the same key.
 enum Drawn<'a> {
-    Sprite(&'a Sprite),
+    Sprite(&'a Sprite2D),
     Tilemap(&'a Tilemap),
     Text(&'a Text),
     Particles(&'a ParticleEmitter),
@@ -57,7 +57,7 @@ impl<'a> Drawn<'a> {
 }
 
 impl SpriteBatch {
-    /// Walks every entity holding a [`Transform`] and a [`Sprite`] or a
+    /// Walks every entity holding a [`Transform2D`] and a [`Sprite2D`] or a
     /// [`Tilemap`].
     ///
     /// Collected and sorted rather than pushed as we go. With no depth buffer,
@@ -131,28 +131,28 @@ impl SpriteBatch {
         // One plain loop per kind rather than one iterator chained through
         // eight: the chain's every step asked each level whether it was
         // done, which cost more than the sprites it carried (stage 108).
-        for (entity, _, sprite) in world.query2::<Transform, Sprite>() {
+        for (entity, _, sprite) in world.query2::<Transform2D, Sprite2D>() {
             add(entity, Drawn::Sprite(sprite));
         }
-        for (entity, _, map) in world.query2::<Transform, Tilemap>() {
+        for (entity, _, map) in world.query2::<Transform2D, Tilemap>() {
             add(entity, Drawn::Tilemap(map));
         }
-        for (entity, _, text) in world.query2::<Transform, Text>() {
+        for (entity, _, text) in world.query2::<Transform2D, Text>() {
             add(entity, Drawn::Text(text));
         }
-        for (entity, _, emitter) in world.query2::<Transform, ParticleEmitter>() {
+        for (entity, _, emitter) in world.query2::<Transform2D, ParticleEmitter>() {
             add(entity, Drawn::Particles(emitter));
         }
-        for (entity, _, line) in world.query2::<Transform, Line2D>() {
+        for (entity, _, line) in world.query2::<Transform2D, Line2D>() {
             add(entity, Drawn::Line(line));
         }
-        for (entity, _, polygon) in world.query2::<Transform, Polygon2D>() {
+        for (entity, _, polygon) in world.query2::<Transform2D, Polygon2D>() {
             add(entity, Drawn::Polygon(polygon));
         }
-        for (entity, _, trail) in world.query2::<Transform, Trail2D>() {
+        for (entity, _, trail) in world.query2::<Transform2D, Trail2D>() {
             add(entity, Drawn::Trail(trail));
         }
-        for (entity, _, skinned) in world.query2::<Transform, SkinnedSprite>() {
+        for (entity, _, skinned) in world.query2::<Transform2D, SkinnedSprite>() {
             add(entity, Drawn::Skinned(skinned));
         }
         drawn.sort_unstable_by_key(|(key, _, _)| *key);

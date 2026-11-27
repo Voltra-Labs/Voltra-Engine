@@ -118,7 +118,7 @@ mod tests {
     use super::*;
     use voltra_ecs::Entity;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Collider, RigidBody, Transform};
+    use voltra_scene::{Collider2D, RigidBody2D, Transform2D};
 
     const G: Vec2 = Vec2::new(0.0, -10.0);
     const FRAME: f32 = 1.0 / 60.0;
@@ -135,26 +135,26 @@ mod tests {
 
         let floor = app.world.spawn();
         app.world
-            .insert(floor, Transform::from_translation(Vec2::new(0.0, -2.0)));
+            .insert(floor, Transform2D::from_translation(Vec2::new(0.0, -2.0)));
         app.world.insert(
             floor,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::new(10.0, 0.5),
             },
         );
-        app.world.insert(floor, RigidBody::new_static());
+        app.world.insert(floor, RigidBody2D::new_static());
 
         let ball = app.world.spawn();
-        app.world.insert(ball, Transform::default());
-        app.world.insert(ball, Collider::Circle { radius: 0.5 });
-        app.world.insert(ball, RigidBody::new_dynamic(1.0));
+        app.world.insert(ball, Transform2D::default());
+        app.world.insert(ball, Collider2D::Circle { radius: 0.5 });
+        app.world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
         (app, ball)
     }
 
     fn height(app: &App, entity: Entity) -> f32 {
         app.world
-            .get::<Transform>(entity)
+            .get::<Transform2D>(entity)
             .expect("the transform is there")
             .translation
             .y
@@ -260,13 +260,13 @@ mod tests {
         }
         let floor = app.world.spawn();
         app.world
-            .insert(floor, Transform::from_translation(Vec2::new(0.0, -3.0)));
+            .insert(floor, Transform2D::from_translation(Vec2::new(0.0, -3.0)));
         app.world.insert(floor, layer);
 
         let ball = app.world.spawn();
-        app.world.insert(ball, Transform::default());
-        app.world.insert(ball, Collider::Circle { radius: 0.5 });
-        app.world.insert(ball, RigidBody::new_dynamic(1.0));
+        app.world.insert(ball, Transform2D::default());
+        app.world.insert(ball, Collider2D::Circle { radius: 0.5 });
+        app.world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
         for _ in 0..180 {
             app.advance(FRAME);

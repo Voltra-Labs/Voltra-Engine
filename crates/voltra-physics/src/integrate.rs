@@ -58,7 +58,7 @@ fn clamp_spin(angular_velocity: f32, h: f32, max_rotation: f32) -> f32 {
 
 /// Accumulates each body's move for this sub-step.
 ///
-/// The move lands in `delta_position` rather than in the `Transform`, so the
+/// The move lands in `delta_position` rather than in the `Transform2D`, so the
 /// solver can track a contact's separation through the sub-steps arithmetically
 /// and the world is written exactly once per step.
 pub fn integrate_positions(bodies: &mut SolverBodies, h: f32) {

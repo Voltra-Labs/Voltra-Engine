@@ -6,7 +6,7 @@
 //! that move can start on one side of a wall and end on the other with no
 //! contact ever found. Box2D v3's answer, and its split: a **fast** body —
 //! one moving more than half its thinnest extent in a step — is swept
-//! against **static** geometry; a [`RigidBody::bullet`] against moving
+//! against **static** geometry; a [`RigidBody2D::bullet`] against moving
 //! bodies too. Only the fast few pay: the test is a length against an extent.
 //!
 //! Two passes, as Box2D's speculative contacts and its time of impact:
@@ -24,11 +24,13 @@
 //!   hair short of it, keeping its velocity: the next step's speculative
 //!   contact takes it from there.
 //!
-//! [`RigidBody::bullet`]: voltra_scene::RigidBody::bullet
+//! [`RigidBody2D::bullet`]: voltra_scene::RigidBody2D::bullet
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{BodyType, Collider, CollisionLayers, OneWay, RigidBody, Sensor, Transform};
+use voltra_scene::{
+    BodyType, Collider2D, CollisionLayers, OneWay, RigidBody2D, Sensor, Transform2D,
+};
 
 use crate::geometry::{closest, Hull};
 use crate::hash::FastSet;
@@ -52,8 +54,8 @@ const SLACK: f32 = 0.01;
 /// Something a fast body may be stopped by.
 struct Target {
     entity: Entity,
-    collider: Collider,
-    at: Transform,
+    collider: Collider2D,
+    at: Transform2D,
     hull: Hull,
     min: Vec2,
     max: Vec2,
@@ -66,8 +68,8 @@ struct Target {
 /// A body moving fast enough to be swept, and its move.
 struct Mover {
     entity: Entity,
-    collider: Collider,
-    start: Transform,
+    collider: Collider2D,
+    start: Transform2D,
     translation: Vec2,
     rotation: f32,
     bullet: bool,
@@ -88,7 +90,7 @@ pub(crate) fn speculative_contacts(
     touching: &FastSet<(Entity, Entity)>,
 ) -> Vec<Contact> {
     let movers: Vec<Mover> = world
-        .query::<RigidBody>()
+        .query::<RigidBody2D>()
         .filter(|(entity, _)| sleep.is_awake_dynamic(world, *entity))
         .filter_map(|(entity, body)| {
             let velocity = body.velocity + gravity * body.gravity_scale * dt;
@@ -109,7 +111,7 @@ pub(crate) fn speculative_contacts(
     let moving = if movers.iter().any(|m| m.bullet) {
         targets(world, |entity, body| {
             let body = body.filter(|b| !is_still(Some(b)) && !b.bullet)?;
-            let at = *world.get::<Transform>(entity)?;
+            let at = *world.get::<Transform2D>(entity)?;
             Some((at, body.velocity * dt))
         })
     } else {
@@ -176,7 +178,7 @@ pub(crate) fn sweep(
     // two bullets do not meet each other, as in Box2D.
     // Where everything ended the step.
     let end = |entity: Entity| {
-        let mut at = *world.get::<Transform>(entity)?;
+        let mut at = *world.get::<Transform2D>(entity)?;
         if let Some(body) = bodies.index_of(entity).map(|i| bodies.get(i)) {
             at.translation += body.delta_position;
             at.rotation += body.delta_rotation;
@@ -199,8 +201,8 @@ fn mover(world: &World, entity: Entity, translation: Vec2, rotation: f32) -> Opt
     if translation == Vec2::ZERO && rotation == 0.0 {
         return None;
     }
-    let collider = world.get::<Collider>(entity)?;
-    let start = world.get::<Transform>(entity)?;
+    let collider = world.get::<Collider2D>(entity)?;
+    let start = world.get::<Transform2D>(entity)?;
     if world.get::<Sensor>(entity).is_some() || collider.is_degenerate(start) {
         return None;
     }
@@ -216,30 +218,30 @@ fn mover(world: &World, entity: Entity, translation: Vec2, rotation: f32) -> Opt
         translation,
         rotation,
         bullet: world
-            .get::<RigidBody>(entity)
+            .get::<RigidBody2D>(entity)
             .is_some_and(|body| body.bullet),
         layers: world.get::<CollisionLayers>(entity).copied(),
     })
 }
 
 /// Static geometry: a collider with no body, or a static one.
-fn is_still(body: Option<&RigidBody>) -> bool {
+fn is_still(body: Option<&RigidBody2D>) -> bool {
     body.is_none_or(|b| b.body_type == BodyType::Static)
 }
 
-fn still_pose(world: &World, entity: Entity) -> Option<(Transform, Vec2)> {
-    Some((*world.get::<Transform>(entity)?, Vec2::ZERO))
+fn still_pose(world: &World, entity: Entity) -> Option<(Transform2D, Vec2)> {
+    Some((*world.get::<Transform2D>(entity)?, Vec2::ZERO))
 }
 
 /// [`extents`] about the shape's own origin, without building a hull for the
 /// two shapes most bodies are: this runs for every awake body every step.
-fn collider_extents(collider: &Collider, at: &Transform) -> (f32, f32) {
+fn collider_extents(collider: &Collider2D, at: &Transform2D) -> (f32, f32) {
     match collider {
-        Collider::Box { .. } => {
+        Collider2D::Box { .. } => {
             let half = collider.world_half_extents(at);
             (half.min_element(), half.length())
         }
-        Collider::Circle { .. } => {
+        Collider2D::Circle { .. } => {
             let radius = collider.world_radius(at);
             (radius, radius)
         }
@@ -276,14 +278,14 @@ fn extents(hull: &Hull, origin: Vec2) -> (f32, f32) {
 /// shapes with no area are left out too.
 fn targets(
     world: &World,
-    pose: impl Fn(Entity, Option<&RigidBody>) -> Option<(Transform, Vec2)>,
+    pose: impl Fn(Entity, Option<&RigidBody2D>) -> Option<(Transform2D, Vec2)>,
 ) -> Vec<Target> {
     let mut found = Vec::new();
-    for (entity, collider) in world.query::<Collider>() {
+    for (entity, collider) in world.query::<Collider2D>() {
         if world.get::<Sensor>(entity).is_some() {
             continue;
         }
-        let Some((at, moves)) = pose(entity, world.get::<RigidBody>(entity)) else {
+        let Some((at, moves)) = pose(entity, world.get::<RigidBody2D>(entity)) else {
             continue;
         };
         if collider.is_degenerate(&at) {

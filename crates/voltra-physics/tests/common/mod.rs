@@ -7,7 +7,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_physics::{step, ImpulseCache, SolverParams};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, PhysicsMaterial, RigidBody, Transform};
+use voltra_scene::{Collider2D, PhysicsMaterial, RigidBody2D, Transform2D};
 
 pub const DT: f32 = 1.0 / 60.0;
 pub const G: Vec2 = Vec2::new(0.0, -10.0);
@@ -15,10 +15,10 @@ pub const G: Vec2 = Vec2::new(0.0, -10.0);
 /// A box, static when `mass` is `None` and dynamic otherwise.
 pub fn spawn_box(world: &mut World, at: Vec2, half_extents: Vec2, mass: Option<f32>) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Box { half_extents });
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Box { half_extents });
     if let Some(mass) = mass {
-        world.insert(entity, RigidBody::new_dynamic(mass));
+        world.insert(entity, RigidBody2D::new_dynamic(mass));
     }
     entity
 }
@@ -29,33 +29,33 @@ pub fn floor_and_ball() -> (World, Entity, Entity) {
     let mut world = World::new();
 
     let floor = world.spawn();
-    world.insert(floor, Transform::from_translation(Vec2::new(0.0, -2.0)));
+    world.insert(floor, Transform2D::from_translation(Vec2::new(0.0, -2.0)));
     world.insert(
         floor,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(10.0, 0.5),
         },
     );
-    world.insert(floor, RigidBody::new_static());
+    world.insert(floor, RigidBody2D::new_static());
 
     let ball = world.spawn();
-    world.insert(ball, Transform::default());
-    world.insert(ball, Collider::Circle { radius: 0.5 });
-    world.insert(ball, RigidBody::new_dynamic(1.0));
+    world.insert(ball, Transform2D::default());
+    world.insert(ball, Collider2D::Circle { radius: 0.5 });
+    world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
     (world, floor, ball)
 }
 
 pub fn translation(world: &World, entity: Entity) -> Vec2 {
     world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("the transform is there")
         .translation
 }
 
 pub fn velocity(world: &World, entity: Entity) -> Vec2 {
     world
-        .get::<RigidBody>(entity)
+        .get::<RigidBody2D>(entity)
         .expect("the body is there")
         .velocity
 }
@@ -78,7 +78,7 @@ pub fn spawn_turned_box(
 ) -> Entity {
     let entity = spawn_box(world, at, half_extents, mass);
     world
-        .get_mut::<Transform>(entity)
+        .get_mut::<Transform2D>(entity)
         .expect("just spawned")
         .rotation = rotation;
     entity
@@ -86,14 +86,14 @@ pub fn spawn_turned_box(
 
 pub fn rotation(world: &World, entity: Entity) -> f32 {
     world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("the transform is there")
         .rotation
 }
 
 pub fn spin(world: &World, entity: Entity) -> f32 {
     world
-        .get::<RigidBody>(entity)
+        .get::<RigidBody2D>(entity)
         .expect("the body is there")
         .angular_velocity
 }

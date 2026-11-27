@@ -8,7 +8,8 @@ use voltra_core::{App, Headless, Screenshot, ScreenshotError, WindowConfig};
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    BodyType, Camera, Line2D, LineCap, LineJoint, Polygon2D, RigidBody, Sprite, Trail2D, Transform,
+    BodyType, Camera2D, Line2D, LineCap, LineJoint, Polygon2D, RigidBody2D, Sprite2D, Trail2D,
+    Transform2D,
 };
 
 /// 128 × 128 pixels over four units: 32 a unit, the origin at the middle.
@@ -19,8 +20,8 @@ fn session() -> Headless {
     let mut app =
         App::new(WindowConfig::default()).with_asset_root(voltra_testkit::scratch_root().keep());
     let camera = app.world.spawn();
-    app.world.insert(camera, Transform::default());
-    app.world.insert(camera, Camera::new(2.0));
+    app.world.insert(camera, Transform2D::default());
+    app.world.insert(camera, Camera2D::new(2.0));
     Headless::new(app)
 }
 
@@ -48,7 +49,7 @@ fn white(shot: &Screenshot, at: Vec2) -> bool {
 
 fn drawn<T: 'static>(world: &mut World, component: T) {
     let e = world.spawn();
-    world.insert(e, Transform::default());
+    world.insert(e, Transform2D::default());
     world.insert(e, component);
 }
 
@@ -159,12 +160,12 @@ fn lines_and_polygons_sort_with_sprites() {
         let mut session = session();
         let world = session.world_mut();
         let sprite = world.spawn();
-        world.insert(sprite, Transform::default().with_scale(Vec2::splat(2.0)));
+        world.insert(sprite, Transform2D::default().with_scale(Vec2::splat(2.0)));
         world.insert(
             sprite,
-            Sprite {
+            Sprite2D {
                 sort_order: 0,
-                ..Sprite::new([1.0, 0.0, 0.0, 1.0])
+                ..Sprite2D::new([1.0, 0.0, 0.0, 1.0])
             },
         );
         drawn(
@@ -193,13 +194,13 @@ fn a_trail_follows_a_moving_body_and_fades_behind_it() {
     let mut session = session();
     let world = session.world_mut();
     let body = world.spawn();
-    world.insert(body, Transform::from_translation(Vec2::new(-1.8, 0.0)));
+    world.insert(body, Transform2D::from_translation(Vec2::new(-1.8, 0.0)));
     world.insert(
         body,
-        RigidBody {
+        RigidBody2D {
             body_type: BodyType::Kinematic,
             velocity: Vec2::new(3.0, 0.0),
-            ..RigidBody::default()
+            ..RigidBody2D::default()
         },
     );
     world.insert(
@@ -219,7 +220,7 @@ fn a_trail_follows_a_moving_body_and_fades_behind_it() {
     };
     let at = session
         .world()
-        .get::<Transform>(body)
+        .get::<Transform2D>(body)
         .expect("the body")
         .translation;
     assert!((at.x - 1.2).abs() < 0.1, "the body moved: {at}");

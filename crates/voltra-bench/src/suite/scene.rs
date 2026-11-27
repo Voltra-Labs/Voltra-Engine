@@ -3,7 +3,9 @@
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_scene::format::{from_scene_file, to_scene_file, SceneFile};
-use voltra_scene::{Collider, ComponentRegistry, Name, RigidBody, SceneId, Sprite, Transform};
+use voltra_scene::{
+    Collider2D, ComponentRegistry, Name, RigidBody2D, SceneId, Sprite2D, Transform2D,
+};
 
 use super::{Bench, Outcome};
 use crate::harness::{iter, iter_batched, measure};
@@ -81,20 +83,20 @@ fn scene_text(count: usize) -> Option<String> {
         world.insert(entity, Name::new(format!("Entity {i}")));
         world.insert(
             entity,
-            Transform::from_translation(Vec2::new((i % 100) as f32, (i / 100) as f32)),
+            Transform2D::from_translation(Vec2::new((i % 100) as f32, (i / 100) as f32)),
         );
         world.insert(
             entity,
-            Sprite {
+            Sprite2D {
                 sort_order: (i % 5) as i32,
-                ..Sprite::default()
+                ..Sprite2D::default()
             },
         );
         if i % 4 == 0 {
-            world.insert(entity, RigidBody::new_dynamic(1.0));
+            world.insert(entity, RigidBody2D::new_dynamic(1.0));
             world.insert(
                 entity,
-                Collider::Box {
+                Collider2D::Box {
                     half_extents: Vec2::splat(0.5),
                 },
             );

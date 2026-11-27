@@ -27,8 +27,8 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    prefab, AudioSource, Camera, Collider, ComponentRegistry, Name, RigidBody, SceneId, Sprite,
-    Tilemap, Transform,
+    prefab, AudioSource, Camera2D, Collider2D, ComponentRegistry, Name, RigidBody2D, SceneId,
+    Sprite2D, Tilemap, Transform2D,
 };
 
 use crate::editor::Editor;
@@ -111,7 +111,7 @@ pub(crate) fn prefab(
         frame.world,
         registry,
         frame.prefabs.get(handle),
-        &Transform::from_translation(at),
+        &Transform2D::from_translation(at),
     );
     match spawned {
         Ok(instance) => {
@@ -135,9 +135,9 @@ pub(crate) fn sprite(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
     frame.world.insert(entity, Name::new(name));
     frame.world.insert(
         entity,
-        Transform::from_translation(at).with_scale(Vec2::splat(DEFAULT_SCALE)),
+        Transform2D::from_translation(at).with_scale(Vec2::splat(DEFAULT_SCALE)),
     );
-    frame.world.insert(entity, Sprite::default());
+    frame.world.insert(entity, Sprite2D::default());
     entity
 }
 
@@ -151,7 +151,9 @@ pub(crate) fn tilemap(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
     frame.world.insert(entity, Name::new(name));
-    frame.world.insert(entity, Transform::from_translation(at));
+    frame
+        .world
+        .insert(entity, Transform2D::from_translation(at));
     let mut map = Tilemap::default();
     map.sort_order = -1;
     frame.world.insert(entity, map);
@@ -162,15 +164,17 @@ pub(crate) fn tilemap(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
 ///
 /// No sprite and no scale of its own: a camera is a framing, and the entity
 /// carrying it is drawn by [`crate::view::overlay`] rather than by the sprite
-/// batch. `Camera::default` is active, so the first one added to a scene is
+/// batch. `Camera2D::default` is active, so the first one added to a scene is
 /// immediately the one the game view shows — an added camera that changes
 /// nothing until a checkbox is found is the worse default.
 pub(crate) fn camera(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
     frame.world.insert(entity, Name::new(name));
-    frame.world.insert(entity, Transform::from_translation(at));
-    frame.world.insert(entity, Camera::default());
+    frame
+        .world
+        .insert(entity, Transform2D::from_translation(at));
+    frame.world.insert(entity, Camera2D::default());
     entity
 }
 
@@ -186,7 +190,7 @@ pub(crate) fn camera(frame: &mut UiFrame<'_>, name: &str, at: Vec2) -> Entity {
 pub(crate) fn textured_sprite(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPath) -> Entity {
     let entity = sprite(frame, &name_of(path), at);
 
-    let Some(component) = frame.world.get_mut::<Sprite>(entity) else {
+    let Some(component) = frame.world.get_mut::<Sprite2D>(entity) else {
         return entity;
     };
     component.set_texture(
@@ -208,7 +212,7 @@ pub(crate) fn textured_sprite(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPat
     if longest <= 0.0 {
         return entity;
     }
-    if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
+    if let Some(transform) = frame.world.get_mut::<Transform2D>(entity) {
         transform.scale = Vec2::new(width / longest, height / longest) * DEFAULT_SCALE;
     }
     entity
@@ -225,7 +229,9 @@ pub(crate) fn audio_source(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPath) 
     let entity = frame.world.spawn();
     frame.world.insert(entity, SceneId::new());
     frame.world.insert(entity, Name::new(name_of(path)));
-    frame.world.insert(entity, Transform::from_translation(at));
+    frame
+        .world
+        .insert(entity, Transform2D::from_translation(at));
 
     let mut source = AudioSource::default();
     source.set_clip(Some(path.clone()), frame.clips);
@@ -246,7 +252,7 @@ fn name_of(path: &AssetPath) -> String {
 
 /// Drops a sprite with a body and a collider that match its outline.
 ///
-/// The collider is [`Sprite::HALF_EXTENT`] rather than a literal, so the green
+/// The collider is [`Sprite2D::HALF_EXTENT`] rather than a literal, so the green
 /// outline lands exactly on the sprite's edge. A collider that disagrees with
 /// the picture by a hair is a bug that reads as a physics bug.
 pub(crate) fn body(
@@ -255,7 +261,7 @@ pub(crate) fn body(
     at: Vec2,
     scale: Vec2,
     rotation: f32,
-    body: RigidBody,
+    body: RigidBody2D,
     color: [f32; 4],
 ) -> Entity {
     let entity = frame.world.spawn();
@@ -263,16 +269,16 @@ pub(crate) fn body(
     frame.world.insert(entity, Name::new(name));
     frame.world.insert(
         entity,
-        Transform::from_translation(at)
+        Transform2D::from_translation(at)
             .with_scale(scale)
             .with_rotation(rotation),
     );
-    frame.world.insert(entity, Sprite::new(color));
+    frame.world.insert(entity, Sprite2D::new(color));
     frame.world.insert(entity, body);
     frame.world.insert(
         entity,
-        Collider::Box {
-            half_extents: Vec2::splat(Sprite::HALF_EXTENT),
+        Collider2D::Box {
+            half_extents: Vec2::splat(Sprite2D::HALF_EXTENT),
         },
     );
     entity
@@ -298,7 +304,7 @@ pub(crate) fn atlas_sprite(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPath) 
     let texture = atlas.texture().cloned();
     let first = atlas.frame(0);
 
-    let Some(component) = frame.world.get_mut::<Sprite>(entity) else {
+    let Some(component) = frame.world.get_mut::<Sprite2D>(entity) else {
         return entity;
     };
     component.set_atlas(Some(path.clone()), frame.atlases);
@@ -316,7 +322,7 @@ pub(crate) fn atlas_sprite(frame: &mut UiFrame<'_>, at: Vec2, path: &AssetPath) 
     if longest <= 0.0 {
         return entity;
     }
-    if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
+    if let Some(transform) = frame.world.get_mut::<Transform2D>(entity) {
         transform.scale = Vec2::new(size.0 / longest, size.1 / longest) * DEFAULT_SCALE;
     }
     entity

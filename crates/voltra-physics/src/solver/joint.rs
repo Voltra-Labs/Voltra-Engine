@@ -34,7 +34,7 @@ mod wheel;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Joint2D, JointImpulses, JointKind, Transform};
+use voltra_scene::{Joint2D, JointImpulses, JointKind, Transform2D};
 
 use super::{Softness, SolverBodies};
 pub use ends::{joint_ends, JointEnds};
@@ -93,7 +93,7 @@ pub fn prepare_joints(
         };
         let place = |entity: Entity| {
             world
-                .get::<Transform>(entity)
+                .get::<Transform2D>(entity)
                 .map_or((Vec2::ZERO, 0.0), |t| (t.translation, t.rotation))
         };
         let (center_a, angle_a) = place(end.a);

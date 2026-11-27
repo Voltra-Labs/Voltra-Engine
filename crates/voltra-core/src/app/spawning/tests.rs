@@ -14,7 +14,7 @@ fn root_with_a_coin() -> voltra_testkit::Scratch {
     let coin = world.spawn();
     world.insert(coin, SceneId::new());
     world.insert(coin, Name::new("coin"));
-    world.insert(coin, Transform::default());
+    world.insert(coin, Transform2D::default());
     voltra_scene::format::save(
         &world,
         &ComponentRegistry::with_defaults(),
@@ -39,7 +39,7 @@ fn a_tick_spawns_a_prefab_where_it_is_told() {
         .with_update(move |tick| {
             let coin = tick.prefab(&coin());
             let instance = tick
-                .spawn(coin, &Transform::from_translation(Vec2::new(3.0, 4.0)))
+                .spawn(coin, &Transform2D::from_translation(Vec2::new(3.0, 4.0)))
                 .expect("the prefab reads");
             seen.borrow_mut().extend(instance.roots);
         });
@@ -49,7 +49,9 @@ fn a_tick_spawns_a_prefab_where_it_is_told() {
     let roots = spawned.borrow();
     assert_eq!(roots.len(), 1);
     assert_eq!(
-        app.world.get::<Transform>(roots[0]).map(|t| t.translation),
+        app.world
+            .get::<Transform2D>(roots[0])
+            .map(|t| t.translation),
         Some(Vec2::new(3.0, 4.0))
     );
     assert!(app.spawned.is_empty(), "the queue was resolved and emptied");
@@ -63,7 +65,7 @@ fn a_tick_that_spawns_every_frame_makes_one_per_frame() {
         .with_simulation()
         .with_update(|tick| {
             let coin = tick.prefab(&coin());
-            tick.spawn(coin, &Transform::default()).expect("reads");
+            tick.spawn(coin, &Transform2D::default()).expect("reads");
         });
 
     for _ in 0..3 {
@@ -81,7 +83,7 @@ fn a_forged_handle_spawns_nothing_rather_than_panicking() {
         .with_simulation()
         .with_update(|tick| {
             let instance = tick
-                .spawn(Handle::forge(40, 0), &Transform::default())
+                .spawn(Handle::forge(40, 0), &Transform2D::default())
                 .expect("not an error");
             assert!(instance.entities.is_empty());
         });
@@ -99,7 +101,7 @@ fn an_entity_despawned_by_the_tick_that_made_it_is_skipped() {
         .with_simulation()
         .with_update(|tick| {
             let coin = tick.prefab(&coin());
-            let instance = tick.spawn(coin, &Transform::default()).expect("reads");
+            let instance = tick.spawn(coin, &Transform2D::default()).expect("reads");
             for entity in instance.entities {
                 tick.world.despawn(entity);
             }

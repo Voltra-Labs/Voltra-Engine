@@ -6,7 +6,7 @@ use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Sprite, Tilemap};
+use voltra_scene::{Collider2D, Sprite2D, Tilemap};
 
 use super::super::mixed;
 use super::super::{character, collider, collision, game_components, shadow_caster, sorting_layer};
@@ -34,31 +34,31 @@ pub(in crate::panels::inspector) fn show(
         .world
         .get::<Tilemap>(entity)
         .is_some_and(|map| map.collision);
-    let has_collider = frame.world.get::<Collider>(entity).is_some();
+    let has_collider = frame.world.get::<Collider2D>(entity).is_some();
     let textured = frame
         .world
-        .get::<Sprite>(entity)
+        .get::<Sprite2D>(entity)
         .is_some_and(|sprite| sprite.texture.is_some());
     if let Some(shape) = gate(
-        frame.world.get_mut::<Collider>(entity),
+        frame.world.get_mut::<Collider2D>(entity),
         multi,
-        Collider::NAME,
+        Collider2D::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &[Collider::NAME]);
+        mixed::marker(ui, multi, &[Collider2D::NAME]);
         let outcome = collider::show(ui, shape, textured);
         claim = claim.or(outcome.claim);
         if let Some(kind) = outcome.kind {
             // Each of another kind turned into it from its own size; one
             // already of it keeps its own.
             for each in multi.all().collect::<Vec<_>>() {
-                if let Some(other) = frame.world.get_mut::<Collider>(each) {
+                if let Some(other) = frame.world.get_mut::<Collider2D>(each) {
                     if collider::reshape(other, kind) {
                         claim = Some("Change collider shape");
                     }
                 }
             }
-            multi.done_for_each(Collider::NAME);
+            multi.done_for_each(Collider2D::NAME);
         }
         if outcome.fit_to_sprite {
             // Fitted to the frame shown: the authored one.
@@ -70,7 +70,7 @@ pub(in crate::panels::inspector) fn show(
             for each in fitted {
                 claim = claim.or(fit_to_sprite(frame, each));
             }
-            multi.done_for_each(Collider::NAME);
+            multi.done_for_each(Collider2D::NAME);
         }
     }
     let filter = [
@@ -97,7 +97,7 @@ pub(in crate::panels::inspector) fn show(
     ));
     // Keyed off the shape it would take — a collider, a solid
     // layer's boxes, a sprite's quad — or off the caster itself.
-    let has_sprite = frame.world.get::<Sprite>(entity).is_some();
+    let has_sprite = frame.world.get::<Sprite2D>(entity).is_some();
     let casts = frame
         .world
         .get::<voltra_scene::ShadowCaster2D>(entity)
@@ -119,7 +119,7 @@ pub(in crate::panels::inspector) fn show(
                 starting,
                 textured_sprite: frame
                     .world
-                    .get::<Sprite>(entity)
+                    .get::<Sprite2D>(entity)
                     .is_some_and(|sprite| sprite.texture.is_some()),
                 shape: &mut editor.shape,
                 recording: editor.timeline.is_recording(),
@@ -163,7 +163,7 @@ fn add_casters_to_rest(frame: &mut UiFrame<'_>, multi: &mut MultiEdit) {
         {
             continue;
         }
-        let has_collider = frame.world.get::<Collider>(entity).is_some()
+        let has_collider = frame.world.get::<Collider2D>(entity).is_some()
             || frame
                 .world
                 .get::<Tilemap>(entity)
@@ -208,8 +208,8 @@ fn fit_to_sprite(frame: &mut UiFrame<'_>, entity: Entity) -> Option<&'static str
         .collect();
     match voltra_scene::ConvexPolygon::enclosing(&points) {
         Ok(points) => {
-            let collider = frame.world.get_mut::<Collider>(entity)?;
-            *collider = Collider::Polygon {
+            let collider = frame.world.get_mut::<Collider2D>(entity)?;
+            *collider = Collider2D::Polygon {
                 points,
                 radius: 0.0,
             };

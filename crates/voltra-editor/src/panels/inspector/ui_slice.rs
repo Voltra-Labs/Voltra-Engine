@@ -3,14 +3,14 @@
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_ecs::{Entity, World};
 use voltra_scene::ui::Edges;
-use voltra_scene::{Sprite, UiRect, UiSlice};
+use voltra_scene::{Sprite2D, UiRect, UiSlice};
 
 use super::active;
 
 /// The 9-slice section of a UI element with a sprite: its borders, or a
 /// button to slice it. Nothing for anything else.
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
-    let image = world.get::<UiRect>(entity).is_some() && world.get::<Sprite>(entity).is_some();
+    let image = world.get::<UiRect>(entity).is_some() && world.get::<Sprite2D>(entity).is_some();
     let Some(slice) = world.get_mut::<UiSlice>(entity) else {
         if image && ui.button("Add 9-slice").clicked() {
             world.insert(entity, UiSlice::default());

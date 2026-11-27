@@ -12,7 +12,7 @@ use voltra_render::glam::Vec2;
 pub enum BodyType {
     /// Never moves. Walls, floors.
     ///
-    /// The default because a `RigidBody` added from the inspector must not send
+    /// The default because a `RigidBody2D` added from the inspector must not send
     /// the sprite falling off the screen before a mass has been typed.
     #[default]
     Static,
@@ -28,7 +28,7 @@ pub enum BodyType {
 /// uses it divides by mass, and infinite mass — anything that cannot be pushed
 /// — is `0.0` instead of a branch repeated at each of them.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub struct RigidBody {
+pub struct RigidBody2D {
     /// How the body moves, if at all.
     pub body_type: BodyType,
     /// World units per second.
@@ -71,7 +71,7 @@ fn can_sleep_by_default() -> bool {
     true
 }
 
-impl Default for RigidBody {
+impl Default for RigidBody2D {
     fn default() -> Self {
         Self {
             body_type: BodyType::Static,
@@ -88,7 +88,7 @@ impl Default for RigidBody {
     }
 }
 
-impl RigidBody {
+impl RigidBody2D {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "RigidBody";
 
@@ -121,7 +121,7 @@ mod tests {
         // Static, not Dynamic: a component added by a click in the inspector
         // must not make the sprite fall off the screen before anyone has typed
         // a mass. Unity, Godot and Box2D all default to the inert body too.
-        let body = RigidBody::default();
+        let body = RigidBody2D::default();
 
         assert_eq!(body.body_type, BodyType::Static);
         assert_eq!(body.inverse_mass, 0.0);
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn a_default_body_does_not_spin_and_is_free_to_turn() {
-        let body = RigidBody::default();
+        let body = RigidBody2D::default();
 
         assert_eq!(body.angular_velocity, 0.0);
         assert_eq!(body.angular_damping, 0.0);
@@ -141,22 +141,22 @@ mod tests {
     fn the_rotation_fields_survive_a_round_trip() {
         // A body that loses its spin or its lock on save is a scene that plays
         // differently the second time it is opened.
-        let body = RigidBody {
+        let body = RigidBody2D {
             angular_velocity: 1.5,
             angular_damping: 0.25,
             lock_rotation: true,
-            ..RigidBody::new_dynamic(2.0)
+            ..RigidBody2D::new_dynamic(2.0)
         };
 
         let text = ron::to_string(&body).expect("a body serialises");
-        let restored: RigidBody = ron::from_str(&text).expect("and comes back");
+        let restored: RigidBody2D = ron::from_str(&text).expect("and comes back");
 
         assert_eq!(restored, body);
     }
 
     #[test]
     fn a_dynamic_body_stores_the_reciprocal_of_its_mass() {
-        let body = RigidBody::new_dynamic(4.0);
+        let body = RigidBody2D::new_dynamic(4.0);
 
         assert_eq!(body.body_type, BodyType::Dynamic);
         assert_eq!(body.inverse_mass, 0.25);
@@ -167,7 +167,7 @@ mod tests {
         // 1/0 is inf, and an inf inverse mass makes a body react to the
         // smallest impulse by leaving the world. Zero mass means "cannot be
         // moved", which is what every engine means by it.
-        let body = RigidBody::new_dynamic(0.0);
+        let body = RigidBody2D::new_dynamic(0.0);
 
         assert_eq!(body.inverse_mass, 0.0);
         assert!(body.inverse_mass.is_finite());
@@ -176,18 +176,18 @@ mod tests {
     #[test]
     fn a_negative_mass_is_treated_as_zero() {
         // A scene file is external input and can say anything.
-        assert_eq!(RigidBody::new_dynamic(-5.0).inverse_mass, 0.0);
+        assert_eq!(RigidBody2D::new_dynamic(-5.0).inverse_mass, 0.0);
     }
 
     #[test]
     fn a_static_body_has_no_inverse_mass() {
-        assert_eq!(RigidBody::new_static().inverse_mass, 0.0);
-        assert_eq!(RigidBody::new_static().body_type, BodyType::Static);
+        assert_eq!(RigidBody2D::new_static().inverse_mass, 0.0);
+        assert_eq!(RigidBody2D::new_static().body_type, BodyType::Static);
     }
 
     #[test]
     fn a_body_round_trips_through_ron() {
-        let body = RigidBody {
+        let body = RigidBody2D {
             body_type: BodyType::Kinematic,
             velocity: Vec2::new(1.5, -2.5),
             angular_velocity: -0.75,
@@ -201,7 +201,7 @@ mod tests {
         };
 
         let text = ron::to_string(&body).expect("serialise");
-        let back: RigidBody = ron::from_str(&text).expect("deserialise");
+        let back: RigidBody2D = ron::from_str(&text).expect("deserialise");
 
         assert_eq!(back, body);
     }
@@ -209,7 +209,7 @@ mod tests {
     #[test]
     fn a_body_saved_before_sleeping_existed_may_sleep() {
         let text = "(body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:1.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false)";
-        let body: RigidBody = ron::from_str(text).expect("an old body still reads");
+        let body: RigidBody2D = ron::from_str(text).expect("an old body still reads");
         assert!(body.can_sleep);
     }
 }

@@ -9,7 +9,7 @@ use voltra_core::{App, Headless};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::keyframes::{Ease, Property, Value};
-use voltra_scene::{Name, SceneId, Sprite, TimerId, Transform, TweenId};
+use voltra_scene::{Name, SceneId, Sprite2D, TimerId, Transform2D, TweenId};
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -115,8 +115,8 @@ fn a_sprite_fades_and_moves_two_tweens_chain_a_timer_fires_and_the_despawned_sto
         let e = app.world.spawn();
         app.world.insert(e, SceneId::new());
         app.world.insert(e, Name::new(name));
-        app.world.insert(e, Transform::from_translation(at));
-        app.world.insert(e, Sprite::new([1.0, 1.0, 1.0, 1.0]));
+        app.world.insert(e, Transform2D::from_translation(at));
+        app.world.insert(e, Sprite2D::new([1.0, 1.0, 1.0, 1.0]));
     }
     let mut session = Headless::new(app);
     let hero = named(session.world(), "Hero");
@@ -124,10 +124,10 @@ fn a_sprite_fades_and_moves_two_tweens_chain_a_timer_fires_and_the_despawned_sto
     let state = |s: &Headless| {
         let t = s
             .world()
-            .get::<Transform>(hero)
+            .get::<Transform2D>(hero)
             .expect("placed")
             .translation;
-        let a = s.world().get::<Sprite>(hero).expect("a sprite").color[3];
+        let a = s.world().get::<Sprite2D>(hero).expect("a sprite").color[3];
         (t, a)
     };
 
@@ -141,7 +141,7 @@ fn a_sprite_fades_and_moves_two_tweens_chain_a_timer_fires_and_the_despawned_sto
     );
     let doomed_scale = session
         .world()
-        .get::<Transform>(doomed)
+        .get::<Transform2D>(doomed)
         .expect("placed")
         .scale;
     assert!(doomed_scale.x < 1.0, "the shrink is running");

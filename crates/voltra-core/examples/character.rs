@@ -21,8 +21,8 @@ use voltra_core::{move_and_slide, App, WindowConfig};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    AnimationPlayer, Animator, Camera, CameraFollow2D, CameraShake, CharacterBody2D, Collider,
-    FollowBounds, OneWay, RigidBody, SceneId, Sprite, Transform,
+    AnimationPlayer, Animator, Camera2D, CameraFollow2D, CameraShake, CharacterBody2D, Collider2D,
+    FollowBounds, OneWay, RigidBody2D, SceneId, Sprite2D, Transform2D,
 };
 
 /// World units per second at full tilt.
@@ -113,15 +113,15 @@ fn block(app: &mut App, at: Vec2, half: Vec2, degrees: f32, color: [f32; 4]) -> 
     let entity = app.world.spawn();
     app.world.insert(
         entity,
-        Transform::from_translation(at)
+        Transform2D::from_translation(at)
             .with_rotation(degrees.to_radians())
             .with_scale(half * 2.0),
     );
-    app.world.insert(entity, Sprite::new(color));
+    app.world.insert(entity, Sprite2D::new(color));
     // The collider is half a unit either way: the scale makes it the block.
     app.world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
@@ -136,7 +136,7 @@ fn ramp(app: &mut App, foot: Vec2, length: f32, degrees: f32, color: [f32; 4]) {
     let centre = foot + along * (length / 2.0 - 0.3) - along.perp() * half.y;
     let ramp = block(app, centre, half, degrees, color);
     // Under the floor, which hides the part sunk into it.
-    if let Some(sprite) = app.world.get_mut::<Sprite>(ramp) {
+    if let Some(sprite) = app.world.get_mut::<Sprite2D>(ramp) {
         sprite.sort_order = -1;
     }
 }
@@ -174,7 +174,7 @@ fn spawn_level(app: &mut App) -> Entity {
         0.0,
         [0.75, 0.5, 0.3, 1.0],
     );
-    app.world.insert(crate_, RigidBody::new_dynamic(1.0));
+    app.world.insert(crate_, RigidBody2D::new_dynamic(1.0));
     // A low step, stepped onto, and a high one, jumped onto.
     block(app, Vec2::new(1.5, 0.02), Vec2::new(0.5, 0.02), 0.0, moss);
     block(app, Vec2::new(3.0, 0.2), Vec2::new(0.5, 0.2), 0.0, moss);
@@ -210,12 +210,12 @@ fn spawn_level(app: &mut App) -> Entity {
     let me = app.world.spawn();
     app.world.insert(
         me,
-        Transform::from_translation(Vec2::new(-1.0, 1.0)).with_scale(Vec2::new(0.4, 0.6)),
+        Transform2D::from_translation(Vec2::new(-1.0, 1.0)).with_scale(Vec2::new(0.4, 0.6)),
     );
-    app.world.insert(me, Sprite::new([1.0, 0.8, 0.3, 1.0]));
+    app.world.insert(me, Sprite2D::new([1.0, 0.8, 0.3, 1.0]));
     app.world.insert(
         me,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
@@ -244,8 +244,8 @@ fn spawn_camera(app: &mut App, target: Entity) -> Entity {
     let id = SceneId::new();
     app.world.insert(target, id);
     let camera = app.world.spawn();
-    app.world.insert(camera, Transform::default());
-    app.world.insert(camera, Camera::new(4.0));
+    app.world.insert(camera, Transform2D::default());
+    app.world.insert(camera, Camera2D::new(4.0));
     app.world.insert(
         camera,
         CameraFollow2D {

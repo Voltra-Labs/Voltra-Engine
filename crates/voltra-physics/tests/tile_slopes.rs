@@ -6,7 +6,7 @@ use voltra_ecs::{Entity, World};
 use voltra_physics::move_and_slide;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::tilemap::{sync_colliders, TileData, TileShape};
-use voltra_scene::{CharacterBody2D, Collider, Tile, Tilemap, Transform};
+use voltra_scene::{CharacterBody2D, Collider2D, Tile, Tilemap, Transform2D};
 
 const DT: f32 = 1.0 / 60.0;
 const GRAVITY: f32 = -9.81;
@@ -46,17 +46,17 @@ fn level(world: &mut World, mirrored: bool) {
         map.set(IVec2::new(at(x), 1), Some(Tile::new(0)));
     }
     let layer = world.spawn();
-    world.insert(layer, Transform::default());
+    world.insert(layer, Transform2D::default());
     world.insert(layer, map);
     sync_colliders(world);
 }
 
 fn character(world: &mut World, at: Vec2) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.2),
         },
     );
@@ -75,7 +75,12 @@ fn walk(world: &mut World, entity: Entity, walk: f32, ticks: u32) -> Vec<Vec2> {
         velocity = move_and_slide(world, entity, velocity, DT)
             .expect("a character")
             .velocity;
-        path.push(world.get::<Transform>(entity).expect("placed").translation);
+        path.push(
+            world
+                .get::<Transform2D>(entity)
+                .expect("placed")
+                .translation,
+        );
     }
     path
 }

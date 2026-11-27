@@ -1,6 +1,6 @@
 //! Exactly how two shapes overlap, if they do.
 //!
-//! Every shape is a convex hull grown by a radius (`Collider::world_shape`),
+//! Every shape is a convex hull grown by a radius (`Collider2D::world_shape`),
 //! so the general pairs are by kind, as in Box2D v3: polygon against polygon
 //! — a capsule is a two-cornered one — by the separating axis and clipping
 //! (`polygon`), anything against a circle by its nearest feature
@@ -28,7 +28,7 @@ mod round;
 
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider2D, Transform2D};
 
 use crate::geometry::Hull;
 use box_box::box_box;
@@ -165,7 +165,7 @@ impl Contact {
 }
 
 /// A shape and where it sits.
-type Shape<'a> = (&'a Collider, &'a Transform);
+type Shape<'a> = (&'a Collider2D, &'a Transform2D);
 
 /// The overlap between two shapes.
 ///
@@ -179,10 +179,10 @@ pub fn manifold(a: Shape<'_>, b: Shape<'_>) -> Option<Manifold> {
     }
 
     match (a.0, b.0) {
-        (Collider::Circle { .. }, Collider::Circle { .. }) => circle_circle(a, b),
-        (Collider::Box { .. }, Collider::Box { .. }) => box_box(a, b),
-        (Collider::Box { .. }, Collider::Circle { .. }) => box_circle(a, b),
-        (Collider::Circle { .. }, Collider::Box { .. }) => {
+        (Collider2D::Circle { .. }, Collider2D::Circle { .. }) => circle_circle(a, b),
+        (Collider2D::Box { .. }, Collider2D::Box { .. }) => box_box(a, b),
+        (Collider2D::Box { .. }, Collider2D::Circle { .. }) => box_circle(a, b),
+        (Collider2D::Circle { .. }, Collider2D::Box { .. }) => {
             // Solved the other way round and mirrored, so there is one
             // implementation of the hard case rather than two that can drift.
             Some(box_circle(b, a)?.flipped())
@@ -242,16 +242,16 @@ pub(crate) mod tests {
     use super::*;
 
     /// A transform at a point, shared with the per-pair test modules.
-    pub(crate) fn at(x: f32, y: f32) -> Transform {
-        Transform::from_translation(Vec2::new(x, y))
+    pub(crate) fn at(x: f32, y: f32) -> Transform2D {
+        Transform2D::from_translation(Vec2::new(x, y))
     }
 
-    pub(crate) fn circle(r: f32) -> Collider {
-        Collider::Circle { radius: r }
+    pub(crate) fn circle(r: f32) -> Collider2D {
+        Collider2D::Circle { radius: r }
     }
 
-    pub(crate) fn boxed(half: f32) -> Collider {
-        Collider::Box {
+    pub(crate) fn boxed(half: f32) -> Collider2D {
+        Collider2D::Box {
             half_extents: Vec2::splat(half),
         }
     }
@@ -278,7 +278,7 @@ pub(crate) mod tests {
         assert!(manifold((&circle(0.0), &at(0.0, 0.0)), (&circle(1.0), &at(0.0, 0.0))).is_none());
         assert!(manifold(
             (
-                &Collider::Box {
+                &Collider2D::Box {
                     half_extents: Vec2::ZERO
                 },
                 &at(0.0, 0.0)
@@ -290,11 +290,11 @@ pub(crate) mod tests {
 
     #[test]
     fn scale_changes_whether_two_bodies_touch() {
-        let big = Transform::default().with_scale(Vec2::splat(4.0));
+        let big = Transform2D::default().with_scale(Vec2::splat(4.0));
 
         assert!(manifold((&circle(1.0), &big), (&circle(1.0), &at(3.0, 0.0))).is_some());
         assert!(manifold(
-            (&circle(1.0), &Transform::default()),
+            (&circle(1.0), &Transform2D::default()),
             (&circle(1.0), &at(3.0, 0.0))
         )
         .is_none());

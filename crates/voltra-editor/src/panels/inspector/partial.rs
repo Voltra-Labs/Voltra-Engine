@@ -80,7 +80,7 @@ pub(super) fn add_where_missing(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_scene::{Collider, Sprite};
+    use voltra_scene::{Collider2D, Sprite2D};
 
     #[test]
     fn a_component_is_added_only_where_it_is_missing() {
@@ -88,14 +88,17 @@ mod tests {
         let mut world = World::new();
         let with = world.spawn();
         let without = world.spawn();
-        let shaped = Collider::Circle { radius: 4.0 };
+        let shaped = Collider2D::Circle { radius: 4.0 };
         world.insert(with, shaped);
-        world.insert(without, Sprite::default());
+        world.insert(without, Sprite2D::default());
 
         let added = add_where_missing(&mut world, &registry, [with, without], "Collider");
 
         assert_eq!(added, [without]);
-        assert_eq!(world.get::<Collider>(with), Some(&shaped), "kept its own");
-        assert_eq!(world.get::<Collider>(without), Some(&Collider::default()));
+        assert_eq!(world.get::<Collider2D>(with), Some(&shaped), "kept its own");
+        assert_eq!(
+            world.get::<Collider2D>(without),
+            Some(&Collider2D::default())
+        );
     }
 }

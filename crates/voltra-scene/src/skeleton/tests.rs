@@ -3,30 +3,30 @@ use voltra_render::glam::Vec2;
 use super::ik::{apply, problem, IkProblem};
 use super::*;
 use crate::hierarchy::{set_parent, world_matrix};
-use crate::{Name, Transform};
+use crate::{Name, Transform2D};
 
 /// A skeleton at `at` with an arm: an upper bone one unit long and a lower
 /// bone one unit long hung at its tip, the lower one reaching for a target
 /// named "target" placed at `goal` under the root.
 fn arm(world: &mut World, at: Vec2, goal: Vec2) -> (Entity, Entity, Entity, Entity) {
-    let root = named(world, "Rig", Transform::from_translation(at));
+    let root = named(world, "Rig", Transform2D::from_translation(at));
     world.insert(root, Skeleton2D::default());
-    let upper = named(world, "upper", Transform::default());
-    world.insert(upper, Bone2D::new(1.0, Transform::default()));
+    let upper = named(world, "upper", Transform2D::default());
+    world.insert(upper, Bone2D::new(1.0, Transform2D::default()));
     set_parent(world, upper, root).expect("parented");
-    let lower = named(world, "lower", Transform::from_translation(Vec2::X));
+    let lower = named(world, "lower", Transform2D::from_translation(Vec2::X));
     world.insert(
         lower,
-        Bone2D::new(1.0, Transform::from_translation(Vec2::X)),
+        Bone2D::new(1.0, Transform2D::from_translation(Vec2::X)),
     );
     set_parent(world, lower, upper).expect("parented");
     world.insert(lower, TwoBoneIk::default());
-    let target = named(world, "target", Transform::from_translation(goal));
+    let target = named(world, "target", Transform2D::from_translation(goal));
     set_parent(world, target, root).expect("parented");
     (root, upper, lower, target)
 }
 
-fn named(world: &mut World, name: &str, transform: Transform) -> Entity {
+fn named(world: &mut World, name: &str, transform: Transform2D) -> Entity {
     let e = world.spawn();
     world.insert(e, crate::SceneId::new());
     world.insert(e, Name::new(name));
@@ -87,7 +87,7 @@ fn a_mirrored_skeleton_still_reaches() {
     let mut world = World::new();
     let goal = Vec2::new(1.0, 1.0);
     let (root, _, lower, target) = arm(&mut world, Vec2::ZERO, goal);
-    if let Some(t) = world.get_mut::<Transform>(root) {
+    if let Some(t) = world.get_mut::<Transform2D>(root) {
         t.scale = Vec2::new(-1.0, 1.0);
     }
     apply(&mut world);
@@ -119,16 +119,22 @@ fn bones_are_found_placed_picked_and_reset() {
     assert_eq!(skeleton_of(&world, lower), Some(root));
     assert_eq!(bone_at(&world, Vec2::new(1.5, 0.05), 0.1), Some(lower));
     assert_eq!(bone_at(&world, Vec2::new(0.5, 0.5), 0.1), None);
-    if let Some(t) = world.get_mut::<Transform>(upper) {
+    if let Some(t) = world.get_mut::<Transform2D>(upper) {
         t.rotation = 1.0;
     }
     reset_to_rest(&mut world, root);
-    assert_eq!(world.get::<Transform>(upper).map(|t| t.rotation), Some(0.0));
+    assert_eq!(
+        world.get::<Transform2D>(upper).map(|t| t.rotation),
+        Some(0.0)
+    );
 }
 
 #[test]
 fn bones_and_limbs_round_trip_and_old_bones_read() {
-    let bone = Bone2D::new(0.7, Transform::from_translation(Vec2::X).with_rotation(0.3));
+    let bone = Bone2D::new(
+        0.7,
+        Transform2D::from_translation(Vec2::X).with_rotation(0.3),
+    );
     let text = ron::to_string(&bone).expect("writes");
     assert_eq!(ron::from_str::<Bone2D>(&text).expect("reads"), bone);
     let ik: TwoBoneIk = ron::from_str("(target:\"goal\")").expect("defaults fill in");

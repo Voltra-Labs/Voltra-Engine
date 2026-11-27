@@ -13,7 +13,7 @@ use super::rect::Rect;
 /// `Dropdown` is a `Selectable`. The entity's `Text` is the
 /// style of the shown choice and of the list's items — font, size, colour —
 /// and the control writes the chosen option into its content; its
-/// `Sprite`, if any, is the box. The list is drawn by the UI pass itself,
+/// `Sprite2D`, if any, is the box. The list is drawn by the UI pass itself,
 /// after every element, rather than spawned as entities: it is on top of
 /// everything without a sort order to manage, and nothing is left behind
 /// when a scene is saved with it open.

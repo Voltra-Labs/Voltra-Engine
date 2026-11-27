@@ -2,7 +2,7 @@
 
 use super::*;
 use crate::format::save::{save, to_scene_file};
-use crate::{CollisionLayers, Sensor, Sprite, Transform};
+use crate::{CollisionLayers, Sensor, Sprite2D, Transform2D};
 use voltra_render::glam::Vec2;
 
 use crate::hierarchy::{children_of, parent_of, set_parent};
@@ -14,10 +14,10 @@ fn a_parent_link_survives_a_save_and_a_load() {
     let mut source = World::new();
     let parent = source.spawn();
     source.insert(parent, SceneId::new());
-    source.insert(parent, Transform::from_translation(Vec2::new(10.0, 0.0)));
+    source.insert(parent, Transform2D::from_translation(Vec2::new(10.0, 0.0)));
     let child = source.spawn();
     source.insert(child, SceneId::new());
-    source.insert(child, Transform::from_translation(Vec2::new(1.0, 0.0)));
+    source.insert(child, Transform2D::from_translation(Vec2::new(1.0, 0.0)));
     set_parent(&mut source, child, parent).expect("a plain reparent");
 
     let registry = ComponentRegistry::with_defaults();
@@ -48,10 +48,10 @@ fn a_child_listed_before_its_parent_still_resolves() {
     let mut source = World::new();
     let child = source.spawn();
     source.insert(child, SceneId::new());
-    source.insert(child, Transform::default());
+    source.insert(child, Transform2D::default());
     let parent = source.spawn();
     source.insert(parent, SceneId::new());
-    source.insert(parent, Transform::default());
+    source.insert(parent, Transform2D::default());
     set_parent(&mut source, child, parent).expect("a plain reparent");
 
     let registry = ComponentRegistry::with_defaults();
@@ -79,9 +79,9 @@ fn source_world() -> World {
         world.insert(e, SceneId::new());
         world.insert(
             e,
-            Transform::from_translation(Vec2::new(i as f32, -1.0)).with_scale(Vec2::splat(0.5)),
+            Transform2D::from_translation(Vec2::new(i as f32, -1.0)).with_scale(Vec2::splat(0.5)),
         );
-        world.insert(e, Sprite::new([1.0, 0.0, 0.0, 1.0]).with_sort_order(i));
+        world.insert(e, Sprite2D::new([1.0, 0.0, 0.0, 1.0]).with_sort_order(i));
     }
     world
 }
@@ -100,8 +100,8 @@ fn a_world_survives_a_round_trip() {
         .map(|(e, id)| {
             (
                 *id,
-                original.get::<Transform>(e).copied(),
-                original.get::<Sprite>(e).cloned(),
+                original.get::<Transform2D>(e).copied(),
+                original.get::<Sprite2D>(e).cloned(),
             )
         })
         .collect();
@@ -110,8 +110,8 @@ fn a_world_survives_a_round_trip() {
         .map(|(e, id)| {
             (
                 *id,
-                loaded.get::<Transform>(e).copied(),
-                loaded.get::<Sprite>(e).cloned(),
+                loaded.get::<Transform2D>(e).copied(),
+                loaded.get::<Sprite2D>(e).cloned(),
             )
         })
         .collect();
@@ -127,7 +127,7 @@ fn a_filter_and_a_sensor_survive_a_round_trip() {
     let mut original = World::new();
     let entity = original.spawn();
     original.insert(entity, SceneId::new());
-    original.insert(entity, Transform::default());
+    original.insert(entity, Transform2D::default());
     original.insert(entity, CollisionLayers::on(3).looking_at(1));
     original.insert(entity, Sensor);
 
@@ -264,7 +264,7 @@ fn a_failed_load_rolls_back_every_entity_it_spawned() {
     let mut world = World::new();
     let pre_existing = world.spawn();
     world.insert(pre_existing, SceneId::new());
-    world.insert(pre_existing, Sprite::default());
+    world.insert(pre_existing, Sprite2D::default());
 
     let result = from_scene_file(&file, &registry, &mut world);
     assert!(
@@ -277,8 +277,8 @@ fn a_failed_load_rolls_back_every_entity_it_spawned() {
         "a failed load must not touch an entity that was already in the world"
     );
     assert_eq!(
-        world.get::<Sprite>(pre_existing),
-        Some(&Sprite::default()),
+        world.get::<Sprite2D>(pre_existing),
+        Some(&Sprite2D::default()),
         "a failed load must not touch components on a pre-existing entity"
     );
     assert_eq!(
@@ -371,10 +371,10 @@ fn records_spawn_under_their_own_ids_and_resolve_once_asked() {
     let parent = source.spawn();
     let parent_id = SceneId::new();
     source.insert(parent, parent_id);
-    source.insert(parent, Transform::default());
+    source.insert(parent, Transform2D::default());
     let child = source.spawn();
     source.insert(child, SceneId::new());
-    source.insert(child, Sprite::default());
+    source.insert(child, Sprite2D::default());
     set_parent(&mut source, child, parent).expect("a plain reparent");
     let registry = ComponentRegistry::with_defaults();
     let records: Vec<EntityRecord> = [child, parent]

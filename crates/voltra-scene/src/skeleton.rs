@@ -3,7 +3,7 @@
 //!
 //! Godot's `Skeleton2D` + `Bone2D` and Unity's 2D Animation package agree
 //! on the shape, and so does this: **a bone is an entity** in the
-//! hierarchy, its pose its own [`Transform`] — so a clip keys a bone's
+//! hierarchy, its pose its own [`Transform2D`] — so a clip keys a bone's
 //! rotation as it keys any entity's (stage 66, bound by name from the
 //! player), the gizmo turns one, and a sprite parented to one is cut-out
 //! animation with nothing more. [`Bone2D`] adds what a transform does not
@@ -17,7 +17,7 @@ pub mod ik;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
-use crate::hierarchy::{ancestors, descendants, WorldTransforms};
+use crate::hierarchy::{ancestors, descendants, WorldTransforms2D};
 
 pub use bone::Bone2D;
 pub use ik::{solve_two_bone, TwoBoneIk};
@@ -52,7 +52,7 @@ pub fn bones_of(world: &World, skeleton: Entity) -> Vec<Entity> {
 pub fn reset_to_rest(world: &mut World, skeleton: Entity) {
     for bone in bones_of(world, skeleton) {
         let rest = world.get::<Bone2D>(bone).map(|b| b.rest);
-        if let (Some(rest), Some(transform)) = (rest, world.get_mut::<crate::Transform>(bone)) {
+        if let (Some(rest), Some(transform)) = (rest, world.get_mut::<crate::Transform2D>(bone)) {
             *transform = rest;
         }
     }
@@ -70,7 +70,7 @@ pub struct PlacedBone {
 }
 
 /// Every bone in `world`, placed by `transforms`.
-pub fn placed_bones(world: &World, transforms: &WorldTransforms) -> Vec<PlacedBone> {
+pub fn placed_bones(world: &World, transforms: &WorldTransforms2D) -> Vec<PlacedBone> {
     world
         .query::<Bone2D>()
         .map(|(entity, bone)| place(transforms.matrix(entity), entity, bone))
@@ -89,7 +89,7 @@ fn place(matrix: Mat3, entity: Entity, bone: &Bone2D) -> PlacedBone {
 /// world, nearest first — what a click in the viewport selects before the
 /// sprites hung on it.
 pub fn bone_at(world: &World, point: Vec2, reach: f32) -> Option<Entity> {
-    let transforms = WorldTransforms::from_world(world);
+    let transforms = WorldTransforms2D::from_world(world);
     placed_bones(world, &transforms)
         .into_iter()
         .map(|bone| {

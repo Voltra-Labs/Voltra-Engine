@@ -14,7 +14,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::hierarchy::set_parent;
 use voltra_scene::skinned::{generate, pose, weights};
-use voltra_scene::{Bone2D, Camera, Name, SceneId, Skeleton2D, SkinnedSprite, Transform};
+use voltra_scene::{Bone2D, Camera2D, Name, SceneId, Skeleton2D, SkinnedSprite, Transform2D};
 
 const SHOT: u32 = 256;
 const PER_UNIT: f32 = 64.0;
@@ -35,7 +35,7 @@ fn arm_texture(root: &Path) {
     image.save(root.join("arm.png")).expect("the arm");
 }
 
-fn named(world: &mut World, name: &str, transform: Transform) -> Entity {
+fn named(world: &mut World, name: &str, transform: Transform2D) -> Entity {
     let e = world.spawn();
     world.insert(e, SceneId::new());
     world.insert(e, Name::new(name));
@@ -51,19 +51,19 @@ fn arm(root_dir: &Path, bend: f32, smooth: bool) -> Headless {
     let mut app = App::new(WindowConfig::default()).with_asset_root(root_dir.to_path_buf());
     let world = &mut app.world;
     let camera = world.spawn();
-    world.insert(camera, Transform::default());
-    world.insert(camera, Camera::new(2.0));
+    world.insert(camera, Transform2D::default());
+    world.insert(camera, Camera2D::new(2.0));
     let root = named(
         world,
         "Rig",
-        Transform::from_translation(Vec2::new(0.0, 1.0)),
+        Transform2D::from_translation(Vec2::new(0.0, 1.0)),
     );
     world.insert(root, Skeleton2D::default());
-    let down = Transform::default().with_rotation(-std::f32::consts::FRAC_PI_2);
+    let down = Transform2D::default().with_rotation(-std::f32::consts::FRAC_PI_2);
     let upper = named(world, "upper", down);
     world.insert(upper, Bone2D::new(1.0, down));
     set_parent(world, upper, root).expect("parented");
-    let rest = Transform::from_translation(Vec2::X);
+    let rest = Transform2D::from_translation(Vec2::X);
     let lower = named(world, "lower", rest.with_rotation(bend));
     world.insert(lower, Bone2D::new(1.0, rest));
     set_parent(world, lower, upper).expect("parented");
@@ -71,7 +71,7 @@ fn arm(root_dir: &Path, bend: f32, smooth: bool) -> Headless {
     let art = named(
         world,
         "arm",
-        Transform::from_translation(Vec2::new(0.0, -1.0)),
+        Transform2D::from_translation(Vec2::new(0.0, -1.0)),
     );
     set_parent(world, art, root).expect("parented");
 

@@ -5,7 +5,7 @@
 use voltra_core::{move_and_slide, Tick};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{CharacterBody2D, CharacterContact, Transform};
+use voltra_scene::{CharacterBody2D, CharacterContact, Transform2D};
 
 use crate::components::{Walker, WalkerMotion};
 use crate::ladder::Climbing;
@@ -86,7 +86,7 @@ pub fn halt(tick: &mut Tick<'_>, walker: Entity) -> bool {
 /// What it last touched is forgotten too — the floor it stood on may be
 /// gone, and a floor that is not would carry it back.
 pub fn place(world: &mut World, walker: Entity, at: Vec2) {
-    if let Some(transform) = world.get_mut::<Transform>(walker) {
+    if let Some(transform) = world.get_mut::<Transform2D>(walker) {
         transform.translation = at;
     }
     if let Some(body) = world.get_mut::<CharacterBody2D>(walker) {

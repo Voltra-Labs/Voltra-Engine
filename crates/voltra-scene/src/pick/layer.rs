@@ -9,7 +9,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
 use super::MIN_DETERMINANT;
-use crate::hierarchy::WorldTransforms;
+use crate::hierarchy::WorldTransforms2D;
 use crate::sprite::draw_key;
 use crate::tilemap::Tilemap;
 
@@ -23,7 +23,7 @@ pub fn layer_at(
     point: Vec2,
     sheets: crate::sprite::sheets::Sheets<'_>,
 ) -> Option<(Entity, (i32, i32, u32))> {
-    let transforms = WorldTransforms::seen_from(world, sheets.camera);
+    let transforms = WorldTransforms2D::seen_from(world, sheets.camera);
     world
         .query::<Tilemap>()
         .filter(|(entity, map)| has_tile_at(transforms.matrix(*entity), point, map))
@@ -50,7 +50,7 @@ mod tests {
     use voltra_render::glam::IVec2;
 
     use super::*;
-    use crate::{Tile, Transform};
+    use crate::{Tile, Transform2D};
 
     fn layer(world: &mut World, at: Vec2, sort_order: i32, cells: &[(i32, i32)]) -> Entity {
         let mut map = Tilemap::new(Vec2::ONE);
@@ -59,7 +59,7 @@ mod tests {
             map.set(IVec2::new(x, y), Some(Tile::new(0)));
         }
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(entity, map);
         entity
     }
@@ -108,7 +108,7 @@ mod tests {
     fn a_collapsed_layer_is_never_hit() {
         let mut world = World::new();
         let entity = layer(&mut world, Vec2::ZERO, 0, &[(0, 0)]);
-        world.get_mut::<Transform>(entity).expect("a layer").scale = Vec2::ZERO;
+        world.get_mut::<Transform2D>(entity).expect("a layer").scale = Vec2::ZERO;
 
         assert_eq!(hit(&world, Vec2::ZERO), None);
     }

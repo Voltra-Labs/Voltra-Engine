@@ -3,7 +3,7 @@ use voltra_render::glam::Vec2;
 
 use super::*;
 use crate::ui::button::ButtonFrames;
-use crate::{hierarchy, SceneId, Sprite, Text, UiRect};
+use crate::{hierarchy, SceneId, Sprite2D, Text, UiRect};
 
 const SCREEN: Vec2 = Vec2::new(800.0, 600.0);
 
@@ -12,7 +12,7 @@ fn button(world: &mut World, at: Vec2) -> Entity {
     let e = world.spawn();
     world.insert(e, SceneId::new());
     world.insert(e, UiRect::pinned(Vec2::ZERO, at, Vec2::new(100.0, 40.0)));
-    world.insert(e, Sprite::default());
+    world.insert(e, Sprite2D::default());
     world.insert(e, UiButton::default());
     e
 }
@@ -114,7 +114,7 @@ fn a_disabled_button_takes_no_click_and_shows_its_colour() {
     click(&mut world, &mut state, 50.0, 30.0);
     assert!(!state.clicked(ok));
     assert_eq!(
-        world.get::<Sprite>(ok).map(|s| s.color),
+        world.get::<Sprite2D>(ok).map(|s| s.color),
         Some(UiButton::default().disabled_color)
     );
 }
@@ -131,7 +131,7 @@ fn hover_tints_and_leaving_restores() {
     frame(&mut world, &mut state, over, Navigation::default());
     assert!(state.hovered(ok));
     assert_eq!(
-        world.get::<Sprite>(ok).map(|s| s.color),
+        world.get::<Sprite2D>(ok).map(|s| s.color),
         Some(UiButton::default().hovered)
     );
     frame(
@@ -141,7 +141,7 @@ fn hover_tints_and_leaving_restores() {
         Navigation::default(),
     );
     assert_eq!(
-        world.get::<Sprite>(ok).map(|s| s.color),
+        world.get::<Sprite2D>(ok).map(|s| s.color),
         Some(UiButton::default().normal)
     );
 }
@@ -216,7 +216,7 @@ fn a_button_with_frames_shows_the_frame_of_its_state() {
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
     world.get_mut::<UiButton>(ok).expect("a button").frames = Some(ButtonFrames::in_a_row(4));
     let mut state = UiControls::default();
-    let shown = |world: &World| world.get::<Sprite>(ok).expect("a sprite").frame;
+    let shown = |world: &World| world.get::<Sprite2D>(ok).expect("a sprite").frame;
 
     frame(
         &mut world,
@@ -246,10 +246,10 @@ fn a_button_with_frames_shows_the_frame_of_its_state() {
 fn a_button_without_frames_leaves_the_frame_alone() {
     let mut world = World::new();
     let ok = button(&mut world, Vec2::new(10.0, 10.0));
-    world.get_mut::<Sprite>(ok).expect("a sprite").frame = 3;
+    world.get_mut::<Sprite2D>(ok).expect("a sprite").frame = 3;
     let mut state = UiControls::default();
     click(&mut world, &mut state, 50.0, 30.0);
-    assert_eq!(world.get::<Sprite>(ok).expect("a sprite").frame, 3);
+    assert_eq!(world.get::<Sprite2D>(ok).expect("a sprite").frame, 3);
 }
 
 mod popups;

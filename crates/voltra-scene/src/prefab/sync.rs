@@ -15,7 +15,7 @@
 //! a file is pretty-printed and a world's record is not, and text that
 //! differs only in its spaces is the same value.
 //!
-//! **The root's `Transform` is always the instance's own**: it is where the
+//! **The root's `Transform2D` is always the instance's own**: it is where the
 //! instance was put. So are the structure components — `Parent`, the link
 //! and the part — which a sync rebuilds rather than copies.
 //!

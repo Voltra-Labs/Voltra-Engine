@@ -6,7 +6,7 @@ mod shake;
 use voltra_core::egui::{DragValue, Ui};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Camera, CameraFollow2D, CameraShake};
+use voltra_scene::{Camera2D, CameraFollow2D, CameraShake};
 
 use super::active;
 
@@ -14,7 +14,7 @@ use super::active;
 /// camera. A follower that is not a camera — a light trailing the player —
 /// shows its section too.
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
-    let camera = world.get::<Camera>(entity).is_some();
+    let camera = world.get::<Camera2D>(entity).is_some();
     let following = world.get::<CameraFollow2D>(entity).is_some();
     let shaking = world.get::<CameraShake>(entity).is_some();
     if !camera && !following && !shaking {

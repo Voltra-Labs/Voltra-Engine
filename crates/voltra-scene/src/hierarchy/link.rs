@@ -13,7 +13,7 @@ use voltra_ecs::{Entity, World};
 
 use super::parent::Parent;
 use crate::scene_id::SceneId;
-use crate::{Collider, RigidBody};
+use crate::{Collider2D, RigidBody2D};
 
 /// How deep a chain [`ancestors`] will walk before it gives up.
 ///
@@ -42,13 +42,13 @@ pub enum HierarchyError {
     ParentHasNoIdentity,
     /// The child, or the parent, takes part in the simulation.
     ///
-    /// Physics reads and writes [`Transform`] as a world-space value, and knows
+    /// Physics reads and writes [`Transform2D`] as a world-space value, and knows
     /// nothing about the hierarchy. Parenting a body would make gravity pull
     /// along the parent's rotated axes and a contact resolve in the wrong
     /// frame. The rule goes when the solver gathers world transforms, not
     /// before.
     ///
-    /// [`Transform`]: crate::Transform
+    /// [`Transform2D`]: crate::Transform2D
     PhysicsBody,
 }
 
@@ -70,7 +70,7 @@ impl std::error::Error for HierarchyError {}
 /// Makes `child` a child of `parent`.
 ///
 /// Replaces any link the child already had. The transform is **not** adjusted:
-/// a `Transform` is local to its parent, so the child keeps its local values and
+/// a `Transform2D` is local to its parent, so the child keeps its local values and
 /// moves to where those values put it inside the new frame. Unity offers both
 /// ("world position stays" is its default); the editor chooses per action, and
 /// the primitive stays the one that does not silently rewrite data. See
@@ -231,19 +231,19 @@ pub fn despawn_recursive(world: &mut World, entity: Entity) -> Vec<Entity> {
 
 /// Whether the simulation reads this entity's transform as a world value.
 fn takes_part_in_physics(world: &World, entity: Entity) -> bool {
-    world.get::<RigidBody>(entity).is_some() || world.get::<Collider>(entity).is_some()
+    world.get::<RigidBody2D>(entity).is_some() || world.get::<Collider2D>(entity).is_some()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Transform;
+    use crate::Transform2D;
 
     /// An entity that can be a parent: it carries an identity.
     fn spawn(world: &mut World) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         entity
     }
 
@@ -322,7 +322,7 @@ mod tests {
         let mut world = World::new();
         let child = spawn(&mut world);
         let transient = world.spawn();
-        world.insert(transient, Transform::default());
+        world.insert(transient, Transform2D::default());
 
         assert_eq!(
             set_parent(&mut world, child, transient),
@@ -332,12 +332,12 @@ mod tests {
 
     #[test]
     fn a_physics_body_cannot_be_parented() {
-        // Physics reads `Transform` as world space. Until the solver gathers
+        // Physics reads `Transform2D` as world space. Until the solver gathers
         // world transforms, a parented body simulates in the wrong frame.
         let mut world = World::new();
         let parent = spawn(&mut world);
         let body = spawn(&mut world);
-        world.insert(body, RigidBody::new_dynamic(1.0));
+        world.insert(body, RigidBody2D::new_dynamic(1.0));
 
         assert_eq!(
             set_parent(&mut world, body, parent),
@@ -351,7 +351,7 @@ mod tests {
         // transform would be measured against a frame nothing else knows about.
         let mut world = World::new();
         let body = spawn(&mut world);
-        world.insert(body, Collider::Circle { radius: 1.0 });
+        world.insert(body, Collider2D::Circle { radius: 1.0 });
         let child = spawn(&mut world);
 
         assert_eq!(
@@ -537,7 +537,7 @@ mod tests {
         let mut world = World::new();
         let scene_entity = spawn(&mut world);
         let transient = world.spawn();
-        world.insert(transient, Transform::default());
+        world.insert(transient, Transform2D::default());
 
         assert_eq!(roots(&world), vec![scene_entity]);
     }

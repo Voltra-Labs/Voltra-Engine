@@ -6,7 +6,7 @@ use voltra_render::glam::{UVec2, Vec2};
 use super::edges::Edges;
 use super::rect::Rect;
 
-/// Draws this entity's `Sprite` as nine pieces over its [`UiRect`]: the
+/// Draws this entity's `Sprite2D` as nine pieces over its [`UiRect`]: the
 /// corners at their own size, the edges stretched along one axis, the
 /// middle along both — so a panel or a button face of any size keeps a
 /// crisp frame.

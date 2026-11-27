@@ -156,7 +156,9 @@ impl Platformer {
     /// Says once, not every step, that the walker could not be moved.
     fn warn_unless(&mut self, moved: bool) {
         if !moved && !self.warned_not_character {
-            log::warn!("the walker needs a CharacterBody2D, a Collider and a Transform to move");
+            log::warn!(
+                "the walker needs a CharacterBody2D, a Collider2D and a Transform2D to move"
+            );
         }
         self.warned_not_character |= !moved;
     }

@@ -44,7 +44,7 @@ pub fn rebuild(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_scene::{SceneId, Transform, UnknownComponents};
+    use voltra_scene::{SceneId, Transform2D, UnknownComponents};
 
     #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
     struct Coin {
@@ -67,7 +67,7 @@ mod tests {
         let mut world = World::new();
         let coin = world.spawn();
         world.insert(coin, SceneId::new());
-        world.insert(coin, Transform::default());
+        world.insert(coin, Transform2D::default());
         world.insert(coin, Coin { value: 3 });
 
         rebuild(&mut world, &game, &plain).expect("unloads");
@@ -81,7 +81,7 @@ mod tests {
             world.get::<UnknownComponents>(entity).is_some(),
             "kept as text"
         );
-        assert!(world.get::<Transform>(entity).is_some());
+        assert!(world.get::<Transform2D>(entity).is_some());
 
         rebuild(&mut world, &plain, &game).expect("loads");
         let (entity, _) = world.query::<SceneId>().next().expect("still there");

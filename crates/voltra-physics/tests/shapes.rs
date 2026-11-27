@@ -10,45 +10,45 @@ use voltra_physics::query::{self, QueryFilter};
 use voltra_physics::{move_and_slide, ImpulseCache, PhysicsWorld};
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    CharacterBody2D, Collider, ConvexPolygon, OneWay, RigidBody, Sensor, Transform,
+    CharacterBody2D, Collider2D, ConvexPolygon, OneWay, RigidBody2D, Sensor, Transform2D,
 };
 
-fn polygon(points: &[(f32, f32)], radius: f32) -> Collider {
+fn polygon(points: &[(f32, f32)], radius: f32) -> Collider2D {
     let points: Vec<Vec2> = points.iter().map(|(x, y)| Vec2::new(*x, *y)).collect();
-    Collider::Polygon {
+    Collider2D::Polygon {
         points: ConvexPolygon::new(&points).expect("a polygon"),
         radius,
     }
 }
 
 /// A regular hexagon with flat top and bottom, `r` from centre to corner.
-fn hexagon(r: f32) -> Collider {
+fn hexagon(r: f32) -> Collider2D {
     let points: Vec<Vec2> = (0..6)
         .map(|i| Vec2::from_angle(i as f32 * std::f32::consts::FRAC_PI_3) * r)
         .collect();
-    Collider::Polygon {
+    Collider2D::Polygon {
         points: ConvexPolygon::new(&points).expect("a hexagon"),
         radius: 0.0,
     }
 }
 
-fn capsule(half_height: f32, radius: f32) -> Collider {
-    Collider::Capsule {
+fn capsule(half_height: f32, radius: f32) -> Collider2D {
+    Collider2D::Capsule {
         half_height,
         radius,
     }
 }
 
 /// One of each shape, each reaching 0.5 either side of its centre along x.
-fn every_shape() -> [(&'static str, Collider); 5] {
+fn every_shape() -> [(&'static str, Collider2D); 5] {
     [
         (
             "box",
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::new(0.5, 0.5),
             },
         ),
-        ("circle", Collider::Circle { radius: 0.5 }),
+        ("circle", Collider2D::Circle { radius: 0.5 }),
         ("capsule", capsule(1.0, 0.5)),
         (
             "polygon",
@@ -65,7 +65,7 @@ fn every_shape() -> [(&'static str, Collider); 5] {
         ),
         (
             "rounded polygon",
-            Collider::Polygon {
+            Collider2D::Polygon {
                 points: ConvexPolygon::rectangle(Vec2::splat(0.3)).expect("a square"),
                 radius: 0.2,
             },
@@ -73,7 +73,7 @@ fn every_shape() -> [(&'static str, Collider); 5] {
     ]
 }
 
-fn spawn(world: &mut World, collider: Collider, at: Transform) -> Entity {
+fn spawn(world: &mut World, collider: Collider2D, at: Transform2D) -> Entity {
     let entity = world.spawn();
     world.insert(entity, at);
     world.insert(entity, collider);
@@ -84,7 +84,7 @@ fn spawn(world: &mut World, collider: Collider, at: Transform) -> Entity {
 fn every_query_answers_for_every_shape() {
     for (name, shape) in every_shape() {
         let mut world = World::new();
-        let target = spawn(&mut world, shape, Transform::default());
+        let target = spawn(&mut world, shape, Transform2D::default());
         let any = QueryFilter::default();
 
         assert_eq!(
@@ -119,8 +119,8 @@ fn every_shape_is_cast_against_every_shape() {
     for (moved_name, moved) in every_shape() {
         for (still_name, still) in every_shape() {
             let mut world = World::new();
-            let target = spawn(&mut world, still, Transform::default());
-            let from = Transform::from_translation(Vec2::new(-5.0, 0.0));
+            let target = spawn(&mut world, still, Transform2D::default());
+            let from = Transform2D::from_translation(Vec2::new(-5.0, 0.0));
             let hit = query::cast(
                 &world,
                 &moved,
@@ -151,9 +151,9 @@ fn a_capsule_cast_onto_a_turned_polygon_meets_its_face() {
     spawn(
         &mut world,
         polygon(&[(-5.0, -0.5), (5.0, -0.5), (5.0, 0.5), (-5.0, 0.5)], 0.0),
-        Transform::default().with_rotation(slope),
+        Transform2D::default().with_rotation(slope),
     );
-    let from = Transform::from_translation(Vec2::new(0.0, 3.0));
+    let from = Transform2D::from_translation(Vec2::new(0.0, 3.0));
     let hit = query::cast(
         &world,
         &capsule(0.5, 0.25),
@@ -181,11 +181,11 @@ fn a_cast_from_inside_reports_the_way_out_and_a_slide_along_a_touch_hits_nothing
     let floor = spawn(
         &mut world,
         polygon(&[(-5.0, -1.0), (5.0, -1.0), (5.0, 0.0), (-5.0, 0.0)], 0.0),
-        Transform::default(),
+        Transform2D::default(),
     );
     let shape = capsule(0.5, 0.25);
 
-    let sunk = Transform::from_translation(Vec2::new(0.0, 0.4));
+    let sunk = Transform2D::from_translation(Vec2::new(0.0, 0.4));
     let hit =
         query::cast(&world, &shape, &sunk, Vec2::X, QueryFilter::default()).expect("overlapping");
     assert_eq!((hit.entity, hit.fraction), (floor, 0.0));
@@ -193,7 +193,7 @@ fn a_cast_from_inside_reports_the_way_out_and_a_slide_along_a_touch_hits_nothing
     assert!((hit.normal - Vec2::Y).length() < 1e-4, "{hit:?}");
 
     // Resting a hair above the floor, sliding along it and lifting off it.
-    let resting = Transform::from_translation(Vec2::new(0.0, 0.5 + 2e-6));
+    let resting = Transform2D::from_translation(Vec2::new(0.0, 0.5 + 2e-6));
     for motion in [Vec2::X, Vec2::new(1.0, 0.2)] {
         let hit = query::cast(&world, &shape, &resting, motion, QueryFilter::default());
         assert!(hit.is_none(), "{motion}: {hit:?}");
@@ -214,7 +214,7 @@ fn a_cast_from_inside_reports_the_way_out_and_a_slide_along_a_touch_hits_nothing
 #[test]
 fn a_ray_meets_a_capsules_cap_and_misses_past_it() {
     let mut world = World::new();
-    spawn(&mut world, capsule(1.0, 0.5), Transform::default());
+    spawn(&mut world, capsule(1.0, 0.5), Transform2D::default());
     let any = QueryFilter::default();
 
     let down = query::ray(&world, Vec2::new(0.0, 5.0), Vec2::NEG_Y, 10.0, any).expect("the cap");
@@ -238,13 +238,13 @@ fn polygon_floor(world: &mut World) -> Entity {
             &[(-20.0, -1.0), (20.0, -1.0), (20.0, 0.0), (-20.0, 0.0)],
             0.0,
         ),
-        Transform::default(),
+        Transform2D::default(),
     )
 }
 
-fn dynamic(world: &mut World, collider: Collider, at: Transform) -> Entity {
+fn dynamic(world: &mut World, collider: Collider2D, at: Transform2D) -> Entity {
     let entity = spawn(world, collider, at);
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
     entity
 }
 
@@ -258,7 +258,7 @@ fn a_stack_of_hexagons_settles_and_stays_upright() {
             dynamic(
                 &mut world,
                 hexagon(0.5),
-                Transform::from_translation(Vec2::new(
+                Transform2D::from_translation(Vec2::new(
                     0.0,
                     height * 0.5 + k as f32 * height * 1.02,
                 )),
@@ -294,7 +294,7 @@ fn capsules_dropped_lying_settle_on_each_other() {
     let mut world = World::new();
     polygon_floor(&mut world);
     let lying = |y: f32| {
-        Transform::from_translation(Vec2::new(0.0, y)).with_rotation(std::f32::consts::FRAC_PI_2)
+        Transform2D::from_translation(Vec2::new(0.0, y)).with_rotation(std::f32::consts::FRAC_PI_2)
     };
     let low = dynamic(&mut world, capsule(1.0, 0.25), lying(0.3));
     let high = dynamic(&mut world, capsule(1.0, 0.25), lying(0.9));
@@ -333,12 +333,12 @@ fn a_hexagon_rolls_down_a_steep_slope() {
             &[(-10.0, -1.0), (10.0, -1.0), (10.0, 0.0), (-10.0, 0.0)],
             0.0,
         ),
-        Transform::default().with_rotation(-0.6),
+        Transform2D::default().with_rotation(-0.6),
     );
     let hexagon_body = dynamic(
         &mut world,
         hexagon(0.4),
-        Transform::from_translation(Vec2::new(0.0, 0.6)),
+        Transform2D::from_translation(Vec2::new(0.0, 0.6)),
     );
     let mut cache = ImpulseCache::default();
     run(&mut world, &mut cache, G, 120);
@@ -361,8 +361,8 @@ fn steps(world: &mut World, physics: &mut PhysicsWorld, count: usize) {
     }
 }
 
-fn character(world: &mut World, collider: Collider, at: Vec2) -> Entity {
-    let entity = spawn(world, collider, Transform::from_translation(at));
+fn character(world: &mut World, collider: Collider2D, at: Vec2) -> Entity {
+    let entity = spawn(world, collider, Transform2D::from_translation(at));
     world.insert(entity, CharacterBody2D::default());
     entity
 }
@@ -388,12 +388,12 @@ fn a_capsule_character_walks_up_a_polygon_slope() {
     spawn(
         &mut world,
         polygon(&[(1.0, 0.0), (7.0, 0.0), (7.0, rise)], 0.0),
-        Transform::default(),
+        Transform2D::default(),
     );
     spawn(
         &mut world,
         polygon(&[(7.0, 0.0), (15.0, 0.0), (15.0, rise), (7.0, rise)], 0.0),
-        Transform::default(),
+        Transform2D::default(),
     );
     let me = character(&mut world, capsule(0.5, 0.25), Vec2::new(-1.0, 0.6));
     world.get_mut::<CharacterBody2D>(me).expect("c").step_height = 0.0;
@@ -459,13 +459,13 @@ fn a_polygon_sensor_reports_a_capsule_and_stops_nothing() {
     let zone = spawn(
         &mut world,
         hexagon(1.0),
-        Transform::from_translation(Vec2::new(0.0, 2.0)),
+        Transform2D::from_translation(Vec2::new(0.0, 2.0)),
     );
     world.insert(zone, Sensor);
     let falling = dynamic(
         &mut world,
         capsule(0.5, 0.25),
-        Transform::from_translation(Vec2::new(0.0, 5.0)),
+        Transform2D::from_translation(Vec2::new(0.0, 5.0)),
     );
 
     let mut physics = PhysicsWorld::new();
@@ -487,12 +487,12 @@ fn a_capsule_lands_on_a_one_way_polygon_and_rises_through_it() {
     let platform_shape = polygon(&[(-2.0, -0.2), (2.0, -0.2), (2.0, 0.0), (-2.0, 0.0)], 0.0);
 
     let mut world = World::new();
-    let platform = spawn(&mut world, platform_shape, Transform::default());
+    let platform = spawn(&mut world, platform_shape, Transform2D::default());
     world.insert(platform, OneWay::default());
     let dropped = dynamic(
         &mut world,
         capsule(0.5, 0.25),
-        Transform::from_translation(Vec2::new(0.0, 1.5)),
+        Transform2D::from_translation(Vec2::new(0.0, 1.5)),
     );
     let mut physics = PhysicsWorld::new();
     for _ in 0..180 {
@@ -502,14 +502,17 @@ fn a_capsule_lands_on_a_one_way_polygon_and_rises_through_it() {
     assert!((y - 0.5).abs() < 0.03, "resting on top: {y}");
 
     let mut world = World::new();
-    let platform = spawn(&mut world, platform_shape, Transform::default());
+    let platform = spawn(&mut world, platform_shape, Transform2D::default());
     world.insert(platform, OneWay::default());
     let rising = dynamic(
         &mut world,
         capsule(0.5, 0.25),
-        Transform::from_translation(Vec2::new(0.0, -1.0)),
+        Transform2D::from_translation(Vec2::new(0.0, -1.0)),
     );
-    world.get_mut::<RigidBody>(rising).expect("a body").velocity = Vec2::new(0.0, 9.0);
+    world
+        .get_mut::<RigidBody2D>(rising)
+        .expect("a body")
+        .velocity = Vec2::new(0.0, 9.0);
     let mut physics = PhysicsWorld::new();
     let mut highest = f32::MIN;
     for _ in 0..240 {

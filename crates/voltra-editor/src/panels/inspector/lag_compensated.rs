@@ -2,7 +2,7 @@
 
 use voltra_core::egui::Ui;
 use voltra_ecs::{Entity, World};
-use voltra_scene::{Collider, LagCompensated};
+use voltra_scene::{Collider2D, LagCompensated};
 
 /// The lag-compensated mark, for a replicated entity or one that has it.
 ///
@@ -10,7 +10,7 @@ use voltra_scene::{Collider, LagCompensated};
 /// checkbox inserts or removes the marker, as the sensor's does.
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
     let mut marked = world.get::<LagCompensated>(entity).is_some();
-    let hover = if world.get::<Collider>(entity).is_some() {
+    let hover = if world.get::<Collider2D>(entity).is_some() {
         "the server remembers where this collider was each tick, so a client's shot \
          is tested where that client saw it"
     } else {

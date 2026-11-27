@@ -1,17 +1,17 @@
 //! The shape an entity occupies, at the origin.
 //!
 //! Where it sits — and which way it faces — comes from the entity's
-//! [`Transform`], so a collider is a size and nothing else. Every shape is
+//! [`Transform2D`], so a collider is a size and nothing else. Every shape is
 //! *oriented*: it turns with the sprite it covers. Only its world-space
 //! bounds, which the broad phase compares, stay axis-aligned.
 //!
-//! [`Collider::world_shape`] places any of them as one thing — world points
+//! [`Collider2D::world_shape`] places any of them as one thing — world points
 //! grown by a radius — which is what the physics collides.
 
 use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
-use crate::Transform;
+use crate::Transform2D;
 
 mod polygon;
 mod world_shape;
@@ -21,7 +21,7 @@ pub use world_shape::WorldShape;
 
 /// The shape used for collision.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-pub enum Collider {
+pub enum Collider2D {
     /// Box centred on the transform, turned by its rotation.
     ///
     /// Named `Box` rather than `Aabb` since 11b-3: it is only axis-aligned
@@ -66,17 +66,17 @@ pub enum Collider {
     },
 }
 
-impl Default for Collider {
+impl Default for Collider2D {
     /// A box the size of a default sprite, which is what the editor gives a
     /// spawned body: the collider covers what is drawn.
     fn default() -> Self {
         Self::Box {
-            half_extents: Vec2::splat(crate::Sprite::HALF_EXTENT),
+            half_extents: Vec2::splat(crate::Sprite2D::HALF_EXTENT),
         }
     }
 }
 
-impl Collider {
+impl Collider2D {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "Collider";
 
@@ -96,7 +96,7 @@ impl Collider {
     /// a negative scale, and a box whose min exceeds its max overlaps nothing —
     /// the collider would silently stop working on exactly the sprites facing
     /// left.
-    pub fn world_aabb(&self, transform: &Transform) -> (Vec2, Vec2) {
+    pub fn world_aabb(&self, transform: &Transform2D) -> (Vec2, Vec2) {
         let half = match self {
             Self::Box { .. } => {
                 // The bound of a turned box: each axis takes both extents,
@@ -127,7 +127,7 @@ impl Collider {
     /// of its two caps — or one, once it is no taller than wide; a polygon its
     /// points, scaled, turned and placed, still counter-clockwise under a
     /// mirroring scale.
-    pub fn world_shape(&self, transform: &Transform) -> WorldShape {
+    pub fn world_shape(&self, transform: &Transform2D) -> WorldShape {
         match self {
             Self::Box { .. } => WorldShape::new(&self.corners(transform), 0.0),
             Self::Circle { .. } => {
@@ -164,7 +164,7 @@ impl Collider {
     }
 
     /// How far a capsule's cap centres sit from its middle, in world units.
-    fn capsule_reach(&self, transform: &Transform) -> f32 {
+    fn capsule_reach(&self, transform: &Transform2D) -> f32 {
         match self {
             Self::Capsule { half_height, .. } => {
                 (half_height * transform.scale.y.abs() - self.world_radius(transform)).max(0.0)
@@ -175,7 +175,7 @@ impl Collider {
 
     /// The surface in world space as a closed polyline, counter-clockwise,
     /// with round parts cut so that a full turn takes `sides` segments.
-    pub fn outline(&self, transform: &Transform, sides: usize) -> Vec<Vec2> {
+    pub fn outline(&self, transform: &Transform2D, sides: usize) -> Vec<Vec2> {
         self.world_shape(transform).outline(sides)
     }
 
@@ -185,7 +185,7 @@ impl Collider {
     /// corners: callers that care about the difference match on the variant
     /// first, and the degenerate answer is a point rather than a shape of the
     /// wrong size.
-    pub fn corners(&self, transform: &Transform) -> [Vec2; 4] {
+    pub fn corners(&self, transform: &Transform2D) -> [Vec2; 4] {
         let half = self.world_half_extents(transform);
         let rotation = Vec2::from_angle(transform.rotation);
         [
@@ -198,7 +198,7 @@ impl Collider {
     }
 
     /// The scaled half extents, for a box. `Vec2::ZERO` for any other shape.
-    pub fn world_half_extents(&self, transform: &Transform) -> Vec2 {
+    pub fn world_half_extents(&self, transform: &Transform2D) -> Vec2 {
         match self {
             Self::Box { half_extents } => (*half_extents * transform.scale).abs(),
             _ => Vec2::ZERO,
@@ -219,7 +219,7 @@ impl Collider {
     /// happens to contain. Mirroring is honoured; nonsense stays negative so
     /// [`Self::is_degenerate`] can catch it instead of it quietly becoming a
     /// working collider of the wrong provenance.
-    pub fn world_radius(&self, transform: &Transform) -> f32 {
+    pub fn world_radius(&self, transform: &Transform2D) -> f32 {
         match self {
             Self::Circle { radius } | Self::Polygon { radius, .. } => {
                 radius * transform.scale.abs().max_element()
@@ -236,7 +236,7 @@ impl Collider {
     /// flat by its scale has no area whatever its rounding: its points no
     /// longer have an inside to push out of. Anything that is not a number
     /// is degenerate too.
-    pub fn is_degenerate(&self, transform: &Transform) -> bool {
+    pub fn is_degenerate(&self, transform: &Transform2D) -> bool {
         match self {
             Self::Box { .. } => {
                 let half = self.world_half_extents(transform);

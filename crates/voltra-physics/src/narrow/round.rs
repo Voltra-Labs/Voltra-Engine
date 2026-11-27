@@ -110,10 +110,10 @@ mod tests {
     use crate::narrow::manifold;
     use crate::narrow::tests::{at, circle};
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Collider, ConvexPolygon};
+    use voltra_scene::{Collider2D, ConvexPolygon};
 
-    fn triangle() -> Collider {
-        Collider::Polygon {
+    fn triangle() -> Collider2D {
+        Collider2D::Polygon {
             points: ConvexPolygon::new(&[
                 Vec2::new(-1.0, 0.0),
                 Vec2::new(1.0, 0.0),
@@ -124,8 +124,8 @@ mod tests {
         }
     }
 
-    fn capsule() -> Collider {
-        Collider::Capsule {
+    fn capsule() -> Collider2D {
+        Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.5,
         }
@@ -190,7 +190,7 @@ mod tests {
 
     #[test]
     fn a_short_capsule_collides_as_the_circle_it_is() {
-        let short = Collider::Capsule {
+        let short = Collider2D::Capsule {
             half_height: 0.5,
             radius: 0.5,
         };

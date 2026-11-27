@@ -12,17 +12,17 @@ use voltra_ecs::{Entity, World};
 use voltra_physics::{ImpulseCache, PhysicsWorld};
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    AngleLimit, Collider, Joint2D, JointKind, LinearMotor, Motor, RestSpring, RigidBody, SceneId,
-    Spring, Transform, TranslationLimit,
+    AngleLimit, Collider2D, Joint2D, JointKind, LinearMotor, Motor, RestSpring, RigidBody2D,
+    SceneId, Spring, Transform2D, TranslationLimit,
 };
 
 /// A dynamic ball of radius 0.2 at `at`.
 fn ball(world: &mut World, at: Vec2) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Circle { radius: 0.2 });
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Circle { radius: 0.2 });
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
     entity
 }
 
@@ -309,7 +309,7 @@ fn plank(world: &mut World, at: Vec2, half: Vec2, mass: f32) -> Entity {
 /// How far `wheel` sits along `chassis`'s up from where its anchor holds it.
 fn suspension(world: &World, wheel: Entity, chassis: Entity) -> f32 {
     let joint = world.get::<Joint2D>(wheel).expect("the wheel's joint");
-    let body = world.get::<Transform>(chassis).expect("the chassis");
+    let body = world.get::<Transform2D>(chassis).expect("the chassis");
     let anchor = body.matrix().transform_point2(joint.anchor_b);
     let up = Vec2::from_angle(body.rotation).rotate(Vec2::Y);
     (translation(world, wheel) - anchor).dot(up)
@@ -337,7 +337,7 @@ fn a_parked_car_on_a_slope_settles_on_its_suspension() {
         2.0,
     );
     world
-        .get_mut::<Transform>(chassis)
+        .get_mut::<Transform2D>(chassis)
         .expect("chassis")
         .rotation = slope;
     let chassis_id = id(&world, chassis);
@@ -347,10 +347,10 @@ fn a_parked_car_on_a_slope_settles_on_its_suspension() {
         world.insert(wheel, SceneId::new());
         world.insert(
             wheel,
-            Transform::from_translation(base + turn(Vec2::new(x, 0.0))),
+            Transform2D::from_translation(base + turn(Vec2::new(x, 0.0))),
         );
-        world.insert(wheel, Collider::Circle { radius: 0.3 });
-        world.insert(wheel, RigidBody::new_dynamic(0.5));
+        world.insert(wheel, Collider2D::Circle { radius: 0.3 });
+        world.insert(wheel, RigidBody2D::new_dynamic(0.5));
         world.insert(
             wheel,
             Joint2D {
@@ -416,7 +416,7 @@ fn a_wheel_motor_drives_a_car_along() {
     let chassis_id = id(&world, chassis);
     for x in [-0.7, 0.7] {
         let wheel = ball(&mut world, Vec2::new(x, -0.2));
-        world.insert(wheel, Collider::Circle { radius: 0.3 });
+        world.insert(wheel, Collider2D::Circle { radius: 0.3 });
         world.insert(
             wheel,
             Joint2D {
@@ -561,7 +561,7 @@ fn a_revolute_spring_turns_a_bar_back_to_rest() {
         let mut world = World::new();
         let bar = plank(&mut world, Vec2::ZERO, Vec2::new(1.0, 0.1), 1.0);
         world
-            .get_mut::<RigidBody>(bar)
+            .get_mut::<RigidBody2D>(bar)
             .expect("body")
             .angular_velocity = 5.0;
         to_world(

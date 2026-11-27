@@ -2,7 +2,7 @@
 //! words a name must hold, and `t:` terms naming a type.
 //!
 //! Unity's syntax, which its Hierarchy and Project windows share: plain
-//! words match the name, case aside, and `t:Sprite` matches by type — a
+//! words match the name, case aside, and `t:Sprite2D` matches by type — a
 //! component in the hierarchy, a kind of file in the assets. Godot filters
 //! by name only; Unity's `t:` is the one gesture that finds "every camera"
 //! in a scene of a thousand entities, so it is the one copied. What a type

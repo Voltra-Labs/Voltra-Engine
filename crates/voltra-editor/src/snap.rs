@@ -3,7 +3,7 @@
 
 use voltra_render::glam::Vec2;
 use voltra_render::{LineBatch, View2D};
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use crate::tool::Tool;
 
@@ -53,19 +53,19 @@ impl Snap {
     /// `transform`, the result of a `tool` drag, snapped — when snapping is
     /// on, flipped by `invert` (Ctrl held). Only what the tool changes is
     /// touched.
-    pub fn apply(&self, tool: Tool, transform: Transform, invert: bool) -> Transform {
+    pub fn apply(&self, tool: Tool, transform: Transform2D, invert: bool) -> Transform2D {
         if self.enabled == invert {
             return transform;
         }
         match tool {
-            Tool::Translate => Transform {
+            Tool::Translate => Transform2D {
                 translation: Vec2::new(
                     round_to(transform.translation.x, self.step),
                     round_to(transform.translation.y, self.step),
                 ),
                 ..transform
             },
-            Tool::Rotate => Transform {
+            Tool::Rotate => Transform2D {
                 rotation: round_to(transform.rotation.to_degrees(), self.angle).to_radians(),
                 ..transform
             },
@@ -80,7 +80,7 @@ impl Snap {
                         r
                     }
                 };
-                Transform {
+                Transform2D {
                     scale: Vec2::new(snapped(transform.scale.x), snapped(transform.scale.y)),
                     ..transform
                 }
@@ -124,8 +124,8 @@ mod tests {
         }
     }
 
-    fn at(x: f32, y: f32) -> Transform {
-        Transform::from_translation(Vec2::new(x, y))
+    fn at(x: f32, y: f32) -> Transform2D {
+        Transform2D::from_translation(Vec2::new(x, y))
     }
 
     #[test]
@@ -153,13 +153,13 @@ mod tests {
 
     #[test]
     fn a_turn_lands_on_whole_angles_and_a_scale_on_increments() {
-        let turned = Transform {
+        let turned = Transform2D {
             rotation: 0.3,
-            ..Transform::default()
+            ..Transform2D::default()
         };
         let snapped = on().apply(Tool::Rotate, turned, false);
         assert!((snapped.rotation.to_degrees() - 15.0).abs() < 1e-4);
-        let scaled = Transform::default().with_scale(Vec2::new(1.1, 0.05));
+        let scaled = Transform2D::default().with_scale(Vec2::new(1.1, 0.05));
         let snapped = on().apply(Tool::Scale, scaled, false);
         assert_eq!(snapped.scale, Vec2::new(1.0, 0.25), "never to nothing");
         assert_eq!(snapped.translation, Vec2::ZERO, "the rest untouched");

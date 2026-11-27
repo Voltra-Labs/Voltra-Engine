@@ -7,7 +7,7 @@ use common::*;
 use voltra_ecs::{Entity, World};
 use voltra_physics::{step, ImpulseCache, SolverParams};
 use voltra_render::glam::Vec2;
-use voltra_scene::{BodyType, Collider, RigidBody, Transform};
+use voltra_scene::{BodyType, Collider2D, RigidBody2D, Transform2D};
 
 #[test]
 fn a_falling_body_comes_to_rest_on_the_floor() {
@@ -86,16 +86,19 @@ fn a_static_body_is_not_pushed_by_what_lands_on_it() {
 fn a_kinematic_body_is_not_pushed_by_what_lands_on_it() {
     let mut world = World::new();
     let platform = world.spawn();
-    world.insert(platform, Transform::from_translation(Vec2::new(0.0, -2.0)));
     world.insert(
         platform,
-        Collider::Box {
+        Transform2D::from_translation(Vec2::new(0.0, -2.0)),
+    );
+    world.insert(
+        platform,
+        Collider2D::Box {
             half_extents: Vec2::new(10.0, 0.5),
         },
     );
     world.insert(
         platform,
-        RigidBody {
+        RigidBody2D {
             body_type: BodyType::Kinematic,
             ..Default::default()
         },

@@ -7,7 +7,7 @@ use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_core::ui::TextureId;
 use voltra_render::wgpu;
 use voltra_scene::format::serial_tree::Step;
-use voltra_scene::Sprite;
+use voltra_scene::Sprite2D;
 
 use super::active;
 use super::mixed::{self, Fields};
@@ -16,7 +16,7 @@ use super::path_field::{self, PathEdit};
 
 pub(super) fn show(
     ui: &mut Ui,
-    sprite: &mut Sprite,
+    sprite: &mut Sprite2D,
     mixed: Fields<'_>,
     stores: Stores<'_>,
     preview: Option<TextureId>,
@@ -27,7 +27,7 @@ pub(super) fn show(
         device,
         queue,
     } = stores;
-    ui.label(RichText::new(Sprite::NAME).strong());
+    ui.label(RichText::new(Sprite2D::NAME).strong());
 
     let mut claim = None;
     egui::Grid::new("sprite").num_columns(2).show(ui, |ui| {
@@ -74,7 +74,7 @@ pub(super) fn show(
 /// The texture path editor.
 fn texture_ui(
     ui: &mut Ui,
-    sprite: &mut Sprite,
+    sprite: &mut Sprite2D,
     textures: &mut Textures,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -94,7 +94,7 @@ fn texture_ui(
 /// data by the lights with a height.
 fn normal_map_ui(
     ui: &mut Ui,
-    sprite: &mut Sprite,
+    sprite: &mut Sprite2D,
     textures: &mut Textures,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -116,7 +116,7 @@ fn normal_map_ui(
 }
 
 /// The path a sprite is actually showing, as the text box spells it.
-fn committed_path(sprite: &Sprite) -> String {
+fn committed_path(sprite: &Sprite2D) -> String {
     sprite
         .texture
         .as_ref()

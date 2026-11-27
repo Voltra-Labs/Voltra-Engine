@@ -4,20 +4,20 @@
 use super::tests::spawn;
 use super::*;
 use crate::hierarchy::link::set_parent;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 use voltra_render::glam::Vec2;
 
 #[test]
 fn the_view_turns_as_its_entity_does_through_its_parents() {
     let mut world = World::new();
-    let ship = spawn(&mut world, Camera::default(), Vec2::new(10.0, 0.0));
+    let ship = spawn(&mut world, Camera2D::default(), Vec2::new(10.0, 0.0));
     world
-        .get_mut::<Transform>(ship)
+        .get_mut::<Transform2D>(ship)
         .expect("spawned with one")
         .rotation = 0.5;
-    let eye = spawn(&mut world, Camera::default(), Vec2::new(0.0, 2.0));
+    let eye = spawn(&mut world, Camera2D::default(), Vec2::new(0.0, 2.0));
     world
-        .get_mut::<Transform>(eye)
+        .get_mut::<Transform2D>(eye)
         .expect("spawned with one")
         .rotation = 0.25;
     set_parent(&mut world, eye, ship).expect("a plain reparent");
@@ -30,7 +30,7 @@ fn the_view_turns_as_its_entity_does_through_its_parents() {
     assert!((own.position - expected).length() < 1e-5);
 
     world
-        .get_mut::<Camera>(eye)
+        .get_mut::<Camera2D>(eye)
         .expect("a camera")
         .inherit_rotation = true;
     let inherited = view(&world, eye, 1.0).expect("it has a camera");
@@ -44,9 +44,9 @@ fn the_view_turns_as_its_entity_does_through_its_parents() {
 
 #[test]
 fn inheriting_the_turn_is_off_and_not_written_by_default() {
-    let written = ron::to_string(&Camera::default()).expect("writes");
+    let written = ron::to_string(&Camera2D::default()).expect("writes");
     assert!(!written.contains("inherit_rotation"), "{written}");
-    let read: Camera =
+    let read: Camera2D =
         ron::from_str("(size: 5.0, priority: 0, active: true)").expect("an old camera reads");
     assert!(!read.inherit_rotation);
 }
@@ -54,17 +54,17 @@ fn inheriting_the_turn_is_off_and_not_written_by_default() {
 #[test]
 fn a_turn_that_cancels_out_or_goes_round_whole_is_upright() {
     let mut world = World::new();
-    let parent = spawn(&mut world, Camera::default(), Vec2::ZERO);
-    world.get_mut::<Transform>(parent).expect("t").rotation = 0.3;
+    let parent = spawn(&mut world, Camera2D::default(), Vec2::ZERO);
+    world.get_mut::<Transform2D>(parent).expect("t").rotation = 0.3;
     let child = spawn(
         &mut world,
-        Camera {
+        Camera2D {
             inherit_rotation: true,
-            ..Camera::default()
+            ..Camera2D::default()
         },
         Vec2::ZERO,
     );
-    world.get_mut::<Transform>(child).expect("t").rotation = -0.3;
+    world.get_mut::<Transform2D>(child).expect("t").rotation = -0.3;
     set_parent(&mut world, child, parent).expect("a plain reparent");
     assert_eq!(placement(&world, child).1, 0.0, "0.3 − 0.3 is upright");
 
@@ -82,13 +82,13 @@ fn a_camera_s_aspect_is_its_viewport_s_share_of_the_screen() {
     let mut world = World::new();
     let left = spawn(
         &mut world,
-        Camera {
+        Camera2D {
             viewport: Viewport::LEFT,
-            ..Camera::default()
+            ..Camera2D::default()
         },
         Vec2::ZERO,
     );
-    let full = spawn(&mut world, Camera::default(), Vec2::ZERO);
+    let full = spawn(&mut world, Camera2D::default(), Vec2::ZERO);
     let plain = world.spawn();
     assert_eq!(aspect(&world, left, 2.0, None), 1.0, "half of a 2:1 screen");
     assert_eq!(aspect(&world, full, 2.0, None), 2.0);
@@ -104,23 +104,23 @@ fn a_camera_s_aspect_is_its_viewport_s_share_of_the_screen() {
 fn a_click_through_a_turned_camera_picks_what_is_drawn_under_it() {
     use crate::pick;
     use crate::sprite::sheets::Sheets;
-    use crate::Sprite;
+    use crate::Sprite2D;
 
     let mut world = World::new();
-    let eye = spawn(&mut world, Camera::new(5.0), Vec2::new(2.0, 1.0));
+    let eye = spawn(&mut world, Camera2D::new(5.0), Vec2::new(2.0, 1.0));
     world
-        .get_mut::<Transform>(eye)
+        .get_mut::<Transform2D>(eye)
         .expect("spawned with one")
         .rotation = std::f32::consts::FRAC_PI_2;
     // Two units to the camera's right in the world: turned a quarter turn
     // left, the view shows it straight below its centre.
     let target = world.spawn();
-    world.insert(target, Transform::from_translation(Vec2::new(4.0, 1.0)));
-    world.insert(target, Sprite::default());
+    world.insert(target, Transform2D::from_translation(Vec2::new(4.0, 1.0)));
+    world.insert(target, Sprite2D::default());
     // And one where an unturned click would land, to be missed.
     let decoy = world.spawn();
-    world.insert(decoy, Transform::from_translation(Vec2::new(2.0, -1.0)));
-    world.insert(decoy, Sprite::default());
+    world.insert(decoy, Transform2D::from_translation(Vec2::new(2.0, -1.0)));
+    world.insert(decoy, Sprite2D::default());
 
     let viewport = Vec2::new(400.0, 400.0);
     let view = view(&world, eye, 1.0).expect("it has a camera");

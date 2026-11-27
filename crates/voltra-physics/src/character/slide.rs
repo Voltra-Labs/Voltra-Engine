@@ -3,7 +3,7 @@
 
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_scene::{CharacterBody2D, Collider, Transform};
+use voltra_scene::{CharacterBody2D, Collider2D, Transform2D};
 
 use crate::query::{self, QueryFilter, ShapeHit};
 
@@ -15,7 +15,7 @@ use super::{Slide, STILL, TOUCH};
 pub(super) struct Mover<'w> {
     pub(super) world: &'w World,
     /// The collider grown by the skin — see [`inflated`](super::inflated).
-    pub(super) shape: Collider,
+    pub(super) shape: Collider2D,
     pub(super) filter: QueryFilter,
     pub(super) up: Vec2,
     /// The cosine of the steepest floor.
@@ -23,7 +23,7 @@ pub(super) struct Mover<'w> {
 }
 
 impl Mover<'_> {
-    pub(super) fn cast(&self, at: &Transform, motion: Vec2) -> Option<ShapeHit> {
+    pub(super) fn cast(&self, at: &Transform2D, motion: Vec2) -> Option<ShapeHit> {
         query::cast(self.world, &self.shape, at, motion, self.filter)
     }
 
@@ -52,7 +52,7 @@ impl Mover<'_> {
     pub(super) fn slide(
         &self,
         body: &CharacterBody2D,
-        at: &mut Transform,
+        at: &mut Transform2D,
         velocity: Vec2,
         delta: f32,
     ) -> (Slide, Vec<Push>) {

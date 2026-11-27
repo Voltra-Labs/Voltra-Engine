@@ -3,9 +3,9 @@
 use voltra_ecs::World;
 use voltra_render::{BloomSettings, PostSettings};
 
-use crate::camera::{self, Camera};
+use crate::camera::{self, Camera2D};
 
-/// How the frame seen through a [`Camera`] is graded: exposure, contrast,
+/// How the frame seen through a [`Camera2D`] is graded: exposure, contrast,
 /// saturation, a tint and a vignette — Godot's `Environment` adjustments and
 /// Unity's colour-grading volume, cut to what a 2D game reaches for.
 ///
@@ -114,7 +114,7 @@ impl PostProcess {
 /// environment while editing.
 pub fn active(world: &World) -> PostSettings {
     camera::active(world)
-        .and_then(|entity| world.get::<Camera>(entity))
+        .and_then(|entity| world.get::<Camera2D>(entity))
         .map_or(PostSettings::NEUTRAL, |camera| camera.post.settings())
 }
 
@@ -124,9 +124,9 @@ mod tests {
 
     #[test]
     fn a_neutral_grade_is_not_written_and_reads_back_neutral() {
-        let text = ron::to_string(&Camera::default()).expect("writes");
+        let text = ron::to_string(&Camera2D::default()).expect("writes");
         assert!(!text.contains("post"));
-        let back: Camera = ron::from_str(&text).expect("reads");
+        let back: Camera2D = ron::from_str(&text).expect("reads");
         assert!(back.post.is_neutral());
     }
 
@@ -152,12 +152,12 @@ mod tests {
         let e = world.spawn();
         world.insert(
             e,
-            Camera {
+            Camera2D {
                 post: PostProcess {
                     saturation: 0.0,
                     ..PostProcess::default()
                 },
-                ..Camera::default()
+                ..Camera2D::default()
             },
         );
         assert_eq!(active(&world).saturation, 0.0);

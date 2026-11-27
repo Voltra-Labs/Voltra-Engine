@@ -4,7 +4,7 @@ use voltra_assets::{AssetPath, Atlases};
 use voltra_core::egui::{self, Color32, DragValue, Rect, RichText, Ui};
 use voltra_core::ui::TextureId;
 use voltra_scene::format::serial_tree::Step;
-use voltra_scene::Sprite;
+use voltra_scene::Sprite2D;
 
 use super::super::active;
 use super::super::mixed::{self, Fields};
@@ -22,7 +22,7 @@ const DEFAULT_PIXELS_PER_UNIT: f32 = 16.0;
 
 pub(super) fn show(
     ui: &mut Ui,
-    sprite: &mut Sprite,
+    sprite: &mut Sprite2D,
     atlases: &mut Atlases,
     preview: Option<TextureId>,
     mixed: Fields<'_>,

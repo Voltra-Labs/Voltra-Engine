@@ -1,7 +1,7 @@
 //! The scene camera's framing and which one wins.
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
-use voltra_scene::Camera;
+use voltra_scene::Camera2D;
 
 use super::active;
 
@@ -12,8 +12,8 @@ use super::active;
 /// check against the scene. Bounded by the component's own constants, so a drag
 /// stops at the wall instead of running to infinity and being silently clamped
 /// somewhere else.
-pub(super) fn show(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
-    ui.label(RichText::new(Camera::NAME).strong());
+pub(super) fn show(ui: &mut Ui, camera: &mut Camera2D) -> Option<&'static str> {
+    ui.label(RichText::new(Camera2D::NAME).strong());
 
     let mut claim = None;
     egui::Grid::new("camera").num_columns(2).show(ui, |ui| {
@@ -23,7 +23,7 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
             &ui.add(
                 DragValue::new(&mut camera.size)
                     .speed(0.01)
-                    .range(Camera::MIN_SIZE..=Camera::MAX_SIZE),
+                    .range(Camera2D::MIN_SIZE..=Camera2D::MAX_SIZE),
             ),
             "Set camera size",
         ));

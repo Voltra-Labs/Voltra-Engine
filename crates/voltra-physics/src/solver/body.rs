@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{BodyType, Collider, RigidBody, Transform};
+use voltra_scene::{BodyType, Collider2D, RigidBody2D, Transform2D};
 
 /// One body as the solver sees it.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -24,7 +24,7 @@ pub struct SolverBody {
     /// Linear velocity, in world units per second.
     pub velocity: Vec2,
     /// How far this body has moved since the step began. Applied to the
-    /// `Transform` once, at scatter, so a contact's separation can be tracked
+    /// `Transform2D` once, at scatter, so a contact's separation can be tracked
     /// analytically through the sub-steps without touching the ECS.
     pub delta_position: Vec2,
     /// Radians per second, counter-clockwise.
@@ -61,7 +61,7 @@ pub struct SolverBody {
 impl SolverBody {
     /// A body that cannot be pushed and does not move itself.
     ///
-    /// What a collider with no `RigidBody` becomes — static level geometry,
+    /// What a collider with no `RigidBody2D` becomes — static level geometry,
     /// which the scene format has always allowed.
     fn immovable(entity: Entity) -> Self {
         Self {
@@ -83,8 +83,8 @@ impl SolverBody {
     /// a contact pushes against — also what a character's push reads.
     pub(crate) fn from_body(
         entity: Entity,
-        body: &RigidBody,
-        shape: Option<(&Collider, &Transform)>,
+        body: &RigidBody2D,
+        shape: Option<(&Collider2D, &Transform2D)>,
     ) -> Self {
         let (velocity, angular_velocity, inverse_mass) = match body.body_type {
             // A static body's velocity is ignored rather than trusted: the
@@ -134,7 +134,7 @@ impl SolverBody {
 /// division by zero: a body that cannot be pushed, a body with no collider to
 /// give it an extent, or a shape scaled to nothing. An infinite *inverse*
 /// inertia would spin a body out of the world on the first contact it took.
-fn inverse_inertia(inverse_mass: f32, shape: Option<(&Collider, &Transform)>) -> f32 {
+fn inverse_inertia(inverse_mass: f32, shape: Option<(&Collider2D, &Transform2D)>) -> f32 {
     if inverse_mass <= 0.0 {
         return 0.0;
     }
@@ -162,7 +162,7 @@ pub struct SolverBodies {
 impl SolverBodies {
     /// Collects every entity the solver has to know about.
     ///
-    /// That is everything with a `RigidBody` **or** a `Collider`: a collider
+    /// That is everything with a `RigidBody2D` **or** a `Collider2D`: a collider
     /// with no body is static geometry, and it has to be present or a contact
     /// against the world would have no second body to push off. Giving it an
     /// entry rather than a special case is why nothing downstream branches on
@@ -171,18 +171,18 @@ impl SolverBodies {
         let mut bodies = Vec::new();
         let mut index = HashMap::new();
 
-        for (entity, body) in world.query::<RigidBody>() {
+        for (entity, body) in world.query::<RigidBody2D>() {
             // The shape is what gives a mass its inertia, so it is read here
             // rather than stored: a body with no collider never takes a
             // contact and has nothing to turn about.
             let shape = world
-                .get::<Collider>(entity)
-                .zip(world.get::<Transform>(entity));
+                .get::<Collider2D>(entity)
+                .zip(world.get::<Transform2D>(entity));
             index.insert(entity, bodies.len());
             bodies.push(SolverBody::from_body(entity, body, shape));
         }
 
-        for (entity, _) in world.query::<Collider>() {
+        for (entity, _) in world.query::<Collider2D>() {
             index.entry(entity).or_insert_with(|| {
                 bodies.push(SolverBody::immovable(entity));
                 bodies.len() - 1
@@ -255,7 +255,7 @@ impl SolverBodies {
 
     /// Writes the solved velocities and moves back into the world.
     ///
-    /// A static body is skipped on both counts. A body with no `Transform`
+    /// A static body is skipped on both counts. A body with no `Transform2D`
     /// still keeps its velocity and moves nothing visible, which is legitimate:
     /// not everything simulated is drawn.
     pub fn scatter(self, world: &mut World) {
@@ -264,12 +264,12 @@ impl SolverBodies {
                 continue;
             }
 
-            if let Some(component) = world.get_mut::<RigidBody>(body.entity) {
+            if let Some(component) = world.get_mut::<RigidBody2D>(body.entity) {
                 component.velocity = body.velocity;
                 component.angular_velocity = body.angular_velocity;
             }
 
-            if let Some(transform) = world.get_mut::<Transform>(body.entity) {
+            if let Some(transform) = world.get_mut::<Transform2D>(body.entity) {
                 transform.translation += body.delta_position;
                 transform.rotation += body.delta_rotation;
             }

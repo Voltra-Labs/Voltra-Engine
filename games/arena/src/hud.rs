@@ -4,7 +4,7 @@
 use voltra_core::net::PeerId;
 use voltra_core::replication::NetOwner;
 use voltra_ecs::World;
-use voltra_scene::{Name, Sprite, Text};
+use voltra_scene::{Name, Sprite2D, Text};
 
 use crate::{Player, Round, Score};
 
@@ -34,7 +34,7 @@ pub(crate) fn draw(world: &mut World) {
         .map(|(entity, owner)| (entity, owner.0 .0))
         .collect();
     for (entity, peer) in players {
-        if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+        if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
             sprite.color = COLOURS[peer as usize % COLOURS.len()];
         }
         scores.push((peer, world.get::<Score>(entity).map_or(0, |s| s.0)));

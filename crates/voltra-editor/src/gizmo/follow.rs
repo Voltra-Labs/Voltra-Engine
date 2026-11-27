@@ -11,7 +11,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{hierarchy, Transform};
+use voltra_scene::{hierarchy, Transform2D};
 
 use crate::selection::Selection;
 use crate::tool::Tool;
@@ -22,16 +22,21 @@ const MIN_SCALE: f32 = 1e-6;
 
 /// Where `follower` (its world transform when the drag began) goes, the
 /// primary having gone from `start` to `now` under `tool`.
-pub fn follow(tool: Tool, start: &Transform, now: &Transform, follower: &Transform) -> Transform {
+pub fn follow(
+    tool: Tool,
+    start: &Transform2D,
+    now: &Transform2D,
+    follower: &Transform2D,
+) -> Transform2D {
     let pivot = start.translation;
     match tool {
-        Tool::Translate => Transform {
+        Tool::Translate => Transform2D {
             translation: follower.translation + (now.translation - start.translation),
             ..*follower
         },
         Tool::Rotate => {
             let turn = now.rotation - start.rotation;
-            Transform {
+            Transform2D {
                 translation: pivot + Vec2::from_angle(turn).rotate(follower.translation - pivot),
                 rotation: follower.rotation + turn,
                 ..*follower
@@ -46,7 +51,7 @@ pub fn follow(tool: Tool, start: &Transform, now: &Transform, follower: &Transfo
             // The offset in the primary's axes, stretched, and back.
             let axes = Vec2::from_angle(start.rotation);
             let local = Vec2::from_angle(-start.rotation).rotate(follower.translation - pivot);
-            Transform {
+            Transform2D {
                 translation: pivot + axes.rotate(local * ratio),
                 scale: follower.scale * ratio,
                 ..*follower
@@ -63,11 +68,11 @@ pub fn followers(
     world: &World,
     primary: Entity,
     selection: &Selection,
-) -> Vec<(Entity, Transform)> {
+) -> Vec<(Entity, Transform2D)> {
     selection
         .tops(world)
         .into_iter()
-        .filter(|&entity| entity != primary && world.get::<Transform>(entity).is_some())
+        .filter(|&entity| entity != primary && world.get::<Transform2D>(entity).is_some())
         .map(|entity| (entity, hierarchy::world_transform(world, entity)))
         .collect()
 }
@@ -86,9 +91,9 @@ mod tests {
 
     #[test]
     fn a_move_moves_every_follower_by_the_same_amount() {
-        let start = Transform::from_translation(Vec2::new(1.0, 1.0));
-        let now = Transform::from_translation(Vec2::new(3.0, 0.0));
-        let other = Transform::from_translation(Vec2::new(-1.0, 5.0)).with_rotation(0.3);
+        let start = Transform2D::from_translation(Vec2::new(1.0, 1.0));
+        let now = Transform2D::from_translation(Vec2::new(3.0, 0.0));
+        let other = Transform2D::from_translation(Vec2::new(-1.0, 5.0)).with_rotation(0.3);
         let moved = follow(Tool::Translate, &start, &now, &other);
         assert!(near(moved.translation, Vec2::new(1.0, 4.0)));
         assert_eq!(moved.rotation, 0.3, "nothing else changes");
@@ -96,9 +101,9 @@ mod tests {
 
     #[test]
     fn a_turn_swings_followers_round_the_primary_and_turns_them() {
-        let start = Transform::from_translation(Vec2::new(1.0, 0.0));
+        let start = Transform2D::from_translation(Vec2::new(1.0, 0.0));
         let now = start.with_rotation(FRAC_PI_2);
-        let other = Transform::from_translation(Vec2::new(3.0, 0.0));
+        let other = Transform2D::from_translation(Vec2::new(3.0, 0.0));
         let turned = follow(Tool::Rotate, &start, &now, &other);
         assert!(near(turned.translation, Vec2::new(1.0, 2.0)), "{turned:?}");
         assert!((turned.rotation - FRAC_PI_2).abs() < 1e-6);
@@ -107,13 +112,13 @@ mod tests {
     #[test]
     fn a_scale_stretches_distances_along_the_primary_s_axes() {
         // The primary turned a quarter: its x axis is the world's up.
-        let start = Transform::default().with_rotation(FRAC_PI_2);
-        let now = Transform {
+        let start = Transform2D::default().with_rotation(FRAC_PI_2);
+        let now = Transform2D {
             scale: Vec2::new(2.0, 1.0),
             ..start
         };
-        let above = Transform::from_translation(Vec2::new(0.0, 1.0));
-        let beside = Transform::from_translation(Vec2::new(1.0, 0.0));
+        let above = Transform2D::from_translation(Vec2::new(0.0, 1.0));
+        let beside = Transform2D::from_translation(Vec2::new(1.0, 0.0));
         let a = follow(Tool::Scale, &start, &now, &above);
         let b = follow(Tool::Scale, &start, &now, &beside);
         assert!(
@@ -126,15 +131,15 @@ mod tests {
 
     #[test]
     fn a_collapsed_axis_scales_nothing_rather_than_dividing_by_zero() {
-        let start = Transform {
+        let start = Transform2D {
             scale: Vec2::new(0.0, 1.0),
-            ..Transform::default()
+            ..Transform2D::default()
         };
-        let now = Transform {
+        let now = Transform2D {
             scale: Vec2::new(5.0, 1.0),
             ..start
         };
-        let other = Transform::from_translation(Vec2::new(2.0, 0.0));
+        let other = Transform2D::from_translation(Vec2::new(2.0, 0.0));
         let scaled = follow(Tool::Scale, &start, &now, &other);
         assert!(scaled.translation.is_finite() && scaled.scale.is_finite());
         assert!(near(scaled.translation, Vec2::new(2.0, 0.0)));
@@ -146,7 +151,7 @@ mod tests {
         let spawn = |world: &mut World, x: f32| {
             let e = world.spawn();
             world.insert(e, SceneId::new());
-            world.insert(e, Transform::from_translation(Vec2::new(x, 0.0)));
+            world.insert(e, Transform2D::from_translation(Vec2::new(x, 0.0)));
             e
         };
         let primary = spawn(&mut world, 0.0);

@@ -5,7 +5,7 @@
 //! hull — duplicates welded, points on a straight edge dropped, the rest
 //! wound counter-clockwise — so nothing downstream checks again. Eight is
 //! Box2D's `B2_MAX_POLYGON_VERTICES`, and the reason is the same: a fixed
-//! array keeps [`Collider`](crate::Collider) `Copy` and costs no allocation
+//! array keeps [`Collider2D`](crate::Collider2D) `Copy` and costs no allocation
 //! per contact, and a convex outline that needs more than eight points is a
 //! circle or a capsule in disguise.
 

@@ -3,7 +3,7 @@
 
 use voltra_assets::AssetPath;
 use voltra_ecs::World;
-use voltra_scene::{prefab, ComponentRegistry, Name, SceneId, Sprite, Transform};
+use voltra_scene::{prefab, ComponentRegistry, Name, SceneId, Sprite2D, Transform2D};
 use voltra_testkit::scratch_root;
 
 use crate::app::App;
@@ -24,8 +24,8 @@ fn write_coin(root: &std::path::Path, color: [f32; 4]) {
         .expect("a uuid");
     world.insert(coin, SceneId(id));
     world.insert(coin, Name::new("coin"));
-    world.insert(coin, Transform::default());
-    world.insert(coin, Sprite::new(color));
+    world.insert(coin, Transform2D::default());
+    world.insert(coin, Sprite2D::new(color));
     let file = prefab::fragment(&world, &ComponentRegistry::with_defaults(), coin).expect("cut");
     voltra_scene::format::write(&file, &root.join("coin.prefab.ron")).expect("written");
 }
@@ -40,7 +40,7 @@ fn a_base_changed_on_disk_reaches_an_instance_of_its_variant() {
     let variant = path("coin Variant.prefab.ron");
     prefab::variant(&registry, app.prefabs(), &base, &variant).expect("written");
     let coin = app
-        .spawn(&variant, &Transform::default())
+        .spawn(&variant, &Transform2D::default())
         .expect("spawns")
         .root()
         .expect("a root");
@@ -49,6 +49,6 @@ fn a_base_changed_on_disk_reaches_an_instance_of_its_variant() {
     write_coin(&root, [0.0, 1.0, 0.0, 1.0]);
     assert!(app.reload_prefab(&base));
 
-    let sprite = app.world.get::<Sprite>(coin).expect("a sprite");
+    let sprite = app.world.get::<Sprite2D>(coin).expect("a sprite");
     assert_eq!(sprite.color, [0.0, 1.0, 0.0, 1.0]);
 }

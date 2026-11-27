@@ -23,7 +23,7 @@ fn a_prefab_read_from_a_file_links_its_root_to_that_file() {
         &mut world,
         &registry(),
         prefabs.get(handle),
-        &Transform::default(),
+        &Transform2D::default(),
     )
     .expect("reads");
 
@@ -36,7 +36,7 @@ fn only_roots_are_linked_not_their_children() {
     let ship = ship().with_source(path("ship.ron"));
     let mut world = World::new();
 
-    let instance = spawn(&mut world, &registry(), &ship, &Transform::default()).expect("reads");
+    let instance = spawn(&mut world, &registry(), &ship, &Transform2D::default()).expect("reads");
 
     let hull = instance.root().expect("one root");
     let gun = children_of(&world, hull)[0];
@@ -48,7 +48,7 @@ fn only_roots_are_linked_not_their_children() {
 fn a_prefab_built_in_memory_links_nothing() {
     let mut world = World::new();
 
-    let instance = spawn(&mut world, &registry(), &ship(), &Transform::default()).expect("reads");
+    let instance = spawn(&mut world, &registry(), &ship(), &Transform2D::default()).expect("reads");
 
     assert_eq!(link_of(&world, instance.root().expect("one root")), None);
 }
@@ -64,7 +64,7 @@ fn a_root_is_an_instance_of_what_it_was_spawned_from_not_what_it_was_saved_as() 
     let pile = prefab_of(&source).with_source(path("pile.ron"));
     let mut world = World::new();
 
-    let instance = spawn(&mut world, &registry(), &pile, &Transform::default()).expect("reads");
+    let instance = spawn(&mut world, &registry(), &pile, &Transform2D::default()).expect("reads");
 
     assert_eq!(
         link_of(&world, instance.root().expect("one root")),
@@ -84,7 +84,7 @@ fn a_child_that_is_an_instance_of_its_own_keeps_its_link() {
     let chest = prefab_of(&source).with_source(path("chest.ron"));
     let mut world = World::new();
 
-    let instance = spawn(&mut world, &registry(), &chest, &Transform::default()).expect("reads");
+    let instance = spawn(&mut world, &registry(), &chest, &Transform2D::default()).expect("reads");
 
     let root = instance.root().expect("one root");
     let child = children_of(&world, root)[0];
@@ -96,7 +96,7 @@ fn a_child_that_is_an_instance_of_its_own_keeps_its_link() {
 fn the_link_survives_a_save_and_a_load() {
     let ship = ship().with_source(path("ship.ron"));
     let mut world = World::new();
-    spawn(&mut world, &registry(), &ship, &Transform::default()).expect("reads");
+    spawn(&mut world, &registry(), &ship, &Transform2D::default()).expect("reads");
     let file = to_scene_file(&world, &registry()).expect("saves");
 
     let mut loaded = World::new();

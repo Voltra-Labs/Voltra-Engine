@@ -5,7 +5,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_scene::format::{load, save};
 use voltra_scene::hierarchy::{resolve_parents, set_parent};
-use voltra_scene::{prefab, ComponentRegistry, Prefabs, Transform};
+use voltra_scene::{prefab, ComponentRegistry, Prefabs, Transform2D};
 
 use super::{ToolError, ToolResult};
 use crate::Project;
@@ -56,7 +56,7 @@ pub fn prefab_instantiate(
         &mut world,
         &registry,
         source,
-        &Transform::from_translation(at),
+        &Transform2D::from_translation(at),
     )
     .map_err(ToolError::from_cause)?;
     let root = instance

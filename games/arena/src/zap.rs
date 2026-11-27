@@ -16,7 +16,7 @@ use voltra_core::replication::NetOwner;
 use voltra_core::{QueryFilter, Rewound, Tick};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use crate::Player;
 
@@ -52,11 +52,11 @@ impl Cooldowns {
 /// The nearest other player within reach, as `world` has it: where a zap
 /// from `player` is aimed. `None` with nobody in reach.
 pub(crate) fn aim(world: &World, player: Entity) -> Option<Vec2> {
-    let from = world.get::<Transform>(player)?.translation;
+    let from = world.get::<Transform2D>(player)?.translation;
     world
         .query::<Player>()
         .filter(|(other, _)| *other != player)
-        .filter_map(|(other, _)| world.get::<Transform>(other))
+        .filter_map(|(other, _)| world.get::<Transform2D>(other))
         .map(|t| t.translation - from)
         .filter(|to| to.length() <= ZAP_RANGE && *to != Vec2::ZERO)
         .min_by(|a, b| a.length().total_cmp(&b.length()))
@@ -75,7 +75,7 @@ pub(crate) fn fire(
         return None;
     }
     let world: &World = tick.world;
-    let from = world.get::<Transform>(shooter)?.translation;
+    let from = world.get::<Transform2D>(shooter)?.translation;
     let filter = QueryFilter::new().excluding(shooter);
     let seen = tick.net.rewound(world, peer);
     let hit = seen.ray(from, direction, ZAP_RANGE, filter)?;

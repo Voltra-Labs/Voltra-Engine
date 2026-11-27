@@ -4,7 +4,7 @@
 //! neither overrides.
 
 use voltra_scene::format::ComponentRegistry;
-use voltra_scene::{prefab, Sprite};
+use voltra_scene::{prefab, Sprite2D};
 use voltra_testkit::scratch_root;
 
 use super::{begin, BLUE, GREEN};
@@ -31,7 +31,7 @@ fn a_base_instance_and_a_variant_instance_edited_together_keep_their_layers() {
     // Both selected, the variant's the primary: its colour is edited.
     let selected = [plain, varied];
     let edit = begin(&world, &registry, &selected);
-    world.get_mut::<Sprite>(varied).expect("s").color = GREEN;
+    world.get_mut::<Sprite2D>(varied).expect("s").color = GREEN;
     edit.finish(&mut world, &registry);
     for &entity in &selected {
         prefab::refresh_overrides(&mut world, &registry, &mut prefabs, entity).expect("compared");

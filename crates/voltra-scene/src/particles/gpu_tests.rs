@@ -7,13 +7,13 @@ use voltra_render::glam::Vec2;
 
 use super::*;
 use crate::sprite::sheets::Sheets;
-use crate::{Sprite, SpriteBatch, Transform};
+use crate::{Sprite2D, SpriteBatch, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
 fn gpu_emitter(world: &mut World, emitter: ParticleEmitter) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(Vec2::new(3.0, 4.0)));
+    world.insert(entity, Transform2D::from_translation(Vec2::new(3.0, 4.0)));
     world.insert(
         entity,
         ParticleEmitter {
@@ -177,12 +177,12 @@ fn the_batch_draws_a_gpu_emitter_between_the_sprites_around_it() {
     let mut world = World::new();
     let sprite = |world: &mut World, sort_order| {
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         world.insert(
             entity,
-            Sprite {
+            Sprite2D {
                 sort_order,
-                ..Sprite::default()
+                ..Sprite2D::default()
             },
         );
     };
@@ -295,9 +295,9 @@ fn world_space_bounds_stay_where_the_particles_were_born() {
     emitter(&mut world, e).burst(1);
     advance(&mut world, FRAME, true);
     // The emitter flies off; its sparks stay behind at (3, 4).
-    world.insert(e, Transform::from_translation(Vec2::new(100.0, 0.0)));
+    world.insert(e, Transform2D::from_translation(Vec2::new(100.0, 0.0)));
     advance(&mut world, FRAME, true);
-    let matrix = Transform::from_translation(Vec2::new(100.0, 0.0)).matrix();
+    let matrix = Transform2D::from_translation(Vec2::new(100.0, 0.0)).matrix();
     let (min, max) = emitter(&mut world, e).gpu_bounds(matrix).expect("alive");
     assert!(min.x <= 3.0 && max.x >= 3.0 && max.x < 10.0, "{min} {max}");
 }

@@ -79,12 +79,12 @@ fn rect(a: Vec2, b: Vec2, color: [f32; 4], lines: &mut LineBatch) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_scene::{FollowBounds, FollowZoom, SceneId, Transform};
+    use voltra_scene::{FollowBounds, FollowZoom, SceneId, Transform2D};
 
     fn placed(world: &mut World, at: Vec2) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         entity
     }
 

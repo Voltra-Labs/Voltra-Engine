@@ -7,9 +7,9 @@ const H: f32 = 1.0 / 60.0;
 const G: Vec2 = Vec2::new(0.0, -10.0);
 const MAX_ROTATION: f32 = 0.25 * std::f32::consts::PI;
 
-fn spawn(world: &mut World, body: Option<RigidBody>) -> Entity {
+fn spawn(world: &mut World, body: Option<RigidBody2D>) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::default());
+    world.insert(entity, Transform2D::default());
     if let Some(body) = body {
         world.insert(entity, body);
     }
@@ -17,9 +17,9 @@ fn spawn(world: &mut World, body: Option<RigidBody>) -> Entity {
 }
 
 /// One dynamic body of `mass`, wearing `collider`, gathered.
-fn gather_one(collider: Collider, mass: f32) -> SolverBodies {
+fn gather_one(collider: Collider2D, mass: f32) -> SolverBodies {
     let mut world = World::new();
-    let entity = spawn(&mut world, Some(RigidBody::new_dynamic(mass)));
+    let entity = spawn(&mut world, Some(RigidBody2D::new_dynamic(mass)));
     world.insert(entity, collider);
     SolverBodies::gather(&world)
 }
@@ -28,7 +28,7 @@ fn gather_one(collider: Collider, mass: f32) -> SolverBodies {
 fn a_box_body_has_the_inertia_of_a_box() {
     // I = m(hx² + hy²)/3, so its inverse is 3·inv_mass/(hx² + hy²).
     let bodies = gather_one(
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(2.0, 1.0),
         },
         4.0,
@@ -45,7 +45,7 @@ fn a_box_body_has_the_inertia_of_a_box() {
 #[test]
 fn a_circle_body_has_the_inertia_of_a_disc() {
     // I = m·r²/2.
-    let bodies = gather_one(Collider::Circle { radius: 2.0 }, 4.0);
+    let bodies = gather_one(Collider2D::Circle { radius: 2.0 }, 4.0);
 
     let expected = 2.0 * 0.25 / 4.0;
     assert!(
@@ -61,18 +61,18 @@ fn the_collider_scale_reaches_the_inertia() {
     // times as hard to turn. A body that resists like the unscaled shape is
     // a bug that looks like a mass bug.
     let mut world = World::new();
-    let entity = spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
+    let entity = spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
     );
-    world.insert(entity, Transform::default().with_scale(Vec2::splat(2.0)));
+    world.insert(entity, Transform2D::default().with_scale(Vec2::splat(2.0)));
 
     let scaled = SolverBodies::gather(&world).get(0).inverse_inertia;
     let unscaled = gather_one(
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
         1.0,
@@ -89,12 +89,12 @@ fn the_collider_scale_reaches_the_inertia() {
 #[test]
 fn an_immovable_body_has_no_inverse_inertia() {
     // Zero reads as infinite inertia here, exactly as it does for mass.
-    let bodies = gather_one(Collider::Circle { radius: 1.0 }, 0.0);
+    let bodies = gather_one(Collider2D::Circle { radius: 1.0 }, 0.0);
     assert_eq!(bodies.get(0).inverse_inertia, 0.0);
 
     let mut world = World::new();
-    let wall = spawn(&mut world, Some(RigidBody::new_static()));
-    world.insert(wall, Collider::Circle { radius: 1.0 });
+    let wall = spawn(&mut world, Some(RigidBody2D::new_static()));
+    world.insert(wall, Collider2D::Circle { radius: 1.0 });
     assert_eq!(SolverBodies::gather(&world).get(0).inverse_inertia, 0.0);
 }
 
@@ -103,13 +103,13 @@ fn a_locked_body_has_no_inverse_inertia_and_no_spin() {
     let mut world = World::new();
     let entity = spawn(
         &mut world,
-        Some(RigidBody {
+        Some(RigidBody2D {
             lock_rotation: true,
             angular_velocity: 5.0,
-            ..RigidBody::new_dynamic(1.0)
+            ..RigidBody2D::new_dynamic(1.0)
         }),
     );
-    world.insert(entity, Collider::Circle { radius: 1.0 });
+    world.insert(entity, Collider2D::Circle { radius: 1.0 });
 
     let bodies = SolverBodies::gather(&world);
 
@@ -120,7 +120,7 @@ fn a_locked_body_has_no_inverse_inertia_and_no_spin() {
 #[test]
 fn a_body_without_a_collider_has_no_inverse_inertia() {
     let mut world = World::new();
-    spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
+    spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
 
     assert_eq!(SolverBodies::gather(&world).get(0).inverse_inertia, 0.0);
 }
@@ -130,7 +130,7 @@ fn a_degenerate_collider_does_not_divide_by_zero() {
     // 3·inv_mass/0 is an infinity, and an infinite inverse inertia spins a
     // body out of the world on the first contact it takes.
     let bodies = gather_one(
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::ZERO,
         },
         1.0,
@@ -142,8 +142,8 @@ fn a_degenerate_collider_does_not_divide_by_zero() {
 #[test]
 fn a_spin_is_scattered_back_to_the_component_and_the_transform() {
     let mut world = World::new();
-    let entity = spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
-    world.insert(entity, Collider::Circle { radius: 1.0 });
+    let entity = spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
+    world.insert(entity, Collider2D::Circle { radius: 1.0 });
 
     let mut bodies = SolverBodies::gather(&world);
     for body in bodies.iter_mut() {
@@ -153,11 +153,11 @@ fn a_spin_is_scattered_back_to_the_component_and_the_transform() {
     bodies.scatter(&mut world);
 
     let rotation = world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("the transform")
         .rotation;
     let spin = world
-        .get::<RigidBody>(entity)
+        .get::<RigidBody2D>(entity)
         .expect("the body")
         .angular_velocity;
 
@@ -169,8 +169,8 @@ fn a_spin_is_scattered_back_to_the_component_and_the_transform() {
 fn a_collider_without_a_body_is_gathered_as_immovable() {
     let mut world = World::new();
     let wall = world.spawn();
-    world.insert(wall, Transform::default());
-    world.insert(wall, Collider::Circle { radius: 1.0 });
+    world.insert(wall, Transform2D::default());
+    world.insert(wall, Collider2D::Circle { radius: 1.0 });
 
     let bodies = SolverBodies::gather(&world);
     let index = bodies.index_of(wall).expect("gathered");
@@ -182,8 +182,8 @@ fn a_collider_without_a_body_is_gathered_as_immovable() {
 #[test]
 fn a_body_with_a_collider_is_gathered_once() {
     let mut world = World::new();
-    let entity = spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
-    world.insert(entity, Collider::Circle { radius: 1.0 });
+    let entity = spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
+    world.insert(entity, Collider2D::Circle { radius: 1.0 });
 
     let bodies = SolverBodies::gather(&world);
 
@@ -199,7 +199,7 @@ fn a_kinematic_body_moves_itself_but_cannot_be_pushed() {
     let mut world = World::new();
     let platform = spawn(
         &mut world,
-        Some(RigidBody {
+        Some(RigidBody2D {
             body_type: BodyType::Kinematic,
             velocity: Vec2::new(2.0, 0.0),
             ..Default::default()
@@ -224,7 +224,7 @@ fn a_kinematic_body_moves_itself_but_cannot_be_pushed() {
 #[test]
 fn a_static_body_is_never_moved_by_integration() {
     let mut world = World::new();
-    let mut body = RigidBody::new_static();
+    let mut body = RigidBody2D::new_static();
     body.velocity = Vec2::new(100.0, 100.0);
     let entity = spawn(&mut world, Some(body));
 
@@ -235,7 +235,7 @@ fn a_static_body_is_never_moved_by_integration() {
 
     assert_eq!(
         world
-            .get::<Transform>(entity)
+            .get::<Transform2D>(entity)
             .expect("transform")
             .translation,
         Vec2::ZERO
@@ -249,7 +249,7 @@ fn velocity_is_integrated_before_position() {
     // at zero. The difference is the order of two lines and a stack of
     // boxes climbing on its own.
     let mut world = World::new();
-    let entity = spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
+    let entity = spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
 
     let mut bodies = SolverBodies::gather(&world);
     integrate_velocities(&mut bodies, G, H, MAX_ROTATION);
@@ -269,9 +269,9 @@ fn gravity_scale_zero_makes_a_body_float() {
     let mut world = World::new();
     let entity = spawn(
         &mut world,
-        Some(RigidBody {
+        Some(RigidBody2D {
             gravity_scale: 0.0,
-            ..RigidBody::new_dynamic(1.0)
+            ..RigidBody2D::new_dynamic(1.0)
         }),
     );
 
@@ -290,11 +290,11 @@ fn enormous_damping_stops_a_body_rather_than_reversing_it() {
     let mut world = World::new();
     let entity = spawn(
         &mut world,
-        Some(RigidBody {
+        Some(RigidBody2D {
             velocity: Vec2::new(10.0, 0.0),
             gravity_scale: 0.0,
             linear_damping: 10_000.0,
-            ..RigidBody::new_dynamic(1.0)
+            ..RigidBody2D::new_dynamic(1.0)
         }),
     );
 
@@ -310,14 +310,14 @@ fn spinning(spin: f32, angular_damping: f32) -> (World, Entity) {
     let mut world = World::new();
     let entity = spawn(
         &mut world,
-        Some(RigidBody {
+        Some(RigidBody2D {
             angular_velocity: spin,
             gravity_scale: 0.0,
             angular_damping,
-            ..RigidBody::new_dynamic(1.0)
+            ..RigidBody2D::new_dynamic(1.0)
         }),
     );
-    world.insert(entity, Collider::Circle { radius: 1.0 });
+    world.insert(entity, Collider2D::Circle { radius: 1.0 });
     (world, entity)
 }
 
@@ -376,14 +376,14 @@ fn a_kinematic_body_keeps_the_spin_it_was_given() {
     let mut world = World::new();
     let entity = spawn(
         &mut world,
-        Some(RigidBody {
+        Some(RigidBody2D {
             body_type: BodyType::Kinematic,
             angular_velocity: 3.0,
             angular_damping: 5.0,
-            ..RigidBody::default()
+            ..RigidBody2D::default()
         }),
     );
-    world.insert(entity, Collider::Circle { radius: 1.0 });
+    world.insert(entity, Collider2D::Circle { radius: 1.0 });
 
     let mut bodies = SolverBodies::gather(&world);
     integrate_velocities(&mut bodies, G, H, MAX_ROTATION);
@@ -414,9 +414,9 @@ fn a_negative_inverse_mass_cannot_be_pushed_backwards() {
     let mut world = World::new();
     let entity = spawn(
         &mut world,
-        Some(RigidBody {
+        Some(RigidBody2D {
             inverse_mass: -1.0,
-            ..RigidBody::new_dynamic(1.0)
+            ..RigidBody2D::new_dynamic(1.0)
         }),
     );
 
@@ -429,7 +429,7 @@ fn a_negative_inverse_mass_cannot_be_pushed_backwards() {
 #[test]
 fn scatter_writes_velocity_and_the_accumulated_move_back() {
     let mut world = World::new();
-    let entity = spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
+    let entity = spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
 
     let mut bodies = SolverBodies::gather(&world);
     integrate_velocities(&mut bodies, G, H, MAX_ROTATION);
@@ -438,30 +438,30 @@ fn scatter_writes_velocity_and_the_accumulated_move_back() {
 
     assert!(
         world
-            .get::<Transform>(entity)
+            .get::<Transform2D>(entity)
             .expect("transform")
             .translation
             .y
             < 0.0,
         "it should have moved down"
     );
-    assert!(world.get::<RigidBody>(entity).expect("body").velocity.y < 0.0);
+    assert!(world.get::<RigidBody2D>(entity).expect("body").velocity.y < 0.0);
 }
 
 #[test]
 fn a_body_without_a_transform_simulates_and_moves_nothing() {
     let mut world = World::new();
     let entity = world.spawn();
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
 
     let mut bodies = SolverBodies::gather(&world);
     integrate_velocities(&mut bodies, G, H, MAX_ROTATION);
     integrate_positions(&mut bodies, H);
     bodies.scatter(&mut world);
 
-    assert!(world.get::<Transform>(entity).is_none());
+    assert!(world.get::<Transform2D>(entity).is_none());
     assert!(
-        world.get::<RigidBody>(entity).expect("body").velocity.y < 0.0,
+        world.get::<RigidBody2D>(entity).expect("body").velocity.y < 0.0,
         "it should still accelerate; only the move is skipped"
     );
 }
@@ -474,8 +474,8 @@ fn an_empty_world_gathers_nothing() {
 #[test]
 fn a_pair_hands_out_both_ends() {
     let mut world = World::new();
-    let first = spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
-    let second = spawn(&mut world, Some(RigidBody::new_dynamic(2.0)));
+    let first = spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
+    let second = spawn(&mut world, Some(RigidBody2D::new_dynamic(2.0)));
 
     let mut bodies = SolverBodies::gather(&world);
     let (a, b) = bodies.pair_mut(bodies_index(&bodies, first), bodies_index(&bodies, second));
@@ -487,8 +487,8 @@ fn a_pair_hands_out_both_ends() {
 #[test]
 fn a_pair_in_either_order_names_the_same_bodies() {
     let mut world = World::new();
-    let first = spawn(&mut world, Some(RigidBody::new_dynamic(1.0)));
-    let second = spawn(&mut world, Some(RigidBody::new_dynamic(2.0)));
+    let first = spawn(&mut world, Some(RigidBody2D::new_dynamic(1.0)));
+    let second = spawn(&mut world, Some(RigidBody2D::new_dynamic(2.0)));
 
     let mut bodies = SolverBodies::gather(&world);
     let (i, j) = (bodies_index(&bodies, first), bodies_index(&bodies, second));

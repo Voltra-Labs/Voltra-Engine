@@ -5,7 +5,7 @@
 use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
-use voltra_scene::{AudioSource, Camera, LagCompensated, Parallax, Replicated, Transform};
+use voltra_scene::{AudioSource, Camera2D, LagCompensated, Parallax, Replicated, Transform2D};
 
 use super::super::mixed;
 use super::super::{
@@ -73,7 +73,7 @@ pub(in crate::panels::inspector) fn show(
         // Each bone's from its own transform, not the primary's copied.
         let bones: Vec<Entity> = multi.all().collect();
         for bone in bones {
-            let pose = frame.world.get::<Transform>(bone).copied();
+            let pose = frame.world.get::<Transform2D>(bone).copied();
             if let (Some(pose), Some(bone)) =
                 (pose, frame.world.get_mut::<voltra_scene::Bone2D>(bone))
             {
@@ -94,7 +94,7 @@ pub(in crate::panels::inspector) fn show(
                 claim = Some("Reset bone pose");
             }
         }
-        multi.done_for_each(Transform::NAME);
+        multi.done_for_each(Transform2D::NAME);
     }
     if asked.child_bone {
         crate::spawn::record(editor, frame, "Add child bone", |frame| {
@@ -160,13 +160,17 @@ pub(in crate::panels::inspector) fn show(
         mixed::marker(ui, multi, &[voltra_scene::GlobalLight2D::NAME]);
         claim = claim.or(global_light::show(ui, glow));
     }
-    if let Some(camera) = gate(frame.world.get_mut::<Camera>(entity), multi, Camera::NAME) {
+    if let Some(camera) = gate(
+        frame.world.get_mut::<Camera2D>(entity),
+        multi,
+        Camera2D::NAME,
+    ) {
         ui.separator();
-        mixed::marker(ui, multi, &[Camera::NAME]);
+        mixed::marker(ui, multi, &[Camera2D::NAME]);
         claim = claim.or(camera::show(ui, camera));
     }
-    if frame.world.get::<Camera>(entity).is_some()
-        && multi.editable(&[Camera::NAME, voltra_scene::CameraTarget::NAME])
+    if frame.world.get::<Camera2D>(entity).is_some()
+        && multi.editable(&[Camera2D::NAME, voltra_scene::CameraTarget::NAME])
     {
         mixed::marker(ui, multi, &[voltra_scene::CameraTarget::NAME]);
         claim = claim.or(camera_view::show(ui, frame.world, entity));

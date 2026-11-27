@@ -28,8 +28,8 @@ use voltra_render::{
 use voltra_scene::format::{load, save};
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{
-    camera, light, Camera, CasterShape, Collider, ComponentRegistry, LightCone, LightShadows, Name,
-    PointLight2D, SceneId, ShadowCaster2D, Sprite, SpriteBatch, Transform,
+    camera, light, Camera2D, CasterShape, Collider2D, ComponentRegistry, LightCone, LightShadows,
+    Name, PointLight2D, SceneId, ShadowCaster2D, Sprite2D, SpriteBatch, Transform2D,
 };
 use voltra_testkit::{headless_device, read_texture, Rgba};
 
@@ -83,20 +83,20 @@ fn named(world: &mut World, name: &str, at: Vec2, scale: Vec2) -> voltra_ecs::En
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Name::new(name));
-    world.insert(entity, Transform::from_translation(at).with_scale(scale));
+    world.insert(entity, Transform2D::from_translation(at).with_scale(scale));
     entity
 }
 
 /// A flat-coloured quad, drawn at `order`.
-fn quad(color: [f32; 3], order: i32) -> Sprite {
-    Sprite {
+fn quad(color: [f32; 3], order: i32) -> Sprite2D {
+    Sprite2D {
         color: [color[0], color[1], color[2], 1.0],
-        ..Sprite::default().with_sort_order(order)
+        ..Sprite2D::default().with_sort_order(order)
     }
 }
 
 /// The unit box a unit quad covers; the transform's scale sizes both.
-const UNIT_BOX: Collider = Collider::Box {
+const UNIT_BOX: Collider2D = Collider2D::Box {
     half_extents: Vec2::splat(0.5),
 };
 
@@ -115,10 +115,10 @@ fn lights_world() -> World {
     let eye = named(&mut world, "Camera", Vec2::ZERO, Vec2::ONE);
     world.insert(
         eye,
-        Camera {
+        Camera2D {
             size: 4.0,
             ambient: Some([0.06, 0.07, 0.12]),
-            ..Camera::default()
+            ..Camera2D::default()
         },
     );
 
@@ -142,7 +142,7 @@ fn lights_world() -> World {
     }
 
     let crate_box = named(&mut world, "Crate", Vec2::new(3.5, -2.4), Vec2::splat(1.0));
-    if let Some(transform) = world.get_mut::<Transform>(crate_box) {
+    if let Some(transform) = world.get_mut::<Transform2D>(crate_box) {
         transform.rotation = 0.35;
     }
     world.insert(crate_box, quad([0.6, 0.42, 0.25], 1));
@@ -165,7 +165,7 @@ fn lights_world() -> World {
     );
     world.insert(
         plaque,
-        Sprite {
+        Sprite2D {
             normal_map: Some(AssetPath::new(STUDS).expect("a valid asset path")),
             ..quad([0.75, 0.72, 0.68], 0)
         },
@@ -209,7 +209,7 @@ fn lights_world() -> World {
 
     // A spot light aimed down at the pillars: +x turned towards (0, -2).
     let cool = named(&mut world, "Cool spot", Vec2::new(4.5, 3.0), Vec2::ONE);
-    if let Some(transform) = world.get_mut::<Transform>(cool) {
+    if let Some(transform) = world.get_mut::<Transform2D>(cool) {
         transform.rotation = (-5.0f32).atan2(-4.5);
     }
     world.insert(
@@ -318,7 +318,7 @@ fn render(mut world: World, width: u32, height: u32) -> Option<Vec<Rgba>> {
     // Normal maps resolved through the real store, as the engine does: the
     // linear bind group is the path a colour-space mistake would be on.
     let mut textures = Textures::new(&device, &queue, &layout, assets_dir());
-    for (_, sprite) in world.query_mut::<Sprite>() {
+    for (_, sprite) in world.query_mut::<Sprite2D>() {
         let normal = sprite.normal_map.clone();
         sprite.set_normal_map(normal, &mut textures, &device, &queue);
     }
@@ -524,7 +524,7 @@ fn the_plaque_s_studs_catch_the_warm_lamp() {
         return;
     };
     let mut flat = committed();
-    for (_, sprite) in flat.query_mut::<Sprite>() {
+    for (_, sprite) in flat.query_mut::<Sprite2D>() {
         sprite.normal_map = None;
     }
     let flat = render(flat, W, H).expect("an adapter, found above");

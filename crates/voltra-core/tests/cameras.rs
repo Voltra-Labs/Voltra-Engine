@@ -9,7 +9,7 @@ use voltra_core::{App, Headless, Screenshot, ScreenshotError};
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::Filter;
-use voltra_scene::{Camera, CameraTarget, SceneId, Sprite, Transform, UiRect, Viewport};
+use voltra_scene::{Camera2D, CameraTarget, SceneId, Sprite2D, Transform2D, UiRect, Viewport};
 use voltra_testkit::scratch_root;
 
 fn shoot(session: &mut Headless, width: u32, height: u32) -> Option<Screenshot> {
@@ -28,15 +28,15 @@ fn block(world: &mut World, at: Vec2, color: [f32; 4]) {
     world.insert(e, SceneId::new());
     world.insert(
         e,
-        Transform::from_translation(at).with_scale(Vec2::splat(3.0)),
+        Transform2D::from_translation(at).with_scale(Vec2::splat(3.0)),
     );
-    world.insert(e, Sprite::new(color));
+    world.insert(e, Sprite2D::new(color));
 }
 
-fn camera(world: &mut World, at: Vec2, camera: Camera) -> voltra_ecs::Entity {
+fn camera(world: &mut World, at: Vec2, camera: Camera2D) -> voltra_ecs::Entity {
     let e = world.spawn();
     world.insert(e, SceneId::new());
-    world.insert(e, Transform::from_translation(at));
+    world.insert(e, Transform2D::from_translation(at));
     world.insert(e, camera);
     e
 }
@@ -72,23 +72,23 @@ fn a_split_screen_and_a_minimap_draw_in_one_frame() {
     camera(
         world,
         Vec2::new(-20.0, 0.0),
-        Camera {
+        Camera2D {
             size: 2.0,
             viewport: Viewport::LEFT,
-            ..Camera::default()
+            ..Camera2D::default()
         },
     );
     camera(
         world,
         Vec2::new(20.0, 0.0),
-        Camera {
+        Camera2D {
             size: 2.0,
             viewport: Viewport::RIGHT,
-            ..Camera::default()
+            ..Camera2D::default()
         },
     );
     // The minimap sees both, into a texture a HUD image shows top centre.
-    let map = camera(world, Vec2::ZERO, Camera::new(12.0));
+    let map = camera(world, Vec2::ZERO, Camera2D::new(12.0));
     world.insert(
         map,
         CameraTarget::new(
@@ -103,11 +103,11 @@ fn a_split_screen_and_a_minimap_draw_in_one_frame() {
     );
     world.insert(
         image,
-        Sprite {
+        Sprite2D {
             texture: Some(
                 voltra_assets::AssetPath::new("minimap.rendertexture.ron").expect("path"),
             ),
-            ..Sprite::default()
+            ..Sprite2D::default()
         },
     );
 
@@ -168,12 +168,12 @@ fn a_pixel_perfect_camera_matches_its_reference_pixel_for_pixel() {
         .with_texture_filter(Filter::Nearest);
     let tiles = app.world.spawn();
     app.world.insert(tiles, SceneId::new());
-    app.world.insert(tiles, Transform::default());
+    app.world.insert(tiles, Transform2D::default());
     app.world.insert(
         tiles,
-        Sprite {
+        Sprite2D {
             texture: Some(voltra_assets::AssetPath::new("tiles.png").expect("path")),
-            ..Sprite::default()
+            ..Sprite2D::default()
         },
     );
     // Two units over 64 pixels: 32 pixels a unit, 8 a texel. The position
@@ -182,10 +182,10 @@ fn a_pixel_perfect_camera_matches_its_reference_pixel_for_pixel() {
     camera(
         &mut app.world,
         at,
-        Camera {
+        Camera2D {
             size: 1.0,
             pixel_perfect: true,
-            ..Camera::default()
+            ..Camera2D::default()
         },
     );
     let mut session = Headless::new(app);

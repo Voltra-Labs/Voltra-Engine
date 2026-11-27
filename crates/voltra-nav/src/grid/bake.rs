@@ -4,7 +4,8 @@ use voltra_ecs::{Entity, World};
 use voltra_physics::narrow::manifold;
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::{
-    BodyType, CharacterBody2D, Collider, CollisionLayers, OneWay, RigidBody, Sensor, Transform,
+    BodyType, CharacterBody2D, Collider2D, CollisionLayers, OneWay, RigidBody2D, Sensor,
+    Transform2D,
 };
 
 use super::NavGrid;
@@ -57,7 +58,7 @@ fn obstacle(world: &World, entity: Entity, mask: u32) -> bool {
         return false;
     }
     world
-        .get::<RigidBody>(entity)
+        .get::<RigidBody2D>(entity)
         .is_none_or(|body| body.body_type == BodyType::Static)
 }
 
@@ -83,12 +84,12 @@ impl NavGrid {
         };
         let mut grid = NavGrid::new(lo, cell, size).with_diagonal(settings.diagonal);
         let clearance = settings.clearance.max(Vec2::ZERO);
-        let probe = Collider::Box {
+        let probe = Collider2D::Box {
             half_extents: Vec2::splat(cell * 0.5) + clearance,
         };
 
-        for (entity, collider) in world.query::<Collider>() {
-            let Some(transform) = world.get::<Transform>(entity) else {
+        for (entity, collider) in world.query::<Collider2D>() {
+            let Some(transform) = world.get::<Transform2D>(entity) else {
                 continue;
             };
             if collider.is_degenerate(transform) || !obstacle(world, entity, settings.mask) {
@@ -109,7 +110,7 @@ impl NavGrid {
                     if grid.is_blocked(at) {
                         continue;
                     }
-                    let centre = Transform::from_translation(grid.centre(at));
+                    let centre = Transform2D::from_translation(grid.centre(at));
                     if manifold((&probe, &centre), (collider, transform)).is_some() {
                         grid.set_blocked(at, true);
                     }
@@ -123,8 +124,8 @@ impl NavGrid {
     /// a cell and the clearance all round. An empty grid when there is none.
     pub fn bake_all(world: &World, settings: &NavSettings) -> Self {
         let mut bounds: Option<(Vec2, Vec2)> = None;
-        for (entity, collider) in world.query::<Collider>() {
-            let Some(transform) = world.get::<Transform>(entity) else {
+        for (entity, collider) in world.query::<Collider2D>() {
+            let Some(transform) = world.get::<Transform2D>(entity) else {
                 continue;
             };
             if collider.is_degenerate(transform) || !obstacle(world, entity, settings.mask) {

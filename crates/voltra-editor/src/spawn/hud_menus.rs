@@ -5,7 +5,7 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, Align, Name, Sprite, Text, UiButton, UiDropdown, UiHidden, UiRect, UiStack, UiTab,
+    hierarchy, Align, Name, Sprite2D, Text, UiButton, UiDropdown, UiHidden, UiRect, UiStack, UiTab,
     UiTabs, UiToggle, UiTooltip,
 };
 
@@ -38,7 +38,7 @@ pub(crate) fn hud_dropdown(frame: &mut UiFrame<'_>, name: &str) -> Entity {
         dropdown,
         UiRect::pinned(Vec2::ZERO, Vec2::splat(16.0), Vec2::new(200.0, 30.0)),
     );
-    frame.world.insert(dropdown, Sprite::default());
+    frame.world.insert(dropdown, Sprite2D::default());
     frame.world.insert(dropdown, UiButton::default());
     frame.world.insert(dropdown, UiDropdown::default());
     let style = text(frame, "One");
@@ -90,7 +90,7 @@ pub(crate) fn hud_tabs(frame: &mut UiFrame<'_>, name: &str) -> (Vec<Entity>, Opt
                 ..UiRect::default()
             },
         );
-        frame.world.insert(tab, Sprite::default());
+        frame.world.insert(tab, Sprite2D::default());
         frame.world.insert(tab, UiButton::default());
         frame.world.insert(
             tab,
@@ -123,7 +123,7 @@ pub(crate) fn hud_tabs(frame: &mut UiFrame<'_>, name: &str) -> (Vec<Entity>, Opt
         );
         frame
             .world
-            .insert(body, Sprite::new([0.09, 0.1, 0.14, 1.0]));
+            .insert(body, Sprite2D::new([0.09, 0.1, 0.14, 1.0]));
         if slot > 0 {
             frame.world.insert(body, UiHidden);
         }

@@ -165,7 +165,7 @@ fn turn(world: &mut World, entity: Entity, angle: f32) {
         return;
     }
     let mirrored = parent_matrix(world, entity).determinant() < 0.0;
-    if let Some(transform) = world.get_mut::<crate::Transform>(entity) {
+    if let Some(transform) = world.get_mut::<crate::Transform2D>(entity) {
         transform.rotation += if mirrored { -angle } else { angle };
     }
 }

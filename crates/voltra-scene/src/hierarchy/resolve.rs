@@ -6,14 +6,14 @@ use voltra_ecs::{Entity, World};
 
 use super::parent::Parent;
 use crate::scene_id::SceneId;
-use crate::{Collider, RigidBody};
+use crate::{Collider2D, RigidBody2D};
 
 /// Points every [`Parent`] link at the entity its [`SceneId`] names.
 ///
 /// Called after anything that spawns entities from stored records — a load, an
 /// undo, a play-mode restore — because a record carries the identity and the
 /// entity it resolved to last time is gone. This is the same job
-/// [`Sprite::set_texture`] does for a texture path, and for the same reason.
+/// [`Sprite2D::set_texture`] does for a texture path, and for the same reason.
 ///
 /// One pass, not a lookup per link: [`entity_with_id`] is linear, and a scene
 /// where every entity is parented would make resolving quadratic in the number
@@ -23,7 +23,7 @@ use crate::{Collider, RigidBody};
 /// dropped: the child draws as a root, and the id it came with is still there
 /// to be written back on the next save.
 ///
-/// [`Sprite::set_texture`]: crate::Sprite::set_texture
+/// [`Sprite2D::set_texture`]: crate::Sprite2D::set_texture
 /// [`entity_with_id`]: crate::format::entity_with_id
 pub fn resolve_parents(world: &mut World) {
     let by_id: HashMap<SceneId, Entity> = world
@@ -43,7 +43,7 @@ pub fn resolve_parents(world: &mut World) {
         // file. Warned rather than repaired: dropping the link or the body
         // would both be edits to someone's scene, made without asking, on the
         // strength of a rule this build happens to have today.
-        if world.get::<RigidBody>(entity).is_some() || world.get::<Collider>(entity).is_some() {
+        if world.get::<RigidBody2D>(entity).is_some() || world.get::<Collider2D>(entity).is_some() {
             log::warn!(
                 "{entity:?} is parented and takes part in physics; the solver reads its transform as world space"
             );
@@ -142,12 +142,12 @@ mod tests {
         let (parent, parent_id) = spawn_with_id(&mut world);
         let (child, _) = spawn_with_id(&mut world);
         world.insert(child, Parent::new(parent_id));
-        world.insert(child, crate::RigidBody::new_dynamic(1.0));
+        world.insert(child, crate::RigidBody2D::new_dynamic(1.0));
 
         resolve_parents(&mut world);
 
         assert_eq!(parent_of(&world, child), Some(parent));
-        assert!(world.get::<crate::RigidBody>(child).is_some());
+        assert!(world.get::<crate::RigidBody2D>(child).is_some());
     }
 
     #[test]

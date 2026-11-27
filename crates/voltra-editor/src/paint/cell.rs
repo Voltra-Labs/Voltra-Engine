@@ -46,9 +46,9 @@ pub fn corners(world: &World, layer: Entity, a: IVec2, b: IVec2) -> Option<[Vec2
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_scene::Transform;
+    use voltra_scene::Transform2D;
 
-    fn layer(world: &mut World, transform: Transform, tile: Vec2) -> Entity {
+    fn layer(world: &mut World, transform: Transform2D, tile: Vec2) -> Entity {
         let entity = world.spawn();
         world.insert(entity, transform);
         world.insert(entity, Tilemap::new(tile));
@@ -60,7 +60,7 @@ mod tests {
         let mut world = World::new();
         let entity = layer(
             &mut world,
-            Transform::from_translation(Vec2::new(10.0, 5.0)),
+            Transform2D::from_translation(Vec2::new(10.0, 5.0)),
             Vec2::splat(0.5),
         );
 
@@ -79,7 +79,7 @@ mod tests {
         let mut world = World::new();
         let entity = layer(
             &mut world,
-            Transform::default().with_rotation(std::f32::consts::FRAC_PI_2),
+            Transform2D::default().with_rotation(std::f32::consts::FRAC_PI_2),
             Vec2::ONE,
         );
         // A quarter turn puts the layer's +x along the world's +y.
@@ -94,7 +94,7 @@ mod tests {
         let mut world = World::new();
         let entity = layer(
             &mut world,
-            Transform::default().with_scale(Vec2::new(0.0, 1.0)),
+            Transform2D::default().with_scale(Vec2::new(0.0, 1.0)),
             Vec2::ONE,
         );
         assert_eq!(cell_under(&world, entity, Vec2::ZERO), None);
@@ -104,7 +104,7 @@ mod tests {
     fn something_that_is_not_a_layer_has_no_cells() {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         assert_eq!(cell_under(&world, entity, Vec2::ZERO), None);
         assert_eq!(corners(&world, entity, IVec2::ZERO, IVec2::ZERO), None);
     }
@@ -112,7 +112,7 @@ mod tests {
     #[test]
     fn the_corners_cover_both_end_cells_in_either_order() {
         let mut world = World::new();
-        let entity = layer(&mut world, Transform::default(), Vec2::splat(2.0));
+        let entity = layer(&mut world, Transform2D::default(), Vec2::splat(2.0));
 
         let forward = corners(&world, entity, IVec2::new(-1, 0), IVec2::new(1, 2));
         let backward = corners(&world, entity, IVec2::new(1, 2), IVec2::new(-1, 0));

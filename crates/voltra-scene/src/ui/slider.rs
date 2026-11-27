@@ -10,7 +10,7 @@ use super::stack::Direction;
 /// it: left and right for a row, down and up for a column. Across it, the
 /// navigation moves the focus on, as Godot's `HSlider` does.
 ///
-/// It draws nothing of its own: its `Sprite` is the track, and its UI
+/// It draws nothing of its own: its `Sprite2D` is the track, and its UI
 /// children marked [`UiSliderPart`] are moved to the value — a fill
 /// stretched from the start, a handle placed at it — so either can be a
 /// 9-sliced image, a plain colour or absent. A row runs left to right; a

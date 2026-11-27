@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use voltra_core::{Game, Tick, Touch};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{ComponentRegistry, RigidBody, Text, Transform};
+use voltra_scene::{ComponentRegistry, RigidBody2D, Text, Transform2D};
 
 /// The first scene, under the game's asset root.
 pub const FIRST_SCENE: &str = "scenes/main.ron";
@@ -136,7 +136,7 @@ impl Game for Breakout {
         keep_moving(tick.world, ball, settings, tilt);
         let lost = tick
             .world
-            .get::<Transform>(ball)
+            .get::<Transform2D>(ball)
             .is_some_and(|t| t.translation.y < FLOOR);
         if lost {
             serve(tick.world, ball, settings);
@@ -188,13 +188,13 @@ fn steer_paddle(tick: &mut Tick<'_>) {
     let mut push = tick.input.action_axis("move_left", "move_right");
     let x = tick
         .world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .map_or(0.0, |t| t.translation.x);
     // Not past its reach: a kinematic body is stopped by nothing.
     if (x >= paddle.reach && push > 0.0) || (x <= -paddle.reach && push < 0.0) {
         push = 0.0;
     }
-    if let Some(body) = tick.world.get_mut::<RigidBody>(entity) {
+    if let Some(body) = tick.world.get_mut::<RigidBody2D>(entity) {
         body.velocity = Vec2::new(push * paddle.speed, 0.0);
     }
 }
@@ -230,11 +230,11 @@ fn paddle_tilt(tick: &Tick<'_>, ball: Entity) -> Option<f32> {
         return None;
     }
     let _ = settings;
-    let at = |e| tick.world.get::<Transform>(e).map(|t| t.translation);
+    let at = |e| tick.world.get::<Transform2D>(e).map(|t| t.translation);
     let (ball_at, paddle_at) = (at(ball)?, at(paddle)?);
     let half = tick
         .world
-        .get::<Transform>(paddle)
+        .get::<Transform2D>(paddle)
         .map_or(1.0, |t| t.scale.x * 0.5);
     Some(((ball_at.x - paddle_at.x) / half.max(0.1)).clamp(-1.0, 1.0))
 }
@@ -242,7 +242,7 @@ fn paddle_tilt(tick: &Tick<'_>, ball: Entity) -> Option<f32> {
 /// The ball at its speed, never too flat to come back, tilted by the
 /// paddle when it just met it.
 fn keep_moving(world: &mut World, ball: Entity, settings: Ball, tilt: Option<f32>) {
-    let Some(body) = world.get_mut::<RigidBody>(ball) else {
+    let Some(body) = world.get_mut::<RigidBody2D>(ball) else {
         return;
     };
     let mut velocity = body.velocity;
@@ -263,10 +263,10 @@ fn keep_moving(world: &mut World, ball: Entity, settings: Ball, tilt: Option<f32
 
 /// The ball back above the paddle, on its way up.
 fn serve(world: &mut World, ball: Entity, settings: Ball) {
-    if let Some(transform) = world.get_mut::<Transform>(ball) {
+    if let Some(transform) = world.get_mut::<Transform2D>(ball) {
         transform.translation = settings.serve;
     }
-    if let Some(body) = world.get_mut::<RigidBody>(ball) {
+    if let Some(body) = world.get_mut::<RigidBody2D>(ball) {
         body.velocity = Vec2::new(0.6, 1.0).normalize() * settings.speed;
     }
 }

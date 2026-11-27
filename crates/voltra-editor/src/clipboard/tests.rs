@@ -2,7 +2,7 @@
 //! puts it, and what the clipboard text holds.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::{Name, Sprite};
+use voltra_scene::{Name, Sprite2D};
 
 use super::*;
 
@@ -14,8 +14,8 @@ fn spawn(world: &mut World, name: &str, at: Vec2) -> Entity {
     let e = world.spawn();
     world.insert(e, SceneId::new());
     world.insert(e, Name::new(name));
-    world.insert(e, Transform::from_translation(at));
-    world.insert(e, Sprite::default());
+    world.insert(e, Transform2D::from_translation(at));
+    world.insert(e, Sprite2D::default());
     e
 }
 
@@ -133,7 +133,7 @@ fn nothing_in_the_scene_selected_copies_nothing() {
     let registry = registry();
     let mut world = World::new();
     let transient = world.spawn();
-    world.insert(transient, Transform::default());
+    world.insert(transient, Transform2D::default());
     assert!(copy(&world, &registry, &selecting(&[transient]))
         .expect("records")
         .is_none());
@@ -193,7 +193,7 @@ fn a_paste_is_numbered_only_where_its_name_is_taken_and_nameless_stays_so() {
     let player = spawn(&mut world, "Player", Vec2::ZERO);
     let nameless = world.spawn();
     world.insert(nameless, SceneId::new());
-    world.insert(nameless, Transform::default());
+    world.insert(nameless, Transform2D::default());
     let clip = copy(&world, &registry, &selecting(&[player, nameless]))
         .expect("records")
         .expect("something to copy");
@@ -225,7 +225,7 @@ fn a_variant_instance_duplicated_is_one_of_the_variant_numbered_apart() {
     let variant = path(VARIANT);
     let mut world = World::new();
     let varied = spawned(&mut world, &registry, &mut prefabs, &variant);
-    world.get_mut::<Sprite>(varied).expect("s").color = [0.0, 1.0, 0.0, 1.0];
+    world.get_mut::<Sprite2D>(varied).expect("s").color = [0.0, 1.0, 0.0, 1.0];
     prefab::refresh_overrides(&mut world, &registry, &mut prefabs, varied).expect("compared");
 
     // As `duplicate` does: copied, pasted back, its overrides said.

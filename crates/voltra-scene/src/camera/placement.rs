@@ -7,10 +7,10 @@ use voltra_assets::Textures;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
-use super::{Camera, CameraTarget};
+use super::{Camera2D, CameraTarget};
 use crate::camera_rig::CameraShake;
 use crate::hierarchy::world_matrix;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 
 /// Turns closer to upright than this are upright: a parent's `0.3` under a
 /// child's `-0.3` leaves a rounding error, not a turn, and a turned view is
@@ -38,21 +38,21 @@ pub fn normalised_turn(turn: f32) -> f32 {
 /// what a follower moves and fits by, without any shake.
 ///
 /// The position is the entity's, through its parents. The turn is its own
-/// [`Transform::rotation`], and its parents' too only when its [`Camera`]
-/// says [`Camera::inherit_rotation`] (an entity without a camera turns with
+/// [`Transform2D::rotation`], and its parents' too only when its [`Camera2D`]
+/// says [`Camera2D::inherit_rotation`] (an entity without a camera turns with
 /// its parents): a camera on a rolling ball stays upright unless asked.
 /// Normalised by [`normalised_turn`].
 pub fn placement(world: &World, entity: Entity) -> (Vec2, f32) {
     let matrix = world_matrix(world, entity);
     let position = matrix.transform_point2(Vec2::ZERO);
     let inherit = world
-        .get::<Camera>(entity)
+        .get::<Camera2D>(entity)
         .is_none_or(|camera| camera.inherit_rotation);
     let rotation = if inherit {
-        Transform::from_matrix(matrix).rotation
+        Transform2D::from_matrix(matrix).rotation
     } else {
         world
-            .get::<Transform>(entity)
+            .get::<Transform2D>(entity)
             .map_or(0.0, |transform| transform.rotation)
     };
     (position, normalised_turn(rotation))
@@ -86,7 +86,7 @@ pub fn aspect(world: &World, entity: Entity, screen: f32, textures: Option<&Text
     } else {
         1.0
     };
-    let Some(camera) = world.get::<Camera>(entity) else {
+    let Some(camera) = world.get::<Camera2D>(entity) else {
         return screen;
     };
     let texture = world

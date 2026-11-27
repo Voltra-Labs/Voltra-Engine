@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 use voltra_core::{Game, Tick};
 use voltra_render::glam::Vec2;
-use voltra_scene::{ComponentRegistry, Transform};
+use voltra_scene::{ComponentRegistry, Transform2D};
 
 /// The first scene, under the game's asset root.
 pub const FIRST_SCENE: &str = "scenes/main.ron";
@@ -60,7 +60,7 @@ impl Game for {{type}} {
             .map(|(entity, player)| (entity, player.speed))
             .collect();
         for (entity, speed) in players {
-            if let Some(transform) = tick.world.get_mut::<Transform>(entity) {
+            if let Some(transform) = tick.world.get_mut::<Transform2D>(entity) {
                 transform.translation += direction * speed * tick.delta;
             }
         }

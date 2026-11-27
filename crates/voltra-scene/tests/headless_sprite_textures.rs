@@ -1,4 +1,4 @@
-//! The whole chain, in pixels: a `Sprite`'s path becomes a handle, the handle
+//! The whole chain, in pixels: a `Sprite2D`'s path becomes a handle, the handle
 //! becomes a bind group, the batch's ranges become draw calls, and the right
 //! texels land in the right half of the frame.
 //!
@@ -18,7 +18,7 @@ use voltra_render::glam::Vec2;
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Texture};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{Sprite, SpriteBatch, Transform};
+use voltra_scene::{Sprite2D, SpriteBatch, Transform2D};
 use voltra_testkit::{headless_device, read_texture, scratch_root, Rgba, CLEAR};
 
 const SIZE: u32 = 64;
@@ -153,8 +153,8 @@ fn sprite_at(
     textures: &mut Textures,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) -> (Transform, Sprite) {
-    let mut sprite = Sprite::default();
+) -> (Transform2D, Sprite2D) {
+    let mut sprite = Sprite2D::default();
     if let Some(path) = path {
         sprite.set_texture(
             Some(AssetPath::new(path).expect("a valid asset path")),
@@ -163,7 +163,7 @@ fn sprite_at(
             queue,
         );
     }
-    (Transform::from_translation(Vec2::new(x, 0.0)), sprite)
+    (Transform2D::from_translation(Vec2::new(x, 0.0)), sprite)
 }
 
 #[test]
@@ -304,11 +304,11 @@ fn an_untextured_sprite_still_tints_through_white() {
     let root = scratch_root();
 
     let textures = Textures::new(&device, &queue, &layout, &root);
-    let sprite = Sprite::new([0.9, 0.2, 0.2, 1.0]);
+    let sprite = Sprite2D::new([0.9, 0.2, 0.2, 1.0]);
     assert!(sprite.texture_handle.is_none());
 
     let mut batch = SpriteBatch::default();
-    batch.push(Transform::default().matrix(), &sprite, Sheets::default());
+    batch.push(Transform2D::default().matrix(), &sprite, Sheets::default());
     assert_eq!(batch.ranges.len(), 1);
     assert!(
         batch.ranges[0].texture.is_none(),
@@ -393,7 +393,7 @@ fn the_frame_a_sprite_names_is_the_cell_that_reaches_the_screen() {
     let layout = texture::bind_group_layout(&device);
     let mut textures = Textures::new(&device, &queue, &layout, root.to_path_buf());
     let mut atlases = voltra_assets::Atlases::new(&root);
-    let mut sprite = Sprite::default();
+    let mut sprite = Sprite2D::default();
     sprite.set_texture(
         Some(AssetPath::new("strip.png").expect("valid")),
         &mut textures,
@@ -410,7 +410,7 @@ fn the_frame_a_sprite_names_is_the_cell_that_reaches_the_screen() {
         sprite.frame = frame;
         let mut batch = SpriteBatch::default();
         batch.push(
-            Transform::default().matrix(),
+            Transform2D::default().matrix(),
             &sprite,
             Sheets::new(&atlases, &textures),
         );

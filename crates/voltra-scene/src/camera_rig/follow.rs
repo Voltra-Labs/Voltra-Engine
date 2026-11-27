@@ -50,7 +50,7 @@ pub struct CameraFollow2D {
     pub bounds: Option<FollowBounds>,
     /// Zooms a camera on it so its targets fit, with a margin, between two
     /// sizes. `None` — the default, and not written — keeps the camera's
-    /// size; on an entity without a [`Camera`] it does nothing.
+    /// size; on an entity without a [`Camera2D`] it does nothing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub zoom: Option<FollowZoom>,
     /// What it remembers from frame to frame. Never saved.

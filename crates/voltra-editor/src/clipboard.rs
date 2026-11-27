@@ -30,7 +30,7 @@ use voltra_ecs::{Entity, World};
 use voltra_scene::format::{entity_with_id, record_entity, SceneFile, VERSION};
 use voltra_scene::hierarchy;
 use voltra_scene::prefab::{self, Prefab};
-use voltra_scene::{ComponentRegistry, SceneError, SceneId, Transform};
+use voltra_scene::{ComponentRegistry, SceneError, SceneId, Transform2D};
 
 use crate::editor::Editor;
 use crate::selection::Selection;
@@ -59,7 +59,7 @@ struct Top {
     parent: Option<SceneId>,
     /// Its transform in the world when copied, for a paste that cannot put
     /// it back under that parent. `None` without one.
-    world: Option<Transform>,
+    world: Option<Transform2D>,
 }
 
 /// The selection as a [`Clip`]; `None` when nothing selected is part of the
@@ -80,7 +80,7 @@ fn copy(
             parent: hierarchy::parent_of(world, top)
                 .and_then(|parent| world.get::<SceneId>(parent).copied()),
             world: world
-                .get::<Transform>(top)
+                .get::<Transform2D>(top)
                 .map(|_| hierarchy::world_transform(world, top)),
         });
         for entity in std::iter::once(top).chain(hierarchy::descendants(world, top)) {

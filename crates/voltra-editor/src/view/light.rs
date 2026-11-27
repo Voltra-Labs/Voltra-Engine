@@ -58,13 +58,13 @@ pub fn draw(world: &World, entity: Entity, lines: &mut LineBatch) {
 
 #[cfg(test)]
 mod tests {
-    use voltra_scene::{LightCone, Transform};
+    use voltra_scene::{LightCone, Transform2D};
 
     use super::*;
 
     fn light(world: &mut World, cone: Option<LightCone>) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         world.insert(
             entity,
             PointLight2D {
@@ -104,7 +104,7 @@ mod tests {
         let mut world = World::new();
         let squashed = light(&mut world, Some(LightCone::default()));
         // Scaled to nothing along x: its cone points nowhere.
-        if let Some(transform) = world.get_mut::<Transform>(squashed) {
+        if let Some(transform) = world.get_mut::<Transform2D>(squashed) {
             transform.scale = Vec2::new(0.0, 1.0);
         }
         let mut lines = LineBatch::default();
@@ -116,7 +116,7 @@ mod tests {
     fn anything_but_a_light_draws_nothing() {
         let mut world = World::new();
         let plain = world.spawn();
-        world.insert(plain, Transform::default());
+        world.insert(plain, Transform2D::default());
         let mut lines = LineBatch::default();
         draw(&world, plain, &mut lines);
         assert!(lines.is_empty());

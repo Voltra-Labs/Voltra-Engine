@@ -7,8 +7,8 @@ use std::f32::consts::FRAC_PI_2;
 /// The gizmo's origin in these tests, in screen pixels.
 const O: Vec2 = Vec2::new(100.0, 100.0);
 
-fn transform() -> Transform {
-    Transform::from_translation(Vec2::ZERO)
+fn transform() -> Transform2D {
+    Transform2D::from_translation(Vec2::ZERO)
 }
 
 #[test]

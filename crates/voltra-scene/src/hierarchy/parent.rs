@@ -13,14 +13,14 @@ use crate::scene_id::SceneId;
 /// surface on that invariant. One direction cannot disagree with itself, and
 /// the list a panel wants is one pass over the children ([`children_of`]).
 ///
-/// Stored by identity, resolved to a handle, exactly like [`Sprite`]'s texture:
+/// Stored by identity, resolved to a handle, exactly like [`Sprite2D`]'s texture:
 /// `id` is the truth and the only thing a file carries, `entity` is what this
 /// session resolved it to. An `Entity` is an index and a generation, both
 /// recycled by the allocator, so writing one to disk would make a scene file
 /// mean something different every run.
 ///
 /// [`children_of`]: super::link::children_of
-/// [`Sprite`]: crate::Sprite
+/// [`Sprite2D`]: crate::Sprite2D
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Parent {

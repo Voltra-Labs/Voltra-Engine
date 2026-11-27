@@ -9,9 +9,9 @@ use voltra_render::Occluder;
 
 use super::silhouette::{sprite_outlines, SpriteShapes};
 use super::{CasterShape, ShadowCaster2D};
-use crate::hierarchy::{world_matrix, WorldTransforms};
+use crate::hierarchy::{world_matrix, WorldTransforms2D};
 use crate::tilemap::TileCollider;
-use crate::{Collider, Tilemap, Transform};
+use crate::{Collider2D, Tilemap, Transform2D};
 
 /// Corners a circle collider's outline is cut into: the polygon stays
 /// within half a percent of the radius of the true circle, so its shadow's
@@ -23,7 +23,7 @@ pub const CIRCLE_SIDES: usize = 32;
 /// silhouettes read through `sprites` (none without it).
 pub fn occluders(
     world: &World,
-    transforms: &WorldTransforms,
+    transforms: &WorldTransforms2D,
     sprites: Option<SpriteShapes<'_>>,
 ) -> Vec<Occluder> {
     let casters: Vec<(Entity, &ShadowCaster2D)> = world.query::<ShadowCaster2D>().collect();
@@ -125,11 +125,11 @@ fn outlines(
 }
 
 /// `entity`'s collider as a world-space outline, counter-clockwise, placed
-/// by its own [`Transform`] as the physics places it, a full turn of any
+/// by its own [`Transform2D`] as the physics places it, a full turn of any
 /// round part cut into `sides`; `None` without one, or for a shape with no area.
 pub(super) fn collider_outline(world: &World, entity: Entity, sides: usize) -> Option<Vec<Vec2>> {
-    let collider = world.get::<Collider>(entity)?;
-    let transform = world.get::<Transform>(entity)?;
+    let collider = world.get::<Collider2D>(entity)?;
+    let transform = world.get::<Transform2D>(entity)?;
     if collider.is_degenerate(transform) {
         return None;
     }
@@ -141,7 +141,7 @@ mod tests {
     use super::*;
     use crate::hierarchy;
 
-    fn spawn(world: &mut World, transform: Transform, caster: ShadowCaster2D) -> Entity {
+    fn spawn(world: &mut World, transform: Transform2D, caster: ShadowCaster2D) -> Entity {
         let entity = world.spawn();
         world.insert(entity, transform);
         world.insert(entity, caster);
@@ -153,16 +153,16 @@ mod tests {
         let mut world = World::new();
         let wall = spawn(
             &mut world,
-            Transform::from_translation(Vec2::new(2.0, 0.0)),
+            Transform2D::from_translation(Vec2::new(2.0, 0.0)),
             ShadowCaster2D::default(),
         );
         world.insert(
             wall,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::new(0.5, 1.0),
             },
         );
-        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
+        let found = occluders(&world, &WorldTransforms2D::from_world(&world), None);
         assert_eq!(found.len(), 1);
         assert!(found[0].closed && !found[0].self_shadow);
         assert!(found[0].points.contains(&Vec2::new(2.5, 1.0)));
@@ -174,14 +174,14 @@ mod tests {
         let mut world = World::new();
         let ball = spawn(
             &mut world,
-            Transform::from_translation(Vec2::new(0.0, 3.0)),
+            Transform2D::from_translation(Vec2::new(0.0, 3.0)),
             ShadowCaster2D {
                 self_shadow: true,
                 ..ShadowCaster2D::default()
             },
         );
-        world.insert(ball, Collider::Circle { radius: 2.0 });
-        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
+        world.insert(ball, Collider2D::Circle { radius: 2.0 });
+        let found = occluders(&world, &WorldTransforms2D::from_world(&world), None);
         assert_eq!(found[0].points.len(), CIRCLE_SIDES);
         assert!(found[0].self_shadow);
         assert!(found[0]
@@ -193,15 +193,23 @@ mod tests {
     #[test]
     fn a_collider_shape_without_a_collider_casts_nothing() {
         let mut world = World::new();
-        spawn(&mut world, Transform::default(), ShadowCaster2D::default());
-        let flat = spawn(&mut world, Transform::default(), ShadowCaster2D::default());
+        spawn(
+            &mut world,
+            Transform2D::default(),
+            ShadowCaster2D::default(),
+        );
+        let flat = spawn(
+            &mut world,
+            Transform2D::default(),
+            ShadowCaster2D::default(),
+        );
         world.insert(
             flat,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::new(0.0, 1.0),
             },
         );
-        assert!(occluders(&world, &WorldTransforms::from_world(&world), None).is_empty());
+        assert!(occluders(&world, &WorldTransforms2D::from_world(&world), None).is_empty());
     }
 
     #[test]
@@ -210,12 +218,12 @@ mod tests {
         let parent = world.spawn();
         world.insert(
             parent,
-            Transform::from_translation(Vec2::new(10.0, 0.0)).with_scale(Vec2::splat(2.0)),
+            Transform2D::from_translation(Vec2::new(10.0, 0.0)).with_scale(Vec2::splat(2.0)),
         );
         world.insert(parent, crate::SceneId::new());
         let line = spawn(
             &mut world,
-            Transform::default(),
+            Transform2D::default(),
             ShadowCaster2D {
                 shape: CasterShape::Polygon {
                     points: vec![Vec2::ZERO, Vec2::new(1.0, 0.0)],
@@ -226,7 +234,7 @@ mod tests {
             },
         );
         hierarchy::set_parent(&mut world, line, parent).expect("no cycle");
-        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
+        let found = occluders(&world, &WorldTransforms2D::from_world(&world), None);
         assert!(!found[0].closed);
         assert_eq!(
             found[0].points,
@@ -237,7 +245,11 @@ mod tests {
     #[test]
     fn a_solid_layer_casts_its_generated_boxes() {
         let mut world = World::new();
-        let layer = spawn(&mut world, Transform::default(), ShadowCaster2D::default());
+        let layer = spawn(
+            &mut world,
+            Transform2D::default(),
+            ShadowCaster2D::default(),
+        );
         let mut map = Tilemap::default();
         map.collision = true;
         map.set(
@@ -252,7 +264,7 @@ mod tests {
         crate::tilemap::sync_colliders(&mut world);
         // Another layer's boxes are not this caster's.
         let other = world.spawn();
-        world.insert(other, Transform::default());
+        world.insert(other, Transform2D::default());
         let mut other_map = Tilemap::default();
         other_map.collision = true;
         other_map.set(
@@ -262,7 +274,7 @@ mod tests {
         world.insert(other, other_map);
         crate::tilemap::sync_colliders(&mut world);
 
-        let found = occluders(&world, &WorldTransforms::from_world(&world), None);
+        let found = occluders(&world, &WorldTransforms2D::from_world(&world), None);
         assert_eq!(found.len(), 2, "two separate tiles, two boxes: {found:?}");
         assert!(found.iter().all(|o| o.closed && o.points.len() == 4));
     }
@@ -270,20 +282,28 @@ mod tests {
     #[test]
     fn one_caster_s_outlines_are_its_own() {
         let mut world = World::new();
-        let mine = spawn(&mut world, Transform::default(), ShadowCaster2D::default());
-        world.insert(mine, Collider::Circle { radius: 1.0 });
-        let theirs = spawn(&mut world, Transform::default(), ShadowCaster2D::default());
-        world.insert(theirs, Collider::Circle { radius: 1.0 });
+        let mine = spawn(
+            &mut world,
+            Transform2D::default(),
+            ShadowCaster2D::default(),
+        );
+        world.insert(mine, Collider2D::Circle { radius: 1.0 });
+        let theirs = spawn(
+            &mut world,
+            Transform2D::default(),
+            ShadowCaster2D::default(),
+        );
+        world.insert(theirs, Collider2D::Circle { radius: 1.0 });
         let plain = world.spawn();
-        world.insert(plain, Transform::default());
-        world.insert(plain, Collider::Circle { radius: 1.0 });
+        world.insert(plain, Transform2D::default());
+        world.insert(plain, Collider2D::Circle { radius: 1.0 });
         assert_eq!(outlines_of(&world, mine, None).len(), 1);
         assert!(
             outlines_of(&world, plain, None).is_empty(),
             "no caster, no shadow"
         );
         assert_eq!(
-            occluders(&world, &WorldTransforms::from_world(&world), None).len(),
+            occluders(&world, &WorldTransforms2D::from_world(&world), None).len(),
             2
         );
     }

@@ -9,7 +9,7 @@ use voltra_ecs::{Entity, World};
 use voltra_physics::PhysicsWorld;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    Collider, CollisionLayers, ConvexPolygon, OneWay, PhysicsMaterial, RigidBody, Transform,
+    Collider2D, CollisionLayers, ConvexPolygon, OneWay, PhysicsMaterial, RigidBody2D, Transform2D,
 };
 
 /// A static wall 0.1 thick, its left face at x = 5.
@@ -17,11 +17,11 @@ fn wall(world: &mut World) -> Entity {
     spawn_box(world, Vec2::new(5.05, 0.0), Vec2::new(0.05, 5.0), None)
 }
 
-fn shot(world: &mut World, collider: Collider, velocity: Vec2) -> Entity {
+fn shot(world: &mut World, collider: Collider2D, velocity: Vec2) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::default());
+    world.insert(entity, Transform2D::default());
     world.insert(entity, collider);
-    let mut body = RigidBody::new_dynamic(1.0);
+    let mut body = RigidBody2D::new_dynamic(1.0);
     body.velocity = velocity;
     body.gravity_scale = 0.0;
     world.insert(entity, body);
@@ -34,25 +34,25 @@ fn steps(world: &mut World, physics: &mut PhysicsWorld, count: usize) {
     }
 }
 
-fn shapes() -> [(&'static str, Collider); 4] {
+fn shapes() -> [(&'static str, Collider2D); 4] {
     [
         (
             "box",
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::splat(0.25),
             },
         ),
-        ("circle", Collider::Circle { radius: 0.25 }),
+        ("circle", Collider2D::Circle { radius: 0.25 }),
         (
             "capsule",
-            Collider::Capsule {
+            Collider2D::Capsule {
                 half_height: 0.5,
                 radius: 0.25,
             },
         ),
         (
             "polygon",
-            Collider::Polygon {
+            Collider2D::Polygon {
                 points: ConvexPolygon::new(&[
                     Vec2::new(0.25, 0.0),
                     Vec2::new(-0.25, 0.25),
@@ -91,7 +91,7 @@ fn without_continuous_collision_it_tunnels() {
     wall(&mut world);
     let fast = shot(
         &mut world,
-        Collider::Circle { radius: 0.25 },
+        Collider2D::Circle { radius: 0.25 },
         Vec2::new(200.0, 0.0),
     );
     let mut physics = PhysicsWorld::new();
@@ -116,7 +116,7 @@ fn a_fast_ball_bounces_off_a_thin_wall_as_a_slow_one_would() {
     world.insert(barrier, bouncy);
     let fast = shot(
         &mut world,
-        Collider::Circle { radius: 0.25 },
+        Collider2D::Circle { radius: 0.25 },
         Vec2::new(200.0, 0.0),
     );
     world.insert(fast, bouncy);
@@ -139,17 +139,17 @@ fn a_fast_fall_lands_on_the_floor() {
     );
     let fast = shot(
         &mut world,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.25),
         },
         Vec2::new(0.0, -300.0),
     );
     world
-        .get_mut::<Transform>(fast)
+        .get_mut::<Transform2D>(fast)
         .expect("placed")
         .translation = Vec2::new(0.0, 10.0);
     world
-        .get_mut::<RigidBody>(fast)
+        .get_mut::<RigidBody2D>(fast)
         .expect("a body")
         .gravity_scale = 1.0;
     let mut physics = PhysicsWorld::new();
@@ -166,14 +166,14 @@ fn a_spinning_bar_does_not_sweep_through_a_wall() {
     wall(&mut world);
     let bar = shot(
         &mut world,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(5.5, 0.05),
         },
         Vec2::ZERO,
     );
-    world.get_mut::<Transform>(bar).expect("placed").rotation = std::f32::consts::FRAC_PI_2;
+    world.get_mut::<Transform2D>(bar).expect("placed").rotation = std::f32::consts::FRAC_PI_2;
     world
-        .get_mut::<RigidBody>(bar)
+        .get_mut::<RigidBody2D>(bar)
         .expect("a body")
         .angular_velocity = -60.0;
     let mut physics = PhysicsWorld::new();
@@ -213,15 +213,15 @@ fn a_bullet_stops_at_a_thin_moving_body_and_a_plain_body_does_not() {
             Some(1.0),
         );
         world
-            .get_mut::<RigidBody>(plank)
+            .get_mut::<RigidBody2D>(plank)
             .expect("a body")
             .gravity_scale = 0.0;
         let fast = shot(
             &mut world,
-            Collider::Circle { radius: 0.1 },
+            Collider2D::Circle { radius: 0.1 },
             Vec2::new(200.0, 0.0),
         );
-        world.get_mut::<RigidBody>(fast).expect("a body").bullet = bullet;
+        world.get_mut::<RigidBody2D>(fast).expect("a body").bullet = bullet;
         let mut physics = PhysicsWorld::new();
         steps(&mut world, &mut physics, 10);
 
@@ -256,20 +256,20 @@ fn a_fast_body_falls_onto_a_one_way_platform_and_rises_through_it() {
     world.insert(platform, OneWay::default());
     let falling = shot(
         &mut world,
-        Collider::Circle { radius: 0.25 },
+        Collider2D::Circle { radius: 0.25 },
         Vec2::new(0.0, -300.0),
     );
     world
-        .get_mut::<Transform>(falling)
+        .get_mut::<Transform2D>(falling)
         .expect("placed")
         .translation = Vec2::new(0.0, 8.0);
     let rising = shot(
         &mut world,
-        Collider::Circle { radius: 0.25 },
+        Collider2D::Circle { radius: 0.25 },
         Vec2::new(0.0, 300.0),
     );
     world
-        .get_mut::<Transform>(rising)
+        .get_mut::<Transform2D>(rising)
         .expect("placed")
         .translation = Vec2::new(2.0, -8.0);
     let mut physics = PhysicsWorld::new();
@@ -295,7 +295,7 @@ fn a_wall_on_a_layer_the_body_does_not_see_is_passed() {
     );
     let fast = shot(
         &mut world,
-        Collider::Circle { radius: 0.25 },
+        Collider2D::Circle { radius: 0.25 },
         Vec2::new(200.0, 0.0),
     );
     world.insert(

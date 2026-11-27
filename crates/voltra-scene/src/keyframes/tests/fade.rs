@@ -8,7 +8,7 @@ use voltra_render::glam::Vec2;
 
 use super::*;
 use crate::hierarchy::despawn_recursive;
-use crate::{PointLight2D, Sprite, Transform};
+use crate::{PointLight2D, Sprite2D, Transform2D};
 
 /// A clip holding the player at `x` and its lamp at `intensity`.
 fn hold(x: f32, intensity: f32) -> String {
@@ -30,7 +30,7 @@ fn store(files: &[(&str, String)]) -> AnimationClips {
 }
 
 fn x(world: &World, entity: voltra_ecs::Entity) -> f32 {
-    world.get::<Transform>(entity).expect("t").translation.x
+    world.get::<Transform2D>(entity).expect("t").translation.x
 }
 
 fn fading(world: &mut World, root: voltra_ecs::Entity, clip: &str, duration: f32) {
@@ -107,7 +107,7 @@ fn a_rotation_fades_the_short_way_round() {
     fading(&mut world, root, "b.anim.ron", 0.4);
     advance(&mut world, &mut clips, 0.2);
     let turned = world
-        .get::<Transform>(root)
+        .get::<Transform2D>(root)
         .expect("t")
         .rotation
         .rem_euclid(TAU);
@@ -117,7 +117,7 @@ fn a_rotation_fades_the_short_way_round() {
         turned.to_degrees()
     );
     advance(&mut world, &mut clips, 0.5);
-    let end = world.get::<Transform>(root).expect("t").rotation;
+    let end = world.get::<Transform2D>(root).expect("t").rotation;
     assert!(
         (end - 10f32.to_radians()).abs() < 1e-6,
         "ends on b's own value"
@@ -132,14 +132,14 @@ fn a_sprite_frame_switches_at_half_way() {
     let mut clips = store(&[("a.anim.ron", frame(2)), ("b.anim.ron", frame(7))]);
     let mut world = World::new();
     let (root, _) = rig(&mut world, "a.anim.ron");
-    world.insert(root, Sprite::default());
+    world.insert(root, Sprite2D::default());
     advance(&mut world, &mut clips, 0.0);
     fading(&mut world, root, "b.anim.ron", 1.0);
     advance(&mut world, &mut clips, 0.4);
-    assert_eq!(world.get::<Sprite>(root).expect("s").frame, 2);
+    assert_eq!(world.get::<Sprite2D>(root).expect("s").frame, 2);
     advance(&mut world, &mut clips, 0.15);
     assert_eq!(
-        world.get::<Sprite>(root).expect("s").frame,
+        world.get::<Sprite2D>(root).expect("s").frame,
         7,
         "past half way"
     );
@@ -271,7 +271,7 @@ fn a_paused_fade_holds_and_a_clip_that_ends_first_is_held_to_the_end() {
     fading(&mut world, root, "a.anim.ron", 1.0);
     advance(&mut world, &mut clips, 0.0);
     world.get_mut::<AnimationPlayer>(root).expect("p").playing = false;
-    world.get_mut::<Transform>(root).expect("t").translation = Vec2::new(-1.0, 0.0);
+    world.get_mut::<Transform2D>(root).expect("t").translation = Vec2::new(-1.0, 0.0);
     advance(&mut world, &mut clips, 0.5);
     assert_eq!(x(&world, root), -1.0, "paused: nothing written");
     assert_eq!(

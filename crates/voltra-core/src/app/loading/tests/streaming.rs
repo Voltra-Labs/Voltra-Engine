@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Camera, Name, Persistent, StreamingAnchor, Transform, WorldRegions};
+use voltra_scene::{Camera2D, Name, Persistent, StreamingAnchor, Transform2D, WorldRegions};
 use voltra_testkit::scratch_root;
 
 use super::{path, run_frame, write_grid, BudgetCheck};
@@ -72,7 +72,7 @@ fn walk(
     let mut x = 0.0;
     while x <= end {
         app.world
-            .insert(camera, Transform::from_translation(Vec2::new(x, y)));
+            .insert(camera, Transform2D::from_translation(Vec2::new(x, y)));
         run_frame(app);
         budget.frame(&app.load_stats());
 
@@ -99,8 +99,8 @@ fn walk(
 
 fn anchored_camera(world: &mut World) -> Entity {
     let camera = world.spawn();
-    world.insert(camera, Camera::new(8.0));
-    world.insert(camera, Transform::default());
+    world.insert(camera, Camera2D::new(8.0));
+    world.insert(camera, Transform2D::default());
     world.insert(camera, StreamingAnchor::default());
     world.insert(camera, Persistent);
     camera
@@ -190,7 +190,7 @@ fn every_anchor_keeps_its_own_regions_in() {
     for x in [8.0, CELL * COLUMNS as f32 - 8.0] {
         let anchor = app.world.spawn();
         app.world
-            .insert(anchor, Transform::from_translation(Vec2::new(x, y)));
+            .insert(anchor, Transform2D::from_translation(Vec2::new(x, y)));
         app.world.insert(anchor, StreamingAnchor::with_radius(4.0));
     }
     app.stream_world(&file);
@@ -219,9 +219,9 @@ fn with_no_anchor_the_active_camera_is_one() {
         .with_asset_root(&root)
         .with_load_budget(Duration::from_secs(1));
     let camera = app.world.spawn();
-    app.world.insert(camera, Camera::new(8.0));
+    app.world.insert(camera, Camera2D::new(8.0));
     app.world
-        .insert(camera, Transform::from_translation(Vec2::new(8.0, 8.0)));
+        .insert(camera, Transform2D::from_translation(Vec2::new(8.0, 8.0)));
     app.stream_world(&file);
     for _ in 0..100 {
         run_frame(&mut app);
@@ -250,7 +250,7 @@ fn a_broken_region_is_left_out_and_the_rest_load() {
         .with_load_budget(Duration::from_secs(1));
     let camera = anchored_camera(&mut app.world);
     app.world
-        .insert(camera, Transform::from_translation(Vec2::new(16.0, 16.0)));
+        .insert(camera, Transform2D::from_translation(Vec2::new(16.0, 16.0)));
     app.stream_world(&file);
     for _ in 0..100 {
         run_frame(&mut app);

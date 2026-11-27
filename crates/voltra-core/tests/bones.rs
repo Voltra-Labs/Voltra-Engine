@@ -72,7 +72,7 @@ fn the_sample_walks_by_its_clip_of_bone_rotations() {
     // the thigh's line at some point and back again.
     let world = session.world();
     let shin = world
-        .get::<voltra_scene::Transform>(named(world, "shin_l"))
+        .get::<voltra_scene::Transform2D>(named(world, "shin_l"))
         .expect("a shin");
     assert!(
         shin.rotation.abs() < 0.2,

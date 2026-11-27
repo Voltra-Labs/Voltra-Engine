@@ -37,7 +37,7 @@ impl Score {
     pub const NAME: &'static str = "Score";
 }
 
-/// The coin. Not replicated as a type — its `Transform` is — but marks the
+/// The coin. Not replicated as a type — its `Transform2D` is — but marks the
 /// entity on every end, spawned from the same prefab.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Coin;

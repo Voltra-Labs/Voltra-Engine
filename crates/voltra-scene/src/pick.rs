@@ -14,11 +14,11 @@ pub use text::text_at;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Mat3, Vec2};
 
-use crate::hierarchy::WorldTransforms;
+use crate::hierarchy::WorldTransforms2D;
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
-use crate::sprite::{draw_key, Sprite};
-use crate::transform::Transform;
+use crate::sprite::{draw_key, Sprite2D};
+use crate::transform::Transform2D;
 
 /// Determinant at or below which a transform counts as collapsed.
 ///
@@ -51,11 +51,11 @@ pub(crate) const MIN_DETERMINANT: f32 = 1e-12;
 /// [`SpriteBatch::from_world`]: crate::batch::SpriteBatch::from_world
 pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entity> {
     // The same composed matrices the batch draws with, so what is picked is
-    // what is on screen. A parented sprite is nowhere near its own `Transform`.
-    let transforms = WorldTransforms::seen_from(world, sheets.camera);
+    // what is on screen. A parented sprite is nowhere near its own `Transform2D`.
+    let transforms = WorldTransforms2D::seen_from(world, sheets.camera);
 
     world
-        .query2::<Transform, Sprite>()
+        .query2::<Transform2D, Sprite2D>()
         .filter(|(entity, _transform, sprite)| {
             // Screen-space elements are not in the world to be clicked.
             !crate::ui::is_ui(world, *entity)
@@ -79,7 +79,7 @@ pub fn sprite_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
 pub fn entity_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entity> {
     let sprite = sprite_at(world, point, sheets).map(|entity| {
         let (rank, order) = world
-            .get::<Sprite>(entity)
+            .get::<Sprite2D>(entity)
             .map_or((0, 0), |s| (sheets.rank(&s.sorting_layer), s.sort_order));
         (entity, draw_key(entity, rank, order))
     });
@@ -101,7 +101,7 @@ pub fn entity_at(world: &World, point: Vec2, sheets: Sheets<'_>) -> Option<Entit
 /// unit quad before its transform, so once the point is local the test is two
 /// comparisons — and rotation and non-uniform scale come out exact with no
 /// second code path.
-fn contains(matrix: Mat3, point: Vec2, sprite: &Sprite, sheets: Sheets<'_>) -> bool {
+fn contains(matrix: Mat3, point: Vec2, sprite: &Sprite2D, sheets: Sheets<'_>) -> bool {
     // A zero scale on either axis makes the matrix singular. `Mat3::inverse`
     // does not panic on one: it returns infinities and NaN, and every
     // comparison against NaN is false. `inverse_or_zero` is worse rather than
@@ -125,7 +125,7 @@ mod tests {
     use super::*;
     use std::f32::consts::FRAC_PI_4;
 
-    // `World`, `Entity`, `Transform`, `Sprite` and `Vec2` all arrive through
+    // `World`, `Entity`, `Transform2D`, `Sprite2D` and `Vec2` all arrive through
     // `super::*` — do not import them again here, or the glob and the explicit
     // import name the same item twice.
 
@@ -134,7 +134,7 @@ mod tests {
         sprite_at(world, point, Sheets::default())
     }
 
-    fn spawn(world: &mut World, transform: Transform, sprite: Sprite) -> Entity {
+    fn spawn(world: &mut World, transform: Transform2D, sprite: Sprite2D) -> Entity {
         let e = world.spawn();
         world.insert(e, transform);
         world.insert(e, sprite);
@@ -149,7 +149,7 @@ mod tests {
     #[test]
     fn a_point_outside_every_sprite_picks_nothing() {
         let mut world = World::new();
-        spawn(&mut world, Transform::default(), Sprite::default());
+        spawn(&mut world, Transform2D::default(), Sprite2D::default());
         assert_eq!(pick(&world, Vec2::new(5.0, 5.0)), None);
     }
 
@@ -158,13 +158,13 @@ mod tests {
         let mut world = World::new();
         let a = spawn(
             &mut world,
-            Transform::from_translation(Vec2::new(-2.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(-2.0, 0.0)),
+            Sprite2D::default(),
         );
         let b = spawn(
             &mut world,
-            Transform::from_translation(Vec2::new(2.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(2.0, 0.0)),
+            Sprite2D::default(),
         );
 
         assert_eq!(pick(&world, Vec2::new(-2.1, 0.1)), Some(a));
@@ -179,8 +179,8 @@ mod tests {
         // box is outside the diamond.
         spawn(
             &mut world,
-            Transform::default().with_rotation(FRAC_PI_4),
-            Sprite::default(),
+            Transform2D::default().with_rotation(FRAC_PI_4),
+            Sprite2D::default(),
         );
 
         // Inside the diamond.
@@ -196,8 +196,8 @@ mod tests {
         // Four wide, half tall.
         spawn(
             &mut world,
-            Transform::default().with_scale(Vec2::new(4.0, 0.5)),
-            Sprite::default(),
+            Transform2D::default().with_scale(Vec2::new(4.0, 0.5)),
+            Sprite2D::default(),
         );
 
         assert!(pick(&world, Vec2::new(1.8, 0.0)).is_some());
@@ -210,13 +210,13 @@ mod tests {
         let mut world = World::new();
         let _under = spawn(
             &mut world,
-            Transform::default(),
-            Sprite::default().with_sort_order(10),
+            Transform2D::default(),
+            Sprite2D::default().with_sort_order(10),
         );
         let over = spawn(
             &mut world,
-            Transform::default(),
-            Sprite::default().with_sort_order(20),
+            Transform2D::default(),
+            Sprite2D::default().with_sort_order(20),
         );
 
         assert_eq!(pick(&world, Vec2::ZERO), Some(over));
@@ -225,13 +225,13 @@ mod tests {
         let mut reversed = World::new();
         let over_first = spawn(
             &mut reversed,
-            Transform::default(),
-            Sprite::default().with_sort_order(20),
+            Transform2D::default(),
+            Sprite2D::default().with_sort_order(20),
         );
         spawn(
             &mut reversed,
-            Transform::default(),
-            Sprite::default().with_sort_order(10),
+            Transform2D::default(),
+            Sprite2D::default().with_sort_order(10),
         );
         assert_eq!(pick(&reversed, Vec2::ZERO), Some(over_first));
     }
@@ -239,8 +239,8 @@ mod tests {
     #[test]
     fn an_overlap_tie_goes_to_the_later_entity() {
         let mut world = World::new();
-        let _first = spawn(&mut world, Transform::default(), Sprite::default());
-        let second = spawn(&mut world, Transform::default(), Sprite::default());
+        let _first = spawn(&mut world, Transform2D::default(), Sprite2D::default());
+        let second = spawn(&mut world, Transform2D::default(), Sprite2D::default());
 
         assert_eq!(pick(&world, Vec2::ZERO), Some(second));
     }
@@ -250,8 +250,8 @@ mod tests {
         let mut world = World::new();
         spawn(
             &mut world,
-            Transform::default().with_scale(Vec2::new(0.0, 1.0)),
-            Sprite::default(),
+            Transform2D::default().with_scale(Vec2::new(0.0, 1.0)),
+            Sprite2D::default(),
         );
 
         // Honest about its own weakness: this passes with the determinant check
@@ -274,8 +274,8 @@ mod tests {
         // far thinner than a pixel is pickable along its entire centre line.
         spawn(
             &mut world,
-            Transform::default().with_scale(Vec2::new(1e-30, 1.0)),
-            Sprite::default(),
+            Transform2D::default().with_scale(Vec2::new(1e-30, 1.0)),
+            Sprite2D::default(),
         );
 
         assert_eq!(pick(&world, Vec2::ZERO), None);
@@ -292,8 +292,8 @@ mod tests {
         // rather than merely present.
         let sprite = spawn(
             &mut world,
-            Transform::default().with_scale(Vec2::splat(1e-4)),
-            Sprite::default(),
+            Transform2D::default().with_scale(Vec2::splat(1e-4)),
+            Sprite2D::default(),
         );
 
         assert_eq!(pick(&world, Vec2::ZERO), Some(sprite));
@@ -315,11 +315,11 @@ mod tests {
         let mut world = World::new();
         let third = spawn(
             &mut world,
-            Transform::from_translation(Vec2::new(50.0, 50.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(50.0, 50.0)),
+            Sprite2D::default(),
         );
-        let _first = spawn(&mut world, Transform::default(), Sprite::default());
-        let second = spawn(&mut world, Transform::default(), Sprite::default());
+        let _first = spawn(&mut world, Transform2D::default(), Sprite2D::default());
+        let second = spawn(&mut world, Transform2D::default(), Sprite2D::default());
 
         assert_eq!(pick(&world, Vec2::ZERO), Some(second));
 
@@ -342,13 +342,13 @@ mod tests {
         let mut world = World::new();
         let top = spawn(
             &mut world,
-            Transform::default(),
-            Sprite::new([0.0, 1.0, 0.0, 1.0]).with_sort_order(2),
+            Transform2D::default(),
+            Sprite2D::new([0.0, 1.0, 0.0, 1.0]).with_sort_order(2),
         );
         spawn(
             &mut world,
-            Transform::default(),
-            Sprite::new([1.0, 0.0, 0.0, 1.0]).with_sort_order(1),
+            Transform2D::default(),
+            Sprite2D::new([1.0, 0.0, 0.0, 1.0]).with_sort_order(1),
         );
 
         let batch = crate::batch::SpriteBatch::from_world(&world, Sheets::default());
@@ -366,12 +366,12 @@ mod tests {
         use voltra_render::glam::IVec2;
 
         let mut world = World::new();
-        let sprite = spawn(&mut world, Transform::default(), Sprite::default());
+        let sprite = spawn(&mut world, Transform2D::default(), Sprite2D::default());
         let mut map = Tilemap::new(Vec2::ONE);
         map.set(IVec2::new(-1, -1), Some(Tile::new(0)));
         map.sort_order = 1;
         let layer = world.spawn();
-        world.insert(layer, Transform::default());
+        world.insert(layer, Transform2D::default());
         world.insert(layer, map);
 
         let at = Vec2::splat(-0.25);
@@ -410,8 +410,8 @@ mod frame_tests {
         let (mut atlases, path) = atlases();
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
-        let mut sprite = Sprite::default();
+        world.insert(entity, Transform2D::default());
+        let mut sprite = Sprite2D::default();
         sprite.set_atlas(Some(path), &mut atlases);
         sprite.pixels_per_unit = Some(16.0);
         world.insert(entity, sprite);
@@ -453,8 +453,8 @@ mod frame_tests {
         // was authored against, rather than a sprite that silently shrinks.
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
-        world.insert(entity, Sprite::default());
+        world.insert(entity, Transform2D::default());
+        world.insert(entity, Sprite2D::default());
 
         assert_eq!(
             sprite_at(&world, Vec2::new(0.4, 0.4), Sheets::default()),

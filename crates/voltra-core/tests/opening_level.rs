@@ -16,7 +16,9 @@ use voltra_core::replication::ReplicationConfig;
 use voltra_core::{App, Headless};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{ComponentRegistry, Name, Persistent, Replicated, SceneId, Sprite, Transform};
+use voltra_scene::{
+    ComponentRegistry, Name, Persistent, Replicated, SceneId, Sprite2D, Transform2D,
+};
 use voltra_testkit::scratch_root;
 
 const FRAME: f32 = 1.0 / 60.0;
@@ -29,18 +31,18 @@ fn write_level(root: &Path, name: &str, coin: Option<SceneId>) {
     let wall = level.spawn();
     level.insert(wall, SceneId::new());
     level.insert(wall, Name::new("Wall"));
-    level.insert(wall, Transform::default());
+    level.insert(wall, Transform2D::default());
     if let Some(id) = coin {
         let coin = level.spawn();
         level.insert(coin, id);
         level.insert(coin, Name::new("Coin"));
-        level.insert(coin, Transform::from_translation(Vec2::new(1.0, 2.0)));
-        level.insert(coin, Sprite::default().with_sort_order(7));
+        level.insert(coin, Transform2D::from_translation(Vec2::new(1.0, 2.0)));
+        level.insert(coin, Sprite2D::default().with_sort_order(7));
         level.insert(coin, Replicated::default());
         let glow = level.spawn();
         level.insert(glow, SceneId::new());
         level.insert(glow, Name::new("Glow"));
-        level.insert(glow, Transform::default());
+        level.insert(glow, Transform2D::default());
         voltra_scene::hierarchy::set_parent(&mut level, glow, coin).expect("parents");
     }
     save(root, name, &level);
@@ -94,7 +96,7 @@ fn assert_dressed(server: &mut Headless, client: &mut Headless, coin_id: SceneId
     let world = client.world();
     assert_eq!(world.get::<SceneId>(coins[0]), Some(&coin_id));
     assert_eq!(
-        world.get::<Sprite>(coins[0]).map(|s| s.sort_order),
+        world.get::<Sprite2D>(coins[0]).map(|s| s.sort_order),
         Some(7),
         "the level's own sprite kept"
     );
@@ -105,7 +107,7 @@ fn assert_dressed(server: &mut Headless, client: &mut Headless, coin_id: SceneId
         .map(|(e, _)| e)
         .collect();
     for entity in ours {
-        if let Some(t) = server.world_mut().get_mut::<Transform>(entity) {
+        if let Some(t) = server.world_mut().get_mut::<Transform2D>(entity) {
             t.translation = Vec2::new(5.0, 6.0);
         }
     }
@@ -114,7 +116,7 @@ fn assert_dressed(server: &mut Headless, client: &mut Headless, coin_id: SceneId
     assert_eq!(
         client
             .world()
-            .get::<Transform>(coins[0])
+            .get::<Transform2D>(coins[0])
             .map(|t| t.translation),
         Some(Vec2::new(5.0, 6.0)),
         "the server's copy"
@@ -367,7 +369,10 @@ fn a_level_entity_asked_for_again_comes_back_though_the_asks_are_lost() {
     let coins = replicated(&client);
     assert_eq!(coins.len(), 1, "asked for until it came");
     assert_eq!(
-        client.world().get::<Sprite>(coins[0]).map(|s| s.sort_order),
+        client
+            .world()
+            .get::<Sprite2D>(coins[0])
+            .map(|s| s.sort_order),
         Some(7)
     );
 }
@@ -415,7 +420,7 @@ fn an_ask_for_an_entity_the_server_despawned_meanwhile_is_answered() {
         .map(|(e, _)| e)
         .collect();
     for &coin in &theirs {
-        if let Some(t) = server.world_mut().get_mut::<Transform>(coin) {
+        if let Some(t) = server.world_mut().get_mut::<Transform2D>(coin) {
             t.translation.x += 1.0;
         }
     }

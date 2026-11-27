@@ -101,10 +101,29 @@ fn no_code_spells_a_registered_name() {
             .expect("under the root")
             .to_string_lossy()
             .replace('\\', "/");
-        for (number, line) in text.lines().enumerate() {
-            // A file's own unit tests are its last module.
-            if line.trim() == "#[cfg(test)]" {
-                break;
+        let lines: Vec<&str> = text.lines().collect();
+        // Inside a `#[cfg(test)]` module, by brace depth: zero is outside.
+        let mut in_tests = 0usize;
+        let mut module_line = false;
+        for (number, line) in lines.iter().enumerate() {
+            if std::mem::take(&mut module_line) {
+                continue;
+            }
+            if in_tests > 0 {
+                in_tests = (in_tests + line.matches('{').count())
+                    .saturating_sub(line.matches('}').count());
+                continue;
+            }
+            let test_module = line.trim() == "#[cfg(test)]"
+                && lines
+                    .get(number + 1)
+                    .is_some_and(|next| next.trim_start().starts_with("mod "));
+            if test_module {
+                let next = lines[number + 1];
+                // `mod tests;` is another file, left out by its name.
+                in_tests = next.matches('{').count();
+                module_line = true;
+                continue;
             }
             let code = line.trim_start();
             if code.starts_with("//") || code.contains("const NAME: &'static str") {

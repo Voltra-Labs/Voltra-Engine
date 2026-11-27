@@ -15,7 +15,7 @@ use std::f32::consts::{PI, TAU};
 
 use voltra_ecs::Entity;
 use voltra_render::glam::{Mat2, Vec2};
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use super::handle::Handle;
 use crate::tool::Tool;
@@ -48,7 +48,7 @@ pub struct Drag {
     /// Cursor position, in world units, when the grab began.
     pub grab: Vec2,
     /// The entity's transform when the grab began.
-    pub start: Transform,
+    pub start: Transform2D,
     /// Angle from the pivot to the cursor last frame, in radians.
     last_angle: f32,
     /// Total angle turned since the grab began, in radians.
@@ -61,7 +61,13 @@ pub struct Drag {
 
 impl Drag {
     /// Begins a grab on `entity`, whose transform is `start`.
-    pub fn begin(entity: Entity, tool: Tool, handle: Handle, grab: Vec2, start: Transform) -> Self {
+    pub fn begin(
+        entity: Entity,
+        tool: Tool,
+        handle: Handle,
+        grab: Vec2,
+        start: Transform2D,
+    ) -> Self {
         Self {
             entity,
             tool,
@@ -77,17 +83,17 @@ impl Drag {
     ///
     /// Takes `&mut self` for the rotate tool alone, which has to remember where
     /// the cursor was last frame to know which way it went round.
-    pub fn transform(&mut self, cursor: Vec2) -> Transform {
+    pub fn transform(&mut self, cursor: Vec2) -> Transform2D {
         match self.tool {
-            Tool::Translate => Transform {
+            Tool::Translate => Transform2D {
                 translation: self.translation(cursor),
                 ..self.start
             },
-            Tool::Rotate => Transform {
+            Tool::Rotate => Transform2D {
                 rotation: self.start.rotation + self.turn(cursor),
                 ..self.start
             },
-            Tool::Scale => Transform {
+            Tool::Scale => Transform2D {
                 scale: self.scale(cursor),
                 ..self.start
             },
@@ -203,12 +209,12 @@ mod tests {
     /// Spawned from a `World` because nothing public constructs an `Entity`
     /// from parts, and adding a constructor to `voltra-ecs` for a test's
     /// convenience would widen that crate's API for no other caller.
-    fn drag(tool: Tool, handle: Handle, grab: Vec2, start: Transform) -> Drag {
+    fn drag(tool: Tool, handle: Handle, grab: Vec2, start: Transform2D) -> Drag {
         Drag::begin(World::new().spawn(), tool, handle, grab, start)
     }
 
-    fn at(translation: Vec2) -> Transform {
-        Transform::from_translation(translation)
+    fn at(translation: Vec2) -> Transform2D {
+        Transform2D::from_translation(translation)
     }
 
     #[test]
@@ -291,7 +297,7 @@ mod tests {
     #[test]
     fn a_rotate_drag_turns_by_the_angle_swept() {
         // Grabbed at +x, dragged to +y: a quarter turn counter-clockwise, which
-        // is the positive direction `Transform::rotation` is documented in.
+        // is the positive direction `Transform2D::rotation` is documented in.
         let mut d = drag(
             Tool::Rotate,
             Handle::Ring,

@@ -54,13 +54,13 @@ impl ParticlePreview {
 
 #[cfg(test)]
 mod tests {
-    use voltra_scene::Transform;
+    use voltra_scene::Transform2D;
 
     use super::*;
 
     fn emitter(world: &mut World) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
+        world.insert(entity, Transform2D::default());
         world.insert(
             entity,
             ParticleEmitter {

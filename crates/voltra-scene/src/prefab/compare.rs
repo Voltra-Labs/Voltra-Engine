@@ -17,7 +17,7 @@ pub(super) const STRUCTURE: [&str; 3] = [Parent::NAME, PrefabInstance::NAME, Pre
 /// Whether a sync keeps `name` in step on an entity: not structure, and not
 /// the instance root's placement.
 pub(super) fn tracked(name: &str, is_root: bool) -> bool {
-    !STRUCTURE.contains(&name) && !(is_root && name == crate::Transform::NAME)
+    !STRUCTURE.contains(&name) && !(is_root && name == crate::Transform2D::NAME)
 }
 
 /// A record's components as their types write them, structure left out and

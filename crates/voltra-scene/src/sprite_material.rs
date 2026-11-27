@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use voltra_assets::{AssetPath, Handle, Material, Materials};
 use voltra_render::material::Uniform;
 
-/// Draws a [`Sprite`](crate::Sprite) or [`Tilemap`](crate::Tilemap)
+/// Draws a [`Sprite2D`](crate::Sprite2D) or [`Tilemap`](crate::Tilemap)
 /// through a material instead of the plain sprite shader — a hit flash, an
 /// outline, a dissolve — with this entity's own values for its uniforms.
 ///
@@ -54,7 +54,7 @@ impl SpriteMaterial {
 
 /// Resolves the material of every sprite and tile layer in `world`.
 pub fn resolve_world(world: &mut voltra_ecs::World, materials: &mut Materials) {
-    for (_, sprite) in world.query_mut::<crate::Sprite>() {
+    for (_, sprite) in world.query_mut::<crate::Sprite2D>() {
         if let Some(slot) = &mut sprite.material {
             slot.resolve(materials);
         }
@@ -74,7 +74,7 @@ pub fn resolve_entity(
     materials: &mut Materials,
 ) {
     if let Some(slot) = world
-        .get_mut::<crate::Sprite>(entity)
+        .get_mut::<crate::Sprite2D>(entity)
         .and_then(|s| s.material.as_mut())
     {
         slot.resolve(materials);

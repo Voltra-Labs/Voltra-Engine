@@ -10,7 +10,7 @@ use voltra_core::replication::{Interest, InterestGrid, NetOwner, ReplicationConf
 use voltra_core::{App, Headless};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Replicated, SceneId, Transform};
+use voltra_scene::{Replicated, SceneId, Transform2D};
 
 use super::Bench;
 use crate::harness::{iter, measure, Config};
@@ -160,7 +160,7 @@ fn server_frame(config: &Config, interest: Option<Interest>) -> super::Outcome {
             let world = server.world_mut();
             let entity = world.spawn();
             world.insert(entity, SceneId::new());
-            world.insert(entity, Transform::from_translation(*at));
+            world.insert(entity, Transform2D::from_translation(*at));
             world.insert(entity, Replicated::default());
             if let Some(&peer) = peers.get(n) {
                 world.insert(entity, NetOwner(peer));
@@ -176,7 +176,7 @@ fn server_frame(config: &Config, interest: Option<Interest>) -> super::Outcome {
             frame += 1;
             let world = server.world_mut();
             for (n, &entity) in movers.iter().enumerate() {
-                if let Some(t) = world.get_mut::<Transform>(entity) {
+                if let Some(t) = world.get_mut::<Transform2D>(entity) {
                     t.translation =
                         spots[n] + Vec2::new((frame as f32 * 0.05 + n as f32).sin(), 0.0);
                 }

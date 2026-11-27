@@ -42,7 +42,7 @@ impl Align {
 /// tilemap layers by [`sort_order`](Self::sort_order).
 ///
 /// The colour's alpha fades the glyphs, as it does a
-/// [`Sprite`](crate::Sprite).
+/// [`Sprite2D`](crate::Sprite2D).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Text {
     /// What is drawn. `\n` starts a new line.
@@ -90,7 +90,7 @@ pub struct Text {
     /// Which end of each line sits on the origin.
     pub align: Align,
     /// Draw order among sprites and tilemap layers. See
-    /// [`Sprite::sort_order`](crate::Sprite::sort_order).
+    /// [`Sprite2D::sort_order`](crate::Sprite2D::sort_order).
     #[serde(default)]
     pub sort_order: i32,
     /// The named layer it draws on, before `sort_order` is consulted. See
@@ -101,7 +101,7 @@ pub struct Text {
     )]
     pub sorting_layer: String,
     /// The light layers its glyphs are on, as a sprite's
-    /// [`light_layers`](crate::Sprite::light_layers) are. The first — the
+    /// [`light_layers`](crate::Sprite2D::light_layers) are. The first — the
     /// default, and not written — is what every light lights unless told
     /// otherwise.
     #[serde(

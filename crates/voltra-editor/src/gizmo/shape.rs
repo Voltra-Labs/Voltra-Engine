@@ -12,7 +12,7 @@
 
 use voltra_render::glam::Vec2;
 use voltra_render::View2D;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 use super::handle::{Axes, AXIS_LENGTH, CENTRE_HALF, RING_RADIUS, TIP_HALF};
 use crate::tool::Tool;
@@ -40,7 +40,7 @@ pub fn segments(
     tool: Tool,
     camera: &View2D,
     viewport: Vec2,
-    transform: &Transform,
+    transform: &Transform2D,
 ) -> Vec<Segment> {
     let origin = camera.world_to_viewport(transform.translation, viewport);
     let to_world = |point: Vec2| camera.viewport_to_world(point, viewport);
@@ -132,8 +132,8 @@ mod tests {
             .distance(camera.world_to_viewport(b, VIEWPORT))
     }
 
-    fn at(translation: Vec2) -> Transform {
-        Transform::from_translation(translation)
+    fn at(translation: Vec2) -> Transform2D {
+        Transform2D::from_translation(translation)
     }
 
     #[test]

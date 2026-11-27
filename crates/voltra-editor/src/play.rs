@@ -52,7 +52,7 @@ pub trait PlayHost {
     fn reset_physics(&mut self);
     /// Re-resolves every sprite's GPU handle from its path.
     ///
-    /// A restore respawns every entity, and `Sprite::texture_handle` is
+    /// A restore respawns every entity, and `Sprite2D::texture_handle` is
     /// `#[serde(skip)]` — a handle addresses a slot in this session's
     /// `Textures` and means nothing across a round trip. Without this every
     /// textured sprite draws flat white after Stop.
@@ -233,7 +233,7 @@ mod tests {
     use ron::value::RawValue;
     use voltra_render::glam::Vec2;
     use voltra_scene::format::entity_with_id;
-    use voltra_scene::{Sprite, Transform, UnknownComponents};
+    use voltra_scene::{Sprite2D, Transform2D, UnknownComponents};
 
     /// A [`PlayHost`] with no `App` and no GPU behind it.
     ///
@@ -308,14 +308,14 @@ mod tests {
     fn spawn_scene_entity(world: &mut World, at: Vec2) -> Entity {
         let entity = world.spawn();
         world.insert(entity, SceneId::new());
-        world.insert(entity, Transform::from_translation(at));
-        world.insert(entity, Sprite::default());
+        world.insert(entity, Transform2D::from_translation(at));
+        world.insert(entity, Sprite2D::default());
         entity
     }
 
     fn translation(world: &World, entity: Entity) -> Vec2 {
         world
-            .get::<Transform>(entity)
+            .get::<Transform2D>(entity)
             .expect("the transform is there")
             .translation
     }
@@ -354,7 +354,7 @@ mod tests {
         play.play(fixture.ctx(), &mut host);
         play.pause(&mut host);
         host.world
-            .get_mut::<Transform>(entity)
+            .get_mut::<Transform2D>(entity)
             .expect("the transform is there")
             .translation = Vec2::new(0.0, -5.0);
         play.play(fixture.ctx(), &mut host);
@@ -451,7 +451,7 @@ mod tests {
         let mut play = Play::default();
         play.play(fixture.ctx(), &mut host);
         host.world
-            .get_mut::<Transform>(entity)
+            .get_mut::<Transform2D>(entity)
             .expect("the transform is there")
             .translation = Vec2::new(-9.0, -9.0);
 
@@ -502,8 +502,10 @@ mod tests {
         let mut host = FakeHost::new();
         spawn_scene_entity(&mut host.world, Vec2::ZERO);
         let transient = host.world.spawn();
-        host.world
-            .insert(transient, Transform::from_translation(Vec2::new(7.0, 7.0)));
+        host.world.insert(
+            transient,
+            Transform2D::from_translation(Vec2::new(7.0, 7.0)),
+        );
         let mut fixture = Fixture::new();
         let mut play = Play::default();
 

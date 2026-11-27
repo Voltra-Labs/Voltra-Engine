@@ -6,20 +6,20 @@ use voltra_render::glam::Vec2;
 use super::*;
 use crate::hierarchy::{resolve_parents, set_parent};
 use crate::scene_id::SceneId;
-use crate::{Camera, ComponentRegistry, Transform};
+use crate::{Camera2D, ComponentRegistry, Transform2D};
 
 pub(super) const DT: f32 = 1.0 / 60.0;
 
 pub(super) fn placed(world: &mut World, at: Vec2) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     entity
 }
 
 pub(super) fn rig(world: &mut World, target: Entity, follow: CameraFollow2D) -> Entity {
     let camera = placed(world, Vec2::ZERO);
-    world.insert(camera, Camera::new(2.0));
+    world.insert(camera, Camera2D::new(2.0));
     let id = *world.get::<SceneId>(target).expect("an id");
     world.insert(
         camera,
@@ -32,7 +32,10 @@ pub(super) fn rig(world: &mut World, target: Entity, follow: CameraFollow2D) -> 
 }
 
 pub(super) fn at(world: &World, entity: Entity) -> Vec2 {
-    world.get::<Transform>(entity).expect("placed").translation
+    world
+        .get::<Transform2D>(entity)
+        .expect("placed")
+        .translation
 }
 
 pub(super) fn near(a: Vec2, b: Vec2) -> bool {
@@ -56,7 +59,7 @@ fn it_lands_on_its_target_then_eases_after_it_at_any_frame_rate() {
             "snapped: {}",
             at(&world, camera)
         );
-        world.get_mut::<Transform>(player).expect("p").translation = Vec2::new(7.0, 1.0);
+        world.get_mut::<Transform2D>(player).expect("p").translation = Vec2::new(7.0, 1.0);
         (world, camera)
     };
     let (mut once, camera) = scene();
@@ -85,14 +88,14 @@ fn a_dead_zone_holds_until_the_target_leaves_it() {
     };
     let camera = rig(&mut world, player, follow);
     update(&mut world, DT, 1.0, None);
-    world.get_mut::<Transform>(player).expect("p").translation = Vec2::new(0.8, -0.3);
+    world.get_mut::<Transform2D>(player).expect("p").translation = Vec2::new(0.8, -0.3);
     update(&mut world, DT, 1.0, None);
     assert!(
         near(at(&world, camera), Vec2::ZERO),
         "inside: {}",
         at(&world, camera)
     );
-    world.get_mut::<Transform>(player).expect("p").translation = Vec2::new(3.0, 0.0);
+    world.get_mut::<Transform2D>(player).expect("p").translation = Vec2::new(3.0, 0.0);
     update(&mut world, DT, 1.0, None);
     assert!(
         near(at(&world, camera), Vec2::new(2.0, 0.0)),
@@ -133,7 +136,7 @@ fn looking_ahead_leads_a_moving_target() {
     };
     let camera = rig(&mut world, player, follow);
     for i in 1..=30 {
-        world.get_mut::<Transform>(player).expect("p").translation =
+        world.get_mut::<Transform2D>(player).expect("p").translation =
             Vec2::new(i as f32 * 4.0 * DT, 0.0);
         update(&mut world, DT, 1.0, None);
     }
@@ -148,7 +151,7 @@ fn a_missing_target_holds_it_still() {
     let camera = rig(&mut world, player, CameraFollow2D::default());
     update(&mut world, DT, 1.0, None);
     world.despawn(player);
-    world.get_mut::<Transform>(camera).expect("c").translation = Vec2::new(1.0, 1.0);
+    world.get_mut::<Transform2D>(camera).expect("c").translation = Vec2::new(1.0, 1.0);
     update(&mut world, DT, 1.0, None);
     assert_eq!(at(&world, camera), Vec2::new(1.0, 1.0));
 }
@@ -158,7 +161,7 @@ fn a_parented_follower_lands_in_the_world_where_it_should() {
     let mut world = World::new();
     let player = placed(&mut world, Vec2::new(4.0, 0.0));
     let holder = placed(&mut world, Vec2::new(1.0, 1.0));
-    world.get_mut::<Transform>(holder).expect("h").scale = Vec2::splat(2.0);
+    world.get_mut::<Transform2D>(holder).expect("h").scale = Vec2::splat(2.0);
     let camera = rig(&mut world, player, CameraFollow2D::default());
     set_parent(&mut world, camera, holder).expect("a plain reparent");
     resolve_parents(&mut world);

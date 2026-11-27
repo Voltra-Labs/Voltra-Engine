@@ -105,7 +105,7 @@ pub struct ParticleEmitter {
     /// What `texture` resolves to in this session's textures. Never written.
     pub texture_handle: Option<Handle<Texture>>,
     #[serde(default)]
-    /// Draw order among sprites and tilemap layers. See [`Sprite::sort_order`](crate::Sprite::sort_order).
+    /// Draw order among sprites and tilemap layers. See [`Sprite2D::sort_order`](crate::Sprite2D::sort_order).
     pub sort_order: i32,
     /// The named layer it draws on, before `sort_order` is consulted. See
     /// [`SortingLayers`](crate::sorting::SortingLayers).
@@ -115,7 +115,7 @@ pub struct ParticleEmitter {
     )]
     pub sorting_layer: String,
     /// The light layers its particles are on, as a sprite's
-    /// [`light_layers`](crate::Sprite::light_layers) are. The first — the
+    /// [`light_layers`](crate::Sprite2D::light_layers) are. The first — the
     /// default, and not written — is what every light lights unless told
     /// otherwise.
     #[serde(
@@ -260,7 +260,7 @@ impl ParticleEmitter {
     }
 
     /// Refreshes the flipbook's atlas handle from its path, as
-    /// [`Sprite::set_atlas`](crate::Sprite::set_atlas) does a sprite's.
+    /// [`Sprite2D::set_atlas`](crate::Sprite2D::set_atlas) does a sprite's.
     pub fn resolve_atlas(&mut self, atlases: &mut voltra_assets::Atlases) {
         if let Some(flipbook) = &mut self.flipbook {
             flipbook.resolve(atlases);
@@ -276,7 +276,7 @@ impl ParticleEmitter {
     }
 
     /// Sets or clears the texture path and refreshes its handle, as
-    /// [`Sprite::set_texture`](crate::Sprite::set_texture) does.
+    /// [`Sprite2D::set_texture`](crate::Sprite2D::set_texture) does.
     pub fn set_texture(
         &mut self,
         path: Option<AssetPath>,

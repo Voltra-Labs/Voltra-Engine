@@ -4,15 +4,15 @@ use serde::{Deserialize, Serialize};
 
 /// The surface properties of a collider.
 ///
-/// A component of its own rather than fields on [`Collider`] or [`RigidBody`].
-/// `Collider` is an enum, so two fields there are duplicated in every variant
-/// and in every shape added later; `RigidBody` would leave static geometry — a
+/// A component of its own rather than fields on [`Collider2D`] or [`RigidBody2D`].
+/// `Collider2D` is an enum, so two fields there are duplicated in every variant
+/// and in every shape added later; `RigidBody2D` would leave static geometry — a
 /// collider with no body, which the solver already has to handle — with no
 /// surface at all. Unity's `PhysicsMaterial2D` is the same separation, adapted
 /// to composition rather than to an asset reference.
 ///
-/// [`Collider`]: crate::Collider
-/// [`RigidBody`]: crate::RigidBody
+/// [`Collider2D`]: crate::Collider2D
+/// [`RigidBody2D`]: crate::RigidBody2D
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PhysicsMaterial {
     /// Resistance to sliding. Box2D's default of `0.6` is a wooden crate.

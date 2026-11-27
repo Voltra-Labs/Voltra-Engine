@@ -3,7 +3,7 @@ use voltra_render::glam::Vec2;
 use super::*;
 use crate::format::to_scene_file;
 use crate::hierarchy::{parent_of, set_parent};
-use crate::{Name, Replicated, Transform};
+use crate::{Name, Replicated, Transform2D};
 
 fn registry() -> ComponentRegistry {
     ComponentRegistry::with_defaults()
@@ -13,7 +13,7 @@ fn named(world: &mut World, name: &str) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Name::new(name));
-    world.insert(entity, Transform::from_translation(Vec2::ZERO));
+    world.insert(entity, Transform2D::from_translation(Vec2::ZERO));
     entity
 }
 

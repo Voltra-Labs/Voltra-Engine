@@ -10,15 +10,15 @@ mod write;
 use voltra_ecs::{Entity, World};
 use voltra_scene::format::serial_tree::Step;
 use voltra_scene::format::ComponentRegistry;
-use voltra_scene::{SceneId, Sprite, Transform};
+use voltra_scene::{SceneId, Sprite2D, Transform2D};
 
 use super::MultiEdit;
 
 pub(super) fn sprite(world: &mut World, color: [f32; 4]) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
-    world.insert(entity, Transform::default());
-    world.insert(entity, Sprite::new(color));
+    world.insert(entity, Transform2D::default());
+    world.insert(entity, Sprite2D::new(color));
     entity
 }
 

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 /// is shot at needs it — the players, not the walls. Unity Netcode's
 /// `PhysicsWorldHistory` keeps every collider of its world; Source keeps
 /// only players, and this keeps what the game marks. The entity needs a
-/// `Collider` and a `Transform` too, and is usually [`Replicated`]: what
+/// `Collider2D` and a `Transform2D` too, and is usually [`Replicated`]: what
 /// a client did not see it cannot have aimed at.
 ///
 /// [`Replicated`]: crate::Replicated

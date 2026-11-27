@@ -11,9 +11,9 @@
 use voltra_assets::{AssetPath, Clips, Handle};
 use voltra_audio::{Buses, Clip, PlayParams};
 
-/// A sound an entity can play, positioned by that entity's [`Transform`].
+/// A sound an entity can play, positioned by that entity's [`Transform2D`].
 ///
-/// [`Transform`]: crate::transform::Transform
+/// [`Transform2D`]: crate::transform::Transform2D
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AudioSource {
     /// The sound this source plays, by path relative to the asset root.
@@ -24,11 +24,11 @@ pub struct AudioSource {
     pub clip: Option<AssetPath>,
     /// The handle `clip` currently resolves to, if any.
     ///
-    /// Never serialised, for the same reason [`Sprite::texture_handle`] is
+    /// Never serialised, for the same reason [`Sprite2D::texture_handle`] is
     /// not: it addresses a slot in whichever store loaded this session, which
     /// means nothing across a save, a load, or two runs of the same binary.
     ///
-    /// [`Sprite::texture_handle`]: crate::sprite::Sprite::texture_handle
+    /// [`Sprite2D::texture_handle`]: crate::sprite::Sprite2D::texture_handle
     #[serde(skip)]
     pub clip_handle: Option<Handle<Clip>>,
     /// Linear gain before the distance falloff. `1.0` plays it as recorded.
@@ -122,11 +122,11 @@ impl AudioSource {
 
     /// Sets or clears the clip path and refreshes the runtime handle.
     ///
-    /// No device, the way [`Sprite::set_atlas`] needs no GPU: decoding is
+    /// No device, the way [`Sprite2D::set_atlas`] needs no GPU: decoding is
     /// arithmetic over a file, and whether anything can be heard is settled
     /// much later, by [`Audio`](voltra_audio::Audio).
     ///
-    /// [`Sprite::set_atlas`]: crate::sprite::Sprite::set_atlas
+    /// [`Sprite2D::set_atlas`]: crate::sprite::Sprite2D::set_atlas
     pub fn set_clip(&mut self, path: Option<AssetPath>, clips: &mut Clips) {
         match path {
             None => {

@@ -3,12 +3,12 @@
 use voltra_assets::{AssetPath, Handle};
 use voltra_render::Texture;
 
-/// Makes this entity's [`Camera`](super::Camera) draw into a render texture
+/// Makes this entity's [`Camera2D`](super::Camera2D) draw into a render texture
 /// — a `.rendertexture.ron` — instead of the screen: a minimap, a security
 /// monitor, a mirror. A sprite or a UI image naming the same file as its
 /// texture shows what it sees, the same frame.
 ///
-/// Unity's `Camera.targetTexture`, Godot's camera inside a `SubViewport`.
+/// Unity's `Camera2D.targetTexture`, Godot's camera inside a `SubViewport`.
 /// A separate component, not a field of the camera, because a path is not
 /// `Copy` and the camera is read by value everywhere.
 ///

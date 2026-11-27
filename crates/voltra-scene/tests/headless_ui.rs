@@ -9,7 +9,7 @@ use voltra_render::glam::Vec2;
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Texture};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{ui, Sprite, SpriteBatch, Transform, UiLayout, UiRect};
+use voltra_scene::{ui, Sprite2D, SpriteBatch, Transform2D, UiLayout, UiRect};
 use voltra_testkit::{headless_device, read_texture, CLEAR};
 
 const SIZE: u32 = 64;
@@ -26,14 +26,14 @@ fn the_hud_lands_in_pixels_over_a_world_it_does_not_clear() {
     // quarter — at 2 pixels per point, so 16 points is 32 pixels.
     let mut world = World::new();
     let ground = world.spawn();
-    world.insert(ground, Transform::default().with_scale(Vec2::splat(4.0)));
-    world.insert(ground, Sprite::new([0.0, 1.0, 0.0, 1.0]));
+    world.insert(ground, Transform2D::default().with_scale(Vec2::splat(4.0)));
+    world.insert(ground, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
     let panel = world.spawn();
     world.insert(
         panel,
         UiRect::pinned(Vec2::ZERO, Vec2::ZERO, Vec2::splat(16.0)),
     );
-    world.insert(panel, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    world.insert(panel, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
 
     let scale = 2.0;
     let world_batch = SpriteBatch::from_world(&world, Sheets::default());

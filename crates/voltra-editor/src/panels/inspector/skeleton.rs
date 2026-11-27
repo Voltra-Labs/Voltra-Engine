@@ -4,7 +4,7 @@ use voltra_core::egui::{DragValue, RichText, TextEdit, Ui};
 use voltra_ecs::{Entity, World};
 use voltra_scene::skeleton::ik::{problem, IkProblem};
 use voltra_scene::skeleton::{bones_of, reset_to_rest};
-use voltra_scene::{Bone2D, Skeleton2D, Transform, TwoBoneIk};
+use voltra_scene::{Bone2D, Skeleton2D, Transform2D, TwoBoneIk};
 
 use super::active;
 
@@ -116,7 +116,7 @@ pub(super) fn reset_bone(world: &mut World, entity: Entity) -> bool {
     let Some(rest) = world.get::<Bone2D>(entity).map(|bone| bone.rest) else {
         return false;
     };
-    match world.get_mut::<Transform>(entity) {
+    match world.get_mut::<Transform2D>(entity) {
         Some(transform) => {
             *transform = rest;
             true

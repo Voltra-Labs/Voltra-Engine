@@ -4,7 +4,7 @@
 use voltra_render::glam::Vec2;
 use voltra_scene::hierarchy::{resolve_parents, set_parent};
 use voltra_scene::keyframes::Track;
-use voltra_scene::{Name, SceneId, Transform};
+use voltra_scene::{Name, SceneId, Transform2D};
 
 use super::*;
 use crate::undo::shortcut::UndoAction;
@@ -33,12 +33,12 @@ fn scene() -> Scene {
     let mut world = World::new();
     let root = world.spawn();
     world.insert(root, SceneId::new());
-    world.insert(root, Transform::from_translation(Vec2::new(1.0, 1.0)));
+    world.insert(root, Transform2D::from_translation(Vec2::new(1.0, 1.0)));
     world.insert(root, AnimationPlayer::new(path.clone()));
     let arm = world.spawn();
     world.insert(arm, SceneId::new());
     world.insert(arm, Name::new("arm"));
-    world.insert(arm, Transform::default());
+    world.insert(arm, Transform2D::default());
     set_parent(&mut world, arm, root).expect("a plain reparent");
     resolve_parents(&mut world);
 
@@ -67,9 +67,9 @@ impl Scene {
         self.clips.get(handle)
     }
 
-    fn transform(&mut self, entity: Entity) -> &mut Transform {
+    fn transform(&mut self, entity: Entity) -> &mut Transform2D {
         self.world
-            .get_mut::<Transform>(entity)
+            .get_mut::<Transform2D>(entity)
             .expect("a transform")
     }
 
@@ -93,7 +93,7 @@ impl Scene {
 fn a_recorded_move_keys_the_pose_and_leaves_the_scene_as_authored() {
     let mut scene = scene();
     let keyed = scene.frame(|world, root, arm| {
-        let t = world.get_mut::<Transform>(root).expect("t");
+        let t = world.get_mut::<Transform2D>(root).expect("t");
         assert_eq!(
             t.translation,
             Vec2::new(2.0, 0.0),
@@ -102,7 +102,7 @@ fn a_recorded_move_keys_the_pose_and_leaves_the_scene_as_authored() {
         t.translation += Vec2::new(1.0, 1.0);
         // A gizmo's round trip: a hair off on what it did not mean to move.
         t.scale.x += 1e-7;
-        let arm = world.get_mut::<Transform>(arm).expect("t");
+        let arm = world.get_mut::<Transform2D>(arm).expect("t");
         arm.rotation = 0.7;
     });
     assert_eq!(keyed, 2, "the move and the arm, not the hair");
@@ -165,7 +165,7 @@ fn nothing_is_keyed_without_record_or_preview() {
     let mut scene = scene();
     scene.timeline.record = false;
     let keyed = scene.frame(|world, root, _| {
-        let t = world.get_mut::<Transform>(root).expect("t");
+        let t = world.get_mut::<Transform2D>(root).expect("t");
         assert_eq!(t.translation, Vec2::new(1.0, 1.0), "the authored scene");
         t.translation.x = 9.0;
     });

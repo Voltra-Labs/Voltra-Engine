@@ -3,30 +3,30 @@
 //! advancement once a capsule or a polygon is in the pair.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider2D, Transform2D};
 
 use super::advance::advance;
 use super::{PARALLEL, TOUCH};
 use crate::geometry::Hull;
 use crate::query::{rotated, to_local};
 
-type Shape<'a> = (&'a Collider, &'a Transform);
+type Shape<'a> = (&'a Collider2D, &'a Transform2D);
 
 /// When, as a fraction of `motion`, `a` first touches `b`, and the normal
 /// pushing `a` away there. Negative while they start overlapping, with a
 /// normal that may be zero if no face is to blame.
 pub(super) fn sweep(a: Shape<'_>, motion: Vec2, b: Shape<'_>) -> Option<(f32, Vec2)> {
     match (a.0, b.0) {
-        (Collider::Box { .. }, Collider::Box { .. }) => box_box(a, motion, b),
-        (Collider::Circle { .. }, Collider::Box { .. }) => {
+        (Collider2D::Box { .. }, Collider2D::Box { .. }) => box_box(a, motion, b),
+        (Collider2D::Circle { .. }, Collider2D::Box { .. }) => {
             circle_box(a.1.translation, a.0.world_radius(a.1), motion, b)
         }
-        (Collider::Box { .. }, Collider::Circle { .. }) => {
+        (Collider2D::Box { .. }, Collider2D::Circle { .. }) => {
             // The circle moving back against the box; its normal reversed.
             circle_box(b.1.translation, b.0.world_radius(b.1), -motion, a)
                 .map(|(t, normal)| (t, -normal))
         }
-        (Collider::Circle { .. }, Collider::Circle { .. }) => {
+        (Collider2D::Circle { .. }, Collider2D::Circle { .. }) => {
             let radius = a.0.world_radius(a.1) + b.0.world_radius(b.1);
             let from = a.1.translation - b.1.translation;
             let t = circle_entry(from, motion, radius)?;

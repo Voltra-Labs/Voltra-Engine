@@ -31,7 +31,7 @@ impl App {
 mod tests {
     use super::*;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{CameraFollow2D, SceneId, Transform};
+    use voltra_scene::{CameraFollow2D, SceneId, Transform2D};
 
     #[test]
     fn a_camera_follows_only_while_the_game_runs() {
@@ -40,11 +40,17 @@ mod tests {
         let id = SceneId::new();
         app.world.insert(player, id);
         app.world
-            .insert(player, Transform::from_translation(Vec2::new(4.0, 0.0)));
+            .insert(player, Transform2D::from_translation(Vec2::new(4.0, 0.0)));
         let camera = app.world.spawn();
-        app.world.insert(camera, Transform::default());
+        app.world.insert(camera, Transform2D::default());
         app.world.insert(camera, CameraFollow2D::new(id));
-        let x = |app: &App| app.world.get::<Transform>(camera).expect("t").translation.x;
+        let x = |app: &App| {
+            app.world
+                .get::<Transform2D>(camera)
+                .expect("t")
+                .translation
+                .x
+        };
 
         app.update_camera_rigs(0.1);
         assert_eq!(x(&app), 0.0, "authoring holds still");

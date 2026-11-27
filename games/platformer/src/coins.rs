@@ -3,7 +3,7 @@
 use voltra_core::{PlayParams, Tick, Touch};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{AudioSource, ParticleEmitter, Text, Transform};
+use voltra_scene::{AudioSource, ParticleEmitter, Text, Transform2D};
 
 use crate::components::{Coin, CoinCounter};
 
@@ -52,7 +52,7 @@ pub fn take(tick: &mut Tick<'_>, walker: Entity) -> u32 {
                 );
             }
         }
-        if let Some(at) = tick.world.get::<Transform>(coin).map(|t| t.translation) {
+        if let Some(at) = tick.world.get::<Transform2D>(coin).map(|t| t.translation) {
             sparks(tick, at);
         }
         // Despawned mid-overlap on purpose: the pair ends by disappearing, and
@@ -67,7 +67,7 @@ pub fn take(tick: &mut Tick<'_>, walker: Entity) -> u32 {
 /// once the last spark has faded.
 fn sparks(tick: &mut Tick<'_>, at: Vec2) {
     let sparks = tick.world.spawn();
-    tick.world.insert(sparks, Transform::from_translation(at));
+    tick.world.insert(sparks, Transform2D::from_translation(at));
     let mut emitter = ParticleEmitter {
         emitting: false,
         one_shot: true,

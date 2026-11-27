@@ -9,7 +9,7 @@ use voltra_scene::keyframes::{
     self, Ease, Key, LayerBlend, PlayerLayer, Property, SyncedClips, Track, Value,
 };
 use voltra_scene::{
-    AnimationClip, AnimationClips, AnimationPlayer, Name, SceneId, Sprite, Transform,
+    AnimationClip, AnimationClips, AnimationPlayer, Name, SceneId, Sprite2D, Transform2D,
 };
 
 use super::{Bench, Outcome};
@@ -198,14 +198,14 @@ fn crowd() -> Option<(Scratch, World, AnimationClips, Vec<Entity>)> {
     for _ in 0..PLAYERS {
         let player = world.spawn();
         world.insert(player, SceneId::new());
-        world.insert(player, Transform::default());
+        world.insert(player, Transform2D::default());
         world.insert(player, AnimationPlayer::new(path(CLIPS[0])));
         for t in 0..TARGETS {
             let part = world.spawn();
             world.insert(part, SceneId::new());
             world.insert(part, Name::new(format!("part{t}")));
-            world.insert(part, Transform::default());
-            world.insert(part, Sprite::default());
+            world.insert(part, Transform2D::default());
+            world.insert(part, Sprite2D::default());
             set_parent(&mut world, part, player).ok()?;
         }
         players.push(player);

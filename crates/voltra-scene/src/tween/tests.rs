@@ -2,21 +2,21 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use super::*;
-use crate::{Sprite, Transform};
+use crate::{Sprite2D, Transform2D};
 
 fn sprite(world: &mut World) -> Entity {
     let e = world.spawn();
-    world.insert(e, Transform::default());
-    world.insert(e, Sprite::new([1.0, 1.0, 1.0, 1.0]));
+    world.insert(e, Transform2D::default());
+    world.insert(e, Sprite2D::new([1.0, 1.0, 1.0, 1.0]));
     e
 }
 
 fn position(world: &World, e: Entity) -> Vec2 {
-    world.get::<Transform>(e).expect("placed").translation
+    world.get::<Transform2D>(e).expect("placed").translation
 }
 
 fn alpha(world: &World, e: Entity) -> f32 {
-    world.get::<Sprite>(e).expect("a sprite").color[3]
+    world.get::<Sprite2D>(e).expect("a sprite").color[3]
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn a_despawned_entity_takes_its_tweens_and_their_chains_with_it() {
     assert!(!tweens.is_running(first) && !tweens.is_running(chained));
     assert!(!tweens.finished(first), "stopped, not finished");
     assert_eq!(
-        world.get::<Transform>(other).expect("placed").scale,
+        world.get::<Transform2D>(other).expect("placed").scale,
         Vec2::ONE
     );
 }
@@ -170,7 +170,7 @@ fn cancelling_stops_it_where_it_is() {
     tweens.step(&mut world, 0.5);
     tweens.cancel(id);
     tweens.step(&mut world, 1.0);
-    assert_eq!(world.get::<Transform>(e).expect("placed").rotation, 0.5);
+    assert_eq!(world.get::<Transform2D>(e).expect("placed").rotation, 0.5);
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn a_value_of_the_wrong_kind_is_refused_and_a_chain_behind_it_runs() {
     );
     tweens.step(&mut world, 0.1);
     assert!(tweens.finished(next));
-    assert_eq!(world.get::<Transform>(e).expect("placed").rotation, 2.0);
+    assert_eq!(world.get::<Transform2D>(e).expect("placed").rotation, 2.0);
 }
 
 #[test]

@@ -5,13 +5,13 @@ use voltra_ecs::World;
 use voltra_nav::{NavGrid, NavSettings};
 use voltra_render::glam::{IVec2, Vec2};
 use voltra_scene::tilemap::sync_colliders;
-use voltra_scene::{Tile, Tilemap, Transform};
+use voltra_scene::{Tile, Tilemap, Transform2D};
 
 #[test]
 fn a_solid_layer_blocks_its_tiles_and_a_path_goes_round_them() {
     let mut world = World::new();
     let layer = world.spawn();
-    world.insert(layer, Transform::default());
+    world.insert(layer, Transform2D::default());
     let mut map = Tilemap::new(Vec2::ONE);
     map.collision = true;
     // A wall of tiles up column 3, rows 0..6, in an 8×8 room.

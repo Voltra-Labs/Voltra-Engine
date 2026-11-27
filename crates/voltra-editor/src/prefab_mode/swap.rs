@@ -92,7 +92,7 @@ fn despawn_scene(world: &mut World) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_scene::{Name, Sprite, Transform};
+    use voltra_scene::{Name, Sprite2D, Transform2D};
 
     fn scratch() -> voltra_testkit::Scratch {
         let root = voltra_testkit::Scratch::new("voltra-prefab-mode");
@@ -104,7 +104,7 @@ mod tests {
         world
             .query::<Name>()
             .find(|(_, n)| n.as_str() == name)
-            .and_then(|(e, _)| world.get::<Sprite>(e))
+            .and_then(|(e, _)| world.get::<Sprite2D>(e))
             .expect("the sprite")
             .color
     }
@@ -121,19 +121,19 @@ mod tests {
         let coin = world.spawn();
         world.insert(coin, SceneId::new());
         world.insert(coin, Name::new("Coin"));
-        world.insert(coin, Transform::default());
-        world.insert(coin, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+        world.insert(coin, Transform2D::default());
+        world.insert(coin, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
         prefab::write(&world, registry, prefabs, coin, &path).expect("written");
         prefab::link(&mut world, coin, path.clone());
         assert!(root.join(path.as_str()).is_file());
 
         let handle = prefabs.load(&path);
-        let at = Transform::from_translation(voltra_render::glam::Vec2::new(3.0, 0.0));
+        let at = Transform2D::from_translation(voltra_render::glam::Vec2::new(3.0, 0.0));
         let other = prefab::spawn(&mut world, registry, prefabs.get(handle), &at)
             .expect("spawned")
             .roots[0];
         world.insert(other, Name::new("Blue coin"));
-        world.insert(other, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+        world.insert(other, Sprite2D::new([0.0, 0.0, 1.0, 1.0]));
         prefab::refresh_overrides(&mut world, registry, prefabs, other).expect("compared");
         (world, path)
     }
@@ -154,7 +154,7 @@ mod tests {
 
         // Edited and saved as the prefab, as Save does in prefab mode.
         let (coin, _) = world.query::<Name>().next().expect("the coin");
-        world.insert(coin, Sprite::new([0.0, 1.0, 0.0, 1.0]));
+        world.insert(coin, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
         assert_eq!(cycle_through(&world, &mut prefabs, &path), None);
         voltra_scene::format::save(&world, &registry, &file).expect("saved");
 
@@ -193,7 +193,7 @@ mod tests {
             &mut world,
             &registry,
             prefabs.get(handle),
-            &Transform::default(),
+            &Transform2D::default(),
         )
         .expect("spawned");
 

@@ -1,14 +1,14 @@
 //! Registering, saving, loading and removing components by name.
 
 use super::*;
-use crate::{Sprite, Transform};
+use crate::{Sprite2D, Transform2D};
 use voltra_render::glam::Vec2;
 
 fn world_with_one_sprite() -> (World, Entity) {
     let mut world = World::new();
     let e = world.spawn();
-    world.insert(e, Transform::from_translation(Vec2::new(1.0, 2.0)));
-    world.insert(e, Sprite::default().with_sort_order(3));
+    world.insert(e, Transform2D::from_translation(Vec2::new(1.0, 2.0)));
+    world.insert(e, Sprite2D::default().with_sort_order(3));
     (world, e)
 }
 
@@ -46,7 +46,7 @@ fn a_registered_component_round_trips_through_a_value() {
         .expect("Sprite is registered")
         .expect("the value came from a Sprite, so it must load as one");
 
-    assert_eq!(target.get::<Sprite>(copy), world.get::<Sprite>(entity));
+    assert_eq!(target.get::<Sprite2D>(copy), world.get::<Sprite2D>(entity));
 }
 
 #[test]
@@ -102,9 +102,9 @@ fn remove_one_takes_the_component_off() {
 
     assert!(registry.remove_one(&mut world, entity, "Sprite"));
 
-    assert_eq!(world.get::<Sprite>(entity), None);
+    assert_eq!(world.get::<Sprite2D>(entity), None);
     assert!(
-        world.get::<Transform>(entity).is_some(),
+        world.get::<Transform2D>(entity).is_some(),
         "and leaves the others alone"
     );
 }
@@ -143,7 +143,7 @@ fn removing_a_component_the_entity_lacks_is_not_an_error() {
 #[test]
 fn the_component_error_names_the_registered_name_not_the_rust_path() {
     // Regression test: this field used to hold `std::any::type_name::<T>()`
-    // (e.g. `voltra_scene::sprite::Sprite`), which is not the name that
+    // (e.g. `voltra_scene::sprite::Sprite2D`), which is not the name that
     // appears in a scene file, and does not let a user find the thing the
     // error is about. It must be the name `register` was called with.
     let mut world = World::new();

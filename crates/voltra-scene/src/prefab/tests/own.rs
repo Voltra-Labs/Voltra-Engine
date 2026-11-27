@@ -14,7 +14,7 @@ const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
 
 fn color_of(world: &World, entity: Entity) -> [f32; 4] {
-    world.get::<Sprite>(entity).expect("a sprite").color
+    world.get::<Sprite2D>(entity).expect("a sprite").color
 }
 
 fn coin_instance(world: &mut World, prefabs: &mut Prefabs, coin: &AssetPath) -> Entity {
@@ -23,7 +23,7 @@ fn coin_instance(world: &mut World, prefabs: &mut Prefabs, coin: &AssetPath) -> 
         world,
         &registry(),
         prefabs.get(handle),
-        &Transform::default(),
+        &Transform2D::default(),
     )
     .expect("spawns")
     .root()
@@ -72,7 +72,7 @@ fn a_coin_deleted_from_a_row_cut_around_it_leaves_the_row_s_instances() {
     let mut world = World::new();
     let row_entity = named(&mut world, "row", Vec2::ZERO);
     let coin_entity = named(&mut world, "coin", Vec2::ZERO);
-    world.insert(coin_entity, Sprite::new(RED));
+    world.insert(coin_entity, Sprite2D::new(RED));
     set_parent(&mut world, coin_entity, row_entity).expect("a plain reparent");
     let coin = path("coin.prefab.ron");
     write(&world, &registry(), &mut prefabs, coin_entity, &coin).expect("written");
@@ -85,7 +85,7 @@ fn a_coin_deleted_from_a_row_cut_around_it_leaves_the_row_s_instances() {
         &mut scene,
         &registry(),
         prefabs.get(handle),
-        &Transform::default(),
+        &Transform2D::default(),
     )
     .expect("spawns")
     .root()

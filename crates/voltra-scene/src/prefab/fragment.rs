@@ -6,7 +6,7 @@ use voltra_render::glam::Vec2;
 use super::PrefabInstance;
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile, VERSION};
 use crate::hierarchy::{descendants, is_ancestor};
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 
 /// `root` and its descendants as a file [`super::spawn`] can stamp out again.
 ///
@@ -56,14 +56,16 @@ pub fn fragment(
         if entity == root {
             record.components.remove(crate::Parent::NAME);
             record.components.remove(PrefabInstance::NAME);
-            if let Some(transform) = world.get::<Transform>(entity) {
-                let at_origin = Transform {
+            if let Some(transform) = world.get::<Transform2D>(entity) {
+                let at_origin = Transform2D {
                     translation: Vec2::ZERO,
                     ..*transform
                 };
                 let value =
                     ron::value::RawValue::from_rust(&at_origin).map_err(SceneError::Serialize)?;
-                record.components.insert(Transform::NAME.to_owned(), value);
+                record
+                    .components
+                    .insert(Transform2D::NAME.to_owned(), value);
             }
         }
         entities.push(record);

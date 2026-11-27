@@ -10,7 +10,7 @@ fn level() -> (World, Entity, Entity, Entity) {
     let mut world = World::new();
     let level = named(&mut world, "level", Vec2::ZERO);
     let chest = named(&mut world, "chest", Vec2::new(5.0, 2.0));
-    if let Some(transform) = world.get_mut::<Transform>(chest) {
+    if let Some(transform) = world.get_mut::<Transform2D>(chest) {
         transform.rotation = 0.5;
     }
     set_parent(&mut world, chest, level).expect("a plain reparent");
@@ -38,11 +38,11 @@ fn the_root_loses_its_parent_and_its_position_but_keeps_its_shape() {
 
     let prefab = Prefab::new(fragment(&world, &registry(), chest).expect("records")).expect("v1");
     let mut out = World::new();
-    let at = Transform::from_translation(Vec2::new(-3.0, 0.0));
+    let at = Transform2D::from_translation(Vec2::new(-3.0, 0.0));
     let instance = spawn(&mut out, &registry(), &prefab, &at).expect("reads");
 
     let root = instance.root().expect("one root");
-    let transform = out.get::<Transform>(root).expect("positional");
+    let transform = out.get::<Transform2D>(root).expect("positional");
     assert_eq!(transform.translation, Vec2::new(-3.0, 0.0), "lands on `at`");
     assert_eq!(transform.rotation, 0.5);
     assert_eq!(instance.entities.len(), 2);
@@ -87,7 +87,7 @@ fn a_written_prefab_spawns_linked_to_where_it_was_written() {
         &mut out,
         &registry(),
         prefabs.get(handle),
-        &Transform::default(),
+        &Transform2D::default(),
     )
     .expect("reads");
     assert_eq!(instance.entities.len(), 2);

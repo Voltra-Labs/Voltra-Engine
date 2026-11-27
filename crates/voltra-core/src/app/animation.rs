@@ -99,7 +99,7 @@ pub(super) fn clip_store<'a>(
 mod tests {
     use super::*;
     use voltra_ecs::Entity;
-    use voltra_scene::{Sprite, SpriteAnimation};
+    use voltra_scene::{Sprite2D, SpriteAnimation};
 
     /// An app holding one animated sprite, with no window.
     ///
@@ -108,7 +108,7 @@ mod tests {
     fn app_with_a_clip() -> (App, Entity) {
         let mut app = App::default();
         let entity = app.world.spawn();
-        app.world.insert(entity, Sprite::default());
+        app.world.insert(entity, Sprite2D::default());
         app.world
             .insert(entity, SpriteAnimation::new(vec![0, 1, 2, 3], 4.0));
         (app, entity)
@@ -116,7 +116,7 @@ mod tests {
 
     fn frame_of(app: &App, entity: Entity) -> u32 {
         app.world
-            .get::<Sprite>(entity)
+            .get::<Sprite2D>(entity)
             .expect("the sprite is there")
             .frame
     }
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn a_player_plays_its_clip_only_while_simulating_and_takes_a_reload() {
-        use voltra_scene::{AnimationPlayer, Transform};
+        use voltra_scene::{AnimationPlayer, Transform2D};
         let root = voltra_testkit::scratch_root();
         let write = |y: f32| {
             let text = format!(
@@ -157,9 +157,15 @@ mod tests {
         };
         let path = AssetPath::new("pose.anim.ron").expect("valid");
         let entity = app.world.spawn();
-        app.world.insert(entity, Transform::default());
+        app.world.insert(entity, Transform2D::default());
         app.world.insert(entity, AnimationPlayer::new(path.clone()));
-        let y = |app: &App| app.world.get::<Transform>(entity).expect("t").translation.y;
+        let y = |app: &App| {
+            app.world
+                .get::<Transform2D>(entity)
+                .expect("t")
+                .translation
+                .y
+        };
 
         app.advance_animations(0.1);
         assert_eq!(y(&app), 0.0, "authoring holds still");

@@ -2,7 +2,7 @@
 //! outward normals.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, ConvexPolygon, Transform, WorldShape};
+use voltra_scene::{Collider2D, ConvexPolygon, Transform2D, WorldShape};
 
 /// A collider in world space: corners, the outward normal of the edge
 /// leaving each, and the radius the surface stands off them.
@@ -19,7 +19,7 @@ pub(crate) struct Hull {
 }
 
 impl Hull {
-    pub(crate) fn of(collider: &Collider, transform: &Transform) -> Self {
+    pub(crate) fn of(collider: &Collider2D, transform: &Transform2D) -> Self {
         Self::from_shape(&collider.world_shape(transform))
     }
 
@@ -135,11 +135,11 @@ mod tests {
 
     #[test]
     fn a_capsules_two_edges_face_opposite_ways() {
-        let capsule = Collider::Capsule {
+        let capsule = Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.5,
         };
-        let hull = Hull::of(&capsule, &Transform::default());
+        let hull = Hull::of(&capsule, &Transform2D::default());
 
         assert_eq!(hull.len(), 2);
         assert!((hull.normals()[0] + hull.normals()[1]).length() < 1e-6);
@@ -148,7 +148,7 @@ mod tests {
 
     #[test]
     fn a_boxs_normals_point_out() {
-        let hull = Hull::of(&Collider::default(), &Transform::default());
+        let hull = Hull::of(&Collider2D::default(), &Transform2D::default());
         for (vertex, normal) in hull.vertices().iter().zip(hull.normals()) {
             // Each normal leaves its edge away from the centre.
             assert!(normal.dot(*vertex) > 0.0, "{normal:?} at {vertex:?}");
@@ -157,11 +157,11 @@ mod tests {
 
     #[test]
     fn the_normal_on_a_round_part_points_away_from_the_core() {
-        let capsule = Collider::Capsule {
+        let capsule = Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.5,
         };
-        let hull = Hull::of(&capsule, &Transform::default());
+        let hull = Hull::of(&capsule, &Transform2D::default());
         let top = hull.normal_at(Vec2::new(0.0, 1.0), Vec2::X);
         let side = hull.normal_at(Vec2::new(0.5, 0.0), Vec2::Y);
 

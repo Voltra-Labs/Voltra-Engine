@@ -9,7 +9,7 @@ mod visual;
 /// Godot's `LineEdit`. The entity's `Text` is the style — font, size,
 /// colour, alignment — and the field writes into its content what it
 /// shows: the text, the IME's composition at the caret while there is one,
-/// or the `placeholder`, drawn fainter, when it is empty. Its `Sprite`, if
+/// or the `placeholder`, drawn fainter, when it is empty. Its `Sprite2D`, if
 /// any, is the box. The text scrolls sideways to keep the caret in the box
 /// and is cut to it.
 ///

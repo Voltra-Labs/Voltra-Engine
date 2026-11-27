@@ -10,7 +10,7 @@ use voltra_render::glam::{Mat2, Mat3, Vec2};
 use super::{CasterShape, ShadowCaster2D};
 use crate::sprite::quad::{frame_missing, quad, Quad};
 use crate::sprite::sheets::Sheets;
-use crate::Sprite;
+use crate::Sprite2D;
 
 /// What a sprite-shaped caster needs to find its outline: the sheets its
 /// quad is resolved against, and the traced outlines.
@@ -28,7 +28,7 @@ pub struct SpriteShapes<'a> {
 /// not there. One function for the tracing and the reading, so both name the
 /// same rectangle.
 pub fn silhouette_key<'s>(
-    sprite: &'s Sprite,
+    sprite: &'s Sprite2D,
     sheets: Sheets<'_>,
 ) -> Option<(&'s AssetPath, Rect, Quad)> {
     let path = sprite.texture.as_ref()?;
@@ -59,7 +59,7 @@ pub fn prepare(world: &World, sheets: Sheets<'_>, silhouettes: &mut Silhouettes)
             continue;
         };
         if let Some((path, rect, _)) = world
-            .get::<Sprite>(entity)
+            .get::<Sprite2D>(entity)
             .and_then(|sprite| silhouette_key(sprite, sheets))
         {
             silhouettes.ensure(path, rect, alpha);
@@ -77,7 +77,7 @@ pub(super) fn sprite_outlines(
     shapes: SpriteShapes<'_>,
 ) -> Vec<Vec<Vec2>> {
     let Some((path, rect, drawn)) = world
-        .get::<Sprite>(entity)
+        .get::<Sprite2D>(entity)
         .and_then(|sprite| silhouette_key(sprite, shapes.sheets))
     else {
         return Vec::new();
@@ -116,7 +116,7 @@ pub fn sprite_silhouette(
     silhouettes: &mut Silhouettes,
 ) -> Vec<Vec<Vec2>> {
     let Some((path, rect, _)) = world
-        .get::<Sprite>(entity)
+        .get::<Sprite2D>(entity)
         .and_then(|sprite| silhouette_key(sprite, sheets))
     else {
         return Vec::new();

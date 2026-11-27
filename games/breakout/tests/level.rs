@@ -5,7 +5,7 @@
 use breakout::{Ball, Breakout, Brick, Score, FIRST_SCENE};
 use voltra_assets::AssetPath;
 use voltra_core::{App, Headless};
-use voltra_scene::{Text, Transform};
+use voltra_scene::{Text, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -56,7 +56,7 @@ fn the_ball_keeps_its_speed() {
         .expect("a ball");
     let speed = session
         .world()
-        .get::<voltra_scene::RigidBody>(ball)
+        .get::<voltra_scene::RigidBody2D>(ball)
         .expect("a body")
         .velocity
         .length();
@@ -75,7 +75,7 @@ fn a_lost_ball_is_served_again_and_costs_one() {
         .expect("a ball");
     session
         .world_mut()
-        .get_mut::<Transform>(ball)
+        .get_mut::<Transform2D>(ball)
         .expect("placed")
         .translation
         .y = -10.0;
@@ -83,7 +83,7 @@ fn a_lost_ball_is_served_again_and_costs_one() {
     assert_eq!(score(&session).balls, 2);
     let y = session
         .world()
-        .get::<Transform>(ball)
+        .get::<Transform2D>(ball)
         .expect("placed")
         .translation
         .y;

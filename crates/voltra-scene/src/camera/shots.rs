@@ -5,7 +5,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_render::{Texture, View2D};
 
-use super::{eye, Camera, CameraTarget};
+use super::{eye, Camera2D, CameraTarget};
 
 /// One camera's part of a frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -13,7 +13,7 @@ pub struct Shot {
     /// The camera's entity.
     pub entity: Entity,
     /// The camera component.
-    pub camera: Camera,
+    pub camera: Camera2D,
     /// Where its view is in the world, shake and all.
     pub position: Vec2,
     /// How far it is turned, counter-clockwise, in radians, shake and all.
@@ -64,7 +64,7 @@ impl Shot {
 /// frame. A camera whose render texture is not resolved is left out too.
 pub fn shots(world: &World) -> Vec<Shot> {
     let mut all: Vec<(Shot, bool, i32, u32)> = world
-        .query::<Camera>()
+        .query::<Camera2D>()
         .filter(|(_, camera)| camera.active)
         .filter_map(|(entity, camera)| {
             let wants_texture = world.get::<CameraTarget>(entity);
@@ -101,12 +101,12 @@ mod tests {
 
     use super::*;
     use crate::camera::Viewport;
-    use crate::{SceneId, Transform};
+    use crate::{SceneId, Transform2D};
 
-    fn camera(world: &mut World, camera: Camera, x: f32) -> Entity {
+    fn camera(world: &mut World, camera: Camera2D, x: f32) -> Entity {
         let e = world.spawn();
         world.insert(e, SceneId::new());
-        world.insert(e, Transform::from_translation(Vec2::new(x, 0.0)));
+        world.insert(e, Transform2D::from_translation(Vec2::new(x, 0.0)));
         world.insert(e, camera);
         e
     }
@@ -114,8 +114,8 @@ mod tests {
     #[test]
     fn of_several_full_screen_cameras_only_the_highest_draws() {
         let mut world = World::new();
-        camera(&mut world, Camera::default(), 0.0);
-        let top = camera(&mut world, Camera::default().with_priority(3), 1.0);
+        camera(&mut world, Camera2D::default(), 0.0);
+        let top = camera(&mut world, Camera2D::default().with_priority(3), 1.0);
         let shots = shots(&world);
         assert_eq!(shots.len(), 1);
         assert_eq!(shots[0].entity, top);
@@ -126,21 +126,21 @@ mod tests {
         let mut world = World::new();
         let left = camera(
             &mut world,
-            Camera {
+            Camera2D {
                 viewport: Viewport::LEFT,
-                ..Camera::default()
+                ..Camera2D::default()
             },
             -5.0,
         );
         let right = camera(
             &mut world,
-            Camera {
+            Camera2D {
                 viewport: Viewport::RIGHT,
-                ..Camera::default()
+                ..Camera2D::default()
             },
             5.0,
         );
-        let map = camera(&mut world, Camera::new(20.0), 0.0);
+        let map = camera(&mut world, Camera2D::new(20.0), 0.0);
         let mut target =
             CameraTarget::new(AssetPath::new("minimap.rendertexture.ron").expect("a path"));
         target.handle = Some(Handle::forge(9, 0));
@@ -152,16 +152,16 @@ mod tests {
     #[test]
     fn an_unresolved_texture_camera_and_an_inactive_one_are_left_out() {
         let mut world = World::new();
-        let map = camera(&mut world, Camera::default(), 0.0);
+        let map = camera(&mut world, Camera2D::default(), 0.0);
         world.insert(
             map,
             CameraTarget::new(AssetPath::new("m.rendertexture.ron").expect("a path")),
         );
         camera(
             &mut world,
-            Camera {
+            Camera2D {
                 active: false,
-                ..Camera::default()
+                ..Camera2D::default()
             },
             0.0,
         );
@@ -173,10 +173,10 @@ mod tests {
         let mut world = World::new();
         let shot = Shot {
             entity: world.spawn(),
-            camera: Camera {
+            camera: Camera2D {
                 size: 2.0,
                 pixel_perfect: true,
-                ..Camera::default()
+                ..Camera2D::default()
             },
             position: Vec2::new(0.013, -0.041),
             rotation: 0.0,
@@ -194,7 +194,7 @@ mod tests {
         assert!((bottom / pixel - (bottom / pixel).round()).abs() < 1e-4);
         assert!((view.position - shot.position).abs().max_element() <= pixel / 2.0 + 1e-6);
         let loose = Shot {
-            camera: Camera::new(2.0),
+            camera: Camera2D::new(2.0),
             ..shot
         };
         assert_eq!(loose.view(65, 64).position, shot.position);
@@ -210,9 +210,9 @@ mod tests {
     #[test]
     fn a_shot_turns_as_its_camera_does_in_the_world() {
         let mut world = World::new();
-        let e = camera(&mut world, Camera::default(), 2.0);
+        let e = camera(&mut world, Camera2D::default(), 2.0);
         world
-            .get_mut::<Transform>(e)
+            .get_mut::<Transform2D>(e)
             .expect("spawned with one")
             .rotation = 0.5;
         let shots = shots(&world);

@@ -7,15 +7,15 @@ const NEAR: f32 = 1e-4;
 
 fn box_at(world: &mut World, at: Vec2, half: Vec2) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Box { half_extents: half });
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Box { half_extents: half });
     entity
 }
 
 fn circle_at(world: &mut World, at: Vec2, radius: f32) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Circle { radius });
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Circle { radius });
     entity
 }
 
@@ -83,11 +83,12 @@ fn a_ray_hits_the_turned_face_of_a_turned_box() {
     let entity = world.spawn();
     world.insert(
         entity,
-        Transform::from_translation(Vec2::new(4.0, 0.0)).with_rotation(std::f32::consts::FRAC_PI_4),
+        Transform2D::from_translation(Vec2::new(4.0, 0.0))
+            .with_rotation(std::f32::consts::FRAC_PI_4),
     );
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
     );
@@ -292,11 +293,11 @@ fn a_point_respects_a_turned_box() {
     let entity = world.spawn();
     world.insert(
         entity,
-        Transform::default().with_rotation(std::f32::consts::FRAC_PI_4),
+        Transform2D::default().with_rotation(std::f32::consts::FRAC_PI_4),
     );
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
     );
@@ -346,11 +347,11 @@ fn an_overlap_tests_the_shape_and_not_its_bounds() {
     let entity = world.spawn();
     world.insert(
         entity,
-        Transform::default().with_rotation(std::f32::consts::FRAC_PI_4),
+        Transform2D::default().with_rotation(std::f32::consts::FRAC_PI_4),
     );
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
     );

@@ -2,7 +2,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider2D, Transform2D};
 
 use crate::query::{self, Poses, QueryFilter, RayHit, ShapeHit};
 
@@ -61,11 +61,11 @@ impl<'w> Rewound<'w> {
     /// lag-compensated, its transform now if not; `None` when the query
     /// cannot find it — not there at that moment, hidden, or without a
     /// transform.
-    pub fn pose(&self, entity: Entity) -> Option<Transform> {
+    pub fn pose(&self, entity: Entity) -> Option<Transform2D> {
         match self.poses.as_ref().and_then(|poses| poses.get(&entity)) {
             Some(Some((_, transform))) => Some(*transform),
             Some(None) => None,
-            None => self.world.get::<Transform>(entity).copied(),
+            None => self.world.get::<Transform2D>(entity).copied(),
         }
     }
 
@@ -104,8 +104,8 @@ impl<'w> Rewound<'w> {
     /// [`query::cast`] at this moment.
     pub fn cast(
         &self,
-        shape: &Collider,
-        at: &Transform,
+        shape: &Collider2D,
+        at: &Transform2D,
         motion: Vec2,
         filter: QueryFilter,
     ) -> Option<ShapeHit> {

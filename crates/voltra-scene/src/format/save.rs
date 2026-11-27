@@ -114,7 +114,7 @@ pub fn write(file: &SceneFile, path: &Path) -> Result<(), SceneError> {
 mod tests {
     use super::*;
     use crate::scene_id::UnknownComponents;
-    use crate::{Sprite, Transform};
+    use crate::{Sprite2D, Transform2D};
     use voltra_render::glam::Vec2;
 
     fn world_with(count: usize) -> World {
@@ -122,8 +122,8 @@ mod tests {
         for i in 0..count {
             let e = world.spawn();
             world.insert(e, SceneId::new());
-            world.insert(e, Transform::from_translation(Vec2::new(i as f32, 0.0)));
-            world.insert(e, Sprite::default());
+            world.insert(e, Transform2D::from_translation(Vec2::new(i as f32, 0.0)));
+            world.insert(e, Sprite2D::default());
         }
         world
     }
@@ -142,8 +142,8 @@ mod tests {
         // list has to be kept anywhere.
         let mut world = World::new();
         let e = world.spawn();
-        world.insert(e, Transform::default());
-        world.insert(e, Sprite::default());
+        world.insert(e, Transform2D::default());
+        world.insert(e, Sprite2D::default());
 
         let file = to_scene_file(&world, &ComponentRegistry::with_defaults())
             .expect("saving cannot fail here");
@@ -177,7 +177,7 @@ mod tests {
         let mut world = World::new();
         let e = world.spawn();
         world.insert(e, SceneId::new());
-        world.insert(e, Sprite::default());
+        world.insert(e, Sprite2D::default());
 
         let physics: Box<RawValue> = RawValue::from_ron("(mass: 5.0)")
             .expect("valid RON")

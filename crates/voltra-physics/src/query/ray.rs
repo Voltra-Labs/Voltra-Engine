@@ -2,7 +2,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider2D, Transform2D};
 
 use super::{colliders, normalized, rotated, to_local, Poses, QueryFilter};
 use crate::geometry::Hull;
@@ -76,14 +76,14 @@ pub(crate) fn ray_among(
 
 /// `(point, normal, distance)` where a unit ray meets the shape within `max`.
 fn cast(
-    collider: &Collider,
-    transform: &Transform,
+    collider: &Collider2D,
+    transform: &Transform2D,
     origin: Vec2,
     direction: Vec2,
     max: f32,
 ) -> Option<(Vec2, Vec2, f32)> {
     let distance = match collider {
-        Collider::Box { .. } => {
+        Collider2D::Box { .. } => {
             let half = collider.world_half_extents(transform);
             slab(
                 to_local(transform, origin),
@@ -91,11 +91,11 @@ fn cast(
                 half,
             )?
         }
-        Collider::Circle { .. } => {
+        Collider2D::Circle { .. } => {
             let radius = collider.world_radius(transform);
             sphere(origin - transform.translation, direction, radius)?
         }
-        Collider::Capsule { .. } | Collider::Polygon { .. } => {
+        Collider2D::Capsule { .. } | Collider2D::Polygon { .. } => {
             hull_entry(&Hull::of(collider, transform), origin, direction)?
         }
     };
@@ -110,11 +110,11 @@ fn cast(
         -direction
     } else {
         match collider {
-            Collider::Box { .. } => face_normal(collider, transform, point),
-            Collider::Circle { .. } => (point - transform.translation)
+            Collider2D::Box { .. } => face_normal(collider, transform, point),
+            Collider2D::Circle { .. } => (point - transform.translation)
                 .try_normalize()
                 .unwrap_or(-direction),
-            Collider::Capsule { .. } | Collider::Polygon { .. } => {
+            Collider2D::Capsule { .. } | Collider2D::Polygon { .. } => {
                 Hull::of(collider, transform).normal_at(point, -direction)
             }
         }
@@ -226,7 +226,7 @@ fn convex_entry(points: &[Vec2], origin: Vec2, direction: Vec2) -> Option<f32> {
 }
 
 /// The outward normal of the box face `point` sits on.
-fn face_normal(collider: &Collider, transform: &Transform, point: Vec2) -> Vec2 {
+fn face_normal(collider: &Collider2D, transform: &Transform2D, point: Vec2) -> Vec2 {
     let local = to_local(transform, point);
     let half = collider.world_half_extents(transform);
     // Whichever axis the point is nearest the edge of, in units of that axis'

@@ -2,15 +2,15 @@
 
 use voltra_ecs::World;
 use voltra_render::glam::{IVec2, Vec2};
-use voltra_scene::{Collider, OneWay, RigidBody, Transform};
+use voltra_scene::{Collider2D, OneWay, RigidBody2D, Transform2D};
 
 use super::*;
 use crate::Path;
 
 fn wall(world: &mut World, at: Vec2, half: Vec2) {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Box { half_extents: half });
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Box { half_extents: half });
 }
 
 fn settings(clearance: f32) -> NavSettings {
@@ -126,28 +126,31 @@ fn diagonals_never_cut_a_blocked_corner() {
 fn moving_bodies_characters_and_one_way_platforms_are_not_baked_in() {
     let mut world = World::new();
     let walker = world.spawn();
-    world.insert(walker, Transform::from_translation(Vec2::new(4.0, 4.0)));
+    world.insert(walker, Transform2D::from_translation(Vec2::new(4.0, 4.0)));
     world.insert(
         walker,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
     world.insert(walker, voltra_scene::CharacterBody2D::default());
     let crate_body = world.spawn();
-    world.insert(crate_body, Transform::from_translation(Vec2::new(2.0, 2.0)));
     world.insert(
         crate_body,
-        Collider::Box {
+        Transform2D::from_translation(Vec2::new(2.0, 2.0)),
+    );
+    world.insert(
+        crate_body,
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
-    world.insert(crate_body, RigidBody::new_dynamic(1.0));
+    world.insert(crate_body, RigidBody2D::new_dynamic(1.0));
     let ledge = world.spawn();
-    world.insert(ledge, Transform::from_translation(Vec2::new(6.0, 6.0)));
+    world.insert(ledge, Transform2D::from_translation(Vec2::new(6.0, 6.0)));
     world.insert(
         ledge,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );

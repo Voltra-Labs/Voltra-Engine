@@ -131,7 +131,7 @@ impl App {
 
     /// Starts with the world live: physics steps, and the game's ticks run.
     ///
-    /// Off by default: a scene with no `RigidBody` pays nothing either way, but
+    /// Off by default: a scene with no `RigidBody2D` pays nothing either way, but
     /// an editor that started simulating the moment a body was added would move
     /// the thing being placed out from under the cursor, and one that ran game
     /// logic while authoring would edit the scene behind the author's back —

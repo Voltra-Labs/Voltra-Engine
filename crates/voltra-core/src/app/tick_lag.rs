@@ -15,7 +15,7 @@ use voltra_ecs::World;
 use voltra_net::PeerId;
 use voltra_physics::{PoseHistory, Rewound};
 use voltra_replication::{LagCompensation, Replication, ReplicationServer};
-use voltra_scene::Collider;
+use voltra_scene::Collider2D;
 
 use super::tick_net::Net;
 
@@ -136,7 +136,7 @@ fn hide_unsent(server: &ReplicationServer, peer: PeerId, rewound: &mut Rewound<'
     }
     let world = rewound.world();
     let unsent: Vec<_> = world
-        .query::<Collider>()
+        .query::<Collider2D>()
         .map(|(entity, _)| entity)
         .filter(|&entity| server.net_id(entity).is_some() && !server.is_relevant(peer, entity))
         .collect();

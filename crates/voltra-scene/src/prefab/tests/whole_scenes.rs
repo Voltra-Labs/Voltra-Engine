@@ -5,7 +5,7 @@ use super::*;
 fn level() -> Prefab {
     let mut world = World::new();
     let floor = named(&mut world, "floor", Vec2::new(5.0, -1.0));
-    world.insert(floor, Sprite::default());
+    world.insert(floor, Sprite2D::default());
     let coin = named(&mut world, "coin", Vec2::new(2.0, 0.0));
     world.insert(
         coin,
@@ -25,7 +25,7 @@ fn a_scene_keeps_its_authored_positions() {
         .copied()
         .expect("the floor");
     assert_eq!(
-        world.get::<Transform>(floor).map(|t| t.translation),
+        world.get::<Transform2D>(floor).map(|t| t.translation),
         Some(Vec2::new(5.0, -1.0))
     );
 }

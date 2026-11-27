@@ -7,7 +7,7 @@ use voltra_render::glam::Vec2;
 use super::tests::{at, near, placed, DT};
 use super::*;
 use crate::scene_id::SceneId;
-use crate::{Camera, ComponentRegistry, Transform};
+use crate::{Camera2D, ComponentRegistry, Transform2D};
 
 fn id(world: &World, entity: Entity) -> SceneId {
     *world.get::<SceneId>(entity).expect("an id")
@@ -17,7 +17,7 @@ fn id(world: &World, entity: Entity) -> SceneId {
 fn group_rig(world: &mut World, targets: &[Entity], zoom: Option<FollowZoom>) -> Entity {
     let ids: Vec<SceneId> = targets.iter().map(|&t| id(world, t)).collect();
     let camera = placed(world, Vec2::ZERO);
-    world.insert(camera, Camera::new(2.0));
+    world.insert(camera, Camera2D::new(2.0));
     world.insert(
         camera,
         CameraFollow2D {
@@ -30,7 +30,7 @@ fn group_rig(world: &mut World, targets: &[Entity], zoom: Option<FollowZoom>) ->
 }
 
 fn size(world: &World, camera: Entity) -> f32 {
-    world.get::<Camera>(camera).expect("a camera").size
+    world.get::<Camera2D>(camera).expect("a camera").size
 }
 
 #[test]
@@ -54,13 +54,13 @@ fn two_targets_are_framed_at_their_middle_and_zoomed_to_fit() {
     );
 
     // They close in: it zooms in, down to its least size.
-    world.get_mut::<Transform>(right).expect("t").translation = Vec2::new(-5.0, 1.0);
+    world.get_mut::<Transform2D>(right).expect("t").translation = Vec2::new(-5.0, 1.0);
     update(&mut world, DT, 2.0, None);
     assert!(near(at(&world, camera), Vec2::new(-5.5, 1.0)));
     assert_eq!(size(&world, camera), 2.0);
 
     // Far apart, out to its greatest.
-    world.get_mut::<Transform>(right).expect("t").translation = Vec2::new(200.0, 1.0);
+    world.get_mut::<Transform2D>(right).expect("t").translation = Vec2::new(200.0, 1.0);
     update(&mut world, DT, 2.0, None);
     assert_eq!(size(&world, camera), 20.0);
 }
@@ -77,7 +77,7 @@ fn the_zoom_eases_at_the_followers_smoothing() {
         .smoothing = 5.0;
     update(&mut world, DT, 1.0, None);
     let landed = size(&world, camera);
-    world.get_mut::<Transform>(b).expect("t").translation = Vec2::new(10.0, 0.0);
+    world.get_mut::<Transform2D>(b).expect("t").translation = Vec2::new(10.0, 0.0);
     update(&mut world, DT, 1.0, None);
     let eased = size(&world, camera);
     assert!(eased > landed && eased < 9.0, "{landed} → {eased}");
@@ -106,7 +106,7 @@ fn a_despawned_target_drops_out_and_all_gone_holds_still() {
     );
 
     world.despawn(a);
-    world.get_mut::<Transform>(camera).expect("c").translation = Vec2::new(7.0, 7.0);
+    world.get_mut::<Transform2D>(camera).expect("c").translation = Vec2::new(7.0, 7.0);
     update(&mut world, DT, 1.0, None);
     update(&mut world, DT, 1.0, None);
     assert_eq!(at(&world, camera), Vec2::new(7.0, 7.0));
@@ -123,7 +123,7 @@ fn a_turned_camera_zooms_to_fit_the_group_turned() {
         max_size: 50.0,
     };
     let camera = group_rig(&mut world, &[low, high], Some(zoom));
-    world.get_mut::<Transform>(camera).expect("t").rotation = std::f32::consts::FRAC_PI_2;
+    world.get_mut::<Transform2D>(camera).expect("t").rotation = std::f32::consts::FRAC_PI_2;
     update(&mut world, DT, 2.0, None);
     // Sixteen tall in the world is sixteen across the turned view: half 8
     // over an aspect of 2.
@@ -194,7 +194,7 @@ fn a_split_screen_camera_fits_its_half_not_the_window() {
         max_size: 50.0,
     };
     let camera = group_rig(&mut world, &[left, right], Some(zoom));
-    world.get_mut::<Camera>(camera).expect("c").viewport = crate::camera::Viewport::LEFT;
+    world.get_mut::<Camera2D>(camera).expect("c").viewport = crate::camera::Viewport::LEFT;
     // A 2:1 window, the camera drawing into its left half: square, so
     // twelve wide needs a size of six, not three.
     update(&mut world, DT, 2.0, None);

@@ -8,7 +8,7 @@ use super::*;
 use crate::batch::SpriteBatch;
 use crate::pick::entity_at;
 use crate::sprite::sheets::Sheets;
-use crate::{Sprite, Transform};
+use crate::{Sprite2D, Transform2D};
 
 fn fonts() -> Fonts {
     let root = scratch_root().keep();
@@ -167,7 +167,7 @@ fn prepare_rasterizes_what_the_world_holds() {
     let mut fonts = fonts();
     let mut world = World::new();
     let e = world.spawn();
-    world.insert(e, Transform::default());
+    world.insert(e, Transform2D::default());
     world.insert(e, Text::new("ab"));
     resolve_fonts(&mut world, &mut fonts);
 
@@ -181,7 +181,7 @@ mod in_the_world {
 
     fn spawn<T: 'static>(world: &mut World, component: T, at: Vec2) -> Entity {
         let e = world.spawn();
-        world.insert(e, Transform::from_translation(at));
+        world.insert(e, Transform2D::from_translation(at));
         world.insert(e, component);
         e
     }
@@ -199,11 +199,19 @@ mod in_the_world {
         let scratch = scratch_root();
         let atlases = Atlases::new(&scratch);
         let mut world = World::new();
-        spawn(&mut world, Sprite::default().with_sort_order(2), Vec2::ZERO);
+        spawn(
+            &mut world,
+            Sprite2D::default().with_sort_order(2),
+            Vec2::ZERO,
+        );
         let mut label = Text::new("H");
         label.sort_order = 1;
         spawn(&mut world, label, Vec2::ZERO);
-        spawn(&mut world, Sprite::default().with_sort_order(0), Vec2::ZERO);
+        spawn(
+            &mut world,
+            Sprite2D::default().with_sort_order(0),
+            Vec2::ZERO,
+        );
         ready(&mut world, &mut fonts);
 
         let sheets = Sheets {
@@ -279,7 +287,7 @@ mod in_the_world {
     fn a_text_in_front_of_a_sprite_is_picked_over_it() {
         let mut fonts = fonts();
         let mut world = World::new();
-        spawn(&mut world, Sprite::default(), Vec2::new(0.5, 0.0));
+        spawn(&mut world, Sprite2D::default(), Vec2::new(0.5, 0.0));
         let mut front = Text::new("HHHH");
         front.sort_order = 1;
         let label = spawn(&mut world, front, Vec2::ZERO);

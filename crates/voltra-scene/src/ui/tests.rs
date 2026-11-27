@@ -8,7 +8,7 @@ use crate::batch::SpriteBatch;
 use crate::pick::entity_at;
 use crate::sprite::sheets::Sheets;
 use crate::text::{prepare, resolve_fonts, ui_px};
-use crate::{hierarchy, Align, SceneId, Sprite, Text, Transform};
+use crate::{hierarchy, Align, SceneId, Sprite2D, Text, Transform2D};
 
 const SCREEN: Vec2 = Vec2::new(800.0, 600.0);
 
@@ -57,7 +57,7 @@ fn a_sprite_fills_its_rect_in_physical_pixels() {
         &mut world,
         UiRect::pinned(Vec2::ZERO, Vec2::splat(10.0), Vec2::new(100.0, 50.0)),
     );
-    world.insert(panel, Sprite::default());
+    world.insert(panel, Sprite2D::default());
 
     let layout = UiLayout::from_world(&world, SCREEN);
     let batch = mesh::batch(&world, Sheets::default(), &layout, 2.0);
@@ -70,11 +70,11 @@ fn a_sprite_fills_its_rect_in_physical_pixels() {
 fn ui_elements_are_not_drawn_in_the_world() {
     let mut world = World::new();
     let panel = element(&mut world, UiRect::default());
-    world.insert(panel, Transform::default());
-    world.insert(panel, Sprite::default());
+    world.insert(panel, Transform2D::default());
+    world.insert(panel, Sprite2D::default());
     let world_sprite = world.spawn();
-    world.insert(world_sprite, Transform::default());
-    world.insert(world_sprite, Sprite::default());
+    world.insert(world_sprite, Transform2D::default());
+    world.insert(world_sprite, Sprite2D::default());
 
     let batch = SpriteBatch::from_world(&world, Sheets::default());
     assert_eq!(batch.sprite_count(), 1, "only the world sprite");
@@ -84,8 +84,8 @@ fn ui_elements_are_not_drawn_in_the_world() {
 fn ui_elements_are_not_picked_in_the_world() {
     let mut world = World::new();
     let panel = element(&mut world, UiRect::default());
-    world.insert(panel, Transform::default());
-    world.insert(panel, Sprite::default());
+    world.insert(panel, Transform2D::default());
+    world.insert(panel, Sprite2D::default());
     assert_eq!(entity_at(&world, Vec2::ZERO, Sheets::default()), None);
 }
 
@@ -205,10 +205,10 @@ fn a_childs_sprite_draws_over_its_panels_and_text_over_its_own_sprite() {
     let mut fonts = fonts();
     let mut world = World::new();
     let button = element(&mut world, UiRect::stretched(0.0));
-    world.insert(button, Sprite::default());
+    world.insert(button, Sprite2D::default());
     world.insert(button, Text::new("H"));
     let panel = element(&mut world, UiRect::stretched(0.0));
-    world.insert(panel, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+    world.insert(panel, Sprite2D::new([0.0, 0.0, 1.0, 1.0]));
     hierarchy::set_parent(&mut world, button, panel).expect("parents");
     ready(&mut world, &mut fonts, 1.0);
 
@@ -229,12 +229,12 @@ fn a_childs_sprite_draws_over_its_panels_and_text_over_its_own_sprite() {
 fn the_topmost_element_under_a_point_is_picked() {
     let mut world = World::new();
     let panel = element(&mut world, UiRect::stretched(0.0));
-    world.insert(panel, Sprite::default());
+    world.insert(panel, Sprite2D::default());
     let badge = element(
         &mut world,
         UiRect::pinned(Vec2::ZERO, Vec2::ZERO, Vec2::splat(50.0)),
     );
-    world.insert(badge, Sprite::default().with_sort_order(1));
+    world.insert(badge, Sprite2D::default().with_sort_order(1));
     let layout = UiLayout::from_world(&world, SCREEN);
 
     assert_eq!(element_at(&world, &layout, Vec2::splat(10.0)), Some(badge));

@@ -12,11 +12,11 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{IVec2, Mat3, Vec2};
 
-use crate::hierarchy::WorldTransforms;
+use crate::hierarchy::WorldTransforms2D;
 use crate::scene_id::SceneId;
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
-use crate::sprite::{draw_key, Sprite};
+use crate::sprite::{draw_key, Sprite2D};
 use crate::text::{shape, Text};
 use crate::tilemap::Tilemap;
 
@@ -26,7 +26,7 @@ use crate::tilemap::Tilemap;
 pub fn entities_within(world: &World, a: Vec2, b: Vec2, sheets: Sheets<'_>) -> Vec<Entity> {
     let (min, max) = (a.min(b), a.max(b));
     let inside = |p: Vec2| p.cmpge(min).all() && p.cmple(max).all();
-    let transforms = WorldTransforms::seen_from(world, sheets.camera);
+    let transforms = WorldTransforms2D::seen_from(world, sheets.camera);
     let mut found: Vec<(Entity, (i32, i32, u32))> = world
         .query::<SceneId>()
         .filter(|(entity, _)| !crate::ui::is_ui(world, *entity))
@@ -48,13 +48,13 @@ pub fn entities_within(world: &World, a: Vec2, b: Vec2, sheets: Sheets<'_>) -> V
 /// entity with nothing drawn (or a text not laid out yet). What the editor
 /// outlines a selected entity by.
 pub fn outline(world: &World, entity: Entity, sheets: Sheets<'_>) -> Option<[Vec2; 4]> {
-    let transforms = WorldTransforms::seen_from(world, sheets.camera);
+    let transforms = WorldTransforms2D::seen_from(world, sheets.camera);
     shape_of(world, entity, transforms.matrix(entity), sheets)
 }
 
 /// [`outline`] through an already composed `matrix`.
 fn shape_of(world: &World, entity: Entity, matrix: Mat3, sheets: Sheets<'_>) -> Option<[Vec2; 4]> {
-    let local = if let Some(sprite) = world.get::<Sprite>(entity) {
+    let local = if let Some(sprite) = world.get::<Sprite2D>(entity) {
         quad(sprite, sheets).corners()
     } else if let Some(text) = world.get::<Text>(entity) {
         let bounds = shape::bounds(text, sheets.fonts?)?;
@@ -69,7 +69,7 @@ fn shape_of(world: &World, entity: Entity, matrix: Mat3, sheets: Sheets<'_>) -> 
 
 /// The key `entity` draws at, for ordering what a box took.
 fn key_of(world: &World, entity: Entity, sheets: Sheets<'_>) -> (i32, i32, u32) {
-    if let Some(sprite) = world.get::<Sprite>(entity) {
+    if let Some(sprite) = world.get::<Sprite2D>(entity) {
         draw_key(
             entity,
             sheets.rank(&sprite.sorting_layer),
@@ -91,12 +91,12 @@ fn box_corners(min: Vec2, max: Vec2) -> [Vec2; 4] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Tile, Transform};
+    use crate::{Tile, Transform2D};
 
     fn spawn(world: &mut World, at: Vec2) -> Entity {
         let e = world.spawn();
         world.insert(e, SceneId::new());
-        world.insert(e, Transform::from_translation(at));
+        world.insert(e, Transform2D::from_translation(at));
         e
     }
 
@@ -105,9 +105,9 @@ mod tests {
         let mut world = World::new();
         // Unit quads: half a unit either way of their centre.
         let whole = spawn(&mut world, Vec2::new(1.0, 1.0));
-        world.insert(whole, Sprite::default());
+        world.insert(whole, Sprite2D::default());
         let straddling = spawn(&mut world, Vec2::new(3.0, 1.0));
-        world.insert(straddling, Sprite::default());
+        world.insert(straddling, Sprite2D::default());
         let taken = entities_within(&world, Vec2::ZERO, Vec2::new(3.0, 2.0), Sheets::default());
         assert_eq!(taken, [whole]);
     }
@@ -157,9 +157,9 @@ mod tests {
     fn the_topmost_is_last() {
         let mut world = World::new();
         let top = spawn(&mut world, Vec2::new(1.0, 1.0));
-        world.insert(top, Sprite::default().with_sort_order(5));
+        world.insert(top, Sprite2D::default().with_sort_order(5));
         let bottom = spawn(&mut world, Vec2::new(1.0, 1.0));
-        world.insert(bottom, Sprite::default().with_sort_order(-5));
+        world.insert(bottom, Sprite2D::default().with_sort_order(-5));
         let taken = entities_within(&world, Vec2::ZERO, Vec2::splat(2.0), Sheets::default());
         assert_eq!(taken, [bottom, top]);
     }
@@ -168,7 +168,7 @@ mod tests {
     fn an_outline_is_what_is_drawn_and_nothing_for_an_empty_entity() {
         let mut world = World::new();
         let sprite = spawn(&mut world, Vec2::new(2.0, 0.0));
-        world.insert(sprite, Sprite::default());
+        world.insert(sprite, Sprite2D::default());
         let corners = outline(&world, sprite, Sheets::default()).expect("a quad");
         let min = corners.iter().copied().fold(Vec2::INFINITY, Vec2::min);
         let max = corners.iter().copied().fold(Vec2::NEG_INFINITY, Vec2::max);

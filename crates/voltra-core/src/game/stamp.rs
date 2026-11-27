@@ -5,7 +5,7 @@
 //! valid `Box<dyn Game>` to the editor if both were built by the same
 //! compiler from the same engine sources with the same features and flags.
 //! And the world is keyed by `TypeId`, which hashes all of that in — a
-//! library whose `Transform` has another `TypeId` would find no transforms
+//! library whose `Transform2D` has another `TypeId` would find no transforms
 //! at all, silently. So the stamp carries the compiler's version, the
 //! profile, the engine's version and a fingerprint of the `TypeId`s of the
 //! engine types a game touches, and [`Stamp::check`] names the first that
@@ -210,14 +210,14 @@ fn fingerprint() -> u64 {
     // each is hashed with its layout too: a library built before
     // `CharacterBody2D` grew a field would otherwise pass and read
     // garbage through it.
-    component::<voltra_scene::Transform>(&mut hasher);
-    component::<voltra_scene::Sprite>(&mut hasher);
-    component::<voltra_scene::RigidBody>(&mut hasher);
-    component::<voltra_scene::Collider>(&mut hasher);
+    component::<voltra_scene::Transform2D>(&mut hasher);
+    component::<voltra_scene::Sprite2D>(&mut hasher);
+    component::<voltra_scene::RigidBody2D>(&mut hasher);
+    component::<voltra_scene::Collider2D>(&mut hasher);
     component::<voltra_scene::Sensor>(&mut hasher);
     component::<voltra_scene::CharacterBody2D>(&mut hasher);
     component::<voltra_scene::CharacterContact>(&mut hasher);
-    component::<voltra_scene::Camera>(&mut hasher);
+    component::<voltra_scene::Camera2D>(&mut hasher);
     component::<voltra_scene::CameraFollow2D>(&mut hasher);
     component::<voltra_scene::CameraShake>(&mut hasher);
     component::<voltra_scene::Name>(&mut hasher);

@@ -2,10 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::Transform;
+use crate::Transform2D;
 
 /// A bone of a [`Skeleton2D`](super::Skeleton2D). Its pose is the entity's
-/// own [`Transform`], relative to its parent bone; it points along its +x.
+/// own [`Transform2D`], relative to its parent bone; it points along its +x.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Bone2D {
     /// From its origin to its tip along its +x, in its own units: where a
@@ -14,7 +14,7 @@ pub struct Bone2D {
     /// The pose it is bound in, relative to its parent: what a skinned
     /// mesh's weights were painted against, and what *Reset pose* puts back.
     #[serde(default)]
-    pub rest: Transform,
+    pub rest: Transform2D,
 }
 
 impl Default for Bone2D {
@@ -22,7 +22,7 @@ impl Default for Bone2D {
     fn default() -> Self {
         Self {
             length: 0.5,
-            rest: Transform::default(),
+            rest: Transform2D::default(),
         }
     }
 }
@@ -32,7 +32,7 @@ impl Bone2D {
     pub const NAME: &'static str = "Bone2D";
 
     /// A bone `length` long resting in `rest`.
-    pub fn new(length: f32, rest: Transform) -> Self {
+    pub fn new(length: f32, rest: Transform2D) -> Self {
         Self { length, rest }
     }
 }

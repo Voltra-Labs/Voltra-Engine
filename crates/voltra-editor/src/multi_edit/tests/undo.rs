@@ -2,7 +2,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_scene::format::{entity_with_id, ComponentRegistry};
-use voltra_scene::{Collider, SceneId, Sprite};
+use voltra_scene::{Collider2D, SceneId, Sprite2D};
 
 use super::{begin, three, BLUE, GREEN, RED};
 use crate::gizmo::Gizmo;
@@ -39,7 +39,10 @@ fn a_drag_across_three_entities_is_one_undo_step() {
         };
         history.watch(view, ids.iter().copied());
         let edit = begin(&host.0, &registry, &selected);
-        host.0.get_mut::<Sprite>(selected[2]).expect("s").sort_order = order;
+        host.0
+            .get_mut::<Sprite2D>(selected[2])
+            .expect("s")
+            .sort_order = order;
         edit.finish(&mut host.0, &registry);
         history.claim("Set sort order");
         let view = SceneView {
@@ -66,7 +69,7 @@ fn a_drag_across_three_entities_is_one_undo_step() {
     assert_eq!(history.len(), 1, "one step for the drag and the three");
     for &id in &ids {
         let entity = entity_with_id(&host.0, id).expect("there");
-        assert_eq!(host.0.get::<Sprite>(entity).expect("s").sort_order, 3);
+        assert_eq!(host.0.get::<Sprite2D>(entity).expect("s").sort_order, 3);
     }
 
     let mut gizmo = Gizmo::default();
@@ -78,7 +81,7 @@ fn a_drag_across_three_entities_is_one_undo_step() {
     assert!(history.undo(ctx, &mut host));
     for (&id, color) in ids.iter().zip([RED, GREEN, BLUE]) {
         let entity = entity_with_id(&host.0, id).expect("there");
-        let sprite = host.0.get::<Sprite>(entity).expect("s");
+        let sprite = host.0.get::<Sprite2D>(entity).expect("s");
         assert_eq!((sprite.sort_order, sprite.color), (0, color));
     }
 }
@@ -119,7 +122,7 @@ fn a_component_added_to_all_is_undone_from_all_and_redone_on_all() {
     selected.iter().for_each(|&e| selection.add(e));
     let ids = selection.ids(&host.0);
     let mut history = History::default();
-    let circle = Collider::Circle { radius: 1.5 };
+    let circle = Collider2D::Circle { radius: 1.5 };
     frame(
         &mut history,
         &mut host,
@@ -137,7 +140,7 @@ fn a_component_added_to_all_is_undone_from_all_and_redone_on_all() {
         ids.iter()
             .map(|&id| {
                 let e = entity_with_id(&host.0, id).expect("there");
-                host.0.get::<Collider>(e).copied()
+                host.0.get::<Collider2D>(e).copied()
             })
             .collect::<Vec<_>>()
     };

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
 use super::*;
-use crate::{Collider, Sprite, Transform};
+use crate::{Collider2D, Sprite2D, Transform2D};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 enum Shape {
@@ -66,11 +66,11 @@ fn a_replayed_tree_writes_exactly_what_the_type_writes() {
         assert_eq!(raw.get_ron(), direct.get_ron());
     }
     // And the engine's own, enums included, load back as themselves.
-    let collider = Collider::Capsule {
+    let collider = Collider2D::Capsule {
         radius: 0.25,
         half_height: 1.0,
     };
-    let back: Collider = tree(&collider)
+    let back: Collider2D = tree(&collider)
         .to_raw()
         .expect("writes")
         .into_rust()
@@ -179,13 +179,13 @@ fn a_value_is_written_at_a_place_only_where_the_tree_has_it() {
     assert!(!capsule.set(&path, tree(&4.0_f32)));
     assert_eq!(capsule, before);
 
-    let sprite = tree(&Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    let sprite = tree(&Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
     assert_eq!(
         sprite.at(&[Step::Field("color"), Step::Index(0)]),
         Some(&tree(&1.0_f32))
     );
     assert_eq!(sprite.at(&[Step::Field("no_such_field")]), None);
-    let transform = tree(&Transform::default());
+    let transform = tree(&Transform2D::default());
     assert_eq!(transform.at(&[]), Some(&transform));
 }
 

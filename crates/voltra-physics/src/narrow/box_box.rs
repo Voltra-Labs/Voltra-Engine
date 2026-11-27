@@ -198,28 +198,28 @@ mod tests {
     use crate::narrow::tests::at;
     use std::f32::consts::FRAC_PI_4;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Collider, Transform};
+    use voltra_scene::{Collider2D, Transform2D};
 
     /// A wide, thin floor whose top face is at y = 0.
-    fn floor() -> Collider {
-        Collider::Box {
+    fn floor() -> Collider2D {
+        Collider2D::Box {
             half_extents: Vec2::new(5.0, 1.0),
         }
     }
 
-    fn floor_at() -> Transform {
-        Transform::from_translation(Vec2::new(0.0, -1.0))
+    fn floor_at() -> Transform2D {
+        Transform2D::from_translation(Vec2::new(0.0, -1.0))
     }
 
     /// A unit box, half extents 0.5.
-    fn unit() -> Collider {
-        Collider::Box {
+    fn unit() -> Collider2D {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         }
     }
 
-    fn unit_at(y: f32, rotation: f32) -> Transform {
-        Transform::from_translation(Vec2::new(0.0, y)).with_rotation(rotation)
+    fn unit_at(y: f32, rotation: f32) -> Transform2D {
+        Transform2D::from_translation(Vec2::new(0.0, y)).with_rotation(rotation)
     }
 
     #[test]
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn the_point_ids_are_stable_while_the_features_are() {
-        let ids = |transform: &Transform| {
+        let ids = |transform: &Transform2D| {
             manifold((&floor(), &floor_at()), (&unit(), transform))
                 .expect("they overlap")
                 .points()
@@ -339,9 +339,9 @@ mod tests {
         // it is still two points, and the normal is the turned floor's.
         let angle = 0.3;
         let floor_transform =
-            Transform::from_translation(Vec2::new(0.0, -1.0)).with_rotation(angle);
+            Transform2D::from_translation(Vec2::new(0.0, -1.0)).with_rotation(angle);
         let rotation = Vec2::from_angle(angle);
-        let box_transform = Transform::from_translation(
+        let box_transform = Transform2D::from_translation(
             floor_transform.translation + rotation.rotate(Vec2::new(0.0, 1.4)),
         )
         .with_rotation(angle);
@@ -373,7 +373,7 @@ mod tests {
     fn a_deeply_buried_box_still_reports_one_normal() {
         // A small box entirely inside a large one: every axis overlaps, and the
         // least of them is the answer rather than a NaN.
-        let big = Collider::Box {
+        let big = Collider2D::Box {
             half_extents: Vec2::splat(4.0),
         };
         let m = manifold((&big, &at(0.0, 0.0)), (&unit(), &at(1.0, 0.0))).expect("inside");

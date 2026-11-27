@@ -4,7 +4,7 @@ use voltra_ecs::World;
 use voltra_render::glam::{IVec2, Vec2};
 
 use crate::sprite::sheets::Sheets;
-use crate::{Parallax, SceneId, Sprite, SpriteBatch, Tile, Tilemap, Transform};
+use crate::{Parallax, SceneId, Sprite2D, SpriteBatch, Tile, Tilemap, Transform2D};
 
 /// A view of the box `-5..5` square.
 fn view() -> Sheets<'static> {
@@ -13,8 +13,8 @@ fn view() -> Sheets<'static> {
 
 fn sprite_at(world: &mut World, at: Vec2) {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Sprite::default());
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Sprite2D::default());
 }
 
 #[test]
@@ -40,11 +40,11 @@ fn a_rotated_quad_is_tested_where_its_corners_are() {
     let entity = world.spawn();
     world.insert(
         entity,
-        Transform::from_translation(Vec2::new(0.0, 8.0))
+        Transform2D::from_translation(Vec2::new(0.0, 8.0))
             .with_scale(Vec2::new(10.0, 1.0))
             .with_rotation(std::f32::consts::FRAC_PI_2),
     );
-    world.insert(entity, Sprite::default());
+    world.insert(entity, Sprite2D::default());
     assert_eq!(SpriteBatch::from_world(&world, view()).sprite_count(), 1);
 }
 
@@ -66,7 +66,7 @@ fn a_tilemap_draws_only_the_tiles_in_view() {
         map.set(IVec2::new(x, 0), Some(Tile::new(0)));
     }
     let layer = world.spawn();
-    world.insert(layer, Transform::default());
+    world.insert(layer, Transform2D::default());
     world.insert(layer, map);
 
     let drawn = SpriteBatch::from_world(&world, view()).sprite_count();
@@ -79,8 +79,8 @@ fn a_parallax_layer_is_culled_where_it_is_drawn() {
     let mut world = World::new();
     let sky = world.spawn();
     world.insert(sky, SceneId::new());
-    world.insert(sky, Transform::default());
-    world.insert(sky, Sprite::default());
+    world.insert(sky, Transform2D::default());
+    world.insert(sky, Sprite2D::default());
     world.insert(sky, Parallax::new(Vec2::ZERO));
     // The camera is far right; the sky is pinned to it and so in view, though
     // its transform is far out of it.
@@ -131,11 +131,11 @@ fn a_parallax_layer_turns_with_the_world_about_the_turned_camera() {
     let mut world = World::new();
     let sky = world.spawn();
     world.insert(sky, SceneId::new());
-    world.insert(sky, Transform::default());
-    world.insert(sky, Sprite::default());
+    world.insert(sky, Transform2D::default());
+    world.insert(sky, Sprite2D::default());
     world.insert(sky, Parallax::new(Vec2::ZERO));
     let view = voltra_render::View2D::new(Vec2::new(40.0, -7.0), 1.0, 1.0).with_rotation(0.8);
-    let drawn = crate::hierarchy::WorldTransforms::seen_from(&world, view.position)
+    let drawn = crate::hierarchy::WorldTransforms2D::seen_from(&world, view.position)
         .matrix(sky)
         .transform_point2(Vec2::ZERO);
     let on_screen = view.world_to_viewport(drawn, Vec2::splat(100.0));

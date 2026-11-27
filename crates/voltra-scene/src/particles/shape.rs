@@ -11,7 +11,7 @@ use voltra_render::glam::Vec2;
 use voltra_render::particles::TABLE_SAMPLES;
 use voltra_render::SpawnShape;
 
-use crate::{Collider, Transform};
+use crate::{Collider2D, Transform2D};
 
 /// The area or line an emitter's newborns are spread over, in its space.
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
@@ -42,7 +42,7 @@ pub enum EmitShape {
         /// Half its length.
         half_length: f32,
     },
-    /// Evenly along the outline of the entity's own [`Collider`], as the
+    /// Evenly along the outline of the entity's own [`Collider2D`], as the
     /// collider sits at the origin. At the origin when the entity has none.
     Outline,
 }
@@ -145,11 +145,11 @@ impl EmitShape {
 
 /// The outline of `entity`'s collider at the origin, as
 /// [`outline_table`] lays it out — or empty without a collider.
-pub(crate) fn collider_outline(collider: Option<&Collider>) -> Vec<[f32; 4]> {
+pub(crate) fn collider_outline(collider: Option<&Collider2D>) -> Vec<[f32; 4]> {
     // A full turn of a round part in 32 segments: smooth at a particle's
     // size, and well inside the table's room.
     collider.map_or_else(Vec::new, |collider| {
-        outline_table(&collider.outline(&Transform::default(), 32))
+        outline_table(&collider.outline(&Transform2D::default(), 32))
     })
 }
 
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn a_collider_s_outline_is_where_it_is_at_the_origin() {
-        let collider = Collider::Box {
+        let collider = Collider2D::Box {
             half_extents: Vec2::new(2.0, 1.0),
         };
         let table = collider_outline(Some(&collider));

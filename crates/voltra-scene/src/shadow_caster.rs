@@ -1,7 +1,7 @@
 //! What blocks 2D light: the shadow caster component.
 //!
 //! Unity's `ShadowCaster2D` and Godot's `LightOccluder2D`. By default the
-//! shape is the entity's own [`Collider`](crate::Collider) — or, on a solid
+//! shape is the entity's own [`Collider2D`](crate::Collider2D) — or, on a solid
 //! tilemap layer, the boxes generated from its tiles — so a wall casts
 //! where it blocks and the two cannot drift apart; a polygon of its own is
 //! there for a shape that should shadow differently from how it collides.
@@ -60,7 +60,7 @@ impl Default for ShadowCaster2D {
 /// What a caster's outline is.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub enum CasterShape {
-    /// The entity's [`Collider`](crate::Collider), placed as the physics places it; on a
+    /// The entity's [`Collider2D`](crate::Collider2D), placed as the physics places it; on a
     /// solid [`Tilemap`](crate::Tilemap) layer, its generated boxes. Nothing, on an entity
     /// with neither.
     #[default]

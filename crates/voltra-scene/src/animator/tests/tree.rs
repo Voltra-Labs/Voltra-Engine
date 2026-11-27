@@ -21,7 +21,10 @@ fn rig(machine: &str, clips: &[(&str, String)]) -> Rig {
 
 impl Rig {
     fn at(&self) -> [f32; 2] {
-        let t = self.world.get::<Transform>(self.hero).expect("a transform");
+        let t = self
+            .world
+            .get::<Transform2D>(self.hero)
+            .expect("a transform");
         [t.translation.x, t.translation.y]
     }
 
@@ -166,7 +169,7 @@ fn an_empty_tree_warns_and_plays_nothing() {
     );
     let mut rig = rig(machine, &[]);
     rig.world
-        .get_mut::<Transform>(rig.hero)
+        .get_mut::<Transform2D>(rig.hero)
         .expect("t")
         .translation
         .x = 5.0;

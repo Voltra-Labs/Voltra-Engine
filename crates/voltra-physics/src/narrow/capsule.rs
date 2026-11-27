@@ -112,16 +112,16 @@ mod tests {
     use crate::narrow::tests::at;
     use std::f32::consts::FRAC_PI_2;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Collider, Transform};
+    use voltra_scene::{Collider2D, Transform2D};
 
-    fn capsule() -> Collider {
-        Collider::Capsule {
+    fn capsule() -> Collider2D {
+        Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.25,
         }
     }
 
-    fn lying(x: f32, y: f32) -> Transform {
+    fn lying(x: f32, y: f32) -> Transform2D {
         at(x, y).with_rotation(FRAC_PI_2)
     }
 

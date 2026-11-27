@@ -8,7 +8,7 @@
 //! one-way sample keep the same state.
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::{OneWay, Transform};
+use voltra_scene::{OneWay, Transform2D};
 
 use crate::hash::FastSet;
 use crate::narrow::Manifold;
@@ -85,9 +85,9 @@ impl OneWayPasses {
     }
 }
 
-fn side(world: &World, entity: Entity) -> Option<(&OneWay, &Transform)> {
+fn side(world: &World, entity: Entity) -> Option<(&OneWay, &Transform2D)> {
     Some((
         world.get::<OneWay>(entity)?,
-        world.get::<Transform>(entity)?,
+        world.get::<Transform2D>(entity)?,
     ))
 }

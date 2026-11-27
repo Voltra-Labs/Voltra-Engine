@@ -17,7 +17,7 @@ use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Texture};
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::text::{prepare, resolve_fonts};
-use voltra_scene::{Align, SpriteBatch, Text, Transform};
+use voltra_scene::{Align, SpriteBatch, Text, Transform2D};
 use voltra_testkit::{copy_bundled_font, headless_device, read_texture, scratch_root, Rgba, CLEAR};
 
 const SIZE: u32 = 64;
@@ -106,7 +106,7 @@ fn coverage_lands_in_alpha_and_the_colour_tints_it() {
     // A big red H, centred across the frame, baseline a unit below centre.
     let mut world = World::new();
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(Vec2::new(0.0, -1.0)));
+    world.insert(entity, Transform2D::from_translation(Vec2::new(0.0, -1.0)));
     world.insert(
         entity,
         Text {

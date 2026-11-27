@@ -30,7 +30,7 @@ impl App {
 #[cfg(test)]
 mod tests {
     use voltra_render::glam::Vec2;
-    use voltra_scene::{ParticleEmitter, Transform};
+    use voltra_scene::{ParticleEmitter, Transform2D};
 
     use crate::app::App;
 
@@ -39,7 +39,7 @@ mod tests {
         let mut app = App::default().with_simulation();
         let entity = app.world.spawn();
         app.world
-            .insert(entity, Transform::from_translation(Vec2::ZERO));
+            .insert(entity, Transform2D::from_translation(Vec2::ZERO));
         let mut emitter = ParticleEmitter {
             emitting: false,
             one_shot: true,
@@ -60,7 +60,7 @@ mod tests {
     fn particles_hold_still_while_the_world_is_not_running() {
         let mut app = App::default();
         let entity = app.world.spawn();
-        app.world.insert(entity, Transform::default());
+        app.world.insert(entity, Transform2D::default());
         app.world.insert(entity, ParticleEmitter::default());
         app.advance(0.5);
         let alive = app

@@ -4,10 +4,10 @@ use voltra_ecs::{Entity, World};
 
 use super::rect::UiRect;
 use super::toggle::UiToggle;
-use crate::sprite::Sprite;
+use crate::sprite::Sprite2D;
 
 /// Makes a [`UiRect`] element clickable and focusable, and tints its
-/// `Sprite` by state — and, with [`frames`](Self::frames), swaps the atlas
+/// `Sprite2D` by state — and, with [`frames`](Self::frames), swaps the atlas
 /// frame it shows, so a button is drawn from an image per state.
 ///
 /// Godot's `Button`, minus the text it carries: the label is a `Text`
@@ -36,7 +36,7 @@ pub struct UiButton {
 
 /// One atlas frame per button state: Unity's sprite-swap transition.
 ///
-/// Frames of the button's own `Sprite` atlas, rather than four images of
+/// Frames of the button's own `Sprite2D` atlas, rather than four images of
 /// their own: a UI skin is one sheet, and the sprite already names it —
 /// the frame is the one thing a state changes.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -96,7 +96,7 @@ impl UiButton {
 
     /// Writes the face of `state` into `sprite`: the state's colour — times
     /// a toggle's tint while it is on — and, with frames, its frame.
-    pub fn show(&self, state: State, toggle: Option<&UiToggle>, sprite: &mut Sprite) {
+    pub fn show(&self, state: State, toggle: Option<&UiToggle>, sprite: &mut Sprite2D) {
         let state = if self.disabled {
             State::Disabled
         } else {

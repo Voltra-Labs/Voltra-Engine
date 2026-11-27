@@ -11,7 +11,7 @@ use voltra_core::replication::NetOwner;
 use voltra_core::{Net, Tick};
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{hierarchy, Transform};
+use voltra_scene::{hierarchy, Transform2D};
 
 use crate::zap::{self, Cooldowns};
 use crate::{walk, Coin, Pilot, Player, Round, Score, Steer, PLAYER_PREFAB};
@@ -54,14 +54,14 @@ impl Dice {
 fn coin_at(world: &voltra_ecs::World) -> Option<(Entity, Vec2)> {
     world
         .query::<Coin>()
-        .find_map(|(coin, _)| Some((coin, world.get::<Transform>(coin)?.translation)))
+        .find_map(|(coin, _)| Some((coin, world.get::<Transform2D>(coin)?.translation)))
 }
 
 /// Spawns `peer`'s player from its prefab, owned by it.
 pub(crate) fn spawn_player(tick: &mut Tick<'_>, peer: PeerId) {
     let path = AssetPath::new(PLAYER_PREFAB).expect("the prefab path is valid");
     let prefab = tick.prefab(&path);
-    let at = Transform::from_translation(spawn_point(peer));
+    let at = Transform2D::from_translation(spawn_point(peer));
     match tick.spawn(prefab, &at) {
         Ok(instance) => match instance.root() {
             Some(root) => {
@@ -181,7 +181,7 @@ pub(crate) fn step(tick: &mut Tick<'_>, pilot: Pilot, dice: &mut Dice, cooldowns
     } else if let Some((coin, at)) = coin_at(tick.world) {
         let taker = players.iter().copied().find(|&(entity, _)| {
             tick.world
-                .get::<Transform>(entity)
+                .get::<Transform2D>(entity)
                 .is_some_and(|t| t.translation.distance(at) < REACH)
         });
         if let Some((entity, peer)) = taker {
@@ -190,7 +190,7 @@ pub(crate) fn step(tick: &mut Tick<'_>, pilot: Pilot, dice: &mut Dice, cooldowns
                 .world
                 .get::<Player>(entity)
                 .map_or(Vec2::splat(3.0), |p| p.bounds);
-            if let Some(transform) = tick.world.get_mut::<Transform>(coin) {
+            if let Some(transform) = tick.world.get_mut::<Transform2D>(coin) {
                 transform.translation = Vec2::new(
                     (dice.unit() * 2.0 - 1.0) * bounds.x * 0.9,
                     (dice.unit() * 2.0 - 1.0) * bounds.y * 0.9,

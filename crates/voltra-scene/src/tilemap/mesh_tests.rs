@@ -8,7 +8,7 @@ use voltra_testkit::scratch_root;
 
 use crate::batch::SpriteBatch;
 use crate::sprite::sheets::Sheets;
-use crate::{Sprite, Tile, Tilemap, Transform};
+use crate::{Sprite2D, Tile, Tilemap, Transform2D};
 
 struct Sizes;
 
@@ -168,12 +168,12 @@ fn a_layer_draws_among_sprites_by_sort_order() {
 
     for map in [front, back] {
         let e = world.spawn();
-        world.insert(e, Transform::default());
+        world.insert(e, Transform2D::default());
         world.insert(e, map);
     }
     let e = world.spawn();
-    world.insert(e, Transform::default());
-    world.insert(e, Sprite::default());
+    world.insert(e, Transform2D::default());
+    world.insert(e, Sprite2D::default());
 
     let batch = SpriteBatch::from_world(&world, Sheets::new(&atlases, &Sizes));
 
@@ -193,7 +193,7 @@ fn a_layer_moves_with_its_transform() {
     map.set(IVec2::ZERO, Some(Tile::new(0)));
     let mut world = World::new();
     let e = world.spawn();
-    world.insert(e, Transform::from_translation(Vec2::new(5.0, 5.0)));
+    world.insert(e, Transform2D::from_translation(Vec2::new(5.0, 5.0)));
     world.insert(e, map);
 
     let batch = SpriteBatch::from_world(&world, Sheets::new(&atlases, &Sizes));

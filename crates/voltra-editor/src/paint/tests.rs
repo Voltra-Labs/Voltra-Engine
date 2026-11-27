@@ -1,16 +1,16 @@
 use voltra_render::glam::{UVec2, Vec2};
 use voltra_scene::tilemap::Terrain;
-use voltra_scene::{Tile, Transform};
+use voltra_scene::{Tile, Transform2D};
 
 use super::*;
 
 fn world_with_layer() -> (World, Entity, Entity) {
     let mut world = World::new();
     let layer = world.spawn();
-    world.insert(layer, Transform::default());
+    world.insert(layer, Transform2D::default());
     world.insert(layer, Tilemap::new(Vec2::ONE));
     let sprite = world.spawn();
-    world.insert(sprite, Transform::default());
+    world.insert(sprite, Transform2D::default());
     (world, layer, sprite)
 }
 

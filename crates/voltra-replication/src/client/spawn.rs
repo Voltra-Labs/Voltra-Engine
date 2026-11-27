@@ -16,7 +16,9 @@ use std::collections::HashMap;
 use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 use voltra_net::PeerId;
-use voltra_scene::{hierarchy, prefab, ComponentRegistry, Prefabs, Replicated, SceneId, Transform};
+use voltra_scene::{
+    hierarchy, prefab, ComponentRegistry, Prefabs, Replicated, SceneId, Transform2D,
+};
 
 use super::stash::Stash;
 use crate::wire::Spawn;
@@ -121,7 +123,7 @@ fn from_prefab(
     };
     let handle = prefabs.load(&path);
     let prefab = prefabs.try_get(handle)?;
-    let instance = match prefab::spawn(world, registry, prefab, &Transform::default()) {
+    let instance = match prefab::spawn(world, registry, prefab, &Transform2D::default()) {
         Ok(instance) => instance,
         Err(error) => {
             log::warn!("prefab {path:?} would not spawn for a replicated entity: {error}");

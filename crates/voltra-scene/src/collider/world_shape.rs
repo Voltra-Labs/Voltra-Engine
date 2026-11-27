@@ -62,7 +62,7 @@ impl WorldShape {
             .iter()
             .fold((first, first), |(lo, hi), v| (lo.min(*v), hi.max(*v)));
         // Clamped so a nonsense radius gives the hull's box rather than an
-        // inverted one; `Collider::is_degenerate` is what rejects it.
+        // inverted one; `Collider2D::is_degenerate` is what rejects it.
         let grow = Vec2::splat(self.radius.max(0.0));
         (min - grow, max + grow)
     }

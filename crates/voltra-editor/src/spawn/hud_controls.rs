@@ -5,7 +5,7 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, Align, Sprite, Text, UiButton, UiRect, UiScroll, UiSlider, UiSliderPart, UiStack,
+    hierarchy, Align, Sprite2D, Text, UiButton, UiRect, UiScroll, UiSlider, UiSliderPart, UiStack,
     UiTextField, UiToggle,
 };
 
@@ -33,7 +33,7 @@ fn text(frame: &mut UiFrame<'_>, content: &str, align: Align) -> Text {
 /// A checkbox: a button that toggles, labelled.
 pub(crate) fn hud_toggle(frame: &mut UiFrame<'_>, name: &str) -> (Vec<Entity>, Option<Entity>) {
     let toggle = spawn(frame, name);
-    frame.world.insert(toggle, Sprite::default());
+    frame.world.insert(toggle, Sprite2D::default());
     frame.world.insert(toggle, UiButton::default());
     frame.world.insert(toggle, UiToggle::default());
     let label = spawn(frame, "Label");
@@ -53,11 +53,13 @@ pub(crate) fn hud_slider(frame: &mut UiFrame<'_>, name: &str) -> (Vec<Entity>, O
     );
     frame
         .world
-        .insert(slider, Sprite::new([0.12, 0.13, 0.17, 1.0]));
+        .insert(slider, Sprite2D::new([0.12, 0.13, 0.17, 1.0]));
     frame.world.insert(slider, UiSlider::default());
     let fill = spawn(frame, "Fill");
     frame.world.insert(fill, UiRect::stretched(0.0));
-    frame.world.insert(fill, Sprite::new([0.3, 0.5, 0.9, 1.0]));
+    frame
+        .world
+        .insert(fill, Sprite2D::new([0.3, 0.5, 0.9, 1.0]));
     frame.world.insert(fill, UiSliderPart::Fill);
     child(frame, slider, fill);
     let handle = spawn(frame, "Handle");
@@ -73,7 +75,7 @@ pub(crate) fn hud_slider(frame: &mut UiFrame<'_>, name: &str) -> (Vec<Entity>, O
     );
     frame
         .world
-        .insert(handle, Sprite::new([0.9, 0.92, 1.0, 1.0]));
+        .insert(handle, Sprite2D::new([0.9, 0.92, 1.0, 1.0]));
     frame.world.insert(handle, UiSliderPart::Handle);
     child(frame, slider, handle);
     (vec![slider, fill, handle], Some(slider))
@@ -88,7 +90,7 @@ pub(crate) fn hud_text_field(frame: &mut UiFrame<'_>, name: &str) -> Entity {
     );
     frame
         .world
-        .insert(field, Sprite::new([0.08, 0.09, 0.12, 1.0]));
+        .insert(field, Sprite2D::new([0.08, 0.09, 0.12, 1.0]));
     let style = text(frame, "", Align::Left);
     frame.world.insert(field, style);
     frame.world.insert(

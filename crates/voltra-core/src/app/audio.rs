@@ -203,7 +203,7 @@ impl App {
 mod tests {
     use super::*;
     use voltra_assets::AssetPath;
-    use voltra_scene::{AudioListener, Transform};
+    use voltra_scene::{AudioListener, Transform2D};
     use voltra_testkit::scratch_root;
 
     /// A store holding one clip under `coin.wav`.
@@ -219,14 +219,14 @@ mod tests {
 
     fn spawn_source(world: &mut World, source: AudioSource, at: Vec2) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(entity, source);
         entity
     }
 
     fn spawn_listener(world: &mut World, at: Vec2) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(entity, AudioListener::default());
         entity
     }
@@ -487,7 +487,7 @@ mod tests {
         let mut world = World::new();
         let rig = world.spawn();
         world.insert(rig, voltra_scene::SceneId::new());
-        world.insert(rig, Transform::from_translation(Vec2::new(6.0, 0.0)));
+        world.insert(rig, Transform2D::from_translation(Vec2::new(6.0, 0.0)));
 
         let entity = spawn_source(&mut world, AudioSource::default(), Vec2::new(1.0, 0.0));
         world.insert(entity, voltra_scene::SceneId::new());
@@ -519,7 +519,7 @@ mod tests {
     fn an_app_that_is_not_simulating_starts_nothing() {
         let mut app = App::default();
         let entity = app.world.spawn();
-        app.world.insert(entity, Transform::default());
+        app.world.insert(entity, Transform2D::default());
         app.world.insert(
             entity,
             AudioSource {
@@ -543,7 +543,7 @@ mod tests {
     fn a_live_app_starts_the_scene_s_sources() {
         let mut app = App::default().with_simulation();
         let entity = app.world.spawn();
-        app.world.insert(entity, Transform::default());
+        app.world.insert(entity, Transform2D::default());
         let (clips, handle) = clips_with_a_coin();
         app.clips = Some(clips);
         app.world.insert(
@@ -564,7 +564,7 @@ mod tests {
     fn stopping_the_simulation_silences_the_scene() {
         let mut app = App::default().with_simulation();
         let entity = app.world.spawn();
-        app.world.insert(entity, Transform::default());
+        app.world.insert(entity, Transform2D::default());
         let (clips, handle) = clips_with_a_coin();
         app.clips = Some(clips);
         app.world.insert(

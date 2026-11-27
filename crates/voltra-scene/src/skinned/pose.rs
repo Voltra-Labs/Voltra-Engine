@@ -16,7 +16,7 @@ use super::SkinnedSprite;
 use crate::hierarchy::parent_of;
 use crate::keyframes::target::resolve;
 use crate::skeleton::skeleton_of;
-use crate::{Bone2D, Transform};
+use crate::{Bone2D, Transform2D};
 
 /// One frame's matrices for a skinned mesh.
 #[derive(Debug, Clone, PartialEq)]
@@ -78,7 +78,7 @@ pub fn rest_relative(world: &World, root: Entity, entity: Entity) -> Option<Mat3
         let local = match world.get::<Bone2D>(at) {
             Some(bone) => bone.rest.matrix(),
             None => world
-                .get::<Transform>(at)
+                .get::<Transform2D>(at)
                 .copied()
                 .unwrap_or_default()
                 .matrix(),

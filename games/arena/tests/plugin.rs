@@ -7,7 +7,7 @@ use arena::FIRST_SCENE;
 use voltra_assets::AssetPath;
 use voltra_core::game::library::{library_file, GameLibrary};
 use voltra_core::{App, Headless};
-use voltra_scene::{Name, Transform};
+use voltra_scene::{Name, Transform2D};
 
 /// The library cargo built for this run: beside the binary after a
 /// `cargo build`, beside the `rlib` the test links after a `cargo test`.
@@ -48,7 +48,7 @@ fn the_editor_can_load_and_play_the_game() {
     let x = |session: &Headless| {
         session
             .world()
-            .get::<Transform>(player)
+            .get::<Transform2D>(player)
             .expect("placed")
             .translation
             .x

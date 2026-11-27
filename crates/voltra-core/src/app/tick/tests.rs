@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, RigidBody, Sensor, Transform};
+use voltra_scene::{Collider2D, RigidBody2D, Sensor, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 const G: Vec2 = Vec2::new(0.0, -10.0);
@@ -21,15 +21,15 @@ fn app_with_a_falling_body() -> (App, Entity) {
         ..Default::default()
     };
     let body = app.world.spawn();
-    app.world.insert(body, Transform::default());
-    app.world.insert(body, Collider::Circle { radius: 0.5 });
-    app.world.insert(body, RigidBody::new_dynamic(1.0));
+    app.world.insert(body, Transform2D::default());
+    app.world.insert(body, Collider2D::Circle { radius: 0.5 });
+    app.world.insert(body, RigidBody2D::new_dynamic(1.0));
     (app, body)
 }
 
 fn height(app: &App, entity: Entity) -> f32 {
     app.world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("the transform is there")
         .translation
         .y
@@ -216,7 +216,7 @@ fn what_the_tick_writes_is_simulated_in_the_same_frame() {
     // velocity set from input must not wait a step to be integrated.
     let (app, body) = app_with_a_falling_body();
     let mut app = app.with_simulation().with_update(move |tick| {
-        if let Some(rigid) = tick.world.get_mut::<RigidBody>(body) {
+        if let Some(rigid) = tick.world.get_mut::<RigidBody2D>(body) {
             rigid.velocity = Vec2::new(0.0, 5.0);
         }
     });
@@ -235,19 +235,19 @@ fn app_with_a_trigger() -> (App, Entity, Entity) {
     let mut app = App::default();
 
     let trigger = app.world.spawn();
-    app.world.insert(trigger, Transform::default());
+    app.world.insert(trigger, Transform2D::default());
     app.world.insert(
         trigger,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
     );
     app.world.insert(trigger, Sensor);
 
     let ball = app.world.spawn();
-    app.world.insert(ball, Transform::default());
-    app.world.insert(ball, Collider::Circle { radius: 0.5 });
-    app.world.insert(ball, RigidBody::new_dynamic(1.0));
+    app.world.insert(ball, Transform2D::default());
+    app.world.insert(ball, Collider2D::Circle { radius: 0.5 });
+    app.world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
     (app, trigger, ball)
 }
@@ -291,7 +291,7 @@ fn the_per_frame_tick_sees_every_step_of_the_frame_not_only_the_last() {
     // lost because the second step replaced what physics remembers.
     let (mut app, _, ball) = app_with_a_trigger();
     app.world
-        .get_mut::<RigidBody>(ball)
+        .get_mut::<RigidBody2D>(ball)
         .expect("it is a body")
         .velocity = Vec2::new(0.0, -100.0);
 
@@ -334,14 +334,14 @@ fn the_tick_sees_the_contacts_of_the_last_step() {
     let (mut app, _) = app_with_a_falling_body();
     let floor = app.world.spawn();
     app.world
-        .insert(floor, Transform::from_translation(Vec2::new(0.0, -1.0)));
+        .insert(floor, Transform2D::from_translation(Vec2::new(0.0, -1.0)));
     app.world.insert(
         floor,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(10.0, 0.5),
         },
     );
-    app.world.insert(floor, RigidBody::new_static());
+    app.world.insert(floor, RigidBody2D::new_static());
 
     let (count, seen) = counter();
     let mut app = app.with_simulation().with_update(move |tick| {

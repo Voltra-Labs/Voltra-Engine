@@ -6,7 +6,7 @@
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::LineBatch;
-use voltra_scene::{Joint2D, JointKind, Transform};
+use voltra_scene::{Joint2D, JointKind, Transform2D};
 
 use crate::solver::joint_ends;
 
@@ -40,7 +40,7 @@ pub fn draw(world: &World, lines: &mut LineBatch) {
         // as the solver holds it.
         let place = |entity, anchor: Vec2| {
             world
-                .get::<Transform>(entity)
+                .get::<Transform2D>(entity)
                 .map(|t| Joint2D::anchor_in_world(t, anchor))
         };
         // A line joint with no axis joins nothing in the solver: nothing is
@@ -57,7 +57,7 @@ pub fn draw(world: &World, lines: &mut LineBatch) {
         // What `b`'s space turns by: the world's is none.
         let b_turn = end
             .b
-            .and_then(|entity| world.get::<Transform>(entity))
+            .and_then(|entity| world.get::<Transform2D>(entity))
             .map_or(0.0, |t| t.rotation);
         let Some(a) = place(end.a, joint.anchor_a) else {
             continue;
@@ -97,7 +97,7 @@ pub fn draw(world: &World, lines: &mut LineBatch) {
                     let ray = Vec2::from_angle(b_turn + reference_angle + angle) * REACH;
                     lines.push(a, a + ray, WIDTH, LIMIT_COLOR);
                 }
-                if let Some(t) = world.get::<Transform>(end.a) {
+                if let Some(t) = world.get::<Transform2D>(end.a) {
                     lines.push(
                         a,
                         a + Vec2::from_angle(t.rotation) * REACH,
@@ -136,7 +136,7 @@ mod tests {
 
     /// Every segment `joint` draws, with its colour, on a body placed at
     /// `placed` held to the world.
-    fn drawn(placed: Transform, joint: Joint2D) -> Vec<(Vec2, Vec2, [f32; 4])> {
+    fn drawn(placed: Transform2D, joint: Joint2D) -> Vec<(Vec2, Vec2, [f32; 4])> {
         let mut world = World::new();
         let body = world.spawn();
         world.insert(body, placed);
@@ -157,7 +157,7 @@ mod tests {
             kind,
             ..Joint2D::default()
         };
-        drawn(Transform::default(), joint)
+        drawn(Transform2D::default(), joint)
             .into_iter()
             .filter(|&(_, _, color)| color == LIMIT_COLOR)
             .map(|(from, to, _)| (from, to))
@@ -200,12 +200,13 @@ mod tests {
             kind: JointKind::prismatic(Vec2::ZERO),
             ..Joint2D::default()
         };
-        assert!(drawn(Transform::default(), joint).is_empty());
+        assert!(drawn(Transform2D::default(), joint).is_empty());
     }
 
     #[test]
     fn an_anchor_on_a_scaled_body_is_drawn_unscaled_as_it_is_held() {
-        let placed = Transform::from_translation(Vec2::new(1.0, 0.0)).with_scale(Vec2::splat(2.0));
+        let placed =
+            Transform2D::from_translation(Vec2::new(1.0, 0.0)).with_scale(Vec2::splat(2.0));
         let joint = Joint2D {
             anchor_a: Vec2::new(0.5, 0.0),
             anchor_b: Vec2::new(3.0, 0.0),

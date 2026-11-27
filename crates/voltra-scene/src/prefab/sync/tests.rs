@@ -9,7 +9,7 @@ use crate::hierarchy::{children_of, set_parent};
 use crate::name::Name;
 use crate::prefab::spawn;
 use crate::prefab::{sync_source, Prefabs};
-use crate::{PointLight2D, Sprite, Transform};
+use crate::{PointLight2D, Sprite2D, Transform2D};
 use voltra_assets::AssetPath;
 
 fn registry() -> ComponentRegistry {
@@ -24,7 +24,7 @@ fn named(world: &mut World, name: &str, at: Vec2) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Name::new(name));
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     entity
 }
 
@@ -39,10 +39,10 @@ struct Authoring {
 fn authoring() -> Authoring {
     let mut world = World::new();
     let coin = named(&mut world, "coin", Vec2::ZERO);
-    world.insert(coin, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    world.insert(coin, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
     world.insert(coin, PointLight2D::default());
     let glow = named(&mut world, "glow", Vec2::new(0.0, 0.2));
-    world.insert(glow, Sprite::default().with_sort_order(1));
+    world.insert(glow, Sprite2D::default().with_sort_order(1));
     set_parent(&mut world, glow, coin).expect("a plain reparent");
     Authoring { world, coin, glow }
 }
@@ -60,10 +60,15 @@ fn prefab_of(world: &World) -> Prefab {
 }
 
 fn instance(world: &mut World, prefab: &Prefab, at: Vec2) -> Entity {
-    spawn(world, &registry(), prefab, &Transform::from_translation(at))
-        .expect("spawns")
-        .root()
-        .expect("one root")
+    spawn(
+        world,
+        &registry(),
+        prefab,
+        &Transform2D::from_translation(at),
+    )
+    .expect("spawns")
+    .root()
+    .expect("one root")
 }
 
 fn child_named(world: &World, parent: Entity, name: &str) -> Option<Entity> {
@@ -95,10 +100,12 @@ fn an_edit_to_the_file_reaches_the_instance_but_not_its_placement() {
     // The file changes: the coin turns blue, the glow moves, a shine appears
     // under the coin, and the light goes.
     made.world
-        .insert(made.coin, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+        .insert(made.coin, Sprite2D::new([0.0, 0.0, 1.0, 1.0]));
     made.world.remove::<PointLight2D>(made.coin);
-    made.world
-        .insert(made.glow, Transform::from_translation(Vec2::new(0.0, 0.4)));
+    made.world.insert(
+        made.glow,
+        Transform2D::from_translation(Vec2::new(0.0, 0.4)),
+    );
     let shine = named(&mut made.world, "shine", Vec2::new(0.1, 0.1));
     set_parent(&mut made.world, shine, made.coin).expect("a plain reparent");
     let edited = prefab_of(&made.world);
@@ -107,18 +114,18 @@ fn an_edit_to_the_file_reaches_the_instance_but_not_its_placement() {
     assert_eq!(report.spawned, 1);
     assert_eq!(report.changed, 3, "colour, light, glow's place: {report:?}");
     assert_eq!(
-        scene.get::<Sprite>(root).expect("sprite").color,
+        scene.get::<Sprite2D>(root).expect("sprite").color,
         [0.0, 0.0, 1.0, 1.0]
     );
     assert!(scene.get::<PointLight2D>(root).is_none());
     assert_eq!(
-        scene.get::<Transform>(root).expect("placed").translation,
+        scene.get::<Transform2D>(root).expect("placed").translation,
         Vec2::new(5.0, 0.0),
         "the root stays where it was put"
     );
     let glow = child_named(&scene, root, "glow").expect("still there");
     assert_eq!(
-        scene.get::<Transform>(glow).expect("t").translation,
+        scene.get::<Transform2D>(glow).expect("t").translation,
         Vec2::new(0.0, 0.4)
     );
     let shine = child_named(&scene, root, "shine").expect("spawned under the coin");
@@ -139,14 +146,14 @@ fn what_the_instance_made_its_own_is_kept() {
     let mut scene = World::new();
     let root = instance(&mut scene, &prefab, Vec2::ZERO);
     // The instance is green, and has a sensor the prefab does not.
-    scene.insert(root, Sprite::new([0.0, 1.0, 0.0, 1.0]));
+    scene.insert(root, Sprite2D::new([0.0, 1.0, 0.0, 1.0]));
     scene.insert(root, crate::Sensor);
     let part = scene.get_mut::<PrefabPart>(root).expect("a part");
     part.overridden.insert("Sprite".to_owned());
     part.overridden.insert("Sensor".to_owned());
 
     made.world
-        .insert(made.coin, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+        .insert(made.coin, Sprite2D::new([0.0, 0.0, 1.0, 1.0]));
     made.world.insert(
         made.coin,
         PointLight2D {
@@ -158,7 +165,7 @@ fn what_the_instance_made_its_own_is_kept() {
     let report = sync(&mut scene, &registry(), &edited, root).expect("syncs");
     assert_eq!(report.changed, 1, "the light only: {report:?}");
     assert_eq!(
-        scene.get::<Sprite>(root).expect("s").color,
+        scene.get::<Sprite2D>(root).expect("s").color,
         [0.0, 1.0, 0.0, 1.0]
     );
     assert!(scene.get::<crate::Sensor>(root).is_some());
@@ -205,7 +212,7 @@ fn an_instance_saved_before_parts_is_adopted_without_a_change() {
     for entity in std::iter::once(root).chain(hierarchy::descendants(&scene, root)) {
         scene.remove::<PrefabPart>(entity);
     }
-    scene.insert(root, Sprite::new([0.5, 0.5, 0.5, 1.0]));
+    scene.insert(root, Sprite2D::new([0.5, 0.5, 0.5, 1.0]));
     let extra = named(&mut scene, "mine", Vec2::ZERO);
     set_parent(&mut scene, extra, root).expect("a plain reparent");
 
@@ -225,7 +232,7 @@ fn an_instance_saved_before_parts_is_adopted_without_a_change() {
         "its own entity stays its own"
     );
     assert_eq!(
-        scene.get::<Sprite>(root).expect("s").color,
+        scene.get::<Sprite2D>(root).expect("s").color,
         [0.5, 0.5, 0.5, 1.0]
     );
 }
@@ -261,13 +268,13 @@ fn sync_source_reaches_only_that_prefab_s_instances() {
     );
 
     made.world
-        .insert(made.coin, Sprite::new([0.0, 0.0, 1.0, 1.0]));
+        .insert(made.coin, Sprite2D::new([0.0, 0.0, 1.0, 1.0]));
     write(&made.world);
     assert!(!prefabs.reload(&source()).is_empty());
     let report = sync_source(&mut scene, &registry(), &mut prefabs, &source());
     assert_eq!(report.changed, 1);
     assert_eq!(
-        scene.get::<Sprite>(root).expect("s").color,
+        scene.get::<Sprite2D>(root).expect("s").color,
         [0.0, 0.0, 1.0, 1.0]
     );
     assert!(

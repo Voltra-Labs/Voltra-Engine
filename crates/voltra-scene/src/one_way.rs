@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
-use crate::Transform;
+use crate::Transform2D;
 
 /// Makes the entity's collider solid only to what meets it from
 /// `direction`.
@@ -39,14 +39,14 @@ impl OneWay {
     pub const NAME: &'static str = "OneWay";
 
     /// `direction` in world space, for a collider placed by `transform`.
-    pub fn world_direction(&self, transform: &Transform) -> Vec2 {
+    pub fn world_direction(&self, transform: &Transform2D) -> Vec2 {
         let local = self.direction.try_normalize().unwrap_or(Vec2::Y);
         Vec2::from_angle(transform.rotation).rotate(local)
     }
 
     /// Whether a contact whose normal, pushing the other shape away from
     /// this collider, is `normal` meets the solid side.
-    pub fn admits(&self, transform: &Transform, normal: Vec2) -> bool {
+    pub fn admits(&self, transform: &Transform2D, normal: Vec2) -> bool {
         normal.dot(self.world_direction(transform))
             >= self.arc.clamp(0.0, std::f32::consts::PI).cos()
     }
@@ -58,12 +58,12 @@ mod tests {
 
     #[test]
     fn a_platform_admits_its_top_and_turns_with_its_entity() {
-        let flat = Transform::default();
+        let flat = Transform2D::default();
         let platform = OneWay::default();
         assert!(platform.admits(&flat, Vec2::Y));
         assert!(!platform.admits(&flat, Vec2::NEG_Y));
         assert!(!platform.admits(&flat, Vec2::X));
-        let turned = Transform::default().with_rotation(std::f32::consts::FRAC_PI_2);
+        let turned = Transform2D::default().with_rotation(std::f32::consts::FRAC_PI_2);
         assert!(platform.admits(&turned, Vec2::NEG_X));
         let back: OneWay = ron::from_str("()").expect("reads");
         assert_eq!(back, platform);

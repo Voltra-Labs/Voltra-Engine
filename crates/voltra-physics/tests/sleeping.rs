@@ -3,25 +3,25 @@
 use voltra_ecs::{Entity, World};
 use voltra_physics::{PhysicsWorld, Touch};
 use voltra_render::glam::Vec2;
-use voltra_scene::{BodyType, Collider, RigidBody, Transform};
+use voltra_scene::{BodyType, Collider2D, RigidBody2D, Transform2D};
 
 const G: Vec2 = Vec2::new(0.0, -10.0);
 const STEP: f32 = 1.0 / 60.0;
 
 fn floor(world: &mut World, at: Vec2, half: Vec2) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Box { half_extents: half });
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Box { half_extents: half });
     entity
 }
 
 fn crate_at(world: &mut World, at: Vec2) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
@@ -36,7 +36,7 @@ fn run(physics: &mut PhysicsWorld, world: &mut World, seconds: f32) {
 
 fn at(world: &World, entity: Entity) -> Vec2 {
     world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("a transform")
         .translation
 }
@@ -91,7 +91,7 @@ fn a_sleeping_crate_is_still_touching_its_floor() {
 fn a_velocity_written_by_the_game_wakes_it() {
     let (mut physics, mut world, _, body) = asleep_on_a_floor();
     let resting = at(&world, body);
-    world.get_mut::<RigidBody>(body).expect("a body").velocity = Vec2::new(0.0, 5.0);
+    world.get_mut::<RigidBody2D>(body).expect("a body").velocity = Vec2::new(0.0, 5.0);
     physics.step_once(&mut world, G);
     assert!(!physics.is_asleep(body));
     assert!(at(&world, body).y > resting.y, "and it moved this step");
@@ -101,7 +101,7 @@ fn a_velocity_written_by_the_game_wakes_it() {
 fn moving_its_transform_from_outside_wakes_it() {
     let (mut physics, mut world, _, body) = asleep_on_a_floor();
     world
-        .get_mut::<Transform>(body)
+        .get_mut::<Transform2D>(body)
         .expect("a transform")
         .translation
         .y = 3.0;
@@ -136,7 +136,7 @@ fn something_awake_landing_on_a_sleeping_stack_wakes_the_whole_stack() {
         woke |= !physics.is_asleep(bottom);
     }
     assert!(woke, "the bottom crate woke through the one it was holding");
-    assert!(world.get::<Transform>(falling).is_some());
+    assert!(world.get::<Transform2D>(falling).is_some());
 }
 
 #[test]
@@ -148,7 +148,7 @@ fn a_disturbance_wakes_only_its_own_island() {
     let mut physics = PhysicsWorld::with_step(STEP);
     run(&mut physics, &mut world, 3.0);
 
-    world.get_mut::<RigidBody>(left).expect("a body").velocity = Vec2::new(1.0, 0.0);
+    world.get_mut::<RigidBody2D>(left).expect("a body").velocity = Vec2::new(1.0, 0.0);
     physics.step_once(&mut world, G);
 
     assert!(!physics.is_asleep(left));
@@ -163,7 +163,10 @@ fn a_body_that_may_not_sleep_never_does() {
     let mut world = World::new();
     floor(&mut world, Vec2::new(0.0, -0.5), Vec2::new(10.0, 0.5));
     let body = crate_at(&mut world, Vec2::new(0.0, 0.6));
-    world.get_mut::<RigidBody>(body).expect("a body").can_sleep = false;
+    world
+        .get_mut::<RigidBody2D>(body)
+        .expect("a body")
+        .can_sleep = false;
     let mut physics = PhysicsWorld::with_step(STEP);
     run(&mut physics, &mut world, 3.0);
     assert!(!physics.is_asleep(body));
@@ -187,10 +190,10 @@ fn a_moving_kinematic_platform_keeps_its_rider_awake() {
     let platform = floor(&mut world, Vec2::new(0.0, -0.5), Vec2::new(10.0, 0.5));
     world.insert(
         platform,
-        RigidBody {
+        RigidBody2D {
             body_type: BodyType::Kinematic,
             velocity: Vec2::new(0.5, 0.0),
-            ..RigidBody::new_static()
+            ..RigidBody2D::new_static()
         },
     );
     let rider = crate_at(&mut world, Vec2::new(0.0, 0.6));
@@ -205,9 +208,9 @@ fn a_platform_that_starts_moving_wakes_a_sleeping_rider() {
     let platform = floor(&mut world, Vec2::new(0.0, -0.5), Vec2::new(10.0, 0.5));
     world.insert(
         platform,
-        RigidBody {
+        RigidBody2D {
             body_type: BodyType::Kinematic,
-            ..RigidBody::new_static()
+            ..RigidBody2D::new_static()
         },
     );
     let rider = crate_at(&mut world, Vec2::new(0.0, 0.6));
@@ -216,7 +219,7 @@ fn a_platform_that_starts_moving_wakes_a_sleeping_rider() {
     assert!(physics.is_asleep(rider));
 
     world
-        .get_mut::<RigidBody>(platform)
+        .get_mut::<RigidBody2D>(platform)
         .expect("a body")
         .velocity = Vec2::new(0.0, 1.0);
     physics.step_once(&mut world, G);

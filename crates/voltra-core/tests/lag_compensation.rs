@@ -18,7 +18,7 @@ use voltra_core::replication::{
 use voltra_core::{App, Headless, QueryFilter, Rewound};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, LagCompensated, Replicated, SceneId, Transform};
+use voltra_scene::{Collider2D, LagCompensated, Replicated, SceneId, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 /// The target's half-width: a shot further off than this misses.
@@ -56,11 +56,11 @@ fn up(rewound: &Rewound<'_>, x: f32) -> Option<Entity> {
 fn target(world: &mut World, x: f32) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
-    world.insert(entity, Transform::from_translation(Vec2::new(x, 0.0)));
+    world.insert(entity, Transform2D::from_translation(Vec2::new(x, 0.0)));
     world.insert(entity, Replicated::default());
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(HALF),
         },
     );
@@ -100,7 +100,7 @@ fn play(config: ReplicationConfig, latency: u64) -> Vec<Shot> {
                         let world = &mut *tick.world;
                         let player = world.spawn();
                         world.insert(player, SceneId::new());
-                        world.insert(player, Transform::default());
+                        world.insert(player, Transform2D::default());
                         world.insert(player, Replicated::default());
                         world.insert(player, NetOwner(peer));
                     }
@@ -137,7 +137,7 @@ fn play(config: ReplicationConfig, latency: u64) -> Vec<Shot> {
                     });
                 }
                 time += tick.delta;
-                if let Some(t) = tick.world.get_mut::<Transform>(near) {
+                if let Some(t) = tick.world.get_mut::<Transform2D>(near) {
                     t.translation.x = 4.0 * (time * 2.0).sin();
                 }
             }),
@@ -156,7 +156,7 @@ fn play(config: ReplicationConfig, latency: u64) -> Vec<Shot> {
                 .world
                 .query::<Replicated>()
                 .filter(|(entity, _)| Some(*entity) != mine)
-                .filter_map(|(entity, _)| tick.world.get::<Transform>(entity))
+                .filter_map(|(entity, _)| tick.world.get::<Transform2D>(entity))
                 .map(|t| t.translation.x)
                 .find(|x| x.abs() < FAR / 2.0);
             tick.predict(&mut predicted.borrow_mut(), Aim { x }, |_, _, _, _| {});

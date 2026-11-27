@@ -7,7 +7,7 @@ use common::*;
 use voltra_ecs::{Entity, World};
 use voltra_physics::ImpulseCache;
 use voltra_render::glam::Vec2;
-use voltra_scene::RigidBody;
+use voltra_scene::RigidBody2D;
 
 #[test]
 fn a_box_dropped_flat_settles_without_rocking() {
@@ -108,7 +108,7 @@ fn a_locked_body_takes_the_hit_without_turning() {
     spawn_box(&mut world, Vec2::new(-0.45, -1.0), Vec2::splat(0.1), None);
     let crate_ = spawn_box(&mut world, Vec2::new(0.0, 0.0), Vec2::splat(0.5), Some(1.0));
     world
-        .get_mut::<RigidBody>(crate_)
+        .get_mut::<RigidBody2D>(crate_)
         .expect("the crate")
         .lock_rotation = true;
 
@@ -183,7 +183,7 @@ fn a_stack_of_rotated_boxes_does_not_gain_energy() {
         boxes
             .iter()
             .map(|entity| {
-                let body = world.get::<RigidBody>(*entity).expect("a body");
+                let body = world.get::<RigidBody2D>(*entity).expect("a body");
                 body.velocity.length_squared() + body.angular_velocity * body.angular_velocity
             })
             .sum()
@@ -207,7 +207,7 @@ fn a_body_spun_absurdly_fast_stays_in_the_world() {
     spawn_box(&mut world, Vec2::new(0.0, -1.0), Vec2::new(10.0, 1.0), None);
     let crate_ = spawn_box(&mut world, Vec2::new(0.0, 0.6), Vec2::splat(0.5), Some(1.0));
     world
-        .get_mut::<RigidBody>(crate_)
+        .get_mut::<RigidBody2D>(crate_)
         .expect("the crate")
         .angular_velocity = 1.0e6;
 

@@ -6,7 +6,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::MeshBuffers;
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{Sprite, SpriteBatch, TileMeshCache, Transform};
+use voltra_scene::{Sprite2D, SpriteBatch, TileMeshCache, Transform2D};
 
 use super::{Bench, Outcome};
 use crate::harness::{iter, measure};
@@ -52,15 +52,15 @@ fn sprites(count: usize) -> World {
     for i in 0..count {
         let entity = world.spawn();
         let at = Vec2::new((i % side) as f32, (i / side) as f32);
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         let texture = (i * TEXTURES / count) as u32;
         world.insert(
             entity,
-            Sprite {
+            Sprite2D {
                 // Never resolved: the batch only compares handles to split
                 // its runs, and draws nothing.
                 texture_handle: Some(Handle::forge(texture, 0)),
-                ..Sprite::default()
+                ..Sprite2D::default()
             },
         );
     }

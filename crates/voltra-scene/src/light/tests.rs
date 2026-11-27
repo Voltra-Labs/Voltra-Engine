@@ -1,23 +1,23 @@
 use voltra_render::glam::Vec2;
 
 use super::*;
-use crate::{hierarchy, Transform};
+use crate::{hierarchy, Transform2D};
 
 fn lit_camera(world: &mut World, ambient: Option<[f32; 3]>) {
     let camera = world.spawn();
-    world.insert(camera, Transform::default());
+    world.insert(camera, Transform2D::default());
     world.insert(
         camera,
-        Camera {
+        Camera2D {
             ambient,
-            ..Camera::default()
+            ..Camera2D::default()
         },
     );
 }
 
 fn lamp(world: &mut World, at: Vec2) -> voltra_ecs::Entity {
     let lamp = world.spawn();
-    world.insert(lamp, Transform::from_translation(at));
+    world.insert(lamp, Transform2D::from_translation(at));
     world.insert(lamp, PointLight2D::default());
     lamp
 }
@@ -65,9 +65,9 @@ fn a_spot_light_aimed_away_from_the_view_is_left_out() {
     // Turned half a turn: shining left, back into the view.
     world.insert(
         toward,
-        Transform {
+        Transform2D {
             rotation: std::f32::consts::PI,
-            ..Transform::from_translation(Vec2::new(12.0, 0.0))
+            ..Transform2D::from_translation(Vec2::new(12.0, 0.0))
         },
     );
     world
@@ -90,7 +90,7 @@ fn a_light_follows_its_parent_and_scales_with_it() {
     let parent = world.spawn();
     world.insert(
         parent,
-        Transform::from_translation(Vec2::new(4.0, 0.0)).with_scale(Vec2::splat(2.0)),
+        Transform2D::from_translation(Vec2::new(4.0, 0.0)).with_scale(Vec2::splat(2.0)),
     );
     world.insert(parent, crate::SceneId::new());
     let child = lamp(&mut world, Vec2::new(1.0, 0.0));
@@ -118,10 +118,10 @@ fn casters_are_gathered_only_for_a_light_that_casts_shadows() {
     lit_camera(&mut world, Some([0.1; 3]));
     let lamp = lamp(&mut world, Vec2::ZERO);
     let wall = world.spawn();
-    world.insert(wall, Transform::from_translation(Vec2::new(2.0, 0.0)));
+    world.insert(wall, Transform2D::from_translation(Vec2::new(2.0, 0.0)));
     world.insert(
         wall,
-        crate::Collider::Box {
+        crate::Collider2D::Box {
             half_extents: Vec2::ONE,
         },
     );
@@ -160,19 +160,19 @@ fn the_shadow_map_s_resolution_is_the_camera_s_and_left_out_when_default() {
     let camera = world.spawn();
     world.insert(
         camera,
-        Camera {
+        Camera2D {
             ambient: Some([0.1; 3]),
             shadow_resolution: 256,
-            ..Camera::default()
+            ..Camera2D::default()
         },
     );
     assert_eq!(
         gather(&world, VIEW.0, VIEW.1, None, None).shadow_resolution,
         256
     );
-    let text = ron::to_string(&Camera::default()).expect("writes");
+    let text = ron::to_string(&Camera2D::default()).expect("writes");
     assert!(!text.contains("shadow_resolution"), "{text}");
-    let read: Camera = ron::from_str(&text).expect("reads");
+    let read: Camera2D = ron::from_str(&text).expect("reads");
     assert_eq!(
         read.shadow_resolution,
         voltra_render::lights::DEFAULT_SHADOW_RESOLUTION
@@ -184,7 +184,7 @@ fn a_spot_light_points_along_its_entity_and_is_left_out_of_the_file_when_off() {
     let mut world = World::new();
     lit_camera(&mut world, Some([0.1; 3]));
     let spot = lamp(&mut world, Vec2::ZERO);
-    if let Some(transform) = world.get_mut::<Transform>(spot) {
+    if let Some(transform) = world.get_mut::<Transform2D>(spot) {
         transform.rotation = std::f32::consts::FRAC_PI_2;
     }
     if let Some(light) = world.get_mut::<PointLight2D>(spot) {

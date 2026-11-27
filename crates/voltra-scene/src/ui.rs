@@ -2,7 +2,7 @@
 //! in the world, drawn after it in the target's own pixels.
 //!
 //! A HUD, and since stage 35 buttons: [`UiButton`] takes clicks, hover and
-//! keyboard/gamepad focus. An image is a `Sprite` on a `UiRect` — a
+//! keyboard/gamepad focus. An image is a `Sprite2D` on a `UiRect` — a
 //! texture, a region or an atlas frame, tinted — drawn whole or, with a
 //! [`UiSlice`], as a 9-slice; a [`UiStack`] lays its children out in a row
 //! or a column. Stage 94 added [`UiDropdown`], [`UiTooltip`], [`UiTabs`]
@@ -66,7 +66,7 @@ pub fn element_at(world: &World, layout: &UiLayout, point: Vec2) -> Option<Entit
                 .get::<crate::Text>(entity)
                 .map(|text| text.sort_order)
                 .into_iter()
-                .chain(world.get::<crate::Sprite>(entity).map(|s| s.sort_order))
+                .chain(world.get::<crate::Sprite2D>(entity).map(|s| s.sort_order))
                 .chain(controls::is_control(world, entity).then_some(0))
                 .max()?;
             layout

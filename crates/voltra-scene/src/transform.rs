@@ -7,7 +7,7 @@ use voltra_render::glam::{Affine2, Mat3, Vec2, Vec3};
 /// `Mat3` rather than `Mat4`: a 2D affine transform needs nine floats, not
 /// sixteen, and the camera promotes it on the way to the shader.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Transform {
+pub struct Transform2D {
     /// Where the entity is, in world units.
     pub translation: Vec2,
     /// Counter-clockwise, in radians.
@@ -16,7 +16,7 @@ pub struct Transform {
     pub scale: Vec2,
 }
 
-impl Default for Transform {
+impl Default for Transform2D {
     fn default() -> Self {
         Self {
             translation: Vec2::ZERO,
@@ -28,7 +28,7 @@ impl Default for Transform {
     }
 }
 
-impl Transform {
+impl Transform2D {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "Transform";
 
@@ -101,14 +101,14 @@ mod tests {
     use super::*;
     use std::f32::consts::FRAC_PI_2;
 
-    fn apply(transform: &Transform, point: Vec2) -> Vec2 {
+    fn apply(transform: &Transform2D, point: Vec2) -> Vec2 {
         transform.matrix().transform_point2(point)
     }
 
     #[test]
     fn an_unturned_matrix_is_the_general_one_to_the_bit() {
         for rotation in [0.0, -0.0] {
-            let transform = Transform {
+            let transform = Transform2D {
                 translation: Vec2::new(3.5, -2.0),
                 rotation,
                 scale: Vec2::new(-2.0, 0.25),
@@ -130,31 +130,31 @@ mod tests {
     #[test]
     fn default_transform_leaves_a_point_alone() {
         let point = Vec2::new(3.0, -4.0);
-        assert!((apply(&Transform::default(), point) - point).length() < 1e-6);
+        assert!((apply(&Transform2D::default(), point) - point).length() < 1e-6);
     }
 
     #[test]
     fn translation_moves_the_point() {
-        let t = Transform::from_translation(Vec2::new(2.0, 1.0));
+        let t = Transform2D::from_translation(Vec2::new(2.0, 1.0));
         assert!((apply(&t, Vec2::ZERO) - Vec2::new(2.0, 1.0)).length() < 1e-6);
     }
 
     #[test]
     fn scale_multiplies_around_the_origin() {
-        let t = Transform::default().with_scale(Vec2::new(2.0, 3.0));
+        let t = Transform2D::default().with_scale(Vec2::new(2.0, 3.0));
         assert!((apply(&t, Vec2::new(1.0, 1.0)) - Vec2::new(2.0, 3.0)).length() < 1e-6);
     }
 
     #[test]
     fn rotation_is_counter_clockwise_in_radians() {
-        let t = Transform::default().with_rotation(FRAC_PI_2);
+        let t = Transform2D::default().with_rotation(FRAC_PI_2);
         // +X rotated a quarter turn counter-clockwise lands on +Y.
         assert!((apply(&t, Vec2::X) - Vec2::Y).length() < 1e-6);
     }
 
     #[test]
     fn scale_is_applied_before_translation() {
-        let t = Transform::from_translation(Vec2::new(10.0, 0.0)).with_scale(Vec2::splat(2.0));
+        let t = Transform2D::from_translation(Vec2::new(10.0, 0.0)).with_scale(Vec2::splat(2.0));
 
         // Scale-then-translate puts this at 10 + 2; the other order would put
         // it at (1 + 10) * 2 = 22. Getting this backwards makes objects drift
@@ -164,11 +164,11 @@ mod tests {
 
     #[test]
     fn a_transform_survives_a_trip_through_its_matrix() {
-        let t = Transform::from_translation(Vec2::new(-3.0, 7.0))
+        let t = Transform2D::from_translation(Vec2::new(-3.0, 7.0))
             .with_rotation(FRAC_PI_2 * 0.5)
             .with_scale(Vec2::new(2.0, 5.0));
 
-        let back = Transform::from_matrix(t.matrix());
+        let back = Transform2D::from_matrix(t.matrix());
 
         assert!((back.translation - t.translation).length() < 1e-5);
         assert!((back.rotation - t.rotation).abs() < 1e-5);
@@ -181,10 +181,11 @@ mod tests {
         // times the child's. With the parent scaled uniformly there is no
         // shear, so the answer is exact and the child ends up at the parent's
         // scale times its own.
-        let parent = Transform::from_translation(Vec2::new(10.0, 0.0)).with_scale(Vec2::splat(2.0));
-        let child = Transform::from_translation(Vec2::new(1.0, 0.0));
+        let parent =
+            Transform2D::from_translation(Vec2::new(10.0, 0.0)).with_scale(Vec2::splat(2.0));
+        let child = Transform2D::from_translation(Vec2::new(1.0, 0.0));
 
-        let world = Transform::from_matrix(parent.matrix() * child.matrix());
+        let world = Transform2D::from_matrix(parent.matrix() * child.matrix());
 
         assert!((world.translation - Vec2::new(12.0, 0.0)).length() < 1e-5);
         assert!((world.scale - Vec2::splat(2.0)).length() < 1e-5);
@@ -192,7 +193,7 @@ mod tests {
 
     #[test]
     fn with_scale_builds_a_uniform_square() {
-        let t = Transform::from_translation(Vec2::ZERO).with_scale(Vec2::splat(4.0));
+        let t = Transform2D::from_translation(Vec2::ZERO).with_scale(Vec2::splat(4.0));
         assert_eq!(t.scale, Vec2::splat(4.0));
     }
 }

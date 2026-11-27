@@ -29,9 +29,9 @@ pub enum ViewMode {
     /// The editor's own camera, driven by [`crate::camera::ViewportCamera`].
     #[default]
     Scene,
-    /// The scene's active [`Camera`], as a running game would frame it.
+    /// The scene's active [`Camera2D`], as a running game would frame it.
     ///
-    /// [`Camera`]: voltra_scene::Camera
+    /// [`Camera2D`]: voltra_scene::Camera2D
     Game,
 }
 
@@ -118,7 +118,7 @@ impl View {
 mod tests {
     use super::*;
     use voltra_render::glam::Vec2;
-    use voltra_scene::{Camera, Transform};
+    use voltra_scene::{Camera2D, Transform2D};
 
     fn editor_camera() -> View2D {
         View2D::new(Vec2::new(7.0, -3.0), 4.0, 1.5)
@@ -127,8 +127,8 @@ mod tests {
     fn scene_with_camera(at: Vec2, size: f32) -> World {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
-        world.insert(entity, Camera::new(size));
+        world.insert(entity, Transform2D::from_translation(at));
+        world.insert(entity, Camera2D::new(size));
         world
     }
 
@@ -217,7 +217,7 @@ mod tests {
     fn an_inactive_camera_does_not_frame_the_game_view() {
         let view = View::default();
         let mut world = scene_with_camera(Vec2::new(2.0, 5.0), 3.0);
-        for (_, camera) in world.query_mut::<Camera>() {
+        for (_, camera) in world.query_mut::<Camera2D>() {
             camera.active = false;
         }
         let mut camera = editor_camera();

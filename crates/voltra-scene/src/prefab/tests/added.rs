@@ -26,7 +26,7 @@ fn write_gem(prefabs: &mut Prefabs, color: [f32; 4]) -> AssetPath {
                 .expect("a uuid"),
         ),
     );
-    world.insert(gem, Sprite::new(color));
+    world.insert(gem, Sprite2D::new(color));
     let target = path("gem.prefab.ron");
     let file = fragment(&world, &registry(), gem).expect("cut");
     crate::format::write(&file, &prefabs.root().join(target.as_str())).expect("written");
@@ -41,7 +41,7 @@ fn gem_under(world: &World, parent: Entity) -> Option<Entity> {
 }
 
 fn color_of(world: &World, entity: Entity) -> [f32; 4] {
-    world.get::<Sprite>(entity).expect("a sprite").color
+    world.get::<Sprite2D>(entity).expect("a sprite").color
 }
 
 fn len_of(prefabs: &mut Prefabs, file: &AssetPath) -> usize {
@@ -144,7 +144,7 @@ fn a_prefab_made_from_a_selection_inside_a_variant_stays_in_it() {
     let mut own = Prefabs::new(&root);
     edit_in_place(&root, &mut prefabs, &target, |world, top| {
         let made = named(world, "sparkle", Vec2::ZERO);
-        world.insert(made, Sprite::new(YELLOW));
+        world.insert(made, Sprite2D::new(YELLOW));
         set_parent(world, made, top).expect("a plain reparent");
         write(world, &registry(), &mut own, made, &sparkle).expect("written");
         link(world, made, sparkle.clone());

@@ -2,7 +2,7 @@
 
 use voltra_render::glam::Vec2;
 
-use crate::Transform;
+use crate::Transform2D;
 
 /// A value that can be blended toward another: what a component
 /// replicated with
@@ -30,7 +30,7 @@ impl Interpolate for Vec2 {
     }
 }
 
-impl Interpolate for Transform {
+impl Interpolate for Transform2D {
     /// Position and scale linearly; the rotation the short way round, so a
     /// turn through ±π does not spin the long way.
     fn interpolate(&self, to: &Self, t: f32) -> Self {
@@ -51,8 +51,8 @@ mod tests {
 
     #[test]
     fn a_rotation_takes_the_short_way() {
-        let a = Transform::default().with_rotation(3.0);
-        let b = Transform::default().with_rotation(-3.0);
+        let a = Transform2D::default().with_rotation(3.0);
+        let b = Transform2D::default().with_rotation(-3.0);
         let half = a.interpolate(&b, 0.5);
         // Through π, not through 0.
         assert!((half.rotation.abs() - std::f32::consts::PI).abs() < 1e-4);
@@ -60,7 +60,8 @@ mod tests {
 
     #[test]
     fn equal_values_interpolate_to_themselves_exactly() {
-        let a = Transform::from_translation(Vec2::new(-12.621071, -3.115856)).with_rotation(15.95);
+        let a =
+            Transform2D::from_translation(Vec2::new(-12.621071, -3.115856)).with_rotation(15.95);
         for t in [0.125, 0.5, 0.875, 0.999] {
             assert_eq!(a.interpolate(&a, t), a);
         }
@@ -68,8 +69,8 @@ mod tests {
 
     #[test]
     fn the_ends_are_the_values() {
-        let a = Transform::from_translation(Vec2::new(1.0, 2.0));
-        let b = Transform::from_translation(Vec2::new(3.0, -2.0)).with_scale(Vec2::splat(2.0));
+        let a = Transform2D::from_translation(Vec2::new(1.0, 2.0));
+        let b = Transform2D::from_translation(Vec2::new(3.0, -2.0)).with_scale(Vec2::splat(2.0));
         assert_eq!(a.interpolate(&b, 0.0), a);
         let end = a.interpolate(&b, 1.0);
         assert!((end.translation - b.translation).length() < 1e-6);

@@ -10,7 +10,7 @@ use voltra_testkit::scratch_root;
 use super::TileAnimation;
 use crate::batch::SpriteBatch;
 use crate::sprite::sheets::Sheets;
-use crate::{Parallax, Tile, TileMeshCache, Tilemap, Transform};
+use crate::{Parallax, Tile, TileMeshCache, Tilemap, Transform2D};
 
 struct Sizes;
 
@@ -55,7 +55,7 @@ fn level(atlases: &mut Atlases, path: &AssetPath) -> (World, Entity) {
     );
     let mut world = World::new();
     let layer = world.spawn();
-    world.insert(layer, Transform::default());
+    world.insert(layer, Transform2D::default());
     world.insert(layer, map);
     (world, layer)
 }
@@ -98,7 +98,7 @@ fn a_cached_frame_equals_a_fresh_one_through_every_change() {
         map.set(IVec2::new(40, 0), Some(Tile::new(1)));
     }
     same(&world, all, &mut cache);
-    world.insert(layer, Transform::from_translation(Vec2::new(3.0, -1.0)));
+    world.insert(layer, Transform2D::from_translation(Vec2::new(3.0, -1.0)));
     same(&world, all, &mut cache);
     world.get_mut::<Tilemap>(layer).expect("spawned").color = [1.0, 0.5, 0.5, 0.5];
     same(&world, all, &mut cache);

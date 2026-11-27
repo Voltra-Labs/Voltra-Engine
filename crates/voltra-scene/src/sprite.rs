@@ -7,9 +7,9 @@ use voltra_assets::{AssetPath, Atlas, Atlases, Frame, Handle, Textures};
 use voltra_ecs::Entity;
 use voltra_render::Texture;
 
-/// A coloured quad. Its size comes from the entity's [`Transform`].
+/// A coloured quad. Its size comes from the entity's [`Transform2D`].
 ///
-/// [`Transform`]: crate::transform::Transform
+/// [`Transform2D`]: crate::transform::Transform2D
 ///
 /// No longer `Copy`: `texture_handle` is an `Option<Handle<Texture>>`, and
 /// while a `Handle` itself is `Copy`, wrapping every field of a type in a
@@ -17,7 +17,7 @@ use voltra_render::Texture;
 /// a GPU resource, not a value to duplicate freely. `Clone` is enough for
 /// every caller that used to rely on `Copy`.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct Sprite {
+pub struct Sprite2D {
     /// Multiplied with the bound texture. White leaves the texture as-is.
     pub color: [f32; 4],
     /// Draw order within the scene. Higher is drawn later, and therefore on
@@ -57,7 +57,7 @@ pub struct Sprite {
     /// Never serialised — a handle addresses a slot in whichever `Textures`
     /// loaded this session, which means nothing across a save/load or even
     /// across two runs of the same process. Resolved fresh from `texture` on
-    /// load, by [`set_texture`](Sprite::set_texture) or its world-wide caller.
+    /// load, by [`set_texture`](Sprite2D::set_texture) or its world-wide caller.
     #[serde(skip)]
     pub texture_handle: Option<Handle<Texture>>,
     /// The slicing this sprite takes its frame from, by path.
@@ -81,7 +81,7 @@ pub struct Sprite {
     pub frame: u32,
     /// A rectangle of the texture, in texels, for a sheet with no atlas file.
     ///
-    /// Godot's `region_rect` and Bevy's `Sprite::rect`, and worth keeping
+    /// Godot's `region_rect` and Bevy's `Sprite2D::rect`, and worth keeping
     /// beside the atlas: a UI element cut once out of a shared sheet does not
     /// need a file of its own. The atlas wins when both are set — a sprite
     /// that names one is asking for its frames.
@@ -136,7 +136,7 @@ pub struct Sprite {
     pub material: Option<crate::SpriteMaterial>,
 }
 
-impl Default for Sprite {
+impl Default for Sprite2D {
     fn default() -> Self {
         Self {
             color: [1.0, 1.0, 1.0, 1.0],
@@ -159,7 +159,7 @@ impl Default for Sprite {
     }
 }
 
-impl Sprite {
+impl Sprite2D {
     /// The registered name a scene file stores it under.
     pub const NAME: &'static str = "Sprite";
 
@@ -260,7 +260,7 @@ impl Sprite {
 /// One function rather than two matching tuples. If batching and picking ever
 /// disagreed, a click would select something other than the sprite whose pixels
 /// are visible, and nothing would report it. Takes the order rather than a
-/// [`Sprite`] because a tilemap layer sorts among sprites by the same key.
+/// [`Sprite2D`] because a tilemap layer sorts among sprites by the same key.
 pub fn draw_key(entity: Entity, layer_rank: i32, sort_order: i32) -> (i32, i32, u32) {
     (layer_rank, sort_order, entity.index())
 }

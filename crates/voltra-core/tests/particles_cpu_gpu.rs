@@ -14,7 +14,7 @@ use voltra_assets::AssetPath;
 use voltra_core::{App, Headless, Screenshot, ScreenshotError, WindowConfig};
 use voltra_render::glam::Vec2;
 use voltra_scene::particles::{Flipbook, FlipbookTiming, Simulation};
-use voltra_scene::{Camera, Collider, Curve, CurveKey, Gradient, ParticleEmitter, Transform};
+use voltra_scene::{Camera2D, Collider2D, Curve, CurveKey, Gradient, ParticleEmitter, Transform2D};
 
 /// 64 × 64 pixels over four units: sixteen pixels a unit, the origin at
 /// pixel (32, 32).
@@ -28,7 +28,7 @@ const FRAME: f32 = 1.0 / 60.0;
 fn shoot(
     root: &Path,
     emitter: &ParticleEmitter,
-    collider: Option<Collider>,
+    collider: Option<Collider2D>,
     simulation: Simulation,
     frames: u32,
 ) -> Option<Screenshot> {
@@ -37,10 +37,10 @@ fn shoot(
     // flipbook's atlas as it does a loaded scene's.
     let world = &mut app.world;
     let camera = world.spawn();
-    world.insert(camera, Transform::default());
-    world.insert(camera, Camera::new(2.0));
+    world.insert(camera, Transform2D::default());
+    world.insert(camera, Camera2D::new(2.0));
     let entity = world.spawn();
-    world.insert(entity, Transform::default());
+    world.insert(entity, Transform2D::default());
     if let Some(collider) = collider {
         world.insert(entity, collider);
     }
@@ -82,7 +82,7 @@ fn shoot(
 fn both(
     root: &Path,
     emitter: &ParticleEmitter,
-    collider: Option<Collider>,
+    collider: Option<Collider2D>,
     frames: u32,
 ) -> Option<(Screenshot, Screenshot)> {
     let cpu = shoot(root, emitter, collider, Simulation::Cpu, frames)?;
@@ -253,7 +253,7 @@ fn rotation_and_spin_turn_the_same_both_ways() {
 /// densely, both ways, and nothing outside `inside`.
 fn assert_shape(
     shape: voltra_scene::particles::EmitShape,
-    collider: Option<Collider>,
+    collider: Option<Collider2D>,
     min_lit: usize,
     inside: impl Fn(Vec2) -> bool,
 ) {
@@ -330,7 +330,7 @@ fn each_emission_shape_covers_the_same_region_both_ways() {
     });
     assert_shape(
         EmitShape::Outline,
-        Some(Collider::Box {
+        Some(Collider2D::Box {
             half_extents: Vec2::new(1.0, 0.75),
         }),
         100,

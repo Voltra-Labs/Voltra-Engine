@@ -8,7 +8,7 @@ use common::*;
 use voltra_ecs::{Entity, World};
 use voltra_physics::ImpulseCache;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Joint2D, JointKind, RigidBody, Transform};
+use voltra_scene::{Collider2D, Joint2D, JointKind, RigidBody2D, Transform2D};
 
 /// Ten tonnes.
 const HEAVY: f32 = 10_000.0;
@@ -17,9 +17,9 @@ const HEAVY: f32 = 10_000.0;
 /// held to the world at `anchor_b`.
 fn heavy_ball(world: &mut World, anchor_b: Vec2, kind: JointKind) -> Entity {
     let entity = world.spawn();
-    world.insert(entity, Transform::default());
-    world.insert(entity, Collider::Circle { radius: 0.2 });
-    world.insert(entity, RigidBody::new_dynamic(HEAVY));
+    world.insert(entity, Transform2D::default());
+    world.insert(entity, Collider2D::Circle { radius: 0.2 });
+    world.insert(entity, RigidBody2D::new_dynamic(HEAVY));
     world.insert(
         entity,
         Joint2D {
@@ -72,7 +72,10 @@ fn a_ten_tonne_slider_stays_on_its_line() {
             ..Joint2D::default()
         },
     );
-    world.get_mut::<RigidBody>(body).expect("its body").velocity = Vec2::new(1.0, 0.0);
+    world
+        .get_mut::<RigidBody2D>(body)
+        .expect("its body")
+        .velocity = Vec2::new(1.0, 0.0);
     let mut cache = ImpulseCache::default();
     for _ in 0..120 {
         run(&mut world, &mut cache, G, 1);

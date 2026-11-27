@@ -5,10 +5,10 @@ use voltra_render::glam::Vec2;
 
 use voltra_ecs::{Entity, World};
 
-use crate::Camera;
+use crate::Camera2D;
 
 /// How a following camera zooms to frame its targets — Cinemachine's
-/// Framing Transposer over a Target Group: the camera's [`Camera::size`]
+/// Framing Transposer over a Target Group: the camera's [`Camera2D::size`]
 /// eased, at the follower's smoothing, to the size that shows the box
 /// around every target plus `margin`, within `min_size..=max_size`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -18,9 +18,9 @@ pub struct FollowZoom {
     /// targets are points, and a player at the edge of the screen is half
     /// off it.
     pub margin: Vec2,
-    /// The closest it zooms in: the smallest [`Camera::size`] it sets.
+    /// The closest it zooms in: the smallest [`Camera2D::size`] it sets.
     pub min_size: f32,
-    /// The furthest it zooms out: the largest [`Camera::size`] it sets.
+    /// The furthest it zooms out: the largest [`Camera2D::size`] it sets.
     pub max_size: f32,
 }
 
@@ -40,7 +40,7 @@ impl FollowZoom {
     /// `rotation` radians, within the limits.
     ///
     /// Limits out of order are taken either way round, and both are kept
-    /// within what a [`Camera`] can show. A non-finite answer is `None`, and
+    /// within what a [`Camera2D`] can show. A non-finite answer is `None`, and
     /// the camera keeps its size.
     pub fn size_for(&self, half: Vec2, aspect: f32, rotation: f32) -> Option<f32> {
         let half = half.abs() + self.margin.max(Vec2::ZERO);
@@ -70,11 +70,14 @@ impl FollowZoom {
 /// end is the camera's own limit.
 fn limits(min: f32, max: f32) -> (f32, f32) {
     let finite = |v: f32, or: f32| if v.is_finite() { v } else { or };
-    let (a, b) = (finite(min, Camera::MIN_SIZE), finite(max, Camera::MAX_SIZE));
+    let (a, b) = (
+        finite(min, Camera2D::MIN_SIZE),
+        finite(max, Camera2D::MAX_SIZE),
+    );
     let (lo, hi) = (a.min(b), a.max(b));
     (
-        lo.clamp(Camera::MIN_SIZE, Camera::MAX_SIZE),
-        hi.clamp(Camera::MIN_SIZE, Camera::MAX_SIZE),
+        lo.clamp(Camera2D::MIN_SIZE, Camera2D::MAX_SIZE),
+        hi.clamp(Camera2D::MIN_SIZE, Camera2D::MAX_SIZE),
     )
 }
 
@@ -90,10 +93,10 @@ pub(super) struct Fit {
 }
 
 /// The camera size the rig zooms to this frame, eased at the fit's rate
-/// and written to the entity's [`Camera`]; or the camera's size as it is
+/// and written to the entity's [`Camera2D`]; or the camera's size as it is
 /// without a zoom; `None` without a camera.
 pub(super) fn zoom_to(world: &mut World, entity: Entity, fit: Fit) -> Option<f32> {
-    let camera = world.get_mut::<Camera>(entity)?;
+    let camera = world.get_mut::<Camera2D>(entity)?;
     let Some(zoom) = fit.zoom else {
         return Some(camera.size);
     };

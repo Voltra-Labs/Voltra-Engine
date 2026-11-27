@@ -5,7 +5,7 @@ use voltra_assets::AssetPath;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_scene::hierarchy::set_parent;
-use voltra_scene::{prefab, ComponentRegistry, Name, Prefabs, SceneId, Sprite, Transform};
+use voltra_scene::{prefab, ComponentRegistry, Name, Prefabs, SceneId, Sprite2D, Transform2D};
 use voltra_testkit::Scratch;
 
 use super::{Bench, Outcome};
@@ -46,9 +46,9 @@ fn level() -> Option<(Scratch, World, Prefabs)> {
     let registry = ComponentRegistry::with_defaults();
     let mut authoring = World::new();
     let coin = named(&mut authoring, "coin");
-    authoring.insert(coin, Sprite::new([1.0, 0.8, 0.1, 1.0]));
+    authoring.insert(coin, Sprite2D::new([1.0, 0.8, 0.1, 1.0]));
     let glow = named(&mut authoring, "glow");
-    authoring.insert(glow, Sprite::default().with_sort_order(1));
+    authoring.insert(glow, Sprite2D::default().with_sort_order(1));
     set_parent(&mut authoring, glow, coin).ok()?;
     let path = AssetPath::new("coin.prefab.ron").ok()?;
     let mut prefabs = Prefabs::new(&root);
@@ -57,7 +57,7 @@ fn level() -> Option<(Scratch, World, Prefabs)> {
     let mut world = World::new();
     let handle = prefabs.load(&path);
     for i in 0..INSTANCES {
-        let at = Transform::from_translation(Vec2::new(i as f32, 0.0));
+        let at = Transform2D::from_translation(Vec2::new(i as f32, 0.0));
         prefab::spawn(&mut world, &registry, prefabs.get(handle), &at).ok()?;
     }
     for _ in 0..FILLER {
@@ -70,6 +70,6 @@ fn named(world: &mut World, name: &str) -> voltra_ecs::Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Name::new(name));
-    world.insert(entity, Transform::default());
+    world.insert(entity, Transform2D::default());
     entity
 }

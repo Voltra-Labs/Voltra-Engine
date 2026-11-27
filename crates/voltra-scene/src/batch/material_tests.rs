@@ -8,7 +8,7 @@ use voltra_testkit::scratch_root;
 
 use super::SpriteBatch;
 use crate::sprite::sheets::Sheets;
-use crate::{Sprite, SpriteMaterial};
+use crate::{Sprite2D, SpriteMaterial};
 
 fn flash_store() -> (Materials, AssetPath) {
     let root = scratch_root().keep();
@@ -29,8 +29,8 @@ fn flash_store() -> (Materials, AssetPath) {
     )
 }
 
-fn sprite(material: Option<(&mut Materials, &AssetPath, f32)>) -> Sprite {
-    let mut sprite = Sprite::default();
+fn sprite(material: Option<(&mut Materials, &AssetPath, f32)>) -> Sprite2D {
+    let mut sprite = Sprite2D::default();
     if let Some((store, path, flash)) = material {
         let mut slot = SpriteMaterial::new(path.clone());
         slot.set("flash", Uniform::Float(flash));
@@ -78,7 +78,7 @@ fn without_a_store_or_with_none_it_batches_as_before() {
     let (mut store, path) = flash_store();
     let with = sprite(Some((&mut store, &path, 1.0)));
     let mut batch = SpriteBatch::default();
-    for s in [&with, &Sprite::default(), &with] {
+    for s in [&with, &Sprite2D::default(), &with] {
         batch.push(Mat3::IDENTITY, s, Sheets::default());
     }
     assert_eq!(

@@ -4,7 +4,7 @@
 use voltra_ecs::World;
 
 use super::*;
-use crate::Transform;
+use crate::Transform2D;
 
 /// A looping clip `length` long moving the player from `0` to `to` in x.
 fn sweep(length: f32, to: f32) -> String {
@@ -24,7 +24,7 @@ fn store(files: &[(&str, String)]) -> AnimationClips {
 }
 
 fn x(world: &World, entity: voltra_ecs::Entity) -> f32 {
-    world.get::<Transform>(entity).expect("t").translation.x
+    world.get::<Transform2D>(entity).expect("t").translation.x
 }
 
 fn walk_and_run() -> AnimationClips {
@@ -112,7 +112,7 @@ fn a_blend_of_nothing_that_reads_writes_nothing_and_warns_of_nothing() {
     let mut clips = walk_and_run();
     let mut world = World::new();
     let (root, _) = rig(&mut world, "walk.anim.ron");
-    world.get_mut::<Transform>(root).expect("t").translation.x = 9.0;
+    world.get_mut::<Transform2D>(root).expect("t").translation.x = 9.0;
     world
         .get_mut::<AnimationPlayer>(root)
         .expect("p")

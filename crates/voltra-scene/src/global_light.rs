@@ -1,7 +1,7 @@
 //! A light with no place: Unity URP's Global `Light2D`, as an addition to
 //! the camera's ambient for the pixels of its light layers.
 //!
-//! The camera's [`ambient`](crate::Camera::ambient) lights every pixel of a
+//! The camera's [`ambient`](crate::Camera2D::ambient) lights every pixel of a
 //! lit frame; a global light adds its colour on top, but only where what was
 //! drawn shares one of its light layers — a background left dim while the
 //! foreground's layer is lifted, without a lamp. Its entity's transform does

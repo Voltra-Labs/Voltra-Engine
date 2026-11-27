@@ -1,5 +1,5 @@
 use super::*;
-use crate::transform::Transform;
+use crate::transform::Transform2D;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::Primitives;
@@ -10,7 +10,7 @@ fn batch_of(world: &World) -> SpriteBatch {
     SpriteBatch::from_world(world, Sheets::default())
 }
 
-fn world_with(sprites: &[(Transform, Sprite)]) -> World {
+fn world_with(sprites: &[(Transform2D, Sprite2D)]) -> World {
     let mut world = World::new();
     for (transform, sprite) in sprites {
         let e = world.spawn();
@@ -33,14 +33,17 @@ fn an_empty_world_produces_no_geometry() {
 fn an_entity_without_a_sprite_is_skipped() {
     let mut world = World::new();
     let e = world.spawn();
-    world.insert(e, Transform::default());
+    world.insert(e, Transform2D::default());
 
     assert_eq!(batch_of(&world).sprite_count(), 0);
 }
 
 #[test]
 fn one_sprite_becomes_a_quad() {
-    let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
+    let batch = batch_of(&world_with(&[(
+        Transform2D::default(),
+        Sprite2D::default(),
+    )]));
 
     assert_eq!(batch.quads.len(), 1);
     assert!(batch.vertices.is_empty() && batch.indices.is_empty());
@@ -49,7 +52,10 @@ fn one_sprite_becomes_a_quad() {
 
 #[test]
 fn an_untransformed_sprite_spans_one_unit_around_the_origin() {
-    let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
+    let batch = batch_of(&world_with(&[(
+        Transform2D::default(),
+        Sprite2D::default(),
+    )]));
 
     let xs: Vec<f32> = batch
         .quad_vertices()
@@ -71,8 +77,8 @@ fn an_untransformed_sprite_spans_one_unit_around_the_origin() {
 #[test]
 fn the_transform_moves_the_quad() {
     let batch = batch_of(&world_with(&[(
-        Transform::from_translation(Vec2::new(10.0, 0.0)),
-        Sprite::default(),
+        Transform2D::from_translation(Vec2::new(10.0, 0.0)),
+        Sprite2D::default(),
     )]));
 
     for v in &batch.quad_vertices() {
@@ -86,8 +92,8 @@ fn the_transform_moves_the_quad() {
 #[test]
 fn scale_grows_the_quad() {
     let batch = batch_of(&world_with(&[(
-        Transform::default().with_scale(Vec2::splat(4.0)),
-        Sprite::default(),
+        Transform2D::default().with_scale(Vec2::splat(4.0)),
+        Sprite2D::default(),
     )]));
 
     let xs: Vec<f32> = batch
@@ -100,8 +106,8 @@ fn scale_grows_the_quad() {
 
 #[test]
 fn the_sprite_colour_reaches_every_vertex() {
-    let sprite = Sprite::new([0.25, 0.5, 0.75, 1.0]);
-    let batch = batch_of(&world_with(&[(Transform::default(), sprite)]));
+    let sprite = Sprite2D::new([0.25, 0.5, 0.75, 1.0]);
+    let batch = batch_of(&world_with(&[(Transform2D::default(), sprite)]));
 
     for v in &batch.quad_vertices() {
         assert_eq!(v.color, [0.25, 0.5, 0.75, 1.0]);
@@ -111,14 +117,17 @@ fn the_sprite_colour_reaches_every_vertex() {
 #[test]
 fn the_sprite_alpha_reaches_the_vertex_too() {
     // Dropped before stage 34; a translucent sprite now draws translucent.
-    let sprite = Sprite::new([1.0, 1.0, 1.0, 0.4]);
-    let batch = batch_of(&world_with(&[(Transform::default(), sprite)]));
+    let sprite = Sprite2D::new([1.0, 1.0, 1.0, 0.4]);
+    let batch = batch_of(&world_with(&[(Transform2D::default(), sprite)]));
     assert!(batch.quad_vertices().iter().all(|v| v.color[3] == 0.4));
 }
 
 #[test]
 fn uvs_cover_the_whole_texture_with_v_pointing_down() {
-    let batch = batch_of(&world_with(&[(Transform::default(), Sprite::default())]));
+    let batch = batch_of(&world_with(&[(
+        Transform2D::default(),
+        Sprite2D::default(),
+    )]));
 
     let top = batch
         .quad_vertices()
@@ -131,10 +140,10 @@ fn uvs_cover_the_whole_texture_with_v_pointing_down() {
 #[test]
 fn a_second_sprite_gets_its_own_instance() {
     let batch = batch_of(&world_with(&[
-        (Transform::default(), Sprite::default()),
+        (Transform2D::default(), Sprite2D::default()),
         (
-            Transform::from_translation(Vec2::new(5.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(5.0, 0.0)),
+            Sprite2D::default(),
         ),
     ]));
 
@@ -151,9 +160,9 @@ fn a_second_sprite_gets_its_own_instance() {
 #[test]
 fn ranges_never_point_past_the_quads() {
     let batch = batch_of(&world_with(&[
-        (Transform::default(), Sprite::default()),
-        (Transform::default(), Sprite::default()),
-        (Transform::default(), Sprite::default()),
+        (Transform2D::default(), Sprite2D::default()),
+        (Transform2D::default(), Sprite2D::default()),
+        (Transform2D::default(), Sprite2D::default()),
     ]));
 
     let count = batch.quads.len() as u32;
@@ -165,7 +174,9 @@ fn ranges_never_point_past_the_quads() {
 
 /// Spawns each sprite and hands back the handles, so a test can despawn a
 /// specific one.
-fn world_returning_entities(sprites: &[(Transform, Sprite)]) -> (World, Vec<voltra_ecs::Entity>) {
+fn world_returning_entities(
+    sprites: &[(Transform2D, Sprite2D)],
+) -> (World, Vec<voltra_ecs::Entity>) {
     let mut world = World::new();
     let mut entities = Vec::new();
     for (transform, sprite) in sprites {
@@ -200,12 +211,12 @@ fn a_higher_sort_order_is_drawn_later() {
     // insertion order survives and this fails.
     let (world, _) = world_returning_entities(&[
         (
-            Transform::from_translation(Vec2::new(10.0, 0.0)),
-            Sprite::default().with_sort_order(5),
+            Transform2D::from_translation(Vec2::new(10.0, 0.0)),
+            Sprite2D::default().with_sort_order(5),
         ),
         (
-            Transform::from_translation(Vec2::new(20.0, 0.0)),
-            Sprite::default().with_sort_order(-3),
+            Transform2D::from_translation(Vec2::new(20.0, 0.0)),
+            Sprite2D::default().with_sort_order(-3),
         ),
     ]);
 
@@ -222,16 +233,16 @@ fn a_higher_sort_order_is_drawn_later() {
 fn sprites_are_drawn_in_spawn_order_by_default() {
     let (world, _) = world_returning_entities(&[
         (
-            Transform::from_translation(Vec2::new(1.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(1.0, 0.0)),
+            Sprite2D::default(),
         ),
         (
-            Transform::from_translation(Vec2::new(2.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(2.0, 0.0)),
+            Sprite2D::default(),
         ),
         (
-            Transform::from_translation(Vec2::new(3.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(3.0, 0.0)),
+            Sprite2D::default(),
         ),
     ]);
 
@@ -246,20 +257,20 @@ fn sprites_are_drawn_in_spawn_order_by_default() {
 fn despawning_scrambles_storage_but_not_draw_order() {
     let (mut world, entities) = world_returning_entities(&[
         (
-            Transform::from_translation(Vec2::new(1.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(1.0, 0.0)),
+            Sprite2D::default(),
         ),
         (
-            Transform::from_translation(Vec2::new(2.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(2.0, 0.0)),
+            Sprite2D::default(),
         ),
         (
-            Transform::from_translation(Vec2::new(3.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(3.0, 0.0)),
+            Sprite2D::default(),
         ),
         (
-            Transform::from_translation(Vec2::new(4.0, 0.0)),
-            Sprite::default(),
+            Transform2D::from_translation(Vec2::new(4.0, 0.0)),
+            Sprite2D::default(),
         ),
     ]);
 
@@ -283,12 +294,12 @@ fn despawning_scrambles_storage_but_not_draw_order() {
 
 #[test]
 fn a_sprite_defaults_to_sort_order_zero() {
-    assert_eq!(Sprite::default().sort_order, 0);
-    assert_eq!(Sprite::new([1.0, 0.0, 0.0, 1.0]).sort_order, 0);
+    assert_eq!(Sprite2D::default().sort_order, 0);
+    assert_eq!(Sprite2D::new([1.0, 0.0, 0.0, 1.0]).sort_order, 0);
 }
 
-fn sprite_with_texture(handle: Option<Handle<Texture>>) -> Sprite {
-    Sprite {
+fn sprite_with_texture(handle: Option<Handle<Texture>>) -> Sprite2D {
+    Sprite2D {
         texture_handle: handle,
         ..Default::default()
     }
@@ -303,12 +314,12 @@ fn push_alone_merges_contiguous_same_handles_into_one_range() {
     let a = Handle::forge(0, 0);
     let mut batch = SpriteBatch::default();
     batch.push(
-        Transform::default().matrix(),
+        Transform2D::default().matrix(),
         &sprite_with_texture(Some(a)),
         Sheets::default(),
     );
     batch.push(
-        Transform::default().matrix(),
+        Transform2D::default().matrix(),
         &sprite_with_texture(Some(a)),
         Sheets::default(),
     );
@@ -331,17 +342,17 @@ fn push_alone_splits_a_range_when_the_handle_changes() {
     let b = Handle::forge(1, 0);
     let mut batch = SpriteBatch::default();
     batch.push(
-        Transform::default().matrix(),
+        Transform2D::default().matrix(),
         &sprite_with_texture(Some(a)),
         Sheets::default(),
     );
     batch.push(
-        Transform::default().matrix(),
+        Transform2D::default().matrix(),
         &sprite_with_texture(Some(b)),
         Sheets::default(),
     );
     batch.push(
-        Transform::default().matrix(),
+        Transform2D::default().matrix(),
         &sprite_with_texture(Some(a)),
         Sheets::default(),
     );
@@ -379,12 +390,12 @@ fn push_alone_keeps_none_and_some_in_separate_ranges() {
     let a = Handle::forge(0, 0);
     let mut batch = SpriteBatch::default();
     batch.push(
-        Transform::default().matrix(),
+        Transform2D::default().matrix(),
         &sprite_with_texture(None),
         Sheets::default(),
     );
     batch.push(
-        Transform::default().matrix(),
+        Transform2D::default().matrix(),
         &sprite_with_texture(Some(a)),
         Sheets::default(),
     );
@@ -425,17 +436,17 @@ fn draw_order_still_follows_sort_order() {
     let high = Handle::forge(1, 0);
     let (world, _) = world_returning_entities(&[
         (
-            Transform::from_translation(Vec2::new(10.0, 0.0)),
-            Sprite {
+            Transform2D::from_translation(Vec2::new(10.0, 0.0)),
+            Sprite2D {
                 texture_handle: Some(high),
-                ..Sprite::default().with_sort_order(5)
+                ..Sprite2D::default().with_sort_order(5)
             },
         ),
         (
-            Transform::from_translation(Vec2::new(20.0, 0.0)),
-            Sprite {
+            Transform2D::from_translation(Vec2::new(20.0, 0.0)),
+            Sprite2D {
                 texture_handle: Some(low),
-                ..Sprite::default().with_sort_order(-3)
+                ..Sprite2D::default().with_sort_order(-3)
             },
         ),
     ]);
@@ -470,9 +481,9 @@ fn draw_order_still_follows_sort_order() {
 #[test]
 fn from_world_builds_one_range_for_untextured_sprites() {
     let batch = batch_of(&world_with(&[
-        (Transform::default(), sprite_with_texture(None)),
+        (Transform2D::default(), sprite_with_texture(None)),
         (
-            Transform::from_translation(Vec2::new(5.0, 0.0)),
+            Transform2D::from_translation(Vec2::new(5.0, 0.0)),
             sprite_with_texture(None),
         ),
     ]));
@@ -505,8 +516,8 @@ fn a_batch_past_sixty_five_thousand_vertices_still_indexes_its_own_quads() {
     let mut batch = SpriteBatch::default();
     for _ in 0..SPRITES {
         batch.push(
-            Transform::default().matrix(),
-            &Sprite::default(),
+            Transform2D::default().matrix(),
+            &Sprite2D::default(),
             Sheets::default(),
         );
     }
@@ -523,14 +534,14 @@ fn a_batch_past_sixty_five_thousand_vertices_still_indexes_its_own_quads() {
 fn a_different_normal_map_splits_a_run_and_the_same_one_keeps_it() {
     let texture = Handle::forge(0, 0);
     let (bumps, other) = (Handle::forge(1, 0), Handle::forge(2, 0));
-    let with_normal = |normal| Sprite {
+    let with_normal = |normal| Sprite2D {
         normal_handle: normal,
         ..sprite_with_texture(Some(texture))
     };
     let mut batch = SpriteBatch::default();
     for normal in [Some(bumps), Some(bumps), Some(other), None] {
         batch.push(
-            Transform::default().matrix(),
+            Transform2D::default().matrix(),
             &with_normal(normal),
             Sheets::default(),
         );
@@ -553,14 +564,14 @@ fn a_different_normal_map_splits_a_run_and_the_same_one_keeps_it() {
 #[test]
 fn different_light_layers_split_a_run() {
     let texture = Handle::forge(0, 0);
-    let on = |light_layers| Sprite {
+    let on = |light_layers| Sprite2D {
         light_layers,
         ..sprite_with_texture(Some(texture))
     };
     let mut batch = SpriteBatch::default();
     for layers in [1, 1, 2] {
         batch.push(
-            Transform::default().matrix(),
+            Transform2D::default().matrix(),
             &on(layers),
             Sheets::default(),
         );

@@ -157,7 +157,7 @@ fn walker_x(session: &Headless) -> f32 {
     let walker = named("Walker").expect("the level has a walker");
     session
         .world()
-        .get::<voltra_scene::Transform>(walker)
+        .get::<voltra_scene::Transform2D>(walker)
         .expect("placed")
         .translation
         .x

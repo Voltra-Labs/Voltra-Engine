@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use voltra_scene::{BodyType, RigidBody, SceneId, Transform};
+use voltra_scene::{BodyType, RigidBody2D, SceneId, Transform2D};
 
 use super::*;
 
@@ -20,12 +20,12 @@ fn sandbox() -> Headless {
 fn a_falling_body(session: &Headless) -> (SceneId, f32) {
     let world = session.world();
     world
-        .query::<RigidBody>()
+        .query::<RigidBody2D>()
         .filter(|(_, body)| body.body_type == BodyType::Dynamic)
         .find_map(|(entity, _)| {
             Some((
                 *world.get::<SceneId>(entity)?,
-                world.get::<Transform>(entity)?.translation.y,
+                world.get::<Transform2D>(entity)?.translation.y,
             ))
         })
         .expect("the sandbox has a dynamic body")
@@ -35,7 +35,7 @@ fn height(session: &Headless, id: SceneId) -> f32 {
     let entity = entity_with_id(session.world(), id).expect("still there");
     session
         .world()
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("placed")
         .translation
         .y
@@ -92,18 +92,18 @@ fn a_fed_action_reaches_the_game_s_tick() {
     let app = App::new(crate::WindowConfig::default()).with_asset_root(assets());
     let mut session = Headless::new(app.with_fixed_update(|tick| {
         let push = tick.input.action_axis("move_left", "move_right");
-        let mover = tick.world.query::<Transform>().map(|(e, _)| e).next();
-        if let Some(transform) = mover.and_then(|e| tick.world.get_mut::<Transform>(e)) {
+        let mover = tick.world.query::<Transform2D>().map(|(e, _)| e).next();
+        if let Some(transform) = mover.and_then(|e| tick.world.get_mut::<Transform2D>(e)) {
             transform.translation.x += push * tick.delta;
         }
     }));
     let mover = session.world_mut().spawn();
-    session.world_mut().insert(mover, Transform::default());
+    session.world_mut().insert(mover, Transform2D::default());
     assert!(session.press("move_right"));
     session.step(60, 1.0 / 60.0);
     let x = session
         .world()
-        .get::<Transform>(mover)
+        .get::<Transform2D>(mover)
         .expect("placed")
         .translation
         .x;
@@ -112,7 +112,7 @@ fn a_fed_action_reaches_the_game_s_tick() {
     session.step(30, 1.0 / 60.0);
     let still = session
         .world()
-        .get::<Transform>(mover)
+        .get::<Transform2D>(mover)
         .expect("placed")
         .translation;
     assert_eq!(still.x, x, "let go, it stops");
@@ -127,19 +127,19 @@ fn a_scene_that_is_not_there_is_an_error() {
 
 #[test]
 fn a_screenshot_draws_the_scene_through_its_camera() {
-    use voltra_scene::{Camera, Sprite};
+    use voltra_scene::{Camera2D, Sprite2D};
     let app = App::new(crate::WindowConfig::default()).with_asset_root(assets());
     let mut session = Headless::new(app);
     let world = session.world_mut();
     let camera = world.spawn();
-    world.insert(camera, Transform::default());
-    world.insert(camera, Camera::new(1.0));
+    world.insert(camera, Transform2D::default());
+    world.insert(camera, Camera2D::new(1.0));
     let square = world.spawn();
     world.insert(
         square,
-        Transform::default().with_scale(voltra_render::glam::Vec2::splat(1.0)),
+        Transform2D::default().with_scale(voltra_render::glam::Vec2::splat(1.0)),
     );
-    world.insert(square, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+    world.insert(square, Sprite2D::new([1.0, 0.0, 0.0, 1.0]));
 
     let shot = match session.screenshot(64, 64) {
         Ok(shot) => shot,
@@ -176,7 +176,7 @@ fn a_session_hands_back_what_the_engine_logged_while_it_ran() {
     let _ = session.take_logs();
     // A follower naming a target that is not there warns, once.
     let follower = session.world_mut().spawn();
-    session.world_mut().insert(follower, Transform::default());
+    session.world_mut().insert(follower, Transform2D::default());
     session
         .world_mut()
         .insert(follower, voltra_scene::CameraFollow2D::new(SceneId::new()));

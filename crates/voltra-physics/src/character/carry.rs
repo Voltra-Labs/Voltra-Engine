@@ -9,7 +9,7 @@
 
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_scene::{CharacterContact, Transform};
+use voltra_scene::{CharacterContact, Transform2D};
 
 /// How far the floor `contact` names has carried a character at `at` since
 /// it was stood on — moved, and turned about its own centre — and how far
@@ -18,7 +18,7 @@ pub(super) fn carry(world: &World, contact: &CharacterContact, at: Vec2) -> (Vec
     let (Some(floor), Some((was, was_turned))) = (contact.floor, contact.floor_pose) else {
         return (Vec2::ZERO, 0.0);
     };
-    let Some(now) = world.get::<Transform>(floor) else {
+    let Some(now) = world.get::<Transform2D>(floor) else {
         return (Vec2::ZERO, 0.0);
     };
     let turn = wrapped(now.rotation - was_turned);

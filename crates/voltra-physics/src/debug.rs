@@ -8,7 +8,7 @@
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_render::LineBatch;
-use voltra_scene::{Collider, Sensor, Transform};
+use voltra_scene::{Collider2D, Sensor, Transform2D};
 
 use crate::narrow::Contact;
 
@@ -49,8 +49,8 @@ const NORMAL_LENGTH: f32 = 0.5;
 /// `lines`.
 pub fn draw(world: &World, contacts: &[Contact], lines: &mut LineBatch) {
     joints::draw(world, lines);
-    for (entity, collider) in world.query::<Collider>() {
-        let Some(transform) = world.get::<Transform>(entity) else {
+    for (entity, collider) in world.query::<Collider2D>() {
+        let Some(transform) = world.get::<Transform2D>(entity) else {
             // No transform means no position, so there is nothing to draw and
             // nothing collided with it either — `candidate_pairs` skips it too.
             continue;
@@ -99,10 +99,10 @@ mod tests {
 
     fn box_at(world: &mut World, at: Vec2) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(at));
+        world.insert(entity, Transform2D::from_translation(at));
         world.insert(
             entity,
-            Collider::Box {
+            Collider2D::Box {
                 half_extents: Vec2::splat(1.0),
             },
         );
@@ -134,8 +134,8 @@ mod tests {
     fn a_circle_is_its_segment_count() {
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
-        world.insert(entity, Collider::Circle { radius: 1.0 });
+        world.insert(entity, Transform2D::default());
+        world.insert(entity, Collider2D::Circle { radius: 1.0 });
         let mut lines = LineBatch::default();
 
         draw(&world, &[], &mut lines);
@@ -175,17 +175,17 @@ mod tests {
         let entity = box_at(&mut world, Vec2::ZERO);
         world.insert(
             entity,
-            Transform::default().with_rotation(std::f32::consts::FRAC_PI_4),
+            Transform2D::default().with_rotation(std::f32::consts::FRAC_PI_4),
         );
         let mut lines = LineBatch::default();
 
         draw(&world, &[], &mut lines);
 
         assert_eq!(lines.len(), 4);
-        let corners = Collider::Box {
+        let corners = Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         }
-        .corners(world.get::<Transform>(entity).expect("the transform"));
+        .corners(world.get::<Transform2D>(entity).expect("the transform"));
         let (min, max) = (corners[2], corners[0]);
         assert!(
             (max.y - min.y - 2.0 * std::f32::consts::SQRT_2).abs() < 1e-4,
@@ -243,7 +243,7 @@ mod tests {
     fn a_collider_without_a_transform_is_not_drawn() {
         let mut world = World::new();
         let floating = world.spawn();
-        world.insert(floating, Collider::Circle { radius: 1.0 });
+        world.insert(floating, Collider2D::Circle { radius: 1.0 });
         let mut lines = LineBatch::default();
 
         draw(&world, &[], &mut lines);
@@ -257,8 +257,8 @@ mod tests {
         // zero would still emit 24 of them and cost the walk.
         let mut world = World::new();
         let entity = world.spawn();
-        world.insert(entity, Transform::default());
-        world.insert(entity, Collider::Circle { radius: 0.0 });
+        world.insert(entity, Transform2D::default());
+        world.insert(entity, Collider2D::Circle { radius: 0.0 });
         let mut lines = LineBatch::default();
 
         draw(&world, &[], &mut lines);
@@ -270,30 +270,30 @@ mod tests {
     fn a_capsule_and_a_polygon_are_drawn_as_their_outlines() {
         let mut world = World::new();
         let capsule = world.spawn();
-        world.insert(capsule, Transform::default());
+        world.insert(capsule, Transform2D::default());
         world.insert(
             capsule,
-            Collider::Capsule {
+            Collider2D::Capsule {
                 half_height: 1.0,
                 radius: 0.5,
             },
         );
         let mut lines = LineBatch::default();
         draw(&world, &[], &mut lines);
-        let expected = Collider::Capsule {
+        let expected = Collider2D::Capsule {
             half_height: 1.0,
             radius: 0.5,
         }
-        .outline(&Transform::default(), CIRCLE_SEGMENTS)
+        .outline(&Transform2D::default(), CIRCLE_SEGMENTS)
         .len();
         assert_eq!(lines.len(), expected);
 
         let mut world = World::new();
         let triangle = world.spawn();
-        world.insert(triangle, Transform::default());
+        world.insert(triangle, Transform2D::default());
         world.insert(
             triangle,
-            Collider::Polygon {
+            Collider2D::Polygon {
                 points: voltra_scene::ConvexPolygon::new(&[Vec2::ZERO, Vec2::X, Vec2::Y])
                     .expect("a triangle"),
                 radius: 0.0,

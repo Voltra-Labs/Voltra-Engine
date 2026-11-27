@@ -26,7 +26,7 @@ use voltra_scene::ui::button::ButtonFrames;
 use voltra_scene::ui::stack::{Align as StackAlign, Direction};
 use voltra_scene::ui::{Edges, Navigation, Pointer, UiInput};
 use voltra_scene::{
-    hierarchy, ui, Align, ComponentRegistry, Name, SceneId, Sprite, SpriteBatch, Text, UiButton,
+    hierarchy, ui, Align, ComponentRegistry, Name, SceneId, Sprite2D, SpriteBatch, Text, UiButton,
     UiControls, UiLayout, UiRect, UiSlice, UiStack,
 };
 use voltra_testkit::{copy_bundled_font, headless_device, read_texture, scratch_root, Rgba, CLEAR};
@@ -82,12 +82,12 @@ fn write_skin(root: &Path) {
     .expect("the atlas");
 }
 
-fn skin(frame: u32) -> Sprite {
-    Sprite {
+fn skin(frame: u32) -> Sprite2D {
+    Sprite2D {
         texture: Some(AssetPath::new("skin.png").expect("a path")),
         atlas: Some(AssetPath::new("skin.atlas.ron").expect("a path")),
         frame,
-        ..Sprite::default()
+        ..Sprite2D::default()
     }
 }
 
@@ -248,7 +248,7 @@ fn a_click_on_a_label_clicks_its_button_and_the_keys_walk_the_column() {
         find(&world, "Options"),
         find(&world, "Quit"),
     );
-    let shown = |world: &World, e: Entity| world.get::<Sprite>(e).expect("a face").frame;
+    let shown = |world: &World, e: Entity| world.get::<Sprite2D>(e).expect("a face").frame;
 
     // Over the middle of Quit — its label — then down and up.
     frame(
@@ -308,9 +308,9 @@ fn the_menu_draws_sliced_and_shows_each_buttons_state() {
     let mut textures = Textures::new(&device, &queue, &layout, &root);
     let mut atlases = Atlases::new(&root);
     let mut fonts = Fonts::new(&root);
-    let faces: Vec<Entity> = world.query::<Sprite>().map(|(e, _)| e).collect();
+    let faces: Vec<Entity> = world.query::<Sprite2D>().map(|(e, _)| e).collect();
     for e in faces {
-        let sprite = world.get_mut::<Sprite>(e).expect("a sprite");
+        let sprite = world.get_mut::<Sprite2D>(e).expect("a sprite");
         let (texture, atlas) = (sprite.texture.clone(), sprite.atlas.clone());
         sprite.set_texture(texture, &mut textures, &device, &queue);
         sprite.set_atlas(atlas, &mut atlases);
@@ -333,7 +333,7 @@ fn the_menu_draws_sliced_and_shows_each_buttons_state() {
     };
     frame(&mut world, &mut buttons, down, Navigation::default());
     let quit = find(&world, "Quit");
-    assert_eq!(world.get::<Sprite>(quit).map(|s| s.frame), Some(2));
+    assert_eq!(world.get::<Sprite2D>(quit).map(|s| s.frame), Some(2));
 
     let ui_layout = UiLayout::from_world(&world, SCREEN);
     let sheets = Sheets::new(&atlases, &textures).with_fonts(&fonts);

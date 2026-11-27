@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use voltra_core::Tick;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::Transform;
+use voltra_scene::Transform2D;
 
 /// The engine stores it in a slot without knowing what is in it.
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,7 +18,7 @@ const SLOT: &str = "quicksave";
 
 /// Keeps the walker's position and the coin count in the save slot; logs and keeps nothing if the walker has no transform or the write fails.
 pub fn save(tick: &mut Tick<'_>, walker: Entity, coins: u32) {
-    let Some(at) = tick.world.get::<Transform>(walker).map(|t| t.translation) else {
+    let Some(at) = tick.world.get::<Transform2D>(walker).map(|t| t.translation) else {
         return;
     };
     let progress = Progress {

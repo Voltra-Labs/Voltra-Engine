@@ -6,7 +6,7 @@ use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 
 use super::{Skin, UiOwnStyle, UiTheme};
-use crate::sprite::Sprite;
+use crate::sprite::Sprite2D;
 use crate::text::Text;
 use crate::ui::controls::is_control;
 use crate::ui::edges::Edges;
@@ -66,7 +66,7 @@ fn style(world: &mut World, entity: Entity, theme: &UiTheme, font: Option<&Asset
     if let Some(style) = &theme.field {
         if let Some(field) = world.get_mut::<UiTextField>(entity) {
             field.selection_color = style.selection;
-            if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+            if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
                 sprite.color = style.color;
             }
             let skin = style.skin.clone();
@@ -75,12 +75,12 @@ fn style(world: &mut World, entity: Entity, theme: &UiTheme, font: Option<&Asset
     }
     if let Some(style) = &theme.slider {
         if world.get::<UiSlider>(entity).is_some() {
-            if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+            if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
                 sprite.color = style.track;
             }
         }
         if let Some(part) = world.get::<UiSliderPart>(entity).copied() {
-            if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+            if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
                 sprite.color = match part {
                     UiSliderPart::Fill => style.fill,
                     UiSliderPart::Handle => style.handle,
@@ -114,11 +114,11 @@ fn style(world: &mut World, entity: Entity, theme: &UiTheme, font: Option<&Asset
     }
     let panel = !control
         && world.get::<UiStack>(entity).is_some()
-        && world.get::<Sprite>(entity).is_some()
+        && world.get::<Sprite2D>(entity).is_some()
         && world.get::<UiSliderPart>(entity).is_none();
     if panel {
         if let Some(style) = &theme.panel {
-            if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+            if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
                 sprite.color = style.color;
             }
             let skin = style.skin.clone();
@@ -150,7 +150,7 @@ fn skin_sprite(world: &mut World, entity: Entity, skin: Option<&Skin>) {
             return;
         }
     };
-    let Some(sprite) = world.get_mut::<Sprite>(entity) else {
+    let Some(sprite) = world.get_mut::<Sprite2D>(entity) else {
         return;
     };
     if sprite.texture.as_ref() != Some(&path) {

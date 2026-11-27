@@ -5,9 +5,9 @@ use voltra_render::Texture;
 use voltra_testkit::scratch_root;
 
 use super::*;
-use crate::hierarchy::WorldTransforms;
+use crate::hierarchy::WorldTransforms2D;
 use crate::shadow_caster::occluders;
-use crate::{ShadowCaster2D, Transform};
+use crate::{ShadowCaster2D, Transform2D};
 
 /// Every texture is 8×8.
 struct Eight;
@@ -41,14 +41,14 @@ fn half_sprite(flip_x: bool) -> (World, Silhouettes, Atlases) {
     }
     let mut world = World::new();
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(Vec2::new(10.0, 0.0)));
+    world.insert(entity, Transform2D::from_translation(Vec2::new(10.0, 0.0)));
     world.insert(
         entity,
-        Sprite {
+        Sprite2D {
             texture: Some(AssetPath::new("sprites/half.png").expect("valid")),
             texture_handle: Some(Handle::forge(7, 0)),
             flip_x,
-            ..Sprite::default()
+            ..Sprite2D::default()
         },
     );
     world.insert(
@@ -76,7 +76,7 @@ fn traced_bounds(flip_x: bool) -> (Vec2, Vec2) {
         sheets,
         silhouettes: &silhouettes,
     };
-    let found = occluders(&world, &WorldTransforms::from_world(&world), Some(shapes));
+    let found = occluders(&world, &WorldTransforms2D::from_world(&world), Some(shapes));
     assert_eq!(found.len(), 1, "{found:?}");
     assert!(found[0].closed);
     found[0].points.iter().fold(
@@ -103,35 +103,35 @@ fn a_flipped_sprite_casts_its_mirrored_outline() {
 #[test]
 fn without_silhouettes_or_a_texture_a_sprite_caster_casts_nothing() {
     let (mut world, _, _) = half_sprite(false);
-    assert!(occluders(&world, &WorldTransforms::from_world(&world), None).is_empty());
+    assert!(occluders(&world, &WorldTransforms2D::from_world(&world), None).is_empty());
     let scratch = scratch_root();
     let atlases = Atlases::new(&scratch);
     let scratch = scratch_root();
     let silhouettes = Silhouettes::new(&scratch);
     let entity = world
-        .query::<Sprite>()
+        .query::<Sprite2D>()
         .map(|(e, _)| e)
         .next()
         .expect("the sprite");
-    if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+    if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
         sprite.texture = None;
     }
     let shapes = SpriteShapes {
         sheets: Sheets::new(&atlases, &Eight),
         silhouettes: &silhouettes,
     };
-    assert!(occluders(&world, &WorldTransforms::from_world(&world), Some(shapes)).is_empty());
+    assert!(occluders(&world, &WorldTransforms2D::from_world(&world), Some(shapes)).is_empty());
 }
 
 #[test]
 fn a_frame_that_is_not_there_casts_nothing_rather_than_the_whole_sheet() {
     let (mut world, mut silhouettes, atlases) = half_sprite(false);
     let entity = world
-        .query::<Sprite>()
+        .query::<Sprite2D>()
         .map(|(e, _)| e)
         .next()
         .expect("the sprite");
-    if let Some(sprite) = world.get_mut::<Sprite>(entity) {
+    if let Some(sprite) = world.get_mut::<Sprite2D>(entity) {
         // Far outside the 8×8 texture.
         sprite.region = Some(voltra_assets::Frame {
             x: 100,
@@ -146,5 +146,5 @@ fn a_frame_that_is_not_there_casts_nothing_rather_than_the_whole_sheet() {
         sheets,
         silhouettes: &silhouettes,
     };
-    assert!(occluders(&world, &WorldTransforms::from_world(&world), Some(shapes)).is_empty());
+    assert!(occluders(&world, &WorldTransforms2D::from_world(&world), Some(shapes)).is_empty());
 }

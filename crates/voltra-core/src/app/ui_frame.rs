@@ -13,7 +13,7 @@ use voltra_ecs::{Entity, World};
 use voltra_physics::Contact;
 use voltra_render::{wgpu, LineBatch, Texture, View2D};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{AudioSource, Prefabs, Sprite, Tilemap};
+use voltra_scene::{AudioSource, Prefabs, Sprite2D, Tilemap};
 
 use super::simulation::Simulation;
 use super::window_requests::WindowRequests;
@@ -355,7 +355,7 @@ impl<'a> UiFrame<'a> {
     }
 }
 
-/// Re-resolves every [`Sprite`]'s texture handle from its path.
+/// Re-resolves every [`Sprite2D`]'s texture handle from its path.
 ///
 /// Visible to `app` as well as to [`UiFrame`] because the world can arrive
 /// already populated: [`App::world`](crate::app::App::world) is public and
@@ -372,7 +372,7 @@ pub(super) fn resolve_world_textures(
     // one after another. A pool for the occasion — Open, undo, start — so no
     // thread waits idle between scenes.
     let paths: Vec<_> = world
-        .query::<Sprite>()
+        .query::<Sprite2D>()
         .flat_map(|(_, sprite)| [sprite.texture.clone(), sprite.normal_map.clone()])
         .flatten()
         .chain(
@@ -397,7 +397,7 @@ pub(super) fn resolve_world_textures(
         let jobs = voltra_jobs::JobPool::with_available_parallelism();
         textures.preload(device, queue, paths, &jobs);
     }
-    for (_, sprite) in world.query_mut::<Sprite>() {
+    for (_, sprite) in world.query_mut::<Sprite2D>() {
         let path = sprite.texture.clone();
         sprite.set_texture(path, textures, device, queue);
         let normal = sprite.normal_map.clone();
@@ -447,14 +447,14 @@ pub(super) fn resolve_world_clips(world: &mut World, clips: &mut Clips) {
     }
 }
 
-/// Re-resolves every [`Sprite`]'s, [`Tilemap`]'s and particle flipbook's
+/// Re-resolves every [`Sprite2D`]'s, [`Tilemap`]'s and particle flipbook's
 /// atlas handle from its path.
 ///
 /// The slicing half of [`resolve_world_textures`], and separate from it
 /// because it needs no device: a world can be re-sliced headless, and only the
 /// pixels need a GPU.
 pub(super) fn resolve_world_atlases(world: &mut World, atlases: &mut Atlases) {
-    for (_, sprite) in world.query_mut::<Sprite>() {
+    for (_, sprite) in world.query_mut::<Sprite2D>() {
         let path = sprite.atlas.clone();
         sprite.set_atlas(path, atlases);
     }

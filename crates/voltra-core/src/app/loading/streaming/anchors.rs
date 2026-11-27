@@ -1,7 +1,7 @@
 //! Where a streamed world is kept loaded around.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::{hierarchy, Camera, StreamingAnchor};
+use voltra_scene::{hierarchy, Camera2D, StreamingAnchor};
 
 use crate::app::App;
 
@@ -29,7 +29,7 @@ impl App {
             return anchors;
         }
         self.world
-            .query::<Camera>()
+            .query::<Camera2D>()
             .filter(|(_, camera)| camera.active)
             .map(|(entity, _)| (at(entity), default_radius))
             .collect()

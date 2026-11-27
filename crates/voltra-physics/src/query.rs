@@ -25,7 +25,7 @@ pub use shape::{cast, ShapeHit};
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider2D, Transform2D};
 
 use crate::geometry::Hull;
 use crate::narrow::manifold;
@@ -76,8 +76,8 @@ pub(crate) fn overlap_aabb_among(
     if half.x <= 0.0 || half.y <= 0.0 {
         return Vec::new();
     }
-    let query = Collider::Box { half_extents: half };
-    let at = Transform::from_translation(min + half);
+    let query = Collider2D::Box { half_extents: half };
+    let at = Transform2D::from_translation(min + half);
 
     colliders(world, poses, filter)
         .filter(|(_, collider, transform)| manifold((&query, &at), (collider, transform)).is_some())
@@ -92,12 +92,12 @@ pub(super) fn colliders<'a>(
     world: &'a World,
     poses: Option<&'a Poses>,
     filter: QueryFilter,
-) -> impl Iterator<Item = (Entity, &'a Collider, &'a Transform)> {
-    world.query::<Collider>().filter_map(move |(entity, c)| {
+) -> impl Iterator<Item = (Entity, &'a Collider2D, &'a Transform2D)> {
+    world.query::<Collider2D>().filter_map(move |(entity, c)| {
         let (c, transform) = match poses.and_then(|poses| poses.get(&entity)) {
             Some(Some((collider, transform))) => (collider, transform),
             Some(None) => return None,
-            None => (c, world.get::<Transform>(entity)?),
+            None => (c, world.get::<Transform2D>(entity)?),
         };
         // A shape with no area is not a surface: it would report a hit at a
         // point nothing is drawn at, and `is_degenerate` is what the narrow
@@ -110,18 +110,18 @@ pub(super) fn colliders<'a>(
 }
 
 /// Whether `at` is inside the shape.
-fn contains(collider: &Collider, transform: &Transform, at: Vec2) -> bool {
+fn contains(collider: &Collider2D, transform: &Transform2D, at: Vec2) -> bool {
     match collider {
-        Collider::Box { .. } => {
+        Collider2D::Box { .. } => {
             let local = to_local(transform, at);
             let half = collider.world_half_extents(transform);
             local.x.abs() <= half.x && local.y.abs() <= half.y
         }
-        Collider::Circle { .. } => {
+        Collider2D::Circle { .. } => {
             let radius = collider.world_radius(transform);
             at.distance_squared(transform.translation) <= radius * radius
         }
-        Collider::Capsule { .. } | Collider::Polygon { .. } => {
+        Collider2D::Capsule { .. } | Collider2D::Polygon { .. } => {
             let hull = Hull::of(collider, transform);
             let (nearest, inside) = hull.nearest(at);
             inside || at.distance_squared(nearest) <= hull.radius * hull.radius
@@ -130,7 +130,7 @@ fn contains(collider: &Collider, transform: &Transform, at: Vec2) -> bool {
 }
 
 /// `point` in the shape's own frame: rotation undone, centre at the origin.
-pub(super) fn to_local(transform: &Transform, point: Vec2) -> Vec2 {
+pub(super) fn to_local(transform: &Transform2D, point: Vec2) -> Vec2 {
     rotated(-transform.rotation, point - transform.translation)
 }
 

@@ -6,7 +6,7 @@ use voltra_render::glam::Vec2;
 use super::{at, button, click, SCREEN};
 use crate::ui::controls::{Navigation, Pointer, UiControls, UiInput};
 use crate::ui::{TextInput, UiButton, UiLayout};
-use crate::{hierarchy, SceneId, Sprite, Text, UiRect};
+use crate::{hierarchy, SceneId, Sprite2D, Text, UiRect};
 
 fn input(pointer: Pointer, navigation: Navigation, text: TextInput) -> UiInput {
     UiInput {
@@ -48,7 +48,7 @@ fn a_toggle_flips_on_each_click_and_tints_while_on() {
     assert!(state.changed(check) && state.clicked(check));
     let toggle = *world.get::<crate::ui::UiToggle>(check).expect("a toggle");
     assert!(toggle.on);
-    let shown = world.get::<Sprite>(check).expect("a face").color;
+    let shown = world.get::<Sprite2D>(check).expect("a face").color;
     assert_eq!(shown, toggle.tinted(UiButton::default().hovered));
     click(&mut world, &mut state, 50.0, 30.0);
     assert!(

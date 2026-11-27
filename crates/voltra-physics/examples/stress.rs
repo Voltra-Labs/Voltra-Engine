@@ -23,7 +23,7 @@ use std::time::Instant;
 use voltra_ecs::World;
 use voltra_physics::PhysicsWorld;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, RigidBody, Transform};
+use voltra_scene::{Collider2D, RigidBody2D, Transform2D};
 
 const STEP: f32 = 1.0 / 60.0;
 const STEPS: usize = 600;
@@ -31,17 +31,17 @@ const GRAVITY: Vec2 = Vec2::new(0.0, -10.0);
 
 fn floor(world: &mut World, at: Vec2, half: Vec2) {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, Collider::Box { half_extents: half });
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, Collider2D::Box { half_extents: half });
 }
 
 fn crate_at(world: &mut World, at: Vec2) {
     let entity = world.spawn();
-    world.insert(entity, Transform::from_translation(at));
-    world.insert(entity, RigidBody::new_dynamic(1.0));
+    world.insert(entity, Transform2D::from_translation(at));
+    world.insert(entity, RigidBody2D::new_dynamic(1.0));
     world.insert(
         entity,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(0.5),
         },
     );
@@ -88,13 +88,13 @@ fn shots() -> World {
         let entity = world.spawn();
         world.insert(
             entity,
-            Transform::from_translation(Vec2::new(1.3, k as f32 * 1.1 - 55.0)),
+            Transform2D::from_translation(Vec2::new(1.3, k as f32 * 1.1 - 55.0)),
         );
-        let mut body = RigidBody::new_dynamic(1.0);
+        let mut body = RigidBody2D::new_dynamic(1.0);
         body.velocity = Vec2::new(150.0, 0.0);
         body.gravity_scale = 0.0;
         world.insert(entity, body);
-        world.insert(entity, Collider::Circle { radius: 0.25 });
+        world.insert(entity, Collider2D::Circle { radius: 0.25 });
     }
     world
 }
@@ -130,7 +130,7 @@ fn step_all(name: &str, mut world: World, continuous: bool) {
     // The fastest body left: what keeps an island awake.
     let (linear, angular) =
         world
-            .query::<RigidBody>()
+            .query::<RigidBody2D>()
             .fold((0.0f32, 0.0f32), |(l, a), (_, body)| {
                 (
                     l.max(body.velocity.length()),

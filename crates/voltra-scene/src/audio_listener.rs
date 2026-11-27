@@ -12,14 +12,14 @@ use crate::hierarchy::world_matrix;
 /// than a setting, for the same reason a camera is: it is usually hung off the
 /// thing it follows, and following is what a parent already does.
 ///
-/// **Unlike [`Camera`], this has no priority.** A scene holds several framings
+/// **Unlike [`Camera2D`], this has no priority.** A scene holds several framings
 /// and renders through one, which is a real authoring need; a scene does not
 /// hold several sets of ears. Two active listeners is a mistake to make
 /// deterministic, not a choice to give a knob to — so ties break on the
 /// entity index and the field that exists is the one that turns a listener
 /// off.
 ///
-/// [`Camera`]: crate::camera::Camera
+/// [`Camera2D`]: crate::camera::Camera2D
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AudioListener {
     /// Whether this listener is a candidate at all.
@@ -62,7 +62,7 @@ pub fn active(world: &World) -> Option<Entity> {
 /// Composed through any parents, so a listener can be hung off the character
 /// it follows without a follow system existing — the same way
 /// [`camera::view`](crate::camera::view) reads a camera's position. A listener
-/// with no [`Transform`](crate::transform::Transform) is at the origin.
+/// with no [`Transform2D`](crate::transform::Transform2D) is at the origin.
 ///
 /// `None` means no active listener, which the caller answers for: the engine
 /// plays every source unpositioned and says so once.
@@ -74,11 +74,11 @@ pub fn position(world: &World) -> Option<Vec2> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transform::Transform;
+    use crate::transform::Transform2D;
 
     fn spawn(world: &mut World, listener: AudioListener) -> Entity {
         let entity = world.spawn();
-        world.insert(entity, Transform::from_translation(Vec2::ZERO));
+        world.insert(entity, Transform2D::from_translation(Vec2::ZERO));
         world.insert(entity, listener);
         entity
     }
@@ -128,7 +128,7 @@ mod tests {
     fn the_listener_is_heard_from_where_its_transform_says() {
         let mut world = World::new();
         let ears = spawn(&mut world, AudioListener::default());
-        world.insert(ears, Transform::from_translation(Vec2::new(3.0, -4.0)));
+        world.insert(ears, Transform2D::from_translation(Vec2::new(3.0, -4.0)));
 
         assert_eq!(position(&world), Some(Vec2::new(3.0, -4.0)));
     }
@@ -140,11 +140,11 @@ mod tests {
         let mut world = World::new();
         let rig = world.spawn();
         world.insert(rig, crate::scene_id::SceneId::new());
-        world.insert(rig, Transform::from_translation(Vec2::new(10.0, 0.0)));
+        world.insert(rig, Transform2D::from_translation(Vec2::new(10.0, 0.0)));
 
         let ears = spawn(&mut world, AudioListener::default());
         world.insert(ears, crate::scene_id::SceneId::new());
-        world.insert(ears, Transform::from_translation(Vec2::new(1.0, 2.0)));
+        world.insert(ears, Transform2D::from_translation(Vec2::new(1.0, 2.0)));
         crate::hierarchy::set_parent(&mut world, ears, rig).expect("a plain reparent");
 
         let heard = position(&world).expect("it is active");

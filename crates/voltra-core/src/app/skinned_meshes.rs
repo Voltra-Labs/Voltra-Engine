@@ -5,7 +5,7 @@
 use voltra_ecs::hash::FastMap;
 use voltra_ecs::Entity;
 use voltra_render::{SkinPipeline, SkinnedMesh};
-use voltra_scene::hierarchy::WorldTransforms;
+use voltra_scene::hierarchy::WorldTransforms2D;
 use voltra_scene::skinned::{pose, SkinMesh};
 use voltra_scene::SkinnedSprite;
 
@@ -44,7 +44,7 @@ impl App {
             .get_or_insert_with(|| renderer.skin_pipeline().clone());
         let device = renderer.context().device();
         let queue = renderer.context().queue();
-        let transforms = WorldTransforms::seen_from(&self.world, renderer.camera.position);
+        let transforms = WorldTransforms2D::seen_from(&self.world, renderer.camera.position);
         let mut alive = Vec::new();
         for (entity, skinned) in self.world.query::<SkinnedSprite>() {
             let stale = skins.meshes.get(&entity).is_none_or(|(_, made, bones)| {

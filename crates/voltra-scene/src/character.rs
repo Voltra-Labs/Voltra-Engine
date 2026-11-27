@@ -10,7 +10,7 @@ use voltra_render::glam::Vec2;
 ///
 /// Godot's `CharacterBody2D`: a velocity in, a move that stops at walls and
 /// slides along them, floors told from walls by their slope. The entity
-/// should carry no `RigidBody` — the step would move it too — and is a
+/// should carry no `RigidBody2D` — the step would move it too — and is a
 /// static obstacle to the bodies the step does move.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -52,7 +52,7 @@ pub struct CharacterBody2D {
     /// On, the velocity kept is the walk across, with no part up or down —
     /// but for, with `stop_on_slope` off, the slide down the slope.
     pub constant_speed_on_slopes: bool,
-    /// Whether a turning floor turns the character's own `Transform`
+    /// Whether a turning floor turns the character's own `Transform2D`
     /// rotation with it, as well as carrying it round. Off keeps it as it
     /// was — a capsule stays upright on a tilting platform.
     pub carry_rotation: bool,

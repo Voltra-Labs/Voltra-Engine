@@ -3,7 +3,7 @@
 use super::*;
 use crate::events::Touch;
 use voltra_ecs::Entity;
-use voltra_scene::{Collider, RigidBody, Sensor, Transform};
+use voltra_scene::{Collider2D, RigidBody2D, Sensor, Transform2D};
 
 const G: Vec2 = Vec2::new(0.0, -10.0);
 
@@ -11,33 +11,33 @@ fn floor_and_ball() -> (World, Entity) {
     let mut world = World::new();
 
     let floor = world.spawn();
-    world.insert(floor, Transform::from_translation(Vec2::new(0.0, -2.0)));
+    world.insert(floor, Transform2D::from_translation(Vec2::new(0.0, -2.0)));
     world.insert(
         floor,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::new(10.0, 0.5),
         },
     );
-    world.insert(floor, RigidBody::new_static());
+    world.insert(floor, RigidBody2D::new_static());
 
     let ball = world.spawn();
-    world.insert(ball, Transform::default());
-    world.insert(ball, Collider::Circle { radius: 0.5 });
-    world.insert(ball, RigidBody::new_dynamic(1.0));
+    world.insert(ball, Transform2D::default());
+    world.insert(ball, Collider2D::Circle { radius: 0.5 });
+    world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
     (world, ball)
 }
 
 fn translation(world: &World, entity: Entity) -> Vec2 {
     world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("the transform is there")
         .translation
 }
 
 fn height(world: &World, entity: Entity) -> f32 {
     world
-        .get::<Transform>(entity)
+        .get::<Transform2D>(entity)
         .expect("the transform is there")
         .translation
         .y
@@ -201,10 +201,10 @@ fn overlapping(sensor: bool) -> (PhysicsWorld, World, Entity, Entity) {
     let mut world = World::new();
 
     let trigger = world.spawn();
-    world.insert(trigger, Transform::default());
+    world.insert(trigger, Transform2D::default());
     world.insert(
         trigger,
-        Collider::Box {
+        Collider2D::Box {
             half_extents: Vec2::splat(1.0),
         },
     );
@@ -213,9 +213,9 @@ fn overlapping(sensor: bool) -> (PhysicsWorld, World, Entity, Entity) {
     }
 
     let ball = world.spawn();
-    world.insert(ball, Transform::from_translation(Vec2::new(0.25, 0.0)));
-    world.insert(ball, Collider::Circle { radius: 0.5 });
-    world.insert(ball, RigidBody::new_dynamic(1.0));
+    world.insert(ball, Transform2D::from_translation(Vec2::new(0.25, 0.0)));
+    world.insert(ball, Collider2D::Circle { radius: 0.5 });
+    world.insert(ball, RigidBody2D::new_dynamic(1.0));
 
     (PhysicsWorld::new(), world, trigger, ball)
 }
@@ -278,7 +278,7 @@ fn walking_out_of_a_sensor_ends_the_pair() {
     physics.step_once(&mut world, Vec2::ZERO);
 
     world
-        .get_mut::<Transform>(ball)
+        .get_mut::<Transform2D>(ball)
         .expect("the transform is there")
         .translation = Vec2::new(50.0, 0.0);
     physics.step_once(&mut world, Vec2::ZERO);

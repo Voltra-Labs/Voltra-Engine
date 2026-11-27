@@ -18,7 +18,7 @@ use voltra_render::glam::{UVec2, Vec2};
 use voltra_render::pass::{self, MeshDraw};
 use voltra_render::{pipeline, texture, wgpu, Filter, Texture};
 use voltra_scene::sprite::sheets::Sheets;
-use voltra_scene::{Sprite, SpriteBatch, Transform};
+use voltra_scene::{Sprite2D, SpriteBatch, Transform2D};
 use voltra_testkit::{headless_device, read_texture, scratch_root, Rgba as Pixel, CLEAR};
 
 /// The frame, in pixels; the camera shows as many world units.
@@ -79,9 +79,9 @@ fn layout(pictures: &[(String, UVec2)]) -> Vec<Vec2> {
 
 /// A transform putting a `size`-texel picture's top-left at `top_left`.
 /// Its quad is centred on the transform, so the centre is half a picture in.
-fn placed(top_left: Vec2, size: UVec2) -> Transform {
+fn placed(top_left: Vec2, size: UVec2) -> Transform2D {
     let half = size.as_vec2() * 0.5;
-    Transform::from_translation(Vec2::new(top_left.x + half.x, top_left.y - half.y))
+    Transform2D::from_translation(Vec2::new(top_left.x + half.x, top_left.y - half.y))
 }
 
 fn render(
@@ -183,17 +183,17 @@ fn packed_draws_like_loose(filter: Filter) {
     let mut batch = SpriteBatch::default();
     let mut sprites = Vec::new();
     for ((name, size), spot) in pictures.iter().zip(&spots) {
-        let mut loose = Sprite {
+        let mut loose = Sprite2D {
             pixels_per_unit: Some(1.0),
-            ..Sprite::default()
+            ..Sprite2D::default()
         };
         let path = AssetPath::new(&format!("sprites/samples/{name}.png")).expect("valid");
         loose.set_texture(Some(path), &mut textures, &device, &queue);
         sprites.push((placed(top + *spot, *size), loose));
 
-        let mut region = Sprite {
+        let mut region = Sprite2D {
             pixels_per_unit: Some(1.0),
-            ..Sprite::default()
+            ..Sprite2D::default()
         };
         region.set_texture(Some(sheet.clone()), &mut textures, &device, &queue);
         region.set_atlas(Some(atlas_path.clone()), &mut atlases);

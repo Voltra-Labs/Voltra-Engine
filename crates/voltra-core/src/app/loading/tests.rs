@@ -10,7 +10,7 @@ use std::time::Duration;
 use voltra_assets::AssetPath;
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
-use voltra_scene::{hierarchy, ComponentRegistry, Name, SceneId, Transform, WorldRegions};
+use voltra_scene::{hierarchy, ComponentRegistry, Name, SceneId, Transform2D, WorldRegions};
 
 use super::LoadStats;
 
@@ -73,7 +73,7 @@ fn named(world: &mut World, name: &str, at: Vec2) -> voltra_ecs::Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Name::new(name));
-    world.insert(entity, Transform::from_translation(at));
+    world.insert(entity, Transform2D::from_translation(at));
     entity
 }
 

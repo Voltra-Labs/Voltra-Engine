@@ -22,7 +22,7 @@ const YELLOW: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
 pub(super) fn write_coin(prefabs: &mut Prefabs, color: [f32; 4], intensity: f32) -> AssetPath {
     let mut world = World::new();
     let coin = named(&mut world, "coin", Vec2::ZERO);
-    world.insert(coin, Sprite::new(color));
+    world.insert(coin, Sprite2D::new(color));
     world.insert(
         coin,
         PointLight2D {
@@ -31,7 +31,7 @@ pub(super) fn write_coin(prefabs: &mut Prefabs, color: [f32; 4], intensity: f32)
         },
     );
     let glow = named(&mut world, "glow", Vec2::new(0.0, 0.2));
-    world.insert(glow, Sprite::default().with_sort_order(1));
+    world.insert(glow, Sprite2D::default().with_sort_order(1));
     set_parent(&mut world, glow, coin).expect("a plain reparent");
     let target = path("coin.prefab.ron");
     // The same ids every write, as a prefab saved again in its mode keeps
@@ -77,7 +77,7 @@ pub(super) fn edit_in_place(
 }
 
 fn color_of(world: &World, entity: Entity) -> [f32; 4] {
-    world.get::<Sprite>(entity).expect("a sprite").color
+    world.get::<Sprite2D>(entity).expect("a sprite").color
 }
 
 fn intensity_of(world: &World, entity: Entity) -> f32 {
@@ -93,7 +93,7 @@ pub(super) fn spawned(world: &mut World, prefabs: &mut Prefabs, file: &AssetPath
         world,
         &registry(),
         prefabs.get(handle),
-        &Transform::default(),
+        &Transform2D::default(),
     )
     .expect("spawns")
     .root()
@@ -151,13 +151,13 @@ fn a_variant_override_is_kept_and_an_instance_override_wins_over_it() {
     let target = path("blue.prefab.ron");
     variant(&registry(), &mut prefabs, &base, &target).expect("written");
     edit_in_place(&root, &mut prefabs, &target, |world, coin| {
-        world.insert(coin, Sprite::new(BLUE));
+        world.insert(coin, Sprite2D::new(BLUE));
     });
 
     let mut world = World::new();
     let plain = spawned(&mut world, &mut prefabs, &target);
     let own = spawned(&mut world, &mut prefabs, &target);
-    world.insert(own, Sprite::new(YELLOW));
+    world.insert(own, Sprite2D::new(YELLOW));
     refresh_overrides(&mut world, &registry(), &mut prefabs, own).expect("compared");
     assert_eq!(color_of(&world, plain), BLUE, "the variant's override");
 
@@ -174,7 +174,7 @@ fn a_variant_override_is_kept_and_an_instance_override_wins_over_it() {
 
     // The variant's override changed: the plain instance follows it.
     edit_in_place(&root, &mut prefabs, &target, |world, coin| {
-        world.insert(coin, Sprite::new(RED));
+        world.insert(coin, Sprite2D::new(RED));
     });
     sync_sources(&mut world, &registry(), &mut prefabs, &[target]);
     assert_eq!(color_of(&world, plain), RED);
@@ -190,7 +190,7 @@ fn a_variant_of_a_variant_follows_both() {
     let bright = path("bright blue.prefab.ron");
     variant(&registry(), &mut prefabs, &base, &blue).expect("written");
     edit_in_place(&root, &mut prefabs, &blue, |world, coin| {
-        world.insert(coin, Sprite::new(BLUE));
+        world.insert(coin, Sprite2D::new(BLUE));
     });
     variant(&registry(), &mut prefabs, &blue, &bright).expect("written");
     edit_in_place(&root, &mut prefabs, &bright, |world, coin| {
@@ -228,7 +228,7 @@ fn apply_from_an_instance_of_a_variant_writes_the_variant_not_the_base() {
     let mut world = World::new();
     let coin = spawned(&mut world, &mut prefabs, &blue);
     let other = spawned(&mut world, &mut prefabs, &blue);
-    world.insert(coin, Sprite::new(BLUE));
+    world.insert(coin, Sprite2D::new(BLUE));
     refresh_overrides(&mut world, &registry(), &mut prefabs, coin).expect("compared");
 
     apply(&mut world, &registry(), &mut prefabs, coin).expect("applied");

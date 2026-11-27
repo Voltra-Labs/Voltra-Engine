@@ -9,7 +9,7 @@ use voltra_core::net::{Conditioned, LinkConditions, MemoryNetwork, NetConfig};
 use voltra_core::replication::ReplicationConfig;
 use voltra_core::{App, Headless};
 use voltra_render::glam::Vec2;
-use voltra_scene::{Replicated, SceneId, Transform};
+use voltra_scene::{Replicated, SceneId, Transform2D};
 
 const FRAME: f32 = 1.0 / 60.0;
 const RADIUS: f32 = 5.0;
@@ -65,7 +65,7 @@ fn follow(seed: u64) {
                 };
                 let movers: Vec<_> = tick.world.query::<Replicated>().map(|(e, _)| e).collect();
                 for entity in movers {
-                    if let Some(transform) = tick.world.get_mut::<Transform>(entity) {
+                    if let Some(transform) = tick.world.get_mut::<Transform2D>(entity) {
                         transform.translation = on_circle(now);
                     }
                 }
@@ -85,7 +85,7 @@ fn follow(seed: u64) {
     server.world_mut().insert(mover, Replicated::default());
     server
         .world_mut()
-        .insert(mover, Transform::from_translation(on_circle(0)));
+        .insert(mover, Transform2D::from_translation(on_circle(0)));
 
     // Where the server had it, by server tick.
     let mut path: BTreeMap<u32, Vec2> = BTreeMap::new();
@@ -94,7 +94,7 @@ fn follow(seed: u64) {
         server.step(1, FRAME);
         let at = server
             .world()
-            .get::<Transform>(mover)
+            .get::<Transform2D>(mover)
             .expect("a transform")
             .translation;
         let tick = server
@@ -115,7 +115,7 @@ fn follow(seed: u64) {
             drawn.push(
                 client
                     .world()
-                    .get::<Transform>(copy)
+                    .get::<Transform2D>(copy)
                     .expect("with its transform")
                     .translation,
             );

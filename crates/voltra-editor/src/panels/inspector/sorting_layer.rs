@@ -3,7 +3,7 @@
 use voltra_core::egui::{self, Ui};
 use voltra_ecs::{Entity, World};
 use voltra_scene::format::serial_tree::Step;
-use voltra_scene::{ParticleEmitter, SortingLayers, Sprite, Text, Tilemap};
+use voltra_scene::{ParticleEmitter, SortingLayers, Sprite2D, Text, Tilemap};
 
 use super::mixed;
 use crate::multi_edit::MultiEdit;
@@ -21,10 +21,10 @@ pub(super) fn show_for(
     let mut claim = None;
     let open = |name: &str| multi.editable(&[name]);
     if let Some(sprite) = world
-        .get_mut::<Sprite>(entity)
-        .filter(|_| open(Sprite::NAME))
+        .get_mut::<Sprite2D>(entity)
+        .filter(|_| open(Sprite2D::NAME))
     {
-        claim = claim.or(show(ui, Sprite::NAME, &mut sprite.sorting_layer, layers));
+        claim = claim.or(show(ui, Sprite2D::NAME, &mut sprite.sorting_layer, layers));
     }
     if let Some(map) = world
         .get_mut::<Tilemap>(entity)

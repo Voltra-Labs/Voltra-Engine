@@ -12,7 +12,7 @@ pub use config::{LobbyOutcome, LobbyScreenConfig, LobbyScreenError};
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
 use voltra_net::{DisconnectReason, LobbyEvent, NetEvent, ServerInfo};
-use voltra_scene::{hierarchy, PrefabInstance, PrefabPart, Transform, UiButton};
+use voltra_scene::{hierarchy, PrefabInstance, PrefabPart, Transform2D, UiButton};
 
 use crate::app::Tick;
 use crate::prefab_parts::Parts;
@@ -63,7 +63,7 @@ impl LobbyScreen {
             .map_err(|_| LobbyScreenError::BadPath(config.prefab.clone()))?;
         let prefab = tick.prefab(&path);
         let instance = tick
-            .spawn(prefab, &Transform::default())
+            .spawn(prefab, &Transform2D::default())
             .map_err(LobbyScreenError::Spawn)?;
         let root = instance
             .root()

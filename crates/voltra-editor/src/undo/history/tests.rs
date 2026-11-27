@@ -2,7 +2,7 @@ use super::*;
 use crate::gizmo::Gizmo;
 use crate::selection::Selection;
 use voltra_render::glam::Vec2;
-use voltra_scene::{Sprite, Transform};
+use voltra_scene::{Sprite2D, Transform2D};
 
 /// An [`UndoHost`] with no `App` and no GPU behind it.
 struct FakeHost {
@@ -71,22 +71,22 @@ fn spawn(world: &mut World, x: f32) -> SceneId {
     let entity = world.spawn();
     let id = SceneId::new();
     world.insert(entity, id);
-    world.insert(entity, Transform::from_translation(Vec2::new(x, 0.0)));
-    world.insert(entity, Sprite::default());
+    world.insert(entity, Transform2D::from_translation(Vec2::new(x, 0.0)));
+    world.insert(entity, Sprite2D::default());
     id
 }
 
 fn move_to(world: &mut World, id: SceneId, x: f32) {
     let entity = voltra_scene::format::entity_with_id(world, id).expect("it is there");
     world
-        .get_mut::<Transform>(entity)
+        .get_mut::<Transform2D>(entity)
         .expect("it has one")
         .translation = Vec2::new(x, 0.0);
 }
 
 fn x_of(world: &World, id: SceneId) -> Option<f32> {
     let entity = voltra_scene::format::entity_with_id(world, id)?;
-    Some(world.get::<Transform>(entity)?.translation.x)
+    Some(world.get::<Transform2D>(entity)?.translation.x)
 }
 
 #[test]

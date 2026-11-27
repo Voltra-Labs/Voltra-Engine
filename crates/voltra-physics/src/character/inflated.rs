@@ -1,7 +1,7 @@
 //! The shape a character is cast as: its collider grown by the skin.
 
 use voltra_render::glam::Vec2;
-use voltra_scene::{Collider, Transform};
+use voltra_scene::{Collider2D, Transform2D};
 
 /// The collider grown by `skin` all round, in world units, with the
 /// transform it is cast from: the entity's place and turn.
@@ -14,28 +14,28 @@ use voltra_scene::{Collider, Transform};
 /// stand a little further off, and a box character stands on a ledge's very
 /// edge as it always has.
 pub(super) fn inflated(
-    collider: &Collider,
-    transform: &Transform,
+    collider: &Collider2D,
+    transform: &Transform2D,
     skin: f32,
-) -> (Collider, Transform) {
-    let unit = Transform {
+) -> (Collider2D, Transform2D) {
+    let unit = Transform2D {
         scale: Vec2::ONE,
         ..*transform
     };
     match collider {
-        Collider::Box { .. } => (
-            Collider::Box {
+        Collider2D::Box { .. } => (
+            Collider2D::Box {
                 half_extents: collider.world_half_extents(transform) + Vec2::splat(skin),
             },
             unit,
         ),
-        Collider::Circle { .. } => (
-            Collider::Circle {
+        Collider2D::Circle { .. } => (
+            Collider2D::Circle {
                 radius: collider.world_radius(transform) + skin,
             },
             unit,
         ),
-        Collider::Capsule { .. } => {
+        Collider2D::Capsule { .. } => {
             let shape = collider.world_shape(transform);
             let reach = match *shape.vertices() {
                 [low, high] => (high - low).length() * 0.5,
@@ -43,7 +43,7 @@ pub(super) fn inflated(
             };
             let radius = shape.radius() + skin;
             (
-                Collider::Capsule {
+                Collider2D::Capsule {
                     half_height: reach + radius,
                     radius,
                 },
@@ -52,10 +52,10 @@ pub(super) fn inflated(
         }
         // The points keep their scale, so the rounding is set in the units
         // the scale will turn into world ones.
-        Collider::Polygon { points, .. } => {
+        Collider2D::Polygon { points, .. } => {
             let scale = transform.scale.abs().max_element();
             (
-                Collider::Polygon {
+                Collider2D::Polygon {
                     points: *points,
                     radius: (collider.world_radius(transform) + skin) / scale,
                 },

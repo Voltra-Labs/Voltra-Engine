@@ -133,7 +133,7 @@ mod tests {
     use voltra_ecs::Entity;
     use voltra_render::glam::Vec2;
     use voltra_scene::format::record_entity;
-    use voltra_scene::{Sprite, Transform};
+    use voltra_scene::{Sprite2D, Transform2D};
 
     /// A world holding one sprite at `x`, and the record of it.
     fn one_sprite(x: f32) -> (World, Entity, SceneId, EntityRecord) {
@@ -142,8 +142,8 @@ mod tests {
         let entity = world.spawn();
         let id = SceneId::new();
         world.insert(entity, id);
-        world.insert(entity, Transform::from_translation(Vec2::new(x, 0.0)));
-        world.insert(entity, Sprite::default());
+        world.insert(entity, Transform2D::from_translation(Vec2::new(x, 0.0)));
+        world.insert(entity, Sprite2D::default());
         let record = record_entity(&world, &registry, entity)
             .expect("has an id")
             .expect("serializes");
@@ -152,7 +152,7 @@ mod tests {
 
     fn x_of(world: &World, id: SceneId) -> Option<f32> {
         let entity = entity_with_id(world, id)?;
-        Some(world.get::<Transform>(entity)?.translation.x)
+        Some(world.get::<Transform2D>(entity)?.translation.x)
     }
 
     #[test]
@@ -160,7 +160,7 @@ mod tests {
         let registry = ComponentRegistry::with_defaults();
         let (mut world, entity, id, before) = one_sprite(1.0);
         world
-            .get_mut::<Transform>(entity)
+            .get_mut::<Transform2D>(entity)
             .expect("it has one")
             .translation = Vec2::new(5.0, 0.0);
         let after = record_entity(&world, &registry, entity)
@@ -289,7 +289,7 @@ mod tests {
         let registry = ComponentRegistry::with_defaults();
         let (mut world, entity, id, before) = one_sprite(1.0);
         world
-            .get_mut::<Transform>(entity)
+            .get_mut::<Transform2D>(entity)
             .expect("it has one")
             .translation = Vec2::new(7.0, 0.0);
         let after = record_entity(&world, &registry, entity)
