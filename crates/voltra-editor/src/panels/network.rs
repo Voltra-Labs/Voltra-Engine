@@ -120,8 +120,11 @@ fn contents(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
             .map(|c| c.stats())
         {
             ui.label(format!(
-                "{} entities, drawn {:.0} ms behind (jitter {:.0} ms)",
+                "{} entities ({} out of interest, {} of the level waiting), \
+                 drawn {:.0} ms behind (jitter {:.0} ms)",
                 stats.entities,
+                stats.out_of_interest,
+                stats.level_waiting,
                 stats.delay.as_secs_f64() * 1000.0,
                 stats.jitter.as_secs_f64() * 1000.0
             ));

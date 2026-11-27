@@ -250,6 +250,8 @@ pub(crate) fn status(editor: &Editor, frame: &UiFrame<'_>) -> serde_json::Value 
                 "connection": peer(client.net(), PeerId::SERVER),
                 "replicated": client.world().query::<voltra_scene::Replicated>().count(),
                 "snapshots": replica.map(|r| r.snapshots),
+                "out_of_interest": replica.map(|r| r.out_of_interest),
+                "level_waiting": replica.map(|r| r.level_waiting),
                 "delay_ms": replica.map(|r| r.delay.as_secs_f64() * 1000.0),
                 "jitter_ms": replica.map(|r| r.jitter.as_secs_f64() * 1000.0),
             })
