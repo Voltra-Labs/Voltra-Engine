@@ -6,7 +6,7 @@
 //! and started again after a pause.
 
 use voltra_assets::AssetPath;
-use voltra_core::net::{NetEvent, PeerId};
+use voltra_core::net::{LobbyEvent, LobbyPhase, NetEvent, PeerId};
 use voltra_core::replication::NetOwner;
 use voltra_core::{Net, Tick};
 use voltra_ecs::Entity;
@@ -75,17 +75,50 @@ pub(crate) fn spawn_player(tick: &mut Tick<'_>, peer: PeerId) {
 }
 
 /// Joins and leaves: a player made or taken away. Per frame.
+///
+/// With a lobby, a player is made for each of its players when the match
+/// starts, and for one joining it under way; without one — a session
+/// started by someone else, the editor's network play — for each peer as
+/// it connects.
 pub(crate) fn follow_peers(tick: &mut Tick<'_>) {
+    if let Some(lobby) = tick.net.lobby() {
+        let playing = lobby.lobby().phase() == LobbyPhase::Playing;
+        let everyone: Vec<PeerId> = lobby.lobby().entries().iter().map(|e| e.peer).collect();
+        for event in tick.net.lobby_events().to_vec() {
+            match event {
+                LobbyEvent::Started => {
+                    log::info!("arena: the match starts with {} players", everyone.len());
+                    for &peer in &everyone {
+                        spawn_once(tick, peer);
+                    }
+                }
+                LobbyEvent::Joined { peer, .. } if playing => spawn_once(tick, peer),
+                LobbyEvent::Left { peer } => despawn(tick, peer),
+                _ => {}
+            }
+        }
+        return;
+    }
     for event in tick.net.events().to_vec() {
         match event {
             NetEvent::Connected(peer) => spawn_player(tick, peer),
-            NetEvent::Disconnected { peer, .. } => {
-                if let Some(player) = Net::owned_by(tick.world, peer) {
-                    hierarchy::despawn_recursive(tick.world, player);
-                    log::info!("arena: {peer} left");
-                }
-            }
+            NetEvent::Disconnected { peer, .. } => despawn(tick, peer),
         }
+    }
+}
+
+/// `peer`'s player, unless it has one.
+fn spawn_once(tick: &mut Tick<'_>, peer: PeerId) {
+    if Net::owned_by(tick.world, peer).is_none() {
+        spawn_player(tick, peer);
+    }
+}
+
+/// Takes `peer`'s player away, if it has one.
+fn despawn(tick: &mut Tick<'_>, peer: PeerId) {
+    if let Some(player) = Net::owned_by(tick.world, peer) {
+        hierarchy::despawn_recursive(tick.world, player);
+        log::info!("arena: {peer} left");
     }
 }
 

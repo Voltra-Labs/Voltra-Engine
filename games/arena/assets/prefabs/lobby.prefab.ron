@@ -1,0 +1,254 @@
+// The lobby screen `voltra_core::lobby::LobbyScreen` opens: a name, Host,
+// Find on LAN (a list of the servers found), Join by address; then, in a
+// lobby, its players, a Ready toggle, Start (the host's) and Leave. The
+// code finds each part by its name and stamps a copy of `Server row` per
+// server found and of `Player row` per player; restyle anything, keep the
+// names.
+(
+    version: 1,
+    entities: [
+        (
+            id: "01a2c000-0000-7000-8000-000000000001",
+            components: {
+                "Name": "Lobby",
+                "Persistent": (),
+                "Sprite": (color:(0.06,0.07,0.1,0.96),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.5,0.5),anchor_max:(0.5,0.5),offset_min:(-260.0,-310.0),offset_max:(260.0,310.0)),
+                "UiStack": (direction:Column,spacing:8.0,padding:(left:16.0,top:16.0,right:16.0,bottom:16.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000002",
+            components: {
+                "Name": "Lobby title",
+                "Parent": "01a2c000-0000-7000-8000-000000000001",
+                "Text": (content:"Lobby",font:None,size:26.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,32.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000003",
+            components: {
+                "Name": "Status",
+                "Parent": "01a2c000-0000-7000-8000-000000000001",
+                "Text": (content:"",font:None,size:16.0,pixels_per_em:48,color:(0.8,0.85,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,22.0),slot:1),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000004",
+            components: {
+                "Name": "Lobby menu",
+                "Parent": "01a2c000-0000-7000-8000-000000000001",
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,500.0),slot:2),
+                "UiStack": (direction:Column,spacing:8.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000005",
+            components: {
+                "Name": "Name",
+                "Parent": "01a2c000-0000-7000-8000-000000000004",
+                "Sprite": (color:(0.12,0.13,0.17,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Text": (content:"",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0)),
+                "UiTextField": (text:"",placeholder:"Your name",max_chars:Some(16),selection_color:(0.25,0.45,0.9,0.6)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000006",
+            components: {
+                "Name": "Host",
+                "Parent": "01a2c000-0000-7000-8000-000000000004",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:1),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000007",
+            components: {
+                "Name": "Host label",
+                "Parent": "01a2c000-0000-7000-8000-000000000006",
+                "Text": (content:"Host a game",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000008",
+            components: {
+                "Name": "Find on LAN",
+                "Parent": "01a2c000-0000-7000-8000-000000000004",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:2),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000009",
+            components: {
+                "Name": "Find on LAN label",
+                "Parent": "01a2c000-0000-7000-8000-000000000008",
+                "Text": (content:"Find games on the LAN",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000000a",
+            components: {
+                "Name": "Servers",
+                "Parent": "01a2c000-0000-7000-8000-000000000004",
+                "Sprite": (color:(0.09,0.1,0.14,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,190.0),slot:3),
+                "UiScroll": (offset:(0.0,0.0),vertical:true,horizontal:false,step:34.0),
+                "UiStack": (direction:Column,spacing:4.0,padding:(left:4.0,top:4.0,right:4.0,bottom:4.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000000b",
+            components: {
+                "Name": "Server row",
+                "Parent": "01a2c000-0000-7000-8000-00000000000a",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,30.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000000c",
+            components: {
+                "Name": "Server label",
+                "Parent": "01a2c000-0000-7000-8000-00000000000b",
+                "Text": (content:"Server  1/4",font:None,size:16.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000000d",
+            components: {
+                "Name": "Address",
+                "Parent": "01a2c000-0000-7000-8000-000000000004",
+                "Sprite": (color:(0.12,0.13,0.17,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Text": (content:"",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:4),
+                "UiTextField": (text:"",placeholder:"udp://host:7777",max_chars:Some(128),selection_color:(0.25,0.45,0.9,0.6)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000000e",
+            components: {
+                "Name": "Join",
+                "Parent": "01a2c000-0000-7000-8000-000000000004",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:5),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000000f",
+            components: {
+                "Name": "Join label",
+                "Parent": "01a2c000-0000-7000-8000-00000000000e",
+                "Text": (content:"Join by address",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000010",
+            components: {
+                "Name": "Lobby room",
+                "Parent": "01a2c000-0000-7000-8000-000000000001",
+                "UiHidden": (),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,500.0),slot:3),
+                "UiStack": (direction:Column,spacing:8.0,padding:(left:0.0,top:0.0,right:0.0,bottom:0.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000011",
+            components: {
+                "Name": "Players",
+                "Parent": "01a2c000-0000-7000-8000-000000000010",
+                "Sprite": (color:(0.09,0.1,0.14,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,330.0)),
+                "UiScroll": (offset:(0.0,0.0),vertical:true,horizontal:false,step:34.0),
+                "UiStack": (direction:Column,spacing:4.0,padding:(left:4.0,top:4.0,right:4.0,bottom:4.0),justify:Start,align:Stretch),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000012",
+            components: {
+                "Name": "Player row",
+                "Parent": "01a2c000-0000-7000-8000-000000000011",
+                "Sprite": (color:(0.16,0.17,0.22,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,30.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000013",
+            components: {
+                "Name": "Player label",
+                "Parent": "01a2c000-0000-7000-8000-000000000012",
+                "Text": (content:"Player  (host)  ready",font:None,size:16.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000014",
+            components: {
+                "Name": "Ready",
+                "Parent": "01a2c000-0000-7000-8000-000000000010",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:1),
+                "UiToggle": (on:false,on_tint:(0.45,1.0,0.55,1.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000015",
+            components: {
+                "Name": "Ready label",
+                "Parent": "01a2c000-0000-7000-8000-000000000014",
+                "Text": (content:"Ready",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000016",
+            components: {
+                "Name": "Start",
+                "Parent": "01a2c000-0000-7000-8000-000000000010",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:2),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000017",
+            components: {
+                "Name": "Start label",
+                "Parent": "01a2c000-0000-7000-8000-000000000016",
+                "Text": (content:"Start the match",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000018",
+            components: {
+                "Name": "Leave",
+                "Parent": "01a2c000-0000-7000-8000-000000000010",
+                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:100,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,34.0),slot:3),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-000000000019",
+            components: {
+                "Name": "Leave label",
+                "Parent": "01a2c000-0000-7000-8000-000000000018",
+                "Text": (content:"Leave",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+    ],
+)

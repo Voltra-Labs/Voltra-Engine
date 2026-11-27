@@ -1,6 +1,7 @@
 //! A match end to end: the arena's dedicated server as its own process,
-//! and two headless clients — bots — joining it over UDP and playing until
-//! a round is won. Both clients must agree on the winner and the scores the
+//! and two headless clients — bots — joining it over UDP, readying up in
+//! its lobby, the first in (the lobby's host) starting the match, and
+//! playing until a round is won. Both clients must agree on the winner and the scores the
 //! server decided, and the server must have simulated each one's inputs —
 //! sent by interest management, which on the arena's floor sends them all.
 //! One client's sends are slowed by 60 ms: its zaps land where it saw the
@@ -10,9 +11,14 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use arena::{net_config, replication_config, Arena, Pilot, Round, Score, Session, FIRST_SCENE};
+use arena::{
+    lobby_config, net_config, replication_config, Arena, Pilot, Round, Score, Session, FIRST_SCENE,
+    GAME_ID,
+};
 use voltra_assets::AssetPath;
-use voltra_core::net::{Address, Conditioned, LinkConditions, UdpTransport};
+use voltra_core::net::{
+    Address, Conditioned, LanSearch, LinkConditions, LobbyPhase, SearchOptions, UdpTransport,
+};
 use voltra_core::replication::NetOwner;
 use voltra_core::{App, Headless, WindowConfig};
 
@@ -39,7 +45,8 @@ fn assets() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("assets")
 }
 
-fn start_server() -> (Server, u16) {
+/// The server, its UDP port and the port it answers LAN probes on.
+fn start_server() -> (Server, u16, u16) {
     let dir = std::env::temp_dir().join(format!("arena-match-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a folder");
     let ports = dir.join("ports");
@@ -55,6 +62,8 @@ fn start_server() -> (Server, u16) {
             "off",
             "--seconds",
             "90",
+            "--discovery",
+            "0",
             "--port-file",
         ])
         .arg(&ports)
@@ -67,12 +76,13 @@ fn start_server() -> (Server, u16) {
     let start = Instant::now();
     loop {
         if let Ok(text) = std::fs::read_to_string(&ports) {
-            if let Some(port) = text
-                .lines()
-                .find_map(|line| line.strip_prefix("udp "))
-                .and_then(|p| p.trim().parse().ok())
-            {
-                return (server, port);
+            let port = |kind: &str| {
+                text.lines()
+                    .find_map(|line| line.strip_prefix(kind))
+                    .and_then(|p| p.trim().parse().ok())
+            };
+            if let (Some(udp), Some(probes)) = (port("udp "), port("discovery ")) {
+                return (server, udp, probes);
             }
         }
         assert!(
@@ -98,11 +108,13 @@ fn client(port: u16) -> Headless {
 
 /// A client whose sends wait `latency` (a link conditions what goes out):
 /// a round trip that much longer. Joined before the game's first turn, so
-/// the game leaves the session be.
+/// the game leaves the session be — the lobby turned on by hand, as the
+/// game would have.
 fn slow_client(port: u16, latency: Duration) -> Headless {
     let app = App::new(WindowConfig::default())
         .with_asset_root(assets())
         .with_replication(replication_config())
+        .with_lobby(lobby_config())
         .with_game(Arena::new(Session::Solo, Pilot::Bot));
     let scene = AssetPath::new(FIRST_SCENE).expect("a path");
     let mut game = Headless::open(app, &scene).expect("the scene loads");
@@ -154,8 +166,32 @@ fn scores(game: &Headless) -> Vec<(u32, u32)> {
 
 #[test]
 fn a_server_and_two_clients_play_a_round_to_its_winner() {
-    let (server, port) = start_server();
+    let (server, port, probes) = start_server();
     let mut clients = [slow_client(port, Duration::from_millis(60)), client(port)];
+
+    // Found on the LAN first — probed directly over loopback, which every
+    // container passes — as an arena a client of this build can join.
+    let mut search = LanSearch::start(SearchOptions {
+        broadcast: false,
+        targets: vec![([127, 0, 0, 1], probes).into()],
+        timeout: Duration::from_secs(10),
+        game: GAME_ID.into(),
+        // The slowed client turned replication and the lobby on before its
+        // first turn: its session config is the one it joins with.
+        fingerprint: clients[0].net().session_fingerprint(net_config()),
+        ..SearchOptions::default()
+    })
+    .expect("a socket");
+    let start = Instant::now();
+    while search.servers().is_empty() && !search.is_finished() {
+        search.poll(start.elapsed());
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let found = search.servers().first().expect("the server answered");
+    assert_eq!(found.name, "Arena server");
+    assert!(found.compatible, "{found:?}");
+    assert_eq!((found.players, found.max_players), (0, 4));
+    assert_eq!(found.udp, Some(format!("udp://127.0.0.1:{port}")));
 
     // Stepped with the wall clock: the server keeps real time.
     let start = Instant::now();
@@ -179,6 +215,26 @@ fn a_server_and_two_clients_play_a_round_to_its_winner() {
             server.log()
         );
     };
+
+    // The lobby ran before it: both in, the first in hosting and starting.
+    for client in &clients {
+        let lobby = client.net().lobby().expect("a lobby");
+        assert_eq!(lobby.lobby().phase(), LobbyPhase::Playing);
+        assert_eq!(lobby.lobby().len(), 2, "{:?}", lobby.lobby());
+    }
+    assert_eq!(
+        clients
+            .iter()
+            .filter(|c| c.net().lobby().is_some_and(|l| l.is_host()))
+            .count(),
+        1,
+        "one host"
+    );
+    assert!(
+        server.log().contains("started the match"),
+        "the host started it:\n{}",
+        server.log()
+    );
 
     let ids: Vec<u32> = clients
         .iter()

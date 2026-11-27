@@ -1,9 +1,13 @@
 //! Arena as a build: its first scene, its game, a window.
 //!
-//! `cargo run -p arena` plays alone; `-- --host` hosts a match others join
-//! (UDP 7777 for native players, WebSocket 7778 for browsers); `-- --join
-//! udp://HOST:7777` joins one. In a browser the page's `?join=ws://HOST:7778`
-//! joins. `--bot` lets a bot steer, for a test. `cargo xtask dist
+//! `cargo run -p arena` opens the lobby screen: host, find a match on the
+//! LAN, join one by address. `-- --host` hosts a match others join (UDP
+//! 7777 for native players, WebSocket 7778 for browsers, found on the LAN
+//! by probes on 7779); `-- --join udp://HOST:7777` joins one; `-- --solo`
+//! plays alone. In a browser the page opens the lobby screen (join by
+//! address: a page has no LAN search), and `?join=ws://HOST:7778` joins at
+//! once. `--bot` (`?bot` on a page) lets a bot steer and ready up, for a
+//! test. `cargo xtask dist
 //! --manifest games/arena/build.ron` packages it, and `--web` for a
 //! browser.
 
@@ -25,11 +29,16 @@ fn main() {
 /// The session and pilot the command line — or the page's address — asks
 /// for.
 fn chosen() -> Result<(Session, Pilot), String> {
-    let mut session = Session::Solo;
+    let mut session = Session::Menu;
     let mut pilot = Pilot::Keys;
     #[cfg(target_arch = "wasm32")]
-    if let Some(server) = page_join() {
-        session = Session::Join(server);
+    {
+        if let Some(server) = page_query("join") {
+            session = Session::Join(server);
+        }
+        if page_query("bot").is_some() {
+            pilot = Pilot::Bot;
+        }
     }
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -38,10 +47,11 @@ fn chosen() -> Result<(Session, Pilot), String> {
             "--join" => {
                 session = Session::Join(args.next().ok_or("--join needs a server address")?);
             }
+            "--solo" => session = Session::Solo,
             "--bot" => pilot = Pilot::Bot,
             other => {
                 return Err(format!(
-                    "unknown option {other:?}: --host, --join ADDR, --bot"
+                    "unknown option {other:?}: --host, --join ADDR, --solo, --bot"
                 ))
             }
         }
@@ -49,14 +59,19 @@ fn chosen() -> Result<(Session, Pilot), String> {
     Ok((session, pilot))
 }
 
-/// `?join=ws://…` from the page's address.
+/// `?key=value` from the page's address (`?join=ws://…`, `?bot`): the
+/// value, empty for a bare key.
 #[cfg(target_arch = "wasm32")]
-fn page_join() -> Option<String> {
+fn page_query(key: &str) -> Option<String> {
     let search = web_sys::window()?.location().search().ok()?;
     search
         .trim_start_matches('?')
         .split('&')
-        .find_map(|pair| pair.strip_prefix("join="))
+        .find_map(|pair| match pair.split_once('=') {
+            Some((k, value)) if k == key => Some(value),
+            None if pair == key => Some(""),
+            _ => None,
+        })
         .map(|value| {
             js_sys::decode_uri_component(value)
                 .ok()
