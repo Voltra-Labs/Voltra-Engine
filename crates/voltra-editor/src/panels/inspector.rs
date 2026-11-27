@@ -17,6 +17,7 @@ mod delete;
 mod game_components;
 mod global_light;
 mod joint;
+mod lag_compensated;
 mod light;
 mod light_layers;
 mod mixed;

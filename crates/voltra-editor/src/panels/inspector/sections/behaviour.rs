@@ -1,16 +1,16 @@
 //! The sections of how an entity moves, lights, frames and sounds: its
 //! skin and bones, parallax, light, joint, animation, camera, sound and
-//! replication.
+//! replication (with lag compensation).
 
 use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
-use voltra_scene::{AudioSource, Camera, Parallax, Replicated, Transform};
+use voltra_scene::{AudioSource, Camera, LagCompensated, Parallax, Replicated, Transform};
 
 use super::super::mixed;
 use super::super::{
     animation_player, animator, audio_source, camera, camera_rig, camera_view, global_light, joint,
-    light, parallax, replicated, skeleton, skinned,
+    lag_compensated, light, parallax, replicated, skeleton, skinned,
 };
 use super::gate;
 use crate::editor::Editor;
@@ -184,6 +184,14 @@ pub(in crate::panels::inspector) fn show(
         ui.separator();
         mixed::marker(ui, multi, &[Replicated::NAME]);
         claim = claim.or(replicated::show(ui, sent));
+    }
+    // Under replication, where a networked entity's settings are: and shown
+    // on one marked without being replicated, so the mark is never hidden.
+    let networked = frame.world.get::<Replicated>(entity).is_some()
+        || frame.world.get::<LagCompensated>(entity).is_some();
+    if networked && multi.editable(&[LagCompensated::NAME]) {
+        mixed::marker(ui, multi, &[LagCompensated::NAME]);
+        claim = claim.or(lag_compensated::show(ui, frame.world, entity));
     }
     claim
 }
