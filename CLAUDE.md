@@ -7,29 +7,50 @@ On demand (do not preload every task):
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — crate boundaries, API quirks, decisions
 - [docs/CONVENTIONS.md](docs/CONVENTIONS.md) — naming
 
-## The engine is 2D. 3D comes later
+## 2D and 3D are parallel subsystems
 
-The README mentions 2D/3D and 3D is on the roadmap, but **nothing is built for
-it yet and nothing should be.** Every subsystem written now targets 2D only.
+3D is a second subsystem **beside** 2D in the same engine and the same
+`World` — Godot's shape (docs/ARCHITECTURE.md, "3D: a parallel subsystem";
+the plan is docs/superpowers/specs/0.5-3d.md). The user decided it; do not
+reopen it.
 
-Current tree facts:
-
-- `Vertex::position` is `[f32; 2]`.
-- No depth buffer — `depth_stencil: None` / `depth_stencil_attachment: None`.
-  Draw order (painter's algorithm) decides coverage.
-- `Transform` is `Vec2` + `Mat3`. `Camera2D` is orthographic.
-- `Mat4` / `Vec3` appear only in `camera.rs` because WGSL wants a 4×4 uniform.
-  They are not a third dimension arriving early.
+- **Shared** (one of each): the ECS and `World`, `SceneId`/`Name`/`Parent`,
+  assets and hot reload, scenes, prefabs and the component registry, the
+  editor shell (hierarchy, inspector, undo, play mode, MCP, bridge), audio
+  components and the mixer, input, networking and replication, keyframes and
+  the animator, UI and the HUD, and the marks with no geometry in them
+  (`PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Replicated`, …).
+- **Separate** (one per dimension): `Transform2D`/`Transform3D`,
+  `Camera2D`/`Camera3D`, 2D/3D physics and their bodies and colliders,
+  `Sprite2D`/`Sprite3D`, the editor's 2D/3D scene view, the 2D painter's-order
+  pass / the 3D depth-tested pass, 2D/3D lights.
 
 Rules:
 
-- **No speculative 3D scaffolding.** No `Transform3D`, no depth attachment
-  "ready for later", no unused z-axis on components.
-- **Do not bend 2D designs for unbuilt 3D.** Solve 2D properly; 3D gets its own
-  design when there is code for it.
-- **Do not name a 2D concept after an axis it is not.** Prefer Unity-style
-  `sortingOrder` over Godot-style `z_index`. Keep real-Z names free.
-- 3D is a new subsystem later (ray pick, depth test, frustum), not a parameter.
+- **2D is never 3D with z = 0.** `Vertex2D::position` is `[f32; 2]`; the 2D
+  pass has no depth buffer (`depth_stencil: None`), draw order decides
+  coverage; `Transform2D` is `Vec2` + angle. `sort_order` is 2D-only — 3D
+  sorts by depth and has none. (`Mat4`/`Vec3` in `View2D` exist because WGSL
+  wants a 4×4 uniform, not as a third dimension.)
+- **Do not bend 2D for 3D or 3D for 2D.** A system both use is generic over
+  both — a trait or a two-variant enum — never a 2D type widened until it can
+  hold the 3D one.
+- **No speculative scaffolding.** A type, field or crate appears in the stage
+  whose code uses it: no depth attachment "ready for later", no unused axis,
+  no empty crate from the plan.
+- **Names** (ARCHITECTURE "Naming"): a component whose other-dimension twin
+  exists is suffixed on both sides (`Collider2D`/`Collider3D`); a 2D
+  component with no twin keeps its name until one lands (`Tilemap`); a new 3D
+  component always carries `3D`; shared ones have none (`AudioSource`).
+  Uppercase `D`. Do not name a 2D concept after an axis it is not (no `z`,
+  `depth`, `z_index` in 2D). A registered component name is spelled only by
+  its type's `NAME` const — never as a string literal — so a rename is one
+  line plus a row in `format/migrate.rs`.
+- **The 3D world**: Y up, right-handed, forward is −Z, one unit is a metre
+  (glTF's convention). Cameras and lights look down their entity's −Z.
+- **One frame**: shots by camera priority, 3D before 2D at a tie; a shot an
+  earlier shot of the other dimension overlaps is an overlay and clears
+  transparent; the HUD is drawn once, last, over everything.
 
 ## Commands
 
@@ -163,8 +184,8 @@ Review `get_job_diff` before `apply_job`. Subagents may commit / amend their
 own HEAD only — no rebase, reset --hard, force-push, or plumbing
 (`hash-object`, `commit-tree`, …). Verify claims with `git log`, not the report.
 
-Brief subagents with paths, acceptance check, and hard rules: 2D only,
-`winit` only in core, `wgpu` only in render, workspace versions, no
+Brief subagents with paths, acceptance check, and hard rules: 2D and 3D
+parallel (never 3D with z = 0, no scaffolding), `winit` only in core, `wgpu` only in render, workspace versions, no
 `unwrap()` outside tests, one concept per file.
 
 ## Plugins and skills

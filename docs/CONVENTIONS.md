@@ -18,6 +18,16 @@ This document only records what those leave open or where we are stricter.
 
 Acronyms count as one word: `GpuContext`, not `GPUContext`; `Uuid`, not `UUID`.
 
+**Dimension suffixes.** A type of one dimension whose twin in the other exists
+(or lands in the same release) carries `2D` / `3D`, uppercase `D`, on both
+sides: `Transform2D`/`Transform3D`, `PointLight2D`/`PointLight3D`, `View2D`.
+A new 3D component carries `3D` whether or not it has a twin
+(`MeshInstance3D`); a 2D one without a twin keeps its plain name (`Tilemap`);
+a shared one has no suffix (`AudioSource`). Functions follow their types in
+`snake_case`: `world_matrix_2d`. A registered component's file name is its
+type's `NAME` const (`Transform2D::NAME`), and code never spells the string.
+The full rules are ARCHITECTURE.md's "Naming".
+
 **The kebab/snake trap:** the package `voltra-render` is imported as
 `voltra_render`. Cargo does that translation for you — never rename the package
 to match the import.
