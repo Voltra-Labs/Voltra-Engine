@@ -11,6 +11,8 @@
 //! copy's tops are renamed; what is under them keeps its names, as its
 //! siblings are copies too. A nameless entity stays nameless.
 
+use std::collections::HashSet;
+
 use voltra_ecs::{Entity, World};
 use voltra_scene::{hierarchy, Name};
 
@@ -33,21 +35,18 @@ pub(super) fn split(name: &str) -> (&str, Option<u64>) {
 
 /// The name a copy called `name` takes among siblings named `taken`.
 pub(super) fn unique(name: &str, taken: &[&str]) -> String {
-    if !taken.contains(&name) {
+    let taken: HashSet<&str> = taken.iter().copied().collect();
+    if !taken.contains(name) {
         return name.to_owned();
     }
     let (base, _) = split(name);
     // Each sibling holds at most one number, so one of the first
     // `taken.len() + 1` is free: the count ends there, whatever number the
     // name itself had.
-    let mut n: usize = 1;
-    loop {
-        let candidate = format!("{base} ({n})");
-        if !taken.contains(&candidate.as_str()) {
-            return candidate;
-        }
-        n += 1;
-    }
+    (1..=taken.len() + 1)
+        .map(|n| format!("{base} ({n})"))
+        .find(|candidate| !taken.contains(candidate.as_str()))
+        .unwrap_or_else(|| format!("{base} ({})", taken.len() + 1))
 }
 
 /// Renames each of `tops`, in order, apart from the siblings it now has.
