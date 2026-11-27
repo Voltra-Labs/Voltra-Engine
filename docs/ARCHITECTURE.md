@@ -104,7 +104,8 @@ Added only when there is code to put in them:
 
 | Crate | Purpose | Blocked on |
 | --- | --- | --- |
-| — | Every crate planned here exists | — |
+| `voltra-gltf` | Reads glTF 2.0 into engine-neutral data; the only crate naming `gltf` | Stage 140 ("3D: a parallel subsystem") |
+| `voltra-physics3d` | 3D bodies, solver, queries, characters, joints over `parry3d` geometry; the only crate naming `parry3d`. `voltra-physics` becomes `voltra-physics2d` the same stage | Stage 143 |
 
 ## Frame flow
 
@@ -138,6 +139,513 @@ The scene has to be drawn before egui can sample it, but a panel only learns how
 much room it has *while* egui is laying out. So `UiFrame::request_viewport_size`
 takes effect on the next frame. Dragging a splitter shows the previous size for
 one frame, which is not visible; the alternative is two egui passes per frame.
+
+## 3D: a parallel subsystem (stage 132+)
+
+**Designed, not yet built.** This section is the shape 0.5 builds, stage by
+stage, from `docs/superpowers/specs/0.5-3d.md`. Each stage that lands writes
+its detail as a Decisions entry of its own and edits this section to say what
+is built; until then, every sentence here about 3D is a plan. It replaces
+the direction recorded in "When 3D arrives: one world, two render paths",
+which it keeps and makes concrete.
+
+### The rule: shared above the geometry, separate where it differs
+
+3D is a second subsystem beside 2D in the **same engine and the same
+`World`**, Godot-shaped: two transforms, two cameras, two physics engines,
+two render paths, and one of everything else.
+
+| Shared by 2D and 3D | Separate, one per dimension |
+| --- | --- |
+| `voltra-ecs`, the `World`, `SceneId`, `Name`, `Parent` | `Transform2D` / `Transform3D`, and the composed `WorldTransforms2D` / `WorldTransforms3D` |
+| Assets, handles, hot reload, the asset root and the web funnel | `Camera2D` / `Camera3D` |
+| Scenes, prefabs, variants, overrides, the component registry | `voltra-physics2d` / `voltra-physics3d`, with `RigidBody2D`/`3D`, `Collider2D`/`3D`, `CharacterBody2D`/`3D`, `Joint2D`/`3D` |
+| The editor shell: dock, hierarchy, inspector, undo, play mode, console, asset browser, bridge, MCP | The viewport's scene view: a 2D view and a 3D view, chosen per scene |
+| Audio: `AudioSource`, `AudioListener`, buses, the mixer | The spatialiser's maths: a pan in the plane, a pan around a listener's head |
+| Input, actions, gamepads, touch | The 2D painter's-order pass / the 3D depth-tested pass |
+| Networking and replication: snapshots, deltas, interpolation, prediction, interest, lag compensation, the lobby | The wire form of each transform; the rewound shapes of each physics |
+| UI and the HUD (screen space, already neither) | 2D lights and shadows / 3D lights and shadow maps |
+| Keyframes, the animator, the timeline | The properties each transform offers to a clip |
+| `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Replicated`, `NetOwner`, `LagCompensated` — marks and numbers with no geometry in them | `Sprite2D` / `Sprite3D` |
+
+**2D is never "3D with z = 0".** The 2D pass keeps no depth buffer,
+`Vertex2D::position` stays `[f32; 2]`, `Transform2D` stays `Vec2` + angle,
+`sort_order` stays a 2D-only concept. 3D sorts by depth and has no
+`sort_order`; 2D sorts by key and has no depth. A system both dimensions
+use is made generic over the two by a trait or a two-variant enum — never by
+widening the 2D type until it can hold the 3D one.
+
+**One frame can hold both**: the 3D world is drawn first, then the 2D world
+layers over it, then the UI/HUD once over everything ("One frame, both
+worlds", below).
+
+**A project is never in a mode.** Nothing in a project file says "2D" or
+"3D": a scene holds whichever components it holds, the editor's viewport
+shows the view that scene asks for, and `cargo xtask new-game --3d` only
+changes the defaults the template writes.
+
+### What the established engines do, and what we take
+
+| Engine | What it does | What Voltra takes |
+| --- | --- | --- |
+| **Godot 4** | `Node2D` and `Node3D` are separate trees; the `RenderingServer` has a canvas API and a scene API with their own renderers; `PhysicsServer2D` and `PhysicsServer3D` are separate, and since 4.6 new projects default to Jolt rather than Godot's own 3D physics. `Sprite3D` puts a 2D picture in a 3D world; a `SubViewport` renders a world into a `ViewportTexture` any material can show. The Mobile and Compatibility renderers light each mesh with at most 8 omni + 8 spot lights; Forward+ clusters | The split itself and its paired names; `Sprite3D` with Godot's billboard modes; render-to-texture as a camera into a texture, which stage 84 already built Godot's way; the per-object light list as the first lighting model, because it is what runs on WebGL2; and the evidence from 4.6 that 3D collision geometry is the wrong place to be original |
+| **Unity** | 2D and 3D project templates differ only in defaults (camera projection, import settings, the scene view's 2D toggle); `Physics` and `Physics2D` are separate engines with separate components (`Rigidbody`/`Rigidbody2D`, `Collider`/`Collider2D`); URP has a 2D Renderer and a Universal (3D) Renderer; cameras stack, a base camera then overlay cameras | Templates as defaults only; paired component names a user can guess; the stack of a 3D base under 2D overlays for one screen rectangle |
+| **Bevy** | One `World`, one `Transform` (always 3D); a `Camera2d` runs the `Core2d` render graph and a `Camera3d` runs `Core3d` (depth prepass, opaque, transparent, tonemapping); a reversed-Z infinite perspective; glTF sub-assets named by label (`model.glb#Mesh0/Primitive0`); `Mesh2d` / `Mesh3d` components | Per-camera choice of pipeline (a camera's dimension picks its pass); reversed-Z with an infinite far plane; `#label` sub-asset paths. **Not** the shared transform: our storage is one sparse set per component, so a 2D entity pays nothing for a 3D transform it does not have — the reason recorded in "When 3D arrives" stands |
+| **Avian** (Bevy's ECS-native physics) | Collision geometry from `parry`, its own solver, bodies stored in place in the ECS — written to avoid `bevy_rapier`'s second world | The shape of `voltra-physics3d` (below) |
+| **Unreal** | The Replication Graph's spatial node is a **2D** grid (`GridSpatialization2D`) for 3D worlds; Paper2D sprites are quads in the 3D world | Interest management for 3D over the ground plane with the existing grid; sprites in 3D as quads of the 3D pass |
+| **Filament / glTF 2.0** | Metallic-roughness PBR: GGX, height-correlated Smith, Schlick Fresnel, Lambert diffuse; the glTF material is exactly these inputs | The standard material: what a glTF file says is what we draw |
+
+### Conventions of the 3D world
+
+- **Y up, right-handed, forward is −Z, one unit is a metre.** glTF's
+  convention, and Godot's and Bevy's; a glTF file needs no axis conversion.
+  2D is Y up too, so "up" means the same thing in both.
+- **`Transform3D` is `translation: Vec3`, `rotation: Quat`, `scale: Vec3`**,
+  composed scale → rotate → translate (as 2D). A file stores the quaternion
+  — exact, no gimbal lock, no order ambiguity. The inspector shows Euler
+  angles in degrees, in Godot's YXZ order, and keeps an editor-side hint
+  per entity so a field typed as 180° stays 180° instead of jumping to its
+  equivalent (Unity's `m_LocalEulerAnglesHint`, kept in the editor rather
+  than the file).
+- A camera, a spot light and a directional light look down their entity's
+  **−Z**; a billboard faces **+Z** toward the camera.
+- `glam`'s projections for wgpu are `glam::camera::rh::proj::directx::*`
+  (Z in `[0, 1]`, Y up: wgpu's NDC). Verified in the vendored glam 0.33.
+
+### Naming
+
+1. **A name carries a dimension when the other dimension has, or in the same
+   release gets, a component of the same role.** Both twins are suffixed:
+   `Transform2D`/`Transform3D`, `Camera2D`/`Camera3D`, `Sprite2D`/`Sprite3D`,
+   `RigidBody2D`/`RigidBody3D`, `Collider2D`/`Collider3D`,
+   `CharacterBody2D`/`CharacterBody3D`, `Joint2D`/`Joint3D`,
+   `PointLight2D`/`PointLight3D`. Godot's rule, which is also why its users
+   can guess our names.
+2. **A 2D component with no twin keeps its name** (`Tilemap`, `Parallax`,
+   `ParticleEmitter`, `Text`). When its twin lands, both are renamed
+   through the migration table stage 132 builds — one more entry, not a
+   new mechanism. **A new 3D component always carries `3D`**, twin or not
+   (`MeshInstance3D`, `Environment3D`, `Skin3D`, Godot's names): an
+   unsuffixed name has meant 2D for four releases.
+3. **Shared components have no suffix**: `AudioSource`, `AudioListener`,
+   `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Replicated`,
+   `LagCompensated`, `SpriteAnimation` (it drives a frame index on
+   whichever sprite the entity has), every `Ui*`.
+4. **No 2D concept is named after an axis it is not.** `sort_order` stays;
+   nothing in 2D is called `z`, `depth` or `z_index`. 3D has no
+   `sort_order` — depth decides.
+5. **Render-level twins follow the scene's**: the view maths in
+   `voltra-render` is `View2D` / `View3D` (the scene's `Camera2D` is the
+   component; `voltra-render`'s old `Camera2D` becomes `View2D`), vertex
+   types are `Vertex2D` / `Vertex3D`.
+6. **Crates are suffixed when their twin exists**: `voltra-physics` becomes
+   `voltra-physics2d` in the stage that creates `voltra-physics3d`.
+   Game-facing types of a dimension crate carry the suffix too
+   (`PhysicsWorld2D`, `RayHit3D`), so one file can import both without
+   aliasing.
+
+| Today (0.4) | 0.5 | Migration |
+| --- | --- | --- |
+| `Transform` | `Transform2D` | scene key renamed; `#[deprecated]` Rust alias for 0.5 only |
+| `Camera` (scene) | `Camera2D` | scene key renamed; alias |
+| `Camera2D` (render) | `View2D` | Rust only |
+| `Vertex`, `Mesh` (render) | `Vertex2D`, `Mesh2D` | Rust only |
+| `Sprite` | `Sprite2D` | scene key renamed; alias |
+| `RigidBody`, `Collider` | `RigidBody2D`, `Collider2D` | scene keys renamed; aliases |
+| `Property::{Translation, Rotation, Scale}` (clips) | `Translation2D`, `Rotation2D`, `Scale2D` | `#[serde(alias)]` on the variants |
+| `voltra-physics` | `voltra-physics2d` (stage 143) | crate rename, move-only commit |
+| `WorldTransforms` | `WorldTransforms2D` | Rust only |
+
+### The migration: format version 2
+
+Stage 132 bumps the scene format (`format::VERSION`) from 1 to 2. Version 2
+is version 1 with the components renamed; nothing else changes.
+
+- **The loader migrates, the writer writes the current version.** A
+  `format/migrate.rs` table maps each older version to the renames that
+  reach the next; a v1 file is renamed in memory — record keys **and every
+  place a component name is a value**: `PrefabPart::overridden`, a
+  variant's overrides — then read as v2. Old files keep loading in every
+  later release; a file newer than the build is refused, as today.
+- **Nothing is rewritten behind the author's back.** Opening a v1 scene in
+  the editor loads it and says once in the Console that the next save
+  writes version 2; it does not mark the scene dirty. `cargo xtask migrate
+  [folder] [--check]` rewrites every scene, prefab and clip under a folder
+  through the engine's own loader and writer, so the output is
+  byte-identical to an editor save; `--check` lists what is out of date and
+  fails, which CI runs over `assets/` and `games/`.
+- **Rust callers** get `#[deprecated]` type aliases (`pub type Transform =
+  Transform2D;`) for 0.5 only, so an out-of-tree game compiles with
+  warnings and is told the new name; the tree itself uses none of them
+  (clippy `-D warnings`).
+- A v1 fixture is kept under `crates/voltra-scene/tests/fixtures/` so "old
+  files still load" is pinned rather than remembered.
+
+### Crate boundaries
+
+No new crate per dimension where the boundary is not real. The rule stays
+"a crate per responsibility", and "draws 3D" is not a responsibility apart
+from "draws": the 3D pass needs the device, the targets, the render graph,
+the texture pool, bloom and the material compiler the 2D pass already owns,
+and `wgpu` may only be named by `voltra-render`. Likewise 3D components must
+be in `voltra-scene` for the reason 2D physics components are: the registry
+that makes a scene file complete lives there.
+
+| Crate | Gains in 0.5 | Stage |
+| --- | --- | --- |
+| `voltra-scene` | `Transform3D`, `WorldTransforms3D`, `Camera3D`, `MeshInstance3D`, `Sprite3D`, `DirectionalLight3D`, `PointLight3D`, `SpotLight3D`, `Environment3D`, `RigidBody3D`, `Collider3D`, `CharacterBody3D`, `Joint3D`, `CameraFollow3D`, `Skin3D`; the draw list a 3D view turns the world into (`draw3d/`, the twin of `batch/`); model instancing (`model/`) | 133–149 |
+| `voltra-render` | `render3d/`: `View3D`, `Vertex3D`, `Mesh3D` (GPU buffers), the depth pass, the PBR shader and its composer, lights, shadow maps, environment and image-based light, the ID pass for picking, 3D skinning. No 2D file moves | 134–147 |
+| `voltra-assets` | `Meshes` (built-in primitives and glTF meshes under handles), `Models`, surface materials in the existing `Materials`, environment maps | 134–140 |
+| **`voltra-gltf`** (new) | Reads `.gltf`/`.glb` into engine-neutral data — meshes as arrays, materials as numbers and image references, the node tree, skins, animation channels. No GPU, no ECS. **Only crate that names `gltf`** (and `mikktspace` for tangents) | 140 |
+| **`voltra-physics3d`** (new) | Bodies, colliders, the solver, sleeping, events, queries, CCD, characters, joints, rewind — over `parry3d` geometry. **Only crate that names `parry3d`** | 143–145 |
+| `voltra-physics` → **`voltra-physics2d`** | Renamed when its twin is created; its code does not change | 143 |
+| `voltra-audio` | `spatial3d.rs`: the pan around a listener's head, the same attenuation curve | 150 |
+| `voltra-replication` | The `Transform3D` wire form; interest over the ground plane; prediction and its error metric over either transform | 133, 148 |
+| `voltra-editor` | The 3D view (`view3d/`), its camera, ID-pass picking, 3D gizmos | 141–142 |
+| `voltra-core` | Steps both physics worlds in the fixed tick; draws 3D shots before 2D ones; audio and replication wiring | 135, 143, 148, 150 |
+| `xtask` | `migrate`, `new-game --3d` | 132, 151 |
+
+Rejected: **`voltra-render3d` / `voltra-scene3d` crates**. The first would
+have to name `wgpu` (breaking the one-crate rule) or reach every 2D-pass
+resource through a public API built for one caller; the second would split
+the registry and reintroduce the "a caller forgets a `register` and a save
+silently drops data" failure the physics decision already refused.
+
+```
+  voltra-editor   voltra-player   games/*
+         └──────────────┬───────────────┘
+                 voltra-core (winit)
+        ┌──────────────┼────────────────────┐
+voltra-physics2d  voltra-physics3d (parry3d)  voltra-replication
+        └──────────────┼────────────────────┘
+                 voltra-scene ── components of both dimensions, draw lists
+           ┌───────────┴───────────┐
+       voltra-ecs            voltra-assets ── voltra-gltf (gltf, mikktspace)
+                         ┌──────────┴──────────┐
+                  voltra-render (wgpu)   voltra-audio (cpal, symphonia)
+```
+
+### One frame, both worlds
+
+```
+texture shots (CameraTarget), 3D then 2D, by priority   → their render textures
+for each screen rectangle (Camera*::viewport):
+  3D shots, by priority      depth (Depth32Float, reversed-Z), MSAA,
+                             HDR Rgba16Float → bloom → tonemap + grade → picture
+  2D shots, by priority      painter's order, light map, grade → picture;
+                             cleared transparent when a 3D shot is under it
+composite: pictures in that order, premultiplied alpha over, into the output
+HUD (UiRect …) once, over everything
+```
+
+- **A shot has one dimension**, chosen by its camera's component. Stage
+  84's `camera::shots` keeps its rules (texture cameras first, a screen
+  camera wholly under a later full-screen *opaque* one left out) with one
+  key added in front of priority: 3D before 2D. A 2D camera over a 3D one
+  is an overlay — Unity's camera stack, Godot's canvas over its world —
+  so it clears to transparent and its own light map and grade touch only
+  its own layer.
+- **HDR is 3D's.** The 3D target is `Rgba16Float`, linear; tonemapping (AgX
+  by default, `None`/`Reinhard`/`Aces` selectable on `Camera3D`) runs in
+  the 3D shot's post pass, before the existing grade, and writes the same
+  sRGB picture a 2D shot writes. After that, a 3D picture and a 2D one are
+  the same kind of thing, which is what lets the composite, the editor
+  viewport and render textures stay as they are.
+- **Colour space** follows the rules under "egui for the editor UI": the
+  picture is an sRGB target, blending happens in linear inside it, and
+  egui samples it through the raw view. The 3D tonemap pass is pinned by a
+  headless readback like `headless_post.rs`: one conversion each way.
+- **The editor** draws its scene view in the view's dimension only (the 2D
+  view shows 2D entities, the 3D view 3D ones, Godot's two tabs); the game
+  preview and play mode draw the full composite.
+
+### The 3D pass
+
+- **Depth**: `Depth32Float`, **reversed-Z** (`CompareFunction::GreaterEqual`,
+  cleared to 0), an infinite far plane by default (`far: None`), Bevy's
+  choice: precision spread evenly across distance, no far plane to tune.
+  wgpu 30's `DepthStencilState` takes `depth_write_enabled: Option<bool>`
+  and `depth_compare: Option<CompareFunction>` (verified in the vendored
+  source; see the API notes).
+- **Forward, one pass**: opaque and alpha-mask draws front to back, grouped
+  by pipeline → material → mesh; alpha-blended draws after, back to front
+  by view depth, depth-tested and not written. No depth prepass until a
+  measured scene's overdraw asks for one.
+- **Instanced**: every `MeshInstance3D` sharing a mesh and a material in a
+  run is one draw; per instance the model matrix and its normal matrix
+  (seven `vec4`s), a tint and the draw's light list. WebGL2 caps a vertex
+  stride at 255 bytes and inter-stage variables at 15: the layout is
+  chosen against those.
+- **MSAA 4×** on the 3D target by default (a project setting; 1 turns it
+  off), resolved before the post chain; alpha-mask materials use alpha to
+  coverage when MSAA is on. The 2D pass is unchanged.
+- **Culling** on the CPU: each instance's world bounds against the view
+  frustum, over `voltra-jobs` when the list is long — the batch's model.
+- **Meshes** are `Mesh3D` GPU buffers under `voltra-assets` handles:
+  built-in primitives (`builtin:cube`, `sphere`, `plane`, `capsule`,
+  `cylinder`), glTF primitives (`models/crate.glb#Mesh0/Primitive0`). A
+  missing mesh draws a magenta cube and is warned once — the asset rule
+  "a bad name draws magenta".
+
+### Materials
+
+**One `.material.ron` format with a `domain`**, as Godot has one shader
+language with `shader_type canvas_item` and `shader_type spatial`. `domain:
+Sprite` is stage 83's material, and the default (every existing file
+loads); `domain: Surface` is a 3D material.
+
+- **Standard** (`standard: (...)`): glTF 2.0's metallic-roughness inputs and
+  nothing else — base colour and texture, metallic, roughness, their
+  texture (G roughness, B metallic), normal map and scale, occlusion and
+  strength, emissive colour, texture and strength, `alpha: Opaque |
+  Mask(cutoff) | Blend`, `double_sided`, and `unlit`
+  (`KHR_materials_unlit`). Lit by Filament's BRDF. A glTF material maps
+  onto it one to one, so an imported model looks as its author's tool
+  showed it.
+- **Custom** (`shader: "materials/x.wgsl"`): the file defines `fn
+  surface(in: SurfaceInput) -> Surface`, returning the standard's inputs
+  (base colour, metallic, roughness, normal, emissive, occlusion, alpha);
+  the engine composes the vertex stage, the lighting and the uniforms
+  around it, exactly as stage 83 composes a sprite material. It may start
+  from `standard_surface(in)` — the file's `standard` block evaluated — and
+  change what it wants (Bevy's `ExtendedMaterial`, Godot's spatial shader
+  writing `ALBEDO`). `lighting: Unlit` skips the lighting. Uniforms by
+  stage 83's rules, plus up to four named textures. Checked with naga when
+  the material loads; a broken one draws the standard material and shows
+  its error in the inspector.
+- Rejected: a separate `.material3d.ron` (two asset kinds a user must tell
+  apart in the browser, two loaders), a shader graph (as in stage 83), and
+  materials writing the vertex stage (skinning and instancing are the
+  engine's; it can come later as its own stage).
+
+### Lights, shadows and the environment
+
+- **`DirectionalLight3D`, `PointLight3D`, `SpotLight3D`**: colour,
+  `energy`, range, a spot's inner and outer cone angles, layers. `energy`
+  is Godot's default non-physical unit (1.0 is a usable light, no exposure
+  to tune) rather than Filament's and Bevy's lux and lumens, which are
+  correct but make a first scene black or white until the camera's
+  exposure is set; the glTF importer converts `KHR_lights_punctual`'s
+  candela and lux by one documented factor. Physical units with an
+  exposure on `Camera3D` are **Not yet**.
+- **Forward with a per-object light list.** The frame's lights go into one
+  uniform array (up to 4 directional and 128 point/spot — inside WebGL2's
+  16 KiB uniform block); each instance is given its 8 most important
+  point/spot lights by the CPU, Godot's Mobile/Compatibility model. Chosen
+  because WebGL2 has no storage buffers (`max_storage_buffers_per_shader_stage:
+  0` in `downlevel_webgl2_defaults`), which a clustered light grid needs.
+  Clustered forward is **Not yet**: when a measured scene needs more than 8
+  lights on one mesh, it is added for WebGPU/native with this as the WebGL2
+  path; the light array's layout is the one a cluster lookup would index.
+- **Shadows: one directional light, cascaded** (1–4 cascades, default 3,
+  2048² each in a `Depth32Float` array), split by Unity's and Godot's
+  practical blend of logarithmic and uniform, stabilised by fitting each
+  cascade to a bounding sphere and snapping it to texels so it does not
+  shimmer as the camera moves, filtered by a comparison sampler with PCF,
+  biased by slope and normal offset. Casters behind the near plane are
+  clamped in the vertex stage ("pancaking") rather than through
+  `unclipped_depth`, which needs `DEPTH_CLIP_CONTROL`, absent on WebGL2.
+  Spot and point shadows are **Not yet**.
+- **`Environment3D`** (on the camera or one world entity, Godot's
+  `WorldEnvironment`): background (colour, a gradient sky, or an HDR
+  panorama), ambient light (a colour or taken from the sky), distance and
+  height fog. With a panorama it also lights: a diffuse irradiance as nine
+  spherical-harmonic coefficients (CPU) and a prefiltered specular cube
+  with a split-sum BRDF table (GPU, fragment passes — WebGL2 has no compute),
+  made once per load and on hot reload. Without it, metals render black,
+  which is the first thing a user would see on an imported model.
+
+### Models: glTF
+
+- **`voltra-gltf` parses, the engine instantiates.** A `.gltf`/`.glb` is a
+  model: its meshes become `Mesh3D`s, its materials surface materials, its
+  images textures (PNG and JPEG — the workspace `image` gains `jpeg`), its
+  node tree entities with `Transform3D` and `MeshInstance3D`, its skins
+  `Skin3D`, its animations clips over those entities.
+- **A model in a scene is a prefab instance of the file** — Unity's model
+  prefab, Godot's imported scene. Dropping it in makes an instance that
+  follows the file on re-import, keeping what the instance overrides
+  (stage 64's machinery, unchanged: the model is a prefab whose records are
+  generated from the file, with record ids derived from node indices and
+  names so a re-export keeps them).
+- **Import settings beside the file**: `crate.glb.import.ron` (scale,
+  whether to generate colliders — convex hulls or a static mesh — material
+  overrides by name), Godot's `.import` files. Missing means defaults.
+- **Untrusted input.** A buffer URI may name only a file under the asset
+  root (no `..`, no scheme other than `data:`), counts and indices are
+  checked against their buffers before use, and sizes are capped; a model
+  that fails a check is refused with the reason, never partly spawned.
+
+### Physics: `parry3d` geometry, our dynamics
+
+The decision that most needed weighing. Three options:
+
+1. **In-house, as 2D.** Consistent with "writing those in-house is the
+   point". But in 3D the narrow phase — GJK/EPA, convex–convex manifolds,
+   triangle-mesh and height-field contacts with their internal-edge
+   problems, the BVH under them — is most of the work and most of the
+   bugs, and it is the part a game author cannot see past: a crate that
+   falls through a mesh's seam is a broken engine. Godot is the evidence:
+   it wrote its own 3D physics and, in 4.6, made Jolt the default for new
+   projects.
+2. **`rapier3d`.** High quality and current (0.36). But it is a complete
+   engine with its own sets of bodies, colliders, joints and islands —
+   the second world the 2D physics decision refused because it
+   must be synchronised with ours every step. Its knobs would also differ
+   from 2D's, so the same scene concept would behave differently by
+   dimension.
+3. **`parry3d` for geometry, the dynamics ours** — Avian's shape. Parry is
+   a library of shapes and questions about them: contact manifolds with
+   feature ids (what warm starting matches on), ray and shape casts, time
+   of impact, a BVH. It has no world and no bodies. `voltra-physics3d`
+   owns everything that is engine: bodies stored in place in the `World`,
+   integration, the broad phase, the solver (stage 11b's TGS Soft — sub-step,
+   relax, restitution — with the same `SolverParams` names), warm starting,
+   sleeping islands, events through the same channel, sensors, layers,
+   CCD, the character controller, joints, rewind.
+
+**Chosen: 3.** It keeps the part that is the engine's own design in-house
+and adopts the part that is numerical geometry, which is where this repo
+already draws the line: `rustybuzz` shapes text and `fontdue` rasterises
+it, the runs, fallback and layout are ours. The 2D and 3D solvers share a
+design and a vocabulary, so tuning learned in one carries to the other.
+
+- `parry3d` 0.31 depends on `glamx`, which depends on `glam ^0.33.7`: the
+  workspace `glam` moves from 0.33.3 to the latest 0.33 (semver-compatible),
+  so parry's vectors *are* our vectors and no conversion layer exists.
+  Verify versions when stage 143 starts; record them in the notes at the end.
+- **Revisit** if, in stage 143's benchmark, the solver cannot hold a
+  ten-box stack still or step a 1000-body pile within the frame budget
+  after tuning: `rapier3d` becomes the fallback *behind the same
+  components* (`RigidBody3D`, `Collider3D` live in `voltra-scene` and do
+  not change), and this entry records why.
+- The two physics worlds never interact. Both step in core's fixed tick,
+  2D then 3D, each only when it has bodies.
+- **Parenting and physics stay exclusive in 3D** for the 2D entry's reason
+  ("Physics and parenting are exclusive, for now").
+
+### The editor in 3D
+
+- **One editor; the scene view switches.** A toolbar toggle chooses 2D or
+  3D; a scene opens in 3D when it holds any `Transform3D`, otherwise 2D
+  (Godot switches its main tab by the scene's root the same way), and the
+  choice is remembered per scene in the editor's own state, not in the
+  scene file — it is a view, not content. A project's default for new
+  scenes is `build.ron`'s `editor.default_view`, which `--3d` sets.
+- **Navigation**: right mouse held flies (WASD/QE, the wheel changes speed,
+  Shift is faster — Unity and Unreal); middle mouse orbits a pivot,
+  Shift + middle pans, the wheel dollies toward the pivot (Godot; Alt + left
+  orbits as in Unity); `F` frames the selection, as in 2D; numpad 1/3/7 and
+  a clickable axis widget give front/right/top, numpad 5 toggles
+  orthographic (Blender and Godot). A grid on the ground plane fades with
+  distance.
+- **Gizmos are hit-tested in screen space**, the 2D decision carried over:
+  arrows, plane squares and rings are projected and tested against the
+  pixels they are drawn at, with the same grab margin, at a constant screen
+  size; an axis seen end-on fades and cannot be grabbed (Unity). Local and
+  global space, pivot or centre of the selection, grid and angle snapping
+  through stage 85's `snap.rs`. One `Gizmo` still serves the three tools.
+- **Picking is an ID pass**: the 3D view's draw list drawn once more into
+  an `R32Uint` target with depth, and the pixels under the cursor read
+  back — the entity, and with the depth the world point under it (a drop
+  lands on the surface). Unity picks the same way. The 2D decision's
+  principle — *one definition used twice*, so a click selects what is
+  visible — now means the draw list and not a CPU copy of it: skinned
+  meshes, alpha-masked leaves and billboards pick by what they show.
+  Marquee selection tests world bounds against the marquee's sub-frustum
+  on the CPU. Icons (lights, cameras, sound sources) are screen-space
+  handles tested before the ID pass, like gizmo handles.
+
+### Animation, prefabs and replication over both transforms
+
+Generic from the stage `Transform3D` appears (133), not retrofitted:
+
+- **Prefabs**: an instance's placement is its root's transform, whichever
+  it is (`prefab::spawn` takes a `Placement`, `From` both transforms);
+  `sync` leaves either untouched, as it leaves `Transform` today.
+- **Keyframes**: `Value` gains `Vec3` and `Quat`; `Property` gains
+  `Translation3D`, `Rotation3D`, `Scale3D`. A rotation mixes the short way
+  (`slerp`, the 2D angle rule in its 3D form) in crossfades, blend trees
+  and layers; additive layers compose rotations by multiplication.
+- **Interpolation**: `Interpolate for Transform3D` (lerp, slerp, lerp) —
+  the trait stage 115 made for exactly this.
+- **Replication (148)**: `Transform3D`'s wire form is its translation as
+  three `f32`s, its rotation as the **smallest three** (Gaffer on Games'
+  snapshot compression: drop the largest component, send its index in 2
+  bits and the others in 15 bits each — 6 bytes, under 10⁻⁴ rad of error),
+  canonicalised so one rotation is one byte string and an unchanged entity
+  is unchanged in the delta, and its scale as one `f32` when uniform.
+  Bounded, bit-packed positions are **Not yet**.
+- **Interest** for 3D entities is the existing grid over **(x, z)** — the
+  ground plane, Unreal's 2D spatialisation for 3D worlds — with the final
+  test a 3D distance, so a tall level costs nothing extra and a flying
+  entity is still out of range.
+- **Lag compensation** for 3D is `voltra-physics3d`'s pose ring over
+  `Collider3D` shapes, queried by ray or shape at the client's view time,
+  with stage 128's `max_rewind` bound unchanged.
+
+### 2.5D bridges
+
+- **`Sprite3D`**: a texture or an atlas frame as a quad in the 3D pass,
+  `pixel_size` world units per texel (Godot's default 0.01), `billboard:
+  None | Full | YAxis`, alpha mask or blend, shaded or unlit, casting
+  shadows when masked. `SpriteAnimation` drives its frame as it drives a
+  `Sprite2D`'s. Sorted by depth with the other transparent draws; it has no
+  `sort_order`.
+- **A 2D scene on a 3D surface** is stage 84's render texture: a
+  `Camera2D` with a `CameraTarget` draws into `x.rendertexture.ron`, and a
+  surface material names that file as a texture. A 3D camera can draw into
+  one too (a security monitor, a minimap shown by the HUD). A camera never
+  draws a surface showing its own texture (stage 84's rule, applied to
+  materials). Pointer input on a 3D surface's UI is **Not yet**.
+- **The HUD over a 3D entity**: `Camera3D::world_to_viewport` and a
+  `UiFollow` component that places a `UiRect` over an entity's projected
+  position — a name tag, a health bar — working for either dimension.
+
+### 3D audio
+
+`AudioSource` and `AudioListener` stay one component each. A source is
+spatialised against the listener of its own dimension: a 2D source by
+today's pan in the plane, a 3D source by `voltra_audio::spatial3d` —
+distance attenuation by the same curve, an equal-power pan from the source's
+direction in the listener's frame (its world `Transform3D`: right is +X,
+forward −Z). With no listener of its dimension a source plays unpositioned,
+as today with none at all. Head-related filtering and Doppler are **Not
+yet** (Godot and Unity both ship plain panning as the default).
+
+### WebGL2 is the floor
+
+Every 3D stage runs on WebGPU and on WebGL2 in the web test harness, so the
+design keeps to `downlevel_webgl2_defaults`: no storage buffers, no
+compute, 16 KiB uniform blocks, a 255-byte vertex stride, 15 inter-stage
+variables, no `DEPTH_CLIP_CONTROL`, 2048² textures guaranteed. Where
+WebGPU or native could do better (clustered lights, compute prefiltering),
+the WebGL2-capable path is built first and the better one is a Not-yet.
+
+### Not in 0.5
+
+Global illumination (baked or real-time), lightmaps, reflection probes;
+SSAO, SSR, TAA, depth of field, motion blur; spot and point shadows;
+clustered lighting; terrain rendering and editing; LOD and occlusion
+culling; decals; 3D particles; morph targets; 3D inverse kinematics and
+ragdoll tooling; 3D navigation meshes (`voltra-nav` stays a 2D grid);
+vehicles; a 3D text label; order-independent transparency; pointer input
+into a UI shown on a 3D surface; HRTF and Doppler. Each is a later stage
+with its own spec, not scaffolding in this one.
+
+### Rejected
+
+- **3D as a parameter of 2D** (a `z` on `Transform`, a depth buffer on the
+  sprite pass, `Vec3` vertices): every 2D entity would pay for a dimension
+  it does not use, and painter's order and depth testing are different
+  mechanisms, not settings of one.
+- **One 3D `Transform` for both**, Unity's and Bevy's: decided against in
+  "When 3D arrives", for the per-entity cost our storage avoids. The price
+  is that a shared system is generic over two types; 133 pays it once.
+- **A project mode** (a 2D project, a 3D project): a 3D game with a 2D HUD
+  and a 2D game with a 3D background are both normal.
+- **Two `World`s**, Godot's two trees: we have an ECS, which already
+  separates by component.
 
 ## Decisions
 
@@ -309,6 +817,11 @@ pixel-perfect hit-testing is built on top of that per-sprite alpha.
 
 ### When 3D arrives: one world, two render paths
 
+**Made concrete by "3D: a parallel subsystem (stage 132+)"** and the entry
+after this one. Everything below still holds, with one change: today's
+`Transform` is renamed `Transform2D` (stage 132) so the pair is symmetric.
+The text is kept as the record of why.
+
 **Nothing in this entry is built.** The engine is 2D today and CLAUDE.md forbids
 building 3D scaffolding early. This records the *shape* 3D will take, so that
 decisions made now — a scene file format above all — are not made accidentally
@@ -383,6 +896,34 @@ separate components, which is the ECS-native form of the same idea.
 - **3D only, Unreal-style, with 2D as quads in a 3D world.** Coherent, and it is
   why Unreal has no 2D/3D split to maintain. Rejected because 2D is what this
   engine is for right now, and paying 3D's costs to get it would be backwards.
+
+### 3D is a parallel subsystem in the one world; names come in pairs
+
+Stage 132+, decided with the user before 0.5 began; the design is the
+top-level section "3D: a parallel subsystem (stage 132+)".
+
+- **Shape**: Godot's — separate transforms, cameras, physics engines and
+  render passes per dimension; one ECS, asset system, scene and prefab
+  format, editor, audio, input, networking, hot reload and UI. Unity's
+  templates-as-defaults and paired component names; Bevy's per-camera
+  pipeline choice and reversed-Z; Avian's parry-plus-own-solver physics;
+  Unreal's ground-plane interest grid.
+- **Priorities**, in the user's order: comfort for the game developer,
+  then code that is easy to keep developing. Breaking changes that buy
+  either are accepted: `Transform` → `Transform2D` (and its siblings) with
+  a format version bump, a loader migration and `cargo xtask migrate`.
+- **Frame**: 3D shots, then 2D shots over them (transparent overlays),
+  then the HUD once.
+- **Generic from the start**: prefabs, keyframes, interpolation and
+  replication take either transform from the stage `Transform3D` lands.
+- **Physics 3D**: `parry3d` for collision geometry, the dynamics written
+  here on the 2D solver's design; `rapier3d` is the recorded fallback
+  behind the same components if the stage-143 benchmark fails.
+- **Lighting**: forward with a per-object list of 8 lights (WebGL2 has no
+  storage buffers for clusters); one cascaded directional shadow;
+  standard metallic-roughness materials, unlit, and custom WGSL surface
+  functions in the same `.material.ron` format as sprite materials.
+- **Not yet**: the "Not in 0.5" list in that section.
 
 ### Scenes are RON, and unknown components survive
 
@@ -9682,6 +10223,12 @@ Verified against the crate source, not from memory:
 | Device lost | `device.set_device_lost_callback(callback)`, a `Fn(DeviceLostReason, String)`; natively it fires only on loss or an explicit `destroy`, not on drop |
 | Headless Chromium | WebGPU canvases need `--enable-unsafe-webgpu --enable-features=Vulkan --use-vulkan=swiftshader --use-angle=vulkan --enable-unsafe-swiftshader`; on ANGLE's GL path the swap chain's shared image cannot be made and the device is lost on the first present |
 | Instanced draws on GL | `draw(vertices, first..end)` with a non-zero first instance works on WebGL2, which has no base instance: `wgpu-hal`'s GLES backend rebinds each instance-stepped buffer at `offset + first_instance * stride` (`gles/command.rs`, `prepare_draw`). `@builtin(vertex_index)` is GLSL ES 3.0's `gl_VertexID` |
+| Depth-stencil state | `DepthStencilState { format, depth_write_enabled: Option<bool>, depth_compare: Option<CompareFunction>, stencil, bias }` — both depth fields are `Option` in 30 (`Some` required for a depth format) (`wgpu-types/src/render.rs`) |
+| Depth attachment | `RenderPassDepthStencilAttachment { view, depth_ops: Option<Operations<f32>>, stencil_ops: Option<Operations<u32>> }` (`wgpu/src/api/render_pass.rs`) |
+| Depth formats | `Depth32Float` and `Depth24Plus` are core; `Depth32FloatStencil8` needs `Features::DEPTH32FLOAT_STENCIL8`. `PrimitiveState::unclipped_depth` needs `Features::DEPTH_CLIP_CONTROL` (not on WebGL2) |
+| Shadow sampling | `SamplerDescriptor::compare: Option<CompareFunction>` makes a comparison sampler; `DepthBiasState { constant: i32, slope_scale: f32, clamp: f32 }` |
+| MSAA | `MultisampleState { count, mask: u64, alpha_to_coverage_enabled }`; the resolve is the colour attachment's `resolve_target` |
+| WebGL2 limits | `Limits::downlevel_webgl2_defaults()`: no storage buffers or textures, no compute, `max_inter_stage_shader_variables: 15`, `max_vertex_buffer_array_stride: 255`, 16 KiB uniform blocks (`downlevel_defaults`) |
 | `Queue::write_buffer` ordering | Writes land before the next `submit`'s commands and after every earlier submit's: two writes to one buffer before one submit leave only the second for every draw of that submit |
 
 When touching wgpu, read the vendored source under
@@ -9828,3 +10375,12 @@ Both differ from most training data and from every tutorial written against
 | Untyped numbers are quadratic (**fixed in 0.12.3**, which the workspace pins since stage 108: the search is bounded to the number's own characters) | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
 | `ron::Value` loses names | `deserialize_any` reads `Box(half_extents: ..)` as an anonymous struct: the struct and variant names are dropped, so a `Value` written back no longer reads as the enum. To edit a value field by field, record the type's own `Serialize` calls (`serial_tree`) instead |
 | `RawValue` whitespace (0.12.3) | Non-comment whitespace around a nested `RawValue` is trimmed when it is read, so a pretty-printed file read and written again no longer grows blank space around unknown components |
+
+### `glam` 0.33 projection notes
+
+| Thing | glam 0.33.3 (`src/camera/rh/proj.rs`) |
+| --- | --- |
+| Where projections live | `glam::camera::rh::proj::{opengl, directx, vulkan}`; wgpu's NDC (Z in `[0, 1]`, Y up) is **`directx`** — what `View2D` already uses for its orthographic matrix |
+| Reversed-Z perspective | `directx::perspective_infinite_reverse(vertical_fov, aspect_ratio, near)`: depth 1 at `near`, 0 at infinity — pair with `CompareFunction::GreaterEqual` and a depth clear of 0 |
+| View matrices | `glam::camera::rh::view::look_to_mat4(eye, dir, up)` and `look_to_quat`; the `lh` module mirrors them |
+| Parry | `parry3d` 0.31 needs `glamx ^0.3`, which needs `glam ^0.33.7`: bump the workspace pin within 0.33 when `voltra-physics3d` lands (checked on docs.rs at design time; re-check then) |
