@@ -19,7 +19,9 @@ impl ReplicationServer {
         I: IntoIterator<Item = PeerId>,
         I::IntoIter: Clone,
     {
-        let peers = peers.into_iter();
+        // The host's own player is never a client: left out before the
+        // comparison, so a listen server's unchanged lobby costs nothing.
+        let peers = peers.into_iter().filter(|&peer| peer != PeerId::SERVER);
         if let Some(current) = &self.audience {
             let mut count = 0;
             let same = peers.clone().all(|peer| {
@@ -30,7 +32,7 @@ impl ReplicationServer {
                 return;
             }
         }
-        self.audience = Some(peers.filter(|&peer| peer != PeerId::SERVER).collect());
+        self.audience = Some(peers.collect());
         self.seat_audience();
     }
 
