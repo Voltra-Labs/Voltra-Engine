@@ -5711,8 +5711,10 @@ target and reads it back as RGBA (`Screenshot`, with `pixel`, `save_png`,
   each button in its sprite's own colour, not its face — the platformer's
   white Save and Fullscreen buttons, their white labels lost on them, in
   the stage 130 dogfood pass. The MCP `run_scene` lays its HUD out on the
-  shot's size (1280 × 720 without one), as the player's window always
-  does (pinned by `voltra-mcp`'s `tools/run.rs` test).
+  shot's size, or on the window its app is made with
+  (`WindowConfig::default()`) when no shot is asked for: a player always
+  has a window to lay it out on (pinned by `voltra-mcp`'s `tools/run.rs`
+  test).
 
 Pinned by `app/headless/tests.rs` (a red square in the middle of a 64×64
 shot through a camera, the clear colour at the corner, PNG bytes, a second
