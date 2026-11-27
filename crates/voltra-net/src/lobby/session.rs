@@ -1,6 +1,10 @@
 //! The lobby of one session, pumped with it: the server's rules, or a
 //! client's copy and what it asks for.
 
+mod changes;
+mod client;
+mod server;
+
 use std::time::Duration;
 
 use super::config::LobbyConfig;
@@ -8,8 +12,11 @@ use super::error::LobbyError;
 use super::event::LobbyEvent;
 use super::refusal::LobbyRefusal;
 use super::state::{Lobby, LobbyPhase};
-use super::wire::{Snapshot, ToClient, ToServer};
-use crate::{Endpoint, NetEvent, PeerId};
+use super::wire::ToServer;
+use crate::{Endpoint, PeerId};
+use changes::changes;
+use client::Client;
+use server::Server;
 
 /// A session's lobby: the [`Lobby`], this frame's [`LobbyEvent`]s, and
 /// this end's player's part in it.
@@ -33,24 +40,8 @@ pub struct LobbySession {
 
 #[derive(Debug)]
 enum Role {
-    Server {
-        /// Whether the host plays, as the lobby last saw it.
-        listen: bool,
-        /// Whether the lobby changed since it was last sent.
-        dirty: bool,
-        /// Peers refused, and when they are cut off if still here.
-        refused: Vec<(PeerId, Duration)>,
-    },
-    Client {
-        /// This client's id, once the server let it in.
-        me: Option<PeerId>,
-        /// What it asks, sent at the next flush.
-        outbox: Vec<ToServer>,
-        /// Why the server would not let it in, if it would not.
-        refused: Option<LobbyRefusal>,
-        /// Whether it is connected, to tell its lobby closing.
-        connected: bool,
-    },
+    Server(Server),
+    Client(Client),
 }
 
 impl LobbySession {
@@ -60,18 +51,9 @@ impl LobbySession {
     pub fn new(config: LobbyConfig, endpoint: &Endpoint) -> Self {
         let config = config.validated();
         let role = if endpoint.is_server() {
-            Role::Server {
-                listen: false,
-                dirty: false,
-                refused: Vec::new(),
-            }
+            Role::Server(Server::default())
         } else {
-            Role::Client {
-                me: None,
-                outbox: Vec::new(),
-                refused: None,
-                connected: false,
-            }
+            Role::Client(Client::default())
         };
         Self {
             lobby: Lobby::new(&config),
@@ -99,7 +81,7 @@ impl LobbySession {
 
     /// Whether this end holds the lobby.
     pub fn is_server(&self) -> bool {
-        matches!(self.role, Role::Server { .. })
+        matches!(self.role, Role::Server(_))
     }
 
     /// This end's own player: [`PeerId::SERVER`] on a listen server, the
@@ -107,8 +89,8 @@ impl LobbySession {
     /// has none, and on a client not yet connected.
     pub fn local_player(&self) -> Option<PeerId> {
         match &self.role {
-            Role::Server { listen, .. } => listen.then_some(PeerId::SERVER),
-            Role::Client { me, .. } => *me,
+            Role::Server(server) => server.listen.then_some(PeerId::SERVER),
+            Role::Client(client) => client.me,
         }
     }
 
@@ -134,8 +116,8 @@ impl LobbySession {
     /// Why the server would not let this client in, once it said.
     pub fn refusal(&self) -> Option<LobbyRefusal> {
         match &self.role {
-            Role::Server { .. } => None,
-            Role::Client { refused, .. } => *refused,
+            Role::Server(_) => None,
+            Role::Client(client) => client.refused,
         }
     }
 
@@ -150,20 +132,18 @@ impl LobbySession {
     pub fn set_name(&mut self, name: &str) {
         self.config.name = name.to_owned();
         match &mut self.role {
-            Role::Server { listen, dirty, .. } => {
-                if *listen && self.lobby.contains(PeerId::SERVER) {
+            Role::Server(server) => {
+                if server.listen && self.lobby.contains(PeerId::SERVER) {
                     let before = self.lobby.clone();
                     if self.lobby.join(PeerId::SERVER, name, &self.config).is_ok() {
-                        *dirty = true;
+                        server.dirty = true;
                     }
                     changes(&before, &self.lobby, &mut self.pending);
                 }
             }
-            Role::Client {
-                outbox, connected, ..
-            } => {
-                if *connected {
-                    outbox.push(ToServer::Hello {
+            Role::Client(client) => {
+                if client.connected {
+                    client.outbox.push(ToServer::Hello {
                         name: name.to_owned(),
                     });
                 }
@@ -182,13 +162,13 @@ impl LobbySession {
             return Err(LobbyError::AlreadyPlaying);
         }
         match &mut self.role {
-            Role::Server { dirty, .. } => {
+            Role::Server(server) => {
                 let before = self.lobby.clone();
                 self.lobby.set_ready(me, ready)?;
-                *dirty = true;
+                server.dirty = true;
                 changes(&before, &self.lobby, &mut self.pending);
             }
-            Role::Client { outbox, .. } => outbox.push(ToServer::Ready(ready)),
+            Role::Client(client) => client.outbox.push(ToServer::Ready(ready)),
         }
         Ok(())
     }
@@ -200,15 +180,15 @@ impl LobbySession {
     pub fn start(&mut self) -> Result<(), LobbyError> {
         let me = self.local_player();
         match &mut self.role {
-            Role::Server { dirty, .. } => {
+            Role::Server(server) => {
                 let before = self.lobby.clone();
                 self.lobby.start(me)?;
-                *dirty = true;
+                server.dirty = true;
                 changes(&before, &self.lobby, &mut self.pending);
             }
-            Role::Client { outbox, .. } => {
+            Role::Client(client) => {
                 self.lobby.can_start(me.ok_or(LobbyError::NotInLobby)?)?;
-                outbox.push(ToServer::Start);
+                client.outbox.push(ToServer::Start);
             }
         }
         Ok(())
@@ -217,12 +197,12 @@ impl LobbySession {
     /// Ends the match, on the server: everyone back in the lobby, nobody
     /// ready — the next round starts from there.
     pub fn finish(&mut self) -> Result<(), LobbyError> {
-        let Role::Server { dirty, .. } = &mut self.role else {
+        let Role::Server(server) = &mut self.role else {
             return Err(LobbyError::NotServer);
         };
         let before = self.lobby.clone();
         if self.lobby.finish() {
-            *dirty = true;
+            server.dirty = true;
         }
         changes(&before, &self.lobby, &mut self.pending);
         Ok(())
@@ -236,140 +216,23 @@ impl LobbySession {
         let messages = endpoint.take_messages_on(&[self.config.channel]);
         let net_events = endpoint.events().to_vec();
         match &mut self.role {
-            Role::Server {
-                listen,
-                dirty,
-                refused,
-            } => {
-                let before = self.lobby.clone();
-                for event in &net_events {
-                    match *event {
-                        NetEvent::Connected(PeerId::SERVER) => {
-                            *listen = true;
-                            if let Err(refusal) =
-                                self.lobby
-                                    .join(PeerId::SERVER, &self.config.name, &self.config)
-                            {
-                                log::warn!("the host's own player is not in the lobby: {refusal}");
-                            }
-                            self.lobby.make_host(PeerId::SERVER);
-                        }
-                        NetEvent::Connected(_) => {}
-                        NetEvent::Disconnected { peer, .. } => {
-                            if peer == PeerId::SERVER {
-                                *listen = false;
-                            }
-                            refused.retain(|(gone, _)| *gone != peer);
-                            self.lobby.leave(peer);
-                        }
-                    }
-                }
-                for message in messages {
-                    let peer = message.from;
-                    if refused.iter().any(|(r, _)| *r == peer) {
-                        continue;
-                    }
-                    let asked = match message.decode::<ToServer>() {
-                        Ok(asked) => asked,
-                        Err(error) => {
-                            log::warn!(
-                                "{peer} sent a lobby message that is not one ({error}); kicked"
-                            );
-                            endpoint.kick(peer);
-                            self.lobby.leave(peer);
-                            continue;
-                        }
-                    };
-                    match asked {
-                        ToServer::Hello { name } => {
-                            match self.lobby.join(peer, &name, &self.config) {
-                                Ok(given) => log::info!("lobby: {peer} is {given:?}"),
-                                Err(refusal) => {
-                                    log::info!("lobby: {peer} refused: {refusal}");
-                                    if let Err(error) = endpoint.send_message(
-                                        peer,
-                                        self.config.channel,
-                                        &ToClient::Refused(refusal),
-                                    ) {
-                                        log::warn!("could not tell {peer} why: {error}");
-                                    }
-                                    refused.push((peer, now + self.config.refusal_grace));
-                                }
-                            }
-                        }
-                        ToServer::Ready(ready) => {
-                            if let Err(error) = self.lobby.set_ready(peer, ready) {
-                                log::debug!("lobby: {peer} cannot be ready: {error}");
-                            }
-                        }
-                        ToServer::Start => match self.lobby.start(Some(peer)) {
-                            Ok(()) => log::info!("lobby: {peer} started the match"),
-                            Err(error) => log::debug!("lobby: {peer} cannot start: {error}"),
-                        },
-                    }
-                }
-                refused.retain(|&(peer, deadline)| {
-                    if !endpoint.is_connected(peer) {
-                        return false;
-                    }
-                    if now >= deadline {
-                        endpoint.kick(peer);
-                        return false;
-                    }
-                    true
-                });
-                if before != self.lobby {
-                    *dirty = true;
-                }
-                changes(&before, &self.lobby, &mut self.events);
-            }
-            Role::Client {
-                me,
-                outbox,
-                refused,
-                connected,
-            } => {
-                let before = self.lobby.clone();
-                for event in &net_events {
-                    match event {
-                        NetEvent::Connected(_) => {
-                            *connected = true;
-                            *me = endpoint.local_id();
-                            outbox.push(ToServer::Hello {
-                                name: self.config.name.clone(),
-                            });
-                        }
-                        NetEvent::Disconnected { .. } => {
-                            *connected = false;
-                            self.lobby = Lobby::new(&self.config);
-                            self.events.push(LobbyEvent::Closed);
-                            outbox.clear();
-                        }
-                    }
-                }
-                for message in messages {
-                    match message.decode::<ToClient>() {
-                        Ok(ToClient::State(snapshot)) => match snapshot.into_lobby() {
-                            Some(lobby) => self.lobby = lobby,
-                            None => log::warn!("the server sent a lobby that cannot be; ignored"),
-                        },
-                        Ok(ToClient::Refused(refusal)) => {
-                            log::info!("lobby: refused: {refusal}");
-                            *refused = Some(refusal);
-                            self.events.push(LobbyEvent::Refused(refusal));
-                            endpoint.disconnect(PeerId::SERVER);
-                        }
-                        Err(error) => {
-                            log::warn!("the server sent a lobby message that is not one: {error}");
-                        }
-                    }
-                }
-                // A close resets the copy; the entries leaving it are not
-                // worth an event each — `Closed` says it all.
-                if *connected {
-                    changes(&before, &self.lobby, &mut self.events);
-                }
-            }
+            Role::Server(server) => server.receive(
+                &mut self.lobby,
+                &self.config,
+                &mut self.events,
+                endpoint,
+                messages,
+                &net_events,
+                now,
+            ),
+            Role::Client(client) => client.receive(
+                &mut self.lobby,
+                &self.config,
+                &mut self.events,
+                endpoint,
+                messages,
+                &net_events,
+            ),
         }
     }
 
@@ -379,69 +242,8 @@ impl LobbySession {
     pub fn send(&mut self, endpoint: &mut Endpoint) {
         let channel = self.config.channel;
         match &mut self.role {
-            Role::Server { dirty, .. } => {
-                if !*dirty {
-                    return;
-                }
-                *dirty = false;
-                let state = ToClient::State(Snapshot::of(&self.lobby));
-                for entry in self.lobby.entries() {
-                    if entry.peer == PeerId::SERVER {
-                        continue;
-                    }
-                    if let Err(error) = endpoint.send_message(entry.peer, channel, &state) {
-                        log::warn!("the lobby could not reach {}: {error}", entry.peer);
-                    }
-                }
-            }
-            Role::Client { outbox, .. } => {
-                for asked in outbox.drain(..) {
-                    if let Err(error) = endpoint.send_message(PeerId::SERVER, channel, &asked) {
-                        log::warn!("the lobby could not reach the server: {error}");
-                    }
-                }
-            }
+            Role::Server(server) => server.send(&self.lobby, channel, endpoint),
+            Role::Client(client) => client.send(channel, endpoint),
         }
-    }
-}
-
-/// The events that take `before` to `after`: who left, who joined or
-/// changed, who hosts, whether the match began or ended — in that order,
-/// so a game reading `Started` already has every `Joined`.
-fn changes(before: &Lobby, after: &Lobby, events: &mut Vec<LobbyEvent>) {
-    for gone in before.entries() {
-        if !after.contains(gone.peer) {
-            events.push(LobbyEvent::Left { peer: gone.peer });
-        }
-    }
-    for entry in after.entries() {
-        match before.entry(entry.peer) {
-            None => events.push(LobbyEvent::Joined {
-                peer: entry.peer,
-                name: entry.name.clone(),
-            }),
-            Some(was) => {
-                if was.name != entry.name {
-                    events.push(LobbyEvent::Renamed {
-                        peer: entry.peer,
-                        name: entry.name.clone(),
-                    });
-                }
-                if was.ready != entry.ready && after.phase() == before.phase() {
-                    events.push(LobbyEvent::ReadyChanged {
-                        peer: entry.peer,
-                        ready: entry.ready,
-                    });
-                }
-            }
-        }
-    }
-    if before.host() != after.host() {
-        events.push(LobbyEvent::HostChanged(after.host()));
-    }
-    match (before.phase(), after.phase()) {
-        (LobbyPhase::Waiting, LobbyPhase::Playing) => events.push(LobbyEvent::Started),
-        (LobbyPhase::Playing, LobbyPhase::Waiting) => events.push(LobbyEvent::Finished),
-        _ => {}
     }
 }
