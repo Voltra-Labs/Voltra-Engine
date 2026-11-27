@@ -124,8 +124,15 @@ impl DiscoveryResponder {
             let (len, from) = match self.socket.recv_from(&mut buffer) {
                 Ok(read) => read,
                 Err(e) if e.kind() == ErrorKind::WouldBlock => return,
-                // About some other datagram (one too long for the buffer,
-                // on Windows): this read is lost, the socket is fine.
+                // One too long for the buffer, on Windows: no probe, as a
+                // filled buffer is elsewhere. Its sender is not reported,
+                // so it is counted malformed before any scope check.
+                Err(e) if crate::udp::is_too_long(&e) => {
+                    self.stats.malformed += 1;
+                    continue;
+                }
+                // About some other datagram (an ICMP unreachable for an
+                // answer): this read is lost, the socket is fine.
                 Err(e) if crate::udp::is_transient(&e) => continue,
                 Err(e) => {
                     if !self.failing {
