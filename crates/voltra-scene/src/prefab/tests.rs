@@ -4,9 +4,14 @@ use voltra_assets::AssetPath;
 use voltra_render::glam::Vec2;
 
 use super::*;
+use crate::format::ComponentRegistry;
 use crate::format::{to_scene_file, EntityRecord};
+use crate::hierarchy::Parent;
 use crate::hierarchy::{children_of, parent_of, set_parent};
+use crate::scene_id::SceneId;
+use crate::transform::Transform;
 use crate::{Name, Sprite};
+use voltra_ecs::{Entity, World};
 
 fn registry() -> ComponentRegistry {
     ComponentRegistry::with_defaults()
