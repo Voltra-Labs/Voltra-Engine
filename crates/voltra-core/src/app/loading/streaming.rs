@@ -36,10 +36,10 @@
 //! [`Persistent`]: voltra_scene::Persistent
 
 mod anchors;
+mod slot;
 mod stats;
 
 use voltra_assets::AssetPath;
-use voltra_ecs::Entity;
 use voltra_scene::WorldRegions;
 
 use super::budget::FrameBudget;
@@ -51,6 +51,7 @@ use crate::app::spawning::prefab_store;
 use crate::app::tick::Tick;
 use crate::app::App;
 
+use slot::Slot;
 use stats::stats_of;
 pub use stats::StreamingStats;
 
@@ -58,15 +59,6 @@ pub use stats::StreamingStats;
 /// to keep the workers fed, few enough that a fast anchor does not queue a
 /// world's worth of reads it will have left behind by the time they run.
 const LOADS_PER_THREAD: usize = 2;
-
-#[derive(Debug)]
-enum Slot {
-    Unloaded,
-    Loading(SceneBuild),
-    Loaded(Vec<Entity>),
-    Unloading(Unload),
-    Broken,
-}
 
 #[derive(Debug)]
 struct StreamedWorld {
