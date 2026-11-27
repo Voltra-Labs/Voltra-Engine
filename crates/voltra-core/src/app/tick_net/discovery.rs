@@ -3,7 +3,7 @@
 
 use voltra_net::{
     Address, Advert, Advertise, DiscoveryError, DiscoveryResponder, HostOptions, LanSearch,
-    LobbyPhase, NetConfig, SearchOptions, ServerInfo,
+    LobbyPhase, LobbySession, NetConfig, SearchOptions, ServerInfo,
 };
 
 use super::Net;
@@ -125,39 +125,45 @@ impl Net {
         else {
             return;
         };
-        let port = |want: fn(&Address) -> bool| {
-            endpoint.local_addrs().into_iter().find_map(|address| {
-                if !want(&address) {
-                    return None;
-                }
-                match address {
-                    Address::Udp(at) | Address::WebSocket(at) => Some(at.port()),
+        let Advertising {
+            responder,
+            advertise,
+            fingerprint,
+        } = advertising;
+        let lobby = self.lobby.as_ref().map(LobbySession::lobby);
+        // Made only when a probe is answered: most frames there is none.
+        responder.poll_with(now, || {
+            let port = |want: fn(&Address) -> Option<u16>| {
+                endpoint.local_addrs().iter().find_map(want)
+            };
+            let (players, max_players, in_match) = match lobby {
+                Some(lobby) => (
+                    lobby.len(),
+                    lobby.max_players(),
+                    lobby.phase() == LobbyPhase::Playing,
+                ),
+                None => (
+                    endpoint.players().len(),
+                    endpoint.config().max_clients + usize::from(endpoint.host_plays()),
+                    false,
+                ),
+            };
+            Advert {
+                name: advertise.name.clone(),
+                game: advertise.game.clone(),
+                players,
+                max_players,
+                in_match,
+                udp_port: port(|a| match a {
+                    Address::Udp(at) => Some(at.port()),
                     _ => None,
-                }
-            })
-        };
-        let (players, max_players, in_match) = match &self.lobby {
-            Some(lobby) => (
-                lobby.lobby().len(),
-                lobby.lobby().max_players(),
-                lobby.lobby().phase() == LobbyPhase::Playing,
-            ),
-            None => (
-                endpoint.players().len(),
-                endpoint.config().max_clients + usize::from(endpoint.host_plays()),
-                false,
-            ),
-        };
-        let advert = Advert {
-            name: advertising.advertise.name.clone(),
-            game: advertising.advertise.game.clone(),
-            players,
-            max_players,
-            in_match,
-            udp_port: port(|a| matches!(a, Address::Udp(_))),
-            websocket_port: port(|a| matches!(a, Address::WebSocket(_))),
-            fingerprint: advertising.fingerprint,
-        };
-        advertising.responder.poll(now, &advert);
+                }),
+                websocket_port: port(|a| match a {
+                    Address::WebSocket(at) => Some(at.port()),
+                    _ => None,
+                }),
+                fingerprint: *fingerprint,
+            }
+        });
     }
 }
