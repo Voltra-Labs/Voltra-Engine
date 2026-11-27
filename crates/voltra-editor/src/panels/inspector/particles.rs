@@ -24,6 +24,8 @@ use voltra_scene::ParticleEmitter;
 
 use super::active;
 use super::collision::bits;
+use super::mixed;
+use voltra_scene::format::serial_tree::Step;
 
 /// The stores the emitter's texture and flipbook resolve against.
 pub(super) struct Stores<'a> {
@@ -128,7 +130,12 @@ fn drawing(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'static str> {
         .selected_text(name(before))
         .show_ui(ui, |ui| {
             for option in [Simulation::Cpu, Simulation::Gpu] {
-                ui.selectable_value(&mut emitter.simulation, option, name(option));
+                if ui
+                    .selectable_value(&mut emitter.simulation, option, name(option))
+                    .clicked()
+                {
+                    mixed::touch(ui, "ParticleEmitter", vec![Step::Field("simulation")]);
+                }
             }
         })
         .response

@@ -9,7 +9,9 @@ use super::active;
 mod kinds;
 mod rows;
 
+use super::mixed;
 use rows::threshold;
+use voltra_scene::format::serial_tree::Step;
 
 /// What the joint's two ends are called, worked out before the joint is
 /// borrowed out of the world.
@@ -29,7 +31,9 @@ pub(super) fn show(ui: &mut Ui, joint: &mut Joint2D, ends: &Ends) -> Option<&'st
         .selected_text(kind)
         .show_ui(ui, |ui| {
             for name in JointKind::NAMES {
-                ui.selectable_value(&mut kind, name, name);
+                if ui.selectable_value(&mut kind, name, name).clicked() {
+                    mixed::touch(ui, "Joint2D", vec![Step::Field("kind")]);
+                }
             }
         });
     if kind != joint.kind.name() {

@@ -6,7 +6,9 @@ use voltra_render::glam::Vec2;
 use voltra_scene::format::entity_with_id;
 use voltra_scene::{CameraFollow2D, FollowBounds, FollowZoom, SceneId};
 
+use super::super::mixed;
 use super::{number, pair};
+use voltra_scene::format::serial_tree::Step;
 
 pub(super) fn follow(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
     ui.label(RichText::new("Follow").strong())
@@ -114,9 +116,12 @@ fn target(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str
         egui::ComboBox::from_id_salt("follow_target")
             .selected_text(shown)
             .show_ui(ui, |ui| {
-                ui.selectable_value(&mut picked, None, "nothing");
+                let mut clicked = ui.selectable_value(&mut picked, None, "nothing").clicked();
                 for (id, name) in &choices {
-                    ui.selectable_value(&mut picked, Some(*id), name);
+                    clicked |= ui.selectable_value(&mut picked, Some(*id), name).clicked();
+                }
+                if clicked {
+                    mixed::touch(ui, "CameraFollow2D", vec![Step::Field("target")]);
                 }
             });
     });

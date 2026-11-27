@@ -6,6 +6,7 @@ use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, ConvexPolygon};
 
 use super::active;
+use super::mixed;
 
 /// The kinds a collider can be switched between, in the order offered.
 const KINDS: [&str; 4] = ["Box", "Circle", "Capsule", "Polygon"];
@@ -31,7 +32,10 @@ pub(super) fn show(ui: &mut Ui, collider: &mut Collider, textured_sprite: bool) 
         .selected_text(kind)
         .show_ui(ui, |ui| {
             for option in KINDS {
-                ui.selectable_value(&mut kind, option, option);
+                if ui.selectable_value(&mut kind, option, option).clicked() {
+                    // The collider is an enum: its shape is the whole of it.
+                    mixed::touch(ui, "Collider", Vec::new());
+                }
             }
         });
     if kind != collider.kind() {

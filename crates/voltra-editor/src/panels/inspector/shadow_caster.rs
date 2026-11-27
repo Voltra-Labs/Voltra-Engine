@@ -23,6 +23,10 @@ pub(super) struct Context<'a> {
     pub recording: bool,
 }
 
+/// What a press of "Use own polygon" is called: the caller does it to the
+/// rest of the selection from each one's own collider or sprite.
+pub(super) const OWN_POLYGON: &str = "Use own shadow shape";
+
 /// The caster ticking the box gives an entity: shaped by its collider when
 /// it has one, else by `starting` — its sprite's quad — as a polygon.
 pub(super) fn starting_caster(has_collider: bool, starting: Option<Vec<Vec2>>) -> ShadowCaster2D {
@@ -118,7 +122,7 @@ pub(super) fn show(
                         closed: true,
                     });
                     shape.set_editing(Some(entity));
-                    claim = claim.or(Some("Use own shadow shape"));
+                    claim = claim.or(Some(OWN_POLYGON));
                 }
             }
             if textured_sprite && use_silhouette(ui) {
@@ -155,7 +159,7 @@ pub(super) fn show(
                             closed: true,
                         });
                         shape.set_editing(Some(entity));
-                        claim = claim.or(Some("Use own shadow shape"));
+                        claim = claim.or(Some(OWN_POLYGON));
                     }
                 }
             });

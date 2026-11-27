@@ -3,6 +3,7 @@
 use voltra_assets::{AssetPath, Atlases};
 use voltra_core::egui::{self, Color32, DragValue, Rect, RichText, Ui};
 use voltra_core::ui::TextureId;
+use voltra_scene::format::serial_tree::Step;
 use voltra_scene::Sprite;
 
 use super::super::active;
@@ -73,12 +74,12 @@ pub(super) fn show(
 
         ui.label("flip");
         ui.horizontal(|ui| {
-            let flip_x = mixed.field("flip_x");
-            if mixed::checkbox(ui, &mut sprite.flip_x, "x", flip_x).changed() {
+            let flip_x = vec![Step::Field("flip_x")];
+            if mixed::checkbox(ui, &mut sprite.flip_x, "x", mixed, flip_x).changed() {
                 claim = claim.or(Some("Flip sprite"));
             }
-            let flip_y = mixed.field("flip_y");
-            if mixed::checkbox(ui, &mut sprite.flip_y, "y", flip_y).changed() {
+            let flip_y = vec![Step::Field("flip_y")];
+            if mixed::checkbox(ui, &mut sprite.flip_y, "y", mixed, flip_y).changed() {
                 claim = claim.or(Some("Flip sprite"));
             }
         });

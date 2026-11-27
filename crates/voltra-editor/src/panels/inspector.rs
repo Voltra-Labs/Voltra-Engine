@@ -57,6 +57,7 @@ use voltra_scene::hierarchy;
 
 use crate::editor::Editor;
 use crate::multi_edit::MultiEdit;
+use crate::play::PlayState;
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::right("inspector")
@@ -80,18 +81,28 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // body by `entity` makes every id here a function of the entity too, so
             // a selection change is a real id change and egui starts clean.
             ui.push_id(entity, |ui| {
-                // While the timeline records, only the primary is keyed: the
-                // rest of the selection is not written to behind its back.
-                let recording = editor.timeline.is_recording();
-                let selected: Vec<Entity> = if recording {
-                    Vec::new()
+                // Only while editing, and not while the timeline records:
+                // recording keys the primary alone, and while playing the
+                // world is the simulation's — writing a value loaded from
+                // text would reset the rest's running state (particles,
+                // animators, joint impulses).
+                let alone =
+                    editor.timeline.is_recording() || editor.play.state() != PlayState::Editing;
+                let selected: Vec<Entity> = if alone {
+                    vec![entity]
                 } else {
-                    editor.selection.iter().collect()
+                    std::iter::once(entity)
+                        .chain(
+                            editor
+                                .selection
+                                .iter()
+                                .filter(|&e| e != entity && frame.world.is_alive(e)),
+                        )
+                        .collect()
                 };
-                let mut multi = MultiEdit::begin(frame.world, &editor.registry, entity, selected);
                 let more = match editor.selection.len() {
                     0 | 1 => String::new(),
-                    n if recording => format!(" — the last picked of {n}, keyed alone"),
+                    n if alone => format!(" — the last picked of {n}, edited alone"),
                     n => format!(" — {n} selected, the last picked shown"),
                 };
                 ui.label(format!(
@@ -99,28 +110,42 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     entity.index(),
                     entity.generation()
                 ))
-                .on_hover_text(if multi.is_multi() {
+                .on_hover_text(if selected.len() > 1 {
                     "an edit writes the field changed to every selected entity"
+                } else if editor.selection.len() > 1 {
+                    "while playing or recording, only this one is edited"
                 } else {
                     "the entity the inspector edits"
                 });
 
                 // The name, then what it hangs off. Both are identity rather
                 // than geometry, so they sit above the components.
-                let named: Vec<Entity> = multi.all().collect();
-                let mut claim: Option<&'static str> = name::show(ui, frame.world, &named);
+                let mut claim: Option<&'static str> = name::show(ui, frame.world, &selected);
                 if let Some(parent) = hierarchy::parent_of(frame.world, entity) {
                     ui.label(
                         RichText::new(format!("child of {}", name::of(frame.world, parent))).weak(),
                     );
                 }
                 ui.separator();
+                // Its prefab's buttons act on this entity's instance alone,
+                // each as an entry of its own: outside what is written
+                // across, which would copy a revert onto the rest.
+                prefab::show(editor, ui, frame, entity);
+                if !frame.world.is_alive(entity) {
+                    return;
+                }
+                let mut multi = MultiEdit::begin(frame.world, &editor.registry, entity, selected);
+                // Touches left by a frame whose sections never ran.
+                mixed::take_touched(ui);
                 let added = partial::show(ui, frame.world, &editor.registry, &multi);
                 if !added.is_empty() {
                     frame.resolve_assets_of(&added);
                     claim = claim.or(Some("Add component"));
                 }
                 claim = claim.or(sections::show(editor, ui, frame, entity, &mut multi));
+                for (name, path) in mixed::take_touched(ui) {
+                    multi.touch(name, path);
+                }
                 // What the sections did to the primary, written into the rest
                 // of the selection before the history takes the frame's after
                 // side: one entry for all of them.

@@ -5,6 +5,7 @@
 //! saves, so neither is an edit; a preset rewrites the emitter and is one
 //! undo entry.
 
+use super::super::mixed;
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_scene::particles::presets::Preset;
 use voltra_scene::ParticleEmitter;
@@ -34,6 +35,8 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
             .show_ui(ui, |ui| {
                 for preset in Preset::ALL {
                     if ui.selectable_label(false, preset.label()).clicked() {
+                        // A preset is the whole emitter, on every one.
+                        mixed::touch(ui, "ParticleEmitter", Vec::new());
                         *emitter = preset.apply(emitter);
                         claim = Some("Apply particle preset");
                     }

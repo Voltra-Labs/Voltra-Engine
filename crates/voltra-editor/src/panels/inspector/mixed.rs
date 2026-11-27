@@ -12,9 +12,16 @@
 //!   and where a widget has no such state (a colour button, a dropdown, a
 //!   path), the row's label says so ([`label`]) next to the primary's
 //!   value. A section opts in by taking a [`Fields`].
+//!
+//! **Choosing what the primary already has** moves nothing on it, so the
+//! difference [`MultiEdit::finish`] looks for is not there. A widget that
+//! commits a choice says so with [`touch`] — a number typed and entered, a
+//! box ticked, a dropdown's entry picked — and the field is written to all
+//! the same, as Unity does. The touches are kept in egui's memory for the
+//! frame, so any section can leave one without being handed the edit.
 
-use voltra_core::egui::{Checkbox, DragValue, Response, RichText, Ui};
-use voltra_scene::format::serial_tree::{describe, Step};
+use voltra_core::egui::{Checkbox, DragValue, Id, Key, Response, RichText, Ui};
+use voltra_scene::format::serial_tree::{describe, Step, TreePath};
 
 use crate::multi_edit::MultiEdit;
 
@@ -35,6 +42,11 @@ impl<'a> Fields<'a> {
         Self { multi, name }
     }
 
+    /// Says `path` of this component was committed this frame.
+    pub(super) fn touch(&self, ui: &Ui, path: TreePath) {
+        touch(ui, self.name, path);
+    }
+
     /// Whether anything at or under `path` differs.
     pub(super) fn at(&self, path: &[Step]) -> bool {
         self.multi.is_mixed(self.name, path)
@@ -44,28 +56,83 @@ impl<'a> Fields<'a> {
     pub(super) fn field(&self, field: &'static str) -> bool {
         self.at(&[Step::Field(field)])
     }
-
-    /// Whether element `index` of the top-level field `field` differs —
-    /// one axis of a vector, one channel of a colour.
-    pub(super) fn element(&self, field: &'static str, index: usize) -> bool {
-        self.at(&[Step::Field(field), Step::Index(index)])
-    }
 }
 
-/// `value`, showing `—` instead of the primary's number when `mixed`.
-/// Dragged or typed into, it writes a number like any other, and the field
-/// stops being mixed.
-pub(super) fn drag(value: DragValue<'_>, mixed: bool) -> DragValue<'_> {
-    if mixed {
+/// Where this frame's touches wait for the inspector to collect them.
+fn touched_id() -> Id {
+    Id::new("inspector_multi_edit_touched")
+}
+
+/// Says the field at `path` of component `name` was committed this frame,
+/// for [`MultiEdit::touch`]: written to the whole selection even if the
+/// primary already had the value chosen.
+pub(super) fn touch(ui: &Ui, name: &'static str, path: TreePath) {
+    ui.ctx().data_mut(|data| {
+        data.get_temp_mut_or_default::<Vec<(&'static str, TreePath)>>(touched_id())
+            .push((name, path));
+    });
+}
+
+/// This frame's touches, taken: the inspector hands them to the edit.
+pub(super) fn take_touched(ui: &Ui) -> Vec<(&'static str, TreePath)> {
+    ui.ctx().data_mut(|data| {
+        data.remove_temp::<Vec<(&'static str, TreePath)>>(touched_id())
+            .unwrap_or_default()
+    })
+}
+
+/// `response`, a dropdown entry or a selectable button for `path` of
+/// component `name`, touched when clicked: picking what the primary
+/// already has still sets it on all.
+pub(super) fn chosen(ui: &Ui, response: Response, name: &'static str, path: TreePath) -> Response {
+    if response.clicked() {
+        touch(ui, name, path);
+    }
+    response
+}
+
+/// A number at `path` of `fields`' component, showing `—` instead of the
+/// primary's when it is mixed. Dragged or typed into, it writes a number
+/// like any other; a number typed and entered is written to all even when
+/// it is the primary's own.
+pub(super) fn drag(
+    ui: &mut Ui,
+    value: DragValue<'_>,
+    fields: Fields<'_>,
+    path: TreePath,
+) -> Response {
+    let mixed = fields.at(&path);
+    let value = if mixed {
         value.custom_formatter(|_, _| "—".to_owned())
     } else {
         value
+    };
+    let response = ui.add(value);
+    if mixed && response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+        fields.touch(ui, path);
+        return response;
+    }
+    if mixed {
+        response.on_hover_text(MIXED)
+    } else {
+        response
     }
 }
 
-/// A checkbox, half-ticked when `mixed`.
-pub(super) fn checkbox(ui: &mut Ui, value: &mut bool, text: &str, mixed: bool) -> Response {
+/// A checkbox at `path` of `fields`' component, half-ticked when mixed;
+/// a click is a commit.
+pub(super) fn checkbox(
+    ui: &mut Ui,
+    value: &mut bool,
+    text: &str,
+    fields: Fields<'_>,
+    path: TreePath,
+) -> Response {
+    let mixed = fields.at(&path);
     let response = ui.add(Checkbox::new(value, text).indeterminate(mixed));
+    if response.changed() {
+        fields.touch(ui, path);
+    }
     if mixed {
         response.on_hover_text(MIXED)
     } else {
@@ -146,8 +213,8 @@ mod tests {
         world.insert(there, flipped);
         let multi = MultiEdit::begin(&world, &registry, there, [here, there]);
         let fields = Fields::of(&multi, "Transform");
-        assert!(fields.element("translation", 0));
-        assert!(!fields.element("translation", 1));
+        assert!(fields.at(&[Step::Field("translation"), Step::Index(0)]));
+        assert!(!fields.at(&[Step::Field("translation"), Step::Index(1)]));
         assert!(Fields::of(&multi, "Sprite").field("flip_x"));
 
         let ctx = Context::default();
@@ -157,12 +224,19 @@ mod tests {
             let _ = ctx.run_ui(Default::default(), |ui| {
                 marker(ui, &multi, &["Transform", "Sprite"]);
                 let _ = super::super::transform::show(ui, &mut transform, fields);
-                let _ = checkbox(ui, &mut flip, "x", true);
+                let sprite = Fields::of(&multi, "Sprite");
+                let _ = checkbox(ui, &mut flip, "x", sprite, vec![Step::Field("flip_x")]);
                 let _ = label(ui, "colour", true);
             });
         }
         assert_eq!(Some(&transform), world.get::<Transform>(there));
         assert!(flip);
+        let _ = ctx.run_ui(Default::default(), |ui| {
+            assert!(take_touched(ui).is_empty(), "nothing committed");
+            touch(ui, "Sprite", vec![Step::Field("flip_x")]);
+            assert_eq!(take_touched(ui), [("Sprite", vec![Step::Field("flip_x")])]);
+            assert!(take_touched(ui).is_empty(), "taken");
+        });
         assert!(multi.finish(&mut world, &registry).is_empty());
     }
 }

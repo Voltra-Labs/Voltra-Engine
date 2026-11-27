@@ -90,7 +90,7 @@ pub(in crate::panels::inspector) fn show(
             voltra_scene::shadow_caster::starting_polygon(frame.world, entity, frame.sheets());
         ui.separator();
         mixed::marker(ui, multi, &caster);
-        claim = claim.or(shadow_caster::show(
+        let outcome = shadow_caster::show(
             ui,
             frame.world,
             entity,
@@ -104,7 +104,11 @@ pub(in crate::panels::inspector) fn show(
                 shape: &mut editor.shape,
                 recording: editor.timeline.is_recording(),
             },
-        ));
+        );
+        claim = claim.or(outcome);
+        if outcome == Some(shadow_caster::OWN_POLYGON) {
+            own_polygons_for_rest(frame, multi);
+        }
         if !casts
             && frame
                 .world
@@ -148,6 +152,27 @@ fn add_casters_to_rest(frame: &mut UiFrame<'_>, multi: &mut MultiEdit) {
             voltra_scene::shadow_caster::starting_polygon(frame.world, entity, frame.sheets());
         let caster = shadow_caster::starting_caster(has_collider, starting);
         frame.world.insert(entity, caster);
+    }
+    multi.done_for_each("ShadowCaster2D");
+}
+
+/// Shapes every other selected caster by its own polygon — its collider's
+/// outline or its sprite's quad — as "Use own polygon" did the primary's.
+fn own_polygons_for_rest(frame: &mut UiFrame<'_>, multi: &mut MultiEdit) {
+    let rest: Vec<Entity> = multi.all().skip(1).collect();
+    for entity in rest {
+        let starting =
+            voltra_scene::shadow_caster::starting_polygon(frame.world, entity, frame.sheets());
+        let (Some(points), Some(caster)) = (
+            starting,
+            frame.world.get_mut::<voltra_scene::ShadowCaster2D>(entity),
+        ) else {
+            continue;
+        };
+        caster.shape = voltra_scene::CasterShape::Polygon {
+            points,
+            closed: true,
+        };
     }
     multi.done_for_each("ShadowCaster2D");
 }

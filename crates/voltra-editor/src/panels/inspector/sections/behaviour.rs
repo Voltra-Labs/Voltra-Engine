@@ -27,7 +27,7 @@ pub(in crate::panels::inspector) fn show(
     let mut claim = None;
     if multi.editable(&["SkinnedSprite"]) {
         mixed::marker(ui, multi, &["SkinnedSprite"]);
-        claim = claim.or(skinned::show(
+        let (edited, action) = skinned::show(
             ui,
             frame.world,
             skinned::Context {
@@ -38,7 +38,18 @@ pub(in crate::panels::inspector) fn show(
                 device: frame.device,
                 queue: frame.queue,
             },
-        ));
+        );
+        claim = claim.or(edited);
+        if let Some(action) = action {
+            // Each from its own texture and bones.
+            for each in multi.all().collect::<Vec<_>>() {
+                let silhouettes = frame.silhouettes.as_deref_mut();
+                if skinned::apply(action, frame.world, each, frame.textures, silhouettes) {
+                    claim = Some(action.label());
+                }
+            }
+            multi.done_for_each("SkinnedSprite");
+        }
     }
     let bones = ["Skeleton2D", "Bone2D", "TwoBoneIk"];
     let asked = if multi.editable(&bones) {
@@ -66,6 +77,19 @@ pub(in crate::panels::inspector) fn show(
             }
         }
         multi.done_for_each("Bone2D");
+    }
+    if asked.reset_pose || asked.reset_bone {
+        // Each from its own rest: the bones of every selected skeleton,
+        // every selected bone's own transform.
+        for each in multi.all().collect::<Vec<_>>() {
+            if asked.reset_pose && skeleton::reset_pose(frame.world, each) {
+                claim = Some("Reset skeleton pose");
+            }
+            if asked.reset_bone && skeleton::reset_bone(frame.world, each) {
+                claim = Some("Reset bone pose");
+            }
+        }
+        multi.done_for_each("Transform");
     }
     if asked.child_bone {
         crate::spawn::record(editor, frame, "Add child bone", |frame| {

@@ -12,11 +12,18 @@ use super::active;
 /// its tip, spawned once the world is no longer borrowed, and the bone's
 /// rest set from its pose — once the timeline has put the scene back as
 /// authored, since a rest copies the transform and no clip keys a rest.
+/// The resets too: each is done by the caller to every selected entity
+/// from its own rest, where copying the primary's pose would put them all
+/// in one place.
 #[derive(Debug, Default)]
 pub(super) struct Asked {
     pub claim: Option<&'static str>,
     pub child_bone: bool,
     pub set_rest: bool,
+    /// "Reset pose" on a skeleton: its bones back to their rests.
+    pub reset_pose: bool,
+    /// "Reset to rest" on a bone: its transform back to its rest.
+    pub reset_bone: bool,
 }
 
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
@@ -32,8 +39,7 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
                 .on_hover_text("every bone back to its rest pose")
                 .clicked()
             {
-                reset_to_rest(world, entity);
-                asked.claim = Some("Reset skeleton pose");
+                asked.reset_pose = true;
             }
         });
     }
@@ -51,7 +57,6 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
                 "Edit bone",
             ));
         });
-        let mut reset = false;
         ui.horizontal(|ui| {
             if ui
                 .button("Set rest")
@@ -60,19 +65,12 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
             {
                 asked.set_rest = true;
             }
-            reset = ui.button("Reset to rest").clicked();
+            asked.reset_bone = ui.button("Reset to rest").clicked();
             asked.child_bone = ui
                 .button("Add child bone")
                 .on_hover_text("a bone hung at this one's tip")
                 .clicked();
         });
-        if reset {
-            let rest = bone.rest;
-            if let Some(transform) = world.get_mut::<Transform>(entity) {
-                *transform = rest;
-                asked.claim = Some("Reset bone pose");
-            }
-        }
     }
     if let Some(ik) = world.get_mut::<TwoBoneIk>(entity) {
         ui.separator();
@@ -102,4 +100,27 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Asked {
         }
     }
     asked
+}
+
+/// Puts `entity`'s skeleton's bones back to their rests; whether it is one.
+pub(super) fn reset_pose(world: &mut World, entity: Entity) -> bool {
+    if world.get::<Skeleton2D>(entity).is_none() {
+        return false;
+    }
+    reset_to_rest(world, entity);
+    true
+}
+
+/// Puts `entity`'s transform back to its bone's rest; whether it is a bone.
+pub(super) fn reset_bone(world: &mut World, entity: Entity) -> bool {
+    let Some(rest) = world.get::<Bone2D>(entity).map(|bone| bone.rest) else {
+        return false;
+    };
+    match world.get_mut::<Transform>(entity) {
+        Some(transform) => {
+            *transform = rest;
+            true
+        }
+        None => false,
+    }
 }

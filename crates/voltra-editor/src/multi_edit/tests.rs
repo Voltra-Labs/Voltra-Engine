@@ -304,3 +304,216 @@ fn a_drag_across_three_entities_is_one_undo_step() {
         assert_eq!((sprite.sort_order, sprite.color), (0, color));
     }
 }
+
+#[test]
+fn a_sorting_layer_set_on_the_primary_is_the_only_thing_written() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    for (&entity, flip) in selected.iter().zip([false, true, false]) {
+        world.get_mut::<Sprite>(entity).expect("s").flip_x = flip;
+    }
+    world.get_mut::<Sprite>(selected[2]).expect("s").frame = 3;
+    let edit = begin(&world, &registry, &selected);
+    world
+        .get_mut::<Sprite>(selected[2])
+        .expect("s")
+        .sorting_layer = "Front".into();
+
+    edit.finish(&mut world, &registry);
+
+    for (&entity, (color, flip)) in
+        selected
+            .iter()
+            .zip([(RED, false), (GREEN, true), (BLUE, false)])
+    {
+        let sprite = world.get::<Sprite>(entity).expect("s");
+        assert_eq!(sprite.sorting_layer, "Front");
+        assert_eq!((sprite.color, sprite.flip_x), (color, flip), "its own");
+    }
+    assert_eq!(world.get::<Sprite>(selected[0]).expect("s").frame, 0);
+
+    // And back to the default layer, which a file leaves out: out of all.
+    let edit = begin(&world, &registry, &selected);
+    let default = Sprite::default().sorting_layer;
+    world
+        .get_mut::<Sprite>(selected[2])
+        .expect("s")
+        .sorting_layer = default.clone();
+    edit.finish(&mut world, &registry);
+    for (&entity, color) in selected.iter().zip([RED, GREEN, BLUE]) {
+        let sprite = world.get::<Sprite>(entity).expect("s");
+        assert_eq!(
+            (sprite.sorting_layer.as_str(), sprite.color),
+            (default.as_str(), color)
+        );
+    }
+}
+
+#[test]
+fn one_sprite_on_another_layer_mixes_the_layer_alone() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, RED, RED]);
+    world
+        .get_mut::<Sprite>(selected[0])
+        .expect("s")
+        .sorting_layer = "Front".into();
+    let edit = begin(&world, &registry, &selected);
+    assert_eq!(edit.mixed("Sprite"), [vec![Step::Field("sorting_layer")]]);
+    assert!(!edit.is_mixed("Sprite", &color()));
+    assert!(!edit.is_mixed("Sprite", &[Step::Field("flip_x")]));
+}
+
+#[test]
+fn an_optional_joint_field_set_on_one_copies_nothing_else() {
+    use voltra_scene::Joint2D;
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, RED, RED]);
+    let partner = SceneId::new();
+    for (&entity, x) in selected.iter().zip([1.0, 2.0, 3.0]) {
+        let joint = Joint2D {
+            anchor_a: Vec2::new(x, 0.0),
+            b: (x == 3.0).then_some(partner),
+            ..Joint2D::default()
+        };
+        world.insert(entity, joint);
+    }
+    let edit = begin(&world, &registry, &selected);
+    world
+        .get_mut::<Joint2D>(selected[2])
+        .expect("j")
+        .break_force = Some(50.0);
+    edit.finish(&mut world, &registry);
+    for (&entity, x) in selected.iter().zip([1.0, 2.0, 3.0]) {
+        let joint = world.get::<Joint2D>(entity).expect("j");
+        assert_eq!(joint.break_force, Some(50.0));
+        assert_eq!(joint.anchor_a, Vec2::new(x, 0.0), "its own anchor");
+        assert_eq!(joint.b, (x == 3.0).then_some(partner), "its own body");
+    }
+
+    // Unset again on the primary: unset on all.
+    let edit = begin(&world, &registry, &selected);
+    world
+        .get_mut::<Joint2D>(selected[2])
+        .expect("j")
+        .break_force = None;
+    edit.finish(&mut world, &registry);
+    assert!(selected
+        .iter()
+        .all(|&e| world.get::<Joint2D>(e).expect("j").break_force.is_none()));
+}
+
+#[test]
+fn a_touched_field_is_written_even_as_the_primary_had_it() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    world.get_mut::<Sprite>(selected[0]).expect("s").sort_order = 4;
+    let mut edit = begin(&world, &registry, &selected);
+    // The primary's own value, chosen again: nothing moved on it.
+    edit.touch("Sprite", vec![Step::Field("sort_order")]);
+    edit.touch("Parent", vec![]);
+    let written = edit.finish(&mut world, &registry);
+    assert_eq!(written, [selected[0]], "only the one that differed");
+    for (&entity, color) in selected.iter().zip([RED, GREEN, BLUE]) {
+        let sprite = world.get::<Sprite>(entity).expect("s");
+        assert_eq!((sprite.sort_order, sprite.color), (0, color));
+    }
+
+    // A field left out by the primary's value, touched: left out of all.
+    world
+        .get_mut::<Sprite>(selected[0])
+        .expect("s")
+        .sorting_layer = "Front".into();
+    let mut edit = begin(&world, &registry, &selected);
+    edit.touch("Sprite", vec![Step::Field("sorting_layer")]);
+    edit.finish(&mut world, &registry);
+    let default = Sprite::default().sorting_layer;
+    assert_eq!(
+        world.get::<Sprite>(selected[0]).expect("s").sorting_layer,
+        default
+    );
+}
+
+#[test]
+fn a_primary_gone_by_the_end_writes_nothing() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    let edit = begin(&world, &registry, &selected);
+    world.despawn(selected[2]);
+    assert!(edit.finish(&mut world, &registry).is_empty());
+    assert!(world.get::<Sprite>(selected[0]).is_some(), "kept");
+    assert!(world.get::<Transform>(selected[1]).is_some(), "kept");
+}
+
+/// One frame of the editor: watched, edited by `edit` on the primary,
+/// written across, recorded.
+fn frame(
+    history: &mut History,
+    host: &mut Host,
+    registry: &ComponentRegistry,
+    selected: &[Entity],
+    ids: &[SceneId],
+    edit: impl FnOnce(&mut World, Entity),
+) {
+    let view = SceneView {
+        world: &host.0,
+        registry,
+        selected: ids.to_vec(),
+    };
+    history.watch(view, ids.iter().copied());
+    let multi = begin(&host.0, registry, selected);
+    edit(&mut host.0, selected[2]);
+    multi.finish(&mut host.0, registry);
+    let view = SceneView {
+        world: &host.0,
+        registry,
+        selected: ids.to_vec(),
+    };
+    history.end_frame(view);
+}
+
+#[test]
+fn a_component_added_to_all_is_undone_from_all_and_redone_on_all() {
+    let registry = ComponentRegistry::with_defaults();
+    let (world, selected) = three([RED, GREEN, BLUE]);
+    let mut host = Host(world);
+    let mut selection = Selection::default();
+    selected.iter().for_each(|&e| selection.add(e));
+    let ids = selection.ids(&host.0);
+    let mut history = History::default();
+    let circle = Collider::Circle { radius: 1.5 };
+    frame(
+        &mut history,
+        &mut host,
+        &registry,
+        &selected,
+        &ids,
+        |w, p| {
+            w.insert(p, circle);
+        },
+    );
+    assert_eq!(history.len(), 1);
+
+    let mut gizmo = Gizmo::default();
+    let held = |host: &Host| {
+        ids.iter()
+            .map(|&id| {
+                let e = entity_with_id(&host.0, id).expect("there");
+                host.0.get::<Collider>(e).copied()
+            })
+            .collect::<Vec<_>>()
+    };
+    let ctx = UndoContext {
+        registry: &registry,
+        selected: &mut selection,
+        gizmo: &mut gizmo,
+    };
+    assert!(history.undo(ctx, &mut host));
+    assert_eq!(held(&host), [None, None, None]);
+    let ctx = UndoContext {
+        registry: &registry,
+        selected: &mut selection,
+        gizmo: &mut gizmo,
+    };
+    assert!(history.redo(ctx, &mut host));
+    assert_eq!(held(&host), [Some(circle); 3]);
+}

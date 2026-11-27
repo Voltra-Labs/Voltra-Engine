@@ -6,6 +6,7 @@ use voltra_assets::{AssetPath, Textures};
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_core::ui::TextureId;
 use voltra_render::wgpu;
+use voltra_scene::format::serial_tree::Step;
 use voltra_scene::Sprite;
 
 use super::active;
@@ -48,8 +49,9 @@ pub(super) fn show(
 
         ui.label("sort order");
         let order = DragValue::new(&mut sprite.sort_order);
+        let path = vec![Step::Field("sort_order")];
         claim = claim.or(active(
-            &ui.add(mixed::drag(order, mixed.field("sort_order"))),
+            &mixed::drag(ui, order, mixed, path),
             "Set sort order",
         ));
         ui.end_row();

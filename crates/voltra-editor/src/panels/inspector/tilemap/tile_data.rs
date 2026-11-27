@@ -7,7 +7,9 @@ use voltra_scene::tilemap::{Side, TileData, TileShape, TileValue};
 use voltra_scene::Tilemap;
 
 use super::super::active;
+use super::super::mixed;
 use crate::paint::Paint;
+use voltra_scene::format::serial_tree::{SerialTree, Step};
 
 /// The shapes a tile can be given, as the combo box lists them.
 const SHAPES: [&str; 5] = ["Full", "None", "Half", "Slope", "Polygon"];
@@ -53,10 +55,8 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &Paint) -> Option<&'st
         .selected_text(shape_name(&data.shape))
         .show_ui(ui, |ui| {
             for name in SHAPES {
-                if ui
-                    .selectable_label(shape_name(&data.shape) == name, name)
-                    .clicked()
-                {
+                let response = ui.selectable_label(shape_name(&data.shape) == name, name);
+                if mixed::chosen(ui, response, "Tilemap", shape_path(frame, &[])).clicked() {
                     picked = Some(name);
                 }
             }
@@ -65,7 +65,7 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &Paint) -> Option<&'st
         data.shape = shape_named(name);
         claim = Some("Set tile shape");
     }
-    claim = claim.or(shape_fields(ui, &mut data.shape));
+    claim = claim.or(shape_fields(ui, &mut data.shape, frame));
 
     claim = claim.or(custom_values(ui, data));
     // A frame left plain is not written: the layer saves as it did.
@@ -75,7 +75,19 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &Paint) -> Option<&'st
     claim
 }
 
-fn shape_fields(ui: &mut Ui, shape: &mut TileShape) -> Option<&'static str> {
+/// Where frame `frame`'s shape — and `then` under it — sits in the
+/// layer's value; the frame's key as the map writes it.
+fn shape_path(frame: u32, then: &[Step]) -> Vec<Step> {
+    let mut path = vec![
+        Step::Field("tile_data"),
+        Step::Key(SerialTree::U32(frame)),
+        Step::Field("shape"),
+    ];
+    path.extend_from_slice(then);
+    path
+}
+
+fn shape_fields(ui: &mut Ui, shape: &mut TileShape, frame: u32) -> Option<&'static str> {
     let mut claim = None;
     match shape {
         TileShape::Half(side) => {
@@ -86,7 +98,9 @@ fn shape_fields(ui: &mut Ui, shape: &mut TileShape) -> Option<&'static str> {
                     (Side::Left, "left"),
                     (Side::Right, "right"),
                 ] {
-                    if ui.selectable_label(*side == value, label).clicked() && *side != value {
+                    let response = ui.selectable_label(*side == value, label);
+                    let path = shape_path(frame, &[Step::Variant("Half")]);
+                    if mixed::chosen(ui, response, "Tilemap", path).clicked() && *side != value {
                         *side = value;
                         claim = Some("Set tile shape");
                     }

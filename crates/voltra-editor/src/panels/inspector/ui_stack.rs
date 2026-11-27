@@ -5,7 +5,9 @@ use voltra_ecs::{Entity, World};
 use voltra_scene::ui::stack::{Align, Direction};
 use voltra_scene::{UiRect, UiStack};
 
+use super::mixed;
 use super::{active, ui_slice};
+use voltra_scene::format::serial_tree::Step;
 
 /// The stack section of a UI element, or the button that makes it one.
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
@@ -25,10 +27,9 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
         ui.label("direction");
         ui.horizontal(|ui| {
             for (label, direction) in [("row", Direction::Row), ("column", Direction::Column)] {
-                if ui
-                    .selectable_value(&mut stack.direction, direction, label)
-                    .changed()
-                {
+                let response = ui.selectable_value(&mut stack.direction, direction, label);
+                let path = vec![Step::Field("direction")];
+                if mixed::chosen(ui, response, "UiStack", path).changed() {
                     claim = Some("Edit stack");
                 }
             }
@@ -56,17 +57,17 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
     claim
 }
 
-fn align(ui: &mut Ui, label: &str, value: &mut Align, hint: &str) -> Option<&'static str> {
+/// A dropdown of alignments for the stack's field named `label`.
+fn align(ui: &mut Ui, label: &'static str, value: &mut Align, hint: &str) -> Option<&'static str> {
     ui.label(label).on_hover_text(hint);
     let mut claim = None;
     egui::ComboBox::from_id_salt(label)
         .selected_text(format!("{value:?}"))
         .show_ui(ui, |ui| {
             for option in [Align::Start, Align::Center, Align::End, Align::Stretch] {
-                if ui
-                    .selectable_value(value, option, format!("{option:?}"))
-                    .changed()
-                {
+                let response = ui.selectable_value(value, option, format!("{option:?}"));
+                let path = vec![Step::Field(label)];
+                if mixed::chosen(ui, response, "UiStack", path).changed() {
                     claim = Some("Edit stack");
                 }
             }

@@ -1,6 +1,7 @@
 //! Where an entity sits, which way it faces, and how big it is.
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
+use voltra_scene::format::serial_tree::Step;
 use voltra_scene::Transform;
 
 use super::active;
@@ -23,8 +24,8 @@ pub(super) fn show(
                 .enumerate()
             {
                 let drag = DragValue::new(value).speed(0.01);
-                let drag = mixed::drag(drag, mixed.element("translation", axis));
-                claim = claim.or(active(&ui.add(drag), "Move"));
+                let path = vec![Step::Field("translation"), Step::Index(axis)];
+                claim = claim.or(active(&mixed::drag(ui, drag, mixed, path), "Move"));
             }
         });
         ui.end_row();
@@ -41,8 +42,8 @@ pub(super) fn show(
                 .enumerate()
             {
                 let drag = DragValue::new(value).speed(0.01);
-                let drag = mixed::drag(drag, mixed.element("scale", axis));
-                claim = claim.or(active(&ui.add(drag), "Scale"));
+                let path = vec![Step::Field("scale"), Step::Index(axis)];
+                claim = claim.or(active(&mixed::drag(ui, drag, mixed, path), "Scale"));
             }
         });
         ui.end_row();

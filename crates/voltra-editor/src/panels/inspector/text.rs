@@ -5,7 +5,9 @@ use voltra_core::egui::{self, DragValue, RichText, TextEdit, Ui};
 use voltra_scene::{Align, Text};
 
 use super::active;
+use super::mixed;
 use super::path_field::{self, PathEdit};
+use voltra_scene::format::serial_tree::Step;
 
 /// Every field of a [`Text`]. One undo entry per edit through the caller's
 /// `claim`, as every other section.
@@ -79,7 +81,11 @@ pub(super) fn show(
                 (Align::Center, "Center"),
                 (Align::Right, "Right"),
             ] {
-                if ui.selectable_value(&mut text.align, align, label).changed() {
+                let response = ui.selectable_value(&mut text.align, align, label);
+                if response.clicked() {
+                    mixed::touch(ui, "Text", vec![Step::Field("align")]);
+                }
+                if response.changed() {
                     claim = claim.or(Some("Align text"));
                 }
             }

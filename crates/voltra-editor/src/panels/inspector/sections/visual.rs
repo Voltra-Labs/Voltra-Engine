@@ -12,8 +12,8 @@ use voltra_scene::{
 
 use super::super::mixed::{self, Fields};
 use super::super::{
-    animation, particles, prefab, shapes2d, sprite, sprite_material, text, tilemap, transform,
-    ui_button, ui_controls, ui_rect, ui_slice, ui_stack,
+    animation, particles, shapes2d, sprite, sprite_material, text, tilemap, transform, ui_button,
+    ui_controls, ui_rect, ui_slice, ui_stack,
 };
 use super::gate;
 use crate::editor::Editor;
@@ -29,7 +29,6 @@ pub(in crate::panels::inspector) fn show(
     multi: &mut MultiEdit,
 ) -> Option<&'static str> {
     let mut claim = None;
-    prefab::show(editor, ui, frame, entity);
     if let Some(transform) = gate(frame.world.get_mut::<Transform>(entity), multi, "Transform") {
         mixed::marker(ui, multi, &["Transform"]);
         let fields = Fields::of(multi, "Transform");

@@ -57,6 +57,10 @@ pub(crate) struct MultiEdit {
     mixed: BTreeMap<&'static str, Vec<TreePath>>,
     /// Each partial component and how many of the selection hold it.
     partial: Vec<(&'static str, usize)>,
+    /// Places a widget committed this frame, written across even where the
+    /// primary's value did not move — choosing the primary's own value for
+    /// a mixed field sets it on all, as in Unity.
+    touched: Vec<(&'static str, TreePath)>,
 }
 
 impl MultiEdit {
@@ -80,6 +84,7 @@ impl MultiEdit {
             before: Vec::new(),
             mixed: BTreeMap::new(),
             partial: Vec::new(),
+            touched: Vec::new(),
         };
         if edit.others.is_empty() {
             return edit;
@@ -124,6 +129,7 @@ impl MultiEdit {
     }
 
     /// Whether more than one entity is being edited.
+    #[cfg(test)]
     pub(crate) fn is_multi(&self) -> bool {
         !self.others.is_empty()
     }
@@ -160,6 +166,18 @@ impl MultiEdit {
         &self.partial
     }
 
+    /// Says a widget committed `path` of `name` this frame: written to the
+    /// rest of the selection whether or not the primary's value moved. A
+    /// name that is not written across (partial, structure) is ignored.
+    pub(crate) fn touch(&mut self, name: &str, path: TreePath) {
+        let Some(&(name, _)) = self.before.iter().find(|(held, _)| *held == name) else {
+            return;
+        };
+        if !self.touched.contains(&(name, path.clone())) {
+            self.touched.push((name, path));
+        }
+    }
+
     /// Leaves `name` out of what [`finish`](Self::finish) writes across:
     /// for an action the inspector has already done to every entity on its
     /// own terms — a bone's rest from its own transform, a collider fitted
@@ -180,22 +198,26 @@ fn tree(
     match registry.save_tree(world, entity, name)? {
         Ok(tree) => Some(tree),
         Err(error) => {
-            warn_once(name, &format!("cannot be read: {error}"));
+            warn_once(format!(
+                "{name} cannot be edited across the selection: it could not be written out: {error}"
+            ));
             None
         }
     }
 }
 
-/// Says why `name` is left alone across the selection, once per component
-/// for the session: the inspector asks every frame.
-fn warn_once(name: &str, why: &str) {
+/// Logs `message` the first time it is said this session: the inspector
+/// asks every frame, and the same failure would otherwise fill the log.
+/// Keyed by the whole message, so a second component — or a second
+/// reason — is still said.
+fn warn_once(message: String) {
     static SEEN: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
     let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
     let first = seen
         .lock()
-        .map_or(true, |mut seen| seen.insert(name.to_owned()));
+        .map_or(true, |mut seen| seen.insert(message.clone()));
     if first {
-        log::warn!("{name} is not edited across the selection: it {why}");
+        log::warn!("{message}");
     }
 }
 
