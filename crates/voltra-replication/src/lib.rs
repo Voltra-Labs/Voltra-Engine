@@ -23,7 +23,8 @@
 //!   to the server's state and replayed when that state arrives.
 //! - **Lag compensation** ([`LagCompensation`], stage 128): each input
 //!   carries the moment its client was drawing ([`ViewTime`]), which the
-//!   server's hit tests rewind to, within a bound.
+//!   server's hit tests rewind to, within what the lag it measured for
+//!   that client allows ([`MeasuredLag`]).
 //!
 //! The engine's loop drives all of it through `tick.net` (`voltra-core`);
 //! this crate is the part that knows neither a window nor a frame.
@@ -53,7 +54,7 @@ mod wire;
 pub use client::{Correction, ReplicaStats, ReplicationClient};
 pub use config::{ReplicationChannels, ReplicationConfig};
 pub use interest::{Interest, InterestGrid, MAX_CELLS_PER_AXIS};
-pub use lag::{LagCompensation, ViewTime};
+pub use lag::{LagCompensation, MeasuredLag, ViewTime};
 pub use owner::NetOwner;
 pub use prediction::{Prediction, PredictionStats};
 pub use server::{ClientReplicationStats, ReplicationServer, MAX_INTEREST_POINTS};

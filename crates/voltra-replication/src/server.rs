@@ -19,6 +19,7 @@ use crate::{Interest, InterestGrid, ReplicationConfig};
 
 mod inputs;
 mod interest_points;
+mod lag;
 mod refresh;
 mod relevance;
 mod snapshot;
@@ -181,6 +182,7 @@ impl ReplicationServer {
                 inputs,
                 self.config.max_input_size,
                 self.config.max_buffered_inputs,
+                self.tick,
             );
             for id in update.resync.into_iter().take(MAX_LISTED) {
                 view.resync(id, self.components.len(), self.tick.wrapping_add(1));
@@ -193,7 +195,7 @@ impl ReplicationServer {
     pub fn begin_step(&mut self) {
         self.tick = self.tick.wrapping_add(1).max(1);
         for view in self.clients.values_mut() {
-            view.inputs.next();
+            view.inputs.next(self.tick);
         }
     }
 
@@ -203,17 +205,6 @@ impl ReplicationServer {
         self.clients
             .get(&peer)
             .and_then(|view| view.inputs.current.as_deref())
-    }
-
-    /// The moment `peer` was drawing remote entities at when it made this
-    /// step's input, as it reported — the client's word, to be bounded
-    /// ([`LagCompensation::target`](crate::LagCompensation::target))
-    /// before a shot is rewound to it. `None` with no input this step, or
-    /// one made before its first snapshot.
-    pub fn view_time(&self, peer: PeerId) -> Option<crate::ViewTime> {
-        self.clients
-            .get(&peer)
-            .and_then(|view| view.inputs.current_view)
     }
 
     /// Sends each client its snapshot, if one is due: at most one per tick,
