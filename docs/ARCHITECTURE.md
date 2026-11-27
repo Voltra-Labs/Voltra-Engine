@@ -7992,7 +7992,9 @@ connections and the scene; `voltra-core` drives it from the loop and
   until the next does not fit; a smaller one after it still may. A single
   update larger than the whole budget goes alone, with a warning, rather
   than starve. A snapshot that held everything due says so (`complete`).
-  No interest management: every client is sent every replicated entity.
+  With interest management (stage 127, below) the budget is shared only
+  by the entities relevant to that client; without it, every client is
+  sent every replicated entity.
 - **Untrusted input.** A snapshot or client message that will not decode
   is dropped whole; a client's lists are cut at 64; a component value that
   will not decode changes nothing. A client whose game despawned a
@@ -8222,6 +8224,137 @@ build, on WebGPU and WebGL2, joins a native `arena-server` over WebSocket
 from its page's `?join=`; the server spawns the page's player and the page
 logs that it predicts it. Guide chapter `docs/guide/08-networking.md`,
 whose checked blocks run the match test and the server for two seconds.
+### Each client is sent what is near what it watches, and what leaves is despawned on it
+
+Stage 127. `ReplicationConfig::interest: Option<Interest { radius,
+cell_size, hysteresis }>` — `None`, the default, is stage 114 exactly
+(pinned: with a radius covering everything, a client is sent the same
+snapshots byte for byte as with `None`). Only the server's is read.
+
+- **Relevance.** An entity is relevant to a client when it is within
+  `radius` of one of the client's *interest points* — where the entities
+  it owns (`NetOwner`) are, plus the points the game sets for it
+  (`tick.net.set_interest_points(peer, points)`: a spectator's camera, a
+  scout's sight; replaced by the next call, dropped when the peer leaves)
+  — or when it is `Replicated { always_relevant: true }`, or it has no
+  `Transform` (the match's state has nowhere to be far from). A
+  `Replicated::relevance_radius` replaces the session's radius for one
+  entity. The owned entity's root is always relevant to its owner,
+  wherever it is: a client never loses the entity it predicts. Both new
+  fields are `#[serde(default)]` and unwritten at their defaults, so every
+  scene written before reads and writes back unchanged; the inspector's
+  Replicated section edits them with the priority. Unreal's
+  `bAlwaysRelevant` and `NetCullDistanceSquared` per actor; Unity
+  Netcode's distance-based visibility and Godot's per-peer
+  `MultiplayerSynchronizer` visibility are the same switch with a
+  callback where this has a grid.
+- **The grid, not per-pair distance** (`interest/grid.rs`): a uniform
+  grid over the replicated roots, rebuilt each snapshot (a thousand hash
+  pushes is cheaper than tracking which entity moved out of which cell,
+  and a rebuilt grid cannot drift), and each client reads only the cells
+  within its leave radius of each of its points. Unreal's replication
+  graph keeps the same grid node (`UReplicationGraphNode_GridSpatialization2D`).
+  Per-pair distance is clients × entities every tick; the grid is entities
+  once plus each client's neighbourhood, and the snapshot that follows
+  reads only the relevant entities too (it read all of them before, to
+  find what was due). A cell size far below the radius would make the
+  range larger than the occupied cells, and the query reads those instead;
+  an entity with its own radius larger than the session's is checked
+  against every point, as no cell range covers it. Measured in release
+  at 1000 entities over a 400-unit map, radius 30, one point per client
+  (`voltra-bench`, `interest/…`, two runs): at **8 clients** the grid's
+  rebuild and queries take 22–33 µs and the per-pair check 14 µs — eight
+  thousand distances are cheap, and the rebuild is a fixed cost; at **64
+  clients** the grid is 60 µs and the pairs 124 µs, the grid flat in
+  clients where the pairs grow with them (and with the map, at a constant
+  density). Either is under 5 % of the frame. What interest buys is the
+  frame: a server step replicating the thousand moving entities to 8
+  clients is **0.71–0.76 ms with interest, 3.5–3.8 ms without** — the
+  snapshots read 20-odd relevant entities each instead of a thousand. The
+  grid is kept for the shape the plan is going to (more clients, larger
+  maps), and because what it costs at 8 is noise. Its cells hash with one
+  multiply (`CellHasher`; SipHash was a third of a rebuild) and keep their
+  lists across rebuilds.
+- **Hysteresis.** An entity enters at `radius` and leaves past
+  `radius × (1 + hysteresis)` (0.1 by default), so one on the edge is not
+  despawned and spawned every tick (pinned: moved back and forth across
+  the radius for four seconds under loss, the client keeps one copy).
+- **Hierarchies follow their root.** A replicated child is relevant
+  exactly when its topmost replicated ancestor is — placed by the root's
+  position, not its own — so a client never holds half a hierarchy (a
+  turret without its tank).
+- **Leaving is a cull, sent as a despawn is**: in every snapshot until
+  one carrying it is acknowledged (`culled`, beside `despawned`), and the
+  client despawns the entity and everything under it. Unreal closes the
+  actor's channel and destroys the actor on the client, and so does this
+  — nothing out of interest is left in a client's world to draw, collide
+  or be found by a query. But a spawn brings back only replicated
+  components, and an entity of the level carries more on the client (the
+  sprite it was loaded with, a prefab instance's overrides, its children
+  that only draw); destroyed outright, it would come back bare. So the
+  client sets its own state aside first (`client/stash.rs`): the entity
+  and its non-replicated descendants as records, by `SceneId`, without
+  the replicated components (the spawn brings them whole, and one the
+  server removed meanwhile must not come back). Unreal loses a startup
+  actor's non-replicated state this way; keeping a hidden copy in the
+  world instead would have every system skip it.
+- **Entering is a spawn**, with full state: a fresh view per client, so
+  every component the server has is due (a component changed or removed
+  while away arrives as it is now — pinned), acknowledged like any spawn.
+  The client spawns it from what it set aside under that id (same ids,
+  parents resolved once per snapshot), else by prefab, else bare, then
+  lays the replicated components over it. An entity is not sent again
+  while its cull is unacknowledged: a spawn overtaking its own cull would
+  be despawned by it. An acknowledgement of a snapshot older than a view
+  is of a copy the client no longer has, and is ignored (the same now
+  holds for `resync`).
+- **Despawned while away**: the server remembers per client which
+  entities it culled and the client acknowledged, and sends those a real
+  despawn, so the client lets go of what it set aside. A client that
+  joins late sweeps the level's replicated entities it was never sent
+  (stage 114's first complete snapshot) into the same store rather than
+  destroying them — under interest, never sent may mean only far away —
+  and spawns the level's copy back when one comes near. One the server
+  despawned before the client joined stays in the store, a record per
+  entity of the level, until the session ends.
+- **References** (`SceneRefs`: a joint's other body, a camera target) to
+  an entity out of interest name an id the client does not hold; they
+  resolve the way a reference to any id not yet spawned does, once both
+  are relevant — a joint to a body out of interest joins nothing on that
+  client (`joint_ends` finds bodies by id every step) until it is back. A game whose client-side logic needs the target relevant
+  marks it `always_relevant` or gives it a radius.
+- **Budget**: an irrelevant entity costs a client nothing — no view, no
+  bank, no bytes; the relevant ones are taken by banked priority within
+  `bytes_per_snapshot` as before (pinned: 300 entities moving far away
+  and 20 near under a 600-byte budget, every snapshot complete).
+- **Editor**: `Window ▸ Network` shows each client's relevant entities
+  in the server's table and draws each client's interest radius round its
+  points on its map; `net_play` answers `relevant` per server peer; the
+  profiler's `net relevant` counter sums them. `games/arena` opts in at a
+  radius of 20 (its floor is 17 × 9: everything stays relevant, the grid
+  still runs end to end) with its coin `always_relevant`; its match test
+  checks the server culls by interest and each client holds all four.
+- **Not yet**: interest by anything but distance (teams, line of sight,
+  a room graph — Unreal's other replication graph nodes); dormancy (an
+  entity at rest kept relevant but not compared each tick); the editor's
+  network play setting interest itself (it hosts with the default config,
+  so a game's interest applies to a dedicated or listen server it
+  starts); a store bound for level entities a late joiner never sees.
+
+Pinned by `voltra-core/tests/interest.rs`: entering at the radius and
+leaving past it under 20 % loss, back again where the server has it, and
+let go of once despawned while away; the edge held for four seconds with
+one copy; always-relevant, positionless and own-radius entities; the
+owned entity's far root and a hierarchy that comes and goes whole;
+the owner despawned and a spectator point set; a level entity back with
+its sprite, a changed component and a removed one; the budget; the
+byte-for-byte equality with `None`; a client joining late. Unit tests of
+the grid (radius, leave radius, own radius, a tiny cell, negative cells),
+the stash (kept but for the replicated components, a replicated child
+kept on its own, let go of), the view (a cull acknowledged, an old
+acknowledgement missing a new copy), `Interest`'s checks, `spawn_records`
+and `Replicated`'s format.
+
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
 Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
@@ -9018,6 +9151,7 @@ Same problem, same rule: read the source, not a tutorial.
 | Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
 | Mixed values | `DragValue::custom_formatter(\|_, _\| "—".into())` shows text in place of the number; focused, the text is selected whole, so typing replaces it. `Checkbox::new(..).indeterminate(true)` draws the half-ticked state (the value still toggles on click) |
 | Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
+| Ellipse | `egui::Shape::ellipse_stroke(center, radius: Vec2, stroke)` (epaint 0.35) draws an axis-aligned ellipse; the Network window's interest radius uses it, its map scaling each axis on its own |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes
 

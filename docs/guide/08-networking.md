@@ -61,6 +61,42 @@ Remote entities are drawn a little in the past, between two snapshots, so
 they move smoothly however the network bunches them: the delay is measured
 from the link, a few tens of milliseconds on a good one.
 
+## Only what is near: interest
+
+On a big map, a player has no use for what happens on the far side of it,
+and sending it costs every player bandwidth. Turn interest management on
+and each client is sent only the entities near what it watches:
+
+```rust
+ReplicationConfig {
+    interest: Some(Interest::new(30.0)), // world units
+    ..ReplicationConfig::default()
+}
+```
+
+What a client watches is, by default, the entities it owns (`NetOwner`).
+For a spectator or a camera that roams, give the server points of your
+own for that player, each tick if they move:
+
+```rust
+tick.net.set_interest_points(peer, vec![camera_position]);
+```
+
+An entity that drifts out of range is despawned on that client and spawned
+again, with everything that changed meanwhile, when it comes back; an
+entity of the level comes back with what the client loaded it with (its
+sprite, say). It enters at the radius and leaves a little further out (10 %
+by default, `Interest::hysteresis`), so one on the edge does not blink. A
+child is sent exactly when the replicated entity at the top of its
+hierarchy is. Your own player is always sent to you.
+
+Some things every player must see wherever they are — the score, the
+objective. Tick **always relevant** on their `Replicated` component in the
+inspector (`always_relevant: true` in the file), or give one entity a
+radius of its own (`relevance_radius`). An entity with no `Transform`, like
+a match's state, is sent to everyone. The Network window shows how many
+entities each client is sent and draws its radius on its map.
+
 ## Your own player: prediction
 
 Waiting a round trip for the server to move your own player feels like

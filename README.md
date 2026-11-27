@@ -442,6 +442,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 124 | The camera turns: rotated views, rotational shake, group framing | done |
 | 125 | Editing many entities at once; numbered duplicates | done |
 | 126 | Prefab variants; nested prefabs follow their file | done |
+| 127 | Interest management: relevance by distance on a grid, with hysteresis | done |
 
 ## Contributing
 
