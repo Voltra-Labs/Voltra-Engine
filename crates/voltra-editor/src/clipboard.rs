@@ -18,6 +18,11 @@
 //! original, as in Unity and Godot, and a paste into another scene lands
 //! where the copy was taken. Duplicate is a copy and a paste that leaves the
 //! clipboard alone. Each is one undo entry, and selects what it made.
+//!
+//! **A copy is named apart from its new siblings** — `Coin (1)`, `Coin (2)`
+//! — once it has landed: see [`numbering`].
+
+mod numbering;
 
 use serde::{Deserialize, Serialize};
 use voltra_core::UiFrame;
@@ -109,6 +114,7 @@ fn paste(
             instance.roots.len(),
             clip.tops.len()
         );
+        numbering::number(world, &instance.roots);
         return Ok((instance.entities, instance.roots));
     }
     for (&root, top) in instance.roots.iter().zip(&clip.tops) {
@@ -122,6 +128,8 @@ fn paste(
             }
         }
     }
+    // Last: the siblings a top is named apart from are where it landed.
+    numbering::number(world, &instance.roots);
     Ok((instance.entities, instance.roots))
 }
 
@@ -199,6 +207,18 @@ fn put(editor: &mut Editor, frame: &mut UiFrame<'_>, label: &'static str, clip: 
             // Drawn this very frame: their textures, fonts and clips are
             // looked up now.
             frame.resolve_assets_of(entities);
+            // A copy of an instance renamed by its number overrides its
+            // name; said now, so it is part of this entry rather than an
+            // edit of its own next frame.
+            for &top in tops {
+                if frame.world.get::<voltra_scene::PrefabPart>(top).is_some() {
+                    if let Err(error) =
+                        prefab::refresh_overrides(frame.world, &editor.registry, frame.prefabs, top)
+                    {
+                        log::error!("could not compare a pasted instance with its prefab: {error}");
+                    }
+                }
+            }
             editor.selection.clear();
             tops.iter().for_each(|&top| editor.selection.add(top));
             entities
