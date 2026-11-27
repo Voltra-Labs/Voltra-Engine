@@ -15,6 +15,8 @@ use voltra_net::{
 
 use super::App;
 
+mod discovery;
+mod lobby;
 mod messages;
 
 /// The game's network session: none, a server, or a client.
@@ -42,6 +44,16 @@ pub struct Net {
     pub(super) counted: voltra_net::ConnectionStats,
     /// Whether the profiler's net counters are left alone.
     pub(super) uncounted: bool,
+    /// The lobby's settings, when the game turned it on.
+    lobby_config: Option<voltra_net::LobbyConfig>,
+    /// The session's lobby, made at its first receive.
+    lobby: Option<voltra_net::LobbySession>,
+    /// The session could not carry the lobby, and it was said once.
+    lobby_refused: bool,
+    /// A hosting session's answers to LAN probes.
+    advertising: Option<discovery::Advertising>,
+    /// The last search for servers on the LAN.
+    search: Option<voltra_net::LanSearch>,
     /// The session's clock: the sum of the frames' deltas, so a headless
     /// run is as deterministic as its steps.
     now: Duration,
@@ -62,6 +74,9 @@ impl Net {
         self.endpoint = Some(endpoint);
         self.replication = None;
         self.replication_refused = false;
+        self.lobby = None;
+        self.lobby_refused = false;
+        self.advertising = None;
         self.stopping = false;
         self.goodbye_heard = false;
     }
@@ -70,12 +85,15 @@ impl Net {
     /// players, WebSockets for browser ones — from the next frame. With
     /// [`HostOptions::listen`] this game plays too, as
     /// [`PeerId::SERVER`]: a listen server, whose own player joins in the
-    /// next frame's events like any other. Fails if a port will not open,
-    /// and always in a browser, which cannot listen.
+    /// next frame's events like any other. With
+    /// [`HostOptions::discovery`] it answers LAN probes too (a port that
+    /// will not open for those is a warning). Fails if a game port will
+    /// not open, and always in a browser, which cannot listen.
     pub fn host(&mut self, options: &HostOptions) -> Result<(), SessionError> {
         let mut options = options.clone();
         options.config = self.session_config(options.config);
         self.start(voltra_net::host(&options)?);
+        self.advertise_host(&options);
         Ok(())
     }
 
@@ -204,16 +222,21 @@ impl Net {
         if let Some(endpoint) = self.endpoint.as_mut() {
             endpoint.receive(self.now);
         }
+        self.receive_lobby();
+        self.poll_discovery();
         self.goodbye_heard = self.stopping;
     }
 
     pub(super) fn flush(&mut self) {
+        self.send_lobby();
         if let Some(endpoint) = self.endpoint.as_mut() {
             endpoint.flush(self.now);
         }
         if self.goodbye_heard {
             self.endpoint = None;
             self.replication = None;
+            self.lobby = None;
+            self.advertising = None;
             self.stopping = false;
             self.goodbye_heard = false;
         }

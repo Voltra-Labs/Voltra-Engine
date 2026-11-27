@@ -243,6 +243,21 @@ fn fingerprint() -> u64 {
     component::<voltra_physics::Rewound<'static>>(&mut hasher);
     component::<voltra_physics::PoseHistory>(&mut hasher);
     component::<voltra_net::NetConfig>(&mut hasher);
+    // The lobby and LAN discovery: what `tick.net.lobby()` hands a game,
+    // the events it reads, what it configures and the servers it lists.
+    component::<voltra_net::LobbyConfig>(&mut hasher);
+    component::<voltra_net::LobbySession>(&mut hasher);
+    component::<voltra_net::Lobby>(&mut hasher);
+    component::<voltra_net::LobbyEntry>(&mut hasher);
+    component::<voltra_net::LobbyEvent>(&mut hasher);
+    component::<voltra_net::LobbyError>(&mut hasher);
+    component::<voltra_net::ServerInfo>(&mut hasher);
+    component::<voltra_net::SearchOptions>(&mut hasher);
+    component::<voltra_net::Advertise>(&mut hasher);
+    component::<voltra_net::HostOptions>(&mut hasher);
+    component::<crate::lobby::LobbyScreen>(&mut hasher);
+    component::<crate::lobby::LobbyScreenConfig>(&mut hasher);
+    component::<crate::lobby::LobbyOutcome>(&mut hasher);
     mix::<voltra_physics::CollisionEvent>(&mut hasher);
     mix::<voltra_physics::JointBroken>(&mut hasher);
     mix::<voltra_render::glam::Vec2>(&mut hasher);

@@ -43,12 +43,14 @@ impl Net {
         self.replication_config.is_some()
     }
 
-    /// `config` with replication's channels, when it is on.
+    /// `config` with replication's channels, when it is on, and the
+    /// lobby's: the config a session is made with.
     pub(super) fn session_config(&self, config: NetConfig) -> NetConfig {
-        match &self.replication_config {
+        let config = match &self.replication_config {
             Some(replication) => replication.net_config(config),
             None => config,
-        }
+        };
+        self.lobby_session_config(config)
     }
 
     /// This session's replication, once it has started.
