@@ -111,6 +111,11 @@ impl ReplicationServer {
         self.tick
     }
 
+    /// A server tick's length, in seconds.
+    pub fn step(&self) -> f32 {
+        self.step
+    }
+
     /// The clients it replicates to.
     pub fn clients(&self) -> impl Iterator<Item = PeerId> + '_ {
         self.clients.keys().copied()
@@ -198,6 +203,17 @@ impl ReplicationServer {
         self.clients
             .get(&peer)
             .and_then(|view| view.inputs.current.as_deref())
+    }
+
+    /// The moment `peer` was drawing remote entities at when it made this
+    /// step's input, as it reported — the client's word, to be bounded
+    /// ([`LagCompensation::target`](crate::LagCompensation::target))
+    /// before a shot is rewound to it. `None` with no input this step, or
+    /// one made before its first snapshot.
+    pub fn view_time(&self, peer: PeerId) -> Option<crate::ViewTime> {
+        self.clients
+            .get(&peer)
+            .and_then(|view| view.inputs.current_view)
     }
 
     /// Sends each client its snapshot, if one is due: at most one per tick,

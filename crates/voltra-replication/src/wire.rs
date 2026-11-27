@@ -10,6 +10,8 @@
 use serde::{Deserialize, Serialize};
 use voltra_scene::SceneId;
 
+use crate::ViewTime;
+
 /// The version of what this module lays on the wire. **Bump it on any
 /// change to a replication message** — a field added to [`Control`],
 /// [`SnapshotHeader`], [`EntityUpdate`], [`Spawn`] or [`ClientMessage`],
@@ -20,8 +22,9 @@ use voltra_scene::SceneId;
 /// door with `ProtocolMismatch`.
 ///
 /// `1`: stage 114's (0.3). `2`: stage 127's interest — the schema's
-/// `interest` flag and the snapshot's `culled` list.
-pub const REPLICATION_WIRE_VERSION: u32 = 2;
+/// `interest` flag and the snapshot's `culled` list. `3`: stage 128's lag
+/// compensation — each input's [`ViewTime`].
+pub const REPLICATION_WIRE_VERSION: u32 = 3;
 
 /// A replicated entity's number in a session: given by the server, never
 /// reused while it runs, and far smaller on the wire than a [`SceneId`].
@@ -110,8 +113,11 @@ pub(crate) struct ClientMessage {
     /// `n + 1` ticks before it.
     pub(crate) newest: ServerTick,
     pub(crate) mask: u64,
-    /// The recent inputs not yet acknowledged, oldest first.
-    pub(crate) inputs: Vec<(InputTick, Vec<u8>)>,
+    /// The recent inputs not yet acknowledged, oldest first, each with
+    /// the moment the client was drawing remote entities at when it made
+    /// it (`None` before its first snapshot) — what a lag-compensated
+    /// shot in it is tested against.
+    pub(crate) inputs: Vec<(InputTick, Option<ViewTime>, Vec<u8>)>,
     /// Entities a snapshot updated that this client has no copy of — its
     /// game despawned one — to be sent whole again.
     pub(crate) resync: Vec<NetId>,

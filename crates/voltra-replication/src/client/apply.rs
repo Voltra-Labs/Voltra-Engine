@@ -72,7 +72,7 @@ impl ReplicationClient {
         while self
             .inputs
             .front()
-            .is_some_and(|(t, _)| *t <= self.input_ack)
+            .is_some_and(|(t, _, _)| *t <= self.input_ack)
         {
             self.inputs.pop_front();
         }

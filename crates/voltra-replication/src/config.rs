@@ -2,7 +2,7 @@
 
 use voltra_net::{ChannelId, ChannelKind, NetConfig, DEFAULT_CHANNELS};
 
-use crate::Interest;
+use crate::{Interest, LagCompensation};
 
 /// The three channels replication owns, beside the game's.
 ///
@@ -90,6 +90,12 @@ pub struct ReplicationConfig {
     /// it watches. `None`, the default, sends every client every replicated
     /// entity. Only the server's is read.
     pub interest: Option<Interest>,
+    /// Lag compensation: how much of the past the server keeps of its
+    /// `LagCompensated` colliders, and how far back a client's shot may be
+    /// tested. On by default — it records only what a game marks; `None`
+    /// keeps nothing, and every rewound query is a query of the world as
+    /// it is. Only the server's is read.
+    pub lag_compensation: Option<LagCompensation>,
 }
 
 impl Default for ReplicationConfig {
@@ -104,6 +110,7 @@ impl Default for ReplicationConfig {
             input_redundancy: 8,
             min_delay_snapshots: 1.0,
             interest: None,
+            lag_compensation: Some(LagCompensation::default()),
         }
     }
 }

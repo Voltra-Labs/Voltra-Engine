@@ -5,10 +5,20 @@ use voltra_net::{Endpoint, PeerId};
 
 use super::{ReplicationClient, MAX_PENDING_INPUTS};
 use crate::wire::{self, ClientMessage, InputTick};
+use crate::ViewTime;
 
 impl ReplicationClient {
+    /// The moment remote entities were last drawn at: what the player is
+    /// looking at, which each input carries for the server's lag
+    /// compensation. `None` before the first snapshot is drawn.
+    pub fn view_time(&self) -> Option<ViewTime> {
+        self.timeline.drawn_tick().and_then(ViewTime::from_ticks)
+    }
+
     /// Queues an input for the server, sent with the next few
-    /// [`send`](Self::send)s until acknowledged.
+    /// [`send`](Self::send)s until acknowledged — with the moment the
+    /// player was looking at ([`view_time`](Self::view_time)), which a
+    /// shot in it is tested against.
     pub fn queue_input(&mut self, tick: InputTick, bytes: Vec<u8>) {
         if bytes.len() > self.config.max_input_size {
             log::warn!(
@@ -18,7 +28,8 @@ impl ReplicationClient {
             );
             return;
         }
-        self.inputs.push_back((tick, bytes));
+        let view = self.view_time();
+        self.inputs.push_back((tick, view, bytes));
         while self.inputs.len() > MAX_PENDING_INPUTS {
             self.inputs.pop_front();
         }

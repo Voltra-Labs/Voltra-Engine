@@ -23,7 +23,7 @@ use voltra_scene::{ComponentRegistry, Prefabs, ReplicatedComponent};
 
 use crate::acks::ReceivedTicks;
 use crate::wire::{Control, InputTick, NetId, ServerTick, Snapshot};
-use crate::{ReplicationConfig, Timeline};
+use crate::{ReplicationConfig, Timeline, ViewTime};
 
 mod apply;
 mod interpolate;
@@ -101,7 +101,7 @@ pub struct ReplicationClient {
     by_entity: HashMap<Entity, NetId>,
     received: ReceivedTicks,
     input_ack: InputTick,
-    inputs: VecDeque<(InputTick, Vec<u8>)>,
+    inputs: VecDeque<(InputTick, Option<ViewTime>, Vec<u8>)>,
     resync: Vec<NetId>,
     predicted: Option<NetId>,
     correction: Option<Correction>,

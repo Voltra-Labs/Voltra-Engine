@@ -3,7 +3,7 @@
 //! Above `voltra-net`'s connections and beside the scene: components a game
 //! registers as replicated ([`ComponentRegistry::replicate`]) on entities
 //! marked [`Replicated`] are sent by the server — spawned, changed and
-//! despawned — and a client's world follows. Four parts, one per stage of
+//! despawned — and a client's world follows. Five parts, one per stage of
 //! the plan:
 //!
 //! - **Snapshots and deltas** ([`ReplicationServer`], stage 114): a
@@ -21,6 +21,9 @@
 //! - **Prediction** ([`Prediction`], stage 116): the entity this client
 //!   owns ([`NetOwner`]) simulated ahead with the player's inputs, put back
 //!   to the server's state and replayed when that state arrives.
+//! - **Lag compensation** ([`LagCompensation`], stage 128): each input
+//!   carries the moment its client was drawing ([`ViewTime`]), which the
+//!   server's hit tests rewind to, within a bound.
 //!
 //! The engine's loop drives all of it through `tick.net` (`voltra-core`);
 //! this crate is the part that knows neither a window nor a frame.
@@ -40,6 +43,7 @@ mod acks;
 mod client;
 mod config;
 mod interest;
+mod lag;
 mod owner;
 mod prediction;
 mod server;
@@ -49,6 +53,7 @@ mod wire;
 pub use client::{Correction, ReplicaStats, ReplicationClient};
 pub use config::{ReplicationChannels, ReplicationConfig};
 pub use interest::{Interest, InterestGrid, MAX_CELLS_PER_AXIS};
+pub use lag::{LagCompensation, ViewTime};
 pub use owner::NetOwner;
 pub use prediction::{Prediction, PredictionStats};
 pub use server::{ClientReplicationStats, ReplicationServer, MAX_INTEREST_POINTS};
