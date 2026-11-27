@@ -40,7 +40,8 @@ pub(super) fn show(ui: &mut Ui, replicated: &mut Replicated) -> Option<&'static 
         );
         let mut own = replicated.relevance_radius.is_some();
         if ui.checkbox(&mut own, "").changed() {
-            replicated.relevance_radius = own.then_some(30.0);
+            replicated.relevance_radius =
+                own.then_some(voltra_core::replication::Interest::default().radius);
             claim = claim.or(Some("Set replication"));
         }
         ui.end_row();
