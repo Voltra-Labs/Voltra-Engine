@@ -99,6 +99,9 @@ impl Default for Trail2D {
 }
 
 impl Trail2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Trail2D";
+
     /// Ages every point by `dt`, drops the dead, and drops a new point at
     /// `head` if the entity has moved far enough from the last one.
     pub fn advance(&mut self, head: Vec2, dt: f32) {

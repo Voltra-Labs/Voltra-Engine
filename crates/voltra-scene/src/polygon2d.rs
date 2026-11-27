@@ -66,6 +66,9 @@ impl Default for Polygon2D {
 }
 
 impl Polygon2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Polygon2D";
+
     /// The triangles it is drawn as, in its entity's space; the texture's
     /// top-left at the bounds' top-left. A polygon that crosses itself is
     /// still drawn — as far as it can be cut — and warned about.

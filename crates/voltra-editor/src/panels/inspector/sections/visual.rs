@@ -29,25 +29,33 @@ pub(in crate::panels::inspector) fn show(
     multi: &mut MultiEdit,
 ) -> Option<&'static str> {
     let mut claim = None;
-    if let Some(transform) = gate(frame.world.get_mut::<Transform>(entity), multi, "Transform") {
-        mixed::marker(ui, multi, &["Transform"]);
-        let fields = Fields::of(multi, "Transform");
+    if let Some(transform) = gate(
+        frame.world.get_mut::<Transform>(entity),
+        multi,
+        Transform::NAME,
+    ) {
+        mixed::marker(ui, multi, &[Transform::NAME]);
+        let fields = Fields::of(multi, Transform::NAME);
         claim = claim.or(transform::show(ui, transform, fields));
     }
     let parent_rect = ui_parent_rect(ui, frame, entity);
     let stacked = hierarchy::parent_of(frame.world, entity)
         .is_some_and(|parent| frame.world.get::<UiStack>(parent).is_some());
-    if let Some(rect) = gate(frame.world.get_mut::<UiRect>(entity), multi, "UiRect") {
-        mixed::marker(ui, multi, &["UiRect"]);
+    if let Some(rect) = gate(frame.world.get_mut::<UiRect>(entity), multi, UiRect::NAME) {
+        mixed::marker(ui, multi, &[UiRect::NAME]);
         claim = claim.or(ui_rect::show(ui, rect, parent_rect, stacked));
     }
     let shown = frame.world.get::<Sprite>(entity).map_or(0, |s| s.frame);
-    if let Some(button) = gate(frame.world.get_mut::<UiButton>(entity), multi, "UiButton") {
-        mixed::marker(ui, multi, &["UiButton"]);
+    if let Some(button) = gate(
+        frame.world.get_mut::<UiButton>(entity),
+        multi,
+        UiButton::NAME,
+    ) {
+        mixed::marker(ui, multi, &[UiButton::NAME]);
         claim = claim.or(ui_button::show(ui, button, shown));
     }
-    if multi.editable(&["UiStack"]) {
-        mixed::marker(ui, multi, &["UiStack"]);
+    if multi.editable(&[UiStack::NAME]) {
+        mixed::marker(ui, multi, &[UiStack::NAME]);
         claim = claim.or(ui_stack::show(ui, frame.world, entity));
     }
     claim = claim.or(ui_controls::show(ui, frame.world, entity, multi));
@@ -69,18 +77,18 @@ pub(in crate::panels::inspector) fn show(
         .map(|atlas| atlas.len())
         .unwrap_or(0);
 
-    let sprite_shared = multi.editable(&["Sprite"]);
+    let sprite_shared = multi.editable(&[Sprite::NAME]);
     if let Some(sprite) = frame
         .world
         .get_mut::<Sprite>(entity)
         .filter(|_| sprite_shared)
     {
         ui.separator();
-        mixed::marker(ui, multi, &["Sprite"]);
+        mixed::marker(ui, multi, &[Sprite::NAME]);
         claim = claim.or(sprite::show(
             ui,
             sprite,
-            Fields::of(multi, "Sprite"),
+            Fields::of(multi, Sprite::NAME),
             particles::Stores {
                 textures: frame.textures,
                 atlases: frame.atlases,
@@ -98,14 +106,15 @@ pub(in crate::panels::inspector) fn show(
         let materials = frame.materials.as_deref_mut();
         claim = claim.or(sprite_material::show(ui, &mut sprite.material, materials));
     }
-    if multi.editable(&["UiSlice"]) {
-        mixed::marker(ui, multi, &["UiSlice"]);
+    if multi.editable(&[voltra_scene::UiSlice::NAME]) {
+        mixed::marker(ui, multi, &[voltra_scene::UiSlice::NAME]);
         claim = claim.or(ui_slice::show(ui, frame.world, entity));
     }
-    if frame.world.get::<Sprite>(entity).is_some() && multi.editable(&["Sprite", "SpriteAnimation"])
+    if frame.world.get::<Sprite>(entity).is_some()
+        && multi.editable(&[Sprite::NAME, voltra_scene::SpriteAnimation::NAME])
     {
         ui.separator();
-        mixed::marker(ui, multi, &["SpriteAnimation"]);
+        mixed::marker(ui, multi, &[voltra_scene::SpriteAnimation::NAME]);
         claim = claim.or(animation::show(ui, frame.world, entity, frames_in_atlas));
     }
     let sheet = frame
@@ -113,14 +122,14 @@ pub(in crate::panels::inspector) fn show(
         .get::<Tilemap>(entity)
         .and_then(|map| map.texture_handle)
         .and_then(|handle| frame.thumbnail(handle));
-    let map_shared = multi.editable(&["Tilemap"]);
+    let map_shared = multi.editable(&[Tilemap::NAME]);
     if let Some(map) = frame
         .world
         .get_mut::<Tilemap>(entity)
         .filter(|_| map_shared)
     {
         ui.separator();
-        mixed::marker(ui, multi, &["Tilemap"]);
+        mixed::marker(ui, multi, &[Tilemap::NAME]);
         claim = claim.or(tilemap::show(
             ui,
             map,
@@ -143,18 +152,18 @@ pub(in crate::panels::inspector) fn show(
         let materials = frame.materials.as_deref_mut();
         claim = claim.or(sprite_material::show(ui, &mut map.material, materials));
     }
-    if let Some(text) = gate(frame.world.get_mut::<Text>(entity), multi, "Text") {
+    if let Some(text) = gate(frame.world.get_mut::<Text>(entity), multi, Text::NAME) {
         ui.separator();
-        mixed::marker(ui, multi, &["Text"]);
+        mixed::marker(ui, multi, &[Text::NAME]);
         claim = claim.or(text::show(ui, text, frame.fonts, on_screen));
     }
     if let Some(emitter) = gate(
         frame.world.get_mut::<ParticleEmitter>(entity),
         multi,
-        "ParticleEmitter",
+        ParticleEmitter::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &["ParticleEmitter"]);
+        mixed::marker(ui, multi, &[ParticleEmitter::NAME]);
         let (edited, preset) = particles::show(
             ui,
             emitter,
@@ -174,16 +183,16 @@ pub(in crate::panels::inspector) fn show(
                     claim = Some("Apply particle preset");
                 }
             }
-            multi.done_for_each("ParticleEmitter");
+            multi.done_for_each(ParticleEmitter::NAME);
         }
     }
     if let Some(line) = gate(
         frame.world.get_mut::<voltra_scene::Line2D>(entity),
         multi,
-        "Line2D",
+        voltra_scene::Line2D::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &["Line2D"]);
+        mixed::marker(ui, multi, &[voltra_scene::Line2D::NAME]);
         claim = claim.or(shapes2d::line(
             ui,
             line,
@@ -199,10 +208,10 @@ pub(in crate::panels::inspector) fn show(
     if let Some(polygon) = gate(
         frame.world.get_mut::<voltra_scene::Polygon2D>(entity),
         multi,
-        "Polygon2D",
+        voltra_scene::Polygon2D::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &["Polygon2D"]);
+        mixed::marker(ui, multi, &[voltra_scene::Polygon2D::NAME]);
         claim = claim.or(shapes2d::polygon(
             ui,
             polygon,
@@ -218,10 +227,10 @@ pub(in crate::panels::inspector) fn show(
     if let Some(trail) = gate(
         frame.world.get_mut::<voltra_scene::Trail2D>(entity),
         multi,
-        "Trail2D",
+        voltra_scene::Trail2D::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &["Trail2D"]);
+        mixed::marker(ui, multi, &[voltra_scene::Trail2D::NAME]);
         claim = claim.or(shapes2d::trail(
             ui,
             trail,

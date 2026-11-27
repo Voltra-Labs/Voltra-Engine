@@ -27,6 +27,11 @@ pub use ik::{solve_two_bone, TwoBoneIk};
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Skeleton2D {}
 
+impl Skeleton2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Skeleton2D";
+}
+
 /// The nearest ancestor of `entity` (or `entity` itself) that is a
 /// [`Skeleton2D`].
 pub fn skeleton_of(world: &World, entity: Entity) -> Option<Entity> {

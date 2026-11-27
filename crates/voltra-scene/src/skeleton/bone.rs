@@ -28,6 +28,9 @@ impl Default for Bone2D {
 }
 
 impl Bone2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Bone2D";
+
     /// A bone `length` long resting in `rest`.
     pub fn new(length: f32, rest: Transform) -> Self {
         Self { length, rest }

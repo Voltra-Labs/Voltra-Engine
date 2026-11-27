@@ -121,6 +121,9 @@ impl Default for LightCone {
 }
 
 impl PointLight2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "PointLight2D";
+
     /// The light as the renderer takes it, carried by `matrix` (the
     /// entity's composed transform): placed at its origin, its radius
     /// scaled by the larger axis, a spot light's cone along its +x as the

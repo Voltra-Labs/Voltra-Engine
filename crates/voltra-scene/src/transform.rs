@@ -29,6 +29,9 @@ impl Default for Transform {
 }
 
 impl Transform {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Transform";
+
     /// A transform at `translation`, unrotated and unscaled.
     pub fn from_translation(translation: Vec2) -> Self {
         Self {

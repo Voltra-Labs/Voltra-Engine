@@ -103,6 +103,9 @@ impl Default for UiRect {
 }
 
 impl UiRect {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiRect";
+
     /// A fixed-size box pinned to `anchor` of its parent, `offset` points
     /// from it, extending away from the anchored edge — so `(1, 0)` with an
     /// offset of `(-16, 16)` is a box whose top-right corner is 16 points in

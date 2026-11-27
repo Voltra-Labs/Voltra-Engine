@@ -137,7 +137,7 @@ fn bus_ui(ui: &mut Ui, source: &mut AudioSource, audio: &mut Audio) -> Option<&'
             for name in audio.buses().names() {
                 let clicked = ui.selectable_label(name == shown, name).clicked();
                 if clicked {
-                    mixed::touch(ui, "AudioSource", vec![Step::Field("bus")]);
+                    mixed::touch(ui, AudioSource::NAME, vec![Step::Field("bus")]);
                 }
                 if clicked && name != shown {
                     picked = Some(name.to_owned());

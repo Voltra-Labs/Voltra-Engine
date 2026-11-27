@@ -27,7 +27,7 @@ pub(super) fn show(
         device,
         queue,
     } = stores;
-    ui.label(RichText::new("Sprite").strong());
+    ui.label(RichText::new(Sprite::NAME).strong());
 
     let mut claim = None;
     egui::Grid::new("sprite").num_columns(2).show(ui, |ui| {

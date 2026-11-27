@@ -26,6 +26,11 @@ pub struct AudioListener {
     pub active: bool,
 }
 
+impl AudioListener {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "AudioListener";
+}
+
 impl Default for AudioListener {
     fn default() -> Self {
         Self { active: true }

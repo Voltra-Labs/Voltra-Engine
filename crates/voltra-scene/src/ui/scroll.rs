@@ -56,6 +56,9 @@ impl Default for UiScroll {
 }
 
 impl UiScroll {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiScroll";
+
     /// The offset the layout moves the content by: none on an axis that does
     /// not scroll, and none for a value that is not a number.
     pub fn shift(&self) -> Vec2 {

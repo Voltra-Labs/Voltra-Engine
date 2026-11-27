@@ -7,9 +7,10 @@ use super::active;
 
 /// The factor per axis: 1 moves with the world, 0 stays with the camera.
 pub(super) fn show(ui: &mut Ui, parallax: &mut Parallax) -> Option<&'static str> {
-    ui.label(RichText::new("Parallax").strong()).on_hover_text(
-        "drawn as if the camera moved this much: 1 = world, 0 = fixed to the camera",
-    );
+    ui.label(RichText::new(Parallax::NAME).strong())
+        .on_hover_text(
+            "drawn as if the camera moved this much: 1 = world, 0 = fixed to the camera",
+        );
     let mut claim = None;
     egui::Grid::new("parallax").num_columns(3).show(ui, |ui| {
         ui.label("factor");

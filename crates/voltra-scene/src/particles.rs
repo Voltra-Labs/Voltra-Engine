@@ -185,6 +185,9 @@ impl Default for ParticleEmitter {
 }
 
 impl ParticleEmitter {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "ParticleEmitter";
+
     /// Emits `count` particles at once on the next advance, on top of the
     /// rate — an explosion, a coin's sparkle.
     pub fn burst(&mut self, count: u32) {

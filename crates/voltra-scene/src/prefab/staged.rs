@@ -33,7 +33,7 @@ mod order;
 use order::parents_first;
 
 /// The name a parent link is stored under in a scene file.
-const PARENT: &str = "Parent";
+const PARENT: &str = Parent::NAME;
 
 /// A scene file ready to be spawned one entity at a time.
 #[derive(Debug)]

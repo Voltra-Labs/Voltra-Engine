@@ -9,6 +9,11 @@ use voltra_scene::ComponentRegistry;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct Walker;
 
+impl Walker {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Walker";
+}
+
 /// On the walker: the velocity it keeps between steps, which
 /// `move_and_slide` answers and the next step starts from.
 ///
@@ -25,12 +30,22 @@ pub struct WalkerMotion {
     pub velocity: Vec2,
 }
 
+impl WalkerMotion {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "WalkerMotion";
+}
+
 /// Something to pick up, worth `value` on the counter.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Coin {
     /// What it adds to the coin counter.
     pub value: u32,
+}
+
+impl Coin {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Coin";
 }
 
 impl Default for Coin {
@@ -45,6 +60,11 @@ impl Default for Coin {
 pub struct Goal {
     /// A scene file under the asset root.
     pub next: String,
+}
+
+impl Goal {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Goal";
 }
 
 impl Default for Goal {
@@ -70,29 +90,44 @@ pub struct CoinCounter {
     pub total: u32,
 }
 
+impl CoinCounter {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "CoinCounter";
+}
+
 /// The button that saves, as F5 does.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct SaveButton;
+
+impl SaveButton {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "SaveButton";
+}
 
 /// The button that goes fullscreen and back, as F11 does.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct FullscreenButton;
 
+impl FullscreenButton {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "FullscreenButton";
+}
+
 /// Names every component above, each but [`WalkerMotion`] with its default
 /// as the template the editor's "Add component" starts from.
 pub fn register(registry: &mut ComponentRegistry) {
-    registry.register::<Walker>("Walker").with_template();
+    registry.register::<Walker>(Walker::NAME).with_template();
     // No template: the walker's step puts it there, not an author.
-    registry.register::<WalkerMotion>("WalkerMotion");
-    registry.register::<Coin>("Coin").with_template();
-    registry.register::<Goal>("Goal").with_template();
+    registry.register::<WalkerMotion>(WalkerMotion::NAME);
+    registry.register::<Coin>(Coin::NAME).with_template();
+    registry.register::<Goal>(Goal::NAME).with_template();
     registry
-        .register::<CoinCounter>("CoinCounter")
+        .register::<CoinCounter>(CoinCounter::NAME)
         .with_template();
     registry
-        .register::<SaveButton>("SaveButton")
+        .register::<SaveButton>(SaveButton::NAME)
         .with_template();
     registry
-        .register::<FullscreenButton>("FullscreenButton")
+        .register::<FullscreenButton>(FullscreenButton::NAME)
         .with_template();
 }

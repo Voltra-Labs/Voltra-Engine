@@ -35,6 +35,11 @@ pub struct TwoBoneIk {
     pub enabled: bool,
 }
 
+impl TwoBoneIk {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "TwoBoneIk";
+}
+
 fn enabled() -> bool {
     true
 }

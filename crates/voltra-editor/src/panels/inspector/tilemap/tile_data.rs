@@ -57,7 +57,7 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &Paint) -> Option<&'st
             for name in SHAPES {
                 let response = ui.selectable_label(shape_name(&data.shape) == name, name);
                 let path = shape_path(frame, &[]);
-                if mixed::chosen_variant(ui, response, "Tilemap", path).clicked() {
+                if mixed::chosen_variant(ui, response, Tilemap::NAME, path).clicked() {
                     picked = Some(name);
                 }
             }
@@ -101,7 +101,8 @@ fn shape_fields(ui: &mut Ui, shape: &mut TileShape, frame: u32) -> Option<&'stat
                 ] {
                     let response = ui.selectable_label(*side == value, label);
                     let path = shape_path(frame, &[Step::Variant("Half")]);
-                    if mixed::chosen(ui, response, "Tilemap", path).clicked() && *side != value {
+                    if mixed::chosen(ui, response, Tilemap::NAME, path).clicked() && *side != value
+                    {
                         *side = value;
                         claim = Some("Set tile shape");
                     }

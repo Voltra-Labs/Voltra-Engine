@@ -160,6 +160,9 @@ impl Default for Sprite {
 }
 
 impl Sprite {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Sprite";
+
     /// Half the width and height of the quad a sprite covers, before its
     /// transform is applied.
     ///

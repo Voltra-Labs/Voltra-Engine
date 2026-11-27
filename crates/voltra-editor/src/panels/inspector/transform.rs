@@ -13,7 +13,7 @@ pub(super) fn show(
     transform: &mut Transform,
     mixed: Fields<'_>,
 ) -> Option<&'static str> {
-    ui.label(RichText::new("Transform").strong());
+    ui.label(RichText::new(Transform::NAME).strong());
 
     let mut claim = None;
     egui::Grid::new("transform").num_columns(2).show(ui, |ui| {

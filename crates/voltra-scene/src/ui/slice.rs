@@ -77,6 +77,9 @@ pub struct Image {
 }
 
 impl UiSlice {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiSlice";
+
     /// The pieces covering `rect` — in pixels, y down — with borders drawn
     /// at `pixels_per_point` times their size in points. Pieces of no area
     /// are left out, and so is the middle when [`center`](Self::center) is

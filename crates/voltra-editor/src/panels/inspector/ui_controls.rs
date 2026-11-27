@@ -27,42 +27,46 @@ pub(super) fn show(
         }
         shared
     };
-    if world.get::<UiToggle>(entity).is_some() && open(ui, "UiToggle") {
+    if world.get::<UiToggle>(entity).is_some() && open(ui, UiToggle::NAME) {
         if let Some(toggle) = world.get_mut::<UiToggle>(entity) {
             claim = claim.or(ui_toggle::show(ui, toggle));
         }
     }
-    if world.get::<UiSlider>(entity).is_some() && open(ui, "UiSlider") {
+    if world.get::<UiSlider>(entity).is_some() && open(ui, UiSlider::NAME) {
         if let Some(slider) = world.get_mut::<UiSlider>(entity) {
             claim = claim.or(ui_slider::show(ui, slider));
         }
     }
-    if world.get::<UiSliderPart>(entity).is_some() && open(ui, "UiSliderPart") {
+    if world.get::<UiSliderPart>(entity).is_some() && open(ui, UiSliderPart::NAME) {
         if let Some(part) = world.get_mut::<UiSliderPart>(entity) {
             claim = claim.or(ui_slider::show_part(ui, part));
         }
     }
-    if world.get::<UiTextField>(entity).is_some() && open(ui, "UiTextField") {
+    if world.get::<UiTextField>(entity).is_some() && open(ui, UiTextField::NAME) {
         if let Some(field) = world.get_mut::<UiTextField>(entity) {
             claim = claim.or(ui_text_field::show(ui, field));
         }
     }
-    if world.get::<UiDropdown>(entity).is_some() && open(ui, "UiDropdown") {
+    if world.get::<UiDropdown>(entity).is_some() && open(ui, UiDropdown::NAME) {
         if let Some(dropdown) = world.get_mut::<UiDropdown>(entity) {
             claim = claim.or(ui_dropdown::show(ui, dropdown));
         }
     }
-    if world.get::<UiTooltip>(entity).is_some() && open(ui, "UiTooltip") {
+    if world.get::<UiTooltip>(entity).is_some() && open(ui, UiTooltip::NAME) {
         if let Some(tooltip) = world.get_mut::<UiTooltip>(entity) {
             claim = claim.or(ui_tooltip::show(ui, tooltip));
         }
     }
-    if multi.editable(&["UiTabs", "UiTab"]) {
-        mixed::marker(ui, multi, &["UiTabs", "UiTab"]);
+    if multi.editable(&[voltra_scene::UiTabs::NAME, voltra_scene::UiTab::NAME]) {
+        mixed::marker(
+            ui,
+            multi,
+            &[voltra_scene::UiTabs::NAME, voltra_scene::UiTab::NAME],
+        );
         claim = claim.or(ui_tabs::show(ui, world, entity));
     }
-    if multi.editable(&["UiScroll"]) {
-        mixed::marker(ui, multi, &["UiScroll"]);
+    if multi.editable(&[voltra_scene::UiScroll::NAME]) {
+        mixed::marker(ui, multi, &[voltra_scene::UiScroll::NAME]);
         claim = claim.or(ui_scroll::show(ui, world, entity));
     }
     claim

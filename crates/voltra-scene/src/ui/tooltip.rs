@@ -83,6 +83,9 @@ impl Default for UiTooltip {
 }
 
 impl UiTooltip {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiTooltip";
+
     /// A tooltip saying `text`, every other field at its default.
     pub fn new(text: impl Into<String>) -> Self {
         Self {

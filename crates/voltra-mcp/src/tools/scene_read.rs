@@ -22,12 +22,12 @@ pub fn scene_read(project: &Project, path: &str) -> ToolResult {
         .map(|record| {
             let name = record
                 .components
-                .get("Name")
+                .get(Name::NAME)
                 .and_then(|raw| raw.into_rust::<Name>().ok())
                 .map(|name| name.as_str().to_owned());
             let parent = record
                 .components
-                .get("Parent")
+                .get(Parent::NAME)
                 .and_then(|raw| raw.into_rust::<Parent>().ok())
                 .map(|parent| parent.id.0.to_string());
             let components: Map<String, Value> = record

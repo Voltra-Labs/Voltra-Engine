@@ -114,6 +114,9 @@ impl ListBox {
 }
 
 impl UiDropdown {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiDropdown";
+
     /// The chosen option's text; empty with no options.
     pub fn selected_text(&self) -> &str {
         self.options.get(self.selected).map_or("", String::as_str)

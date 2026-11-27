@@ -89,6 +89,9 @@ impl Default for RigidBody {
 }
 
 impl RigidBody {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "RigidBody";
+
     /// A dynamic body of `mass`.
     ///
     /// A mass of zero or less means "cannot be pushed" rather than "infinitely

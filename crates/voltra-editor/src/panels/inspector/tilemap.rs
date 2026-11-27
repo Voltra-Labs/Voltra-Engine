@@ -33,7 +33,7 @@ pub(super) fn show(
     queue: &wgpu::Queue,
     palette: Palette<'_>,
 ) -> Option<&'static str> {
-    ui.label(RichText::new("Tilemap").strong());
+    ui.label(RichText::new(Tilemap::NAME).strong());
 
     let mut claim = None;
     egui::Grid::new("tilemap").num_columns(2).show(ui, |ui| {

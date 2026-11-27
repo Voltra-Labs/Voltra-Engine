@@ -39,9 +39,13 @@ pub(in crate::panels::inspector) fn show(
         .world
         .get::<Sprite>(entity)
         .is_some_and(|sprite| sprite.texture.is_some());
-    if let Some(shape) = gate(frame.world.get_mut::<Collider>(entity), multi, "Collider") {
+    if let Some(shape) = gate(
+        frame.world.get_mut::<Collider>(entity),
+        multi,
+        Collider::NAME,
+    ) {
         ui.separator();
-        mixed::marker(ui, multi, &["Collider"]);
+        mixed::marker(ui, multi, &[Collider::NAME]);
         let outcome = collider::show(ui, shape, textured);
         claim = claim.or(outcome.claim);
         if let Some(kind) = outcome.kind {
@@ -54,7 +58,7 @@ pub(in crate::panels::inspector) fn show(
                     }
                 }
             }
-            multi.done_for_each("Collider");
+            multi.done_for_each(Collider::NAME);
         }
         if outcome.fit_to_sprite {
             // Fitted to the frame shown: the authored one.
@@ -66,16 +70,20 @@ pub(in crate::panels::inspector) fn show(
             for each in fitted {
                 claim = claim.or(fit_to_sprite(frame, each));
             }
-            multi.done_for_each("Collider");
+            multi.done_for_each(Collider::NAME);
         }
     }
-    let filter = ["CollisionLayers", "OneWay", "Sensor"];
+    let filter = [
+        voltra_scene::CollisionLayers::NAME,
+        voltra_scene::OneWay::NAME,
+        voltra_scene::Sensor::NAME,
+    ];
     if (has_collider || solid_layer) && multi.editable(&filter) {
         ui.separator();
         mixed::marker(ui, multi, &filter);
         claim = claim.or(collision::show(ui, frame.world, entity));
     }
-    let body = ["CharacterBody2D"];
+    let body = [voltra_scene::CharacterBody2D::NAME];
     if multi.editable(&body) {
         mixed::marker(ui, multi, &body);
         claim = claim.or(character::show(ui, frame.world, entity));
@@ -94,7 +102,7 @@ pub(in crate::panels::inspector) fn show(
         .world
         .get::<voltra_scene::ShadowCaster2D>(entity)
         .is_some();
-    let caster = ["ShadowCaster2D"];
+    let caster = [voltra_scene::ShadowCaster2D::NAME];
     if (has_collider || solid_layer || has_sprite || casts) && multi.editable(&caster) {
         // Read before the world is borrowed mutably below: the
         // sprite's quad is resolved against the frame's sheets.
@@ -165,7 +173,7 @@ fn add_casters_to_rest(frame: &mut UiFrame<'_>, multi: &mut MultiEdit) {
         let caster = shadow_caster::starting_caster(has_collider, starting);
         frame.world.insert(entity, caster);
     }
-    multi.done_for_each("ShadowCaster2D");
+    multi.done_for_each(voltra_scene::ShadowCaster2D::NAME);
 }
 
 /// Shapes every other selected caster by its own polygon — its collider's
@@ -186,7 +194,7 @@ fn own_polygons_for_rest(frame: &mut UiFrame<'_>, multi: &mut MultiEdit) {
             closed: true,
         };
     }
-    multi.done_for_each("ShadowCaster2D");
+    multi.done_for_each(voltra_scene::ShadowCaster2D::NAME);
 }
 
 /// Shapes `entity`'s collider as the convex hull of its sprite's opaque

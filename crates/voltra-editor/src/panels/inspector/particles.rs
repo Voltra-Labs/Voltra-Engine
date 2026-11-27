@@ -152,7 +152,7 @@ fn drawing(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'static str> {
                     .selectable_value(&mut emitter.simulation, option, name(option))
                     .clicked()
                 {
-                    mixed::touch(ui, "ParticleEmitter", vec![Step::Field("simulation")]);
+                    mixed::touch(ui, ParticleEmitter::NAME, vec![Step::Field("simulation")]);
                 }
             }
         })

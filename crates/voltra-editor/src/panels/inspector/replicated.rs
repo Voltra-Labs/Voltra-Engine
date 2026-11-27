@@ -9,7 +9,7 @@ use super::active;
 /// Its priority, whether every client is sent it, and its own relevance
 /// radius when it has one.
 pub(super) fn show(ui: &mut Ui, replicated: &mut Replicated) -> Option<&'static str> {
-    ui.label(RichText::new("Replicated").strong())
+    ui.label(RichText::new(Replicated::NAME).strong())
         .on_hover_text("the server sends this entity's replicated components to its clients");
     let mut claim = None;
     egui::Grid::new("replicated").num_columns(2).show(ui, |ui| {

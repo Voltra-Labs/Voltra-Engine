@@ -138,6 +138,9 @@ impl Default for Line2D {
 }
 
 impl Line2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Line2D";
+
     /// The triangles it is drawn as, in its entity's space.
     pub fn mesh(&self) -> crate::batch::TriangleMesh {
         let width = |t: f32| {

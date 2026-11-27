@@ -37,7 +37,7 @@ pub(super) fn reshape(collider: &mut Collider, kind: &str) -> bool {
 /// The collider's kind and sizes. `textured_sprite` offers the fit.
 pub(super) fn show(ui: &mut Ui, collider: &mut Collider, textured_sprite: bool) -> Outcome {
     let mut outcome = Outcome::default();
-    ui.label(RichText::new("Collider").strong())
+    ui.label(RichText::new(Collider::NAME).strong())
         .on_hover_text("the shape it collides as, in the entity's space");
 
     let mut kind = collider.kind();

@@ -38,7 +38,7 @@ pub(super) fn show(ui: &mut Ui, slider: &mut UiSlider) -> Option<&'static str> {
             for (label, direction) in [("row", Direction::Row), ("column", Direction::Column)] {
                 let response = ui.selectable_value(&mut slider.direction, direction, label);
                 let path = vec![Step::Field("direction")];
-                if mixed::chosen(ui, response, "UiSlider", path).changed() {
+                if mixed::chosen(ui, response, UiSlider::NAME, path).changed() {
                     claim = Some("Edit slider");
                 }
             }
@@ -58,7 +58,7 @@ pub(super) fn show_part(ui: &mut Ui, part: &mut UiSliderPart) -> Option<&'static
             ("handle", UiSliderPart::Handle),
         ] {
             let response = ui.selectable_value(part, kind, label);
-            if mixed::chosen_variant(ui, response, "UiSliderPart", Vec::new()).changed() {
+            if mixed::chosen_variant(ui, response, UiSliderPart::NAME, Vec::new()).changed() {
                 claim = Some("Edit slider part");
             }
         }

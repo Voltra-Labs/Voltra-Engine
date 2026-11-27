@@ -26,8 +26,8 @@ pub(in crate::panels::inspector) fn show(
     multi: &mut MultiEdit,
 ) -> Option<&'static str> {
     let mut claim = None;
-    if multi.editable(&["SkinnedSprite"]) {
-        mixed::marker(ui, multi, &["SkinnedSprite"]);
+    if multi.editable(&[voltra_scene::SkinnedSprite::NAME]) {
+        mixed::marker(ui, multi, &[voltra_scene::SkinnedSprite::NAME]);
         let (edited, action) = skinned::show(
             ui,
             frame.world,
@@ -49,10 +49,14 @@ pub(in crate::panels::inspector) fn show(
                     claim = Some(action.label());
                 }
             }
-            multi.done_for_each("SkinnedSprite");
+            multi.done_for_each(voltra_scene::SkinnedSprite::NAME);
         }
     }
-    let bones = ["Skeleton2D", "Bone2D", "TwoBoneIk"];
+    let bones = [
+        voltra_scene::Skeleton2D::NAME,
+        voltra_scene::Bone2D::NAME,
+        voltra_scene::TwoBoneIk::NAME,
+    ];
     let asked = if multi.editable(&bones) {
         mixed::marker(ui, multi, &bones);
         skeleton::show(ui, frame.world, entity)
@@ -77,7 +81,7 @@ pub(in crate::panels::inspector) fn show(
                 claim = Some("Set bone rest pose");
             }
         }
-        multi.done_for_each("Bone2D");
+        multi.done_for_each(voltra_scene::Bone2D::NAME);
     }
     if asked.reset_pose || asked.reset_bone {
         // Each from its own rest: the bones of every selected skeleton,
@@ -90,25 +94,29 @@ pub(in crate::panels::inspector) fn show(
                 claim = Some("Reset bone pose");
             }
         }
-        multi.done_for_each("Transform");
+        multi.done_for_each(Transform::NAME);
     }
     if asked.child_bone {
         crate::spawn::record(editor, frame, "Add child bone", |frame| {
             crate::spawn::child_bone(frame, entity)
         });
     }
-    if let Some(layer) = gate(frame.world.get_mut::<Parallax>(entity), multi, "Parallax") {
+    if let Some(layer) = gate(
+        frame.world.get_mut::<Parallax>(entity),
+        multi,
+        Parallax::NAME,
+    ) {
         ui.separator();
-        mixed::marker(ui, multi, &["Parallax"]);
+        mixed::marker(ui, multi, &[Parallax::NAME]);
         claim = claim.or(parallax::show(ui, layer));
     }
     if let Some(lamp) = gate(
         frame.world.get_mut::<voltra_scene::PointLight2D>(entity),
         multi,
-        "PointLight2D",
+        voltra_scene::PointLight2D::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &["PointLight2D"]);
+        mixed::marker(ui, multi, &[voltra_scene::PointLight2D::NAME]);
         claim = claim.or(light::show(
             ui,
             lamp,
@@ -117,20 +125,25 @@ pub(in crate::panels::inspector) fn show(
             frame.queue,
         ));
     }
-    if frame.world.get::<voltra_scene::Joint2D>(entity).is_some() && multi.editable(&["Joint2D"]) {
+    if frame.world.get::<voltra_scene::Joint2D>(entity).is_some()
+        && multi.editable(&[voltra_scene::Joint2D::NAME])
+    {
         let ends = joint::ends(frame.world, entity);
         if let Some(j) = frame.world.get_mut::<voltra_scene::Joint2D>(entity) {
             ui.separator();
-            mixed::marker(ui, multi, &["Joint2D"]);
+            mixed::marker(ui, multi, &[voltra_scene::Joint2D::NAME]);
             claim = claim.or(joint::show(ui, j, &ends));
         }
     }
-    if multi.editable(&["AnimationPlayer"]) {
-        mixed::marker(ui, multi, &["AnimationPlayer"]);
+    if multi.editable(&[voltra_scene::AnimationPlayer::NAME]) {
+        mixed::marker(ui, multi, &[voltra_scene::AnimationPlayer::NAME]);
         claim = claim.or(animation_player::show(ui, frame.world, entity));
     }
-    if multi.editable(&["Animator", "AnimationPlayer"]) {
-        mixed::marker(ui, multi, &["Animator"]);
+    if multi.editable(&[
+        voltra_scene::Animator::NAME,
+        voltra_scene::AnimationPlayer::NAME,
+    ]) {
+        mixed::marker(ui, multi, &[voltra_scene::Animator::NAME]);
         claim = claim.or(animator::show(
             ui,
             frame.world,
@@ -141,22 +154,27 @@ pub(in crate::panels::inspector) fn show(
     if let Some(glow) = gate(
         frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity),
         multi,
-        "GlobalLight2D",
+        voltra_scene::GlobalLight2D::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &["GlobalLight2D"]);
+        mixed::marker(ui, multi, &[voltra_scene::GlobalLight2D::NAME]);
         claim = claim.or(global_light::show(ui, glow));
     }
-    if let Some(camera) = gate(frame.world.get_mut::<Camera>(entity), multi, "Camera") {
+    if let Some(camera) = gate(frame.world.get_mut::<Camera>(entity), multi, Camera::NAME) {
         ui.separator();
-        mixed::marker(ui, multi, &["Camera"]);
+        mixed::marker(ui, multi, &[Camera::NAME]);
         claim = claim.or(camera::show(ui, camera));
     }
-    if frame.world.get::<Camera>(entity).is_some() && multi.editable(&["Camera", "CameraTarget"]) {
-        mixed::marker(ui, multi, &["CameraTarget"]);
+    if frame.world.get::<Camera>(entity).is_some()
+        && multi.editable(&[Camera::NAME, voltra_scene::CameraTarget::NAME])
+    {
+        mixed::marker(ui, multi, &[voltra_scene::CameraTarget::NAME]);
         claim = claim.or(camera_view::show(ui, frame.world, entity));
     }
-    let rig = ["CameraFollow2D", "CameraShake"];
+    let rig = [
+        voltra_scene::CameraFollow2D::NAME,
+        voltra_scene::CameraShake::NAME,
+    ];
     if multi.editable(&rig) {
         mixed::marker(ui, multi, &rig);
         claim = claim.or(camera_rig::show(ui, frame.world, entity));
@@ -164,10 +182,10 @@ pub(in crate::panels::inspector) fn show(
     if let Some(source) = gate(
         frame.world.get_mut::<AudioSource>(entity),
         multi,
-        "AudioSource",
+        AudioSource::NAME,
     ) {
         ui.separator();
-        mixed::marker(ui, multi, &["AudioSource"]);
+        mixed::marker(ui, multi, &[AudioSource::NAME]);
         claim = claim.or(audio_source::show(
             ui,
             source,

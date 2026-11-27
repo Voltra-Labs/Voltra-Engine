@@ -108,7 +108,7 @@ pub fn apply(
     let record_of = |_: &World, entity: Entity| ids.get(&entity).copied();
     let file_root_transform = record_of(world, root)
         .and_then(|top| resolved.entities.iter().find(|r| r.id == top))
-        .and_then(|r| r.components.get("Transform").cloned());
+        .and_then(|r| r.components.get(Transform::NAME).cloned());
 
     // A reference between the instance's entities — a joint, a camera's
     // target — names their records in the file.
@@ -137,7 +137,7 @@ pub fn apply(
         }
         if entity == root {
             record.components.remove(PrefabInstance::NAME);
-            record.components.remove("Parent");
+            record.components.remove(Parent::NAME);
             let placement = match &file_root_transform {
                 Some(kept) => kept.clone(),
                 None => {
@@ -151,7 +151,9 @@ pub fn apply(
                     }
                 }
             };
-            record.components.insert("Transform".to_owned(), placement);
+            record
+                .components
+                .insert(Transform::NAME.to_owned(), placement);
         } else if let Some(parent) = hierarchy::parent_of(world, entity) {
             if let Some(parent_record) = record_of(world, parent) {
                 let link = Parent {
@@ -159,7 +161,7 @@ pub fn apply(
                     entity: None,
                 };
                 let value = RawValue::from_rust(&link).map_err(SceneError::Serialize)?;
-                record.components.insert("Parent".to_owned(), value);
+                record.components.insert(Parent::NAME.to_owned(), value);
             }
         }
         records.push(record);

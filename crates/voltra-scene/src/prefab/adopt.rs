@@ -26,7 +26,7 @@ pub(super) fn adopt(
     let name_of_record = |record: &EntityRecord| {
         record
             .components
-            .get("Name")
+            .get(Name::NAME)
             .and_then(|raw| raw.into_rust::<Name>().ok())
     };
     let name_of = |world: &World, entity: Entity| world.get::<Name>(entity).cloned();

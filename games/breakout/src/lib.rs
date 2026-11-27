@@ -32,6 +32,11 @@ pub struct Paddle {
     pub reach: f32,
 }
 
+impl Paddle {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Paddle";
+}
+
 impl Default for Paddle {
     fn default() -> Self {
         Self {
@@ -51,6 +56,11 @@ pub struct Ball {
     pub serve: Vec2,
 }
 
+impl Ball {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Ball";
+}
+
 impl Default for Ball {
     fn default() -> Self {
         Self {
@@ -66,6 +76,11 @@ impl Default for Ball {
 pub struct Brick {
     /// Added to the score when it breaks.
     pub points: u32,
+}
+
+impl Brick {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Brick";
 }
 
 impl Default for Brick {
@@ -85,6 +100,11 @@ pub struct Score {
     pub balls: u32,
 }
 
+impl Score {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Score";
+}
+
 impl Default for Score {
     fn default() -> Self {
         Self {
@@ -100,10 +120,10 @@ pub struct Breakout;
 
 impl Game for Breakout {
     fn register(&self, registry: &mut ComponentRegistry) {
-        registry.register::<Paddle>("Paddle").with_template();
-        registry.register::<Ball>("Ball").with_template();
-        registry.register::<Brick>("Brick").with_template();
-        registry.register::<Score>("Score").with_template();
+        registry.register::<Paddle>(Paddle::NAME).with_template();
+        registry.register::<Ball>(Ball::NAME).with_template();
+        registry.register::<Brick>(Brick::NAME).with_template();
+        registry.register::<Score>(Score::NAME).with_template();
     }
 
     fn fixed_update(&mut self, tick: &mut Tick<'_>) {

@@ -42,7 +42,7 @@ pub(super) fn show(
         .get_mut::<Animator>(entity)
         .expect("the component is there: it was just tested for");
     ui.separator();
-    ui.label(RichText::new("Animator").strong())
+    ui.label(RichText::new(Animator::NAME).strong())
         .on_hover_text("runs a .animator.ron state machine while the game plays");
     let claim = machine_ui(ui, animator);
     if let Some(state) = animator.current_state() {

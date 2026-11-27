@@ -12,7 +12,7 @@ use crate::scene_id::SceneId;
 use crate::transform::Transform;
 
 /// The name a parent link is stored under in a scene file.
-const PARENT: &str = "Parent";
+const PARENT: &str = Parent::NAME;
 
 /// The entities one spawn made.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

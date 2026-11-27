@@ -30,24 +30,24 @@ pub fn texture_paths<'a>(records: impl IntoIterator<Item = &'a EntityRecord>) ->
     for record in records {
         for (name, value) in &record.components {
             match name.as_str() {
-                "Sprite" => {
+                Sprite::NAME => {
                     if let Ok(sprite) = value.into_rust::<Sprite>() {
                         add(sprite.texture);
                         add(sprite.normal_map);
                     }
                 }
-                "Tilemap" => {
+                Tilemap::NAME => {
                     if let Ok(map) = value.into_rust::<Tilemap>() {
                         add(map.texture);
                         add(map.normal_map);
                     }
                 }
-                "ParticleEmitter" => {
+                ParticleEmitter::NAME => {
                     if let Ok(emitter) = value.into_rust::<ParticleEmitter>() {
                         add(emitter.texture);
                     }
                 }
-                "PointLight2D" => {
+                PointLight2D::NAME => {
                     if let Ok(light) = value.into_rust::<PointLight2D>() {
                         add(light.cookie);
                     }

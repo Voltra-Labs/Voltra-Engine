@@ -13,7 +13,7 @@ use super::active;
 /// stops at the wall instead of running to infinity and being silently clamped
 /// somewhere else.
 pub(super) fn show(ui: &mut Ui, camera: &mut Camera) -> Option<&'static str> {
-    ui.label(RichText::new("Camera").strong());
+    ui.label(RichText::new(Camera::NAME).strong());
 
     let mut claim = None;
     egui::Grid::new("camera").num_columns(2).show(ui, |ui| {

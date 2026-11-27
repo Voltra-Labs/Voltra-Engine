@@ -17,12 +17,12 @@ impl ComponentRegistry {
     /// when a caller forgets a line is not a format.
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
-        registry.register::<Name>("Name").with_template();
+        registry.register::<Name>(Name::NAME).with_template();
         // Replicated by default: where a networked thing is, is what every
         // networked game sends, and remote copies are drawn between
         // snapshots rather than snapped to each.
         registry
-            .register::<Transform>("Transform")
+            .register::<Transform>(Transform::NAME)
             .with_template()
             .replicated_interpolated();
         registry
@@ -33,10 +33,10 @@ impl ComponentRegistry {
             .with_template();
         // Stored as the parent's `SceneId`; the live `Entity` is resolved after
         // the whole file is in, by `hierarchy::resolve_parents`.
-        registry.register::<Parent>("Parent");
-        registry.register::<Sprite>("Sprite").with_template();
+        registry.register::<Parent>(Parent::NAME);
+        registry.register::<Sprite>(Sprite::NAME).with_template();
         registry
-            .register::<SpriteAnimation>("SpriteAnimation")
+            .register::<SpriteAnimation>(SpriteAnimation::NAME)
             .with_template();
         registry
             .register::<crate::Animator>(crate::Animator::NAME)
@@ -44,7 +44,7 @@ impl ComponentRegistry {
         registry
             .register::<crate::AnimationPlayer>(crate::AnimationPlayer::NAME)
             .with_template();
-        registry.register::<Camera>("Camera").with_template();
+        registry.register::<Camera>(Camera::NAME).with_template();
         registry
             .register_with_refs::<crate::CameraFollow2D>(crate::CameraFollow2D::NAME)
             .with_template();
@@ -52,20 +52,24 @@ impl ComponentRegistry {
             .register::<crate::CameraShake>(crate::CameraShake::NAME)
             .with_template();
         registry
-            .register::<AudioSource>("AudioSource")
+            .register::<AudioSource>(AudioSource::NAME)
             .with_template();
         registry
-            .register::<AudioListener>("AudioListener")
-            .with_template();
-        registry.register::<RigidBody>("RigidBody").with_template();
-        registry.register::<Collider>("Collider").with_template();
-        registry
-            .register::<PhysicsMaterial>("PhysicsMaterial")
+            .register::<AudioListener>(AudioListener::NAME)
             .with_template();
         registry
-            .register::<CollisionLayers>("CollisionLayers")
+            .register::<RigidBody>(RigidBody::NAME)
             .with_template();
-        registry.register::<Sensor>("Sensor").with_template();
+        registry
+            .register::<Collider>(Collider::NAME)
+            .with_template();
+        registry
+            .register::<PhysicsMaterial>(PhysicsMaterial::NAME)
+            .with_template();
+        registry
+            .register::<CollisionLayers>(CollisionLayers::NAME)
+            .with_template();
+        registry.register::<Sensor>(Sensor::NAME).with_template();
         registry
             .register::<crate::OneWay>(crate::OneWay::NAME)
             .with_template();
@@ -74,76 +78,94 @@ impl ComponentRegistry {
             .with_template();
         registry.register::<PrefabInstance>(PrefabInstance::NAME);
         registry.register::<crate::prefab::PrefabPart>(crate::prefab::PrefabPart::NAME);
-        registry.register::<Tilemap>("Tilemap").with_template();
-        registry.register::<Text>("Text").with_template();
-        registry.register::<UiRect>("UiRect").with_template();
-        registry.register::<UiButton>("UiButton").with_template();
-        registry.register::<UiSlice>("UiSlice").with_template();
-        registry.register::<UiStack>("UiStack").with_template();
+        registry.register::<Tilemap>(Tilemap::NAME).with_template();
+        registry.register::<Text>(Text::NAME).with_template();
+        registry.register::<UiRect>(UiRect::NAME).with_template();
         registry
-            .register::<crate::CameraTarget>("CameraTarget")
+            .register::<UiButton>(UiButton::NAME)
             .with_template();
-        registry.register::<UiScroll>("UiScroll").with_template();
-        registry.register::<UiToggle>("UiToggle").with_template();
-        registry.register::<UiSlider>("UiSlider").with_template();
+        registry.register::<UiSlice>(UiSlice::NAME).with_template();
+        registry.register::<UiStack>(UiStack::NAME).with_template();
         registry
-            .register::<UiSliderPart>("UiSliderPart")
+            .register::<crate::CameraTarget>(crate::CameraTarget::NAME)
             .with_template();
         registry
-            .register::<UiTextField>("UiTextField")
+            .register::<UiScroll>(UiScroll::NAME)
             .with_template();
         registry
-            .register::<crate::UiDropdown>("UiDropdown")
+            .register::<UiToggle>(UiToggle::NAME)
             .with_template();
         registry
-            .register::<crate::UiTooltip>("UiTooltip")
-            .with_template();
-        registry.register::<crate::UiTabs>("UiTabs").with_template();
-        registry.register::<crate::UiTab>("UiTab").with_template();
-        registry
-            .register::<crate::UiHidden>("UiHidden")
+            .register::<UiSlider>(UiSlider::NAME)
             .with_template();
         registry
-            .register::<crate::UiOwnStyle>("UiOwnStyle")
+            .register::<UiSliderPart>(UiSliderPart::NAME)
             .with_template();
         registry
-            .register::<Persistent>("Persistent")
+            .register::<UiTextField>(UiTextField::NAME)
+            .with_template();
+        registry
+            .register::<crate::UiDropdown>(crate::UiDropdown::NAME)
+            .with_template();
+        registry
+            .register::<crate::UiTooltip>(crate::UiTooltip::NAME)
+            .with_template();
+        registry
+            .register::<crate::UiTabs>(crate::UiTabs::NAME)
+            .with_template();
+        registry
+            .register::<crate::UiTab>(crate::UiTab::NAME)
+            .with_template();
+        registry
+            .register::<crate::UiHidden>(crate::UiHidden::NAME)
+            .with_template();
+        registry
+            .register::<crate::UiOwnStyle>(crate::UiOwnStyle::NAME)
+            .with_template();
+        registry
+            .register::<Persistent>(Persistent::NAME)
             .with_template();
         registry
             .register::<crate::StreamingAnchor>(crate::StreamingAnchor::NAME)
             .with_template();
-        registry.register::<Parallax>("Parallax").with_template();
         registry
-            .register::<ParticleEmitter>("ParticleEmitter")
+            .register::<Parallax>(Parallax::NAME)
             .with_template();
         registry
-            .register::<PointLight2D>("PointLight2D")
+            .register::<ParticleEmitter>(ParticleEmitter::NAME)
             .with_template();
         registry
-            .register::<GlobalLight2D>("GlobalLight2D")
+            .register::<PointLight2D>(PointLight2D::NAME)
+            .with_template();
+        registry
+            .register::<GlobalLight2D>(GlobalLight2D::NAME)
             .with_template();
         registry
             .register_with_refs::<crate::Joint2D>(crate::Joint2D::NAME)
             .with_template();
         registry
-            .register::<ShadowCaster2D>("ShadowCaster2D")
-            .with_template();
-        registry.register::<crate::Line2D>("Line2D").with_template();
-        registry
-            .register::<crate::Polygon2D>("Polygon2D")
+            .register::<ShadowCaster2D>(ShadowCaster2D::NAME)
             .with_template();
         registry
-            .register::<crate::Trail2D>("Trail2D")
+            .register::<crate::Line2D>(crate::Line2D::NAME)
             .with_template();
         registry
-            .register::<crate::Skeleton2D>("Skeleton2D")
-            .with_template();
-        registry.register::<crate::Bone2D>("Bone2D").with_template();
-        registry
-            .register::<crate::TwoBoneIk>("TwoBoneIk")
+            .register::<crate::Polygon2D>(crate::Polygon2D::NAME)
             .with_template();
         registry
-            .register::<crate::SkinnedSprite>("SkinnedSprite")
+            .register::<crate::Trail2D>(crate::Trail2D::NAME)
+            .with_template();
+        registry
+            .register::<crate::Skeleton2D>(crate::Skeleton2D::NAME)
+            .with_template();
+        registry
+            .register::<crate::Bone2D>(crate::Bone2D::NAME)
+            .with_template();
+        registry
+            .register::<crate::TwoBoneIk>(crate::TwoBoneIk::NAME)
+            .with_template();
+        registry
+            .register::<crate::SkinnedSprite>(crate::SkinnedSprite::NAME)
             .with_template();
         registry
     }

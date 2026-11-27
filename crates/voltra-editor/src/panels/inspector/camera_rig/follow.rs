@@ -121,7 +121,7 @@ fn target(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str
                     clicked |= ui.selectable_value(&mut picked, Some(*id), name).clicked();
                 }
                 if clicked {
-                    mixed::touch(ui, "CameraFollow2D", vec![Step::Field("target")]);
+                    mixed::touch(ui, CameraFollow2D::NAME, vec![Step::Field("target")]);
                 }
             });
     });

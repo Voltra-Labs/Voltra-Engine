@@ -33,6 +33,9 @@ impl Default for CameraTarget {
 }
 
 impl CameraTarget {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "CameraTarget";
+
     /// A target drawing into `texture`, not yet resolved.
     pub fn new(texture: AssetPath) -> Self {
         Self {

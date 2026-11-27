@@ -31,6 +31,11 @@ pub struct Player {
     pub arena: Vec2,
 }
 
+impl Player {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Player";
+}
+
 impl Default for Player {
     fn default() -> Self {
         Self {
@@ -43,6 +48,11 @@ impl Default for Player {
 /// A falling rock.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
 pub struct Rock;
+
+impl Rock {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Rock";
+}
 
 /// How the rocks come: one every `every` seconds at first, a little more
 /// often each time down to `fastest`, falling between `speeds`.
@@ -59,6 +69,11 @@ pub struct Rockfall {
     pub top: f32,
     /// Half the width they start across, from the middle.
     pub width: f32,
+}
+
+impl Rockfall {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Rockfall";
 }
 
 impl Default for Rockfall {
@@ -84,6 +99,11 @@ pub struct Run {
     pub over: bool,
 }
 
+impl Run {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Run";
+}
+
 /// The game. Made afresh for every play in the editor.
 #[derive(Debug, Default)]
 pub struct Dodge {
@@ -98,10 +118,12 @@ pub struct Dodge {
 
 impl Game for Dodge {
     fn register(&self, registry: &mut ComponentRegistry) {
-        registry.register::<Player>("Player").with_template();
-        registry.register::<Rock>("Rock").with_template();
-        registry.register::<Rockfall>("Rockfall").with_template();
-        registry.register::<Run>("Run").with_template();
+        registry.register::<Player>(Player::NAME).with_template();
+        registry.register::<Rock>(Rock::NAME).with_template();
+        registry
+            .register::<Rockfall>(Rockfall::NAME)
+            .with_template();
+        registry.register::<Run>(Run::NAME).with_template();
     }
 
     fn fixed_update(&mut self, tick: &mut Tick<'_>) {

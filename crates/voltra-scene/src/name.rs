@@ -17,6 +17,9 @@ use serde::{Deserialize, Serialize};
 pub struct Name(pub String);
 
 impl Name {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Name";
+
     /// A name from anything that turns into a string.
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())

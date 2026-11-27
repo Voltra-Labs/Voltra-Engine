@@ -31,6 +31,9 @@ impl Default for PhysicsMaterial {
 }
 
 impl PhysicsMaterial {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "PhysicsMaterial";
+
     /// The surface of a contact between two colliders, mixed and clamped.
     ///
     /// `sqrt(fa · fb)` and `max(ra, rb)`, which is what Box2D mixes: the

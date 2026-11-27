@@ -29,7 +29,7 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
             for (label, direction) in [("row", Direction::Row), ("column", Direction::Column)] {
                 let response = ui.selectable_value(&mut stack.direction, direction, label);
                 let path = vec![Step::Field("direction")];
-                if mixed::chosen(ui, response, "UiStack", path).changed() {
+                if mixed::chosen(ui, response, UiStack::NAME, path).changed() {
                     claim = Some("Edit stack");
                 }
             }
@@ -67,7 +67,7 @@ fn align(ui: &mut Ui, label: &'static str, value: &mut Align, hint: &str) -> Opt
             for option in [Align::Start, Align::Center, Align::End, Align::Stretch] {
                 let response = ui.selectable_value(value, option, format!("{option:?}"));
                 let path = vec![Step::Field(label)];
-                if mixed::chosen(ui, response, "UiStack", path).changed() {
+                if mixed::chosen(ui, response, UiStack::NAME, path).changed() {
                     claim = Some("Edit stack");
                 }
             }

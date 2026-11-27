@@ -38,6 +38,9 @@ impl Default for UiToggle {
 }
 
 impl UiToggle {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiToggle";
+
     /// `color` as it shows in this state.
     pub fn tinted(&self, color: [f32; 4]) -> [f32; 4] {
         if !self.on {

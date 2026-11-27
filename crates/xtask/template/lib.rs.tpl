@@ -27,6 +27,11 @@ pub struct Player {
     pub speed: f32,
 }
 
+impl Player {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Player";
+}
+
 impl Default for Player {
     fn default() -> Self {
         Self { speed: 3.0 }
@@ -39,7 +44,7 @@ pub struct {{type}};
 
 impl Game for {{type}} {
     fn register(&self, registry: &mut ComponentRegistry) {
-        registry.register::<Player>("Player").with_template();
+        registry.register::<Player>(Player::NAME).with_template();
     }
 
     fn fixed_update(&mut self, tick: &mut Tick<'_>) {

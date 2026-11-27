@@ -15,6 +15,11 @@ use crate::hierarchy;
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UiHidden;
 
+impl UiHidden {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiHidden";
+}
+
 /// Whether `entity` or any element above it is [`UiHidden`].
 pub fn is_hidden(world: &World, entity: Entity) -> bool {
     world.get::<UiHidden>(entity).is_some()

@@ -53,6 +53,11 @@ pub enum UiSliderPart {
     Handle,
 }
 
+impl UiSliderPart {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiSliderPart";
+}
+
 impl Default for UiSlider {
     fn default() -> Self {
         Self {
@@ -66,6 +71,9 @@ impl Default for UiSlider {
 }
 
 impl UiSlider {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiSlider";
+
     /// The range, low to high, whichever way round it was written; a range
     /// that is not a number is `0..1`.
     fn range(&self) -> (f32, f32) {

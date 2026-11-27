@@ -11,3 +11,8 @@
 /// anything can need it — a sprite, a camera, an empty entity holding state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Persistent;
+
+impl Persistent {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Persistent";
+}

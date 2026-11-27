@@ -54,7 +54,7 @@ pub fn fragment(
             record.components.remove(super::PrefabPart::NAME);
         }
         if entity == root {
-            record.components.remove("Parent");
+            record.components.remove(crate::Parent::NAME);
             record.components.remove(PrefabInstance::NAME);
             if let Some(transform) = world.get::<Transform>(entity) {
                 let at_origin = Transform {
@@ -63,7 +63,7 @@ pub fn fragment(
                 };
                 let value =
                     ron::value::RawValue::from_rust(&at_origin).map_err(SceneError::Serialize)?;
-                record.components.insert("Transform".to_owned(), value);
+                record.components.insert(Transform::NAME.to_owned(), value);
             }
         }
         entities.push(record);

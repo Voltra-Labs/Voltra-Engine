@@ -12,12 +12,12 @@ use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 
 /// The components a sync rebuilds rather than copies.
-pub(super) const STRUCTURE: [&str; 3] = ["Parent", PrefabInstance::NAME, PrefabPart::NAME];
+pub(super) const STRUCTURE: [&str; 3] = [Parent::NAME, PrefabInstance::NAME, PrefabPart::NAME];
 
 /// Whether a sync keeps `name` in step on an entity: not structure, and not
 /// the instance root's placement.
 pub(super) fn tracked(name: &str, is_root: bool) -> bool {
-    !STRUCTURE.contains(&name) && !(is_root && name == "Transform")
+    !STRUCTURE.contains(&name) && !(is_root && name == crate::Transform::NAME)
 }
 
 /// A record's components as their types write them, structure left out and
@@ -95,7 +95,7 @@ pub(super) fn ids_to_records(world: &World, members: &[Entity]) -> HashMap<Scene
 
 /// The parent record a record names, if it carries one.
 pub(super) fn parent_record(record: &EntityRecord) -> Option<SceneId> {
-    let raw = record.components.get("Parent")?;
+    let raw = record.components.get(Parent::NAME)?;
     raw.into_rust::<Parent>().ok().map(|parent| parent.id)
 }
 

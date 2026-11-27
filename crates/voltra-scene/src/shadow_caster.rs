@@ -41,6 +41,11 @@ pub struct ShadowCaster2D {
     pub layers: u32,
 }
 
+impl ShadowCaster2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "ShadowCaster2D";
+}
+
 impl Default for ShadowCaster2D {
     /// Its collider's shape, not self-shadowed, blocking every light.
     fn default() -> Self {

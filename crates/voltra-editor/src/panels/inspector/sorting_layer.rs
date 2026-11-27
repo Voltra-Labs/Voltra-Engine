@@ -20,51 +20,72 @@ pub(super) fn show_for(
 ) -> Option<&'static str> {
     let mut claim = None;
     let open = |name: &str| multi.editable(&[name]);
-    if let Some(sprite) = world.get_mut::<Sprite>(entity).filter(|_| open("Sprite")) {
-        claim = claim.or(show(ui, "Sprite", &mut sprite.sorting_layer, layers));
+    if let Some(sprite) = world
+        .get_mut::<Sprite>(entity)
+        .filter(|_| open(Sprite::NAME))
+    {
+        claim = claim.or(show(ui, Sprite::NAME, &mut sprite.sorting_layer, layers));
     }
-    if let Some(map) = world.get_mut::<Tilemap>(entity).filter(|_| open("Tilemap")) {
-        claim = claim.or(show(ui, "Tilemap", &mut map.sorting_layer, layers));
+    if let Some(map) = world
+        .get_mut::<Tilemap>(entity)
+        .filter(|_| open(Tilemap::NAME))
+    {
+        claim = claim.or(show(ui, Tilemap::NAME, &mut map.sorting_layer, layers));
     }
-    if let Some(text) = world.get_mut::<Text>(entity).filter(|_| open("Text")) {
-        claim = claim.or(show(ui, "Text", &mut text.sorting_layer, layers));
+    if let Some(text) = world.get_mut::<Text>(entity).filter(|_| open(Text::NAME)) {
+        claim = claim.or(show(ui, Text::NAME, &mut text.sorting_layer, layers));
     }
     if let Some(emitter) = world
         .get_mut::<ParticleEmitter>(entity)
-        .filter(|_| open("ParticleEmitter"))
+        .filter(|_| open(ParticleEmitter::NAME))
     {
         claim = claim.or(show(
             ui,
-            "ParticleEmitter",
+            ParticleEmitter::NAME,
             &mut emitter.sorting_layer,
             layers,
         ));
     }
     if let Some(line) = world
         .get_mut::<voltra_scene::Line2D>(entity)
-        .filter(|_| open("Line2D"))
-    {
-        claim = claim.or(show(ui, "Line2D", &mut line.sorting_layer, layers));
-    }
-    if let Some(polygon) = world
-        .get_mut::<voltra_scene::Polygon2D>(entity)
-        .filter(|_| open("Polygon2D"))
-    {
-        claim = claim.or(show(ui, "Polygon2D", &mut polygon.sorting_layer, layers));
-    }
-    if let Some(trail) = world
-        .get_mut::<voltra_scene::Trail2D>(entity)
-        .filter(|_| open("Trail2D"))
-    {
-        claim = claim.or(show(ui, "Trail2D", &mut trail.sorting_layer, layers));
-    }
-    if let Some(skinned) = world
-        .get_mut::<voltra_scene::SkinnedSprite>(entity)
-        .filter(|_| open("SkinnedSprite"))
+        .filter(|_| open(voltra_scene::Line2D::NAME))
     {
         claim = claim.or(show(
             ui,
-            "SkinnedSprite",
+            voltra_scene::Line2D::NAME,
+            &mut line.sorting_layer,
+            layers,
+        ));
+    }
+    if let Some(polygon) = world
+        .get_mut::<voltra_scene::Polygon2D>(entity)
+        .filter(|_| open(voltra_scene::Polygon2D::NAME))
+    {
+        claim = claim.or(show(
+            ui,
+            voltra_scene::Polygon2D::NAME,
+            &mut polygon.sorting_layer,
+            layers,
+        ));
+    }
+    if let Some(trail) = world
+        .get_mut::<voltra_scene::Trail2D>(entity)
+        .filter(|_| open(voltra_scene::Trail2D::NAME))
+    {
+        claim = claim.or(show(
+            ui,
+            voltra_scene::Trail2D::NAME,
+            &mut trail.sorting_layer,
+            layers,
+        ));
+    }
+    if let Some(skinned) = world
+        .get_mut::<voltra_scene::SkinnedSprite>(entity)
+        .filter(|_| open(voltra_scene::SkinnedSprite::NAME))
+    {
+        claim = claim.or(show(
+            ui,
+            voltra_scene::SkinnedSprite::NAME,
             &mut skinned.sorting_layer,
             layers,
         ));

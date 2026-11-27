@@ -40,6 +40,9 @@ pub struct Parent {
 }
 
 impl Parent {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Parent";
+
     /// An unresolved link to `id`.
     pub fn new(id: SceneId) -> Self {
         Self { id, entity: None }

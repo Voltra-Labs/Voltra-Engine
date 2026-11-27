@@ -185,6 +185,11 @@ pub struct TooltipStyle {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct UiOwnStyle;
 
+impl UiOwnStyle {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiOwnStyle";
+}
+
 /// Why a theme did not read.
 #[derive(Debug)]
 pub enum ThemeError {

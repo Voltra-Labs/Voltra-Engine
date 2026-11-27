@@ -23,6 +23,11 @@ pub struct UiTabs {
     pub current: String,
 }
 
+impl UiTabs {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiTabs";
+}
+
 /// A button that shows its [`UiTabs`] container's page named
 /// [`page`](Self::page) when clicked, or accepted on the focus. With a
 /// [`UiToggle`] beside it, the toggle is on while its page shows — the
@@ -32,6 +37,11 @@ pub struct UiTab {
     /// The [`Name`] of the page it shows, under the same container.
     #[serde(default)]
     pub page: String,
+}
+
+impl UiTab {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiTab";
 }
 
 /// The [`UiTabs`] container `entity` belongs to: the nearest one above it.

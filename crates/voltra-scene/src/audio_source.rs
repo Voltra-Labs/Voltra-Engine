@@ -109,6 +109,9 @@ impl Default for AudioSource {
 }
 
 impl AudioSource {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "AudioSource";
+
     /// A source naming `path`, not yet resolved against any store.
     pub fn new(path: AssetPath) -> Self {
         Self {

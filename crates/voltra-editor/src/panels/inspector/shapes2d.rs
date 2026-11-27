@@ -206,7 +206,7 @@ fn pick<T: PartialEq + Copy>(
             for (option, name) in options {
                 let response = ui.selectable_label(option == value, *name);
                 let path = vec![Step::Field(field)];
-                if mixed::chosen(ui, response, "Line2D", path).clicked() && option != value {
+                if mixed::chosen(ui, response, Line2D::NAME, path).clicked() && option != value {
                     *value = *option;
                     claim = Some("Edit line");
                 }

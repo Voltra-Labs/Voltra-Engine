@@ -89,16 +89,16 @@ fn decides(tick: &Tick<'_>) -> bool {
 impl Game for Arena {
     fn register(&self, registry: &mut ComponentRegistry) {
         registry
-            .register::<Player>("Player")
+            .register::<Player>(Player::NAME)
             .with_template()
             .replicated();
         registry
-            .register::<Score>("Score")
+            .register::<Score>(Score::NAME)
             .with_template()
             .replicated();
-        registry.register::<Coin>("Coin").with_template();
+        registry.register::<Coin>(Coin::NAME).with_template();
         registry
-            .register::<Round>("Round")
+            .register::<Round>(Round::NAME)
             .with_template()
             .replicated();
     }

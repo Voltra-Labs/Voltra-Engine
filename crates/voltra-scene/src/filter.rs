@@ -36,6 +36,9 @@ impl Default for CollisionLayers {
 }
 
 impl CollisionLayers {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "CollisionLayers";
+
     /// Every layer at once, which is what a collider that has never been
     /// filtered is on and looks at.
     pub const ALL: u32 = u32::MAX;
@@ -109,6 +112,11 @@ impl CollisionLayers {
 /// [`Collider`]: crate::Collider
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Sensor;
+
+impl Sensor {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Sensor";
+}
 
 #[cfg(test)]
 mod tests {

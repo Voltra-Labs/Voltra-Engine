@@ -62,6 +62,9 @@ impl Default for SpriteAnimation {
 }
 
 impl SpriteAnimation {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "SpriteAnimation";
+
     /// The rate a new clip starts at.
     ///
     /// Twelve: animation's traditional "on twos" against 24 fps film, and what

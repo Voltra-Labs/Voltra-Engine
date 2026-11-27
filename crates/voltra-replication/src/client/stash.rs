@@ -34,7 +34,7 @@ use voltra_scene::{hierarchy, ComponentRegistry, Replicated, SceneId};
 use crate::NetId;
 
 /// The name a parent link is stored under in a scene file.
-const PARENT: &str = "Parent";
+const PARENT: &str = Parent::NAME;
 
 /// What [`Stash::keep`] asks of the entities it meets.
 pub(crate) struct KeepIds<'a> {

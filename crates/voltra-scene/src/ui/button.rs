@@ -91,6 +91,9 @@ pub enum State {
 }
 
 impl UiButton {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiButton";
+
     /// Writes the face of `state` into `sprite`: the state's colour — times
     /// a toggle's tint while it is on — and, with frames, its frame.
     pub fn show(&self, state: State, toggle: Option<&UiToggle>, sprite: &mut Sprite) {

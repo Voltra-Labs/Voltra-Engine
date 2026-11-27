@@ -148,6 +148,9 @@ impl TextInput {
 }
 
 impl UiTextField {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiTextField";
+
     /// A field holding `text`, the caret at its end.
     pub fn with_text(text: impl Into<String>) -> Self {
         let mut field = Self::default();

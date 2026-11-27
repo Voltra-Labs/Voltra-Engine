@@ -41,7 +41,12 @@ use voltra_scene::{ComponentRegistry, PrefabInstance, PrefabPart};
 /// where an entity hangs and which prefab it came from, is the entity's
 /// own; and the name, which the name field writes to all itself (an
 /// entity without one has an empty one, not a partial one).
-const NOT_SHARED: [&str; 4] = ["Parent", PrefabInstance::NAME, PrefabPart::NAME, "Name"];
+const NOT_SHARED: [&str; 4] = [
+    voltra_scene::Parent::NAME,
+    PrefabInstance::NAME,
+    PrefabPart::NAME,
+    voltra_scene::Name::NAME,
+];
 
 /// One frame of the inspector over the selection.
 #[derive(Debug)]

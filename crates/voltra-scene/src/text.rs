@@ -160,6 +160,9 @@ impl Default for Text {
 }
 
 impl Text {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Text";
+
     /// Raster pixels per em when nothing says otherwise: crisp at the sizes
     /// a label is usually seen at, and a few hundred glyphs per atlas.
     pub const DEFAULT_PIXELS_PER_EM: u32 = 48;

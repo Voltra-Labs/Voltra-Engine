@@ -18,7 +18,11 @@ use crate::{Name, SceneId};
 
 /// Components not written by name: the parent link is [`reparent`]'s, and
 /// the prefab links belong to prefabs.
-pub const STRUCTURE: [&str; 3] = ["Parent", "PrefabInstance", "PrefabPart"];
+pub const STRUCTURE: [&str; 3] = [
+    crate::Parent::NAME,
+    crate::PrefabInstance::NAME,
+    crate::PrefabPart::NAME,
+];
 
 /// Why an edit was refused, in words for whoever asked.
 #[derive(Debug, Clone, PartialEq, Eq)]

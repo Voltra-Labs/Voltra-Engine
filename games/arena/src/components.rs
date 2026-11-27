@@ -14,6 +14,11 @@ pub struct Player {
     pub bounds: Vec2,
 }
 
+impl Player {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Player";
+}
+
 impl Default for Player {
     fn default() -> Self {
         Self {
@@ -27,10 +32,20 @@ impl Default for Player {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Score(pub u32);
 
+impl Score {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Score";
+}
+
 /// The coin. Not replicated as a type — its `Transform` is — but marks the
 /// entity on every end, spawned from the same prefab.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Coin;
+
+impl Coin {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Coin";
+}
 
 /// The round: coins to win, who won, and how long until the next round.
 /// On the scene's replicated `Round` entity, so every client knows.
@@ -47,6 +62,11 @@ pub struct Round {
     pub left: f32,
     /// Rounds finished.
     pub finished: u32,
+}
+
+impl Round {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Round";
 }
 
 impl Default for Round {

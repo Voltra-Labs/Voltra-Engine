@@ -109,6 +109,9 @@ impl Default for SkinnedSprite {
 }
 
 impl SkinnedSprite {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "SkinnedSprite";
+
     /// The mesh as the GPU draws it: vertices with their bone slots and
     /// weights (a weight on a bone past the list or past
     /// [`MAX_BONES`] dropped; a vertex held by nothing given wholly to the

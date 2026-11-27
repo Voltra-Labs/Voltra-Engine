@@ -67,7 +67,7 @@ pub(super) fn show(
                 let life = ui.selectable_label(over_life, "times per life").clicked();
                 let rate = ui.selectable_label(!over_life, "frames / s").clicked();
                 if life || rate {
-                    mixed::touch_variant(ui, "ParticleEmitter", timing());
+                    mixed::touch_variant(ui, ParticleEmitter::NAME, timing());
                 }
                 if life && !over_life {
                     flipbook.timing = FlipbookTiming::OverLife { cycles: 1.0 };

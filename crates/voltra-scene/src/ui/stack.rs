@@ -81,6 +81,9 @@ impl Default for UiStack {
 }
 
 impl UiStack {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "UiStack";
+
     /// Where each stacked child of `stack` goes, when the stack occupies
     /// `rect`. Children past the far end are still placed — they overflow,
     /// as in every toolkit, rather than vanish.

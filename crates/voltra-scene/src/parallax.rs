@@ -44,6 +44,9 @@ impl Default for Parallax {
 pub const MAX_REPEATS: i32 = 64;
 
 impl Parallax {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Parallax";
+
     /// A layer moving at `factor` of the camera, not repeating.
     pub fn new(factor: Vec2) -> Self {
         Self {

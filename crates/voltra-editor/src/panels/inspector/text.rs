@@ -20,7 +20,7 @@ pub(super) fn show(
     fonts: &mut Fonts,
     on_screen: bool,
 ) -> Option<&'static str> {
-    ui.label(RichText::new("Text").strong());
+    ui.label(RichText::new(Text::NAME).strong());
 
     // Multiline, and claimed while focused: one entry for a sentence typed,
     // not one per keystroke. A keyed text's content is its language's
@@ -83,7 +83,7 @@ pub(super) fn show(
             ] {
                 let response = ui.selectable_value(&mut text.align, align, label);
                 if response.clicked() {
-                    mixed::touch(ui, "Text", vec![Step::Field("align")]);
+                    mixed::touch(ui, Text::NAME, vec![Step::Field("align")]);
                 }
                 if response.changed() {
                     claim = claim.or(Some("Align text"));

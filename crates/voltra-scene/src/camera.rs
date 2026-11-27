@@ -118,6 +118,9 @@ impl Default for Camera {
 }
 
 impl Camera {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Camera";
+
     /// Bounds on [`Self::size`], mirroring [`Camera2D`]'s on zoom.
     ///
     /// The reciprocal of the pair over there, because that is the same

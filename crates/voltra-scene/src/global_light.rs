@@ -40,6 +40,9 @@ impl Default for GlobalLight2D {
 }
 
 impl GlobalLight2D {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "GlobalLight2D";
+
     /// The light as the renderer takes it.
     pub fn light(&self) -> GlobalLight {
         GlobalLight {

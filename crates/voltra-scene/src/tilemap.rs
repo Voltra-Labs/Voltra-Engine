@@ -187,6 +187,9 @@ impl Default for Tilemap {
 }
 
 impl Tilemap {
+    /// The registered name a scene file stores it under.
+    pub const NAME: &'static str = "Tilemap";
+
     /// An empty layer whose cells are `tile_size` across.
     pub fn new(tile_size: Vec2) -> Self {
         Self {
