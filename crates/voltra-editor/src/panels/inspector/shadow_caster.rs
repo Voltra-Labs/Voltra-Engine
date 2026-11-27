@@ -23,6 +23,22 @@ pub(super) struct Context<'a> {
     pub recording: bool,
 }
 
+/// The caster ticking the box gives an entity: shaped by its collider when
+/// it has one, else by `starting` — its sprite's quad — as a polygon.
+pub(super) fn starting_caster(has_collider: bool, starting: Option<Vec<Vec2>>) -> ShadowCaster2D {
+    match (has_collider, starting) {
+        (false, Some(points)) => ShadowCaster2D {
+            shape: CasterShape::Polygon {
+                points,
+                closed: true,
+            },
+            self_shadow: false,
+            ..ShadowCaster2D::default()
+        },
+        _ => ShadowCaster2D::default(),
+    }
+}
+
 /// The caster toggle and its settings, for an entity that has a collider or
 /// a sprite, is a solid layer, or already casts.
 ///
@@ -59,18 +75,7 @@ pub(super) fn show(
     );
     if toggle.on_disabled_hover_text(WAIT).changed() {
         if casts {
-            let caster = match (has_collider, starting.clone()) {
-                (false, Some(points)) => ShadowCaster2D {
-                    shape: CasterShape::Polygon {
-                        points,
-                        closed: true,
-                    },
-                    self_shadow: false,
-                    ..ShadowCaster2D::default()
-                },
-                _ => ShadowCaster2D::default(),
-            };
-            world.insert(entity, caster);
+            world.insert(entity, starting_caster(has_collider, starting.clone()));
         } else {
             world.remove::<ShadowCaster2D>(entity);
             shape.set_editing(None);

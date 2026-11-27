@@ -1,0 +1,306 @@
+use serde::{Deserialize, Serialize};
+use voltra_ecs::{Entity, World};
+use voltra_render::glam::Vec2;
+use voltra_scene::format::serial_tree::Step;
+use voltra_scene::format::{entity_with_id, ComponentRegistry};
+use voltra_scene::{Collider, SceneId, Sprite, Transform};
+
+use super::MultiEdit;
+use crate::gizmo::Gizmo;
+use crate::selection::Selection;
+use crate::undo::{History, SceneView, UndoContext, UndoHost};
+
+fn sprite(world: &mut World, color: [f32; 4]) -> Entity {
+    let entity = world.spawn();
+    world.insert(entity, SceneId::new());
+    world.insert(entity, Transform::default());
+    world.insert(entity, Sprite::new(color));
+    entity
+}
+
+const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+
+/// Three sprites, the last the primary.
+fn three(colors: [[f32; 4]; 3]) -> (World, Vec<Entity>) {
+    let mut world = World::new();
+    let entities = colors.iter().map(|&c| sprite(&mut world, c)).collect();
+    (world, entities)
+}
+
+fn begin(world: &World, registry: &ComponentRegistry, selected: &[Entity]) -> MultiEdit {
+    let primary = *selected.last().expect("something selected");
+    MultiEdit::begin(world, registry, primary, selected.iter().copied())
+}
+
+fn color() -> Vec<Step> {
+    vec![Step::Field("color")]
+}
+
+#[test]
+fn equal_fields_are_not_mixed_and_differing_ones_are() {
+    let registry = ComponentRegistry::with_defaults();
+    let (world, selected) = three([RED, RED, RED]);
+    let edit = begin(&world, &registry, &selected);
+    assert!(edit.is_multi());
+    assert!(edit.mixed("Sprite").is_empty());
+    assert!(!edit.is_mixed("Sprite", &color()));
+
+    let (world, selected) = three([RED, GREEN, RED]);
+    let edit = begin(&world, &registry, &selected);
+    // The two channels that differ, nested in the colour, and nothing else.
+    assert_eq!(
+        edit.mixed("Sprite"),
+        [
+            vec![Step::Field("color"), Step::Index(0)],
+            vec![Step::Field("color"), Step::Index(1)],
+        ]
+    );
+    assert!(edit.is_mixed("Sprite", &color()), "under the colour");
+    assert!(edit.is_mixed("Sprite", &[]), "the sprite as a whole");
+    assert!(!edit.is_mixed("Sprite", &[Step::Field("flip_x")]));
+    assert!(!edit.is_mixed("Transform", &[]));
+    assert!(edit.mixed("Transform").is_empty());
+}
+
+#[test]
+fn floats_are_mixed_by_their_exact_value_and_nan_matches_nan() {
+    let registry = ComponentRegistry::with_defaults();
+    let near = [1.0, 0.0, 0.0, 1.000_000_1];
+    let (world, selected) = three([RED, near, RED]);
+    assert!(begin(&world, &registry, &selected).is_mixed("Sprite", &color()));
+
+    let nan = [f32::NAN, 0.0, 0.0, 1.0];
+    let (world, selected) = three([nan, nan, nan]);
+    assert!(!begin(&world, &registry, &selected).is_mixed("Sprite", &color()));
+}
+
+#[test]
+fn a_component_only_some_have_is_partial_and_not_editable() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, RED, RED]);
+    world.insert(selected[0], Collider::default());
+    world.insert(selected[2], Collider::default());
+    let edit = begin(&world, &registry, &selected);
+    assert_eq!(edit.partial(), [("Collider", 2)]);
+    assert!(!edit.editable(&["Collider"]));
+    assert!(!edit.editable(&["Sprite", "Collider"]));
+    assert!(edit.editable(&["Sprite", "Transform"]));
+    // None has a camera, so one can be added to all.
+    assert!(edit.editable(&["Camera"]));
+}
+
+#[test]
+fn one_entity_is_not_a_multi_edit() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    let edit = begin(&world, &registry, &selected[2..]);
+    assert!(!edit.is_multi());
+    assert!(edit.mixed("Sprite").is_empty());
+    assert!(edit.editable(&["Collider"]));
+    if let Some(s) = world.get_mut::<Sprite>(selected[2]) {
+        s.flip_x = true;
+    }
+    assert!(edit.finish(&mut world, &registry).is_empty());
+    assert!(!world.get::<Sprite>(selected[0]).expect("s").flip_x);
+}
+
+#[test]
+fn editing_one_field_writes_only_that_field_to_every_entity() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    let edit = begin(&world, &registry, &selected);
+    world.get_mut::<Sprite>(selected[2]).expect("s").flip_x = true;
+
+    let written = edit.finish(&mut world, &registry);
+
+    assert_eq!(written, [selected[0], selected[1]]);
+    for (&entity, color) in selected.iter().zip([RED, GREEN, BLUE]) {
+        let sprite = world.get::<Sprite>(entity).expect("s");
+        assert!(sprite.flip_x, "flipped");
+        assert_eq!(sprite.color, color, "each keeps its own colour");
+    }
+}
+
+#[test]
+fn one_channel_of_a_mixed_colour_is_written_alone() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    let edit = begin(&world, &registry, &selected);
+    world.get_mut::<Sprite>(selected[2]).expect("s").color[3] = 0.5;
+
+    edit.finish(&mut world, &registry);
+
+    for (&entity, mut color) in selected.iter().zip([RED, GREEN, BLUE]) {
+        color[3] = 0.5;
+        assert_eq!(world.get::<Sprite>(entity).expect("s").color, color);
+    }
+}
+
+#[test]
+fn a_field_an_entity_does_not_have_is_left_alone_and_a_new_shape_is_written_whole() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, RED, RED]);
+    let boxed = Collider::Box {
+        half_extents: Vec2::ONE,
+    };
+    let circle = Collider::Circle { radius: 2.0 };
+    world.insert(selected[0], circle);
+    world.insert(selected[1], boxed);
+    world.insert(selected[2], boxed);
+
+    let edit = begin(&world, &registry, &selected);
+    assert!(edit.is_mixed("Collider", &[]), "two shapes");
+    let grown = Collider::Box {
+        half_extents: Vec2::new(3.0, 1.0),
+    };
+    world.insert(selected[2], grown);
+    edit.finish(&mut world, &registry);
+    assert_eq!(world.get::<Collider>(selected[0]), Some(&circle), "no box");
+    assert_eq!(world.get::<Collider>(selected[1]), Some(&grown));
+
+    // Turning the primary into a circle is a change of the shape itself.
+    let edit = begin(&world, &registry, &selected);
+    let small = Collider::Circle { radius: 0.5 };
+    world.insert(selected[2], small);
+    edit.finish(&mut world, &registry);
+    assert_eq!(world.get::<Collider>(selected[0]), Some(&small));
+    assert_eq!(world.get::<Collider>(selected[1]), Some(&small));
+}
+
+#[test]
+fn a_component_added_or_removed_on_the_primary_is_on_all_or_on_none() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    let edit = begin(&world, &registry, &selected);
+    world.insert(selected[2], Collider::Circle { radius: 3.0 });
+    edit.finish(&mut world, &registry);
+    for &entity in &selected {
+        assert_eq!(
+            world.get::<Collider>(entity),
+            Some(&Collider::Circle { radius: 3.0 })
+        );
+    }
+
+    let edit = begin(&world, &registry, &selected);
+    world.remove::<Collider>(selected[2]);
+    edit.finish(&mut world, &registry);
+    assert!(selected.iter().all(|&e| world.get::<Collider>(e).is_none()));
+}
+
+#[test]
+fn a_component_done_for_each_is_not_copied_from_the_primary() {
+    let registry = ComponentRegistry::with_defaults();
+    let (mut world, selected) = three([RED, GREEN, BLUE]);
+    let mut edit = begin(&world, &registry, &selected);
+    world.get_mut::<Sprite>(selected[2]).expect("s").flip_y = true;
+    edit.done_for_each("Sprite");
+    assert!(edit.finish(&mut world, &registry).is_empty());
+    assert!(!world.get::<Sprite>(selected[0]).expect("s").flip_y);
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+struct Coin {
+    value: u32,
+    label: String,
+}
+
+#[test]
+fn a_component_the_game_registered_is_edited_across_the_selection() {
+    let mut registry = ComponentRegistry::with_defaults();
+    registry.register::<Coin>("Coin").with_template();
+    let (mut world, selected) = three([RED, RED, RED]);
+    for (&entity, label) in selected.iter().zip(["a", "b", "c"]) {
+        world.insert(
+            entity,
+            Coin {
+                value: 1,
+                label: label.into(),
+            },
+        );
+    }
+    let edit = begin(&world, &registry, &selected);
+    assert_eq!(edit.mixed("Coin"), [vec![Step::Field("label")]]);
+    world.get_mut::<Coin>(selected[2]).expect("c").value = 10;
+    edit.finish(&mut world, &registry);
+    for (&entity, label) in selected.iter().zip(["a", "b", "c"]) {
+        let coin = world.get::<Coin>(entity).expect("c");
+        assert_eq!((coin.value, coin.label.as_str()), (10, label));
+    }
+}
+
+/// An [`UndoHost`] with no `App` and no GPU behind it.
+struct Host(World);
+
+impl UndoHost for Host {
+    fn world(&mut self) -> &mut World {
+        &mut self.0
+    }
+    fn reset_physics(&mut self) {}
+    fn resolve_scene_assets(&mut self) {}
+}
+
+#[test]
+fn a_drag_across_three_entities_is_one_undo_step() {
+    let registry = ComponentRegistry::with_defaults();
+    let (world, selected) = three([RED, GREEN, BLUE]);
+    let mut host = Host(world);
+    let mut selection = Selection::default();
+    selected.iter().for_each(|&e| selection.add(e));
+    let ids: Vec<SceneId> = selection.ids(&host.0);
+    let mut history = History::default();
+
+    // Three frames of one drag on the primary's sort order.
+    for order in 1..=3 {
+        let view = SceneView {
+            world: &host.0,
+            registry: &registry,
+            selected: ids.clone(),
+        };
+        history.watch(view, ids.iter().copied());
+        let edit = begin(&host.0, &registry, &selected);
+        host.0.get_mut::<Sprite>(selected[2]).expect("s").sort_order = order;
+        edit.finish(&mut host.0, &registry);
+        history.claim("Set sort order");
+        let view = SceneView {
+            world: &host.0,
+            registry: &registry,
+            selected: ids.clone(),
+        };
+        history.end_frame(view);
+    }
+    // Let go: a frame with no claim closes it.
+    let view = SceneView {
+        world: &host.0,
+        registry: &registry,
+        selected: ids.clone(),
+    };
+    history.watch(view, ids.iter().copied());
+    let view = SceneView {
+        world: &host.0,
+        registry: &registry,
+        selected: ids.clone(),
+    };
+    history.end_frame(view);
+
+    assert_eq!(history.len(), 1, "one step for the drag and the three");
+    for &id in &ids {
+        let entity = entity_with_id(&host.0, id).expect("there");
+        assert_eq!(host.0.get::<Sprite>(entity).expect("s").sort_order, 3);
+    }
+
+    let mut gizmo = Gizmo::default();
+    let ctx = UndoContext {
+        registry: &registry,
+        selected: &mut selection,
+        gizmo: &mut gizmo,
+    };
+    assert!(history.undo(ctx, &mut host));
+    for (&id, color) in ids.iter().zip([RED, GREEN, BLUE]) {
+        let entity = entity_with_id(&host.0, id).expect("there");
+        let sprite = host.0.get::<Sprite>(entity).expect("s");
+        assert_eq!((sprite.sort_order, sprite.color), (0, color));
+    }
+}

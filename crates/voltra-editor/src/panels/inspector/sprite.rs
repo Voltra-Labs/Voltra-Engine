@@ -2,29 +2,36 @@
 
 mod atlas;
 
-use voltra_assets::{AssetPath, Atlases, Textures};
+use voltra_assets::{AssetPath, Textures};
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_core::ui::TextureId;
 use voltra_render::wgpu;
 use voltra_scene::Sprite;
 
 use super::active;
+use super::mixed::{self, Fields};
+use super::particles::Stores;
 use super::path_field::{self, PathEdit};
 
 pub(super) fn show(
     ui: &mut Ui,
     sprite: &mut Sprite,
-    textures: &mut Textures,
-    atlases: &mut Atlases,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
+    mixed: Fields<'_>,
+    stores: Stores<'_>,
     preview: Option<TextureId>,
 ) -> Option<&'static str> {
+    let Stores {
+        textures,
+        atlases,
+        device,
+        queue,
+    } = stores;
     ui.label(RichText::new("Sprite").strong());
 
     let mut claim = None;
     egui::Grid::new("sprite").num_columns(2).show(ui, |ui| {
-        ui.label("colour");
+        // A colour button has no mixed state: the label carries it.
+        mixed::label(ui, "colour", mixed.field("color"));
         // The colour is edited inside a popup, so the button itself is never
         // dragged or focused while the value moves and [`active`] would report
         // nothing — one entry per frame of the pick. The popup's id is
@@ -40,8 +47,9 @@ pub(super) fn show(
         ui.end_row();
 
         ui.label("sort order");
+        let order = DragValue::new(&mut sprite.sort_order);
         claim = claim.or(active(
-            &ui.add(DragValue::new(&mut sprite.sort_order)),
+            &ui.add(mixed::drag(order, mixed.field("sort_order"))),
             "Set sort order",
         ));
         ui.end_row();
@@ -58,7 +66,7 @@ pub(super) fn show(
         &mut sprite.light_layers,
     ));
     ui.separator();
-    claim.or(atlas::show(ui, sprite, atlases, preview))
+    claim.or(atlas::show(ui, sprite, atlases, preview, mixed))
 }
 
 /// The texture path editor.

@@ -6,6 +6,7 @@ use voltra_core::ui::TextureId;
 use voltra_scene::Sprite;
 
 use super::super::active;
+use super::super::mixed::{self, Fields};
 use super::super::path_field::{self, PathEdit};
 
 /// Side of the frame preview, in points.
@@ -23,6 +24,7 @@ pub(super) fn show(
     sprite: &mut Sprite,
     atlases: &mut Atlases,
     preview: Option<TextureId>,
+    mixed: Fields<'_>,
 ) -> Option<&'static str> {
     ui.label(RichText::new("Atlas").strong());
 
@@ -71,10 +73,12 @@ pub(super) fn show(
 
         ui.label("flip");
         ui.horizontal(|ui| {
-            if ui.checkbox(&mut sprite.flip_x, "x").changed() {
+            let flip_x = mixed.field("flip_x");
+            if mixed::checkbox(ui, &mut sprite.flip_x, "x", flip_x).changed() {
                 claim = claim.or(Some("Flip sprite"));
             }
-            if ui.checkbox(&mut sprite.flip_y, "y").changed() {
+            let flip_y = mixed.field("flip_y");
+            if mixed::checkbox(ui, &mut sprite.flip_y, "y", flip_y).changed() {
                 claim = claim.or(Some("Flip sprite"));
             }
         });

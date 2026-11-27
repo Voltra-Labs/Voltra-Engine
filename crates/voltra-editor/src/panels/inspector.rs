@@ -19,8 +19,10 @@ mod global_light;
 mod joint;
 mod light;
 mod light_layers;
+mod mixed;
 mod name;
 mod parallax;
+mod partial;
 mod particles;
 mod path_field;
 mod prefab;
@@ -50,9 +52,11 @@ mod ui_tooltip;
 
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
+use voltra_ecs::Entity;
 use voltra_scene::hierarchy;
 
 use crate::editor::Editor;
+use crate::multi_edit::MultiEdit;
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::right("inspector")
@@ -76,28 +80,53 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // body by `entity` makes every id here a function of the entity too, so
             // a selection change is a real id change and egui starts clean.
             ui.push_id(entity, |ui| {
-                // One entity is edited at a time; with more selected, say so,
-                // so an edit here is not taken for an edit to all of them.
+                // While the timeline records, only the primary is keyed: the
+                // rest of the selection is not written to behind its back.
+                let recording = editor.timeline.is_recording();
+                let selected: Vec<Entity> = if recording {
+                    Vec::new()
+                } else {
+                    editor.selection.iter().collect()
+                };
+                let mut multi = MultiEdit::begin(frame.world, &editor.registry, entity, selected);
                 let more = match editor.selection.len() {
                     0 | 1 => String::new(),
-                    n => format!(" — the last picked of {n}"),
+                    n if recording => format!(" — the last picked of {n}, keyed alone"),
+                    n => format!(" — {n} selected, the last picked shown"),
                 };
                 ui.label(format!(
                     "Entity {} (gen {}){more}",
                     entity.index(),
                     entity.generation()
-                ));
+                ))
+                .on_hover_text(if multi.is_multi() {
+                    "an edit writes the field changed to every selected entity"
+                } else {
+                    "the entity the inspector edits"
+                });
 
                 // The name, then what it hangs off. Both are identity rather
                 // than geometry, so they sit above the components.
-                let mut claim: Option<&'static str> = name::show(ui, frame.world, entity);
+                let named: Vec<Entity> = multi.all().collect();
+                let mut claim: Option<&'static str> = name::show(ui, frame.world, &named);
                 if let Some(parent) = hierarchy::parent_of(frame.world, entity) {
                     ui.label(
                         RichText::new(format!("child of {}", name::of(frame.world, parent))).weak(),
                     );
                 }
                 ui.separator();
-                claim = claim.or(sections::show(editor, ui, frame, entity));
+                let added = partial::show(ui, frame.world, &editor.registry, &multi);
+                if !added.is_empty() {
+                    frame.resolve_assets_of(&added);
+                    claim = claim.or(Some("Add component"));
+                }
+                claim = claim.or(sections::show(editor, ui, frame, entity, &mut multi));
+                // What the sections did to the primary, written into the rest
+                // of the selection before the history takes the frame's after
+                // side: one entry for all of them.
+                let written = multi.finish(frame.world, &editor.registry);
+                // Loaded from text, the rest carry no handles yet.
+                frame.resolve_assets_of(&written);
                 // A field held down or focused keeps one entry open for the
                 // whole edit, the way a gizmo drag does. Collected and applied
                 // here rather than pushed from inside the widget helpers: they

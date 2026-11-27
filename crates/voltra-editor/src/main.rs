@@ -14,6 +14,7 @@ mod grab;
 mod instance;
 mod joints;
 mod marquee;
+mod multi_edit;
 mod netplay;
 mod pack_atlas;
 mod paint;
