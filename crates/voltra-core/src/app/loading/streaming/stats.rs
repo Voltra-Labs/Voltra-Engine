@@ -35,7 +35,7 @@ pub(super) fn stats_of(streaming: &Streaming) -> StreamingStats {
             match slot {
                 Slot::Unloaded => {}
                 Slot::Loading(_) => stats.loading += 1,
-                Slot::Loaded(entities) => {
+                Slot::Loaded(entities, _) => {
                     stats.loaded += 1;
                     stats.entities += entities.len();
                 }

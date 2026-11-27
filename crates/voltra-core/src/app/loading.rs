@@ -179,10 +179,19 @@ impl App {
 
     /// On a replication client, lets go of the level entities it set aside
     /// out of interest without the server ever sending them: the level
-    /// they came from is going (a scene change, a region unloaded).
+    /// they came from is going (a scene change).
     fn forget_unsent_level(&mut self) {
         if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
             client.forget_unsent();
+        }
+    }
+
+    /// [`forget_unsent_level`](Self::forget_unsent_level), of the entities
+    /// `ids` names alone: the replicated entities of regions unloading,
+    /// while the rest of the level stays.
+    fn forget_unsent_of(&mut self, ids: &[voltra_scene::SceneId]) {
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.forget_unsent_of(ids);
         }
     }
 }

@@ -8349,11 +8349,14 @@ replication message.
   destroying them — under interest, never sent may mean only far away —
   and spawns the level's copy back when one comes near. Those have no
   number the server sends, so no despawn reaches them: they are let go of
-  when their level goes — a scene change, a region unloaded
-  (`ReplicationClient::forget_unsent`, called by the loop) — which also
-  covers a region loaded before joining, whose entities carry fresh ids
-  the server never sends. One the server despawned before the client
-  joined is kept until then.
+  when their level goes — a scene change lets go of every one
+  (`ReplicationClient::forget_unsent`, called by the loop), a region
+  unloaded of its own alone (`forget_unsent_of`, with the ids of the
+  replicated entities the region spawned, noted when it finished loading;
+  stage 130 — it had let go of every swept entity, so a still-loaded
+  level's came back by prefab or bare). That covers a region loaded
+  before joining, whose entities carry fresh ids the server never sends.
+  One the server despawned before the client joined is kept until then.
 - **References** (`SceneRefs`: a joint's other body, a camera target) to
   an entity out of interest name an id the client does not hold; they
   resolve the way a reference to any id not yet spawned does, once both
@@ -8376,9 +8379,7 @@ replication message.
   entity at rest kept relevant but not compared each tick); the editor's
   network play setting interest itself (it hosts with the default config,
   so a game's interest applies to a dedicated or listen server it
-  starts); letting go of a swept entity of one region alone (any region
-  unloaded lets go of every swept entity, so one of the still-loaded
-  level comes back by prefab or bare).
+  starts).
 
 Pinned by `voltra-core/tests/interest.rs`: entering at the radius and
 leaving past it under 20 % loss, back again where the server has it, and
@@ -8390,7 +8391,10 @@ owned entity's far root and a hierarchy that comes and goes whole;
 the owner despawned and a spectator point set; a level entity back with
 its sprite, a changed component and a removed one; the budget; the
 same snapshot sizes and world as `None`; a client joining late;
-(`tests/replication.rs`) a peer on the previous wire version refused. Unit tests of
+(`tests/replication.rs`) a peer on the previous wire version refused;
+(`tests/streaming_replication.rs`) a region unloaded letting go of what
+was swept of it while the level's far door is kept and comes back with
+its sprite. Unit tests of
 the grid (radius, leave radius, own radius, a tiny cell, negative cells),
 the stash (kept but for the replicated components, a replicated child
 kept on its own, let go of), the view (a cull acknowledged, an old

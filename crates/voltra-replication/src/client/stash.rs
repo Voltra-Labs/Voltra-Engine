@@ -19,8 +19,9 @@
 //! swept (a level entity the server never sent, which under interest may
 //! be only far away) has no number the server sends; it is bounded by the
 //! level, and let go of when the level goes
-//! ([`ReplicationClient::forget_unsent`](crate::ReplicationClient::forget_unsent):
-//! a scene change, a region unloaded — a region's entities have fresh ids
+//! ([`ReplicationClient::forget_unsent`](crate::ReplicationClient::forget_unsent),
+//! a scene change; [`forget_unsent_of`](crate::ReplicationClient::forget_unsent_of),
+//! a region unloaded, its own alone — a region's entities have fresh ids
 //! the server never sends, so they would otherwise stay).
 
 use std::collections::HashMap;
@@ -156,6 +157,16 @@ impl Stash {
     /// the level entities swept, never sent.
     pub(crate) fn forget_unnumbered(&mut self) {
         self.kept.retain(|_, (net, _)| net.is_some());
+    }
+
+    /// [`forget_unnumbered`](Self::forget_unnumbered), of `ids` alone: the
+    /// entities of one region of several.
+    pub(crate) fn forget_unnumbered_of(&mut self, ids: &[SceneId]) {
+        for id in ids {
+            if let Some((None, _)) = self.kept.get(id) {
+                self.kept.remove(id);
+            }
+        }
     }
 
     /// Lets go of everything: a new session.

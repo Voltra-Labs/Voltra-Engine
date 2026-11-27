@@ -4,7 +4,7 @@ use voltra_assets::AssetPath;
 use voltra_scene::WorldRegions;
 
 use super::super::unload::Unload;
-use super::{Slot, StreamedWorld, Streaming};
+use super::{replicated_ids, Slot, StreamedWorld, Streaming};
 use crate::app::spawning::prefab_store;
 use crate::app::App;
 
@@ -13,17 +13,25 @@ impl App {
     /// the frames to come — and starts on `next`, if it reads.
     pub(super) fn switch_world(&mut self, streaming: &mut Streaming, next: Option<AssetPath>) {
         if let Some(old) = streaming.world.take() {
+            // On a replication client, what was swept of the regions going.
+            let mut going = Vec::new();
             for slot in old.slots {
                 match slot {
                     Slot::Loading(build) => {
-                        streaming
-                            .orphans
-                            .push(Unload::new(build.entities().to_vec()));
+                        let entities = build.entities().to_vec();
+                        going.extend(replicated_ids(&self.world, &entities));
+                        streaming.orphans.push(Unload::new(entities));
                     }
-                    Slot::Loaded(entities) => streaming.orphans.push(Unload::new(entities)),
+                    Slot::Loaded(entities, ids) => {
+                        going.extend(ids);
+                        streaming.orphans.push(Unload::new(entities));
+                    }
                     Slot::Unloading(unload) => streaming.orphans.push(unload),
                     Slot::Unloaded | Slot::Broken => {}
                 }
+            }
+            if !going.is_empty() {
+                self.forget_unsent_of(&going);
             }
             log::info!("stopped streaming {}", old.path.as_str());
         }

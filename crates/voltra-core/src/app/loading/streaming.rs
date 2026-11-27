@@ -52,7 +52,7 @@ use crate::app::spawning::prefab_store;
 use crate::app::tick::Tick;
 use crate::app::App;
 
-use slot::Slot;
+use slot::{replicated_ids, Slot};
 use stats::stats_of;
 pub use stats::StreamingStats;
 
@@ -153,7 +153,8 @@ impl App {
         // A scene change is taking the world away: no region starts or
         // stops until it is done, but a stopped world's go on going.
         let mut order: Vec<(f32, usize)> = Vec::new();
-        let mut unloaded = false;
+        // The replicated entities of the regions going, by id.
+        let mut going = Vec::new();
         if let (Some(world), false) = (streaming.world.as_mut(), changing) {
             let anchors = self.streaming_anchors(world.regions.load_radius);
             let margin = world.regions.unload_margin;
@@ -175,14 +176,15 @@ impl App {
                     // spawn put in so far goes.
                     Slot::Loading(build) if !kept => {
                         let entities = build.entities().to_vec();
+                        going.extend(replicated_ids(&self.world, &entities));
                         *slot = if entities.is_empty() {
                             Slot::Unloaded
                         } else {
                             Slot::Unloading(Unload::new(entities))
                         };
                     }
-                    Slot::Loaded(entities) if !kept => {
-                        unloaded = true;
+                    Slot::Loaded(entities, ids) if !kept => {
+                        going.append(ids);
                         *slot = Slot::Unloading(Unload::new(std::mem::take(entities)));
                     }
                     _ => {}
@@ -208,8 +210,8 @@ impl App {
             }
             order.sort_by(|a, b| a.0.total_cmp(&b.0));
         }
-        if unloaded {
-            self.forget_unsent_level();
+        if !going.is_empty() {
+            self.forget_unsent_of(&going);
         }
 
         // Loads, nearest first, and unloads take turns.
@@ -236,7 +238,9 @@ impl App {
                             if let Slot::Loading(build) =
                                 std::mem::replace(&mut world.slots[index], Slot::Unloaded)
                             {
-                                world.slots[index] = Slot::Loaded(build.into_entities());
+                                let entities = build.into_entities();
+                                let ids = replicated_ids(&self.world, &entities);
+                                world.slots[index] = Slot::Loaded(entities, ids);
                             }
                         }
                         Step::Failed => {
