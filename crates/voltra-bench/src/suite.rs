@@ -13,6 +13,7 @@ use crate::stats::Stats;
 
 mod batch;
 mod frame;
+mod interest;
 mod keyframes;
 mod physics;
 mod prefab;
@@ -89,6 +90,7 @@ pub fn all() -> Vec<Bench> {
     benches.extend(scene::benches());
     benches.extend(prefab::benches());
     benches.extend(keyframes::benches());
+    benches.extend(interest::benches());
     benches.extend(frame::benches());
     benches
 }
