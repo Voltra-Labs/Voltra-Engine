@@ -216,8 +216,10 @@ the readiness). What "start" does is the game's: the engine only says
 when. Lobby messages travel on a channel of their own, so
 `tick.net.received()` never holds one; a client of another build's lobby
 is refused at the handshake. A peer that connects and never joins is cut
-off after `join_timeout` (5 s), and with the lobby on, replication sends
-the world only to the lobby's players.
+off after the session's timeout plus `JOIN_GRACE` (12 s by default;
+`join_timeout` may lengthen it, never shorten it below that — a client
+the session keeps through an outage keeps its place), and with the lobby
+on, replication sends the world only to the lobby's players.
 
 The lobby screen does the clicking: `assets/prefabs/lobby.prefab.ron`
 (every `cargo xtask new-game` copies it) with `LobbyScreen::open(tick,

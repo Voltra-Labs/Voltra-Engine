@@ -32,7 +32,7 @@ mod state;
 mod wire;
 
 pub use config::{
-    LateJoin, LobbyConfig, MAX_LOBBY_PLAYERS, MAX_LOBBY_SNAPSHOT, MAX_NAME_CHARS, MIN_JOIN_TIMEOUT,
+    LateJoin, LobbyConfig, JOIN_GRACE, MAX_LOBBY_PLAYERS, MAX_LOBBY_SNAPSHOT, MAX_NAME_CHARS,
 };
 pub use error::LobbyError;
 pub use event::LobbyEvent;

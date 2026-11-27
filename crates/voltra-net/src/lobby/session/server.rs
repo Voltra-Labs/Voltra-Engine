@@ -19,8 +19,11 @@ pub(super) struct Server {
     pub(super) dirty: bool,
     /// Peers refused, and when they are cut off if still here.
     pub(super) refused: Vec<(PeerId, Duration)>,
+    /// How long a connected peer has to say hello
+    /// ([`LobbyConfig::join_deadline`] for this session).
+    pub(super) join_timeout: Duration,
     /// Peers connected but not yet in, and when they are cut off if they
-    /// have still not said hello ([`LobbyConfig::join_timeout`]).
+    /// have still not said hello.
     pub(super) waiting: HashMap<PeerId, Duration>,
 }
 
@@ -113,7 +116,7 @@ impl Server {
             }
             true
         });
-        self.hold_to_the_deadline(lobby, config, endpoint, now);
+        self.hold_to_the_deadline(lobby, endpoint, now);
         // Whoever is no longer connected is out, however the frame's events
         // and messages fell: the lobby never holds a peer that is gone.
         let gone: Vec<PeerId> = lobby
@@ -132,16 +135,10 @@ impl Server {
     }
 
     /// Cuts off a connected peer that has not joined within
-    /// [`LobbyConfig::join_timeout`]: a session slot is not held by a peer
+    /// [`join_timeout`](Self::join_timeout): a session slot is not held by a peer
     /// that never says who it is. Counted from when this lobby first saw
     /// it connected.
-    fn hold_to_the_deadline(
-        &mut self,
-        lobby: &Lobby,
-        config: &LobbyConfig,
-        endpoint: &mut Endpoint,
-        now: Duration,
-    ) {
+    fn hold_to_the_deadline(&mut self, lobby: &Lobby, endpoint: &mut Endpoint, now: Duration) {
         let refused = &self.refused;
         let unjoined: Vec<PeerId> = endpoint
             .peers()
@@ -153,14 +150,11 @@ impl Server {
             .collect();
         self.waiting.retain(|peer, _| unjoined.contains(peer));
         for peer in unjoined {
-            let deadline = *self
-                .waiting
-                .entry(peer)
-                .or_insert(now + config.join_timeout);
+            let deadline = *self.waiting.entry(peer).or_insert(now + self.join_timeout);
             if now >= deadline {
                 log::info!(
                     "lobby: {peer} did not join within {:?}; cut off",
-                    config.join_timeout
+                    self.join_timeout
                 );
                 endpoint.kick(peer);
                 self.waiting.remove(&peer);

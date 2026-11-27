@@ -8583,7 +8583,10 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   characters — must fit: `max_name_chars` gives way in a lobby so large
   it would pass `MAX_LOBBY_SNAPSHOT` (60 KiB, under the default 64 KiB
   message limit; 255 slots take 58-character names), and
-  `LobbyConfig::net_config` raises a smaller `max_message_size` to it.
+  `LobbyConfig::net_config` raises a smaller `max_message_size` to that
+  constant — not to this config's own worst case: the limit is in the
+  fingerprint, and a client and a server with other slots or name
+  lengths must make the same session.
 - **Peers are counted out by the session, not by events.** A server
   ignores lobby messages from a peer no longer connected (a hello and a
   goodbye read in one receive would otherwise leave an entry nobody
@@ -8672,7 +8675,9 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
 - **The local network only, by default** (`DiscoveryScope::Local`, in
   `Advertise::scope`): a responder answers private, link-local and
   loopback sources (`10/8`, `172.16/12`, `192.168/16`, `169.254/16`,
-  `127/8`, `fc00::/7`, `fe80::/10`, `::1`, and IPv4-mapped ones) and
+  `127/8`, `100.64/10` — shared address space, carrier NAT and mesh
+  VPNs such as Tailscale's, never publicly routed — `fc00::/7`,
+  `fe80::/10`, `::1`, and IPv4-mapped ones) and
   drops the rest unread (`DiscoveryStats::out_of_scope`). A broadcast
   never crosses a router, so every probe a LAN game wants comes from
   those ranges; a public responder serves only strangers — scanners,
@@ -8735,8 +8740,7 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   per address, and a forged answer for a server's own address and ports
   replaces its entry: a nonce seen on the LAN is enough to forge one);
   confusable scripts in names (Cyrillic `а` for Latin `a`: UTS #39's
-  skeletons would be the tool); `100.64/10` (CGNAT, some VPN overlays)
-  counted as local.
+  skeletons would be the tool).
 
 Pinned by `voltra-net/tests/lobby.rs` over a lossy memory network: two
 players joining (names cleaned and made unique), readying, the

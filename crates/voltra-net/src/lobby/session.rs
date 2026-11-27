@@ -51,7 +51,10 @@ impl LobbySession {
     pub fn new(config: LobbyConfig, endpoint: &Endpoint) -> Self {
         let config = config.validated();
         let role = if endpoint.is_server() {
-            Role::Server(Server::default())
+            Role::Server(Server {
+                join_timeout: config.join_deadline(endpoint.config()),
+                ..Server::default()
+            })
         } else {
             Role::Client(Client::default())
         };

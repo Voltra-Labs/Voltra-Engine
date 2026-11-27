@@ -249,7 +249,6 @@ fn with_a_lobby_the_match_is_replicated_to_its_players_only() {
     let address = transport.address();
     let rules = LobbyConfig {
         min_players: 1,
-        join_timeout: Duration::from_secs(2),
         ..lobby("Server")
     };
     let mut server = Headless::new(
@@ -257,7 +256,12 @@ fn with_a_lobby_the_match_is_replicated_to_its_players_only() {
             .with_lobby(rules.clone())
             .with_replication(ReplicationConfig::default()),
     );
-    server.net_mut().host_on(transport, NetConfig::default());
+    // A short session timeout: the join deadline is it plus JOIN_GRACE.
+    let short = NetConfig {
+        timeout: Duration::from_secs(1),
+        ..NetConfig::default()
+    };
+    server.net_mut().host_on(transport, short);
     let session = server.net().endpoint().expect("hosting").config().clone();
 
     let (app, _) = eager(lobby("Player"));
@@ -295,8 +299,9 @@ fn with_a_lobby_the_match_is_replicated_to_its_players_only() {
         "only the lobby's player is sent the world"
     );
 
-    // Past the join deadline the silent peer is cut off; the player stays.
-    for _ in 0..150 {
+    // Past the join deadline (3 s) the silent peer is cut off; the player
+    // stays.
+    for _ in 0..240 {
         frame(&mut server, &mut player, &mut silent);
     }
     assert_eq!(silent.local_id(), None, "cut off at the join deadline");

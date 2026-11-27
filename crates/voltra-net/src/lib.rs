@@ -77,8 +77,8 @@ pub use endpoint::{Endpoint, SendError};
 pub use event::{DisconnectReason, NetEvent, PeerId};
 pub use lobby::{
     sanitize_name, unique_name, LateJoin, Lobby, LobbyConfig, LobbyEntry, LobbyError, LobbyEvent,
-    LobbyPhase, LobbyRefusal, LobbySession, LOBBY_WIRE_VERSION, MAX_LOBBY_PLAYERS,
-    MAX_LOBBY_SNAPSHOT, MAX_MARKS_PER_BASE, MAX_NAME_CHARS, MIN_JOIN_TIMEOUT,
+    LobbyPhase, LobbyRefusal, LobbySession, JOIN_GRACE, LOBBY_WIRE_VERSION, MAX_LOBBY_PLAYERS,
+    MAX_LOBBY_SNAPSHOT, MAX_MARKS_PER_BASE, MAX_NAME_CHARS,
 };
 pub use memory::{MemoryNetwork, MemoryTransport};
 pub use message::{decode, encode, CodecError, Message};

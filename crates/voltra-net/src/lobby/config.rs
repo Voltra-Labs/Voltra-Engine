@@ -22,9 +22,11 @@ pub const MAX_NAME_CHARS: usize = 64;
 /// message limit is smaller has it raised ([`LobbyConfig::net_config`]).
 pub const MAX_LOBBY_SNAPSHOT: usize = 60 * 1024;
 
-/// The shortest [`LobbyConfig::join_timeout`]: a client's hello needs a
-/// round trip to arrive.
-pub const MIN_JOIN_TIMEOUT: Duration = Duration::from_millis(250);
+/// What the join deadline adds to the session's
+/// [`timeout`](NetConfig::timeout): a client the session keeps through an
+/// outage as long as that has, once the link is back, this long for its
+/// hello to arrive. See [`LobbyConfig::join_timeout`].
+pub const JOIN_GRACE: Duration = Duration::from_secs(2);
 
 /// What a lobby does with a peer that asks to join while the match is
 /// being played.
@@ -76,10 +78,15 @@ pub struct LobbyConfig {
     /// server cuts it off. A client leaves on its own as soon as it reads
     /// the refusal.
     pub refusal_grace: Duration,
-    /// How long a connected peer may take to join (its hello) before the
-    /// server cuts it off, so a peer that never says who it is cannot hold
-    /// a session slot. At least [`MIN_JOIN_TIMEOUT`].
-    pub join_timeout: Duration,
+    /// How long a connected peer may take to join (its hello), counted
+    /// from when the server's lobby first sees it connected, before the
+    /// server cuts it off — so a peer that keeps its connection alive and
+    /// never says who it is cannot hold a session slot. `None`, the
+    /// default, is the session's [`timeout`](NetConfig::timeout) plus
+    /// [`JOIN_GRACE`] (12 s with the default 10 s); a `Some` shorter than
+    /// that is raised to it, since a client the session keeps through an
+    /// outage must not be cut for one.
+    pub join_timeout: Option<Duration>,
 }
 
 impl Default for LobbyConfig {
@@ -92,7 +99,7 @@ impl Default for LobbyConfig {
             late_join: LateJoin::Refuse,
             name: "Player".to_owned(),
             refusal_grace: Duration::from_secs(2),
-            join_timeout: Duration::from_secs(5),
+            join_timeout: None,
         }
     }
 }
@@ -138,12 +145,19 @@ impl LobbyConfig {
                 == Some(&ChannelKind::ReliableOrdered)
     }
 
+    /// How long a server running a session of `session` waits for a
+    /// connected peer's hello: [`join_timeout`](Self::join_timeout), at
+    /// least the session's timeout plus [`JOIN_GRACE`].
+    pub fn join_deadline(&self, session: &NetConfig) -> Duration {
+        let floor = session.timeout + JOIN_GRACE;
+        self.join_timeout.map_or(floor, |asked| asked.max(floor))
+    }
+
     /// The config with every limit brought into range.
     pub(crate) fn validated(mut self) -> Self {
         self.max_players = self.max_players.clamp(1, MAX_LOBBY_PLAYERS);
         self.min_players = self.min_players.clamp(1, self.max_players);
         self.max_name_chars = name_cap(self.max_players, self.max_name_chars);
-        self.join_timeout = self.join_timeout.max(MIN_JOIN_TIMEOUT);
         self
     }
 }
@@ -180,6 +194,30 @@ mod tests {
         };
         assert!(!lobby.fits(&other_build));
         assert_ne!(with.fingerprint(), other_build.fingerprint());
+    }
+
+    #[test]
+    fn the_join_deadline_outlasts_the_session_timeout() {
+        let session = NetConfig {
+            timeout: Duration::from_secs(10),
+            ..NetConfig::default()
+        };
+        let derived = LobbyConfig::default();
+        assert_eq!(derived.join_deadline(&session), Duration::from_secs(12));
+        let short = LobbyConfig {
+            join_timeout: Some(Duration::from_secs(5)),
+            ..LobbyConfig::default()
+        };
+        assert_eq!(
+            short.join_deadline(&session),
+            Duration::from_secs(12),
+            "raised: an outage the session survives is not a reason"
+        );
+        let long = LobbyConfig {
+            join_timeout: Some(Duration::from_secs(30)),
+            ..LobbyConfig::default()
+        };
+        assert_eq!(long.join_deadline(&session), Duration::from_secs(30));
     }
 
     #[test]
@@ -260,15 +298,6 @@ mod tests {
         }
         .validated();
         assert_eq!(roomy.max_name_chars, MAX_NAME_CHARS);
-        assert_eq!(
-            LobbyConfig {
-                join_timeout: Duration::ZERO,
-                ..LobbyConfig::default()
-            }
-            .validated()
-            .join_timeout,
-            MIN_JOIN_TIMEOUT
-        );
 
         let fewer_slots_than_needed = LobbyConfig {
             max_players: 2,
