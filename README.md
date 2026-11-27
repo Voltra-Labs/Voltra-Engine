@@ -303,7 +303,16 @@ privileged and plain `cargo build` covers everything.
 
 Version 0.3 closed the 2D base and added networking (stages 88–118);
 version 0.4 closes the 2D and networking gaps a game author hits first
-(stages 119–131, below). 3D comes next, with a plan of its own.
+(stages 119–131, below).
+
+**Version 0.5 is 3D** (stages 132–154): a parallel subsystem beside 2D in
+the same engine — its own transform, camera, physics and depth-tested
+pass; the ECS, assets, scenes, editor, audio, input, networking and UI
+shared — with glTF models, PBR materials, shadows, a 3D editor view,
+2.5D bridges and `cargo xtask new-game --3d`. The design is "3D: a
+parallel subsystem" in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), the
+plan [docs/superpowers/specs/0.5-3d.md](docs/superpowers/specs/0.5-3d.md);
+a row is added below as each stage lands.
 
 | Stage | Scope | State |
 | --- | --- | --- |
