@@ -215,3 +215,63 @@ fn a_game_type_without_a_default_still_registers() {
     assert!(registry.names().any(|n| n == "Coin"));
     assert!(registry.template("Coin").is_none());
 }
+
+#[test]
+fn every_built_in_round_trips_through_a_tree() {
+    // The tree replays the type's own calls, so what it loads back is the
+    // value, for every template the registry has.
+    let registry = ComponentRegistry::with_defaults();
+    for info in registry.describe().iter().filter(|i| i.has_template) {
+        let mut world = World::new();
+        let entity = world.spawn();
+        let template = registry
+            .template(info.name)
+            .expect("listed")
+            .expect("writes");
+        assert!(matches!(
+            registry.load_one(&mut world, entity, info.name, &template),
+            Some(Ok(()))
+        ));
+        let tree = registry
+            .save_tree(&world, entity, info.name)
+            .expect("held")
+            .expect("records");
+        let other = world.spawn();
+        assert!(
+            matches!(
+                registry.load_tree(&mut world, other, info.name, &tree),
+                Some(Ok(()))
+            ),
+            "{} loads back from its tree",
+            info.name
+        );
+        let first = registry.save_one(&world, entity, info.name).expect("h");
+        let second = registry.save_one(&world, other, info.name).expect("h");
+        assert_eq!(
+            first.expect("w").get_ron(),
+            second.expect("w").get_ron(),
+            "{}",
+            info.name
+        );
+    }
+}
+
+#[test]
+fn a_tree_is_none_for_an_unregistered_name_or_a_missing_component() {
+    let (mut world, entity) = world_with_one_sprite();
+    let registry = ComponentRegistry::with_defaults();
+    assert!(registry.save_tree(&world, entity, "Physics").is_none());
+    assert!(registry.save_tree(&world, entity, "Camera").is_none());
+    let tree = registry
+        .save_tree(&world, entity, "Sprite")
+        .expect("held")
+        .expect("records");
+    assert!(registry
+        .load_tree(&mut world, entity, "Physics", &tree)
+        .is_none());
+    // A sprite's tree is no transform.
+    assert!(matches!(
+        registry.load_tree(&mut world, entity, "Transform", &tree),
+        Some(Err(_))
+    ));
+}

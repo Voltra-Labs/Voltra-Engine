@@ -15,6 +15,7 @@ use voltra_ecs::{Entity, World};
 mod entry;
 mod registration;
 mod replicate;
+mod tree;
 
 pub use registration::{ComponentInfo, Registration};
 pub use replicate::{ReplicateError, ReplicatedComponent};
@@ -23,6 +24,7 @@ use entry::Entry;
 
 use super::error::SceneError;
 use super::refs::SceneRefs;
+use super::serial_tree::SerialTree;
 use crate::scene_id::SceneId;
 use crate::{
     AudioListener, AudioSource, Camera, Collider, CollisionLayers, GlobalLight2D, Name, Parallax,
@@ -211,6 +213,7 @@ impl ComponentRegistry {
                 let component: T = value.into_rust().map_err(SceneError::Parse)?;
                 RawValue::from_rust(&component).map_err(SceneError::Serialize)
             },
+            tree: |world, entity| world.get::<T>(entity).map(SerialTree::record),
             refs: None,
             template: None,
             type_id: std::any::TypeId::of::<T>(),
