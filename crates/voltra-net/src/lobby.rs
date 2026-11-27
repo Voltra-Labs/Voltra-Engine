@@ -31,7 +31,7 @@ mod session;
 mod state;
 mod wire;
 
-pub use config::{LateJoin, LobbyConfig, MAX_LOBBY_PLAYERS, MAX_NAME_CHARS};
+pub use config::{LateJoin, LobbyConfig, MAX_LOBBY_PLAYERS, MAX_NAME_CHARS, MIN_JOIN_TIMEOUT};
 pub use error::LobbyError;
 pub use event::LobbyEvent;
 #[cfg(not(target_arch = "wasm32"))]

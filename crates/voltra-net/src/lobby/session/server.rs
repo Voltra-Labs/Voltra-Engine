@@ -1,5 +1,6 @@
 //! The server's side of a lobby: the rules, run on what its peers ask.
 
+use std::collections::HashMap;
 use std::time::Duration;
 
 use super::super::config::LobbyConfig;
@@ -18,6 +19,9 @@ pub(super) struct Server {
     pub(super) dirty: bool,
     /// Peers refused, and when they are cut off if still here.
     pub(super) refused: Vec<(PeerId, Duration)>,
+    /// Peers connected but not yet in, and when they are cut off if they
+    /// have still not said hello ([`LobbyConfig::join_timeout`]).
+    pub(super) waiting: HashMap<PeerId, Duration>,
 }
 
 impl Server {
@@ -49,13 +53,17 @@ impl Server {
                         self.listen = false;
                     }
                     self.refused.retain(|(gone, _)| *gone != peer);
+                    self.waiting.remove(&peer);
                     lobby.leave(peer);
                 }
             }
         }
         for message in messages {
             let peer = message.from;
-            if self.refused.iter().any(|(r, _)| *r == peer) {
+            // Gone in this same receive (its hello and its disconnect in
+            // one frame): what it asked dies with it, or it would be an
+            // entry nobody ever takes out.
+            if !endpoint.is_connected(peer) || self.refused.iter().any(|(r, _)| *r == peer) {
                 continue;
             }
             let asked = match message.decode::<ToServer>() {
@@ -69,8 +77,12 @@ impl Server {
             };
             match asked {
                 ToServer::Hello { name } => match lobby.join(peer, &name, config) {
-                    Ok(given) => log::info!("lobby: {peer} is {given:?}"),
+                    Ok(given) => {
+                        self.waiting.remove(&peer);
+                        log::info!("lobby: {peer} is {given:?}");
+                    }
                     Err(refusal) => {
+                        self.waiting.remove(&peer);
                         log::info!("lobby: {peer} refused: {refusal}");
                         if let Err(error) =
                             endpoint.send_message(peer, config.channel, &ToClient::Refused(refusal))
@@ -101,10 +113,59 @@ impl Server {
             }
             true
         });
+        self.hold_to_the_deadline(lobby, config, endpoint, now);
+        // Whoever is no longer connected is out, however the frame's events
+        // and messages fell: the lobby never holds a peer that is gone.
+        let gone: Vec<PeerId> = lobby
+            .entries()
+            .iter()
+            .map(|entry| entry.peer)
+            .filter(|&peer| peer != PeerId::SERVER && !endpoint.is_connected(peer))
+            .collect();
+        for peer in gone {
+            lobby.leave(peer);
+        }
         if before != *lobby {
             self.dirty = true;
         }
         changes(&before, lobby, events);
+    }
+
+    /// Cuts off a connected peer that has not joined within
+    /// [`LobbyConfig::join_timeout`]: a session slot is not held by a peer
+    /// that never says who it is. Counted from when this lobby first saw
+    /// it connected.
+    fn hold_to_the_deadline(
+        &mut self,
+        lobby: &Lobby,
+        config: &LobbyConfig,
+        endpoint: &mut Endpoint,
+        now: Duration,
+    ) {
+        let refused = &self.refused;
+        let unjoined: Vec<PeerId> = endpoint
+            .peers()
+            .filter(|&peer| {
+                peer != PeerId::SERVER
+                    && !lobby.contains(peer)
+                    && !refused.iter().any(|(r, _)| *r == peer)
+            })
+            .collect();
+        self.waiting.retain(|peer, _| unjoined.contains(peer));
+        for peer in unjoined {
+            let deadline = *self
+                .waiting
+                .entry(peer)
+                .or_insert(now + config.join_timeout);
+            if now >= deadline {
+                log::info!(
+                    "lobby: {peer} did not join within {:?}; cut off",
+                    config.join_timeout
+                );
+                endpoint.kick(peer);
+                self.waiting.remove(&peer);
+            }
+        }
     }
 
     /// The lobby to everyone in it, when it changed.

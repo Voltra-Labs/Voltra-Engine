@@ -12,6 +12,10 @@ pub const MAX_LOBBY_PLAYERS: usize = 255;
 /// says.
 pub const MAX_NAME_CHARS: usize = 64;
 
+/// The shortest [`LobbyConfig::join_timeout`]: a client's hello needs a
+/// round trip to arrive.
+pub const MIN_JOIN_TIMEOUT: Duration = Duration::from_millis(250);
+
 /// What a lobby does with a peer that asks to join while the match is
 /// being played.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -57,6 +61,10 @@ pub struct LobbyConfig {
     /// server cuts it off. A client leaves on its own as soon as it reads
     /// the refusal.
     pub refusal_grace: Duration,
+    /// How long a connected peer may take to join (its hello) before the
+    /// server cuts it off, so a peer that never says who it is cannot hold
+    /// a session slot. At least [`MIN_JOIN_TIMEOUT`].
+    pub join_timeout: Duration,
 }
 
 impl Default for LobbyConfig {
@@ -69,6 +77,7 @@ impl Default for LobbyConfig {
             late_join: LateJoin::Refuse,
             name: "Player".to_owned(),
             refusal_grace: Duration::from_secs(2),
+            join_timeout: Duration::from_secs(5),
         }
     }
 }
@@ -112,6 +121,7 @@ impl LobbyConfig {
         self.max_players = self.max_players.clamp(1, MAX_LOBBY_PLAYERS);
         self.min_players = self.min_players.clamp(1, self.max_players);
         self.max_name_chars = self.max_name_chars.clamp(1, MAX_NAME_CHARS);
+        self.join_timeout = self.join_timeout.max(MIN_JOIN_TIMEOUT);
         self
     }
 }
@@ -168,6 +178,15 @@ mod tests {
         assert_eq!(config.max_players, MAX_LOBBY_PLAYERS);
         assert_eq!(config.min_players, 1);
         assert_eq!(config.max_name_chars, 1);
+        assert_eq!(
+            LobbyConfig {
+                join_timeout: Duration::ZERO,
+                ..LobbyConfig::default()
+            }
+            .validated()
+            .join_timeout,
+            MIN_JOIN_TIMEOUT
+        );
 
         let fewer_slots_than_needed = LobbyConfig {
             max_players: 2,
