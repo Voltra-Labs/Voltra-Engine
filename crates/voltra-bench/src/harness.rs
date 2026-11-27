@@ -44,6 +44,19 @@ impl Config {
     };
 }
 
+impl Config {
+    /// This config with three times the samples, for a routine of a few
+    /// microseconds or less: a sample of it is a burst of many thousand
+    /// runs that one scheduler hiccup can slow whole, and a median of
+    /// more samples is not moved by a few slowed ones. Odd still.
+    pub fn steady(&self) -> Self {
+        Self {
+            samples: self.samples * 3,
+            ..*self
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self::DEFAULT

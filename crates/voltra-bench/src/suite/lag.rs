@@ -17,12 +17,13 @@ const TICKS: u32 = 60;
 const BACK: f64 = 8.5;
 
 pub(super) fn benches() -> Vec<Bench> {
+    // A few microseconds each: steadied (`Config::steady`).
     vec![
         Bench::new("lag/rewound-ray/100-entities", 15.0, |config| {
             let (world, history) = recorded();
             let at = f64::from(TICKS) - BACK;
             measure(
-                config,
+                &config.steady(),
                 1,
                 iter(|| {
                     history.rewound(&world, at).ray(
@@ -35,12 +36,10 @@ pub(super) fn benches() -> Vec<Bench> {
             )
             .into()
         }),
-        // Five microseconds: three runs spread 40 % on a 4-core container
-        // (stage 130), so the limit is the comparer's suggestion.
-        Bench::new("lag/live-ray/100-entities", 85.0, |config| {
+        Bench::new("lag/live-ray/100-entities", 15.0, |config| {
             let (world, _) = recorded();
             measure(
-                config,
+                &config.steady(),
                 1,
                 iter(|| {
                     query::ray(
@@ -58,7 +57,7 @@ pub(super) fn benches() -> Vec<Bench> {
             let (world, mut history) = recorded();
             let mut tick = TICKS;
             measure(
-                config,
+                &config.steady(),
                 1,
                 iter(|| {
                     tick += 1;

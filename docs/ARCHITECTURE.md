@@ -8876,9 +8876,16 @@ to meet in throwaway probes — kept as tests where they found something.
   level entity, not its own (interest, above). An MCP run's screenshot drew
   HUD buttons unlaid out, in their sprites' white (the screenshot section).
   Test scratch folders were never removed and filled the disk (testkit
-  section). Four new benchmarks' limits sat under their own run-to-run
-  spread — `interest/grid` ×2, `keyframes/sample`, `keyframes/blend`,
-  `lag/live-ray` — and are raised to the comparer's suggestion.
+  section). The new benchmarks of a few microseconds or less
+  (`keyframes/sample`, `keyframes/blend`, `lag/*`, `interest/grid` ×2)
+  spread 24–74 % over three runs taken while another build shared the
+  machine; they now take three times the samples (`Config::steady`: a
+  median of more is not moved by a few bursts slowed whole) and keep
+  their limits. An A/A over six runs on a quiet machine (load under 1.5
+  after the first; `voltra-bench noise`, best of three against best of
+  three) found every benchmark's A/A under 10 %, each within its limit
+  but `interest/server-frame-without` (7.5 %), raised from 15 to
+  `noise::suggest`'s 20.
 - **Met and held** (probes; the first two kept as tests in
   `voltra-editor`): a base's instance and its variant's multi-edited
   together, each overriding against its own prefab and the base's edit
@@ -8895,9 +8902,7 @@ to meet in throwaway probes — kept as tests where they found something.
   state is not serialized, so nothing of it is written across.
 - **Not yet**: a joint's break replicating (the joints section); camera
   shake in the editor's three-client network play was read, not run — a
-  shake is per camera entity and view-only, each client's world its own;
-  `batch/sprites/10k` spreads 74 % run to run here against its 40 % limit
-  (stage 107's, left as CI measured it).
+  shake is per camera entity and view-only, each client's world its own.
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 

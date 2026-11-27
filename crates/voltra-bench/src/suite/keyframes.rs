@@ -31,22 +31,20 @@ const FRAME: f32 = 1.0 / 60.0;
 pub(super) fn benches() -> Vec<Bench> {
     let tracks = TARGETS * 3;
     vec![
-        // Under two microseconds each: three runs spread 28 % and 74 % on
-        // a 4-core container (stage 130); the limits are the comparer's
-        // suggestions.
+        // Under two microseconds each: steadied (`Config::steady`).
         Bench::new(
             format!("keyframes/sample/{tracks}-tracks"),
-            60.0,
+            30.0,
             |config| {
                 let one = clip(0);
-                measure(config, 1, iter(|| one.sample(0.37))).into()
+                measure(&config.steady(), 1, iter(|| one.sample(0.37))).into()
             },
         ),
-        Bench::new(format!("keyframes/blend/3x{tracks}"), 150.0, |config| {
+        Bench::new(format!("keyframes/blend/3x{tracks}"), 30.0, |config| {
             let clips: Vec<AnimationClip> = (0..CLIPS.len()).map(clip).collect();
             let poses: Vec<_> = clips.iter().map(|c| c.sample(0.37)).collect();
             measure(
-                config,
+                &config.steady(),
                 1,
                 iter(|| keyframes::blend(&[(&poses[0], 0.2), (&poses[1], 0.5), (&poses[2], 0.3)])),
             )
