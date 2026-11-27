@@ -15,7 +15,7 @@ use voltra_ecs::World;
 use voltra_net::PeerId;
 use voltra_physics::{PoseHistory, Rewound};
 use voltra_replication::{LagCompensation, Replication, ReplicationServer};
-use voltra_scene::LagCompensated;
+use voltra_scene::Collider;
 
 use super::tick_net::Net;
 
@@ -30,22 +30,35 @@ impl Net {
 
     /// The tick `peer`'s shot this fixed step is tested at: the moment it
     /// reported drawing when it made this step's input, no later than the
-    /// newest tick held and no earlier than
-    /// [`max_rewind`](LagCompensation::max_rewind) before it. The newest
-    /// tick for a peer with no input this step (or whose input came before
-    /// its first snapshot) — the world as it is. `None` off a replicating
-    /// server, with lag compensation off, or before the first step.
+    /// newest tick held and no further back than
+    /// [`rewind_allowed`](Self::rewind_allowed). The newest tick for a
+    /// peer with no input this step (or whose input came before its first
+    /// snapshot) — the world as it is. `None` off a replicating server,
+    /// with lag compensation off, or before the first step.
     pub fn rewind_target(&self, peer: PeerId) -> Option<f64> {
         let (server, history, lag) = self.lag_parts()?;
         let newest = f64::from(history.newest()?);
-        Some(lag.target(server.view_time(peer), newest, server.step()))
+        let allowed = self.rewind_allowed(peer).unwrap_or_default();
+        Some(lag.target(server.view_time(peer), newest, server.step(), allowed))
+    }
+
+    /// How far back `peer` may be rewound this step: what the lag this
+    /// server measured for it allows
+    /// ([`LagCompensation::allowed`](voltra_replication::LagCompensation::allowed)
+    /// of its round trip, the snapshot interval and its input's wait), at
+    /// most `max_rewind`. `None` for a peer that is not a client of this
+    /// replicating server — the listen host sees the world as it is.
+    pub fn rewind_allowed(&self, peer: PeerId) -> Option<std::time::Duration> {
+        let (server, _, lag) = self.lag_parts()?;
+        let link = self.endpoint.as_ref()?.stats(peer)?;
+        Some(lag.allowed(&server.measured_lag(peer, link)?))
     }
 
     /// The world as `peer` saw it when it made this step's input: its
     /// lag-compensated colliders at [`rewind_target`](Self::rewind_target),
-    /// interpolated between the two server ticks around it, and those out
-    /// of `peer`'s interest hidden — what a client was not sent it cannot
-    /// have aimed at. Everything not marked `LagCompensated` is queried
+    /// interpolated between the two server ticks around it, and every
+    /// replicated collider out of `peer`'s interest hidden — what a client
+    /// was not sent it cannot have aimed at. Everything not marked `LagCompensated` is queried
     /// where it is now. Read it in the fixed tick, where
     /// [`input`](Self::input) is this step's.
     ///
@@ -64,10 +77,10 @@ impl Net {
         rewound
     }
 
-    /// The world at `tick` (fractional server ticks), bounded as a
-    /// client's report is: no later than the newest tick held, no earlier
-    /// than [`max_rewind`](LagCompensation::max_rewind) before it nor than
-    /// the oldest held. For a game's own rewinds — a shot it timed itself;
+    /// The world at `tick` (fractional server ticks): no later than the
+    /// newest tick held, no earlier than
+    /// [`max_rewind`](LagCompensation::max_rewind) before it nor than the
+    /// oldest held. For a game's own rewinds — a shot it timed itself;
     /// a client's goes through [`rewound`](Self::rewound). The world as it
     /// is off a replicating server or with lag compensation off.
     pub fn rewound_to<'w>(&self, world: &'w World, tick: f64) -> Rewound<'w> {
@@ -80,7 +93,10 @@ impl Net {
         let reported = voltra_replication::ViewTime::from_ticks(tick);
         // A moment no tick can name is not the past: the world as it is.
         match reported {
-            Some(view) => history.rewound(world, lag.target(Some(view), newest, server.step())),
+            Some(view) => history.rewound(
+                world,
+                lag.target(Some(view), newest, server.step(), lag.max_rewind),
+            ),
             None => Rewound::live(world),
         }
     }
@@ -108,18 +124,19 @@ impl Net {
     }
 }
 
-/// Hides from `rewound` each lag-compensated entity the server replicates
-/// that was not relevant to `peer` at the last snapshot — it had no copy
-/// of it to aim at. Nothing is hidden from a peer that is not one of the
-/// server's clients (the listen host), nor without interest management,
-/// where every client is sent everything.
+/// Hides from `rewound` every collider the server replicates that was not
+/// relevant to `peer` at the last snapshot — lag-compensated or not, the
+/// client had no copy of it to aim at. Nothing is hidden from a peer that
+/// is not one of the server's clients (the listen host), nor without
+/// interest management, where every client is sent everything. What is
+/// not replicated (the level's walls, loaded on every end) stays.
 fn hide_unsent(server: &ReplicationServer, peer: PeerId, rewound: &mut Rewound<'_>) {
     if server.interest().is_none() || server.stats(peer).is_none() {
         return;
     }
     let world = rewound.world();
     let unsent: Vec<_> = world
-        .query::<LagCompensated>()
+        .query::<Collider>()
         .map(|(entity, _)| entity)
         .filter(|&entity| server.net_id(entity).is_some() && !server.is_relevant(peer, entity))
         .collect();

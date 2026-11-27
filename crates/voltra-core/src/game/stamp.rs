@@ -237,6 +237,9 @@ fn fingerprint() -> u64 {
     component::<voltra_scene::LagCompensated>(&mut hasher);
     component::<voltra_replication::LagCompensation>(&mut hasher);
     component::<voltra_replication::ViewTime>(&mut hasher);
+    component::<voltra_replication::MeasuredLag>(&mut hasher);
+    // What `tick.net.stats` hands a game; it grew `rtt_variation`.
+    component::<voltra_net::ConnectionStats>(&mut hasher);
     component::<voltra_physics::Rewound<'static>>(&mut hasher);
     component::<voltra_physics::PoseHistory>(&mut hasher);
     component::<voltra_net::NetConfig>(&mut hasher);
