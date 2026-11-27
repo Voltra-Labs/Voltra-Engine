@@ -4384,7 +4384,14 @@ solved and relaxed in every sub-step.
   without a shape, as before); a motor joint (Box2D's `b2MotorJoint`,
   driving one body's offset and angle to another's — no game needs it
   yet); a gear or pulley joint; a mouse joint's angular damping; breaking
-  that leaves the component flagged rather than removed.
+  that leaves the component flagged rather than removed; a break that
+  replicates (stage 130's dogfood: `Joint2D` is not a replicated
+  component, so a client's copy of a joint between replicated bodies is
+  its own — it is solved against the transforms the server sends and
+  breaks, or not, by the client's own physics, and its `JointBroken` is
+  the client's event. A server's break reached a client in that run only
+  through the transforms; a game that needs the client to know replicates
+  a component of its own).
 
 Pinned by `tests/joints.rs` (a rod and a pin pendulum keeping their length
 through a swing; a rod between two falling bodies; a rope slack then taut; a
@@ -8009,6 +8016,17 @@ connections and the scene; `voltra-core` drives it from the loop and
   entities of the client's level the server never had (one it despawned
   before the client joined) — once only, since a replicated entity spawned
   on the client later races the server's spawn of the same.
+- **Both ends hold the level under the file's ids** (stage 130). A
+  dedicated server opens its scene as authored (`Headless::open`); a game's
+  binary opens its first one with `App::load_scene`, whose copy gave every
+  entity a fresh id — so no level entity of a client (or of a listen host)
+  was ever the other end's, every one was swept and sent back bare,
+  without the sprite the level gave it: the arena's coin was invisible and
+  its bot idle in every build (the tests open their scenes as authored,
+  which hid it). With replication on, a scene replacing the level keeps
+  its file's ids (`prefab::spawn_scene_as_authored`); an additive load,
+  which may load a scene twice, keeps fresh ones. Pinned by
+  `tests/opening_level.rs`.
 - **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
   datagram with room for its header, 60 KB/s at 60 Hz) bounds each
   client's snapshot. Due entities are taken by banked priority — each

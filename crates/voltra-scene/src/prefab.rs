@@ -51,7 +51,7 @@ pub use link::{PrefabInstance, PrefabPart};
 pub use membership::instance_root;
 pub use overrides::{note_removed, refresh_overrides, revert, revert_instance};
 pub use resolve::{ResolveProblem, MAX_DEPTH, MAX_RECORDS};
-pub use spawn::{spawn, spawn_scene, Instance};
+pub use spawn::{spawn, spawn_scene, spawn_scene_as_authored, Instance};
 pub use staged::StagedScene;
 pub use store::{Prefabs, MAX_PREFAB_BYTES};
 pub use sync::{sync, SyncReport};

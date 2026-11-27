@@ -90,7 +90,7 @@ impl App {
             match request {
                 Request::Replace(path) => self.replace_scene(&path),
                 Request::Add(path, load) => {
-                    if let Some(entities) = self.spawn_scene(&path) {
+                    if let Some(entities) = self.spawn_scene(&path, false) {
                         log::info!("added {} ({} entities)", path.as_str(), entities.len());
                         self.scenes.loaded.insert(load, entities);
                     }
@@ -119,8 +119,15 @@ impl App {
 
     /// Spawns the new scene first and only then despawns the old one, so a
     /// scene whose components will not read leaves the old one standing.
+    ///
+    /// With replication on, the level keeps its file's ids: both ends of a
+    /// session must hold each level entity under one id for a client's copy
+    /// to be the server's (a dedicated server opens its scene as authored).
+    /// The old level holding the same ids for the moment between the spawn
+    /// and the sweep is harmless: nothing reads an id in between.
     fn replace_scene(&mut self, path: &AssetPath) {
-        let Some(arrived) = self.spawn_scene(path) else {
+        let authored = self.net.replicates();
+        let Some(arrived) = self.spawn_scene(path, authored) else {
             return;
         };
         let keep: HashSet<Entity> = arrived.iter().copied().collect();
@@ -171,7 +178,10 @@ impl App {
 
     /// Reads `path` and spawns a copy of it, or logs why not. The entities
     /// are queued for asset resolution.
-    fn spawn_scene(&mut self, path: &AssetPath) -> Option<Vec<Entity>> {
+    ///
+    /// `authored` keeps the file's ids rather than giving each entity a
+    /// fresh one ([`prefab::spawn_scene_as_authored`]).
+    fn spawn_scene(&mut self, path: &AssetPath, authored: bool) -> Option<Vec<Entity>> {
         let scenes = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = scenes.load_scene(path);
         let scene = scenes.get(handle);
@@ -184,7 +194,12 @@ impl App {
             );
             return None;
         }
-        match prefab::spawn_scene(&mut self.world, &self.registry, scene) {
+        let spawned = if authored {
+            prefab::spawn_scene_as_authored(&mut self.world, &self.registry, scene)
+        } else {
+            prefab::spawn_scene(&mut self.world, &self.registry, scene)
+        };
+        match spawned {
             Ok(instance) => {
                 self.spawned.extend_from_slice(&instance.entities);
                 Some(instance.entities)

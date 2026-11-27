@@ -63,7 +63,7 @@ pub fn spawn(
     prefab: &Prefab,
     at: &Transform,
 ) -> Result<Instance, SceneError> {
-    spawn_copy(world, registry, prefab, Some(at))
+    spawn_copy(world, registry, prefab, Some(at), Ids::Fresh)
 }
 
 /// Spawns a copy of a whole scene file into `world`: an additive load, or the
@@ -78,7 +78,34 @@ pub fn spawn_scene(
     registry: &ComponentRegistry,
     scene: &Prefab,
 ) -> Result<Instance, SceneError> {
-    spawn_copy(world, registry, scene, None)
+    spawn_copy(world, registry, scene, None, Ids::Fresh)
+}
+
+/// [`spawn_scene`], every entity keeping the id its record has: a level
+/// loaded as *the* level of a networked session, whose two ends match
+/// their copies of each level entity by id (stage 114's first complete
+/// snapshot adopts the client's own by it). With fresh ids, a client's
+/// level copy is never the server's: it is swept, and the server's comes
+/// back bare or by prefab, without what the level gave it — a sprite.
+///
+/// The caller must know the world holds none of the file's ids already
+/// (an additive load of a scene twice would), or two entities answer to
+/// one id.
+pub fn spawn_scene_as_authored(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    scene: &Prefab,
+) -> Result<Instance, SceneError> {
+    spawn_copy(world, registry, scene, None, Ids::Authored)
+}
+
+/// Which ids a copy's entities get.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ids {
+    /// A fresh one each: a copy of a copy.
+    Fresh,
+    /// Their records' own: the level as authored.
+    Authored,
 }
 
 /// The copy both share. `at` is `Some` for a prefab: roots placed by it and
@@ -88,6 +115,7 @@ fn spawn_copy(
     registry: &ComponentRegistry,
     prefab: &Prefab,
     at: Option<&Transform>,
+    ids: Ids,
 ) -> Result<Instance, SceneError> {
     let Some(file) = prefab.file.as_ref() else {
         return Ok(Instance::default());
@@ -96,7 +124,14 @@ fn spawn_copy(
     // One fresh id per record, and a map from the old ids for the links. The
     // map keeps the first record under a duplicated id, which is what a link
     // to it resolved to in the file as well.
-    let fresh: Vec<SceneId> = file.entities.iter().map(|_| SceneId::new()).collect();
+    let fresh: Vec<SceneId> = file
+        .entities
+        .iter()
+        .map(|record| match ids {
+            Ids::Fresh => SceneId::new(),
+            Ids::Authored => record.id,
+        })
+        .collect();
     let mut renamed: HashMap<SceneId, SceneId> = HashMap::with_capacity(fresh.len());
     for (record, id) in file.entities.iter().zip(&fresh) {
         renamed.entry(record.id).or_insert(*id);
