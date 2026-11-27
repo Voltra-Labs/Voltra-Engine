@@ -12,11 +12,15 @@
 //! [`PhysicsWorld`]: crate::PhysicsWorld
 
 mod filter;
+mod poses;
 mod ray;
 mod shape;
 
 pub use filter::QueryFilter;
+pub(crate) use poses::Poses;
+pub(crate) use ray::ray_among;
 pub use ray::{ray, RayHit};
+pub(crate) use shape::cast_among;
 pub use shape::{cast, ShapeHit};
 
 use voltra_ecs::{Entity, World};
@@ -33,7 +37,17 @@ use crate::narrow::manifold;
 /// for "is there anything here", which is how Godot's and Unity's point checks
 /// are used too.
 pub fn point(world: &World, at: Vec2, filter: QueryFilter) -> Option<Entity> {
-    colliders(world, filter)
+    point_among(world, None, at, filter)
+}
+
+/// [`point`], with `poses` read in place of the world's.
+pub(crate) fn point_among(
+    world: &World,
+    poses: Option<&Poses>,
+    at: Vec2,
+    filter: QueryFilter,
+) -> Option<Entity> {
+    colliders(world, poses, filter)
         .find(|(_, collider, transform)| contains(collider, transform, at))
         .map(|(entity, _, _)| entity)
 }
@@ -47,6 +61,17 @@ pub fn point(world: &World, at: Vec2, filter: QueryFilter) -> Option<Entity> {
 ///
 /// An inverted or empty box finds nothing.
 pub fn overlap_aabb(world: &World, min: Vec2, max: Vec2, filter: QueryFilter) -> Vec<Entity> {
+    overlap_aabb_among(world, None, min, max, filter)
+}
+
+/// [`overlap_aabb`], with `poses` read in place of the world's.
+pub(crate) fn overlap_aabb_among(
+    world: &World,
+    poses: Option<&Poses>,
+    min: Vec2,
+    max: Vec2,
+    filter: QueryFilter,
+) -> Vec<Entity> {
     let half = (max - min) * 0.5;
     if half.x <= 0.0 || half.y <= 0.0 {
         return Vec::new();
@@ -54,19 +79,26 @@ pub fn overlap_aabb(world: &World, min: Vec2, max: Vec2, filter: QueryFilter) ->
     let query = Collider::Box { half_extents: half };
     let at = Transform::from_translation(min + half);
 
-    colliders(world, filter)
+    colliders(world, poses, filter)
         .filter(|(_, collider, transform)| manifold((&query, &at), (collider, transform)).is_some())
         .map(|(entity, _, _)| entity)
         .collect()
 }
 
-/// Every collider this query may find, with where it sits.
-pub(super) fn colliders(
-    world: &World,
+/// Every collider this query may find, with where it sits: as the world
+/// has it, or as `poses` says for the entities it names — hidden for one
+/// it holds no pose of.
+pub(super) fn colliders<'a>(
+    world: &'a World,
+    poses: Option<&'a Poses>,
     filter: QueryFilter,
-) -> impl Iterator<Item = (Entity, &Collider, &Transform)> {
+) -> impl Iterator<Item = (Entity, &'a Collider, &'a Transform)> {
     world.query::<Collider>().filter_map(move |(entity, c)| {
-        let transform = world.get::<Transform>(entity)?;
+        let (c, transform) = match poses.and_then(|poses| poses.get(&entity)) {
+            Some(Some((collider, transform))) => (collider, transform),
+            Some(None) => return None,
+            None => (c, world.get::<Transform>(entity)?),
+        };
         // A shape with no area is not a surface: it would report a hit at a
         // point nothing is drawn at, and `is_degenerate` is what the narrow
         // phase rejects it with too.

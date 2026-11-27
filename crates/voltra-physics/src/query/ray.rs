@@ -4,7 +4,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, Transform};
 
-use super::{colliders, normalized, rotated, to_local, QueryFilter};
+use super::{colliders, normalized, rotated, to_local, Poses, QueryFilter};
 use crate::geometry::Hull;
 
 /// Where a ray met a collider.
@@ -37,6 +37,18 @@ pub fn ray(
     max: f32,
     filter: QueryFilter,
 ) -> Option<RayHit> {
+    ray_among(world, None, origin, direction, max, filter)
+}
+
+/// [`ray`], with `poses` read in place of the world's.
+pub(crate) fn ray_among(
+    world: &World,
+    poses: Option<&Poses>,
+    origin: Vec2,
+    direction: Vec2,
+    max: f32,
+    filter: QueryFilter,
+) -> Option<RayHit> {
     let direction = normalized(direction)?;
     // NaN included, which is why this is not `max <= 0.0` alone: a length
     // nothing compares to is not a length.
@@ -45,7 +57,7 @@ pub fn ray(
     }
 
     let mut nearest: Option<RayHit> = None;
-    for (entity, collider, transform) in colliders(world, filter) {
+    for (entity, collider, transform) in colliders(world, poses, filter) {
         let Some(hit) = cast(collider, transform, origin, direction, max) else {
             continue;
         };
