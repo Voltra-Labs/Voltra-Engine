@@ -123,3 +123,46 @@ fn top_field(place: &[Step]) -> Option<&'static str> {
         _ => None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use voltra_core::egui::Context;
+    use voltra_ecs::World;
+    use voltra_render::glam::Vec2;
+    use voltra_scene::{ComponentRegistry, Sprite, Transform};
+
+    #[test]
+    fn drawing_mixed_sections_changes_nothing_by_itself() {
+        let registry = ComponentRegistry::with_defaults();
+        let mut world = World::new();
+        let here = world.spawn();
+        let there = world.spawn();
+        world.insert(here, Transform::from_translation(Vec2::new(1.0, 2.0)));
+        world.insert(there, Transform::from_translation(Vec2::new(3.0, 2.0)));
+        world.insert(here, Sprite::new([1.0, 0.0, 0.0, 1.0]));
+        let mut flipped = Sprite::new([0.0, 1.0, 0.0, 1.0]);
+        flipped.flip_x = true;
+        world.insert(there, flipped);
+        let multi = MultiEdit::begin(&world, &registry, there, [here, there]);
+        let fields = Fields::of(&multi, "Transform");
+        assert!(fields.element("translation", 0));
+        assert!(!fields.element("translation", 1));
+        assert!(Fields::of(&multi, "Sprite").field("flip_x"));
+
+        let ctx = Context::default();
+        let mut transform = *world.get::<Transform>(there).expect("t");
+        let mut flip = true;
+        for _ in 0..2 {
+            let _ = ctx.run_ui(Default::default(), |ui| {
+                marker(ui, &multi, &["Transform", "Sprite"]);
+                let _ = super::super::transform::show(ui, &mut transform, fields);
+                let _ = checkbox(ui, &mut flip, "x", true);
+                let _ = label(ui, "colour", true);
+            });
+        }
+        assert_eq!(Some(&transform), world.get::<Transform>(there));
+        assert!(flip);
+        assert!(multi.finish(&mut world, &registry).is_empty());
+    }
+}
