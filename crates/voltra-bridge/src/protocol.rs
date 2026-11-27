@@ -3,7 +3,10 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
+mod response;
+
+pub use response::Response;
 
 /// One command, with the id its answer will carry.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -376,70 +379,5 @@ impl Command {
     }
 }
 
-/// The answer to the request of the same id: a JSON value, or why not.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Response {
-    /// The id of the request it answers.
-    pub id: u64,
-    /// The result, when the command succeeded.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ok: Option<Value>,
-    /// Why the command failed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-impl Response {
-    /// The response to request `id` for the outcome `result`.
-    pub fn answer(id: u64, result: Result<Value, String>) -> Self {
-        match result {
-            Ok(value) => Self {
-                id,
-                ok: Some(value),
-                error: None,
-            },
-            Err(error) => Self {
-                id,
-                ok: None,
-                error: Some(error),
-            },
-        }
-    }
-
-    /// The result: the error if there is one, else the value, or null if there is neither.
-    pub fn into_result(self) -> Result<Value, String> {
-        match (self.ok, self.error) {
-            (_, Some(error)) => Err(error),
-            (Some(value), None) => Ok(value),
-            (None, None) => Ok(Value::Null),
-        }
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_command_reads_back_from_its_line() {
-        let request = Request {
-            id: 7,
-            command: Command::ComponentSet {
-                entity: "Player".into(),
-                component: "Sprite".into(),
-                ron: "(color: (1.0, 0.0, 0.0, 1.0))".into(),
-            },
-        };
-        let line = serde_json::to_string(&request).expect("writes");
-        assert!(line.contains("\"op\":\"component_set\""), "{line}");
-        assert_eq!(
-            serde_json::from_str::<Request>(&line).expect("reads"),
-            request
-        );
-        let response = Response::answer(7, Err("no such entity".into()));
-        let back: Response =
-            serde_json::from_str(&serde_json::to_string(&response).expect("writes"))
-                .expect("reads");
-        assert_eq!(back.into_result(), Err("no such entity".to_owned()));
-    }
-}
+mod tests;

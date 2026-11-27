@@ -115,85 +115,6 @@ fn a_child_hangs_off_its_own_instance_s_parent() {
 }
 
 #[test]
-fn the_roots_are_placed_and_the_children_keep_their_offsets() {
-    let mut world = World::new();
-    let at = Transform::from_translation(Vec2::new(10.0, 5.0));
-
-    let instance = spawn(&mut world, &registry(), &ship(), &at).expect("reads");
-
-    let hull = instance.root().expect("one root");
-    let gun = children_of(&world, hull)[0];
-    assert_eq!(
-        world.get::<Transform>(hull).map(|t| t.translation),
-        Some(Vec2::new(10.0, 5.0))
-    );
-    assert_eq!(
-        world.get::<Transform>(gun).map(|t| t.translation),
-        Some(Vec2::new(1.0, 0.0)),
-        "local to the hull, which moved it"
-    );
-}
-
-#[test]
-fn a_rotated_placement_turns_the_root_about_its_own_origin() {
-    let mut world = World::new();
-    let at =
-        Transform::from_translation(Vec2::new(3.0, 0.0)).with_rotation(std::f32::consts::FRAC_PI_2);
-
-    let instance = spawn(&mut world, &registry(), &ship(), &at).expect("reads");
-
-    let hull = world
-        .get::<Transform>(instance.root().expect("one root"))
-        .copied()
-        .expect("authored with one");
-    assert!((hull.translation - Vec2::new(3.0, 0.0)).length() < 1e-5);
-    assert!((hull.rotation - std::f32::consts::FRAC_PI_2).abs() < 1e-5);
-}
-
-#[test]
-fn a_root_authored_off_the_origin_keeps_its_offset_from_the_placement() {
-    let mut source = World::new();
-    named(&mut source, "off", Vec2::new(2.0, 0.0));
-    let mut world = World::new();
-
-    let instance = spawn(
-        &mut world,
-        &registry(),
-        &prefab_of(&source),
-        &Transform::from_translation(Vec2::new(0.0, 7.0)),
-    )
-    .expect("reads");
-
-    assert_eq!(
-        world
-            .get::<Transform>(instance.root().expect("one root"))
-            .map(|t| t.translation),
-        Some(Vec2::new(2.0, 7.0))
-    );
-}
-
-#[test]
-fn a_root_with_no_transform_is_not_given_one() {
-    let mut source = World::new();
-    let entity = source.spawn();
-    source.insert(entity, SceneId::new());
-    source.insert(entity, Name::new("listener rig"));
-    let mut world = World::new();
-
-    let instance = spawn(
-        &mut world,
-        &registry(),
-        &prefab_of(&source),
-        &Transform::from_translation(Vec2::ONE),
-    )
-    .expect("reads");
-
-    assert!(world
-        .get::<Transform>(instance.root().expect("one root"))
-        .is_none());
-}
-
-#[test]
 fn a_parent_outside_the_prefab_is_cut_and_its_child_is_a_root() {
     // A fragment cut out of a bigger scene still names the parent it had
     // there. Following that id would hang every instance off one entity in
@@ -325,65 +246,8 @@ fn write_ship(root: &std::path::Path, name: &str) {
 mod link;
 mod loops;
 mod nested;
+mod placement;
 mod store;
 mod variant;
+mod whole_scenes;
 mod write;
-
-mod whole_scenes {
-    use super::*;
-
-    fn level() -> Prefab {
-        let mut world = World::new();
-        let floor = named(&mut world, "floor", Vec2::new(5.0, -1.0));
-        world.insert(floor, Sprite::default());
-        let coin = named(&mut world, "coin", Vec2::new(2.0, 0.0));
-        world.insert(
-            coin,
-            PrefabInstance::new(AssetPath::new("prefabs/coin.ron").expect("valid")),
-        );
-        prefab_of(&world).with_source(AssetPath::new("scenes/level.ron").expect("valid"))
-    }
-
-    #[test]
-    fn a_scene_keeps_its_authored_positions() {
-        let mut world = World::new();
-        let instance = spawn_scene(&mut world, &registry(), &level()).expect("reads");
-        let floor = instance
-            .roots
-            .iter()
-            .find(|e| name_of(&world, **e) == "floor")
-            .copied()
-            .expect("the floor");
-        assert_eq!(
-            world.get::<Transform>(floor).map(|t| t.translation),
-            Some(Vec2::new(5.0, -1.0))
-        );
-    }
-
-    #[test]
-    fn a_scene_is_not_an_instance_of_itself() {
-        let mut world = World::new();
-        let instance = spawn_scene(&mut world, &registry(), &level()).expect("reads");
-        let floor = instance
-            .roots
-            .iter()
-            .find(|e| name_of(&world, **e) == "floor")
-            .copied()
-            .expect("the floor");
-        assert!(world.get::<PrefabInstance>(floor).is_none());
-    }
-
-    #[test]
-    fn a_prefab_placed_in_the_scene_keeps_its_own_link() {
-        let mut world = World::new();
-        let instance = spawn_scene(&mut world, &registry(), &level()).expect("reads");
-        let coin = instance
-            .roots
-            .iter()
-            .find(|e| name_of(&world, **e) == "coin")
-            .copied()
-            .expect("the coin");
-        let link = world.get::<PrefabInstance>(coin).expect("still linked");
-        assert_eq!(link.source.as_str(), "prefabs/coin.ron");
-    }
-}
