@@ -12,13 +12,15 @@
 //!   holds a lock on its own `<process>/.lock` until it exits. The first
 //!   scratch folder a process makes removes the other processes' folders
 //!   whose lock it can take — their process has ended, killed mid-test, or
-//!   a helper handed a folder on with [`Scratch::keep`]. With
+//!   a helper handed a folder on with [`Scratch::keep`]. A folder under a
+//!   minute old is left: its process may not have taken its lock yet. With
 //!   [`KEEP_SCRATCH_VAR`] set nothing is swept.
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::time::{Duration, UNIX_EPOCH};
 
 /// The environment variable that keeps scratch folders (any value): a
 /// failed test's is not removed when the test ends, and no earlier run's
@@ -62,10 +64,10 @@ fn process_dir() -> &'static Path {
         .get_or_init(|| {
             let parent = parent();
             if !keeping() {
-                sweep(&parent);
+                sweep(&parent, SWEEP_AFTER);
             }
             let nanos = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
+                .duration_since(UNIX_EPOCH)
                 .expect("the clock is after 1970")
                 .as_nanos();
             let path = parent.join(format!("{}-{nanos}", std::process::id()));
@@ -80,23 +82,49 @@ fn process_dir() -> &'static Path {
         .path
 }
 
-/// Removes the process folders under `parent` no live process holds.
-fn sweep(parent: &Path) {
+/// A process folder younger than this is never swept: its process may have
+/// made it and its `.lock` and not yet taken the lock.
+const SWEEP_AFTER: Duration = Duration::from_secs(60);
+
+/// A process folder with no lock file this old is no one's.
+const ORPHANED_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// How long ago the process folder `entry` was made: by the time in its
+/// name (`<pid>-<nanos>`), else by when it last changed.
+fn age(entry: &std::fs::DirEntry) -> Option<Duration> {
+    let name = entry.file_name();
+    let made = name
+        .to_str()
+        .and_then(|name| name.split_once('-'))
+        .and_then(|(_, nanos)| nanos.parse::<u64>().ok())
+        .map(|nanos| UNIX_EPOCH + Duration::from_nanos(nanos));
+    let made = match made {
+        Some(made) => made,
+        None => entry.metadata().and_then(|m| m.modified()).ok()?,
+    };
+    // A time in the future (a clock set back) reads as new: kept.
+    Some(made.elapsed().unwrap_or(Duration::ZERO))
+}
+
+/// Removes the process folders under `parent`, at least `young` old, that
+/// no live process holds.
+fn sweep(parent: &Path, young: Duration) {
     let Ok(entries) = std::fs::read_dir(parent) else {
         return;
     };
     for entry in entries.flatten() {
+        let Some(age) = age(&entry) else {
+            continue;
+        };
+        if age < young {
+            continue;
+        }
         let dir = entry.path();
         let free = match File::options().write(true).open(dir.join(".lock")) {
             Ok(file) => file.try_lock().is_ok(),
             // No lock file: a process that could not make one, or a folder
             // half removed. Old enough, it is no one's.
-            Err(_) => entry
-                .metadata()
-                .and_then(|m| m.modified())
-                .ok()
-                .and_then(|at| at.elapsed().ok())
-                .is_some_and(|age| age.as_secs() > 24 * 60 * 60),
+            Err(_) => age > ORPHANED_AFTER,
         };
         if free {
             let _ = std::fs::remove_dir_all(&dir);
@@ -198,8 +226,20 @@ mod tests {
         let held = File::create(live.join(".lock")).expect("lock file");
         held.try_lock().expect("locks");
 
-        sweep(&parent);
+        // A folder made a moment ago, its lock not taken yet.
+        let new = parent.join(format!(
+            "3-{}",
+            std::time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("after 1970")
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&new).expect("dir");
+        File::create(new.join(".lock")).expect("lock file");
+
+        sweep(&parent, SWEEP_AFTER);
         assert!(!dead.exists(), "no one holds its lock");
         assert!(live.exists(), "a live process's");
+        assert!(new.exists(), "too young to tell");
     }
 }

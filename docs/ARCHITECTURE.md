@@ -724,7 +724,8 @@ filled the disk. Every folder sits under `voltra-scratch/<pid>-<nanos>/`, and
 each test process holds a lock on its own `.lock` there for its life (a
 `File::try_lock` in a static, released by the system at exit); the first
 scratch folder a process makes sweeps the folders of processes whose lock it
-can take. That catches what no guard can: a test binary killed mid-run, and a
+can take — but for one under a minute old (by the time in its name), whose
+process may have made it and not yet locked it. That catches what no guard can: a test binary killed mid-run, and a
 helper that hands its folder to a store outliving it (`Scratch::keep`). Set
 `VOLTRA_KEEP_SCRATCH` (any value) to keep a failed test's folder — the guard
 then leaves it and says where on stderr — and to sweep nothing. The editor's,
