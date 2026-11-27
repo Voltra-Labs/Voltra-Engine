@@ -26,11 +26,12 @@ use crate::wire::{self, ClientMessage, Control, InputTick, NetId, ServerTick, Sn
 use crate::{ReplicationConfig, Timeline};
 
 mod apply;
+mod interpolate;
 mod samples;
 mod spawn;
 mod stash;
 
-use samples::{Pick, Samples};
+use samples::Samples;
 use stash::Stash;
 
 /// The most inputs kept waiting for the server's acknowledgement.
@@ -280,52 +281,6 @@ impl ReplicationClient {
             }
         }
         made
-    }
-
-    /// Draws every remote entity's interpolated components at the
-    /// timeline's moment, which this moves on by `delta`.
-    pub fn interpolate(
-        &mut self,
-        world: &mut World,
-        registry: &ComponentRegistry,
-        now: Duration,
-        delta: f32,
-    ) {
-        let Some(schema) = self.schema.as_ref() else {
-            return;
-        };
-        let Some(drawn) = self.timeline.advance(now, delta) else {
-            return;
-        };
-        for (id, bound) in &mut self.bound {
-            if self.predicted == Some(*id) || !world.is_alive(bound.entity) {
-                continue;
-            }
-            for (index, samples) in bound.samples.iter_mut().enumerate() {
-                if samples.is_empty() {
-                    continue;
-                }
-                let Some(Some(component)) = schema.local.get(index).copied() else {
-                    continue;
-                };
-                let value = match samples.at(drawn) {
-                    Some(Pick::Hold(value)) => Ok(value.to_vec()),
-                    Some(Pick::Between(from, to, t)) => {
-                        match registry.lerp_replicated(component, from, to, t) {
-                            Some(result) => result,
-                            None => Ok(to.to_vec()),
-                        }
-                    }
-                    None => continue,
-                };
-                let applied = value.and_then(|bytes| {
-                    registry.apply_replicated(component, world, bound.entity, &bytes)
-                });
-                if let Err(error) = applied {
-                    log::warn!("{}: {error}", component.name);
-                }
-            }
-        }
     }
 
     /// Tells the server which snapshots arrived, and sends the newest
