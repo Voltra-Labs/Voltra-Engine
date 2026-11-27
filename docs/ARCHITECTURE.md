@@ -8592,13 +8592,22 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   goodbye read in one receive would otherwise leave an entry nobody
   takes out, a slot lost for good), and at the end of every receive
   drops the entry of any non-host peer not connected. A connected peer
-  that has not said hello within `LobbyConfig::join_timeout` (5 s, at
-  least `MIN_JOIN_TIMEOUT`) is cut off, so silent connections cannot
-  hold every session slot. With the lobby on, `tick.net`'s replication
+  that has not said hello within `LobbyConfig::join_deadline` is cut
+  off, so silent connections cannot hold every session slot. The
+  deadline is the session's `NetConfig::timeout` plus `JOIN_GRACE`
+  (2 s): 12 s by default, and `join_timeout` may lengthen it, never
+  shorten it below that — a client the session keeps through an outage
+  must not lose its join to the same outage. With the lobby on, `tick.net`'s replication
   server replicates only to lobby members
   (`ReplicationServer::set_audience`): a peer not in it — not yet
   joined, or refused and waiting out its grace — is sent nothing of
   the match, which keeps `LateJoin::Refuse` true.
+- **A lobby made on a session under way catches up**: a listen host's
+  own player is in at once, a client already connected asks in at the
+  next send, and a server gives connected peers the join deadline from
+  then. `tick.net.enable_lobby` while a session's lobby runs leaves it
+  be (rebuilding it would empty the room and cut every client at the
+  join deadline), warns, and keeps the config for the next session.
 - **A match started and finished between two snapshots** is still both
   events: the lobby counts the matches it started (`Lobby::matches`,
   on the wire), the diff emits `Started` then `Finished` when the count
