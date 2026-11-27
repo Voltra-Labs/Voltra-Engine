@@ -123,6 +123,42 @@ entity's own replicated components, the input and the step, and move the
 player kinematically rather than with physics forces — the replay runs
 `walk`, not the physics step.
 
+## Shots where the shooter saw them: lag compensation
+
+Because remote players are drawn a little in the past, a client aims at
+where its target *was*: a round trip and the interpolation delay ago. A
+server that tested the shot against where the target is now would make
+every player on a slow link lead their targets. Instead it rewinds: mark
+what can be shot **lag compensated** (the checkbox under *Replicated* in
+the inspector, `"LagCompensated": ()` in the file — it needs a
+`Collider`), and in the server's fixed tick ask the world as the shooter
+saw it when it made this step's input:
+
+```rust
+if let Some(steer) = tick.net.input::<Steer>(peer) {
+    let seen = tick.net.rewound(tick.world, peer);
+    if let Some(hit) = seen.ray(from, aim, range, QueryFilter::new().excluding(me)) {
+        // hit.entity was there when this player fired
+    }
+}
+```
+
+`rewound` answers the same `ray`, `cast`, `point` and `overlap_aabb` as
+`query`, with every lag-compensated collider where it was at the moment
+the client says it was drawing — each input carries it — and everything
+else (walls, unmarked entities) where it is. Nothing in the world moves.
+A shot is never rewound more than 200 ms (`LagCompensation::max_rewind`),
+whatever the client claims, so a player on a terrible link cannot hit
+someone a second after they reached cover; a client claiming the future
+gets the present. Something spawned after that moment, or despawned
+since, is not there to hit, and neither is anything the client was not
+sent (interest). The server keeps a second of history by default
+(`LagCompensation::history`); `lag_compensation: None` in the
+`ReplicationConfig` keeps none, and every rewound query is live.
+
+The arena's zap is one: a bot zaps the nearest other player where it sees
+it, and the server's log says how far back each zap was tested.
+
 ## Trying it
 
 The arena's dedicated server and two bot clients play a round to its

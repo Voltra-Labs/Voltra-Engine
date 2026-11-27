@@ -86,7 +86,7 @@ version bump is a one-line change.
 | `voltra-audio` | The mixer, decoding, and the output device | `Audio`, `Mixer`, `Voice`, `Clip`, `PlayParams`, `VoiceId`, `decode`, `spatial` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
-| `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
+| `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them — now or as they were | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit`, `PoseHistory`, `Rewound` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
 | `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport`, `Endpoint`, `NetConfig`, `ChannelKind`, `ChannelId`, `PeerId`, `NetEvent`, `DisconnectReason`, `Message` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
@@ -94,7 +94,7 @@ version bump is a one-line change.
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session and its replication | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
-| `voltra-replication` | The server's world sent to its clients: snapshots and deltas within a per-client budget, interpolation of remote entities, prediction of the owned one | `ReplicationServer`, `ReplicationClient`, `ReplicationConfig`, `Timeline`, `Prediction`, `NetOwner` |
+| `voltra-replication` | The server's world sent to its clients: snapshots and deltas within a per-client budget, interpolation of remote entities, prediction of the owned one, the view time lag compensation rewinds to | `ReplicationServer`, `ReplicationClient`, `ReplicationConfig`, `Timeline`, `Prediction`, `NetOwner`, `LagCompensation`, `ViewTime` |
 | `voltra-server` | A dedicated server: a scene headless at a fixed tick, hosted over UDP and WebSockets; a library a game's own server binary is built on | `Server`, `ServerOptions`, `Pacer` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
@@ -8377,6 +8377,132 @@ the stash (kept but for the replicated components, a replicated child
 kept on its own, let go of), the view (a cull acknowledged, an old
 acknowledgement missing a new copy), `Interest`'s checks, `spawn_records`
 and `Replicated`'s format.
+
+### A shot is tested where its shooter saw the target, no further back than a bound
+
+Stage 128. A client draws remote entities a jitter buffer behind the
+newest snapshot (stage 115), which is a round trip and that buffer behind
+where the server has them. A server that tested a client's shot against
+the world as it is now would make every player lead their target by
+their own latency. So the server keeps the recent past of what can be
+shot and tests each shot there.
+
+- **What is remembered**: entities marked `LagCompensated` (voltra-scene,
+  a unit marker beside `Replicated`; registered, `"LagCompensated": ()`
+  in a file; the inspector's checkbox under *Replicated*, shown on any
+  replicated entity or one already marked). Each server tick, after the
+  fixed step, the loop records every marked entity's `Collider` and
+  `Transform` (`PoseHistory::record`, `voltra-physics/src/rewind.rs`) as
+  that tick — the tick the snapshot carries, so the history and what the
+  client draws are the same values. The *shape* is recorded with the pose
+  (a `Collider` is `Copy`; a crouch that swaps the box is tested at the box
+  it had). Sorted by entity, binary-searched; the ring reuses its oldest
+  tick's storage. A tick not after the newest (a new session) starts it
+  again. Unity Netcode's `PhysicsWorldHistory` keeps every collider; Source
+  keeps only players; this keeps what the game marks, so the walls cost
+  nothing and an unmarked game costs an empty query a tick.
+- **The view time travels with each input** (`ViewTime`: the server tick
+  and 256ths of the next, a few bytes; `ReplicationClient::queue_input`
+  takes it from the `Timeline`'s drawn moment when the input is made —
+  the frame the player was looking at). Per input, not per message or from
+  an RTT estimate: the server's input queue keeps each input's moment and
+  `ReplicationServer::view_time(peer)` is the one of the input this step
+  simulates. Valve computes the target from `cl_interp` and the latency
+  the server measures; reporting the drawn moment instead covers the
+  measured, moving jitter buffer of stage 115 exactly, which a fixed
+  `cl_interp` does not have. **Wire version 3** (`REPLICATION_WIRE_VERSION`):
+  the input list's entries grew the moment, so a 0.4-stage-127 peer is
+  refused at the handshake.
+- **The bound** (`LagCompensation { history, max_rewind }`, a field of
+  `ReplicationConfig`, on by default; only the server's is read): the
+  reported moment is the client's word, so `LagCompensation::target`
+  takes it no later than the newest tick held (a client claiming the
+  future gets the present) and no earlier than `max_rewind` (200 ms)
+  before it; `PoseHistory` then takes it no earlier than its oldest tick
+  (`history`, a second, Source's). Source rewinds up to `sv_maxunlag`, a
+  second; Overwatch favours the shooter only within a bound and makes the
+  rest lead. 200 ms is a jitter buffer and a round trip on any playable
+  link, and it is what the *target* feels: shot behind cover a fifth of a
+  second after reaching it, never more. A player on a worse link than
+  that is not rewound further — pinned: with `max_rewind` 50 ms, shots
+  are tested three ticks back at most and the laggy shooter misses.
+- **The query** (`voltra-physics/src/rewind/rewound.rs`): `Rewound` — the
+  same `ray`, `cast`, `point` and `overlap_aabb` as `query`, reading a
+  table of past poses in place of the world's. Each marked collider is put
+  between the two recorded ticks around the moment with the `Interpolate`
+  the client draws with (so the history interpolated is what the client
+  interpolated), everything unmarked is read where it is now. The live
+  world is never changed: `query`'s collider walk takes an optional
+  pose table (`query/poses.rs`), so there is nothing to swap in and out,
+  no state another system or a panic halfway could see. Source moves its
+  players back and forward around the test
+  (`StartLagCompensation`/`FinishLagCompensation`), which is cheaper per
+  query and needs every reader of a position to know a rewind is on;
+  Unity tests against a copied collision world. A table of a hundred poses
+  is the cost of one rewound query — measured below.
+- **Who is there**: an entity spawned after the moment (not in the tick at
+  or before it) is not; one despawned since is not either — it is not in
+  the world to report, as in Source, where a player gone is gone from
+  every rewind, and a hit on an entity that no longer exists would hand
+  the game an id it cannot use. One recorded before the moment and not
+  after (it lost its collider) is held at the earlier pose.
+- **Interest** (stage 127) is enforced: `Net::rewound` hides every marked
+  entity the server replicates that was not relevant to the peer at the
+  last snapshot — the client had no copy of it to aim at. Read from the
+  relevance set the snapshot already built, so it is a set lookup per
+  marked entity; a peer that is not one of the server's clients (the
+  listen host) and a session without interest hide nothing.
+- **Through `tick.net`** (`voltra-core/src/app/tick_lag.rs`):
+  `rewound(world, peer)` in the server's fixed tick — the world as `peer`
+  saw it when it made this step's input; the world as it is for a peer
+  with no input this step, the listen host, off a server, or with lag
+  compensation off. `rewind_target(peer)` says the tick it chose,
+  `rewound_to(world, tick)` rewinds to a tick of the game's own within the
+  same bound, `pose_history()` reads the ring. The shooter is where it is
+  now: it predicted itself, so the server's copy is where it fired from.
+- **The arena zaps**: a player zaps the nearest other player in reach
+  (`games/arena/src/zap.rs`; `Steer` grew `zap: Option<(i8, i8)>`, the
+  keys' `zap` action (Space) or the bot always, a second's cooldown on the server); a
+  zap that lands is worth a point. The server fires it from where the
+  shooter stood before the step's walk, as its client aimed, into
+  `tick.net.rewound`, and logs how many ticks back and whether the same
+  ray at the live world would have missed. Players gained a `Collider` and
+  `LagCompensated` in their prefab (no body: statics never pair).
+
+Measured in release (`voltra-bench`, `lag/…`, 100 lag-compensated boxes
+over a second of history, ten unmarked walls; two runs): a **rewound
+ray is 13–18 µs**, the same ray at the live world 5–7 µs — the table of
+a hundred past poses (two binary searches and an interpolation each, one
+hash insert) is most of the difference, and is made once per
+`rewound`, so a game testing several shots of one input asks once and
+casts many. Recording the hundred each tick is 2.6–4 µs. A zap a player
+a second at 60 Hz is noise beside a frame; a server testing every
+client's every input against a hundred targets (8 × 60 a second) spends
+under 1 % of its time there.
+
+- **Not yet**: rewinding anything but colliders (an animation's hitboxes
+  per bone, a sprite's frame); a rewound physics *step* (projectiles flown
+  in the past); relevance at the view time rather than at the last snapshot (an entity
+  that entered interest within the rewind is hittable a few ticks early);
+  the editor drawing a rewound pose.
+
+Pinned by `voltra-core/tests/lag_compensation.rs`, 40 ms each way: a
+client aiming at a target moving up to 8 units a second where it draws
+it — every shot hits the rewound world, most miss the live one, rewound
+5–12 ticks; `max_rewind` 50 ms holding every rewind to three ticks; no
+history, every query live; a far target out of interest hidden.
+`games/arena/tests/match.rs`: one of the two bots, its sends 60 ms
+slower, lands zaps the server tested further back than the other's
+(four ticks and more, the other's two or so), none past twelve; an
+input made before its client drew anything carries no moment and is
+tested at the present. Unit
+tests of the ring (`rewind/tests.rs`: past pose hit and present missed
+and the reverse, interpolation between two ticks, spawned after,
+despawned, wraparound and the oldest clamp, newest-or-later and empty =
+live, unmarked live, every query, hidden, the recorded shape, a tick
+going back), of `ViewTime` and `LagCompensation::target` (in the bound,
+the far past clamped, the future clamped to now), of the input queue
+(each input's own view time; none without input).
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
