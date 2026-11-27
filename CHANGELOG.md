@@ -66,16 +66,28 @@ user's side. 3D is not part of it: it comes next, with a plan of its own.
   `ProtocolMismatch` at connect.
 
 ### Fixed
-- A networked build opened its first level with fresh ids, so no client
-  entity was the server's: the arena's coin had no sprite and its bot
-  stood still. The level now keeps its file's ids with replication on.
+- A networked build opened its level — first or changed to, with
+  `load_scene` or `change_scene` — under fresh ids, so no client entity
+  was the server's: the arena's coin had no sprite and its bot stood
+  still. With replication on, the level keeps its file's ids; a client
+  sets the level's replicated records aside and spawns the server's copy
+  of each from them when it arrives, so a coin keeps its sprite, and a
+  copy a change swept early is asked for again at once.
+- A level reloaded under its ids no longer spawns a twin of a
+  `Persistent` entity it holds.
 - A region unloading on a replication client let go of every entity the
-  first snapshot swept, not only its own.
+  first snapshot swept, not only its own; a region now notes its
+  replicated ids as each spawns, and a scene replaced lets go of the old
+  level's unsent entries.
 - The MCP `run_scene` screenshot drew HUD buttons unlaid out; the run now
-  lays the HUD out on the shot's size.
-- Test scratch folders are removed when their test ends, and the folders
-  of ended processes swept (`VOLTRA_KEEP_SCRATCH` keeps them).
-- Four new benchmarks' limits raised past their own run-to-run spread.
+  lays the HUD out on the shot's size, or on `WindowConfig::default()`'s.
+- Test scratch folders are removed when their test ends, and those of
+  ended processes swept — never one under a minute old
+  (`VOLTRA_KEEP_SCRATCH` keeps them).
+- The new microsecond benchmarks (`keyframes/sample`, `keyframes/blend`,
+  `lag/*`, `interest/grid`) take three times the samples
+  (`Config::steady`) and keep their limits; only
+  `interest/server-frame-without` went from 15 to 20 %.
 
 ## [0.3.0] — 2026-11-24
 
