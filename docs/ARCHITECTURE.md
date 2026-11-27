@@ -8048,21 +8048,33 @@ connections and the scene; `voltra-core` drives it from the loop and
   replace (`load_scene`) sets them aside the same way
   (`spawn_scene_as_authored` answers what it left out). The set-aside
   records outlive the session connecting (a game's opening level is
-  loaded before it joins), and are counted apart from interest
-  (`ReplicaStats::level_waiting`). A server copy of the new level that
+  loaded before it joins) — and, by design, a reconnect: a client that
+  joins a server on another level without loading it keeps records
+  nothing matches, a stale `level_waiting`, until its next scene change;
+  bounded by one level and never spawned, so no ghost — and are counted
+  apart from interest (`ReplicaStats::level_waiting`). A server copy of the new level that
   arrived before the change swept the old one went with it; the client
   asks for it again (`resync_despawned`) rather than when it next
-  changes — and keeps asking, in every message, the first 64 and then
-  the rest in turn (`client/resync.rs`), until its spawn arrives, the
-  server despawns it or the level goes: the ask rides the lossy input
-  channel. A client's streamed region still leaves them out
+  changes — and keeps asking (`client/resync.rs`), 64 a message at
+  most, the ones asked longest ago first, until its spawn arrives, the
+  server despawns it, it goes out of interest or the level goes: the ask
+  rides the lossy input channel. An ask is listed again only once its
+  answer could have come back — the round trip plus four times its
+  variation, RFC 6298's bound — since each ask the server reads starts
+  the entity over and sends it whole; the client knows an ask is
+  outstanding, so the throttle is the client's. The server answers an
+  ask for an entity it no longer has with a despawn, which travels in
+  every snapshot until acknowledged: despawned while its view was being
+  started over (no spawn sent, so none owed), it would otherwise be
+  asked for for good. A client's streamed region still leaves them out
   (`Replicas::LeaveOut`).
   Pinned by `tests/opening_level.rs` (the opening level; both ends
   changing scene together, the server first and the client first; a
   level reloaded over a persistent entity it holds, by load and by
   change; a coin the server took before the client loaded its level, by
   load and by change, not coming back; the asks lost for twenty frames
-  around a change, the coin still coming back).
+  around a change, the coin still coming back; an ask whose entity the
+  server despawned while the answer was lost, settled).
 - **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
   datagram with room for its header, 60 KB/s at 60 Hz) bounds each
   client's snapshot. Due entities are taken by banked priority — each

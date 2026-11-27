@@ -265,7 +265,11 @@ impl Stash {
     /// Lets go of what a session set aside — out of interest, swept — but
     /// keeps what the loaded level set aside: a level loaded before its
     /// session connects (a game's opening one) is the next session's
-    /// still.
+    /// still. By design they survive a reconnect too. A client joining a
+    /// server on another level without loading it keeps records nothing
+    /// will match, counted in `level_waiting`, until its next scene change
+    /// lets go of them: bounded by one level, and never spawned — only a
+    /// server's spawn of the same id brings one into the world.
     pub(crate) fn clear_session(&mut self) {
         let level = &self.level;
         self.kept.retain(|id, _| level.contains(id));
