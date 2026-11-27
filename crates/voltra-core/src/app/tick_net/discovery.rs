@@ -133,9 +133,8 @@ impl Net {
         let lobby = self.lobby.as_ref().map(LobbySession::lobby);
         // Made only when a probe is answered: most frames there is none.
         responder.poll_with(now, || {
-            let port = |want: fn(&Address) -> Option<u16>| {
-                endpoint.local_addrs().iter().find_map(want)
-            };
+            let port =
+                |want: fn(&Address) -> Option<u16>| endpoint.local_addrs().iter().find_map(want);
             let (players, max_players, in_match) = match lobby {
                 Some(lobby) => (
                     lobby.len(),
