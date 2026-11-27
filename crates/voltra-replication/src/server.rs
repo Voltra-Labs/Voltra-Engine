@@ -17,6 +17,7 @@ use crate::acks::ReceivedTicks;
 use crate::wire::{self, ClientMessage, Control, NetId, ServerTick, MAX_LISTED};
 use crate::{Interest, InterestGrid, ReplicationConfig};
 
+mod ask;
 mod audience;
 mod inputs;
 mod interest_points;
@@ -197,18 +198,13 @@ impl ReplicationServer {
                 self.config.max_buffered_inputs,
                 self.tick,
             );
-            for id in update.resync.into_iter().take(MAX_LISTED) {
-                if self.tracked.contains_key(&id) {
-                    view.resync(id, self.components.len(), self.tick.wrapping_add(1));
-                } else {
-                    // Gone, or never ours: said as a despawn, which is in
-                    // every snapshot until acknowledged — or the client,
-                    // whose copy went while its view was being started
-                    // over (no spawn sent, so no despawn owed), would ask
-                    // for it for good.
-                    view.despawned.insert(id);
-                }
-            }
+            ask::answer(
+                view,
+                update.resync,
+                &self.tracked,
+                self.components.len(),
+                self.tick,
+            );
         }
     }
 
