@@ -19,6 +19,10 @@
 //! - [`host`] and [`join`]: a session from a port or a `udp://` / `ws://`
 //!   address, with the transports made for it; a listen server
 //!   ([`HostOptions::listen`]) whose host plays as [`PeerId::SERVER`].
+//! - [`LobbySession`]: the room before a match — names, ready flags, a
+//!   host who starts it — on a channel of its own.
+//! - [`LanSearch`] and [`DiscoveryResponder`]: servers found on the local
+//!   network by a broadcast probe (native only).
 //!
 //! Everything that arrives is untrusted: a transport bounds a datagram to
 //! [`MAX_DATAGRAM`] bytes before anyone sees it, and the endpoint reads every
@@ -35,8 +39,10 @@ mod channel;
 mod conditions;
 mod config;
 mod connection;
+mod discovery;
 mod endpoint;
 mod event;
+mod lobby;
 mod memory;
 mod message;
 mod multi;
@@ -62,8 +68,17 @@ pub use channel::{
 pub use conditions::{ConditionStats, Conditioned, LinkConditions, LinkControl};
 pub use config::{NetConfig, MAX_MESSAGE_LIMIT, PROTOCOL_VERSION};
 pub use connection::ConnectionStats;
+pub use discovery::{
+    advertise, Advert, Advertise, DiscoveryError, DiscoveryLimits, DiscoveryResponder,
+    DiscoveryStats, LanSearch, SearchOptions, ServerInfo, DEFAULT_DISCOVERY_PORT, MAX_ANSWER_SIZE,
+    MAX_GAME_ID, MAX_SERVER_NAME, PROBE_SIZE,
+};
 pub use endpoint::{Endpoint, SendError};
 pub use event::{DisconnectReason, NetEvent, PeerId};
+pub use lobby::{
+    sanitize_name, unique_name, LateJoin, Lobby, LobbyConfig, LobbyEntry, LobbyError, LobbyEvent,
+    LobbyPhase, LobbyRefusal, LobbySession, LOBBY_WIRE_VERSION, MAX_LOBBY_PLAYERS, MAX_NAME_CHARS,
+};
 pub use memory::{MemoryNetwork, MemoryTransport};
 pub use message::{decode, encode, CodecError, Message};
 pub use multi::MultiTransport;

@@ -34,6 +34,11 @@ pub struct HostOptions {
     pub listen: bool,
     /// The session's configuration; clients must agree with it.
     pub config: NetConfig,
+    /// Whether the host answers LAN discovery probes, and as what. `None`,
+    /// the default, keeps it off every list. Opened by `tick.net.host` beside
+    /// the session (or [`advertise`](crate::advertise)); a socket that will
+    /// not open is a warning, not a failed host. Native only.
+    pub discovery: Option<crate::Advertise>,
 }
 
 impl Default for HostOptions {
@@ -44,6 +49,7 @@ impl Default for HostOptions {
             websocket_port: Some(DEFAULT_WEBSOCKET_PORT),
             listen: false,
             config: NetConfig::default(),
+            discovery: None,
         }
     }
 }
