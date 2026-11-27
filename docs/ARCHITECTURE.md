@@ -8023,10 +8023,33 @@ connections and the scene; `voltra-core` drives it from the loop and
   was ever the other end's, every one was swept and sent back bare,
   without the sprite the level gave it: the arena's coin was invisible and
   its bot idle in every build (the tests open their scenes as authored,
-  which hid it). With replication on, a scene replacing the level keeps
-  its file's ids (`prefab::spawn_scene_as_authored`); an additive load,
-  which may load a scene twice, keeps fresh ones. Pinned by
-  `tests/opening_level.rs`.
+  which hid it). With replication on (`Net::replicates`), on either end,
+  **a level keeps its file's ids** on exactly these paths:
+  `Headless::open`; `App::load_scene` / `Tick::load_scene`
+  (`prefab::spawn_scene_as_authored`); `App::change_scene` /
+  `Tick::change_scene` (`StagedScene::keep_ids`). Fresh ids on the rest:
+  an additive load (`add_scene`, which may load a scene twice), a
+  streamed region (a world's regions are fresh on both ends, so a
+  client's region copy is never the server's), any load without
+  replication, and every prefab spawn. A record whose id a `Persistent`
+  entity holds — one that outlives the change — is left out, with what
+  hangs under it, so no two entities answer to one id.
+  **A client's change sets the level's replicated entities aside**
+  rather than spawning them (`Replicas::SetAside` →
+  `ReplicationClient::keep_level`): kept in the stash under their file's
+  ids, unnumbered, the server's copy of each is spawned from them when
+  its spawn arrives — sprite and children and all, whenever it comes,
+  before or after the client's own load — and one the server never
+  sends stays aside until the level goes. A server copy of the new level
+  that arrived before the change swept the old one went with it; the
+  client asks for it again at once (`resync_despawned`) rather than
+  when it next changes. A synchronous replace spawns them as authored
+  (the server's copies adopt them), sweeps, and asks again the same way.
+  A client's streamed region still leaves them out (`Replicas::LeaveOut`).
+  Pinned by `tests/opening_level.rs` (the opening level; both ends
+  changing scene together, the server first and the client first; a
+  level reloaded over a persistent entity it holds, by load and by
+  change).
 - **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
   datagram with room for its header, 60 KB/s at 60 Hz) bounds each
   client's snapshot. Due entities are taken by banked priority — each
@@ -8377,8 +8400,8 @@ replication message.
   when their level goes — a scene change lets go of every one
   (`ReplicationClient::forget_unsent`, called by the loop), a region
   unloaded of its own alone (`forget_unsent_of`, with the ids of the
-  replicated entities the region spawned, noted when it finished loading;
-  stage 130 — it had let go of every swept entity, so a still-loaded
+  replicated entities the region spawned, noted as each landed, so one
+  swept while the region was still loading is let go of too; stage 130 — it had let go of every swept entity, so a still-loaded
   level's came back by prefab or bare). That covers a region loaded
   before joining, whose entities carry fresh ids the server never sends.
   One the server despawned before the client joined is kept until then.

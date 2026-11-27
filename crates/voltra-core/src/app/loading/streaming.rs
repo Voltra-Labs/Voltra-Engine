@@ -44,7 +44,7 @@ use voltra_assets::AssetPath;
 use voltra_scene::WorldRegions;
 
 use super::budget::FrameBudget;
-use super::build::{SceneBuild, Step};
+use super::build::{Replicas, SceneBuild, Step};
 use super::unload::Unload;
 use super::Loading;
 use crate::app::scenes::Request;
@@ -52,7 +52,7 @@ use crate::app::spawning::prefab_store;
 use crate::app::tick::Tick;
 use crate::app::App;
 
-use slot::{replicated_ids, Slot};
+use slot::Slot;
 use stats::stats_of;
 pub use stats::StreamingStats;
 
@@ -176,7 +176,7 @@ impl App {
                     // spawn put in so far goes.
                     Slot::Loading(build) if !kept => {
                         let entities = build.entities().to_vec();
-                        going.extend(replicated_ids(&self.world, &entities));
+                        going.extend_from_slice(build.replicated_ids());
                         *slot = if entities.is_empty() {
                             Slot::Unloaded
                         } else {
@@ -200,12 +200,24 @@ impl App {
             let root = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
                 .root()
                 .to_path_buf();
-            let skip = self.is_replication_client();
+            // A region's ids are fresh on each end, so a client's copy of
+            // its replicated entities could never be the server's.
+            let replicas = if self.is_replication_client() {
+                Replicas::LeaveOut
+            } else {
+                Replicas::Spawn
+            };
             for (reach, index) in starts.into_iter().take(limit.saturating_sub(active)) {
                 let scene = &world.regions.regions[index].scene;
-                let build =
-                    SceneBuild::start(jobs, root.clone(), scene, self.registry.clone(), skip);
-                world.slots[index] = Slot::Loading(build);
+                let build = SceneBuild::start(
+                    jobs,
+                    root.clone(),
+                    scene,
+                    self.registry.clone(),
+                    replicas,
+                    None,
+                );
+                world.slots[index] = Slot::Loading(Box::new(build));
                 order.push((reach, index));
             }
             order.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -238,9 +250,8 @@ impl App {
                             if let Slot::Loading(build) =
                                 std::mem::replace(&mut world.slots[index], Slot::Unloaded)
                             {
-                                let entities = build.into_entities();
-                                let ids = replicated_ids(&self.world, &entities);
-                                world.slots[index] = Slot::Loaded(entities, ids);
+                                let ids = build.replicated_ids().to_vec();
+                                world.slots[index] = Slot::Loaded(build.into_entities(), ids);
                             }
                         }
                         Step::Failed => {

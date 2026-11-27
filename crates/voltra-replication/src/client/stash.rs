@@ -28,9 +28,13 @@ use std::collections::HashMap;
 
 use voltra_ecs::{Entity, World};
 use voltra_scene::format::{record_entity, spawn_records, EntityRecord};
+use voltra_scene::hierarchy::Parent;
 use voltra_scene::{hierarchy, ComponentRegistry, Replicated, SceneId};
 
 use crate::NetId;
+
+/// The name a parent link is stored under in a scene file.
+const PARENT: &str = "Parent";
 
 /// What [`Stash::keep`] asks of the entities it meets.
 pub(crate) struct KeepIds<'a> {
@@ -143,6 +147,65 @@ impl Stash {
                 log::warn!("an entity back in interest would not spawn as it was: {error}");
                 None
             }
+        }
+    }
+
+    /// Sets aside a level's replicated entities before anything of them is
+    /// spawned: `records` are what a client's scene load left out — each
+    /// replicated record and what hangs under it, parents first — kept
+    /// under their own ids with no number, to be spawned back by
+    /// [`restore`](Self::restore) when the server's spawn of each arrives.
+    /// So the server's copy is the level's, sprite and children and all,
+    /// whenever its spawn comes. `replicated` names the components the wire
+    /// brings, left out of each as [`keep`](Self::keep) leaves them. One
+    /// whose id `held` answers true — an entity the world still has, a
+    /// persistent one — is not kept.
+    pub(crate) fn keep_records(
+        &mut self,
+        records: Vec<EntityRecord>,
+        replicated: &[&str],
+        held: &dyn Fn(SceneId) -> bool,
+    ) {
+        // Each record's group: its own id for a replicated one, its
+        // nearest replicated ancestor's for the rest.
+        let mut group_of: HashMap<SceneId, SceneId> = HashMap::new();
+        let mut groups: Vec<(SceneId, Vec<EntityRecord>)> = Vec::new();
+        let mut at: HashMap<SceneId, usize> = HashMap::new();
+        for mut record in records {
+            let top = if record.components.contains_key(Replicated::NAME) {
+                for name in replicated {
+                    record.components.remove(*name);
+                }
+                record.id
+            } else {
+                let parent = record
+                    .components
+                    .get(PARENT)
+                    .and_then(|link| link.into_rust::<Parent>().ok())
+                    .and_then(|link| group_of.get(&link.id).copied());
+                let Some(top) = parent else {
+                    log::debug!("a level record left out with no replicated entity above it");
+                    continue;
+                };
+                top
+            };
+            group_of.insert(record.id, top);
+            let index = *at.entry(top).or_insert_with(|| {
+                groups.push((top, Vec::new()));
+                groups.len() - 1
+            });
+            groups[index].1.push(record);
+        }
+        for (id, records) in groups {
+            if held(id) {
+                continue;
+            }
+            // What was kept under this id before is of a level now gone:
+            // its number, if it had one, no longer names this.
+            if let Some((Some(net), _)) = self.kept.remove(&id) {
+                self.by_net.remove(&net);
+            }
+            self.kept.insert(id, (None, records));
         }
     }
 

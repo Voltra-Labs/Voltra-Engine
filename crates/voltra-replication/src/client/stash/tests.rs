@@ -89,3 +89,47 @@ fn a_replicated_child_the_server_still_sends_stays_in_the_world() {
         "swept, never sent: let go of with the level"
     );
 }
+
+#[test]
+fn a_level_s_records_are_kept_by_their_replicated_tops_and_spawned_back() {
+    let registry = ComponentRegistry::with_defaults();
+    // A level: a coin and its glow, a crate on its own, a wall.
+    let mut level = World::new();
+    let coin = level.spawn();
+    let coin_id = SceneId::new();
+    level.insert(coin, coin_id);
+    level.insert(coin, Replicated::default());
+    level.insert(coin, Transform::default());
+    level.insert(coin, Sprite::default().with_sort_order(7));
+    let glow = level.spawn();
+    level.insert(glow, SceneId::new());
+    level.insert(glow, Name::new("glow"));
+    hierarchy::set_parent(&mut level, glow, coin).expect("parents");
+    let crate_ = level.spawn();
+    let crate_id = SceneId::new();
+    level.insert(crate_, crate_id);
+    level.insert(crate_, Replicated::default());
+    let file = voltra_scene::format::to_scene_file(&level, &registry).expect("saves");
+    let mut staged = voltra_scene::prefab::StagedScene::new(file).expect("this version");
+    let records = staged.take(|record| record.components.contains_key(Replicated::NAME));
+    assert_eq!(records.len(), 3);
+
+    let mut stash = Stash::default();
+    stash.keep_records(records, &["Transform"], &|id| id == crate_id);
+    assert_eq!(stash.len(), 1, "the coin; the crate is held");
+
+    let mut world = World::new();
+    let back = stash.restore(&mut world, &registry, coin_id).expect("kept");
+    assert_eq!(back.len(), 2, "the coin and its glow");
+    assert_eq!(
+        world.get::<Sprite>(back[0]).map(|s| s.sort_order),
+        Some(7),
+        "the level's own"
+    );
+    assert!(
+        world.get::<Transform>(back[0]).is_none(),
+        "the wire brings it"
+    );
+    hierarchy::resolve_parents(&mut world);
+    assert_eq!(hierarchy::parent_of(&world, back[1]), Some(back[0]));
+}

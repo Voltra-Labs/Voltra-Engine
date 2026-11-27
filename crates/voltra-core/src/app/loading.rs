@@ -180,9 +180,29 @@ impl App {
     /// On a replication client, lets go of the level entities it set aside
     /// out of interest without the server ever sending them: the level
     /// they came from is going (a scene change).
-    fn forget_unsent_level(&mut self) {
+    pub(in crate::app) fn forget_unsent_level(&mut self) {
         if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
             client.forget_unsent();
+        }
+    }
+
+    /// On a replication client, asks the server to send again what a sweep
+    /// of the old level took (`ReplicationClient::resync_despawned`).
+    pub(in crate::app) fn resync_swept(&mut self) {
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.resync_despawned(&self.world);
+        }
+    }
+
+    /// On a replication client, sets aside the replicated entities of the
+    /// level it is loading, for the server's copies to be spawned from as
+    /// they arrive (`ReplicationClient::keep_level`).
+    fn keep_level(&mut self, records: Vec<voltra_scene::format::EntityRecord>) {
+        if records.is_empty() {
+            return;
+        }
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.keep_level(&self.world, &self.registry, records);
         }
     }
 

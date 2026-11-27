@@ -14,8 +14,8 @@
 use std::collections::{HashMap, HashSet};
 
 use voltra_assets::AssetPath;
-use voltra_ecs::Entity;
-use voltra_scene::{hierarchy, prefab, Persistent};
+use voltra_ecs::{Entity, World};
+use voltra_scene::{hierarchy, prefab, Persistent, SceneId};
 
 use super::spawning::prefab_store;
 use super::tick::Tick;
@@ -124,14 +124,20 @@ impl App {
     /// session must hold each level entity under one id for a client's copy
     /// to be the server's (a dedicated server opens its scene as authored).
     /// The old level holding the same ids for the moment between the spawn
-    /// and the sweep is harmless: nothing reads an id in between.
+    /// and the sweep is harmless: nothing reads an id in between. A record
+    /// whose id a [`Persistent`] entity holds — one that outlives the
+    /// sweep — is left out, so no two entities answer to one id.
     fn replace_scene(&mut self, path: &AssetPath) {
         let authored = self.net.replicates();
         let Some(arrived) = self.spawn_scene(path, authored) else {
             return;
         };
+        // On a client, what the old level set aside goes with it.
+        self.forget_unsent_level();
         let keep: HashSet<Entity> = arrived.iter().copied().collect();
         self.sweep_roots(&keep);
+        // What the server had sent of the new level went with the old one.
+        self.resync_swept();
         // A change over frames underway, and the streamed world, were for
         // the scene just swept.
         self.scenes.loading.swept();
@@ -195,7 +201,10 @@ impl App {
             return None;
         }
         let spawned = if authored {
-            prefab::spawn_scene_as_authored(&mut self.world, &self.registry, scene)
+            let staying = surviving_ids(&self.world);
+            prefab::spawn_scene_as_authored(&mut self.world, &self.registry, scene, &|id| {
+                staying.contains(&id)
+            })
         } else {
             prefab::spawn_scene(&mut self.world, &self.registry, scene)
         };
@@ -213,6 +222,18 @@ impl App {
             }
         }
     }
+}
+
+/// The ids of what a scene change leaves standing: every [`Persistent`]
+/// root and what hangs under it.
+pub(super) fn surviving_ids(world: &World) -> HashSet<SceneId> {
+    world
+        .query::<Persistent>()
+        .map(|(entity, _)| entity)
+        .filter(|&entity| hierarchy::parent_of(world, entity).is_none())
+        .flat_map(|root| std::iter::once(root).chain(hierarchy::descendants(world, root)))
+        .filter_map(|entity| world.get::<SceneId>(entity).copied())
+        .collect()
 }
 
 #[cfg(test)]

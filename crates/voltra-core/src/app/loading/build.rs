@@ -19,14 +19,15 @@
 //! the second read (the first being the check) is the part left to the
 //! budget.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
 use voltra_jobs::{JobPool, Task};
-use voltra_scene::format::texture_paths;
+use voltra_scene::format::{texture_paths, EntityRecord};
 use voltra_scene::prefab::StagedScene;
-use voltra_scene::{ComponentRegistry, Replicated, SceneError};
+use voltra_scene::{ComponentRegistry, Replicated, SceneError, SceneId};
 
 mod sync;
 mod textures;
@@ -53,6 +54,22 @@ pub(super) enum Step {
 struct Parsed {
     staged: StagedScene,
     textures: Vec<AssetPath>,
+    /// The replicated records set aside ([`Replicas::SetAside`]).
+    set_aside: Vec<EntityRecord>,
+}
+
+/// What a load does with the file's replicated entities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Replicas {
+    /// Spawns them with the rest: no session, or the server's end.
+    Spawn,
+    /// Leaves them out: a client's streamed region, whose entities carry
+    /// fresh ids on both ends, so the server's copy can never be its own.
+    LeaveOut,
+    /// Leaves them out of the world and hands them over
+    /// ([`SceneBuild::take_set_aside`]): a client's level, whose server
+    /// copies are dressed in them as they arrive.
+    SetAside,
 }
 
 #[derive(Debug)]
@@ -78,33 +95,72 @@ enum Phase {
 pub(super) struct SceneBuild {
     path: AssetPath,
     phase: Phase,
+    /// The replicated records set aside, once read, until taken.
+    set_aside: Vec<EntityRecord>,
+    /// The ids of the replicated entities it has spawned, as each lands:
+    /// what a client lets go of from its stash when the load goes.
+    replicated: Vec<SceneId>,
 }
 
 impl SceneBuild {
     /// Starts reading `path` under `root` on `jobs`. `registry` checks the
-    /// components; `skip_replicated` leaves out what a replication client
-    /// gets from its server instead.
+    /// components; `replicas` says what becomes of the replicated entities;
+    /// `keep_ids`, when given, spawns each under its file's id
+    /// ([`StagedScene::keep_ids`]) — a networked session's level — but for
+    /// the ids it holds, which outlive the change (persistent entities)
+    /// and are left out with what hangs under them.
     pub(super) fn start(
         jobs: &JobPool,
         root: PathBuf,
         path: &AssetPath,
         registry: ComponentRegistry,
-        skip_replicated: bool,
+        replicas: Replicas,
+        keep_ids: Option<HashSet<SceneId>>,
     ) -> Self {
         let task_path = path.clone();
         let task = jobs.submit(move || {
             let mut staged = StagedScene::read(&root, &task_path)?;
-            if skip_replicated {
-                staged.skip(|record| record.components.contains_key(Replicated::NAME));
+            let replicated =
+                |record: &EntityRecord| record.components.contains_key(Replicated::NAME);
+            let set_aside = match replicas {
+                Replicas::Spawn => Vec::new(),
+                Replicas::LeaveOut => {
+                    staged.skip(replicated);
+                    Vec::new()
+                }
+                Replicas::SetAside => staged.take(replicated),
+            };
+            if let Some(staying) = keep_ids {
+                if !staying.is_empty() {
+                    staged.skip(|record| staying.contains(&record.id));
+                }
+                staged.keep_ids();
             }
             staged.check(&registry)?;
             let textures = texture_paths(staged.records());
-            Ok(Parsed { staged, textures })
+            Ok(Parsed {
+                staged,
+                textures,
+                set_aside,
+            })
         });
         Self {
             path: path.clone(),
             phase: Phase::Reading(task),
+            set_aside: Vec::new(),
+            replicated: Vec::new(),
         }
+    }
+
+    /// The replicated records set aside ([`Replicas::SetAside`]), once the
+    /// file is read; empty before, and after the first take.
+    pub(super) fn take_set_aside(&mut self) -> Vec<EntityRecord> {
+        std::mem::take(&mut self.set_aside)
+    }
+
+    /// The ids of the replicated entities it has spawned so far.
+    pub(super) fn replicated_ids(&self) -> &[SceneId] {
+        &self.replicated
     }
 
     /// The file it is reading.
@@ -177,6 +233,7 @@ impl App {
                     Step::Failed
                 }
                 Some(Ok(parsed)) => {
+                    build.set_aside = parsed.set_aside;
                     let textures = self.request_decodes(parsed.textures, decodes, jobs);
                     build.phase = Phase::Decoding {
                         staged: parsed.staged,
@@ -216,6 +273,11 @@ impl App {
             Phase::Spawning(mut staged) => match staged.spawn_next(&mut self.world, &self.registry)
             {
                 Ok(Some(entity)) => {
+                    if self.world.get::<Replicated>(entity).is_some() {
+                        if let Some(&id) = self.world.get::<SceneId>(entity) {
+                            build.replicated.push(id);
+                        }
+                    }
                     self.resolve_entity(entity);
                     build.phase = Phase::Spawning(staged);
                     Step::Worked

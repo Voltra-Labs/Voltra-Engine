@@ -1,15 +1,18 @@
 //! A copy of a prefab spawned into a world: fresh ids, links remapped,
 //! roots placed and linked to their file.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use voltra_ecs::{Entity, World};
 
 use super::{Prefab, PrefabInstance, PrefabPart};
-use crate::format::{ComponentRegistry, SceneError};
+use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 use crate::transform::Transform;
+
+/// The name a parent link is stored under in a scene file.
+const PARENT: &str = "Parent";
 
 /// The entities one spawn made.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -88,24 +91,64 @@ pub fn spawn_scene(
 /// level copy is never the server's: it is swept, and the server's comes
 /// back bare or by prefab, without what the level gave it — a sprite.
 ///
-/// The caller must know the world holds none of the file's ids already
-/// (an additive load of a scene twice would), or two entities answer to
-/// one id.
+/// A record whose id `held` answers true — an entity that stays in the
+/// world through the change, a [`Persistent`](crate::Persistent) one the
+/// level also holds — is left out, with what hangs under it in the file:
+/// two entities never answer to one id. Ids the old level holds for the
+/// moment before it is swept are the caller's to answer false for.
 pub fn spawn_scene_as_authored(
     world: &mut World,
     registry: &ComponentRegistry,
     scene: &Prefab,
+    held: &dyn Fn(SceneId) -> bool,
 ) -> Result<Instance, SceneError> {
-    spawn_copy(world, registry, scene, None, Ids::Authored)
+    spawn_copy(world, registry, scene, None, Ids::Authored(held))
 }
 
 /// Which ids a copy's entities get.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Ids {
+#[derive(Clone, Copy)]
+enum Ids<'a> {
     /// A fresh one each: a copy of a copy.
     Fresh,
-    /// Their records' own: the level as authored.
-    Authored,
+    /// Their records' own: the level as authored, but for the ones this
+    /// answers true for, left out.
+    Authored(&'a dyn Fn(SceneId) -> bool),
+}
+
+/// The records of `records` to leave out: those `held` answers true for,
+/// and every one under them in the file.
+fn left_out(records: &[EntityRecord], held: &dyn Fn(SceneId) -> bool) -> HashSet<SceneId> {
+    let mut out: HashSet<SceneId> = records
+        .iter()
+        .map(|record| record.id)
+        .filter(|&id| held(id))
+        .collect();
+    if out.is_empty() {
+        return out;
+    }
+    let parents: Vec<(SceneId, Option<SceneId>)> = records
+        .iter()
+        .map(|record| {
+            let parent = record
+                .components
+                .get(PARENT)
+                .and_then(|link| link.into_rust::<Parent>().ok())
+                .map(|link| link.id);
+            (record.id, parent)
+        })
+        .collect();
+    // To a fixed point: a file need not list a parent before its children.
+    loop {
+        let before = out.len();
+        for &(id, parent) in &parents {
+            if parent.is_some_and(|parent| out.contains(&parent)) {
+                out.insert(id);
+            }
+        }
+        if out.len() == before {
+            return out;
+        }
+    }
 }
 
 /// The copy both share. `at` is `Some` for a prefab: roots placed by it and
@@ -121,24 +164,33 @@ fn spawn_copy(
         return Ok(Instance::default());
     };
 
+    let skipped = match ids {
+        Ids::Fresh => HashSet::new(),
+        Ids::Authored(held) => left_out(&file.entities, held),
+    };
+    let records: Vec<&EntityRecord> = file
+        .entities
+        .iter()
+        .filter(|record| !skipped.contains(&record.id))
+        .collect();
+
     // One fresh id per record, and a map from the old ids for the links. The
     // map keeps the first record under a duplicated id, which is what a link
     // to it resolved to in the file as well.
-    let fresh: Vec<SceneId> = file
-        .entities
+    let fresh: Vec<SceneId> = records
         .iter()
         .map(|record| match ids {
             Ids::Fresh => SceneId::new(),
-            Ids::Authored => record.id,
+            Ids::Authored(_) => record.id,
         })
         .collect();
     let mut renamed: HashMap<SceneId, SceneId> = HashMap::with_capacity(fresh.len());
-    for (record, id) in file.entities.iter().zip(&fresh) {
+    for (record, id) in records.iter().zip(&fresh) {
         renamed.entry(record.id).or_insert(*id);
     }
 
-    let mut entities = Vec::with_capacity(file.entities.len());
-    for (record, id) in file.entities.iter().zip(&fresh) {
+    let mut entities = Vec::with_capacity(records.len());
+    for (record, id) in records.iter().zip(&fresh) {
         let entity = world.spawn();
         entities.push(entity);
         world.insert(entity, *id);

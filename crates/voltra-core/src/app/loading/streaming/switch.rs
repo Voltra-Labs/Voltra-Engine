@@ -4,7 +4,7 @@ use voltra_assets::AssetPath;
 use voltra_scene::WorldRegions;
 
 use super::super::unload::Unload;
-use super::{replicated_ids, Slot, StreamedWorld, Streaming};
+use super::{Slot, StreamedWorld, Streaming};
 use crate::app::spawning::prefab_store;
 use crate::app::App;
 
@@ -19,7 +19,7 @@ impl App {
                 match slot {
                     Slot::Loading(build) => {
                         let entities = build.entities().to_vec();
-                        going.extend(replicated_ids(&self.world, &entities));
+                        going.extend_from_slice(build.replicated_ids());
                         streaming.orphans.push(Unload::new(entities));
                     }
                     Slot::Loaded(entities, ids) => {
