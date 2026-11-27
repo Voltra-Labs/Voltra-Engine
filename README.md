@@ -4,12 +4,16 @@
 
 A 2D/3D game engine written in Rust on top of [`wgpu`](https://github.com/gfx-rs/wgpu) (Vulkan, Metal, DX12, GL, WebGPU) and [`winit`](https://github.com/rust-windowing/winit).
 
-> **Status: 0.3 — a 2D engine with networking.** Voltra was originally a
-> C++/OpenGL engine; the C++ tree is preserved in the `main` branch history and tagged
-> `v0-cpp-final`. The Rust rewrite is a 2D engine with an editor, a player,
-> native and web export, multiplayer over UDP and WebSocket, and games
-> written as Rust crates the editor hot reloads. 3D is on the roadmap, not in the tree. See
-> [CHANGELOG.md](CHANGELOG.md).
+> **Status: 0.4 — a 2D engine with networking, its gaps closed.** Voltra was
+> originally a C++/OpenGL engine; the C++ tree is preserved in the `main` branch
+> history and tagged `v0-cpp-final`. The Rust rewrite is a 2D engine with an
+> editor, a player, native and web export, multiplayer over UDP and WebSocket,
+> and games written as Rust crates the editor hot reloads. 0.4 adds animation
+> blending (crossfades, blend trees, layers), wheel, slider and mouse joints that
+> can break, characters that push what they walk into, a camera that turns and
+> frames a group, editing many entities at once, prefab variants, and for
+> networked games interest management, lag compensation, a lobby and LAN
+> discovery. 3D comes next, not yet in the tree. See [CHANGELOG.md](CHANGELOG.md).
 
 **New here? Start with [the guide](docs/guide/README.md)** — from install
 to a game in a browser. `games/` holds four sample games: `platformer`,
@@ -58,7 +62,8 @@ cargo xtask guide               # run the guide's checked commands, as CI does
 cargo xtask pack-atlas <folder>                   # its PNGs into one sheet + .atlas.ron (--trim, --out)
 cargo xtask bench               # time the hot paths in release (--compare FILE: check for regressions)
 cargo run -p breakout           # a sample game (also: dodge, voltra-platformer)
-cargo run -p arena -- --host                      # the networked sample: host a match (UDP 7777, WS 7778)
+cargo run -p arena                                # the networked sample: its lobby — host, find on LAN, join
+cargo run -p arena -- --host                      # ... or skip it: host a match (UDP 7777, WS 7778)
 cargo run -p arena -- --join udp://127.0.0.1:7777 # ... and join it from another terminal
 cargo run -p arena --bin arena-server -- --asset-root games/arena/assets  # its dedicated server
 cargo run -p voltra-server -- scenes/sandbox.ron  # serve any scene headless to clients (--help)
@@ -77,10 +82,12 @@ be selected by clicking it in the viewport; clicking empty space clears the
 selection. Ctrl-click adds or removes one, Shift-click in the hierarchy takes
 the rows between, and a left drag on empty ground draws a box that selects
 what it encloses; the gizmo, on the last one picked, moves, turns and scales
-them all about it, the inspector edits that one, and `Delete` (the button or
-the key) removes them all as one undo entry. `Ctrl+D` duplicates the selection
-in place, and `Ctrl+C` / `Ctrl+X` / `Ctrl+V` copy, cut and paste it — through
-the system clipboard, so a copy pastes into another scene or editor window.
+them all about it, the inspector edits what they share — a field that differs
+shows `—`, and an edit writes that field alone to every one of them — and
+`Delete` (the button or the key) removes them all; each is one undo entry. `Ctrl+D` duplicates the selection in place, and `Ctrl+C` / `Ctrl+X` /
+`Ctrl+V` copy, cut and paste it — through the system clipboard, so a copy
+pastes into another scene or editor window; each copy is numbered apart from
+its siblings, `Coin (1)`, `Coin (2)`, as in Unity.
 
 `Scene ▸ New`, `Open…`, `Save` and `Save As…` (`Ctrl+N`, `Ctrl+O`, `Ctrl+S`,
 `Ctrl+Shift+S`) work on any scene under the asset root; double-clicking a
@@ -99,7 +106,10 @@ Play to profile the game rather than the editor at rest.
 A prefab dropped from the asset browser stays linked to its file: editing the
 file (on disk or with the inspector's **Apply to prefab** on an edited instance)
 updates every instance, except for the components an instance has changed — the
-inspector lists those as overrides, each with a **Revert**.
+inspector lists those as overrides, each with a **Revert**. A prefab inside
+another stays linked to its own file, and a **variant** (the asset browser's
+"Create variant") is a prefab that is another one with overrides: an edit to the
+base reaches the variant and its instances but for what each overrides.
 
 The hierarchy lists the scene as a tree. An entity's `Name` is what a row says —
 the inspector renames it, and an unnamed one falls back to its index. Dragging a
@@ -291,8 +301,9 @@ privileged and plain `cargo build` covers everything.
 
 ## Roadmap
 
-Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
-3D comes next, with a plan of its own.
+Version 0.3 closed the 2D base and added networking (stages 88–118);
+version 0.4 closes the 2D and networking gaps a game author hits first
+(stages 119–131, below). 3D comes next, with a plan of its own.
 
 | Stage | Scope | State |
 | --- | --- | --- |
@@ -446,6 +457,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 128 | Lag compensation: rewound hit queries within a bound | done |
 | 129 | A lobby and LAN discovery; a lobby screen in new games | done |
 | 130 | Dogfood pass: the 0.4 stages played together | done |
+| 131 | Version 0.4: guide chapters for 119–129, the changelog | done |
 
 ## Contributing
 

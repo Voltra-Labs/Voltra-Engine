@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "arena"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "js-sys",
  "log",
@@ -307,7 +307,7 @@ dependencies = [
 
 [[package]]
 name = "breakout"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "serde",
@@ -812,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "dodge"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "serde",
@@ -3913,7 +3913,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "voltra-assets"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "fontdue",
  "image",
@@ -3935,7 +3935,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-audio"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "cpal",
  "log",
@@ -3946,7 +3946,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-bench"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "env_logger",
  "log",
@@ -3964,7 +3964,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-bridge"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "serde",
@@ -3974,7 +3974,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "egui",
  "egui-winit",
@@ -4008,11 +4008,11 @@ dependencies = [
 
 [[package]]
 name = "voltra-ecs"
-version = "0.3.0"
+version = "0.4.0"
 
 [[package]]
 name = "voltra-editor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "image",
@@ -4034,14 +4034,14 @@ dependencies = [
 
 [[package]]
 name = "voltra-jobs"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
 ]
 
 [[package]]
 name = "voltra-mcp"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64",
  "image",
@@ -4064,7 +4064,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-nav"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "voltra-ecs",
@@ -4075,7 +4075,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-net"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "caseless",
  "env_logger",
@@ -4092,7 +4092,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-physics"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "voltra-ecs",
@@ -4103,7 +4103,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-platformer"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "serde",
@@ -4116,7 +4116,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-player"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "ron",
@@ -4130,14 +4130,14 @@ dependencies = [
 
 [[package]]
 name = "voltra-profile"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "web-time",
 ]
 
 [[package]]
 name = "voltra-render"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bytemuck",
  "epaint",
@@ -4152,7 +4152,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-replication"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "glam",
  "log",
@@ -4167,7 +4167,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-scene"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "image",
  "log",
@@ -4184,7 +4184,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-server"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "log",
  "voltra-assets",
@@ -4195,7 +4195,7 @@ dependencies = [
 
 [[package]]
 name = "voltra-testkit"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "image",
  "pollster",
@@ -5065,7 +5065,7 @@ checksum = "3ae8337f8a065cfc972643663ea4279e04e7256de865aa66fe25cec5fb912d3f"
 
 [[package]]
 name = "xtask"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "voltra-assets",
  "voltra-player",
