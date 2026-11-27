@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
+use voltra_ecs::{Entity, World};
+
+use super::CameraFollow2D;
 use crate::Camera;
 
 /// How a following camera zooms to frame its targets — Cinemachine's
@@ -74,6 +77,30 @@ fn limits(min: f32, max: f32) -> (f32, f32) {
         lo.clamp(Camera::MIN_SIZE, Camera::MAX_SIZE),
         hi.clamp(Camera::MIN_SIZE, Camera::MAX_SIZE),
     )
+}
+
+/// The camera size the rig zooms to this frame, eased at `rate` and written
+/// to the entity's [`Camera`]; or the camera's size as it is without a
+/// zoom; `None` without a camera.
+pub(super) fn zoom_to(
+    world: &mut World,
+    entity: Entity,
+    rig: &CameraFollow2D,
+    present: &super::group::Present,
+    aspect: f32,
+    rotation: f32,
+    rate: f32,
+) -> Option<f32> {
+    let camera = world.get_mut::<Camera>(entity)?;
+    let Some(zoom) = rig.zoom else {
+        return Some(camera.size);
+    };
+    let half = (present.max - present.min) * 0.5;
+    if let Some(wanted) = zoom.size_for(half, aspect, rotation) {
+        let eased = camera.size + (wanted - camera.size) * rate;
+        camera.size = if eased.is_finite() { eased } else { wanted };
+    }
+    Some(camera.size)
 }
 
 #[cfg(test)]

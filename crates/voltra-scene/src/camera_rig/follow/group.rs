@@ -7,6 +7,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use super::super::world_position;
+use super::CameraFollow2D;
 use crate::format::entity_with_id;
 use crate::scene_id::SceneId;
 
@@ -64,4 +65,27 @@ pub(super) fn gather(
     }
     let members = hasher.finish();
     (found.map(|present| Present { members, ..present }), missing)
+}
+
+/// Says each target newly missing once — a warning when none of the group
+/// is left, since then it holds still; a debug line while the rest are
+/// framed, since a member despawning (an enemy killed) is how a group
+/// usually shrinks — and remembers which are missing.
+pub(super) fn say_missing(
+    world: &mut World,
+    entity: Entity,
+    missing: Vec<SceneId>,
+    any_left: bool,
+) {
+    let Some(rig) = world.get_mut::<CameraFollow2D>(entity) else {
+        return;
+    };
+    for id in missing.iter().filter(|id| !rig.state.missing.contains(id)) {
+        if any_left {
+            log::debug!("a follower's target {id:?} is not in the scene; it frames the rest");
+        } else {
+            log::warn!("a follower's target {id:?} is not in the scene; it holds still");
+        }
+    }
+    rig.state.missing = missing;
 }
