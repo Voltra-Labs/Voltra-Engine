@@ -111,7 +111,8 @@ impl Mover<'_> {
                 }
             }
             if body.push_force > 0.0 {
-                if let Some(push) = self.push(at, &hit, velocity, floor) {
+                let standing_on = body.contact.floor.filter(|_| body.contact.on_floor);
+                if let Some(push) = self.push(at, &hit, velocity, floor, standing_on) {
                     record(&mut pushes, push);
                 }
             }
@@ -130,11 +131,25 @@ impl Mover<'_> {
             } else {
                 hit.normal
             };
-            if floor && grounded && body.constant_speed_on_slopes && velocity.dot(up) <= 0.0 {
+            // Only with a walk across: standing, or sliding down under
+            // gravity alone with `stop_on_slope` off, is left to the slope.
+            if floor
+                && grounded
+                && body.constant_speed_on_slopes
+                && !falling_only
+                && velocity.dot(up) <= 0.0
+            {
                 // Walking on: whatever is left across, along this floor, and
-                // the speed kept across — none of it lost to the slope.
+                // the speed kept across — none of it lost to the slope. The
+                // fall into it is taken off, unless the slope is to be slid
+                // down: then the part of the fall along it is kept, and the
+                // slide gathers speed as it does without constant speed.
                 motion = along_floor(motion, normal, up);
-                velocity -= up * velocity.dot(up);
+                let fall = up * velocity.dot(up);
+                velocity -= fall;
+                if !body.stop_on_slope {
+                    velocity += off_surface(fall, normal);
+                }
             } else {
                 motion = off_surface(motion, normal);
                 velocity = off_surface(velocity, normal);

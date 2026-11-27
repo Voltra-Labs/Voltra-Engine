@@ -57,8 +57,10 @@ fn walking_into_a_crate_pushes_it_and_keeps_walking() {
     // Never faster than the character walks into it.
     let speed = world.get::<RigidBody>(crate_).expect("a body").velocity.x;
     assert!(speed <= 2.0 + 1e-3, "{speed}");
-    // A light crate does not slow the character: it walks on at full speed.
-    assert!((velocity.x - 2.0).abs() < 0.05, "{velocity}");
+    // A light crate hardly slows the character: it walks on at the speed
+    // the crate made, which is its own less one step of the floor's
+    // friction.
+    assert!(velocity.x > 1.85 && velocity.x <= 2.0, "{velocity}");
     // And it never walks into the crate.
     let gap = at(&world, crate_).x - 0.25 - (at(&world, me).x + 0.25);
     assert!(gap > -1e-3, "{gap}");
@@ -108,6 +110,20 @@ fn a_crate_against_a_wall_is_not_pushed_through_it() {
         let gap = crate_at - 0.25 - (at(&world, me).x + 0.25);
         assert!(gap > -1e-3, "into the crate: {gap}");
     }
+    // Pinned, the crate takes all of the walk, as a wall does: no speed
+    // kept for a walk animation to play against.
+    let velocity = play(&mut world, &mut physics, me, 4.0, 1);
+    assert!(velocity.x.abs() < 0.05, "{velocity}");
+    assert!(body(&world, me).is_on_wall());
+}
+
+#[test]
+fn a_crate_stood_on_goes_to_sleep() {
+    let (mut world, mut physics, me, crate_) = crate_ahead(1.0, 40.0);
+    world.get_mut::<Transform>(me).expect("placed").translation = Vec2::new(1.0, 0.9);
+    play(&mut world, &mut physics, me, 0.0, 180);
+    assert_eq!(body(&world, me).contact.floor, Some(crate_));
+    assert!(physics.is_asleep(crate_), "pressed only by landing on it");
 }
 
 #[test]

@@ -21,12 +21,39 @@ pub(super) fn carry(world: &World, contact: &CharacterContact, at: Vec2) -> (Vec
     let Some(now) = world.get::<Transform>(floor) else {
         return (Vec2::ZERO, 0.0);
     };
-    let turn = now.rotation - was_turned;
+    let turn = wrapped(now.rotation - was_turned);
     let moved = now.translation + Vec2::from_angle(turn).rotate(at - was);
     let carried = moved - at;
     if carried.is_finite() && turn.is_finite() {
         (carried, turn)
     } else {
         (Vec2::ZERO, 0.0)
+    }
+}
+
+/// `angle` as the same turn in (−π, π]: a floor whose rotation crossed from
+/// π to −π turned a little, not nearly all the way round the other way.
+fn wrapped(angle: f32) -> f32 {
+    use std::f32::consts::{PI, TAU};
+    let turn = angle.rem_euclid(TAU);
+    if turn > PI {
+        turn - TAU
+    } else {
+        turn
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::PI;
+
+    use super::*;
+
+    #[test]
+    fn a_turn_is_the_short_way_round() {
+        assert!((wrapped(0.3) - 0.3).abs() < 1e-6);
+        assert!((wrapped(-0.3) + 0.3).abs() < 1e-6);
+        assert!((wrapped(-3.1 - 3.1) - (2.0 * PI - 6.2)).abs() < 1e-5);
+        assert!((wrapped(3.0 * PI) - PI).abs() < 1e-5);
     }
 }

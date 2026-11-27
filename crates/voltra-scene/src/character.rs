@@ -40,15 +40,17 @@ pub struct CharacterBody2D {
     /// squared), it pushes a dynamic body it walks into with: an impulse
     /// of at most `push_force × delta` a move, along the contact's normal at
     /// the contact point, so a heavier crate moves less and one pushed low
-    /// may tip. Never faster than the character moves into it. Zero pushes
-    /// nothing — the body is a wall, as any other.
+    /// may tip. Never faster than the character moves into it; a body it
+    /// stands on is pressed when landed on, not again while stood on. Zero
+    /// pushes nothing — the body is a wall, as any other.
     pub push_force: f32,
     /// Whether walking up or down a floor's slope covers the same ground
     /// across `up` per second as walking on the flat — Godot's
     /// `floor_constant_speed`, measured across rather than along the slope.
     /// Off, the part of a walk going into a slope is taken off — slower up
     /// it — and down one it walks off into the air for `snap` to bring back.
-    /// On, the velocity kept is the walk across, with no part up or down.
+    /// On, the velocity kept is the walk across, with no part up or down —
+    /// but for, with `stop_on_slope` off, the slide down the slope.
     pub constant_speed_on_slopes: bool,
     /// Whether a turning floor turns the character's own `Transform`
     /// rotation with it, as well as carrying it round. Off keeps it as it

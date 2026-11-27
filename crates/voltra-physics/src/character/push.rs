@@ -37,22 +37,29 @@ pub(super) struct Push {
     pub point: Vec2,
     /// How fast the character was moving into the body.
     pub speed: f32,
-    /// Whether the body was the floor: pressed on, but the character's own
-    /// speed into a floor is taken off as on any floor.
+    /// Whether the body was the floor: landed on and pressed, but the
+    /// character's own speed into a floor is taken off as on any floor.
     pub floor: bool,
 }
 
 impl Mover<'_> {
     /// The push the character, at `at` and moving at `velocity`, gives what
-    /// `hit` met — `None` for anything but a dynamic body with mass, or a
-    /// character not moving into it.
+    /// `hit` met — `None` for anything but a dynamic body with mass, a
+    /// character not moving into it, or the floor it already stood on: what
+    /// presses into that is only the step's pull of gravity, and pressing a
+    /// crate with it every step would keep it from ever sleeping. Landing on
+    /// a body presses it.
     pub(super) fn push(
         &self,
         at: &Transform,
         hit: &ShapeHit,
         velocity: Vec2,
         floor: bool,
+        standing_on: Option<Entity>,
     ) -> Option<Push> {
+        if floor && standing_on == Some(hit.entity) {
+            return None;
+        }
         let speed = -velocity.dot(hit.normal);
         if speed.is_nan() || speed <= 0.0 {
             return None;
@@ -92,9 +99,11 @@ pub(super) fn record(pushes: &mut Vec<Push>, push: Push) {
 }
 
 /// Pushes every body in `pushes` with up to `force × delta`, and gives
-/// `velocity` back the speed each body took off a wall or ceiling: a light
-/// crate is walked on at full speed, a heavy one at its own pace. A body
-/// gone since the move found it is skipped.
+/// `velocity` back, into a wall or ceiling that is a body, the speed that
+/// body was already moving away at — what the last step's pushes achieved,
+/// after the solver had its say: a light crate is walked on at about full
+/// speed, a heavy one at its own pace, and one pinned against a wall takes
+/// it all, as a wall does. A body gone since the move found it is skipped.
 pub(super) fn apply(
     world: &mut World,
     pushes: &[Push],
@@ -122,8 +131,10 @@ pub(super) fn apply(
 }
 
 /// Gives `push`'s body an impulse of at most `limit`, and answers the speed
-/// its contact point now moves at along the push — no more than the
-/// character's. `None` when the body is gone or cannot be moved.
+/// its contact point was moving at along the push before it — no more than
+/// the character's. Not the speed after: that is the impulse's, before the
+/// step has stopped a body pinned against something. `None` when the body
+/// is gone or cannot be moved.
 fn shove(world: &mut World, push: &Push, limit: f32) -> Option<f32> {
     let collider = world.get::<Collider>(push.entity).copied();
     let transform = *world.get::<Transform>(push.entity)?;
@@ -148,7 +159,7 @@ fn shove(world: &mut World, push: &Push, limit: f32) -> Option<f32> {
         body.velocity += into * (impulse * solver.inverse_mass);
         body.angular_velocity += solver.inverse_inertia * lever * impulse;
     }
-    Some((moving + impulse * resistance).clamp(0.0, push.speed))
+    Some(moving.clamp(0.0, push.speed))
 }
 
 /// Where two shapes touching along `normal` — the second's surface normal,

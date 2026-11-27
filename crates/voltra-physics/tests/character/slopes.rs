@@ -98,3 +98,21 @@ fn a_jump_off_a_slope_is_not_turned_along_it() {
     assert!(at(&world, me).y > start + 0.05, "{}", at(&world, me));
     assert!(!body(&world, me).is_on_floor());
 }
+
+#[test]
+fn with_stop_on_slope_off_it_still_slides_down_at_rest() {
+    let (mut world, me) = on_a_slope(30.0, true);
+    if let Some(body) = world.get_mut::<CharacterBody2D>(me) {
+        body.stop_on_slope = false;
+    }
+    let start = at(&world, me);
+    let mut velocity = Vec2::ZERO;
+    let mut speeds = Vec::new();
+    for _ in 0..30 {
+        velocity = run(&mut world, me, velocity, None, 1);
+        speeds.push(velocity.length());
+    }
+    let slid = at(&world, me) - start;
+    assert!(slid.x < -0.1 && slid.y < 0.0, "down the slope: {slid}");
+    assert!(speeds[29] > speeds[10], "gathering speed: {speeds:?}");
+}
