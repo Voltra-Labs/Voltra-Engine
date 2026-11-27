@@ -7210,7 +7210,8 @@ server gave it (what replication will name an owner by).
   encryption. Request and response are padded to 64 bytes — more than any
   answer — so a spoofed source gets no amplification. The fingerprint
   hashes the game's `NetConfig::protocol`, the channel layout, the message
-  size and the channel budget: a mismatch is refused as
+  size and the channel budget (and the replication and lobby wire
+  versions, stages 127 and 129): a mismatch is refused as
   `ProtocolMismatch` at the door rather than misread later. A response
   from a connected address with a new nonce is that client restarted.
 - **Keep-alive, timeouts, reasons**: an empty payload when an ack is owed or
@@ -8540,6 +8541,168 @@ measurement widening it, the future clamped to now), of the input queue
 (each input's own view time and wait; none without input), and of
 voltra-net's round-trip variation (measured on a jittery link).
 
+### Before the match the server holds a lobby; on a LAN a server answers a probe
+
+Stage 129. Two pieces in `voltra-net`, both optional, wired through
+`tick.net`, and a screen in `voltra-core` that drives them.
+
+- **The lobby** (`voltra_net::lobby`): a `Lobby` — slots
+  (`max_players`), a minimum to start (`min_players`), entries in join
+  order (`peer`, `name`, `ready`), a host, a phase (`Waiting`,
+  `Playing`) — held by the server and changed only there, by its rules:
+  a join under a name (sanitised: control characters and invisible
+  formatting ones — zero-width, bidi overrides, a BOM — taken out,
+  whitespace collapsed, cut to `max_name_chars` characters; then made
+  unique, case aside, as `Ada 2`); ready, before the match; start, by
+  the host, only with every player ready and enough of them; a leave.
+  `LobbySession` pumps it with the endpoint (`receive` after the
+  endpoint's, `send` before its flush — the loop does both): the server
+  sends every player the whole lobby whenever it changed, a client
+  mirrors it and asks (`Hello { name }`, `Ready`, `Start`). Both ends see
+  the same `LobbyEvent`s (`Joined`, `Left`, `Renamed`, `ReadyChanged`,
+  `HostChanged`, `Started`, `Finished`, and to a client `Refused`,
+  `Closed`), derived on both by diffing the lobby before and after —
+  leaves first, then joins and changes, then the phase, so `Started`
+  comes after every `Joined`. What this end's player does is an event
+  of the next frame, as everyone else's is. What "start" does is the
+  game's: the engine says when (the arena spawns a player per entry).
+- **Its own channel**, reliable-ordered (`LobbyConfig::channel`, 6:
+  after the game's three and replication's three), not the game's
+  reliable channel — a lobby message must never be in the game's
+  `received()`, as a snapshot is not. Its wire is versioned
+  (`LOBBY_WIRE_VERSION` 1) in a field of its own,
+  `NetConfig::lobby_version`, hashed into the handshake fingerprint
+  behind a tag so it cannot collide with replication's
+  `layer_version`: a client with another build's lobby, or none, is
+  refused as `ProtocolMismatch` at the door. `NetConfig::fingerprint()`
+  is public now: discovery advertises it.
+- **Decided**: a full lobby, and a join while the match is played with
+  `LateJoin::Refuse` (the default), are told why
+  (`LobbyRefusal::{Full, MatchUnderway}`) on the lobby channel and cut
+  off after `refusal_grace` (2 s) unless they leave first — a reason
+  sent with a kick would be lost with the connection. `LateJoin::Play`
+  lets them into the match (the arena's: drop-in, drop-out); a spectator
+  queue is not built. The host is a listen server's own player — its
+  leaving is the session ending, which closes every client's lobby
+  (`Closed`); no migration. On a dedicated server it is the first
+  player in, passed to the next in join order when they leave; the
+  server's game may also start the match itself (`start()` there needs
+  readiness, not a host's word) — the "admin flag", which a game's
+  server binary owns. `finish()` (server) ends the match: back to
+  waiting, nobody ready. A message that does not decode gets its
+  sender kicked; a snapshot no server would send (a peer twice, more
+  entries than slots, a host not in it) is dropped by the client, and
+  its names are sanitised again.
+- **Where it sits.** UNET's `NetworkLobbyManager` (slots, ready flags,
+  `minPlayers`, the match started when all are ready) is the shape;
+  Godot's multiplayer demos and renet's examples write the same thing
+  as game code with RPCs, and Unity's Lobby and Steam's lobbies are
+  online services (a non-goal: no matchmaking, no relay). Engine code
+  because every networked game needs the same bounded, versioned
+  protocol, and the names it shows are untrusted input; the game's part
+  — what start loads, who spawns — stays the game's.
+- **LAN discovery** (`voltra_net::discovery`, native only): a host with
+  `HostOptions::discovery: Some(Advertise { port, name, game, limits })`
+  answers probes on a socket of its own (`DEFAULT_DISCOVERY_PORT` 7779,
+  one above the WebSocket port), polled with the session; a client's
+  `LanSearch` (or `tick.net.discover`) broadcasts a probe to
+  `255.255.255.255` and any `targets`, again every `resend` (500 ms),
+  and lists who answered — `ServerInfo { name, game, players,
+  max_players, in_match, compatible, udp, websocket }` — until its
+  `timeout` (1.5 s). `compatible` is the protocol version and the
+  fingerprint the client would join with (`Net::session_fingerprint`:
+  replication's channels and the lobby's in); another build is listed,
+  greyed by the screen, and would be refused at the handshake. A probe
+  names its game, and a server of another game does not answer.
+  Mirror's and UNET's `NetworkDiscovery` (a broadcast on a known port,
+  unicast answers, a key/version) is the shape; the fingerprint is our
+  key, so "same game, other build" is shown rather than hidden.
+- **Untrusted, bounded, no amplification.** A probe is exactly
+  `PROBE_SIZE` (192) bytes, padded; an answer is at most
+  `MAX_ANSWER_SIZE` (131: fixed fields, a 32-byte game id, a 64-byte
+  name), asserted at compile time to be no larger — a forged source
+  gets back no more than it sent. Answers are token-bucketed per source
+  IP (a burst of 4, then 2 a second) and in all (128, then 64 a second),
+  over a table of at most 1024 sources (idle ones forgotten to make
+  room; with none idle, a new source is not answered); at most 64
+  datagrams are read a poll. Anything of another size, magic, version or
+  kind is dropped unread and counted (`DiscoveryStats`). A client takes
+  only answers carrying its own probe's nonce, at most 64 servers, and
+  sanitises the names it shows.
+- **The probe socket is a warning, not a failed host**: a second server
+  on one machine cannot bind 7779 (std has no `SO_REUSEADDR`), and is
+  hosted, off the lists, with the reason logged. Container networks
+  and some VPNs drop broadcasts: `SearchOptions::targets` probes named
+  addresses (a subnet's broadcast address, `127.0.0.1`), which is how
+  every test here probes.
+- **The web**: no UDP, so `LanSearch::start` and
+  `DiscoveryResponder::bind` are `DiscoveryError::Unsupported` there
+  (the API compiles for `wasm32`); a page joins by address. The lobby
+  works over the page's WebSocket as natively.
+- **The lobby screen** (`voltra_core::lobby`, the options screen's
+  pattern): `assets/prefabs/lobby.prefab.ron` — a menu page (Name, Host,
+  Find on LAN and its `Servers` list, Address, Join) and a room page
+  (`Players`, Ready, Start, Leave), parts found by name
+  (`prefab_parts::Parts`, now shared with the options screen).
+  `LobbyScreen::open(tick, &LobbyScreenConfig)` turns the lobby on if
+  the game has not; `update` hosts (a listen server, advertised as
+  "<name>'s game"), searches, joins from a row or the address, readies
+  and starts, shows the page the session calls for, greys Start for all
+  but a host who may start, and answers `LobbyOutcome::Started` in the
+  frame the match begins. The list rows are copies of the prefab's
+  template rows, kept hidden and stamped again when what they show
+  changes. On the web Host and Find are greyed. `cargo xtask new-game`
+  copies the prefab, with a test (`tests/lobby.rs`) that hosts, readies
+  and starts from it.
+- **`voltra-server`**: answers probes by default (`--discovery
+  PORT|off`, `--name`, `--game`), holds a lobby with `--lobby`,
+  `--min-players`, `--max-players` (laid over the one a game's server
+  sets in `ServerOptions::lobby`), and writes `discovery PORT` to its
+  port file. **`games/arena`** starts on the lobby screen (`--solo` to
+  play alone): two to four players, drop-in; its bots ready up and,
+  hosting, start; the server spawns a player per entry at `Started` and
+  per late join, and falls back to spawning on connect for a session
+  with no lobby (the editor's network play).
+- **Not yet**: host migration; a spectator queue for late joiners;
+  kicking or banning from the lobby screen; a password; teams or slots
+  with roles; chat; matchmaking, NAT punch-through, relays (0.4's
+  non-goals); IPv6 discovery (the probe socket is IPv4, multicast would
+  be the IPv6 way); several servers on one machine sharing the probe
+  port.
+
+Pinned by `voltra-net/tests/lobby.rs` over a lossy memory network: two
+players joining (names cleaned and made unique), readying, the
+non-host's start refused, the host's started everywhere with every
+`Joined` before `Started`, `finish` back to waiting; a full lobby
+refusing a third with its reason, which leaves; a late joiner refused
+or playing by `LateJoin`; a dedicated server's host passing on; a listen
+host hosting and its shutdown closing a client's lobby; a client of
+another lobby version, and one with none, refused as `ProtocolMismatch`;
+a malformed lobby message getting its sender kicked.
+`voltra-net/tests/discovery.rs` over loopback (a directed probe — the
+same packet a broadcast carries): a server found with how to join it;
+another build listed incompatible and another game not listed; 200
+probes from one source answered 4–6 times, none larger than a probe;
+junk of every size dropped unanswered while a real probe gets through; a
+search with nobody there finishing empty at its timeout. Unit tests of
+the names, the state machine, the wire (round trip, impossible lobbies
+refused, random bytes), the config (fingerprint moved, channel taken
+over, limits), the packets (round trip, the largest answer no larger
+than a probe, names cut on a character boundary, wrong size, magic,
+version, kind, random bytes) and the limiter (burst then rate, the
+total shared, the table bounded). `voltra-core/tests/lobby.rs`: a
+listen host and a client readying and starting through their ticks,
+no lobby message in the game's `received()`, the host's stop closing
+the client's lobby; a host found on the LAN by a client that can join
+it and listed incompatible to one without the lobby, whose join is then
+refused. `lobby/screen/tests.rs`: the shipped prefab's pages and
+templates; hosting alone, Ready, Start → `Started`, Leave back to the
+menu; a second screen finding the first on loopback and joining from
+its row. `voltra-server/tests/session.rs`: the binary found by a probe
+under its `--name`. `games/arena/tests/match.rs`: the arena's server
+found on the LAN as a compatible arena with no one in, two bots readying
+up and the first in starting the match, then playing it as before.
+
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
 Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
@@ -9396,6 +9559,16 @@ Both differ from most training data and from every tutorial written against
 | Ids | `GamepadId` → `usize::from(id)`; stable for a pad while connected, reused by UUID on reconnect |
 | Errors | `Gilrs::new()` returns `Error::NotImplemented(dummy)` on unsupported platforms — usable, but we just skip pads |
 | Filters | default filters apply a small stick dead zone and axis-to-button thresholds before we see values |
+
+### `std::net::UdpSocket` broadcast notes
+
+| Thing | std (Rust 1.9x) |
+| --- | --- |
+| Sending to `255.255.255.255` | needs `set_broadcast(true)` first, else `EACCES` (Linux) / `WSAEACCES` |
+| Receiving a broadcast | a socket bound to `0.0.0.0:port` gets them with no option set (Linux, Windows, macOS); one bound to `127.0.0.1` does not |
+| No route | in a container or VPN with no broadcast route `send_to` fails (`ENETUNREACH`): log it, probe named addresses instead |
+| One port, one socket | std sets no `SO_REUSEADDR`/`SO_REUSEPORT`: a second bind of the probe port on a machine fails with `AddrInUse` |
+| An oversized datagram | `recv_from` into a buffer one byte longer than the largest wanted: a read that fills it was something else (truncated silently on Unix, `WSAEMSGSIZE` on Windows) |
 
 ### `tungstenite` 0.30 notes
 

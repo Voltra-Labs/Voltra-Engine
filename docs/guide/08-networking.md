@@ -170,10 +170,99 @@ where the step left it.
 The arena's zap is one: a bot zaps the nearest other player where it sees
 it, and the server's log says how far back each zap was tested.
 
+## Before the match: a lobby
+
+A match rarely starts the moment someone connects. Turn the lobby on — on
+every end, before hosting or joining, as replication is — and the server
+holds the room: who is in, under what name, who is ready, and who starts
+it.
+
+```rust
+tick.net.enable_lobby(LobbyConfig {
+    name: "Ada".into(),   // this player's name: cut, cleaned, made unique
+    min_players: 2,       // a match starts with at least two
+    max_players: 4,       // one more is refused: "the lobby is full"
+    late_join: LateJoin::Refuse, // or Play: drop into a match under way
+    ..LobbyConfig::default()
+});
+```
+
+`tick.net.lobby()` is the room as this end knows it, and what this end's
+player may ask; `tick.net.lobby_events()` what changed this frame:
+
+```rust
+if let Some(lobby) = tick.net.lobby_mut() {
+    if !lobby.is_ready() {
+        lobby.set_ready(true)?;
+    }
+    if lobby.is_host() {
+        lobby.start()?; // refused until everyone is ready, and there are enough
+    }
+}
+for event in tick.net.lobby_events().to_vec() {
+    match event {
+        LobbyEvent::Started => { /* load the level, spawn a player per entry */ }
+        LobbyEvent::Left { peer } => { /* take their player away */ }
+        _ => {}
+    }
+}
+```
+
+The host is the listen server's own player — and its leaving ends the
+lobby for everyone — or, on a dedicated server, the first player in,
+passed to the next in join order when they go. A dedicated server's game
+may start the match itself (`start()` there needs no host's word, only
+the readiness). What "start" does is the game's: the engine only says
+when. Lobby messages travel on a channel of their own, so
+`tick.net.received()` never holds one; a client of another build's lobby
+is refused at the handshake.
+
+The lobby screen does the clicking: `assets/prefabs/lobby.prefab.ron`
+(every `cargo xtask new-game` copies it) with `LobbyScreen::open(tick,
+&LobbyScreenConfig::for_game("my-game"))`, its `update(tick)` each frame
+until it answers `LobbyOutcome::Started`. It hosts, finds games on the
+LAN, joins by address, and in the room shows the players, Ready, and
+Start for the host. Restyle it in the editor; keep the parts' names.
+
+## Finding a game on the LAN
+
+A host that sets `HostOptions::discovery` answers probes on UDP 7779
+(`DEFAULT_DISCOVERY_PORT`) with its name, players and fingerprint; a
+client asks the whole network and lists what answers:
+
+```rust
+tick.net.host(&HostOptions {
+    listen: true,
+    discovery: Some(Advertise { name: "Ada's game".into(), game: "my-game".into(), ..Advertise::default() }),
+    ..HostOptions::default()
+})?;
+// Elsewhere:
+tick.net.discover_game("my-game", NetConfig::default())?;
+// ...frames later:
+for server in tick.net.discovered() {
+    // server.name, server.players / server.max_players, server.address()
+    // server.compatible: false for another build — joining it would be refused
+}
+```
+
+A search probes for `SearchOptions::timeout` (1.5 s), resending as it
+goes. A network that drops broadcasts (some VPNs and containers) is
+reached by naming addresses in `SearchOptions::targets`. A server answers
+each source a few times a second at most, with no more bytes than the
+probe brought. In a browser there is no UDP: join by address.
+
+The tests probe over loopback, which every machine passes:
+
+<!-- ci -->
+```sh
+cargo test -p voltra-net --test lobby --test discovery
+```
+
 ## Trying it
 
-The arena's dedicated server and two bot clients play a round to its
-winner — the same match CI plays:
+The arena's dedicated server and two bot clients find it on the LAN,
+ready up in its lobby, and play a round to its winner — the same match CI
+plays:
 
 <!-- ci -->
 ```sh
@@ -190,18 +279,22 @@ cargo run -p arena --bin arena-server -- --asset-root games/arena/assets --udp 0
 The arena's server is `voltra-server`'s command line with the arena's game
 in it (`games/arena/src/bin/server.rs`, a few lines). `voltra-server`
 itself serves any scene with no game code — the same flags, `--help` for
-the rest (`--tick`, `--max-clients`, `--protocol`, `--bind`):
+the rest (`--tick`, `--max-clients`, `--protocol`, `--bind`, `--lobby`,
+`--min-players`, `--max-players`, and `--discovery PORT|off`, `--name`,
+`--game` for the LAN):
 
 <!-- ci -->
 ```sh
 cargo run -p voltra-server -- scenes/sandbox.ron --udp 0 --ws 0 --seconds 2
 ```
 
-Without `--udp`/`--ws` it listens on 7777 and 7778, and without
-`--seconds` it runs until stopped.
+Without `--udp`/`--ws` it listens on 7777 and 7778, answers LAN probes
+on 7779, and without `--seconds` it runs until stopped.
 
-At a desk: `cargo run -p arena -- --host` in one terminal and `cargo run -p
-arena -- --join udp://127.0.0.1:7777` in another. Or in the editor, without
+At a desk: `cargo run -p arena` opens the lobby screen — Host in one
+window, Find on LAN (or Join by address) in another, Ready in both, Start
+on the host. `cargo run -p arena -- --host` and `-- --join
+udp://127.0.0.1:7777` skip the menu. Or in the editor, without
 a second machine or window: open the arena (`cargo run -p voltra-editor --
 --game games/arena/build.ron scenes/main.ron`), set **Window ▸ Network ▸
 Clients on Play** to 2, and press Play. The editor's world hosts and plays;
@@ -211,7 +304,7 @@ clients cope; the Profiler's `net …` counters show the round trip and the
 traffic, frame by frame.
 
 A web build of the arena joins a server from its page's address:
-`index.html?join=ws://HOST:7778`.
+`index.html?join=ws://HOST:7778` (a page cannot search the LAN, nor host).
 
 A server can stream a big world around every player it hosts, and its
 clients stream the same scenery: [chapter 10](10-big-worlds.md).

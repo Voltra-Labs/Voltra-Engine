@@ -444,6 +444,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 126 | Prefab variants; nested prefabs follow their file | done |
 | 127 | Interest management: relevance by distance on a grid, with hysteresis | done |
 | 128 | Lag compensation: rewound hit queries within a bound | done |
+| 129 | A lobby and LAN discovery; a lobby screen in new games | done |
 
 ## Contributing
 
