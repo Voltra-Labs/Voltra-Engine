@@ -1,7 +1,7 @@
 //! How a run of the arena plays: alone, hosting, or joined.
 
 use voltra_core::net::{HostOptions, NetConfig, DEFAULT_UDP_PORT, DEFAULT_WEBSOCKET_PORT};
-use voltra_core::replication::ReplicationConfig;
+use voltra_core::replication::{Interest, ReplicationConfig};
 use voltra_core::Tick;
 
 /// The arena's protocol number: a client of another game, or another
@@ -13,6 +13,23 @@ pub fn net_config() -> NetConfig {
     NetConfig {
         protocol: PROTOCOL,
         ..NetConfig::default()
+    }
+}
+
+/// How far a player is sent the match, in world units: the floor is 17 by
+/// 9, so 20 covers it from anywhere on it — every player sees every other,
+/// as the scores need — and the grid is still built and read each
+/// snapshot, so the arena exercises interest management end to end. A
+/// larger map would be sent by neighbourhood with no change here.
+pub const INTEREST_RADIUS: f32 = 20.0;
+
+/// The replication every end of an arena match runs: the engine's, with
+/// interest management on ([`INTEREST_RADIUS`]). Only the server's is
+/// read; the clients carry the same for symmetry.
+pub fn replication_config() -> ReplicationConfig {
+    ReplicationConfig {
+        interest: Some(Interest::new(INTEREST_RADIUS)),
+        ..ReplicationConfig::default()
     }
 }
 
@@ -49,7 +66,7 @@ impl Session {
     /// left as it is: whoever started it chose.
     pub(crate) fn begin(&self, tick: &mut Tick<'_>) {
         if !tick.net.replicates() {
-            tick.net.enable_replication(ReplicationConfig::default());
+            tick.net.enable_replication(replication_config());
         }
         if tick.net.is_active() {
             return;

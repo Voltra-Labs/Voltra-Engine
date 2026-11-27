@@ -1,15 +1,16 @@
 //! A match end to end: the arena's dedicated server as its own process,
 //! and two headless clients — bots — joining it over UDP and playing until
 //! a round is won. Both clients must agree on the winner and the scores the
-//! server decided, and the server must have simulated each one's inputs.
+//! server decided, and the server must have simulated each one's inputs —
+//! sent by interest management, which on the arena's floor sends them all.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use arena::{Arena, Pilot, Round, Score, Session, FIRST_SCENE};
+use arena::{replication_config, Arena, Pilot, Round, Score, Session, FIRST_SCENE};
 use voltra_assets::AssetPath;
-use voltra_core::replication::{NetOwner, ReplicationConfig};
+use voltra_core::replication::NetOwner;
 use voltra_core::{App, Headless, WindowConfig};
 
 /// The server process, killed however the test ends.
@@ -83,7 +84,7 @@ fn start_server() -> (Server, u16) {
 fn client(port: u16) -> Headless {
     let app = App::new(WindowConfig::default())
         .with_asset_root(assets())
-        .with_replication(ReplicationConfig::default())
+        .with_replication(replication_config())
         .with_game(Arena::new(
             Session::Join(format!("udp://127.0.0.1:{port}")),
             Pilot::Bot,
@@ -175,4 +176,21 @@ fn a_server_and_two_clients_play_a_round_to_its_winner() {
         "the server decided it:\n{}",
         server.log()
     );
+    // Sent by interest: the grid ran, and covering the floor it sent each
+    // client both players, the coin and the round.
+    assert!(
+        server.log().contains("within 20 units of its interest"),
+        "interest management on:\n{}",
+        server.log()
+    );
+    for client in &clients {
+        let stats = client
+            .net()
+            .replication()
+            .and_then(|r| r.client())
+            .map(|c| c.stats())
+            .expect("a client");
+        assert_eq!(stats.entities, 4, "{stats:?}");
+        assert_eq!(stats.out_of_interest, 0, "{stats:?}");
+    }
 }

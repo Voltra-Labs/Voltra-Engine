@@ -6,8 +6,7 @@
 
 #[cfg(not(target_arch = "wasm32"))]
 fn main() -> std::process::ExitCode {
-    use arena::{Arena, Pilot, Session, FIRST_SCENE, PROTOCOL};
-    use voltra_core::replication::ReplicationConfig;
+    use arena::{replication_config, Arena, Pilot, Session, FIRST_SCENE, PROTOCOL};
     use voltra_core::{App, WindowConfig};
 
     voltra_server::cli::main("arena-server", |args| {
@@ -17,7 +16,7 @@ fn main() -> std::process::ExitCode {
             title: "Arena server".into(),
             ..WindowConfig::default()
         })
-        .with_replication(ReplicationConfig::default())
+        .with_replication(replication_config())
         // The server hosts before the game's first turn, so the game's own
         // session is never started; a server has no player of its own.
         .with_game(Arena::new(Session::Solo, Pilot::Bot))

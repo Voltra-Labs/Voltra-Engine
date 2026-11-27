@@ -12,9 +12,8 @@
 // terminal they were run from.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
-use arena::{Arena, Pilot, Session, FIRST_SCENE};
+use arena::{replication_config, Arena, Pilot, Session, FIRST_SCENE};
 use voltra_assets::AssetPath;
-use voltra_core::replication::ReplicationConfig;
 use voltra_core::{App, WindowConfig};
 
 fn main() {
@@ -74,7 +73,7 @@ fn start() -> Result<(), String> {
         ..Default::default()
     })
     .with_game_name("Arena")
-    .with_replication(ReplicationConfig::default())
+    .with_replication(replication_config())
     .with_game(Arena::new(session, pilot));
     // A top-down arena: nothing falls.
     app.gravity = voltra_render::glam::Vec2::ZERO;

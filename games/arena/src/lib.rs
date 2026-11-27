@@ -26,7 +26,7 @@ mod session;
 pub use components::{Coin, Player, Round, Score};
 pub use movement::{walk, Steer};
 pub use pilot::Pilot;
-pub use session::{net_config, Session, PROTOCOL};
+pub use session::{net_config, replication_config, Session, INTEREST_RADIUS, PROTOCOL};
 
 use voltra_core::net::PeerId;
 use voltra_core::replication::Prediction;
