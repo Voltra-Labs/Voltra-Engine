@@ -20,11 +20,13 @@
 //! including a field `skip_serializing_if` leaves out, which is absent
 //! rather than nowhere, and written back by being left out again.
 
+mod diff;
 mod path;
 mod record;
 mod replay;
 
-pub use path::{describe, differences, Found, Step, TreePath};
+pub use diff::differences;
+pub use path::{describe, Found, Step, TreePath};
 
 use ron::value::RawValue;
 use serde::Serialize;
