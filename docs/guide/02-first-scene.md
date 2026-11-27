@@ -33,6 +33,28 @@ A scene is a RON file — one entry per entity, a map of components — that
 reads well in a diff and merges in version control. Open it in a text
 editor and look.
 
+## Many at once
+
+Ctrl-click or Shift-click in the hierarchy, or drag a box in the
+viewport, to select several. The gizmo moves them together, and the
+inspector edits what they share:
+
+- A field they all agree on shows its value; one that differs shows `—`
+  (a number), a half-ticked box, or a `≠` beside its label — and each
+  section names its differing fields in a line under its rule. Edit a
+  field and only that field is written to all of them: select three
+  sprites of three colours, tick `flip x`, and each keeps its colour.
+- A component only some have is listed, greyed, as `Collider (2 of 3)`,
+  and not edited; **add to the rest** gives it to the others, and then
+  it is. Adding a component none has adds it to all.
+- Typing a name names them all.
+- However many are selected, an edit — a whole drag — is one undo step.
+
+Ctrl+D duplicates the selection (Ctrl+C / Ctrl+V copy and paste it).
+Each copy is named apart from its new siblings, as in Unity: `Coin`
+becomes `Coin (1)`, then `Coin (2)`; duplicating `Coin (3)` gives
+`Coin (4)`. A copy pasted where nothing shares its name keeps it.
+
 ## Play it without the editor
 
 ```sh

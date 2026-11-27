@@ -3691,8 +3691,8 @@ and what an undo or Stop puts back.
   key, not while a text field has the keyboard): every selected entity and
   everything under each, one entry; a child selected with its parent is
   recorded once.
-- The inspector says "the last picked of N" when more than one is
-  selected; editing several at once is not built.
+- The inspector edits what the selection shares (stage 125, below); it
+  says "N selected, the last picked shown" when more than one is.
 
 Rejected: **a hashed set** — the primary would be arbitrary and an undo
 could put back a different one; **"touches" for the box** — see above.
@@ -3733,14 +3733,95 @@ could put back a different one; **"touches" for the box** — see above.
   header is ignored; with it, it is parsed as a scene file is, through the
   same registry (a component the build does not know survives as
   unknown), capped at 16 MiB.
-- **Not yet**: editing a component across the selection; numbering the
-  names of duplicates.
+- **Editing many at once (stage 125, `editor::multi_edit`).** The
+  inspector still draws the primary — every section edits one `&mut T`,
+  and a game's components are edited as their RON — and what that did is
+  turned into an edit of the rest, through the registry rather than per
+  panel. Before the sections draw, `MultiEdit::begin` takes the
+  primary's components as `SerialTree`s (`voltra_scene::format::
+  serial_tree`: the type's serializer calls recorded, names and all,
+  replayed into RON byte for byte); after, `finish` takes them again,
+  finds where they differ (`differences`: the deepest places where the
+  shapes still agree — one float of `half_extents`, or the collider itself
+  when a box became a circle) and writes **only those places** into each
+  other entity's own tree, loaded back through the registry. Unity's
+  `SerializedObject` over several targets, with property paths; Godot's
+  `MultiNodeEdit`, which sets the one property on every node. Chosen over
+  a per-field wrapper every panel would opt into because it needs nothing
+  of forty-odd sections and holds for a game's components unchanged — a
+  field edited inside a game component's text writes that field alone.
+  `ron::Value` was the obvious tree and does not work: reading RON into it
+  drops struct and variant names, so a written-back enum no longer reads.
+  - A component every selected entity has is **shared** and editable;
+    where its fields differ they are **mixed**. A component only some have
+    is **partial**: its section is not drawn, and it is listed greyed,
+    `Collider (2 of 3)`, with "add to the rest" (its template, to each
+    that lacks it) where it has a template. One none has is editable:
+    adding it to the primary adds it to all; removing a shared one removes
+    it from all.
+  - An entity whose value has no such place — a circle, for a box's half
+    extent; a shorter list; another variant — is left alone for that
+    field. A field is compared as its file writes it: floats by their
+    bits, every NaN equal to every NaN, `-0.0` apart from `0.0`.
+  - **Mixed display**, two levels. Every section gets a line under its
+    rule naming its mixed fields (`≠ Sprite: color, flip_x`, each path on
+    hover), whatever its widgets. The shared widgets in
+    `panels/inspector/mixed.rs` show it in the row: a `DragValue` reads
+    `—` (`custom_formatter`), a checkbox is half-ticked
+    (`Checkbox::indeterminate`), and a widget with no mixed state — a
+    colour button, an angle, a dropdown — shows the primary's value with
+    its row's label marked `≠`. Transform and Sprite use them so far.
+  - **The name** is written to all by the name field itself, not by the
+    trees: an entity without one has an empty one, so names never make a
+    partial; differing names show an empty field reading `—`.
+  - **Actions done per entity**: a bone's "set rest" takes each bone's
+    own transform, "fit to sprite" fits each collider to its own sprite,
+    and ticking "casts shadows" shapes each caster by its own collider or
+    sprite; each then tells the edit not to copy the primary's result
+    (`done_for_each`).
+  - **One undo step**: the history already watches the whole selection
+    from the top of the frame, so what `finish` writes — before the
+    history takes the after side — folds into the primary's entry, held
+    open by the same claim. A drag over three sprites is one `Ctrl+Z`.
+  - While the timeline records, only the primary is edited (and keyed):
+    the rest is not written behind the recording's back.
+  - Parent, prefab part and instance links are never written across:
+    structure is each entity's own.
+- **Numbered duplicates (stage 125, `clipboard::numbering`).** Duplicate
+  and paste name each copied top apart from the siblings it lands among:
+  kept when none has its name (a paste into another scene is still
+  `Player`), else its base — a ` (n)` suffix stripped — with the first
+  number past its own that no sibling has: `Coin` → `Coin (1)`,
+  `Coin (3)` → `Coin (4)`, and `Coin` beside `Coin (1)` and `Coin (3)`
+  → `Coin (2)`. Unity's `GetUniqueNameForSibling`; Godot increments a
+  trailing number the same way, without the brackets. Siblings are the new parent's children,
+  or the scene's roots; tops of one paste are numbered in order, so two
+  copies side by side differ. What is under a top keeps its names (its
+  siblings are copies too); nameless stays nameless. A copied prefab
+  instance renamed so has its overrides refreshed in the same entry, so
+  its name is an override rather than a second, separate edit.
+- **Not yet**: the rest of the sections' rows showing `—` themselves
+  (they carry the section's line); typing the primary's own value into a
+  mixed field writes nothing, since an edit is found by a difference
+  (Unity writes it to all); a section over a partial component editable
+  on the entities that have it; Unity's "Center" pivot.
 
 Pinned by `clipboard::tests` (a parent and child selected together copied
 once with fresh ids, the copy's child under the copy's parent; a duplicated
 child under its old parent where it was; a paste into an empty world where
 the copy was taken; the text round trips, other text is not a clip, broken
-text is an error), `gizmo::follow` tests (each tool's rule, a collapsed axis,
+text is an error; a duplicate numbered past taken siblings, `Coin (3)` to
+`Coin (4)`, a child among its parent's children, a paste numbered only
+where its name is taken, nameless staying so), `clipboard::numbering`
+tests (the suffix split as Unity writes it, the next free number, copies
+side by side), `multi_edit::tests` (equal and differing fields, nested
+places, floats exact and NaN equal; partial components; one field written
+leaving three sprites' differing colours alone; a box's half extent left
+off a circle, a new shape written whole; added and removed on all; done
+for each; a game's component; three frames of a drag over three sprites
+one undo entry, undone back), `inspector::mixed` tests (mixed sections
+drawn twice write nothing), `serial_tree::tests` and the registry's tree
+tests (every built-in round trips through a tree), `gizmo::follow` tests (each tool's rule, a collapsed axis,
 which followers ride on a selected parent), `selection::tests` (primary order, toggle, Shift ranges both
 ways and without an order, the box replacing or extending, ids round
 trip), `pick::region` tests (wholly inside, origins, HUD never, a layer
@@ -5247,6 +5328,13 @@ has a template.
   the editor gives a spawned body.
 - Templates stand in for reflection: an AI client learns a component's
   fields from its default value, in the same text it will hand back.
+- **Fields by path (stage 125).** `save_tree` / `load_tree` answer any
+  registered component as a `SerialTree` — its `Serialize` calls recorded
+  with every name serde gives, replayed into RON byte for byte — which
+  `differences`, `at` and `set` address by a `TreePath` of `Field`,
+  `Index`, `Variant`, `Inner` and `Key` steps (Unity's property path). A
+  `Variant` step matches only its own variant, so a circle's `radius` is
+  never a capsule's. What the inspector edits a selection through.
 
 Pinned by `format/registry/tests.rs` (every built-in but structure has a
 template that loads into an entity and saves back identical; `describe`
@@ -8636,6 +8724,7 @@ Same problem, same rule: read the source, not a tutorial.
 | Angles | `ui.drag_angle(&mut radians)` edits radians shown as degrees, unwrapped, and marks the response changed only when the degrees moved |
 | `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before. A range clamps the value *as shown*, edited or not; `.clamp_existing_to_range(false)` clamps only what the user drags or types (the animator's layer weight, stage 121) |
 | Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
+| Mixed values | `DragValue::custom_formatter(\|_, _\| "—".into())` shows text in place of the number; focused, the text is selected whole, so typing replaces it. `Checkbox::new(..).indeterminate(true)` draws the half-ticked state (the value still toggles on click) |
 | Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes
@@ -8725,4 +8814,5 @@ Both differ from most training data and from every tutorial written against
 | Thing | 0.12.2 |
 | --- | --- |
 | Untyped numbers are quadratic (**fixed in 0.12.3**, which the workspace pins since stage 108: the search is bounded to the number's own characters) | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
+| `ron::Value` loses names | `deserialize_any` reads `Box(half_extents: ..)` as an anonymous struct: the struct and variant names are dropped, so a `Value` written back no longer reads as the enum. To edit a value field by field, record the type's own `Serialize` calls (`serial_tree`) instead |
 | `RawValue` whitespace (0.12.3) | Non-comment whitespace around a nested `RawValue` is trimmed when it is read, so a pretty-printed file read and written again no longer grows blank space around unknown components |
