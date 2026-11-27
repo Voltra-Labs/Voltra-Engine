@@ -8413,19 +8413,39 @@ shot and tests each shot there.
   `cl_interp` does not have. **Wire version 3** (`REPLICATION_WIRE_VERSION`):
   the input list's entries grew the moment, so a 0.4-stage-127 peer is
   refused at the handshake.
-- **The bound** (`LagCompensation { history, max_rewind }`, a field of
-  `ReplicationConfig`, on by default; only the server's is read): the
-  reported moment is the client's word, so `LagCompensation::target`
-  takes it no later than the newest tick held (a client claiming the
-  future gets the present) and no earlier than `max_rewind` (200 ms)
-  before it; `PoseHistory` then takes it no earlier than its oldest tick
-  (`history`, a second, Source's). Source rewinds up to `sv_maxunlag`, a
-  second; Overwatch favours the shooter only within a bound and makes the
-  rest lead. 200 ms is a jitter buffer and a round trip on any playable
-  link, and it is what the *target* feels: shot behind cover a fifth of a
-  second after reaching it, never more. A player on a worse link than
-  that is not rewound further — pinned: with `max_rewind` 50 ms, shots
-  are tested three ticks back at most and the laggy shooter misses.
+- **The bound** (`LagCompensation { history, max_rewind, slack }`, a
+  field of `ReplicationConfig`, on by default; only the server's is
+  read): the reported moment is the client's word, so
+  `LagCompensation::target` takes it no later than the newest tick held
+  (a client claiming the future gets the present) and no further back
+  than what the server *measured* of that client allows —
+  `LagCompensation::allowed` of a `MeasuredLag`
+  (`ReplicationServer::measured_lag`): `rtt + 4 × rtt_variation` (TCP's
+  RFC 6298 bound on a round trip; voltra-net's connection now keeps
+  `RTTVAR` beside the smoothed RTT, `ConnectionStats::rtt_variation`),
+  plus two snapshot intervals (a client's jitter buffer is its worst
+  staleness — up to an interval of waiting for the next snapshot, plus
+  the jitter — and one interval on top), plus the ticks that input
+  waited in the server's queue (`InputQueue` notes each input's arrival
+  tick), plus `slack` (50 ms: the frame an input waits for the client's
+  fixed step, jitter the buffer saw and the round trip did not) — capped
+  by the absolute `max_rewind` (500 ms); `PoseHistory` then takes it no
+  earlier than its oldest tick (`history`, a second, Source's). A view
+  lags the server by a round trip, the jitter buffer and the queue wait:
+  a fixed bound alone is either too tight for a slow link and sparse
+  snapshots (the first 200 ms bound sat exactly at the cap at 40 ms each
+  way with a snapshot every three ticks, and missed a fifth of perfectly
+  aimed shots at 60 ms each way or 100 ms at every tick) or lets a quick
+  client claim a slow one's past. Relative, a player is rewound as far
+  as their link really is; the cap is what a *target* can feel at worst
+  — shot behind cover half a second after reaching it, by someone whose
+  link truly is a 300 ms round trip with a 100 ms buffer, past what an
+  action game is played over. Source rewinds by its client's
+  `cl_interp` plus measured latency up to `sv_maxunlag` (one second);
+  Overwatch favours the shooter within a bound and makes the rest lead.
+  Pinned: with `max_rewind` 50 ms, shots are tested three ticks back at
+  most and the laggy shooter misses; a forged client claiming the full
+  cap on a quick link is held under ten ticks.
 - **The query** (`voltra-physics/src/rewind/rewound.rs`): `Rewound` — the
   same `ray`, `cast`, `point` and `overlap_aabb` as `query`, reading a
   table of past poses in place of the world's. Each marked collider is put
@@ -8446,12 +8466,17 @@ shot and tests each shot there.
   every rewind, and a hit on an entity that no longer exists would hand
   the game an id it cannot use. One recorded before the moment and not
   after (it lost its collider) is held at the earlier pose.
-- **Interest** (stage 127) is enforced: `Net::rewound` hides every marked
-  entity the server replicates that was not relevant to the peer at the
-  last snapshot — the client had no copy of it to aim at. Read from the
-  relevance set the snapshot already built, so it is a set lookup per
-  marked entity; a peer that is not one of the server's clients (the
-  listen host) and a session without interest hide nothing.
+- **Interest** (stage 127) is enforced: `Net::rewound` hides every
+  collider the server replicates — marked or not — that was not relevant
+  to the peer at the last snapshot: the client had no copy of it to aim
+  at. Read from the relevance set the snapshot already built, so it is a
+  set lookup per replicated collider; what is not replicated (the
+  level's walls, loaded on every end) stays, and a peer that is not one
+  of the server's clients (the listen host) or a session without
+  interest hides nothing.
+- **Moved in the fixed tick**: poses are recorded after each fixed step,
+  so a lag-compensated entity moved in the per-frame `update` is in the
+  history only from the next step, and the guide says so.
 - **Through `tick.net`** (`voltra-core/src/app/tick_lag.rs`):
   `rewound(world, peer)` in the server's fixed tick — the world as `peer`
   saw it when it made this step's input; the world as it is for a peer
@@ -8482,27 +8507,38 @@ under 1 % of its time there.
 
 - **Not yet**: rewinding anything but colliders (an animation's hitboxes
   per bone, a sprite's frame); a rewound physics *step* (projectiles flown
-  in the past); relevance at the view time rather than at the last snapshot (an entity
-  that entered interest within the rewind is hittable a few ticks early);
-  the editor drawing a rewound pose.
+  in the past); relevance at the view time rather than at the last
+  snapshot (an entity that entered interest within the rewind is hittable
+  a few ticks early); a newly spawned entity is drawn at its spawn pose
+  for one interpolation delay before the server's history says it
+  existed, so a shot aimed at it in that time misses (the spawn sample
+  could be taken as valid from the moment it is first drawn); the editor
+  drawing a rewound pose.
 
 Pinned by `voltra-core/tests/lag_compensation.rs`, 40 ms each way: a
 client aiming at a target moving up to 8 units a second where it draws
 it — every shot hits the rewound world, most miss the live one, rewound
-5–12 ticks; `max_rewind` 50 ms holding every rewind to three ticks; no
-history, every query live; a far target out of interest hidden.
+5–12 ticks; at least 99 % of perfectly aimed shots hitting at 40 ms each
+way with a snapshot every three ticks, 60 ms with every three, and
+100 ms with every tick; a client forging the full cap's claim on a quick
+link held under ten ticks by its measured lag; `max_rewind` 50 ms
+holding every rewind to three ticks; no history, every query live; a
+far target and a far unmarked collider out of interest both hidden.
 `games/arena/tests/match.rs`: one of the two bots, its sends 60 ms
 slower, lands zaps the server tested further back than the other's
-(four ticks and more, the other's two or so), none past twelve; an
+(four ticks and more, the other's two or so), none past twelve (its
+measured lag allows about ten); an
 input made before its client drew anything carries no moment and is
 tested at the present. Unit
 tests of the ring (`rewind/tests.rs`: past pose hit and present missed
 and the reverse, interpolation between two ticks, spawned after,
 despawned, wraparound and the oldest clamp, newest-or-later and empty =
 live, unmarked live, every query, hidden, the recorded shape, a tick
-going back), of `ViewTime` and `LagCompensation::target` (in the bound,
-the far past clamped, the future clamped to now), of the input queue
-(each input's own view time; none without input).
+going back), of `ViewTime` and `LagCompensation` (in the bound, the far
+past clamped at the cap, a quick link held to its measured lag and each
+measurement widening it, the future clamped to now), of the input queue
+(each input's own view time and wait; none without input), and of
+voltra-net's round-trip variation (measured on a jittery link).
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 

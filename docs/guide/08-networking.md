@@ -147,14 +147,25 @@ if let Some(steer) = tick.net.input::<Steer>(peer) {
 `query`, with every lag-compensated collider where it was at the moment
 the client says it was drawing — each input carries it — and everything
 else (walls, unmarked entities) where it is. Nothing in the world moves.
-A shot is never rewound more than 200 ms (`LagCompensation::max_rewind`),
-whatever the client claims, so a player on a terrible link cannot hit
-someone a second after they reached cover; a client claiming the future
-gets the present. Something spawned after that moment, or despawned
-since, is not there to hit, and neither is anything the client was not
-sent (interest). The server keeps a second of history by default
-(`LagCompensation::history`); `lag_compensation: None` in the
-`ReplicationConfig` keeps none, and every rewound query is live.
+A shot is rewound no further than the server measured that player's lag
+to be — its round trip, how much that varies, the snapshot rate and how
+long its input waited, with a little slack — and never more than half a
+second (`LagCompensation::max_rewind`), whatever the client claims. So a
+player on a quick link cannot pretend to be slow and shoot into the past,
+and a player on a slow one is rewound as far as their link really is, up
+to that cap; a client claiming the future gets the present. Something
+spawned after that moment, or despawned since, is not there to hit; with
+interest management on, neither is any replicated collider the client was
+not sent (the level's own walls, loaded on every end, always are). The
+server keeps a second of history by default (`LagCompensation::history`);
+`lag_compensation: None` in the `ReplicationConfig` keeps none, and every
+rewound query is live.
+
+Move lag-compensated entities in the fixed tick (`fixed_update`), as you
+move anything the server replicates: their poses are recorded after each
+fixed step, so a move made in the per-frame `update` is not in the
+history until the next step records it, and a shot is tested against
+where the step left it.
 
 The arena's zap is one: a bot zaps the nearest other player where it sees
 it, and the server's log says how far back each zap was tested.
