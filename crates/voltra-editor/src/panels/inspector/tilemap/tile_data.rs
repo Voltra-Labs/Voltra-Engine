@@ -56,7 +56,8 @@ pub(super) fn show(ui: &mut Ui, map: &mut Tilemap, paint: &Paint) -> Option<&'st
         .show_ui(ui, |ui| {
             for name in SHAPES {
                 let response = ui.selectable_label(shape_name(&data.shape) == name, name);
-                if mixed::chosen(ui, response, "Tilemap", shape_path(frame, &[])).clicked() {
+                let path = shape_path(frame, &[]);
+                if mixed::chosen_variant(ui, response, "Tilemap", path).clicked() {
                     picked = Some(name);
                 }
             }

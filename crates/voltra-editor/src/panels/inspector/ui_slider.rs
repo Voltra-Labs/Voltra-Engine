@@ -58,7 +58,7 @@ pub(super) fn show_part(ui: &mut Ui, part: &mut UiSliderPart) -> Option<&'static
             ("handle", UiSliderPart::Handle),
         ] {
             let response = ui.selectable_value(part, kind, label);
-            if mixed::chosen(ui, response, "UiSliderPart", Vec::new()).changed() {
+            if mixed::chosen_variant(ui, response, "UiSliderPart", Vec::new()).changed() {
                 claim = Some("Edit slider part");
             }
         }

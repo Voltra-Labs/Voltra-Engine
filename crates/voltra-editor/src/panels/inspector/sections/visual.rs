@@ -155,7 +155,7 @@ pub(in crate::panels::inspector) fn show(
     ) {
         ui.separator();
         mixed::marker(ui, multi, &["ParticleEmitter"]);
-        claim = claim.or(particles::show(
+        let (edited, preset) = particles::show(
             ui,
             emitter,
             particles::Stores {
@@ -164,7 +164,18 @@ pub(in crate::panels::inspector) fn show(
                 device: frame.device,
                 queue: frame.queue,
             },
-        ));
+        );
+        claim = claim.or(edited);
+        if let Some(preset) = preset {
+            // Each from its own emitter: a preset keeps the texture,
+            // flipbook and layers, which copying the primary's would not.
+            for each in multi.all().collect::<Vec<_>>() {
+                if particles::apply_preset(frame.world, each, preset) {
+                    claim = Some("Apply particle preset");
+                }
+            }
+            multi.done_for_each("ParticleEmitter");
+        }
     }
     if let Some(line) = gate(
         frame.world.get_mut::<voltra_scene::Line2D>(entity),

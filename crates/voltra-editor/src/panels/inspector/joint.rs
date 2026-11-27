@@ -32,7 +32,7 @@ pub(super) fn show(ui: &mut Ui, joint: &mut Joint2D, ends: &Ends) -> Option<&'st
         .show_ui(ui, |ui| {
             for name in JointKind::NAMES {
                 if ui.selectable_value(&mut kind, name, name).clicked() {
-                    mixed::touch(ui, "Joint2D", vec![Step::Field("kind")]);
+                    mixed::touch_variant(ui, "Joint2D", vec![Step::Field("kind")]);
                 }
             }
         });

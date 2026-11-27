@@ -2,11 +2,11 @@
 //! selection.
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::format::serial_tree::{differences, Found, TreePath};
+use voltra_scene::format::serial_tree::{differences, Found, Step, TreePath};
 use voltra_scene::format::SerialTree;
 use voltra_scene::ComponentRegistry;
 
-use super::{tree, warn_once, MultiEdit};
+use super::{tree, warn_once, MultiEdit, Touch};
 
 impl MultiEdit {
     /// Writes what the frame changed on the primary into every other
@@ -35,18 +35,21 @@ impl MultiEdit {
         }
         for (name, before) in &self.before {
             let after = tree(world, registry, self.primary, name);
-            let touched: Vec<TreePath> = self
+            let touched: Vec<(TreePath, Touch)> = self
                 .touched
                 .iter()
-                .filter(|(held, _)| held == name)
-                .map(|(_, path)| path.clone())
+                .filter(|(held, _, _)| held == name)
+                .map(|(_, path, how)| (path.clone(), *how))
                 .collect();
             let changed = match (before, &after) {
                 (Some(before), Some(after)) if before != after || !touched.is_empty() => {
-                    let mut places = differences(before, after);
-                    for path in touched {
-                        if !places.contains(&path) {
-                            places.push(path);
+                    let mut places: Vec<(TreePath, Touch)> = differences(before, after)
+                        .into_iter()
+                        .map(|path| (path, Touch::Value))
+                        .collect();
+                    for (path, how) in touched {
+                        if !places.iter().any(|(place, _)| *place == path) {
+                            places.push((path, how));
                         }
                     }
                     self.write_places(world, registry, name, &places, after)
@@ -79,7 +82,7 @@ impl MultiEdit {
         world: &mut World,
         registry: &ComponentRegistry,
         name: &str,
-        places: &[TreePath],
+        places: &[(TreePath, Touch)],
         after: &SerialTree,
     ) -> Vec<Entity> {
         let mut written = Vec::new();
@@ -88,7 +91,10 @@ impl MultiEdit {
                 continue;
             };
             let mut moved = false;
-            for place in places {
+            for (place, how) in places {
+                if *how == Touch::Variant && same_variant(after, &theirs, place) {
+                    continue;
+                }
                 moved |= match after.find(place) {
                     Found::Here(value) => theirs.put(place, Some(value)),
                     Found::Absent => theirs.put(place, None),
@@ -115,6 +121,16 @@ impl MultiEdit {
             .copied()
             .filter(|&other| load(world, registry, other, name, value))
             .collect()
+    }
+}
+
+/// Whether `a` and `b` hold the same variant of an enum at `place`: what
+/// a [`Touch::Variant`] leaves alone. Not an enum on either side, or
+/// nothing there, is not the same.
+fn same_variant(a: &SerialTree, b: &SerialTree, place: &[Step]) -> bool {
+    match (a.find(place), b.find(place)) {
+        (Found::Here(a), Found::Here(b)) => a.variant().is_some() && a.variant() == b.variant(),
+        _ => false,
     }
 }
 

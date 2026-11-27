@@ -23,7 +23,7 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
                         .selectable_label(current == std::mem::discriminant(&shape), shape.label())
                         .clicked();
                     if picked {
-                        mixed::touch(ui, "ParticleEmitter", vec![Step::Field("shape")]);
+                        mixed::touch_variant(ui, "ParticleEmitter", vec![Step::Field("shape")]);
                     }
                     if picked && current != std::mem::discriminant(&shape) {
                         emitter.shape = shape;

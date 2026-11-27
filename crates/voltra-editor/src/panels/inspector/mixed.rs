@@ -23,7 +23,7 @@
 use voltra_core::egui::{Checkbox, DragValue, Id, Key, Response, RichText, Ui};
 use voltra_scene::format::serial_tree::{describe, Step, TreePath};
 
-use crate::multi_edit::MultiEdit;
+use crate::multi_edit::{MultiEdit, Touch};
 
 /// What a mixed field's widget or label says on hover.
 const MIXED: &str = "differs across the selection: the last picked's value is shown, \
@@ -63,20 +63,34 @@ fn touched_id() -> Id {
     Id::new("inspector_multi_edit_touched")
 }
 
+/// One touch: the component, the place, and how it is written.
+type Touched = (&'static str, TreePath, Touch);
+
 /// Says the field at `path` of component `name` was committed this frame,
 /// for [`MultiEdit::touch`]: written to the whole selection even if the
 /// primary already had the value chosen.
 pub(super) fn touch(ui: &Ui, name: &'static str, path: TreePath) {
+    push(ui, (name, path, Touch::Value));
+}
+
+/// Says the enum at `path` of component `name` was picked this frame: each
+/// selected entity of another variant becomes the primary's, and each
+/// already of it keeps its own parameters — never the whole component.
+pub(super) fn touch_variant(ui: &Ui, name: &'static str, path: TreePath) {
+    push(ui, (name, path, Touch::Variant));
+}
+
+fn push(ui: &Ui, touched: Touched) {
     ui.ctx().data_mut(|data| {
-        data.get_temp_mut_or_default::<Vec<(&'static str, TreePath)>>(touched_id())
-            .push((name, path));
+        data.get_temp_mut_or_default::<Vec<Touched>>(touched_id())
+            .push(touched);
     });
 }
 
 /// This frame's touches, taken: the inspector hands them to the edit.
-pub(super) fn take_touched(ui: &Ui) -> Vec<(&'static str, TreePath)> {
+pub(super) fn take_touched(ui: &Ui) -> Vec<Touched> {
     ui.ctx().data_mut(|data| {
-        data.remove_temp::<Vec<(&'static str, TreePath)>>(touched_id())
+        data.remove_temp::<Vec<Touched>>(touched_id())
             .unwrap_or_default()
     })
 }
@@ -91,10 +105,26 @@ pub(super) fn chosen(ui: &Ui, response: Response, name: &'static str, path: Tree
     response
 }
 
+/// [`chosen`] for an entry that picks an enum's variant: see
+/// [`touch_variant`].
+pub(super) fn chosen_variant(
+    ui: &Ui,
+    response: Response,
+    name: &'static str,
+    path: TreePath,
+) -> Response {
+    if response.clicked() {
+        touch_variant(ui, name, path);
+    }
+    response
+}
+
 /// A number at `path` of `fields`' component, showing `—` instead of the
 /// primary's when it is mixed. Dragged or typed into, it writes a number
-/// like any other; a number typed and entered is written to all even when
-/// it is the primary's own.
+/// like any other; a number typed into the `—` is written to all once the
+/// field is left — Enter, Tab or a click away — even when it is the
+/// primary's own. Clicked into and left untouched (still `—`), or left
+/// with Escape, it writes nothing.
 pub(super) fn drag(
     ui: &mut Ui,
     value: DragValue<'_>,
@@ -107,8 +137,12 @@ pub(super) fn drag(
     } else {
         value
     };
+    // The id the `DragValue` takes: it keeps the text being typed under it
+    // (egui-0.35 `widgets/drag_value.rs`, `next_auto_id` and the `String`
+    // temp), and drops it the frame the field is left.
+    let id = ui.next_auto_id();
     let response = ui.add(value);
-    if mixed && response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+    if mixed && typed_and_left(ui, id) {
         fields.touch(ui, path);
         return response;
     }
@@ -117,6 +151,22 @@ pub(super) fn drag(
     } else {
         response
     }
+}
+
+/// Whether the `DragValue` at `id` was just left with a number typed into
+/// it. The text is copied aside while it is being typed, since egui drops
+/// its own the frame focus goes; text aside and no focus is a field left.
+fn typed_and_left(ui: &Ui, id: Id) -> bool {
+    let aside = id.with("mixed_typed");
+    if let Some(text) = ui.data(|data| data.get_temp::<String>(id)) {
+        ui.data_mut(|data| data.insert_temp(aside, text));
+    }
+    if ui.memory(|memory| memory.has_focus(id)) {
+        return false;
+    }
+    let typed = ui.data_mut(|data| data.remove_temp::<String>(aside));
+    let escaped = ui.input(|i| i.key_pressed(Key::Escape));
+    !escaped && typed.is_some_and(|text| text.trim().parse::<f64>().is_ok())
 }
 
 /// A checkbox at `path` of `fields`' component, half-ticked when mixed;
@@ -234,7 +284,14 @@ mod tests {
         let _ = ctx.run_ui(Default::default(), |ui| {
             assert!(take_touched(ui).is_empty(), "nothing committed");
             touch(ui, "Sprite", vec![Step::Field("flip_x")]);
-            assert_eq!(take_touched(ui), [("Sprite", vec![Step::Field("flip_x")])]);
+            touch_variant(ui, "Collider", Vec::new());
+            assert_eq!(
+                take_touched(ui),
+                [
+                    ("Sprite", vec![Step::Field("flip_x")], Touch::Value),
+                    ("Collider", Vec::new(), Touch::Variant),
+                ]
+            );
             assert!(take_touched(ui).is_empty(), "taken");
         });
         assert!(multi.finish(&mut world, &registry).is_empty());

@@ -60,7 +60,18 @@ pub(crate) struct MultiEdit {
     /// Places a widget committed this frame, written across even where the
     /// primary's value did not move — choosing the primary's own value for
     /// a mixed field sets it on all, as in Unity.
-    touched: Vec<(&'static str, TreePath)>,
+    touched: Vec<(&'static str, TreePath, Touch)>,
+}
+
+/// How a touched place is written to the rest of the selection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Touch {
+    /// As the primary has it — a number, a name, a unit-only enum.
+    Value,
+    /// Only where the entity's value there is another variant of the enum:
+    /// a kind picked again leaves each one already of it with its own
+    /// parameters (limits, sizes), and turns the rest into the primary's.
+    Variant,
 }
 
 impl MultiEdit {
@@ -167,14 +178,15 @@ impl MultiEdit {
     }
 
     /// Says a widget committed `path` of `name` this frame: written to the
-    /// rest of the selection whether or not the primary's value moved. A
-    /// name that is not written across (partial, structure) is ignored.
-    pub(crate) fn touch(&mut self, name: &str, path: TreePath) {
+    /// rest of the selection, as `how` says, whether or not the primary's
+    /// value moved. A name that is not written across (partial, structure)
+    /// is ignored.
+    pub(crate) fn touch(&mut self, name: &str, path: TreePath, how: Touch) {
         let Some(&(name, _)) = self.before.iter().find(|(held, _)| *held == name) else {
             return;
         };
-        if !self.touched.contains(&(name, path.clone())) {
-            self.touched.push((name, path));
+        if !self.touched.contains(&(name, path.clone(), how)) {
+            self.touched.push((name, path, how));
         }
     }
 

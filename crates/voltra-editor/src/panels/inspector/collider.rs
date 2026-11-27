@@ -8,7 +8,6 @@ use voltra_scene::{Collider, ConvexPolygon};
 mod kind;
 
 use super::active;
-use super::mixed;
 use kind::{converted, KINDS};
 
 /// What the panel asks of the inspector once it has drawn.
@@ -19,6 +18,20 @@ pub(super) struct Outcome {
     /// The fit button was pressed: shape the collider as its sprite's
     /// silhouette, which only the inspector can trace.
     pub fit_to_sprite: bool,
+    /// A kind picked from the dropdown, changed or not: the inspector
+    /// turns every selected collider of another kind into it, each from
+    /// its own size ([`reshape`]), rather than copy the primary's.
+    pub kind: Option<&'static str>,
+}
+
+/// `collider` turned into `kind` at about the size it had; whether it was
+/// another kind.
+pub(super) fn reshape(collider: &mut Collider, kind: &str) -> bool {
+    if collider.kind() == kind {
+        return false;
+    }
+    *collider = converted(collider, kind);
+    true
 }
 
 /// The collider's kind and sizes. `textured_sprite` offers the fit.
@@ -33,8 +46,7 @@ pub(super) fn show(ui: &mut Ui, collider: &mut Collider, textured_sprite: bool) 
         .show_ui(ui, |ui| {
             for option in KINDS {
                 if ui.selectable_value(&mut kind, option, option).clicked() {
-                    // The collider is an enum: its shape is the whole of it.
-                    mixed::touch(ui, "Collider", Vec::new());
+                    outcome.kind = Some(option);
                 }
             }
         });
@@ -208,6 +220,7 @@ mod tests {
                 let mut outcome = Outcome {
                     claim: Some("unset"),
                     fit_to_sprite: true,
+                    kind: Some("unset"),
                 };
                 let ctx = Context::default();
                 let _ = ctx.run_ui(Default::default(), |ui| {
@@ -218,6 +231,44 @@ mod tests {
                 assert_eq!(collider, kind);
             }
         }
+    }
+
+    #[test]
+    fn a_kind_picked_again_keeps_each_colliders_own_size() {
+        use crate::multi_edit::MultiEdit;
+        use voltra_ecs::World;
+        use voltra_scene::ComponentRegistry;
+
+        let registry = ComponentRegistry::with_defaults();
+        let mut world = World::new();
+        let boxed = |x: f32| Collider::Box {
+            half_extents: Vec2::splat(x),
+        };
+        let entities: Vec<_> = [boxed(1.0), Collider::Circle { radius: 2.0 }, boxed(3.0)]
+            .into_iter()
+            .map(|collider| {
+                let e = world.spawn();
+                world.insert(e, collider);
+                e
+            })
+            .collect();
+        let mut multi = MultiEdit::begin(&world, &registry, entities[2], entities.clone());
+        // "Box" picked again on the primary, as the inspector does it.
+        for &each in &entities {
+            if let Some(collider) = world.get_mut::<Collider>(each) {
+                reshape(collider, "Box");
+            }
+        }
+        multi.done_for_each("Collider");
+        assert!(multi.finish(&mut world, &registry).is_empty());
+        let sizes: Vec<_> = entities
+            .iter()
+            .map(|&e| world.get::<Collider>(e).copied())
+            .collect();
+        assert_eq!(
+            sizes,
+            [Some(boxed(1.0)), Some(boxed(2.0)), Some(boxed(3.0))]
+        );
     }
 
     #[test]

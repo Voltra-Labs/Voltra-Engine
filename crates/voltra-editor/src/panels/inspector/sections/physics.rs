@@ -44,6 +44,18 @@ pub(in crate::panels::inspector) fn show(
         mixed::marker(ui, multi, &["Collider"]);
         let outcome = collider::show(ui, shape, textured);
         claim = claim.or(outcome.claim);
+        if let Some(kind) = outcome.kind {
+            // Each of another kind turned into it from its own size; one
+            // already of it keeps its own.
+            for each in multi.all().collect::<Vec<_>>() {
+                if let Some(other) = frame.world.get_mut::<Collider>(each) {
+                    if collider::reshape(other, kind) {
+                        claim = Some("Change collider shape");
+                    }
+                }
+            }
+            multi.done_for_each("Collider");
+        }
         if outcome.fit_to_sprite {
             // Fitted to the frame shown: the authored one.
             editor

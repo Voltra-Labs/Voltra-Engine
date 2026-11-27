@@ -6,6 +6,7 @@ use voltra_scene::format::serial_tree::Step;
 use voltra_scene::format::ComponentRegistry;
 use voltra_scene::{Collider, SceneId, Sprite, Transform};
 
+use super::super::Touch;
 use super::{begin, three, BLUE, GREEN, RED};
 
 #[test]
@@ -223,8 +224,8 @@ fn a_touched_field_is_written_even_as_the_primary_had_it() {
     world.get_mut::<Sprite>(selected[0]).expect("s").sort_order = 4;
     let mut edit = begin(&world, &registry, &selected);
     // The primary's own value, chosen again: nothing moved on it.
-    edit.touch("Sprite", vec![Step::Field("sort_order")]);
-    edit.touch("Parent", vec![]);
+    edit.touch("Sprite", vec![Step::Field("sort_order")], Touch::Value);
+    edit.touch("Parent", vec![], Touch::Value);
     let written = edit.finish(&mut world, &registry);
     assert_eq!(written, [selected[0]], "only the one that differed");
     for (&entity, color) in selected.iter().zip([RED, GREEN, BLUE]) {
@@ -238,7 +239,7 @@ fn a_touched_field_is_written_even_as_the_primary_had_it() {
         .expect("s")
         .sorting_layer = "Front".into();
     let mut edit = begin(&world, &registry, &selected);
-    edit.touch("Sprite", vec![Step::Field("sorting_layer")]);
+    edit.touch("Sprite", vec![Step::Field("sorting_layer")], Touch::Value);
     edit.finish(&mut world, &registry);
     let default = Sprite::default().sorting_layer;
     assert_eq!(

@@ -143,8 +143,8 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                     claim = claim.or(Some("Add component"));
                 }
                 claim = claim.or(sections::show(editor, ui, frame, entity, &mut multi));
-                for (name, path) in mixed::take_touched(ui) {
-                    multi.touch(name, path);
+                for (name, path, how) in mixed::take_touched(ui) {
+                    multi.touch(name, path, how);
                 }
                 // What the sections did to the primary, written into the rest
                 // of the selection before the history takes the frame's after

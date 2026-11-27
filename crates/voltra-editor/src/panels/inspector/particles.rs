@@ -17,8 +17,10 @@ pub(super) use curve_edit::show as curve;
 
 use voltra_assets::{Atlases, Textures};
 use voltra_core::egui::{self, DragValue, RichText, Ui};
+use voltra_ecs::{Entity, World};
 use voltra_render::particles::MAX_GPU_PARTICLES;
 use voltra_render::wgpu;
+use voltra_scene::particles::presets::Preset;
 use voltra_scene::particles::{ParticleCollision, Simulation, MAX_PARTICLES};
 use voltra_scene::ParticleEmitter;
 
@@ -35,13 +37,16 @@ pub(super) struct Stores<'a> {
     pub queue: &'a wgpu::Queue,
 }
 
+/// The emitter's section; a preset picked is left to the caller, which
+/// applies it to every selected emitter ([`apply_preset`]).
 pub(super) fn show(
     ui: &mut Ui,
     emitter: &mut ParticleEmitter,
     stores: Stores<'_>,
-) -> Option<&'static str> {
+) -> (Option<&'static str>, Option<Preset>) {
     ui.label(RichText::new("Particles").strong());
-    let mut claim = preview::show(ui, emitter);
+    let preset = preview::show(ui, emitter);
+    let mut claim = None;
     egui::Grid::new("particles").num_columns(3).show(ui, |ui| {
         claim = claim.or(motion(ui, emitter));
     });
@@ -62,13 +67,26 @@ pub(super) fn show(
         .show(ui, |ui| {
             claim = claim.or(drawing(ui, emitter));
         });
-    claim.or(super::light_layers::show(
+    claim = claim.or(super::light_layers::show(
         ui,
         "particle_light_layers",
         "light layers",
         "its particles are lit only by lights sharing one of these",
         &mut emitter.light_layers,
-    ))
+    ));
+    (claim, preset)
+}
+
+/// `preset` applied to `entity`'s own emitter — its texture, flipbook and
+/// layers kept; whether it has one.
+pub(super) fn apply_preset(world: &mut World, entity: Entity, preset: Preset) -> bool {
+    match world.get_mut::<ParticleEmitter>(entity) {
+        Some(emitter) => {
+            *emitter = preset.apply(emitter);
+            true
+        }
+        None => false,
+    }
 }
 
 /// How many, how long, which way and how fast.
@@ -218,5 +236,39 @@ fn name(simulation: Simulation) -> &'static str {
     match simulation {
         Simulation::Cpu => "CPU",
         Simulation::Gpu => "GPU",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use voltra_assets::AssetPath;
+
+    #[test]
+    fn a_preset_is_applied_to_each_emitter_keeping_its_own_texture() {
+        let mut world = World::new();
+        let textured = |path: &str| ParticleEmitter {
+            texture: AssetPath::new(path).ok(),
+            sorting_layer: format!("{path} layer"),
+            ..ParticleEmitter::default()
+        };
+        let here = world.spawn();
+        let there = world.spawn();
+        world.insert(here, textured("smoke.png"));
+        world.insert(there, textured("spark.png"));
+        let nothing = world.spawn();
+
+        for each in [here, there] {
+            assert!(apply_preset(&mut world, each, Preset::Rain));
+        }
+        assert!(!apply_preset(&mut world, nothing, Preset::Rain));
+
+        for (each, path) in [(here, "smoke.png"), (there, "spark.png")] {
+            let emitter = world.get::<ParticleEmitter>(each).expect("e");
+            let want = Preset::Rain.apply(&textured(path));
+            assert_eq!(emitter.texture, want.texture, "its own texture");
+            assert_eq!(emitter.sorting_layer, want.sorting_layer, "its own layer");
+            assert_eq!(emitter.rate, want.rate, "the preset's");
+        }
     }
 }
