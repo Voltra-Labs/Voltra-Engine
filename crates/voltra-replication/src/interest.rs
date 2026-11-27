@@ -21,6 +21,12 @@ mod grid;
 
 pub use grid::InterestGrid;
 
+/// The most cells a client's query may span along one axis: a cell size
+/// set far below the radius is raised until the leave radius's diameter is
+/// at most this many cells, so a query's range stays a range and not
+/// billions of empty cells to step over.
+pub const MAX_CELLS_PER_AXIS: f32 = 65_536.0;
+
 /// How far a client is sent the world: [`ReplicationConfig::interest`].
 /// `None` there sends every client every replicated entity.
 ///
@@ -59,8 +65,11 @@ impl Interest {
     }
 
     /// The same with every value usable: a radius that is not a positive
-    /// number is refused (`None`, with an error logged), a cell size that
-    /// is not is the radius, a negative hysteresis is none.
+    /// number, or a leave radius that is not finite (a radius or a
+    /// hysteresis near `f32::MAX`), is refused (`None`, with an error
+    /// logged); a cell size that is not a positive number is the radius;
+    /// one so small a query would span more than [`MAX_CELLS_PER_AXIS`]
+    /// cells is raised to fit; a negative or non-finite hysteresis is none.
     pub(crate) fn checked(self) -> Option<Self> {
         if !(self.radius.is_finite() && self.radius > 0.0) {
             log::error!(
@@ -69,7 +78,24 @@ impl Interest {
             );
             return None;
         }
-        let cell_size = if self.cell_size.is_finite() && self.cell_size > 0.0 {
+        let hysteresis = if self.hysteresis.is_finite() {
+            self.hysteresis.max(0.0)
+        } else {
+            0.0
+        };
+        let leave = self.radius * (1.0 + hysteresis);
+        // The span a query reads, both sides of a point.
+        let reach = leave * 2.0;
+        if !reach.is_finite() {
+            log::error!(
+                "interest radius {} with hysteresis {} leaves at no finite distance; \
+                 every client is sent everything",
+                self.radius,
+                hysteresis
+            );
+            return None;
+        }
+        let mut cell_size = if self.cell_size.is_finite() && self.cell_size > 0.0 {
             self.cell_size
         } else {
             log::warn!(
@@ -79,11 +105,14 @@ impl Interest {
             );
             self.radius
         };
-        let hysteresis = if self.hysteresis.is_finite() {
-            self.hysteresis.max(0.0)
-        } else {
-            0.0
-        };
+        if reach / cell_size > MAX_CELLS_PER_AXIS {
+            let raised = reach / MAX_CELLS_PER_AXIS;
+            log::warn!(
+                "interest cell size {cell_size} would have a query read over \
+                 {MAX_CELLS_PER_AXIS} cells a side; {raised} is used"
+            );
+            cell_size = raised;
+        }
         Some(Self {
             radius: self.radius,
             cell_size,
@@ -117,5 +146,30 @@ mod tests {
         assert_eq!(fixed.cell_size, 10.0);
         assert_eq!(fixed.hysteresis, 0.0);
         assert!((Interest::new(10.0).leave_radius(10.0) - 11.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn a_leave_radius_past_f32_is_refused_and_a_tiny_cell_raised() {
+        assert_eq!(Interest::new(f32::MAX).checked(), None);
+        let hysteresis = Interest {
+            hysteresis: f32::MAX,
+            ..Interest::new(10.0)
+        };
+        assert_eq!(hysteresis.checked(), None);
+        let huge = Interest {
+            hysteresis: 1.0e30,
+            ..Interest::new(10.0)
+        }
+        .checked()
+        .expect("finite");
+        assert!(huge.leave_radius(huge.radius) * 2.0 / huge.cell_size <= MAX_CELLS_PER_AXIS);
+        let fine = Interest {
+            cell_size: 1.0e-3,
+            ..Interest::new(1.0e7)
+        }
+        .checked()
+        .expect("finite");
+        assert!(fine.leave_radius(fine.radius) * 2.0 / fine.cell_size <= MAX_CELLS_PER_AXIS);
+        assert!(fine.cell_size > 300.0, "{}", fine.cell_size);
     }
 }

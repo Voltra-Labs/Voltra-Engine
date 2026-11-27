@@ -147,8 +147,12 @@ impl InterestGrid {
         for &point in points.iter().filter(|p| p.is_finite()) {
             let (x0, y0) = self.cell(point - Vec2::splat(reach));
             let (x1, y1) = self.cell(point + Vec2::splat(reach));
-            let span = (i64::from(x1) - i64::from(x0) + 1) * (i64::from(y1) - i64::from(y0) + 1);
-            if span > self.occupied as i64 {
+            // In i128: a range clamped to the whole of i32 both ways is
+            // 2^64 cells, past i64 — an unchecked interest (a radius near
+            // `f32::MAX`, a cell far below it) must not overflow here.
+            let span =
+                (i128::from(x1) - i128::from(x0) + 1) * (i128::from(y1) - i128::from(y0) + 1);
+            if span > self.occupied as i128 {
                 // A cell size far below the radius: fewer cells are
                 // occupied than the range holds, so read those instead.
                 for indices in self.cells.values() {
@@ -266,5 +270,42 @@ mod tests {
         assert!(query(&grid, &[Vec2::ZERO], &[]).is_empty());
         assert_eq!(query(&grid, &[Vec2::new(2985.0, 0.0)], &[]), [1]);
         assert!(grid.cells.len() < 200, "left cells let go of");
+    }
+
+    #[test]
+    fn extreme_values_unchecked_answer_without_overflow_or_a_long_walk() {
+        for interest in [
+            Interest::new(f32::MAX),
+            Interest {
+                hysteresis: f32::MAX,
+                ..Interest::new(10.0)
+            },
+            Interest {
+                cell_size: 1.0e-3,
+                ..Interest::new(1.0e7)
+            },
+        ] {
+            let mut grid = InterestGrid::new(interest);
+            grid.insert(1, Vec2::new(5.0, 0.0), None);
+            grid.insert(2, Vec2::new(-1.0e6, 3.0e6), None);
+            let started = std::time::Instant::now();
+            let found = query(&grid, &[Vec2::ZERO], &[1, 2]);
+            assert!(found.contains(&1), "{interest:?}: {found:?}");
+            assert!(started.elapsed().as_secs() < 1, "{interest:?}");
+        }
+        for interest in [
+            Interest::new(f32::MAX),
+            Interest {
+                cell_size: 1.0e-3,
+                ..Interest::new(1.0e7)
+            },
+        ] {
+            let Some(checked) = interest.checked() else {
+                continue;
+            };
+            let mut grid = InterestGrid::new(checked);
+            grid.insert(1, Vec2::new(9.0e6, 0.0), None);
+            assert_eq!(query(&grid, &[Vec2::ZERO], &[]), [1]);
+        }
     }
 }
