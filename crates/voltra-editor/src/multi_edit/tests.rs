@@ -4,6 +4,7 @@
 mod mixed;
 mod sparse;
 mod undo;
+mod variants;
 mod write;
 
 use voltra_ecs::{Entity, World};

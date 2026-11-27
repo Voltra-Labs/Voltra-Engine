@@ -6,6 +6,8 @@
 //! the scene becomes an instance of that file. This is the command without
 //! the drag — the asset browser's current folder is where the file goes.
 
+#[cfg(test)]
+pub(crate) mod fixtures;
 mod variant;
 
 pub(crate) use variant::create_variant;

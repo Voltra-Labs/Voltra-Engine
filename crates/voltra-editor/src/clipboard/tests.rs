@@ -211,3 +211,52 @@ fn a_paste_is_numbered_only_where_its_name_is_taken_and_nameless_stays_so() {
     assert_eq!(name_of(&world, tops[0]).as_deref(), Some("Player (1)"));
     assert_eq!(name_of(&world, tops[1]), None);
 }
+
+#[test]
+fn a_variant_instance_duplicated_is_one_of_the_variant_numbered_apart() {
+    use crate::prefab::fixtures::{
+        base_and_variant, color, intensity, overridden, override_variant_light, path, spawned,
+        VARIANT,
+    };
+
+    let root = voltra_testkit::scratch_root();
+    let registry = registry();
+    let mut prefabs = base_and_variant(&root, &registry);
+    let variant = path(VARIANT);
+    let mut world = World::new();
+    let varied = spawned(&mut world, &registry, &mut prefabs, &variant);
+    world.get_mut::<Sprite>(varied).expect("s").color = [0.0, 1.0, 0.0, 1.0];
+    prefab::refresh_overrides(&mut world, &registry, &mut prefabs, varied).expect("compared");
+
+    // As `duplicate` does: copied, pasted back, its overrides said.
+    let clip = copy(&world, &registry, &selecting(&[varied]))
+        .expect("records")
+        .expect("something to copy");
+    let (_, tops) = paste(&mut world, &registry, &clip).expect("spawns");
+    let copy = tops[0];
+    prefab::refresh_overrides(&mut world, &registry, &mut prefabs, copy).expect("compared");
+
+    let name = world.get::<Name>(copy).expect("named").as_str().to_owned();
+    assert_eq!(name, "coin (1)");
+    let instance = world
+        .get::<voltra_scene::PrefabInstance>(copy)
+        .expect("an instance");
+    assert_eq!(instance.source, variant, "of the variant");
+    assert_eq!(
+        color(&world, copy),
+        [0.0, 1.0, 0.0, 1.0],
+        "its override copied"
+    );
+    assert_eq!(intensity(&world, copy), 3.0);
+    let mut over = overridden(&world, copy);
+    over.sort();
+    assert_eq!(over, ["Name", "Sprite"]);
+    assert_eq!(hierarchy::children_of(&world, copy).len(), 1, "its glow");
+
+    // The variant's light changes: the copy follows it.
+    override_variant_light(&root, &registry, &mut prefabs, &variant, 5.0);
+    prefab::sync_all(&mut world, &registry, &mut prefabs);
+    assert_eq!(intensity(&world, copy), 5.0);
+    assert_eq!(intensity(&world, varied), 5.0);
+    assert_eq!(color(&world, copy), [0.0, 1.0, 0.0, 1.0]);
+}
