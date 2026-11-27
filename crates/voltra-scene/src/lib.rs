@@ -26,6 +26,7 @@ pub mod hierarchy;
 pub mod interpolate;
 pub mod joint;
 pub mod keyframes;
+pub mod lag_compensated;
 pub mod light;
 pub mod line2d;
 pub mod locale;
@@ -81,6 +82,7 @@ pub use joint::{
     TranslationLimit,
 };
 pub use keyframes::{AnimationClip, AnimationClips, AnimationPlayer};
+pub use lag_compensated::LagCompensated;
 pub use light::{LightCone, LightShadows, PointLight2D};
 pub use line2d::{Line2D, LineCap, LineJoint, LineTexture};
 pub use locale::Locale;

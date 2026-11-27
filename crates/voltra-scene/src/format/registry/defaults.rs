@@ -28,6 +28,9 @@ impl ComponentRegistry {
         registry
             .register::<crate::Replicated>(crate::Replicated::NAME)
             .with_template();
+        registry
+            .register::<crate::LagCompensated>(crate::LagCompensated::NAME)
+            .with_template();
         // Stored as the parent's `SceneId`; the live `Entity` is resolved after
         // the whole file is in, by `hierarchy::resolve_parents`.
         registry.register::<Parent>("Parent");
