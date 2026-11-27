@@ -23,19 +23,23 @@
 //! is refused as [`ProtocolMismatch`](crate::DisconnectReason::ProtocolMismatch).
 
 mod config;
+mod error;
 mod event;
 mod name;
+mod refusal;
 mod session;
 mod state;
 mod wire;
 
 pub use config::{LateJoin, LobbyConfig, MAX_LOBBY_PLAYERS, MAX_NAME_CHARS};
+pub use error::LobbyError;
 pub use event::LobbyEvent;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use name::visible_text;
 pub use name::{sanitize_name, unique_name};
+pub use refusal::LobbyRefusal;
 pub use session::LobbySession;
-pub use state::{Lobby, LobbyEntry, LobbyError, LobbyPhase, LobbyRefusal};
+pub use state::{Lobby, LobbyEntry, LobbyPhase};
 
 /// The version of the lobby's messages. Bump it on any change to
 /// `lobby/wire.rs`: it is in the handshake's fingerprint

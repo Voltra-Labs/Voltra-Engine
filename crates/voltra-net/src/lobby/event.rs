@@ -1,6 +1,6 @@
 //! What changed in the lobby this frame.
 
-use super::state::LobbyRefusal;
+use super::refusal::LobbyRefusal;
 use crate::PeerId;
 
 /// A change to the lobby, seen the same on the server and on every client

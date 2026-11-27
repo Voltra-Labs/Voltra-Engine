@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use super::config::MAX_LOBBY_PLAYERS;
 use super::name::sanitize_name;
-use super::state::{Lobby, LobbyEntry, LobbyPhase, LobbyRefusal};
+use super::refusal::LobbyRefusal;
+use super::state::{Lobby, LobbyEntry, LobbyPhase};
 use super::MAX_NAME_CHARS;
 use crate::PeerId;
 

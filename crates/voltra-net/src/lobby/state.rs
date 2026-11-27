@@ -1,12 +1,12 @@
 //! The lobby itself: slots, entries in join order, ready flags, a host —
 //! and the rules that change them, run on the server.
 
-use std::fmt;
-
 use serde::{Deserialize, Serialize};
 
 use super::config::{LateJoin, LobbyConfig};
+use super::error::LobbyError;
 use super::name::{same_name, sanitize_name, unique_name};
+use super::refusal::LobbyRefusal;
 use crate::PeerId;
 
 /// Whether the match is being played.
@@ -31,67 +31,6 @@ pub struct LobbyEntry {
     /// Whether they are ready to start.
     pub ready: bool,
 }
-
-/// Why the server would not let a peer in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum LobbyRefusal {
-    /// Every slot is taken.
-    Full,
-    /// The match has started, and the lobby takes no late joins
-    /// ([`LateJoin::Refuse`]).
-    MatchUnderway,
-}
-
-impl fmt::Display for LobbyRefusal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Full => write!(f, "the lobby is full"),
-            Self::MatchUnderway => write!(f, "the match has already started"),
-        }
-    }
-}
-
-/// Why a lobby action was not taken.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LobbyError {
-    /// The session has no lobby, or it has not started yet.
-    NoLobby,
-    /// This player is not in the lobby (not yet let in, or refused).
-    NotInLobby,
-    /// Only the host starts the match.
-    NotHost,
-    /// The match is already being played.
-    AlreadyPlaying,
-    /// Not every player is ready.
-    NotEveryoneReady,
-    /// Fewer players than [`LobbyConfig::min_players`].
-    TooFewPlayers {
-        /// Players in the lobby.
-        have: usize,
-        /// Players a match needs.
-        need: usize,
-    },
-    /// Only a server finishes a match.
-    NotServer,
-}
-
-impl fmt::Display for LobbyError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::NoLobby => write!(f, "there is no lobby"),
-            Self::NotInLobby => write!(f, "not in the lobby"),
-            Self::NotHost => write!(f, "only the host starts the match"),
-            Self::AlreadyPlaying => write!(f, "the match is already being played"),
-            Self::NotEveryoneReady => write!(f, "not everyone is ready"),
-            Self::TooFewPlayers { have, need } => {
-                write!(f, "{have} of the {need} players a match needs")
-            }
-            Self::NotServer => write!(f, "only the server finishes a match"),
-        }
-    }
-}
-
-impl std::error::Error for LobbyError {}
 
 /// The lobby: who is in it, and who may start the match.
 ///
@@ -323,156 +262,4 @@ impl Lobby {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn config(max: usize, min: usize) -> LobbyConfig {
-        LobbyConfig {
-            max_players: max,
-            min_players: min,
-            ..LobbyConfig::default()
-        }
-    }
-
-    fn peer(n: u32) -> PeerId {
-        PeerId(n)
-    }
-
-    #[test]
-    fn the_first_in_hosts_and_the_host_passes_on_in_join_order() {
-        let config = config(4, 1);
-        let mut lobby = Lobby::new(&config);
-        assert_eq!(lobby.host(), None);
-
-        for n in 1..=3 {
-            lobby.join(peer(n), "p", &config).expect("room");
-        }
-        assert_eq!(lobby.host(), Some(peer(1)));
-
-        lobby.leave(peer(1)).expect("was in");
-        assert_eq!(lobby.host(), Some(peer(2)));
-        lobby.leave(peer(3)).expect("was in");
-        assert_eq!(lobby.host(), Some(peer(2)));
-        lobby.leave(peer(2)).expect("was in");
-        assert_eq!(lobby.host(), None);
-        assert!(lobby.leave(peer(2)).is_none(), "gone already");
-    }
-
-    #[test]
-    fn names_are_sanitised_and_made_unique() {
-        let config = LobbyConfig {
-            max_name_chars: 8,
-            ..config(4, 1)
-        };
-        let mut lobby = Lobby::new(&config);
-
-        assert_eq!(lobby.join(peer(1), "Ada\u{7}", &config), Ok("Ada".into()));
-        assert_eq!(lobby.join(peer(2), "ada", &config), Ok("ada 2".into()));
-        assert_eq!(
-            lobby.join(peer(3), "a very long name", &config),
-            Ok("a very l".into())
-        );
-        // A rename keeps a name of one's own, and takes no one else's.
-        assert_eq!(lobby.join(peer(2), "Ada", &config), Ok("Ada 2".into()));
-        assert_eq!(lobby.join(peer(1), "Ada", &config), Ok("Ada".into()));
-        assert_eq!(lobby.len(), 3, "a rename is not a second entry");
-    }
-
-    #[test]
-    fn a_full_lobby_refuses_and_frees_a_slot_when_one_leaves() {
-        let config = config(2, 1);
-        let mut lobby = Lobby::new(&config);
-        lobby.join(peer(1), "a", &config).expect("room");
-        lobby.join(peer(2), "b", &config).expect("room");
-
-        assert_eq!(lobby.join(peer(3), "c", &config), Err(LobbyRefusal::Full));
-        assert!(lobby.is_full());
-        lobby.leave(peer(1));
-        assert!(lobby.join(peer(3), "c", &config).is_ok());
-    }
-
-    #[test]
-    fn the_host_starts_once_everyone_is_ready_and_there_are_enough() {
-        let config = config(4, 2);
-        let mut lobby = Lobby::new(&config);
-        lobby.join(peer(1), "a", &config).expect("room");
-
-        assert_eq!(lobby.set_ready(peer(1), true), Ok(true));
-        assert_eq!(lobby.set_ready(peer(1), true), Ok(false), "no change");
-        assert_eq!(
-            lobby.start(Some(peer(1))),
-            Err(LobbyError::TooFewPlayers { have: 1, need: 2 })
-        );
-        lobby.join(peer(2), "b", &config).expect("room");
-        assert_eq!(
-            lobby.start(Some(peer(1))),
-            Err(LobbyError::NotEveryoneReady)
-        );
-        lobby.set_ready(peer(2), true).expect("in");
-        assert_eq!(lobby.start(Some(peer(2))), Err(LobbyError::NotHost));
-        assert_eq!(lobby.start(Some(peer(9))), Err(LobbyError::NotInLobby));
-        assert_eq!(lobby.start(Some(peer(1))), Ok(()));
-        assert_eq!(lobby.phase(), LobbyPhase::Playing);
-        assert_eq!(lobby.start(Some(peer(1))), Err(LobbyError::AlreadyPlaying));
-        assert_eq!(
-            lobby.set_ready(peer(1), false),
-            Err(LobbyError::AlreadyPlaying)
-        );
-
-        assert!(lobby.finish());
-        assert!(!lobby.finish(), "finished already");
-        assert_eq!(lobby.phase(), LobbyPhase::Waiting);
-        assert!(lobby.entries().iter().all(|entry| !entry.ready));
-    }
-
-    #[test]
-    fn a_ready_player_leaving_can_make_the_rest_startable_or_not() {
-        let config = config(4, 2);
-        let mut lobby = Lobby::new(&config);
-        for n in 1..=3 {
-            lobby.join(peer(n), "p", &config).expect("room");
-        }
-        lobby.set_ready(peer(1), true).expect("in");
-        lobby.set_ready(peer(2), true).expect("in");
-        assert_eq!(lobby.ready_to_start(), Err(LobbyError::NotEveryoneReady));
-
-        // The one not ready leaves: the rest can go.
-        lobby.leave(peer(3));
-        assert_eq!(lobby.ready_to_start(), Ok(()));
-        // One more leaves: too few.
-        lobby.leave(peer(2));
-        assert_eq!(
-            lobby.ready_to_start(),
-            Err(LobbyError::TooFewPlayers { have: 1, need: 2 })
-        );
-    }
-
-    #[test]
-    fn a_late_joiner_is_refused_or_plays_as_configured() {
-        let refuse = config(4, 1);
-        let mut lobby = Lobby::new(&refuse);
-        lobby.join(peer(1), "a", &refuse).expect("room");
-        lobby.set_ready(peer(1), true).expect("in");
-        lobby.start(None).expect("the server may start it");
-
-        assert_eq!(
-            lobby.join(peer(2), "b", &refuse),
-            Err(LobbyRefusal::MatchUnderway)
-        );
-
-        let play = LobbyConfig {
-            late_join: LateJoin::Play,
-            ..refuse
-        };
-        assert!(lobby.join(peer(2), "b", &play).is_ok());
-        assert!(lobby.entry(peer(2)).is_some_and(|entry| entry.ready));
-    }
-
-    #[test]
-    fn a_player_not_in_cannot_be_ready() {
-        let config = config(4, 1);
-        let mut lobby = Lobby::new(&config);
-        assert_eq!(lobby.set_ready(peer(1), true), Err(LobbyError::NotInLobby));
-        assert!(!lobby.all_ready(), "an empty lobby is not ready");
-    }
-}
+mod tests;

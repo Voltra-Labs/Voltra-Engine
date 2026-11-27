@@ -4,8 +4,10 @@
 use std::time::Duration;
 
 use super::config::LobbyConfig;
+use super::error::LobbyError;
 use super::event::LobbyEvent;
-use super::state::{Lobby, LobbyError, LobbyPhase, LobbyRefusal};
+use super::refusal::LobbyRefusal;
+use super::state::{Lobby, LobbyPhase};
 use super::wire::{Snapshot, ToClient, ToServer};
 use crate::{Endpoint, NetEvent, PeerId};
 
