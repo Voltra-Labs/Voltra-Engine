@@ -28,8 +28,10 @@ use crate::{ReplicationConfig, Timeline};
 mod apply;
 mod samples;
 mod spawn;
+mod stash;
 
 use samples::{Pick, Samples};
+use stash::Stash;
 
 /// The most inputs kept waiting for the server's acknowledgement.
 const MAX_PENDING_INPUTS: usize = 256;
@@ -57,6 +59,9 @@ pub struct ReplicaStats {
     pub newest_tick: ServerTick,
     /// Replicated entities it has.
     pub entities: usize,
+    /// Entities out of its interest, despawned and set aside until the
+    /// server sends them again.
+    pub out_of_interest: usize,
     /// How far behind the newest snapshot remote entities are drawn.
     pub delay: Duration,
     /// The measured jitter the delay is sized from.
@@ -66,6 +71,12 @@ pub struct ReplicaStats {
 struct Schema {
     /// By server index: this build's handle for the name, if it has one.
     local: Vec<Option<ReplicatedComponent>>,
+    /// Whether the server culls by interest: the replicated entities of
+    /// this client's level it never sends are then set aside, not lost.
+    interest: bool,
+    /// The names of the components this build replicates: what a stash
+    /// leaves out, the spawn bringing them.
+    replicated: Vec<&'static str>,
 }
 
 struct Bound {
@@ -96,6 +107,8 @@ pub struct ReplicationClient {
     /// Whether the first complete snapshot has swept away the replicated
     /// entities the server never had.
     swept: bool,
+    /// What went out of interest, set aside to come back as it was.
+    stash: Stash,
     stats: ReplicaStats,
 }
 
@@ -118,6 +131,7 @@ impl ReplicationClient {
             correction: None,
             local: None,
             swept: false,
+            stash: Stash::default(),
             stats: ReplicaStats::default(),
         }
     }
@@ -126,6 +140,7 @@ impl ReplicationClient {
     pub fn stats(&self) -> ReplicaStats {
         ReplicaStats {
             entities: self.bound.len(),
+            out_of_interest: self.stash.len(),
             delay: self.timeline.delay(),
             jitter: self.timeline.jitter(),
             ..self.stats
@@ -204,6 +219,7 @@ impl ReplicationClient {
         self.predicted = None;
         self.correction = None;
         self.swept = false;
+        self.stash.clear();
     }
 
     /// Applies what the endpoint's receive brought: the schema, then each
@@ -240,7 +256,10 @@ impl ReplicationClient {
                         components,
                         step,
                         snapshot_interval,
-                    }) => self.take_schema(registry, &components, step, snapshot_interval),
+                        interest,
+                    }) => {
+                        self.take_schema(registry, &components, step, snapshot_interval, interest)
+                    }
                     Err(error) => log::warn!("an unreadable replication message: {error}"),
                 }
             } else if message.channel == channels.state {

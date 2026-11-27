@@ -3,13 +3,17 @@
 //! Above `voltra-net`'s connections and beside the scene: components a game
 //! registers as replicated ([`ComponentRegistry::replicate`]) on entities
 //! marked [`Replicated`] are sent by the server — spawned, changed and
-//! despawned — and a client's world follows. Three parts, one per stage of
+//! despawned — and a client's world follows. Four parts, one per stage of
 //! the plan:
 //!
 //! - **Snapshots and deltas** ([`ReplicationServer`], stage 114): a
 //!   snapshot per tick per client, carrying only what differs from what
 //!   that client acknowledged, the most important first within a
 //!   per-client byte budget.
+//! - **Interest** ([`Interest`], stage 127): each client sent only what is
+//!   near the entities it owns or the points the game watches for it, on
+//!   a grid ([`InterestGrid`]); what leaves is despawned on it, what comes
+//!   back spawned whole.
 //! - **Interpolation** ([`ReplicationClient::interpolate`], [`Timeline`],
 //!   stage 115): remote entities drawn between the two snapshots around a
 //!   moment a jitter buffer behind the newest, the buffer sized from the
@@ -35,6 +39,7 @@
 mod acks;
 mod client;
 mod config;
+mod interest;
 mod owner;
 mod prediction;
 mod server;
@@ -43,6 +48,7 @@ mod wire;
 
 pub use client::{Correction, ReplicaStats, ReplicationClient};
 pub use config::{ReplicationChannels, ReplicationConfig};
+pub use interest::{Interest, InterestGrid};
 pub use owner::NetOwner;
 pub use prediction::{Prediction, PredictionStats};
 pub use server::{ClientReplicationStats, ReplicationServer};

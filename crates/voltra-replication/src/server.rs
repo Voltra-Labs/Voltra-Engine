@@ -8,16 +8,18 @@
 
 use std::collections::{BTreeMap, HashMap};
 
+use glam::Vec2;
 use voltra_ecs::{Entity, World};
 use voltra_net::{Endpoint, NetEvent, PeerId};
 use voltra_scene::{ComponentRegistry, ReplicatedComponent};
 
 use crate::acks::ReceivedTicks;
 use crate::wire::{self, ClientMessage, Control, NetId, ServerTick, MAX_LISTED};
-use crate::ReplicationConfig;
+use crate::{Interest, InterestGrid, ReplicationConfig};
 
 mod inputs;
 mod refresh;
+mod relevance;
 mod snapshot;
 mod view;
 
@@ -36,6 +38,9 @@ pub struct ClientReplicationStats {
     pub input_ack: u32,
     /// Its inputs dropped because too many were waiting.
     pub inputs_dropped: u64,
+    /// The replicated entities relevant to it at the last snapshot: all of
+    /// them without interest management.
+    pub relevant: usize,
 }
 
 /// Replication on a server: call [`receive`](Self::receive) after the
@@ -51,14 +56,25 @@ pub struct ReplicationServer {
     clients: BTreeMap<PeerId, ClientView>,
     tick: ServerTick,
     last_snapshot: ServerTick,
+    /// Interest management, when on: its values checked, and the grid it
+    /// rebuilds each snapshot.
+    interest: Option<(Interest, InterestGrid)>,
+    /// The points the game watches for each client, beside its entities.
+    points: HashMap<PeerId, Vec<Vec2>>,
 }
 
 impl ReplicationServer {
     /// A server replicating what `registry` marks replicated, at a tick of
     /// `step` seconds.
     pub fn new(config: ReplicationConfig, registry: &ComponentRegistry, step: f32) -> Self {
+        let interest = config
+            .interest
+            .and_then(Interest::checked)
+            .map(|interest| (interest, InterestGrid::new(interest)));
         Self {
             config,
+            interest,
+            points: HashMap::new(),
             components: registry.replicated(),
             step,
             ids: HashMap::new(),
@@ -97,7 +113,51 @@ impl ReplicationServer {
             complete: view.last_complete,
             input_ack: view.inputs.consumed,
             inputs_dropped: view.inputs.dropped,
+            relevant: match self.interest {
+                Some(_) => view.interest.relevant.len(),
+                None => self.tracked.len(),
+            },
         })
+    }
+
+    /// The interest it culls by: the config's, once checked; `None` when
+    /// every client is sent everything.
+    pub fn interest(&self) -> Option<&Interest> {
+        self.interest.as_ref().map(|(interest, _)| interest)
+    }
+
+    /// Sets the points `peer` is sent the world around, besides the
+    /// entities it owns — a spectator's camera, a scout's sight, a level's
+    /// area of play. Replaces the last it was given; kept until replaced or
+    /// the peer leaves. Without interest management it changes nothing.
+    pub fn set_interest_points(&mut self, peer: PeerId, points: Vec<Vec2>) {
+        if points.is_empty() {
+            self.points.remove(&peer);
+        } else {
+            self.points.insert(peer, points);
+        }
+    }
+
+    /// Every point `peer` was sent the world around at the last snapshot:
+    /// where its entities were, then the game's. Empty without interest
+    /// management.
+    pub fn interest_points(&self, peer: PeerId) -> &[Vec2] {
+        self.clients
+            .get(&peer)
+            .map_or(&[], |view| view.interest.points.as_slice())
+    }
+
+    /// Whether `entity` was relevant to `peer` at the last snapshot: it is
+    /// being sent to it. Every replicated entity without interest
+    /// management.
+    pub fn is_relevant(&self, peer: PeerId, entity: Entity) -> bool {
+        let (Some(view), Some(id)) = (self.clients.get(&peer), self.ids.get(&entity)) else {
+            return false;
+        };
+        match self.interest {
+            Some(_) => view.interest.relevant.contains(id),
+            None => true,
+        }
     }
 
     /// Joins and leaves, acknowledgements and inputs: what the endpoint's
@@ -111,6 +171,7 @@ impl ReplicationServer {
                 }
                 NetEvent::Disconnected { peer, .. } => {
                     self.clients.remove(&peer);
+                    self.points.remove(&peer);
                 }
                 NetEvent::Connected(_) => {}
             }
@@ -142,7 +203,7 @@ impl ReplicationServer {
                 self.config.max_buffered_inputs,
             );
             for id in update.resync.into_iter().take(MAX_LISTED) {
-                view.resync(id, self.components.len());
+                view.resync(id, self.components.len(), self.tick.wrapping_add(1));
             }
         }
     }
@@ -185,6 +246,7 @@ impl ReplicationServer {
                 components: self.components.iter().map(|c| c.name.to_owned()).collect(),
                 step: self.step,
                 snapshot_interval: self.config.snapshot_interval.max(1),
+                interest: self.interest.is_some(),
             };
             match endpoint.send(peer, channels.control, &wire::encode(&schema)) {
                 Ok(()) => view.schema_sent = true,
@@ -201,17 +263,27 @@ impl ReplicationServer {
         }
         self.last_snapshot = self.tick;
         self.refresh(world, registry);
+        let culling = match &mut self.interest {
+            Some((_, grid)) => {
+                relevance::update(grid, &self.tracked, &mut self.clients, &self.points);
+                true
+            }
+            None => false,
+        };
 
         for (&peer, view) in &mut self.clients {
             if !view.schema_sent {
                 continue;
             }
+            let relevant = std::mem::take(&mut view.interest.relevant);
             let bytes = snapshot::build(
                 view,
                 &self.tracked,
+                culling.then_some(relevant.as_slice()),
                 self.tick,
                 self.config.bytes_per_snapshot,
             );
+            view.interest.relevant = relevant;
             while view.sent.len() > self.config.history.max(1) {
                 view.sent.pop_front();
             }

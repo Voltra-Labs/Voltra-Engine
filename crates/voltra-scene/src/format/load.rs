@@ -6,9 +6,7 @@ use voltra_ecs::{Entity, World};
 
 use super::error::SceneError;
 use super::registry::ComponentRegistry;
-#[cfg(test)]
-use super::save::EntityRecord;
-use super::save::{SceneFile, VERSION};
+use super::save::{EntityRecord, SceneFile, VERSION};
 #[cfg(test)]
 use crate::scene_id::SceneId;
 
@@ -40,7 +38,7 @@ pub fn from_scene_file(
         });
     }
 
-    let (spawned, result) = spawn_entities(file, registry, world);
+    let (spawned, result) = spawn_entities(&file.entities, registry, world);
     if let Err(error) = result {
         for entity in spawned {
             world.despawn(entity);
@@ -57,7 +55,37 @@ pub fn from_scene_file(
     Ok(())
 }
 
-/// Spawns every entity in `file` into `world`, stopping at the first error.
+/// Spawns `records` into `world` under their own ids, and answers the
+/// entities, in the records' order.
+///
+/// [`from_scene_file`]'s rules — always spawn, all-or-nothing, an unknown
+/// component kept unread — for a few records rather than a file, and with
+/// one difference: parent links are **not** resolved. A caller putting back
+/// several batches (a client re-spawning what it set aside) resolves once,
+/// with [`crate::hierarchy::resolve_parents`], after the last; resolving
+/// the whole world per batch is what that saves.
+///
+/// The ids are the records' own, not fresh ones: the caller must know the
+/// world does not hold them already, or two entities answer to one id.
+pub fn spawn_records(
+    records: &[EntityRecord],
+    registry: &ComponentRegistry,
+    world: &mut World,
+) -> Result<Vec<Entity>, SceneError> {
+    let (spawned, result) = spawn_entities(records, registry, world);
+    match result {
+        Ok(()) => Ok(spawned),
+        Err(error) => {
+            for entity in spawned {
+                world.despawn(entity);
+            }
+            Err(error)
+        }
+    }
+}
+
+/// Spawns every entity of `records` into `world`, stopping at the first
+/// error.
 ///
 /// Always returns every entity spawned before it stopped, paired with the
 /// outcome, rather than folding the two into a `Result<Vec<Entity>, (Vec<
@@ -66,13 +94,13 @@ pub fn from_scene_file(
 /// needs the spawned list in both the success and the failure case anyway, so
 /// a plain pair is both the smaller type and the fit.
 fn spawn_entities(
-    file: &SceneFile,
+    records: &[EntityRecord],
     registry: &ComponentRegistry,
     world: &mut World,
 ) -> (Vec<Entity>, Result<(), SceneError>) {
-    let mut spawned = Vec::with_capacity(file.entities.len());
+    let mut spawned = Vec::with_capacity(records.len());
 
-    for record in &file.entities {
+    for record in records {
         let entity = world.spawn();
         spawned.push(entity);
         world.insert(entity, record.id);
@@ -472,5 +500,45 @@ mod tests {
             std::fs::read_to_string(&second).expect("written"),
             "save -> load -> save must be a fixed point"
         );
+    }
+
+    #[test]
+    fn records_spawn_under_their_own_ids_and_resolve_once_asked() {
+        let mut source = World::new();
+        let parent = source.spawn();
+        let parent_id = SceneId::new();
+        source.insert(parent, parent_id);
+        source.insert(parent, Transform::default());
+        let child = source.spawn();
+        source.insert(child, SceneId::new());
+        source.insert(child, Sprite::default());
+        set_parent(&mut source, child, parent).expect("a plain reparent");
+        let registry = ComponentRegistry::with_defaults();
+        let records: Vec<EntityRecord> = [child, parent]
+            .iter()
+            .map(|&e| {
+                crate::format::record_entity(&source, &registry, e)
+                    .expect("has an id")
+                    .expect("serializes")
+            })
+            .collect();
+
+        let mut target = World::new();
+        let spawned = spawn_records(&records, &registry, &mut target).expect("spawns");
+        assert_eq!(spawned.len(), 2);
+        assert_eq!(target.get::<SceneId>(spawned[1]), Some(&parent_id));
+        assert_eq!(parent_of(&target, spawned[0]), None, "not resolved yet");
+        crate::hierarchy::resolve_parents(&mut target);
+        assert_eq!(parent_of(&target, spawned[0]), Some(spawned[1]));
+
+        // All or nothing.
+        let mut broken = records.clone();
+        broken[1].components.insert(
+            "Transform".to_owned(),
+            ron::value::RawValue::from_ron("7").expect("ron").to_owned(),
+        );
+        let mut empty = World::new();
+        assert!(spawn_records(&broken, &registry, &mut empty).is_err());
+        assert_eq!(empty.entity_count(), 0);
     }
 }

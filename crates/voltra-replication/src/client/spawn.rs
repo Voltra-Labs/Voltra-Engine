@@ -1,7 +1,9 @@
 //! Making the client's copy of an entity the server spawned.
 //!
 //! By id first: a level loaded on both ends from one file has the same
-//! [`SceneId`]s, and its entities are adopted rather than doubled. Then by
+//! [`SceneId`]s, and its entities are adopted rather than doubled. Then
+//! what was set aside under that id when it went out of interest
+//! ([`Stash`]), spawned back as it was. Then by
 //! prefab: the client spawns the prefab the server did — the sprite, the
 //! collider, the children that only draw — and the replicated components
 //! are laid over it. Godot's `MultiplayerSpawner` spawns by scene path and
@@ -16,11 +18,23 @@ use voltra_ecs::{Entity, World};
 use voltra_net::PeerId;
 use voltra_scene::{hierarchy, prefab, ComponentRegistry, Prefabs, Replicated, SceneId, Transform};
 
+use super::stash::Stash;
 use crate::wire::Spawn;
 use crate::NetOwner;
 
 /// Where the world's ids are, built the first time a snapshot needs it.
 pub(crate) type SceneIndex = Option<HashMap<SceneId, Entity>>;
+
+/// What a spawn may come from besides the world and the prefabs.
+pub(crate) struct Sources<'a> {
+    /// Whether an entity of the world is already another replicated one's.
+    pub(crate) bound: &'a dyn Fn(Entity) -> bool,
+    /// What went out of interest.
+    pub(crate) stash: &'a mut Stash,
+    /// Set when something came out of the stash: its parents are left to
+    /// resolve once the snapshot is in.
+    pub(crate) restored: &'a mut bool,
+}
 
 /// The client's entity for `spawn`, made or adopted; every entity made is
 /// pushed on `made`, for the loop to resolve its assets.
@@ -30,7 +44,7 @@ pub(crate) fn create(
     prefabs: Option<&mut Prefabs>,
     spawn: &Spawn,
     index: &mut SceneIndex,
-    bound: &dyn Fn(Entity) -> bool,
+    sources: &mut Sources<'_>,
     made: &mut Vec<Entity>,
 ) -> Entity {
     let index = index.get_or_insert_with(|| {
@@ -40,11 +54,24 @@ pub(crate) fn create(
             .collect()
     });
     if let Some(&entity) = index.get(&spawn.id) {
-        if world.is_alive(entity) && !bound(entity) {
+        if world.is_alive(entity) && !(sources.bound)(entity) {
             set_owner(world, entity, spawn.owner);
-            world.insert(entity, Replicated::default());
+            if world.get::<Replicated>(entity).is_none() {
+                world.insert(entity, Replicated::default());
+            }
             return entity;
         }
+    }
+    if let Some(entities) = sources.stash.restore(world, registry, spawn.id) {
+        *sources.restored = true;
+        let entity = entities[0];
+        made.extend(entities);
+        if world.get::<Replicated>(entity).is_none() {
+            world.insert(entity, Replicated::default());
+        }
+        set_owner(world, entity, spawn.owner);
+        index.insert(spawn.id, entity);
+        return entity;
     }
 
     let entity = spawn

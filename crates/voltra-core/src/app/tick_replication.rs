@@ -76,6 +76,25 @@ impl Net {
         }
     }
 
+    /// Sets the points `peer` is sent the world around on a server, besides
+    /// the entities it owns: a spectator's camera, say. Replaces the last
+    /// it was given, until the peer leaves; `false` off a replicating
+    /// server. Changes nothing without
+    /// [`ReplicationConfig::interest`](voltra_replication::ReplicationConfig::interest).
+    pub fn set_interest_points(
+        &mut self,
+        peer: PeerId,
+        points: Vec<voltra_render::glam::Vec2>,
+    ) -> bool {
+        match self.replication.as_mut().and_then(Replication::server_mut) {
+            Some(server) => {
+                server.set_interest_points(peer, points);
+                true
+            }
+            None => false,
+        }
+    }
+
     /// The entity `peer` owns on a server: the first [`Replicated`] one
     /// carrying its [`NetOwner`](voltra_replication::NetOwner).
     ///

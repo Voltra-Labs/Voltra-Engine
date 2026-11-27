@@ -227,6 +227,10 @@ fn fingerprint() -> u64 {
     component::<voltra_scene::PrefabInstance>(&mut hasher);
     component::<voltra_scene::PrefabPart>(&mut hasher);
     component::<voltra_scene::Tilemap>(&mut hasher);
+    // Replication: a game marks its entities and hands the host its config.
+    component::<voltra_scene::Replicated>(&mut hasher);
+    component::<voltra_replication::NetOwner>(&mut hasher);
+    component::<voltra_replication::ReplicationConfig>(&mut hasher);
     mix::<voltra_physics::CollisionEvent>(&mut hasher);
     mix::<voltra_physics::JointBroken>(&mut hasher);
     mix::<voltra_render::glam::Vec2>(&mut hasher);

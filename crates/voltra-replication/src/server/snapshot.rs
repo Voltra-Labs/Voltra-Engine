@@ -29,32 +29,67 @@ pub(crate) struct Tracked {
     pub(crate) spawn_value: Spawn,
     pub(crate) components: Vec<Value>,
     pub(crate) priority: f32,
+    /// Where it stands for interest management, read only with it on.
+    pub(crate) place: Place,
+}
+
+/// Where an entity stands for interest management.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Place {
+    /// Its replicated root: the topmost replicated entity above it, or
+    /// itself. A child is relevant exactly when its root is, so a client
+    /// never has half a hierarchy.
+    pub(crate) root: NetId,
+    /// Its position in the world, if it has a `Transform`.
+    pub(crate) at: Option<glam::Vec2>,
+    /// [`Replicated::always_relevant`](voltra_scene::Replicated).
+    pub(crate) always: bool,
+    /// [`Replicated::relevance_radius`](voltra_scene::Replicated).
+    pub(crate) radius: Option<f32>,
 }
 
 /// Builds `view`'s snapshot for `tick`, and notes in `view` what it sent.
+/// `relevant` is what interest management lets it be sent — `None`, all of
+/// `tracked`; an id there that is not tracked is passed over.
 pub(crate) fn build(
     view: &mut ClientView,
     tracked: &BTreeMap<NetId, Tracked>,
+    relevant: Option<&[NetId]>,
     tick: ServerTick,
     budget: usize,
 ) -> Vec<u8> {
     let despawned: Vec<NetId> = view.despawned.iter().copied().take(MAX_DESPAWNS).collect();
+    let culled: Vec<NetId> = view
+        .interest
+        .culled
+        .iter()
+        .copied()
+        .take(MAX_DESPAWNS)
+        .collect();
     let mut header = SnapshotHeader {
         tick,
         input_ack: view.inputs.consumed,
         complete: false,
         despawned,
+        culled,
     };
     let mut room = budget.saturating_sub(wire::encode(&header).len() + COUNT_BYTES);
 
     // What is due, and the bank it waits with.
     let mut due: Vec<(NetId, f32)> = Vec::new();
-    for (&id, entity) in tracked {
+    let candidates: Box<dyn Iterator<Item = (NetId, &Tracked)>> = match relevant {
+        Some(ids) => Box::new(
+            ids.iter()
+                .filter_map(|id| tracked.get(id).map(|entity| (*id, entity))),
+        ),
+        None => Box::new(tracked.iter().map(|(id, entity)| (*id, entity))),
+    };
+    for (id, entity) in candidates {
         let components = entity.components.len();
         let seen = view
             .entities
             .entry(id)
-            .or_insert_with(|| EntityView::new(components));
+            .or_insert_with(|| EntityView::new(components, tick));
         let any = seen.spawn_due(&entity.spawn)
             || entity
                 .components
@@ -73,6 +108,7 @@ pub(crate) fn build(
         tick,
         entities: Vec::new(),
         despawned: header.despawned.clone(),
+        culled: header.culled.clone(),
     };
     let mut left_out = 0usize;
     for (id, _) in due {
@@ -129,7 +165,9 @@ pub(crate) fn build(
         }
     }
 
-    header.complete = left_out == 0 && view.despawned.len() == header.despawned.len();
+    header.complete = left_out == 0
+        && view.despawned.len() == header.despawned.len()
+        && view.interest.culled.len() == header.culled.len();
     view.last_complete = header.complete;
     view.sent.push_back(sent);
     let bytes = wire::write_snapshot(&header, &parts);

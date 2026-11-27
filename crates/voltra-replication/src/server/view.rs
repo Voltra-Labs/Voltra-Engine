@@ -13,8 +13,10 @@
 //! resends what a lost packet carried, which is the same rule seen from the
 //! other side.
 
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::sync::Arc;
+
+use glam::Vec2;
 
 use super::inputs::InputQueue;
 use crate::acks::ReceivedTicks;
@@ -37,16 +39,21 @@ pub(crate) struct EntityView {
     pub(crate) sent: Vec<Value>,
     /// Priority banked while it waited for room in a snapshot.
     pub(crate) bank: f32,
+    /// The first snapshot this view can be in: an acknowledgement of an
+    /// older one is of a copy the client no longer has (it went out of
+    /// interest, or the client asked for it whole again).
+    pub(crate) born: ServerTick,
 }
 
 impl EntityView {
-    pub(crate) fn new(components: usize) -> Self {
+    pub(crate) fn new(components: usize, born: ServerTick) -> Self {
         Self {
             acked_spawn: None,
             sent_spawn: None,
             acked: vec![(0, None); components],
             sent: vec![None; components],
             bank: 0.0,
+            born,
         }
     }
 
@@ -68,6 +75,7 @@ pub(crate) struct Sent {
     pub(crate) tick: ServerTick,
     pub(crate) entities: Vec<SentEntity>,
     pub(crate) despawned: Vec<NetId>,
+    pub(crate) culled: Vec<NetId>,
 }
 
 /// One entity's part of a [`Sent`].
@@ -85,6 +93,9 @@ pub(crate) struct ClientView {
     pub(crate) entities: BTreeMap<NetId, EntityView>,
     /// Despawns not yet acknowledged: in every snapshot until one is.
     pub(crate) despawned: BTreeSet<NetId>,
+    /// The interest this client is sent by (stage 127); all of it unused
+    /// without interest management.
+    pub(crate) interest: ClientInterest,
     pub(crate) sent: VecDeque<Sent>,
     pub(crate) inputs: InputQueue,
     /// The bytes of the last snapshot sent, for a profiler or a test.
@@ -118,11 +129,21 @@ impl ClientView {
         for id in sent.despawned {
             self.despawned.remove(&id);
         }
+        for id in sent.culled {
+            // Acknowledged: the client has despawned it and set it aside.
+            if self.interest.culled.remove(&id) {
+                self.interest.out.insert(id);
+            }
+        }
         for entity in sent.entities {
-            // Gone since: its despawn is what the client needs now.
+            // Gone since: its despawn (or its cull) is what the client
+            // needs now; or a copy the client has since lost.
             let Some(view) = self.entities.get_mut(&entity.id) else {
                 continue;
             };
+            if tick < view.born {
+                continue;
+            }
             if let Some(spawn) = entity.spawn {
                 if view.acked_spawn.as_ref().is_none_or(|(t, _)| *t < tick) {
                     view.acked_spawn = Some((tick, spawn));
@@ -139,12 +160,32 @@ impl ClientView {
     }
 
     /// Starts over for `id`, as if the client had never seen it: it asked,
-    /// having lost its copy.
-    pub(crate) fn resync(&mut self, id: NetId, components: usize) {
+    /// having lost its copy. `born` is the next snapshot's tick.
+    pub(crate) fn resync(&mut self, id: NetId, components: usize, born: ServerTick) {
         if let Some(view) = self.entities.get_mut(&id) {
-            *view = EntityView::new(components);
+            *view = EntityView::new(components, born);
         }
     }
+}
+
+/// What one client is sent by interest management.
+#[derive(Debug, Default)]
+pub(crate) struct ClientInterest {
+    /// The replicated roots relevant to it after the last snapshot: what
+    /// hysteresis compares against.
+    pub(crate) roots: HashSet<NetId>,
+    /// Every entity it is sent this snapshot, roots and their children.
+    pub(crate) relevant: Vec<NetId>,
+    /// Culls sent, not yet acknowledged: in every snapshot until one is.
+    /// An entity waiting here is not sent again — its spawn would race the
+    /// cull it follows.
+    pub(crate) culled: BTreeSet<NetId>,
+    /// Culls acknowledged: entities the client set aside, which a real
+    /// despawn must still reach so it lets go of them.
+    pub(crate) out: HashSet<NetId>,
+    /// The points it was given this snapshot: its own entities' and the
+    /// game's.
+    pub(crate) points: Vec<Vec2>,
 }
 
 #[cfg(test)]
@@ -158,7 +199,7 @@ mod tests {
     #[test]
     fn a_value_is_due_until_acknowledged_and_again_when_it_changes() {
         let mut view = ClientView::default();
-        view.entities.insert(1, EntityView::new(1));
+        view.entities.insert(1, EntityView::new(1, 0));
         let entity = &view.entities[&1];
         assert!(entity.component_due(0, &value(5)));
         assert!(!entity.component_due(0, &None), "absent, as acknowledged");
@@ -174,6 +215,7 @@ mod tests {
                 components: vec![(0, value(5))],
             }],
             despawned: vec![],
+            culled: vec![],
         });
         assert!(view.entities[&1].component_due(0, &value(5)));
 
@@ -188,7 +230,7 @@ mod tests {
     #[test]
     fn an_older_acknowledgement_does_not_undo_a_newer_one() {
         let mut view = ClientView::default();
-        view.entities.insert(1, EntityView::new(1));
+        view.entities.insert(1, EntityView::new(1, 0));
         for (tick, byte) in [(4, 1), (5, 2)] {
             view.sent.push_back(Sent {
                 tick,
@@ -198,6 +240,7 @@ mod tests {
                     components: vec![(0, value(byte))],
                 }],
                 despawned: vec![],
+                culled: vec![],
             });
         }
         let mut five = ReceivedTicks::default();
@@ -207,5 +250,33 @@ mod tests {
         four.insert(4);
         view.acknowledge(four);
         assert_eq!(view.entities[&1].acked[0], (5, value(2)));
+    }
+
+    #[test]
+    fn an_acknowledged_cull_is_out_and_an_old_ack_misses_a_new_copy() {
+        let mut view = ClientView::default();
+        view.interest.culled.insert(7);
+        view.sent.push_back(Sent {
+            tick: 4,
+            entities: vec![SentEntity {
+                id: 1,
+                spawn: None,
+                components: vec![(0, value(1))],
+            }],
+            despawned: vec![],
+            culled: vec![7],
+        });
+        // Entity 1 went and came back since tick 4: a fresh view.
+        view.entities.insert(1, EntityView::new(1, 6));
+        let mut four = ReceivedTicks::default();
+        four.insert(4);
+        view.acknowledge(four);
+        assert!(view.interest.culled.is_empty());
+        assert!(view.interest.out.contains(&7));
+        assert_eq!(
+            view.entities[&1].acked[0],
+            (0, None),
+            "tick 4 was a copy the client no longer has"
+        );
     }
 }

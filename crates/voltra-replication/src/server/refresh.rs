@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::{ComponentRegistry, PrefabInstance, Replicated, SceneId};
+use voltra_scene::{hierarchy, ComponentRegistry, PrefabInstance, Replicated, SceneId, Transform};
 
-use super::snapshot::Tracked;
+use super::snapshot::{Place, Tracked};
 use super::view::Value;
 use super::ReplicationServer;
 use crate::wire::{self, NetId, Spawn};
@@ -17,13 +17,15 @@ impl ReplicationServer {
     /// Reads the world: every replicated entity's spawn and components as
     /// they are now, and the entities gone since the last read.
     pub(super) fn refresh(&mut self, world: &mut World, registry: &ComponentRegistry) {
-        let live: Vec<(Entity, f32)> = world
+        let live: Vec<(Entity, Replicated)> = world
             .query::<Replicated>()
-            .map(|(entity, replicated)| (entity, replicated.priority))
+            .map(|(entity, replicated)| (entity, *replicated))
             .collect();
+        let placed = self.interest.is_some();
 
         let mut seen = HashMap::with_capacity(live.len());
-        for (entity, priority) in live {
+        for &(entity, replicated) in &live {
+            let priority = replicated.priority;
             let id = match self.ids.get(&entity) {
                 Some(&id) => id,
                 None => {
@@ -83,8 +85,20 @@ impl ReplicationServer {
                     spawn_value,
                     components,
                     priority,
+                    place: Place {
+                        root: id,
+                        at: None,
+                        always: replicated.always_relevant,
+                        radius: replicated.relevance_radius,
+                    },
                 },
             );
+        }
+        if placed {
+            // Every live entity has its id now, so a root can be named.
+            for &(entity, _) in &live {
+                self.place(world, entity);
+            }
         }
 
         let gone: Vec<NetId> = self
@@ -98,13 +112,41 @@ impl ReplicationServer {
                 self.ids.remove(&tracked.entity);
             }
             for view in self.clients.values_mut() {
-                // Only a client that may have it needs telling.
-                if let Some(entity) = view.entities.remove(&id) {
-                    if entity.sent_spawn.is_some() {
-                        view.despawned.insert(id);
-                    }
+                // Only a client that may have it needs telling: one sent
+                // its spawn, or one told it went out of interest — which
+                // set it aside, and must let go of it.
+                let had = view
+                    .entities
+                    .remove(&id)
+                    .is_some_and(|entity| entity.sent_spawn.is_some());
+                let culled = view.interest.culled.remove(&id);
+                let out = view.interest.out.remove(&id);
+                view.interest.roots.remove(&id);
+                if had || culled || out {
+                    view.despawned.insert(id);
                 }
             }
+        }
+    }
+
+    /// Where `entity` stands: its replicated root and its world position.
+    fn place(&mut self, world: &World, entity: Entity) {
+        let Some(&id) = self.ids.get(&entity) else {
+            return;
+        };
+        let root = hierarchy::ancestors(world, entity)
+            .into_iter()
+            .rev()
+            .find(|&above| world.get::<Replicated>(above).is_some())
+            .and_then(|above| self.ids.get(&above).copied())
+            .unwrap_or(id);
+        let at = world
+            .get::<Transform>(entity)
+            .is_some()
+            .then(|| hierarchy::world_transform(world, entity).translation);
+        if let Some(tracked) = self.tracked.get_mut(&id) {
+            tracked.place.root = root;
+            tracked.place.at = at;
         }
     }
 }

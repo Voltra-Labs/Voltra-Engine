@@ -4139,6 +4139,7 @@ dependencies = [
 name = "voltra-replication"
 version = "0.3.0"
 dependencies = [
+ "glam",
  "log",
  "postcard",
  "serde",

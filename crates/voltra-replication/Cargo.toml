@@ -11,6 +11,9 @@ voltra-assets.workspace = true
 voltra-ecs.workspace = true
 voltra-net.workspace = true
 voltra-scene.workspace = true
+# Positions for interest management: the same `Vec2` the scene's
+# transforms are (voltra-render re-exports this crate).
+glam.workspace = true
 log.workspace = true
 serde.workspace = true
 postcard.workspace = true

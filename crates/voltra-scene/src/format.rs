@@ -11,7 +11,7 @@ pub mod serial_tree;
 pub mod texture_paths;
 
 pub use error::SceneError;
-pub use load::{from_scene_file, load};
+pub use load::{from_scene_file, load, spawn_records};
 pub use record::{apply_record, entity_with_id, record_entity, record_scene_id};
 pub use refs::SceneRefs;
 pub use registry::{

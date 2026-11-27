@@ -21,6 +21,7 @@ impl ReplicationClient {
         names: &[String],
         step: f32,
         interval: u32,
+        interest: bool,
     ) {
         let ours = registry.replicated();
         let local = names
@@ -36,7 +37,11 @@ impl ReplicationClient {
                 found
             })
             .collect();
-        self.schema = Some(Schema { local });
+        self.schema = Some(Schema {
+            local,
+            interest,
+            replicated: ours.iter().map(|c| c.name).collect(),
+        });
         if step.is_finite() && step > 0.0 {
             self.timeline = Timeline::new(step, interval, self.config.min_delay_snapshots);
         }
@@ -71,7 +76,31 @@ impl ReplicationClient {
             self.inputs.pop_front();
         }
 
+        // Out of interest first: set aside as they are, before a despawn
+        // in the same snapshot takes a parent, and before a spawn brings
+        // one back.
+        for id in snapshot.culled {
+            let Some(bound) = self.bound.remove(&id) else {
+                continue;
+            };
+            if self.predicted == Some(id) {
+                self.predicted = None;
+                self.correction = None;
+            }
+            // A child of one culled before it went with its parent, and
+            // was set aside then.
+            if world.is_alive(bound.entity) {
+                let by_entity = &self.by_entity;
+                self.stash
+                    .keep(world, registry, &schema.replicated, bound.entity, &|e| {
+                        by_entity.get(&e).copied()
+                    });
+            }
+            self.by_entity.remove(&bound.entity);
+        }
+
         for id in snapshot.despawned {
+            self.stash.forget(id);
             if let Some(bound) = self.bound.remove(&id) {
                 self.by_entity.remove(&bound.entity);
                 if world.is_alive(bound.entity) {
@@ -86,6 +115,7 @@ impl ReplicationClient {
 
         let components = schema.local.len();
         let mut scenes = None;
+        let mut restored = false;
         let mut updated = HashMap::with_capacity(snapshot.updates.len());
         for update in snapshot.updates {
             let alive = self
@@ -110,7 +140,11 @@ impl ReplicationClient {
                     prefabs.as_deref_mut(),
                     spawn,
                     &mut scenes,
-                    &|e| by_entity.contains_key(&e),
+                    &mut spawn::Sources {
+                        bound: &|e| by_entity.contains_key(&e),
+                        stash: &mut self.stash,
+                        restored: &mut restored,
+                    },
                     made,
                 );
                 self.by_entity.insert(entity, update.id);
@@ -181,6 +215,12 @@ impl ReplicationClient {
             }
         }
 
+        if restored {
+            // What came back hangs under its parents again — and a child
+            // that came back before its parent finds it now.
+            hierarchy::resolve_parents(world);
+        }
+
         if snapshot.complete {
             // Everything left out is unchanged at this tick: a sample, so
             // a remote entity resting and then moving moves from where it
@@ -204,7 +244,16 @@ impl ReplicationClient {
                     .filter(|entity| !self.by_entity.contains_key(entity))
                     .collect();
                 for entity in orphans {
-                    if world.is_alive(entity) {
+                    if !world.is_alive(entity) {
+                        continue;
+                    }
+                    if schema.interest {
+                        // Under interest, never sent may be only far
+                        // away: set aside, to come back as the level had
+                        // it when the server sends it.
+                        self.stash
+                            .keep(world, registry, &schema.replicated, entity, &|_| None);
+                    } else {
                         hierarchy::despawn_recursive(world, entity);
                     }
                 }

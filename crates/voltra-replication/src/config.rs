@@ -2,6 +2,8 @@
 
 use voltra_net::{ChannelId, ChannelKind, NetConfig, DEFAULT_CHANNELS};
 
+use crate::Interest;
+
 /// The three channels replication owns, beside the game's.
 ///
 /// Its own, so the game's messages never queue behind a snapshot and a
@@ -84,6 +86,10 @@ pub struct ReplicationConfig {
     /// The least interpolation delay, in snapshot intervals, whatever the
     /// measured jitter: two snapshots must be in hand to draw between.
     pub min_delay_snapshots: f32,
+    /// Interest management: each client is sent only the entities near what
+    /// it watches. `None`, the default, sends every client every replicated
+    /// entity. Only the server's is read.
+    pub interest: Option<Interest>,
 }
 
 impl Default for ReplicationConfig {
@@ -97,6 +103,7 @@ impl Default for ReplicationConfig {
             max_input_size: 256,
             input_redundancy: 8,
             min_delay_snapshots: 1.0,
+            interest: None,
         }
     }
 }

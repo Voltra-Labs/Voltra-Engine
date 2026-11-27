@@ -24,11 +24,14 @@ pub type InputTick = u32;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub(crate) enum Control {
     /// The replicated components, by name, in the order snapshots number
-    /// them; and a server tick's length in seconds.
+    /// them; a server tick's length in seconds; and whether the server
+    /// culls by interest — a client then sets aside, rather than loses,
+    /// what it is told is out of its interest.
     Schema {
         components: Vec<String>,
         step: f32,
         snapshot_interval: u32,
+        interest: bool,
     },
 }
 
@@ -70,6 +73,10 @@ pub(crate) struct SnapshotHeader {
     /// server never sent as not the server's.
     pub(crate) complete: bool,
     pub(crate) despawned: Vec<NetId>,
+    /// Entities gone out of this client's interest: despawned on it as a
+    /// despawn is, and spawned again whole if they come back. Not
+    /// destroyed on the server — a later despawn of one says so.
+    pub(crate) culled: Vec<NetId>,
 }
 
 /// A whole snapshot, as the client reads one.
@@ -79,6 +86,7 @@ pub(crate) struct Snapshot {
     pub(crate) input_ack: InputTick,
     pub(crate) complete: bool,
     pub(crate) despawned: Vec<NetId>,
+    pub(crate) culled: Vec<NetId>,
     pub(crate) updates: Vec<EntityUpdate>,
 }
 
@@ -135,6 +143,7 @@ mod tests {
             input_ack: 7,
             complete: true,
             despawned: vec![4, 900],
+            culled: vec![12],
         };
         let updates = vec![
             EntityUpdate {
@@ -159,6 +168,7 @@ mod tests {
         assert_eq!(read.input_ack, 7);
         assert!(read.complete);
         assert_eq!(read.despawned, vec![4, 900]);
+        assert_eq!(read.culled, vec![12]);
         assert_eq!(read.updates, updates);
     }
 
