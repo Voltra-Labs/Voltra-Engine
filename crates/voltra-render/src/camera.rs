@@ -1,4 +1,7 @@
 //! 2D orthographic camera and its GPU binding.
+//!
+//! A view is a position, a zoom and a turn in the plane: still 2D. The turn
+//! is about the view's own centre, as a `Camera2D`'s rotation is in Godot.
 
 use glam::camera::rh;
 use glam::{Mat4, Vec2, Vec3};
@@ -18,6 +21,10 @@ pub struct Camera2D {
     zoom: f32,
     /// Viewport width divided by height. Keeps squares square.
     pub aspect: f32,
+    /// How far the view is turned, counter-clockwise, in radians: the world
+    /// on screen turns the other way. `0` — the default — is upright. A
+    /// non-finite turn is read as upright, so it cannot poison the matrix.
+    pub rotation: f32,
 }
 
 impl Default for Camera2D {
@@ -26,6 +33,7 @@ impl Default for Camera2D {
             position: Vec2::ZERO,
             zoom: 1.0,
             aspect: 1.0,
+            rotation: 0.0,
         }
     }
 }
@@ -37,9 +45,61 @@ impl Camera2D {
             position,
             zoom: 1.0,
             aspect,
+            rotation: 0.0,
         };
         camera.set_zoom(zoom);
         camera
+    }
+
+    /// The same view turned `radians` counter-clockwise; see
+    /// [`Self::rotation`].
+    pub fn with_rotation(mut self, radians: f32) -> Self {
+        self.rotation = radians;
+        self
+    }
+
+    /// The turn as the maths uses it: [`Self::rotation`], or `0` when that is
+    /// not finite.
+    pub fn turn(&self) -> f32 {
+        if self.rotation.is_finite() {
+            self.rotation
+        } else {
+            0.0
+        }
+    }
+
+    /// The view's own axes in the world: its right, then its up.
+    fn axes(&self) -> (Vec2, Vec2) {
+        let (sin, cos) = self.turn().sin_cos();
+        (Vec2::new(cos, sin), Vec2::new(-sin, cos))
+    }
+
+    /// The four world corners of what the view shows: bottom-left,
+    /// bottom-right, top-right, top-left — turned with the view.
+    pub fn corners(&self) -> [Vec2; 4] {
+        let half = self.half_extents();
+        let (right, up) = self.axes();
+        let (x, y) = (right * half.x, up * half.y);
+        [
+            self.position - x - y,
+            self.position + x - y,
+            self.position + x + y,
+            self.position - x + y,
+        ]
+    }
+
+    /// The world box around what the view shows, `(min, max)`: the view's
+    /// rect itself when upright, the box around the turned rect otherwise —
+    /// what everything culled against the view is tested by. Conservative:
+    /// a turned view's box holds corners the view does not show.
+    pub fn visible_bounds(&self) -> (Vec2, Vec2) {
+        let half = self.half_extents();
+        let (sin, cos) = self.turn().sin_cos();
+        let reach = Vec2::new(
+            cos.abs() * half.x + sin.abs() * half.y,
+            sin.abs() * half.x + cos.abs() * half.y,
+        );
+        (self.position - reach, self.position + reach)
     }
 
     /// Current zoom. Always within [`Self::MIN_ZOOM`]..=[`Self::MAX_ZOOM`].
@@ -47,7 +107,9 @@ impl Camera2D {
         self.zoom
     }
 
-    /// Half the world-space height covered by the viewport.
+    /// Half the world-space width and height covered by the viewport, along
+    /// the view's own axes (a turned view covers them turned; see
+    /// [`Self::visible_bounds`] for the world box).
     pub fn half_extents(&self) -> Vec2 {
         let half_height = 1.0 / self.zoom;
         Vec2::new(half_height * self.aspect, half_height)
@@ -75,15 +137,18 @@ impl Camera2D {
         // Normalised to 0..1 across the viewport, then to -1..1 about its
         // centre, then scaled by what the camera covers.
         let normalised = point / viewport;
-        let centred = Vec2::new(normalised.x * 2.0 - 1.0, 1.0 - normalised.y * 2.0);
-        self.position + centred * half
+        let centred = Vec2::new(normalised.x * 2.0 - 1.0, 1.0 - normalised.y * 2.0) * half;
+        let (right, up) = self.axes();
+        self.position + right * centred.x + up * centred.y
     }
 
     /// Inverse of [`Self::viewport_to_world`].
     pub fn world_to_viewport(&self, world: Vec2, viewport: Vec2) -> Vec2 {
         let viewport = Self::guard(viewport);
         let half = self.half_extents();
-        let centred = (world - self.position) / half;
+        let (right, up) = self.axes();
+        let offset = world - self.position;
+        let centred = Vec2::new(offset.dot(right), offset.dot(up)) / half;
         let normalised = Vec2::new(centred.x * 0.5 + 0.5, 0.5 - centred.y * 0.5);
         normalised * viewport
     }
@@ -135,7 +200,10 @@ impl Camera2D {
         let half = self.half_extents();
         let projection =
             rh::proj::directx::orthographic(-half.x, half.x, -half.y, half.y, -1.0, 1.0);
-        let view = Mat4::from_translation(-Vec3::new(self.position.x, self.position.y, 0.0));
+        // Turned back about the view's centre, after moving it to the
+        // origin: the inverse of placing the view, turn then translation.
+        let view = Mat4::from_rotation_z(-self.turn())
+            * Mat4::from_translation(-Vec3::new(self.position.x, self.position.y, 0.0));
         projection * view
     }
 }

@@ -247,3 +247,24 @@ fn global_lights_are_gathered_only_into_a_lit_frame() {
     let globals = gather(&world, VIEW.0, VIEW.1, None, None).globals;
     assert_eq!(globals, [crate::GlobalLight2D::default().light()]);
 }
+
+#[test]
+fn a_view_turned_45_degrees_gathers_by_the_box_around_its_turned_rect() {
+    let mut world = World::new();
+    lit_camera(&mut world, Some([0.1; 3]));
+    // Ten by two, turned 45°: its box reaches about 4.24 each way.
+    let view = voltra_render::Camera2D::new(Vec2::ZERO, 1.0, 5.0)
+        .with_rotation(std::f32::consts::FRAC_PI_4);
+    let (min, max) = view.visible_bounds();
+    // Up the turned view's long axis, well above where it would reach
+    // upright (radius 3 from y = 7 reaches down to 4 > 1).
+    lamp(&mut world, Vec2::new(4.0, 7.0));
+    // Out past the box's corner by more than its radius.
+    lamp(&mut world, Vec2::new(-9.0, 9.0));
+    let at: Vec<Vec2> = gather(&world, min, max, None, None)
+        .lights
+        .iter()
+        .map(|l| l.position)
+        .collect();
+    assert_eq!(at, vec![Vec2::new(4.0, 7.0)]);
+}

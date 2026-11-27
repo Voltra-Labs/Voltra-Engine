@@ -94,23 +94,8 @@ pub(super) fn lighting(
         sheets,
         silhouettes,
     });
-    voltra_scene::light::gather(
-        world,
-        view_min(camera),
-        view_max(camera),
-        sprites,
-        Some(textures),
-    )
-}
-
-/// The lower-left corner of what `camera` sees, in world units.
-pub(super) fn view_min(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
-    camera.position - camera.half_extents()
-}
-
-/// The upper-right corner of what `camera` sees, in world units.
-pub(super) fn view_max(camera: &voltra_render::Camera2D) -> voltra_render::glam::Vec2 {
-    camera.position + camera.half_extents()
+    let (view_min, view_max) = camera.visible_bounds();
+    voltra_scene::light::gather(world, view_min, view_max, sprites, Some(textures))
 }
 
 /// The elapsed clock as the batch takes it. Wrapped at a day, so an `f32`

@@ -184,3 +184,59 @@ fn a_scene_without_an_active_camera_has_no_active_view() {
 
     assert!(active_view(&world, 1.0).is_none());
 }
+
+#[test]
+fn the_view_turns_as_its_entity_does_through_its_parents() {
+    let mut world = World::new();
+    let ship = spawn(&mut world, Camera::default(), Vec2::new(10.0, 0.0));
+    world
+        .get_mut::<Transform>(ship)
+        .expect("spawned with one")
+        .rotation = 0.5;
+    let eye = spawn(&mut world, Camera::default(), Vec2::new(0.0, 2.0));
+    world
+        .get_mut::<Transform>(eye)
+        .expect("spawned with one")
+        .rotation = 0.25;
+    set_parent(&mut world, eye, ship).expect("a plain reparent");
+
+    let view = view(&world, eye, 1.0).expect("it has a camera");
+    assert!((view.rotation - 0.75).abs() < 1e-5, "{}", view.rotation);
+    let expected = Vec2::new(10.0, 0.0) + Vec2::from_angle(0.5).rotate(Vec2::new(0.0, 2.0));
+    assert!((view.position - expected).length() < 1e-5);
+}
+
+#[test]
+fn a_click_through_a_turned_camera_picks_what_is_drawn_under_it() {
+    use crate::pick;
+    use crate::sprite::sheets::Sheets;
+    use crate::Sprite;
+
+    let mut world = World::new();
+    let eye = spawn(&mut world, Camera::new(5.0), Vec2::new(2.0, 1.0));
+    world
+        .get_mut::<Transform>(eye)
+        .expect("spawned with one")
+        .rotation = std::f32::consts::FRAC_PI_2;
+    // Two units to the camera's right in the world: turned a quarter turn
+    // left, the view shows it straight below its centre.
+    let target = world.spawn();
+    world.insert(target, Transform::from_translation(Vec2::new(4.0, 1.0)));
+    world.insert(target, Sprite::default());
+    // And one where an unturned click would land, to be missed.
+    let decoy = world.spawn();
+    world.insert(decoy, Transform::from_translation(Vec2::new(2.0, -1.0)));
+    world.insert(decoy, Sprite::default());
+
+    let viewport = Vec2::new(400.0, 400.0);
+    let view = view(&world, eye, 1.0).expect("it has a camera");
+    // Two units below the centre: 5 units are 200 pixels, so 80 pixels.
+    let click = Vec2::new(200.0, 280.0);
+    let at = view.viewport_to_world(click, viewport);
+    assert!(at.abs_diff_eq(Vec2::new(4.0, 1.0), 1e-4), "{at}");
+    let sheets = Sheets::default().through(&view);
+    assert_eq!(pick::sprite_at(&world, at, sheets), Some(target));
+    assert!(view
+        .world_to_viewport(Vec2::new(4.0, 1.0), viewport)
+        .abs_diff_eq(click, 1e-3));
+}

@@ -12,9 +12,7 @@ mod parts;
 pub(super) mod shots;
 pub(super) mod world;
 
-use parts::{
-    clock_seconds, lighting, mesh_draws, prepare_text, ui_batch, ui_scale, view_max, view_min,
-};
+use parts::{clock_seconds, lighting, mesh_draws, prepare_text, ui_batch, ui_scale};
 
 impl App {
     /// Draws the world straight to the window. No UI, no intermediate texture.
@@ -93,8 +91,7 @@ impl App {
         // its quads and change least.
         let sheets = Sheets::new(atlases, textures)
             .with_fonts(fonts)
-            .seen_from(renderer.camera.position)
-            .visible_in(view_min(&renderer.camera), view_max(&renderer.camera))
+            .through(&renderer.camera)
             .at_time(clock_seconds(self.elapsed))
             .with_layers(&self.sorting_layers);
         let sheets = match self.materials.as_ref() {

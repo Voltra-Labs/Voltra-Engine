@@ -7,9 +7,7 @@ use voltra_render::{Layer, RenderTarget, Renderer};
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{SortingLayers, SpriteBatch, TileMeshCache};
 
-use super::parts::{
-    clock_seconds, lighting, mesh_draws, prepare_text, ui_batch, view_max, view_min,
-};
+use super::parts::{clock_seconds, lighting, mesh_draws, prepare_text, ui_batch};
 use crate::app::gpu_particles::GpuParticleRings;
 
 /// Everything drawing the world needs, borrowed out of the app for one
@@ -58,8 +56,7 @@ impl WorldDraw<'_> {
         let camera = self.renderer.camera;
         let sheets = Sheets::new(self.atlases, self.textures)
             .with_fonts(self.fonts)
-            .seen_from(camera.position)
-            .visible_in(view_min(&camera), view_max(&camera))
+            .through(&camera)
             .at_time(clock_seconds(self.elapsed))
             .with_layers(self.sorting_layers);
         let sheets = match self.materials {

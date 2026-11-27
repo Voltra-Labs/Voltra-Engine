@@ -12,7 +12,6 @@
 //! game gets" is legible without opening the inspector.
 
 use voltra_ecs::{Entity, World};
-use voltra_render::glam::Vec2;
 use voltra_render::{Camera2D, LineBatch};
 use voltra_scene::camera;
 
@@ -44,15 +43,9 @@ pub fn draw(world: &World, entity: Entity, aspect: f32, lines: &mut LineBatch) {
     rect(&view, color, lines);
 }
 
-/// The four edges of what `view` covers.
+/// The four edges of what `view` covers, turned as it is.
 fn rect(view: &Camera2D, color: [f32; 4], lines: &mut LineBatch) {
-    let half = view.half_extents();
-    let corners = [
-        view.position + Vec2::new(-half.x, -half.y),
-        view.position + Vec2::new(half.x, -half.y),
-        view.position + Vec2::new(half.x, half.y),
-        view.position + Vec2::new(-half.x, half.y),
-    ];
+    let corners = view.corners();
     for i in 0..corners.len() {
         lines.push(corners[i], corners[(i + 1) % corners.len()], WIDTH, color);
     }
@@ -61,6 +54,7 @@ fn rect(view: &Camera2D, color: [f32; 4], lines: &mut LineBatch) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use voltra_render::glam::Vec2;
     use voltra_scene::{Camera, Transform};
 
     fn spawn(world: &mut World, camera: Camera, at: Vec2) -> Entity {
@@ -115,6 +109,30 @@ mod tests {
             assert!(
                 clip.y.abs() < 1e-3 || (clip.y - 100.0).abs() < 1e-3,
                 "corner {corner} is not on a horizontal edge: {clip}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_turned_camera_draws_its_turned_rect() {
+        let mut world = World::new();
+        let entity = world.spawn();
+        world.insert(
+            entity,
+            Transform::from_translation(Vec2::ZERO).with_rotation(std::f32::consts::FRAC_PI_2),
+        );
+        world.insert(entity, Camera::new(1.0));
+        let mut lines = LineBatch::default();
+
+        draw(&world, entity, 2.0, &mut lines);
+
+        // Two wide and one tall, a quarter turn round: one wide, two tall.
+        assert_eq!(lines.len(), 4);
+        for vertex in lines.vertices() {
+            let end = Vec2::from(vertex.a);
+            assert!(
+                (end.x.abs() - 1.0).abs() < 1e-5 && (end.y.abs() - 2.0).abs() < 1e-5,
+                "a corner at {end}"
             );
         }
     }

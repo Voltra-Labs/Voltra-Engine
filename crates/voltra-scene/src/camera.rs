@@ -163,14 +163,25 @@ pub fn active(world: &World) -> Option<Entity> {
 
 /// The view `entity`'s camera describes, at `aspect`.
 ///
-/// `None` if it carries no [`Camera`]. Rotation and scale in the transform are
-/// read for nothing: [`Camera2D`] is a position and a zoom, so a turned camera
-/// would need a rotated view matrix and a rotated `viewport_to_world` behind
-/// it, which is a stage of its own rather than a field.
+/// `None` if it carries no [`Camera`]. The view sits where the entity is and
+/// turns as it does in the world, through its parents — a camera hung off a
+/// turning ship turns with it. Scale is read for nothing: how much a camera
+/// shows is its [`Camera::size`], and a mirrored camera is turned, not
+/// flipped.
 pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<Camera2D> {
     let camera = *world.get::<Camera>(entity)?;
-    let position = world_matrix(world, entity).transform_point2(Vec2::ZERO);
-    Some(Camera2D::new(position, camera.zoom(), aspect))
+    let (position, rotation) = placement(world, entity);
+    Some(Camera2D::new(position, camera.zoom(), aspect).with_rotation(rotation))
+}
+
+/// Where `entity` is in the world and how far it is turned there, in
+/// radians: what a view through it is placed by. A turn that cannot be read
+/// off the matrix — a collapsed scale — is upright.
+pub fn placement(world: &World, entity: Entity) -> (Vec2, f32) {
+    let matrix = world_matrix(world, entity);
+    let position = matrix.transform_point2(Vec2::ZERO);
+    let rotation = crate::transform::Transform::from_matrix(matrix).rotation;
+    (position, if rotation.is_finite() { rotation } else { 0.0 })
 }
 
 /// The view the scene renders through at `aspect`: [`active`], then [`view`].

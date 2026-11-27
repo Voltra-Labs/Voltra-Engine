@@ -86,11 +86,14 @@ impl View {
             ViewMode::Game => self.parked = Some(*camera),
             ViewMode::Scene => {
                 if let Some(parked) = self.parked.take() {
-                    // Position and zoom, not the whole camera: `aspect` belongs
-                    // to the target the frame is drawn into, which may have been
-                    // resized while the game view had the viewport.
+                    // Position, zoom and turn, not the whole camera: `aspect`
+                    // belongs to the target the frame is drawn into, which may
+                    // have been resized while the game view had the viewport.
+                    // The turn comes back too, or a turned game camera would
+                    // leave the editor's view turned.
                     camera.position = parked.position;
                     camera.set_zoom(parked.zoom());
+                    camera.rotation = parked.rotation;
                 }
             }
         }
