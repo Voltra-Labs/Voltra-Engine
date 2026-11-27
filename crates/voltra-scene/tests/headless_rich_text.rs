@@ -14,11 +14,11 @@ use voltra_scene::Text;
 use voltra_testkit::{copy_workspace_asset, scratch_root, Rgba};
 
 fn shot(width: u32, height: u32) -> Shot {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     for asset in [DEFAULT_FONT, "sprites/coin.png", "sprites/coin.atlas.ron"] {
         copy_workspace_asset(&root, asset);
     }
-    Shot::new(root.keep(), &[], width, height)
+    Shot::new(root, &[], width, height)
 }
 
 fn red(p: &Rgba) -> bool {

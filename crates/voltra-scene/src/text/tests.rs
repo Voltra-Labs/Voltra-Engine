@@ -11,9 +11,9 @@ use crate::sprite::sheets::Sheets;
 use crate::{Sprite, Transform};
 
 fn fonts() -> Fonts {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     copy_bundled_font(&root, DEFAULT_FONT);
-    Fonts::new(root.keep())
+    Fonts::new(root)
 }
 
 /// A text resolved against `fonts` and prepared, as a frame would leave it.

@@ -20,16 +20,11 @@ const W: u32 = 192;
 const H: u32 = 48;
 
 fn shot() -> Shot {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     for font in [DEFAULT_FONT, NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW] {
         copy_workspace_asset(&root, font);
     }
-    Shot::new(
-        root.keep(),
-        &[NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW],
-        W,
-        H,
-    )
+    Shot::new(root, &[NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW], W, H)
 }
 
 fn line(content: &str) -> Text {

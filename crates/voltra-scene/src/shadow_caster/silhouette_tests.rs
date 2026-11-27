@@ -25,7 +25,7 @@ impl voltra_assets::TextureSizes for Eight {
 /// An 8×8 texture opaque in its left half, a sprite showing it, and a store
 /// that has traced it.
 fn half_sprite(flip_x: bool) -> (World, Silhouettes, Atlases) {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     // Left half opaque: four columns of eight.
     let pixels: Vec<u8> = (0..64u32)
         .flat_map(|i| [9, 9, 9, if i % 8 < 4 { 255 } else { 0 }])
@@ -63,7 +63,7 @@ fn half_sprite(flip_x: bool) -> (World, Silhouettes, Atlases) {
     );
     (
         world,
-        Silhouettes::new(root.keep()),
+        Silhouettes::new(root),
         Atlases::new(scratch_root().keep()),
     )
 }

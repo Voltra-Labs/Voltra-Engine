@@ -50,7 +50,7 @@ fn named(world: &mut World, name: &str, parent: Entity) -> Entity {
 }
 
 fn body() -> Body {
-    let root_dir = voltra_testkit::scratch_root();
+    let root_dir = voltra_testkit::scratch_root().keep();
     for (name, text) in [("base", BASE), ("wave", WAVE), ("breath", BREATH)] {
         std::fs::write(root_dir.join(format!("{name}.anim.ron")), text).expect("writes");
     }
@@ -65,7 +65,7 @@ fn body() -> Body {
     resolve_parents(&mut world);
     Body {
         world,
-        clips: AnimationClips::new(root_dir.keep()),
+        clips: AnimationClips::new(root_dir),
         root,
         arm,
         hand,

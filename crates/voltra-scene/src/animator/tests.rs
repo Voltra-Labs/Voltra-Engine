@@ -59,7 +59,7 @@ impl Rig {
 
     /// A rig whose clips are `clips`, each `name.anim.ron`.
     fn with_clips(machine: &str, clips: &[(&str, &str)]) -> Self {
-        let root = voltra_testkit::scratch_root();
+        let root = voltra_testkit::scratch_root().keep();
         std::fs::write(root.join("hero.animator.ron"), machine).expect("writes");
         for (name, text) in clips {
             std::fs::write(root.join(format!("{name}.anim.ron")), text).expect("writes");

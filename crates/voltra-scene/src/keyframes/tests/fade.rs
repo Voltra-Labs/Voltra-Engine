@@ -22,11 +22,11 @@ fn hold(x: f32, intensity: f32) -> String {
 
 /// A store holding `files`.
 fn store(files: &[(&str, String)]) -> AnimationClips {
-    let root = voltra_testkit::scratch_root();
+    let root = voltra_testkit::scratch_root().keep();
     for (name, text) in files {
         std::fs::write(root.join(name), text).expect("writes");
     }
-    AnimationClips::new(root.keep())
+    AnimationClips::new(root)
 }
 
 fn x(world: &World, entity: voltra_ecs::Entity) -> f32 {

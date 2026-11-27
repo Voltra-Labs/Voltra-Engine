@@ -248,11 +248,11 @@ mod tests {
     use super::*;
 
     fn store(files: &[(&str, &str)]) -> AnimationClips {
-        let root = voltra_testkit::scratch_root();
+        let root = voltra_testkit::scratch_root().keep();
         for (name, text) in files {
             std::fs::write(root.join(name), text).expect("writes");
         }
-        AnimationClips::new(root.keep())
+        AnimationClips::new(root)
     }
 
     fn path(name: &str) -> AssetPath {

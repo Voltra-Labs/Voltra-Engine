@@ -32,7 +32,7 @@ impl TextureSizes for Sizes {
 
 /// Four 16×16 tiles in a row.
 fn atlases() -> (Atlases, AssetPath) {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     std::fs::write(
         root.join("ground.atlas.ron"),
         "(version: 1, grid: Some((cell: (16, 16), columns: 4, rows: 1)))",

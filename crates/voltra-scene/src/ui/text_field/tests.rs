@@ -163,10 +163,10 @@ mod in_visual_order {
     use voltra_testkit::{copy_workspace_asset, scratch_root, NOTO_HEBREW};
 
     fn fonts() -> Fonts {
-        let root = scratch_root();
+        let root = scratch_root().keep();
         copy_workspace_asset(&root, DEFAULT_FONT);
         copy_workspace_asset(&root, NOTO_HEBREW);
-        let mut fonts = Fonts::new(root.keep());
+        let mut fonts = Fonts::new(root);
         fonts.set_fallbacks(&[AssetPath::new(NOTO_HEBREW).expect("a path")]);
         fonts
     }

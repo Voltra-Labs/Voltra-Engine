@@ -11,7 +11,7 @@ use crate::sprite::sheets::Sheets;
 use crate::{Sprite, SpriteMaterial};
 
 fn flash_store() -> (Materials, AssetPath) {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     std::fs::create_dir_all(root.join("materials")).expect("folder");
     std::fs::write(
         root.join("materials/flash.wgsl"),
@@ -24,7 +24,7 @@ fn flash_store() -> (Materials, AssetPath) {
     )
     .expect("material");
     (
-        Materials::new(root.keep()),
+        Materials::new(root),
         AssetPath::new("materials/flash.material.ron").expect("path"),
     )
 }

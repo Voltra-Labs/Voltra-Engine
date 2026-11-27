@@ -30,9 +30,9 @@ fn path(name: &str) -> AssetPath {
 }
 
 fn store_with(name: &str, text: &str) -> AnimationClips {
-    let root = voltra_testkit::scratch_root();
+    let root = voltra_testkit::scratch_root().keep();
     std::fs::write(root.join(name), text).expect("writes");
-    AnimationClips::new(root.keep())
+    AnimationClips::new(root)
 }
 
 /// A player with a lamp under it.
