@@ -4020,17 +4020,37 @@ and there was no prefab *of* a prefab.
   by `ComponentRegistry::stamp`, new for every registry and change).
 - **A reload reaches the files that follow it.** `Prefabs::reload(path)`
   re-reads `path`, then every loaded prefab holding an instance of it,
-  directly or through another (`dependents`), from what each holds — and
-  answers them all, nearest first; `prefab::sync_sources` brings their
+  directly or through another (`dependents`, each after every one it holds
+  an instance of, by path among equals — the same order every time), from
+  what each holds — and answers them all, or nothing for a file that reads
+  as it did; `prefab::sync_sources` brings their
   instances in step. So saving the inner prefab (in its mode, or on disk,
   the watcher's hot reload) moves instances of the outer one in the open
   scene, and of every variant, without the outer file or the variant being
   saved. Apply's undo entry covers the dependents' instances too.
-- **A record a sync adds gets `SceneId::derived(instance root, record)`**,
-  a UUID v8 of the two — not a fresh v7 — so the store's reading of an outer
-  file and the same file opened in prefab mode (its world synced) give an
-  entity the inner file gained one id, and an instance of the outer file
-  keeps naming it. A fresh id where the world already holds that one.
+- **A record a sync adds gets `SceneId::derived(instance root, record)`**
+  — not a fresh id — so the store's reading of an outer file and the same
+  file opened in prefab mode (its world synced) give an entity the inner
+  file gained one id, and an instance of the outer file keeps naming it. A
+  v7 carrying the instance root's timestamp, the rest a mix of the two: a
+  save orders by id, so it sorts among its instance, the same place every
+  save. A fresh id where the world already holds that one.
+- **An instance added inside another is its own** (`prefab/membership.rs`).
+  Under an instance's root there can be two kinds of instance root: a
+  *nested* one, whose entities are parts of the outer instance (their
+  parts name the outer file's records), and an *added* one — a prefab
+  dropped under a part, or made there from a selection — whose parts name
+  its own file's. A linked entity whose part names no record of the outer
+  file but one of its own is added (Unity tells its added nested prefab
+  instances apart the same way, by whose file the object belongs to); one
+  whose own file will not read counts as added, so it is kept rather than
+  despawned. A sync of the outer instance leaves it out, as it leaves an
+  added entity; `sync_in` (and `sync_all`, `sync_sources`, the store's
+  resolve) syncs it with its own file after, inwards. `instance_root`,
+  `note_removed` and `fragment` take the store to tell the two apart.
+  Before this a prefab dropped under a variant's root, or under a part of
+  any instance in a scene, was despawned by the next sync as lost parts.
+  An Apply writes it into the file as a stored instance, linked.
 - **Apply keeps stored instances**: the instance's records are written as
   before, then each record the file had takes back the file's link and
   part, one the instance added keeps the link and parts of a prefab dropped
@@ -4044,6 +4064,11 @@ and there was no prefab *of* a prefab.
   one rule per button is ours, and the inspector says so on a variant's
   instance. `fragment` (Create prefab from selection) keeps the parts of an
   instance inside the selection, not around it, so it stays linked.
+- **Levels are read as scenes**: an additive load reads its file through
+  `Prefabs::load_scene` — no prefab byte limit (a scene never had one),
+  its instances not followed (the sync after the load brings them in step,
+  in the world), one copy cached. The same file later instanced as a
+  prefab is followed then, under the same handle.
 - **Loops**: the store follows root links now, so `nested_sources` and
   `reaches` count a variant's base. Refused before writing at every place
   one can be made — `prefab::write`, Apply, `prefab::variant`, a save in
@@ -4053,8 +4078,13 @@ and there was no prefab *of* a prefab.
   carries a `ResolveProblem::Cycle` (logged, and shown in the inspector);
   no recursion past it. Bounded besides: `MAX_DEPTH` (32) prefabs deep,
   `MAX_RECORDS` (2¹⁷) records once resolved (a few small files nesting each
-  other many times would otherwise ask for billions), and
-  `MAX_PREFAB_BYTES` (16 MiB) per file read, checked before the read.
+  other many times would otherwise ask for billions), `MAX_LINKS` (2¹⁴)
+  linked records and `MAX_SOURCES` (256) different prefabs per file (past
+  either, none are followed: a crafted file of links to missing paths would
+  otherwise be that many failed reads), and `MAX_PREFAB_BYTES` (16 MiB) per
+  prefab file, checked before the read. The scans over a file's links are
+  linear, and a file's problems and unreadable links are logged once, not
+  once per instance or link.
 - **Old files read as they did.** A prefab saved before this holds its
   nested instance baked with no parts; reading it adopts the instance by
   name, as an old scene's are (stage 64), which records everything that
@@ -4099,8 +4129,13 @@ Rejected:
 Not yet: a variant of a prefab with several roots follows each root, but a
 root the base gains later is not added to it; Apply asks no question of
 where an edit goes (variant or base, per component, as Unity does); a
-prefab dropped under a part of an instance in a scene is despawned by the
-next sync of that instance unless Applied first.
+variant's root `Transform` is its own whole, as every instance root's is,
+so a base edit to the root's rotation or scale does not reach it (Unity
+keeps root position and rotation per instance and lets scale follow; a
+split `Transform` override is the field-level overrides stage 64 left
+out); an instance its outer file stops holding stays in an outer instance
+in a scene, as that instance's own, when the inner file still has the
+record its root names (it cannot be told from one added there).
 
 Pinned by:
 - `prefab::tests::variant`: a variant naming its base and spawning it; a
@@ -4110,14 +4145,22 @@ Pinned by:
   an instance of a variant writing the variant, not the base.
 - `prefab::tests::loops`: a variant of itself and a chain back refused with
   nothing written; a prefab nesting itself through its variant refused; a
-  loop of one and of two files written on disk read with a `Cycle` problem
-  and reloaded without recursing; a chain past `MAX_DEPTH` stopping.
+  loop of one and of two files written on disk, and one through a nested
+  (not root) instance, read with a `Cycle` problem and reloaded without
+  recursing; a chain past `MAX_DEPTH` stopping.
+- `prefab::tests::added`: a prefab dropped under a variant's root in its
+  mode kept by the save, a second save, and following its own file; one
+  dropped under a scene instance of a variant surviving `sync_all`,
+  following its file, and Applied into the variant, linked; one made from
+  a selection inside a variant staying in it.
 - `prefab::tests::nested`: an inner edit reaching an instance of the outer
   prefab with its outer override kept and the outer file untouched; a
   record the inner file gains reaching the outer under the same id read by
   the store, read again and opened as prefab mode opens it; Apply on an
   outer instance keeping its inner instances linked; an outer file from
-  before reading as it was and following once saved again.
+  before reading as it was and following once saved again; a diamond (one
+  file nesting two that both nest a coin) reading each file once and a coin
+  edit reaching both branches, in the dependents' stable order.
 - `app::prefab_sync::tests`: a base changed on disk reaching an instance of
   its variant through the hot reload path; `SceneId::derived`'s test.
 - `voltra-editor/tests/prefab_variant.rs` (Xvfb, in CI): a variant made
