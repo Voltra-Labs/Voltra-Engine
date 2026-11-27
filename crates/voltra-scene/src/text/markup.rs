@@ -14,6 +14,11 @@ use std::sync::{Mutex, OnceLock};
 
 use voltra_assets::AssetPath;
 
+/// The largest `[size=…]`, in the text's own units: a tag asking for more
+/// — `[size=1e30]` in a name a peer typed — is shown as written, not laid
+/// out past every float a renderer can place.
+pub const MAX_SIZE: f32 = 4096.0;
+
 /// The character an inline icon stands on in the parsed string: the object
 /// replacement character, which bidi and line breaking treat as one
 /// neutral object.
@@ -27,7 +32,8 @@ pub struct Style {
     pub color: Option<[f32; 4]>,
     /// `[b]`: the text's bold face, or faux bold.
     pub bold: bool,
-    /// `[size=…]`: the em height, in the text's own units.
+    /// `[size=…]`: the em height, in the text's own units; at most
+    /// [`MAX_SIZE`].
     pub size: Option<f32>,
     /// `[font=…]`: another face, by asset path.
     pub font: Option<AssetPath>,
@@ -81,6 +87,18 @@ enum Tag {
     Open(Open),
     Close(&'static str),
     Icon(String),
+}
+
+/// `text` to show as written in a rich text: each `[` doubled, so a name
+/// or a message someone else typed is never read as tags (a colour, a
+/// size, a font or an icon loaded from a path of their choosing). Plain
+/// text — no `[` — is borrowed as it is.
+pub fn escape(text: &str) -> std::borrow::Cow<'_, str> {
+    if text.contains('[') {
+        std::borrow::Cow::Owned(text.replace('[', "[["))
+    } else {
+        std::borrow::Cow::Borrowed(text)
+    }
 }
 
 /// Parses `source`'s tags. Plain text — no `[` — costs one scan.
@@ -209,7 +227,7 @@ fn tag(body: &str, open: &[Open]) -> Option<Tag> {
         ("color", Some(value)) => Tag::Open(Open::Color(color(value)?)),
         ("size", Some(value)) => {
             let size: f32 = value.parse().ok()?;
-            if !(size.is_finite() && size > 0.0) {
+            if !(size.is_finite() && size > 0.0 && size <= MAX_SIZE) {
                 return None;
             }
             Tag::Open(Open::Size(size))

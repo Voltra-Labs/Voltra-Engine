@@ -83,3 +83,35 @@ fn a_font_tag_names_a_path() {
         AssetPath::new("fonts/NotoSansArabic-Regular.ttf").ok()
     );
 }
+
+#[test]
+fn a_size_past_the_cap_is_shown_as_written() {
+    for source in ["[size=1e30]x", "[size=4096.5]x", "[size=inf]x"] {
+        let markup = parse(source);
+        assert_eq!(markup.text, source, "{source}");
+        assert!(markup.runs.iter().all(|run| run.style.size.is_none()));
+    }
+    assert_eq!(parse("[size=4096]x").runs[0].style.size, Some(MAX_SIZE));
+}
+
+#[test]
+fn escaped_text_parses_back_to_itself() {
+    for typed in [
+        "Ada",
+        "[size=1e30]huge",
+        "[color=#0000]gone[/color]",
+        "[font=../../secret.ttf]",
+        "[icon=atlas.atlas.ron/3]",
+        "[[already doubled",
+        "a]b[c",
+    ] {
+        let markup = parse(&escape(typed));
+        assert_eq!(markup.text, typed);
+        assert_eq!(markup.runs.len(), 1, "{typed}: one plain run");
+        assert_eq!(markup.runs[0].style, Style::default(), "{typed}");
+    }
+    assert!(matches!(
+        escape("plain"),
+        std::borrow::Cow::Borrowed("plain")
+    ));
+}
