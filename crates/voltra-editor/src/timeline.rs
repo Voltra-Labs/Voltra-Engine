@@ -213,7 +213,7 @@ mod tests {
         let mut clips = AnimationClips::new("no-such-root");
         let path = AssetPath::new("a.anim.ron").expect("valid");
         let handle = clips.load(&path);
-        let mut track = Track::new("", Property::Translation);
+        let mut track = Track::new("", Property::Translation2D);
         track.set_key(0.0, Value::Vec2(Vec2::ZERO));
         track.set_key(1.0, Value::Vec2(Vec2::new(4.0, 0.0)));
         clips.get_mut(handle).tracks = vec![track.clone(), track];

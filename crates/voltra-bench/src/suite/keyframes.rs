@@ -168,10 +168,10 @@ fn clip(n: usize) -> AnimationClip {
                 .collect();
             track
         };
-        tracks.push(keyed(Property::Translation, &|v| {
+        tracks.push(keyed(Property::Translation2D, &|v| {
             Value::Vec2(Vec2::new(v, -v))
         }));
-        tracks.push(keyed(Property::Rotation, &|v| Value::Float(v * 0.1)));
+        tracks.push(keyed(Property::Rotation2D, &|v| Value::Float(v * 0.1)));
         tracks.push(keyed(Property::SpriteColor, &|v| {
             Value::Color([v * 0.1, 0.5, 1.0 - v * 0.1, 1.0])
         }));

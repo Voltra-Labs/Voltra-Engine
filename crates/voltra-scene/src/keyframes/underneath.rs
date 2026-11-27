@@ -227,9 +227,9 @@ mod tests {
 
     #[test]
     fn a_number_carries_the_change_under_and_a_frame_is_taken_whole() {
-        let last = covered(Value::Float(1.0), Value::Float(1.5), Property::Rotation);
+        let last = covered(Value::Float(1.0), Value::Float(1.5), Property::Rotation2D);
         assert_eq!(
-            moved(Property::Rotation, &last, Value::Float(1.75)),
+            moved(Property::Rotation2D, &last, Value::Float(1.75)),
             Value::Float(1.25)
         );
         let last = covered(

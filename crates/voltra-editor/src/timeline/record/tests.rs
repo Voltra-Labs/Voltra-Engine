@@ -25,7 +25,7 @@ fn scene() -> Scene {
     let mut clips = AnimationClips::new("no-such-root");
     let path = AssetPath::new("walk.anim.ron").expect("valid");
     let handle = clips.load(&path);
-    let mut track = Track::new("", Property::Translation);
+    let mut track = Track::new("", Property::Translation2D);
     track.set_key(0.0, Value::Vec2(Vec2::ZERO));
     track.set_key(1.0, Value::Vec2(Vec2::new(4.0, 0.0)));
     clips.get_mut(handle).tracks = vec![track];
@@ -114,7 +114,7 @@ fn a_recorded_move_keys_the_pose_and_leaves_the_scene_as_authored() {
     let arm = &clip.tracks[1];
     assert_eq!(
         (arm.target.as_str(), arm.property),
-        ("arm", Property::Rotation)
+        ("arm", Property::Rotation2D)
     );
     let keys: Vec<(f32, Value)> = arm.keys.iter().map(|k| (k.time, k.value)).collect();
     assert_eq!(
@@ -122,7 +122,7 @@ fn a_recorded_move_keys_the_pose_and_leaves_the_scene_as_authored() {
         [(0.0, Value::Float(0.0)), (0.5, Value::Float(0.7))],
         "a new track starts from where the arm stood"
     );
-    assert!(clip.tracks.iter().all(|t| t.property != Property::Scale));
+    assert!(clip.tracks.iter().all(|t| t.property != Property::Scale2D));
     assert_eq!(
         scene.transform(scene.root).translation,
         Vec2::new(1.0, 1.0),

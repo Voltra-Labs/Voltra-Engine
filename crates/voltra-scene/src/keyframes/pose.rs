@@ -222,15 +222,15 @@ mod tests {
     #[test]
     fn a_property_set_twice_holds_the_later_value_under_one_spelling() {
         let mut pose = Pose::new();
-        pose.set("arm/hand", Property::Rotation, Value::Float(1.0));
-        pose.set("/arm//hand/", Property::Rotation, Value::Float(2.0));
-        pose.set(String::from("arm"), Property::Rotation, Value::Float(3.0));
+        pose.set("arm/hand", Property::Rotation2D, Value::Float(1.0));
+        pose.set("/arm//hand/", Property::Rotation2D, Value::Float(2.0));
+        pose.set(String::from("arm"), Property::Rotation2D, Value::Float(3.0));
         assert_eq!(pose.len(), 2);
         assert_eq!(
-            pose.get("arm/hand", Property::Rotation),
+            pose.get("arm/hand", Property::Rotation2D),
             Some(Value::Float(2.0))
         );
-        assert_eq!(pose.get("arm", Property::Scale), None);
+        assert_eq!(pose.get("arm", Property::Scale2D), None);
         let owned = pose.clone().into_owned();
         assert_eq!(owned.samples(), pose.samples());
     }

@@ -62,7 +62,7 @@ fn a_sprite_fades_and_moves_two_tweens_chain_a_timer_fires_and_the_despawned_sto
             );
             let right = tick.tween(
                 hero,
-                Property::Translation,
+                Property::Translation2D,
                 Value::Vec2(Vec2::new(4.0, 0.0)),
                 1.0,
                 Ease::EaseInOut,
@@ -71,7 +71,7 @@ fn a_sprite_fades_and_moves_two_tweens_chain_a_timer_fires_and_the_despawned_sto
             s.move_up = Some(tick.tweens.then(
                 right,
                 hero,
-                Property::Translation,
+                Property::Translation2D,
                 Value::Vec2(Vec2::new(4.0, 4.0)),
                 0.5,
                 Ease::Linear,
@@ -79,7 +79,7 @@ fn a_sprite_fades_and_moves_two_tweens_chain_a_timer_fires_and_the_despawned_sto
             // A slow shrink on an entity the timer will despawn.
             s.shrink = Some(tick.tween(
                 doomed,
-                Property::Scale,
+                Property::Scale2D,
                 Value::Vec2(Vec2::ZERO),
                 3.0,
                 Ease::Linear,

@@ -114,7 +114,7 @@ mod tests {
     use super::*;
 
     fn fade() -> Track {
-        let mut track = Track::new("", Property::LightIntensity);
+        let mut track = Track::new("", Property::PointLight2DIntensity);
         track.set_key(1.0, Value::Float(2.0));
         track.set_key(0.0, Value::Float(0.0));
         track
@@ -129,7 +129,7 @@ mod tests {
         track.keys[0].ease = Ease::Step;
         assert_eq!(track.sample(0.99), Some(Value::Float(0.0)));
         assert_eq!(track.sample(1.0), Some(Value::Float(2.0)));
-        assert_eq!(Track::new("", Property::Rotation).sample(0.0), None);
+        assert_eq!(Track::new("", Property::Rotation2D).sample(0.0), None);
     }
 
     #[test]

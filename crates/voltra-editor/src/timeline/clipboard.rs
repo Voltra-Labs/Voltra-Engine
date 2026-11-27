@@ -216,10 +216,10 @@ mod tests {
     use voltra_render::glam::Vec2;
 
     fn clip() -> AnimationClip {
-        let mut arm = Track::new("arm", Property::Rotation);
+        let mut arm = Track::new("arm", Property::Rotation2D);
         arm.set_key(0.0, Value::Float(0.0));
         arm.set_key(0.5, Value::Float(1.0));
-        let mut root = Track::new("", Property::Translation);
+        let mut root = Track::new("", Property::Translation2D);
         root.set_key(0.5, Value::Vec2(Vec2::new(2.0, 0.0)));
         root.set_key(1.0, Value::Vec2(Vec2::ZERO));
         AnimationClip {
@@ -257,7 +257,7 @@ mod tests {
     fn one_key_goes_into_the_selected_track_of_its_property_or_its_own() {
         let mut clip = clip();
         let copied = copy(&clip, Some((1, 0)), 0.0);
-        let mut lamp = Track::new("lamp", Property::Translation);
+        let mut lamp = Track::new("lamp", Property::Translation2D);
         lamp.set_key(0.0, Value::Vec2(Vec2::ZERO));
         clip.tracks.push(lamp);
         assert_eq!(paste(&mut clip, &copied, 0.75, Some(2)), [(2, 1)]);
@@ -269,14 +269,14 @@ mod tests {
 
         let mut empty = AnimationClip::default();
         assert_eq!(paste(&mut empty, &copied, 0.0, None), [(0, 0)]);
-        assert_eq!(empty.tracks[0].property, Property::Translation);
+        assert_eq!(empty.tracks[0].property, Property::Translation2D);
         assert!(copy(&empty, None, 9.0).is_empty());
     }
 
     #[test]
     fn a_number_of_another_property_is_not_pasted_into_a_track() {
         let mut clip = clip();
-        let mut lamp = Track::new("lamp", Property::LightIntensity);
+        let mut lamp = Track::new("lamp", Property::PointLight2DIntensity);
         lamp.set_key(0.0, Value::Float(3.0));
         clip.tracks.push(lamp);
         let copied = copy(&clip, Some((2, 0)), 0.0);
@@ -288,7 +288,7 @@ mod tests {
     #[test]
     fn keys_of_two_tracks_of_one_property_go_back_to_their_own() {
         let mut clip = clip();
-        let mut twin = Track::new("arm", Property::Rotation);
+        let mut twin = Track::new("arm", Property::Rotation2D);
         twin.set_key(0.0, Value::Float(5.0));
         clip.tracks.push(twin);
         let copied = copy(&clip, None, 0.0);

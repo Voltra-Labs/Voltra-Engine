@@ -15,15 +15,23 @@ use crate::{GlobalLight2D, PointLight2D, Sprite2D, Text, Tilemap, Transform2D};
 /// kind, and its two arms in [`read`](Self::read) and
 /// [`write`](Self::write) — Godot's property tracks with the property
 /// list spelled out.
+///
+/// A variant is named by what it writes, with its dimension where the other
+/// dimension gets one of its own (ARCHITECTURE, "Naming"). A renamed one
+/// keeps its old name as a `serde` alias, so a clip written before still
+/// reads; a save writes the new name.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Property {
     /// `Transform2D::translation`, in the parent's space.
-    Translation,
+    #[serde(alias = "Translation")]
+    Translation2D,
     /// `Transform2D::rotation`, radians. Not wrapped: keys at `0` and `2π`
     /// are a whole turn, which is what an author keying a spin means.
-    Rotation,
+    #[serde(alias = "Rotation")]
+    Rotation2D,
     /// `Transform2D::scale`.
-    Scale,
+    #[serde(alias = "Scale")]
+    Scale2D,
     /// `Sprite2D::color`.
     SpriteColor,
     /// `Sprite2D::frame`, an index into its atlas.
@@ -31,11 +39,14 @@ pub enum Property {
     /// `Text::color`.
     TextColor,
     /// `PointLight2D::color`; the keys' alpha is ignored.
-    LightColor,
+    #[serde(alias = "LightColor")]
+    PointLight2DColor,
     /// `PointLight2D::intensity`.
-    LightIntensity,
+    #[serde(alias = "LightIntensity")]
+    PointLight2DIntensity,
     /// `PointLight2D::radius`.
-    LightRadius,
+    #[serde(alias = "LightRadius")]
+    PointLight2DRadius,
     /// `GlobalLight2D::color`; the keys' alpha is ignored.
     GlobalLightColor,
     /// `GlobalLight2D::intensity`.
@@ -47,15 +58,15 @@ pub enum Property {
 impl Property {
     /// Every property, in the order an editor lists them.
     pub const ALL: [Self; 12] = [
-        Self::Translation,
-        Self::Rotation,
-        Self::Scale,
+        Self::Translation2D,
+        Self::Rotation2D,
+        Self::Scale2D,
         Self::SpriteColor,
         Self::SpriteFrame,
         Self::TextColor,
-        Self::LightColor,
-        Self::LightIntensity,
-        Self::LightRadius,
+        Self::PointLight2DColor,
+        Self::PointLight2DIntensity,
+        Self::PointLight2DRadius,
         Self::GlobalLightColor,
         Self::GlobalLightIntensity,
         Self::TilemapColor,
@@ -64,14 +75,14 @@ impl Property {
     /// The kind of value its keys hold.
     pub fn kind(self) -> ValueKind {
         match self {
-            Self::Translation | Self::Scale => ValueKind::Vec2,
-            Self::Rotation
-            | Self::LightIntensity
-            | Self::LightRadius
+            Self::Translation2D | Self::Scale2D => ValueKind::Vec2,
+            Self::Rotation2D
+            | Self::PointLight2DIntensity
+            | Self::PointLight2DRadius
             | Self::GlobalLightIntensity => ValueKind::Float,
             Self::SpriteColor
             | Self::TextColor
-            | Self::LightColor
+            | Self::PointLight2DColor
             | Self::GlobalLightColor
             | Self::TilemapColor => ValueKind::Color,
             Self::SpriteFrame => ValueKind::Int,
@@ -82,11 +93,11 @@ impl Property {
     /// round, a frame by switching, everything else linearly.
     ///
     /// Not the same as how one clip moves between its own keys: a rotation
-    /// keyed `0` then `2π` is a whole turn (see [`Rotation`](Self::Rotation)),
+    /// keyed `0` then `2π` is a whole turn (see [`Rotation2D`](Self::Rotation2D)),
     /// but two clips holding those angles mean one pose.
     pub fn mixing(self) -> Mixing {
         match (self, self.kind()) {
-            (Self::Rotation, _) => Mixing::Angle,
+            (Self::Rotation2D, _) => Mixing::Angle,
             (_, ValueKind::Int) => Mixing::Discrete,
             _ => Mixing::Linear,
         }
@@ -95,15 +106,15 @@ impl Property {
     /// What an editor calls it.
     pub fn label(self) -> &'static str {
         match self {
-            Self::Translation => "position",
-            Self::Rotation => "rotation",
-            Self::Scale => "scale",
+            Self::Translation2D => "position",
+            Self::Rotation2D => "rotation",
+            Self::Scale2D => "scale",
             Self::SpriteColor => "sprite colour",
             Self::SpriteFrame => "sprite frame",
             Self::TextColor => "text colour",
-            Self::LightColor => "light colour",
-            Self::LightIntensity => "light intensity",
-            Self::LightRadius => "light radius",
+            Self::PointLight2DColor => "light colour",
+            Self::PointLight2DIntensity => "light intensity",
+            Self::PointLight2DRadius => "light radius",
             Self::GlobalLightColor => "global light colour",
             Self::GlobalLightIntensity => "global light intensity",
             Self::TilemapColor => "tilemap colour",
@@ -114,15 +125,17 @@ impl Property {
     pub fn read(self, world: &World, entity: Entity) -> Option<Value> {
         let rgb = |c: [f32; 3]| Value::Color([c[0], c[1], c[2], 1.0]);
         Some(match self {
-            Self::Translation => Value::Vec2(world.get::<Transform2D>(entity)?.translation),
-            Self::Rotation => Value::Float(world.get::<Transform2D>(entity)?.rotation),
-            Self::Scale => Value::Vec2(world.get::<Transform2D>(entity)?.scale),
+            Self::Translation2D => Value::Vec2(world.get::<Transform2D>(entity)?.translation),
+            Self::Rotation2D => Value::Float(world.get::<Transform2D>(entity)?.rotation),
+            Self::Scale2D => Value::Vec2(world.get::<Transform2D>(entity)?.scale),
             Self::SpriteColor => Value::Color(world.get::<Sprite2D>(entity)?.color),
             Self::SpriteFrame => Value::Int(i64::from(world.get::<Sprite2D>(entity)?.frame)),
             Self::TextColor => Value::Color(world.get::<Text>(entity)?.color),
-            Self::LightColor => rgb(world.get::<PointLight2D>(entity)?.color),
-            Self::LightIntensity => Value::Float(world.get::<PointLight2D>(entity)?.intensity),
-            Self::LightRadius => Value::Float(world.get::<PointLight2D>(entity)?.radius),
+            Self::PointLight2DColor => rgb(world.get::<PointLight2D>(entity)?.color),
+            Self::PointLight2DIntensity => {
+                Value::Float(world.get::<PointLight2D>(entity)?.intensity)
+            }
+            Self::PointLight2DRadius => Value::Float(world.get::<PointLight2D>(entity)?.radius),
             Self::GlobalLightColor => rgb(world.get::<GlobalLight2D>(entity)?.color),
             Self::GlobalLightIntensity => {
                 Value::Float(world.get::<GlobalLight2D>(entity)?.intensity)
@@ -139,13 +152,13 @@ impl Property {
     /// checked by an inspector's range.
     pub fn write(self, world: &mut World, entity: Entity, value: Value) -> bool {
         let written = match (self, value) {
-            (Self::Translation, Value::Vec2(v)) => world
+            (Self::Translation2D, Value::Vec2(v)) => world
                 .get_mut::<Transform2D>(entity)
                 .map(|t| t.translation = v),
-            (Self::Rotation, Value::Float(v)) => {
+            (Self::Rotation2D, Value::Float(v)) => {
                 world.get_mut::<Transform2D>(entity).map(|t| t.rotation = v)
             }
-            (Self::Scale, Value::Vec2(v)) => {
+            (Self::Scale2D, Value::Vec2(v)) => {
                 world.get_mut::<Transform2D>(entity).map(|t| t.scale = v)
             }
             (Self::SpriteColor, Value::Color(c)) => {
@@ -157,13 +170,13 @@ impl Property {
             (Self::TextColor, Value::Color(c)) => {
                 world.get_mut::<Text>(entity).map(|t| t.color = c)
             }
-            (Self::LightColor, Value::Color(c)) => world
+            (Self::PointLight2DColor, Value::Color(c)) => world
                 .get_mut::<PointLight2D>(entity)
                 .map(|l| l.color = [c[0], c[1], c[2]]),
-            (Self::LightIntensity, Value::Float(v)) => world
+            (Self::PointLight2DIntensity, Value::Float(v)) => world
                 .get_mut::<PointLight2D>(entity)
                 .map(|l| l.intensity = v.max(0.0)),
-            (Self::LightRadius, Value::Float(v)) => world
+            (Self::PointLight2DRadius, Value::Float(v)) => world
                 .get_mut::<PointLight2D>(entity)
                 .map(|l| l.radius = v.max(0.0)),
             (Self::GlobalLightColor, Value::Color(c)) => world
@@ -211,6 +224,37 @@ mod tests {
             );
         }
         let bare = world.spawn();
-        assert!(!Property::LightRadius.write(&mut world, bare, Value::Float(1.0)));
+        assert!(!Property::PointLight2DRadius.write(&mut world, bare, Value::Float(1.0)));
+    }
+
+    #[test]
+    fn a_clip_written_before_the_renames_still_reads() {
+        // The six 0.4 names, each read as its 0.5 variant; a save writes
+        // the new name, and the new name reads too.
+        let renamed = [
+            ("Translation", Property::Translation2D, "Translation2D"),
+            ("Rotation", Property::Rotation2D, "Rotation2D"),
+            ("Scale", Property::Scale2D, "Scale2D"),
+            (
+                "LightColor",
+                Property::PointLight2DColor,
+                "PointLight2DColor",
+            ),
+            (
+                "LightIntensity",
+                Property::PointLight2DIntensity,
+                "PointLight2DIntensity",
+            ),
+            (
+                "LightRadius",
+                Property::PointLight2DRadius,
+                "PointLight2DRadius",
+            ),
+        ];
+        for (old, variant, new) in renamed {
+            assert_eq!(ron::from_str::<Property>(old).expect(old), variant);
+            assert_eq!(ron::from_str::<Property>(new).expect(new), variant);
+            assert_eq!(ron::to_string(&variant).expect("writes"), new);
+        }
     }
 }

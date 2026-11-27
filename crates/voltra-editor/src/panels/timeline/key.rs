@@ -85,7 +85,7 @@ pub(super) fn resort(track: &mut Track, index: usize, time: f32) -> usize {
 /// the transform's own row shows it.
 pub(super) fn value_ui(ui: &mut Ui, property: Property, value: &mut Value) -> bool {
     match value {
-        Value::Float(v) if property == Property::Rotation => {
+        Value::Float(v) if property == Property::Rotation2D => {
             let mut degrees = v.to_degrees();
             let changed = ui
                 .add(DragValue::new(&mut degrees).speed(0.5).suffix("°"))
@@ -118,7 +118,7 @@ mod tests {
 
     #[test]
     fn a_retimed_key_goes_back_in_order() {
-        let mut track = Track::new("", Property::Rotation);
+        let mut track = Track::new("", Property::Rotation2D);
         for t in [0.0, 1.0, 2.0] {
             track.set_key(t, Value::Float(t));
         }

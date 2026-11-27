@@ -96,7 +96,7 @@ mod tests {
     fn a_gesture_is_one_entry_and_redo_puts_it_back() {
         let mut clip = AnimationClip::default();
         let mut history = ClipHistory::new(&clip);
-        clip.tracks.push(Track::new("", Property::Rotation));
+        clip.tracks.push(Track::new("", Property::Rotation2D));
         clip.tracks[0].set_key(0.0, Value::Float(1.0));
         assert!(!history.settle(&clip, false), "still held");
         clip.tracks[0].keys[0].value = Value::Float(2.0);

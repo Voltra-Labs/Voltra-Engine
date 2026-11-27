@@ -48,7 +48,7 @@ fn an_ease_shapes_it() {
     let mut tweens = Tweens::default();
     tweens.tween(
         e,
-        Property::Translation,
+        Property::Translation2D,
         Value::Vec2(Vec2::new(10.0, 0.0)),
         1.0,
         Ease::EaseIn,
@@ -67,7 +67,7 @@ fn a_chain_starts_where_the_last_left_off_with_the_rest_of_the_frame() {
     let mut tweens = Tweens::default();
     let right = tweens.tween(
         e,
-        Property::Translation,
+        Property::Translation2D,
         Value::Vec2(Vec2::new(4.0, 0.0)),
         1.0,
         Ease::Linear,
@@ -75,7 +75,7 @@ fn a_chain_starts_where_the_last_left_off_with_the_rest_of_the_frame() {
     let up = tweens.then(
         right,
         e,
-        Property::Translation,
+        Property::Translation2D,
         Value::Vec2(Vec2::new(4.0, 4.0)),
         1.0,
         Ease::Linear,
@@ -103,7 +103,7 @@ fn a_despawned_entity_takes_its_tweens_and_their_chains_with_it() {
     let mut tweens = Tweens::default();
     let first = tweens.tween(
         e,
-        Property::Scale,
+        Property::Scale2D,
         Value::Vec2(Vec2::splat(2.0)),
         1.0,
         Ease::Linear,
@@ -111,7 +111,7 @@ fn a_despawned_entity_takes_its_tweens_and_their_chains_with_it() {
     let chained = tweens.then(
         first,
         other,
-        Property::Scale,
+        Property::Scale2D,
         Value::Vec2(Vec2::splat(3.0)),
         1.0,
         Ease::Linear,
@@ -134,7 +134,7 @@ fn a_newer_tween_on_a_property_takes_it_over() {
     let mut tweens = Tweens::default();
     let old = tweens.tween(
         e,
-        Property::Translation,
+        Property::Translation2D,
         Value::Vec2(Vec2::new(10.0, 0.0)),
         1.0,
         Ease::Linear,
@@ -142,7 +142,7 @@ fn a_newer_tween_on_a_property_takes_it_over() {
     tweens.step(&mut world, 0.5);
     let new = tweens.tween(
         e,
-        Property::Translation,
+        Property::Translation2D,
         Value::Vec2(Vec2::new(-10.0, 0.0)),
         1.0,
         Ease::Linear,
@@ -166,7 +166,13 @@ fn cancelling_stops_it_where_it_is() {
     let mut world = World::new();
     let e = sprite(&mut world);
     let mut tweens = Tweens::default();
-    let id = tweens.tween(e, Property::Rotation, Value::Float(1.0), 1.0, Ease::Linear);
+    let id = tweens.tween(
+        e,
+        Property::Rotation2D,
+        Value::Float(1.0),
+        1.0,
+        Ease::Linear,
+    );
     tweens.step(&mut world, 0.5);
     tweens.cancel(id);
     tweens.step(&mut world, 1.0);
@@ -180,7 +186,7 @@ fn a_value_of_the_wrong_kind_is_refused_and_a_chain_behind_it_runs() {
     let mut tweens = Tweens::default();
     let bad = tweens.tween(
         e,
-        Property::Rotation,
+        Property::Rotation2D,
         Value::Vec2(Vec2::ONE),
         1.0,
         Ease::Linear,
@@ -189,7 +195,7 @@ fn a_value_of_the_wrong_kind_is_refused_and_a_chain_behind_it_runs() {
     let next = tweens.then(
         bad,
         e,
-        Property::Rotation,
+        Property::Rotation2D,
         Value::Float(2.0),
         0.0,
         Ease::Linear,
@@ -206,7 +212,7 @@ fn a_tween_of_a_missing_component_is_dropped() {
     let mut tweens = Tweens::default();
     let id = tweens.tween(
         e,
-        Property::LightRadius,
+        Property::PointLight2DRadius,
         Value::Float(3.0),
         1.0,
         Ease::Linear,

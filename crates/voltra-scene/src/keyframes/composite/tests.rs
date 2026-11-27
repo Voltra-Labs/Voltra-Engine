@@ -24,15 +24,15 @@ fn float(pose: &Pose, target: &str, property: Property) -> f32 {
 #[test]
 fn an_override_is_the_lower_pose_at_zero_the_layer_at_one_and_continuous_between() {
     let below = pose(&[
-        ("", Property::LightIntensity, Value::Float(1.0)),
-        ("arm", Property::LightRadius, Value::Float(5.0)),
+        ("", Property::PointLight2DIntensity, Value::Float(1.0)),
+        ("arm", Property::PointLight2DRadius, Value::Float(5.0)),
     ]);
-    let layer = pose(&[("", Property::LightIntensity, Value::Float(3.0))]);
+    let layer = pose(&[("", Property::PointLight2DIntensity, Value::Float(3.0))]);
     let at = |w| {
         float(
             &composite(&below, &layer, w, LayerBlend::Override),
             "",
-            Property::LightIntensity,
+            Property::PointLight2DIntensity,
         )
     };
     assert_eq!(at(0.0), 1.0);
@@ -43,7 +43,7 @@ fn an_override_is_the_lower_pose_at_zero_the_layer_at_one_and_continuous_between
     assert_eq!(at(7.0), 3.0, "clamped");
     let out = composite(&below, &layer, 0.5, LayerBlend::Override);
     assert_eq!(
-        float(&out, "arm", Property::LightRadius),
+        float(&out, "arm", Property::PointLight2DRadius),
         5.0,
         "the layer's mask kept it"
     );
@@ -52,35 +52,35 @@ fn an_override_is_the_lower_pose_at_zero_the_layer_at_one_and_continuous_between
 #[test]
 fn an_override_turns_the_short_way_and_switches_a_frame_half_way() {
     let below = pose(&[
-        ("", Property::Rotation, Value::Float(350f32.to_radians())),
+        ("", Property::Rotation2D, Value::Float(350f32.to_radians())),
         ("", Property::SpriteFrame, Value::Int(1)),
     ]);
     let layer = pose(&[
-        ("", Property::Rotation, Value::Float(10f32.to_radians())),
+        ("", Property::Rotation2D, Value::Float(10f32.to_radians())),
         ("", Property::SpriteFrame, Value::Int(4)),
     ]);
     let half = composite(&below, &layer, 0.5, LayerBlend::Override);
-    let angle = float(&half, "", Property::Rotation).rem_euclid(TAU);
+    let angle = float(&half, "", Property::Rotation2D).rem_euclid(TAU);
     assert!(angle < 1e-4 || (TAU - angle) < 1e-4, "through 0°: {angle}");
     assert_eq!(half.get("", Property::SpriteFrame), Some(Value::Int(4)));
     let less = composite(&below, &layer, 0.49, LayerBlend::Override);
     assert_eq!(less.get("", Property::SpriteFrame), Some(Value::Int(1)));
     let all = composite(&below, &layer, 1.0, LayerBlend::Override);
-    assert!((float(&all, "", Property::Rotation) - 10f32.to_radians()).abs() < 1e-6);
+    assert!((float(&all, "", Property::Rotation2D) - 10f32.to_radians()).abs() < 1e-6);
 }
 
 #[test]
 fn an_additive_layer_adds_its_change_by_weight_and_a_frame_overrides() {
     let below = pose(&[
-        ("", Property::Scale, Value::Vec2(Vec2::new(1.0, 2.0))),
+        ("", Property::Scale2D, Value::Vec2(Vec2::new(1.0, 2.0))),
         ("", Property::SpriteFrame, Value::Int(1)),
     ]);
     let change = pose(&[
-        ("", Property::Scale, Value::Vec2(Vec2::new(0.2, -0.4))),
+        ("", Property::Scale2D, Value::Vec2(Vec2::new(0.2, -0.4))),
         ("", Property::SpriteFrame, Value::Int(6)),
     ]);
     let out = composite(&below, &change, 0.5, LayerBlend::Additive);
-    let Some(Value::Vec2(scale)) = out.get("", Property::Scale) else {
+    let Some(Value::Vec2(scale)) = out.get("", Property::Scale2D) else {
         panic!("a scale");
     };
     assert!((scale - Vec2::new(1.1, 1.8)).length() < 1e-6, "{scale}");
@@ -92,7 +92,7 @@ fn an_additive_layer_adds_its_change_by_weight_and_a_frame_overrides() {
 #[test]
 fn a_change_is_taken_from_the_reference_and_padded_with_none() {
     let mut pose_at = pose(&[
-        ("", Property::Rotation, Value::Float(1.5)),
+        ("", Property::Rotation2D, Value::Float(1.5)),
         ("", Property::SpriteFrame, Value::Int(3)),
         (
             "arm",
@@ -101,7 +101,7 @@ fn a_change_is_taken_from_the_reference_and_padded_with_none() {
         ),
     ]);
     let reference = pose(&[
-        ("", Property::Rotation, Value::Float(0.5)),
+        ("", Property::Rotation2D, Value::Float(0.5)),
         ("", Property::SpriteFrame, Value::Int(1)),
         (
             "arm",
@@ -110,7 +110,10 @@ fn a_change_is_taken_from_the_reference_and_padded_with_none() {
         ),
     ]);
     subtract(&mut pose_at, &reference);
-    assert_eq!(pose_at.get("", Property::Rotation), Some(Value::Float(1.0)));
+    assert_eq!(
+        pose_at.get("", Property::Rotation2D),
+        Some(Value::Float(1.0))
+    );
     assert_eq!(
         pose_at.get("", Property::SpriteFrame),
         Some(Value::Int(3)),
@@ -121,12 +124,12 @@ fn a_change_is_taken_from_the_reference_and_padded_with_none() {
         Some(Value::Color([0.0, -0.5, -0.5, 0.0]))
     );
 
-    let mut other = pose(&[("leg", Property::Rotation, Value::Float(2.0))]);
+    let mut other = pose(&[("leg", Property::Rotation2D, Value::Float(2.0))]);
     pad(&mut other, &pose_at);
-    assert_eq!(other.get("", Property::Rotation), Some(Value::Float(0.0)));
+    assert_eq!(other.get("", Property::Rotation2D), Some(Value::Float(0.0)));
     assert_eq!(other.get("", Property::SpriteFrame), None, "not a frame");
     assert_eq!(
-        other.get("leg", Property::Rotation),
+        other.get("leg", Property::Rotation2D),
         Some(Value::Float(2.0))
     );
 }

@@ -25,8 +25,8 @@ fn close(a: Option<Value>, b: Value) -> bool {
 #[test]
 fn numbers_vectors_and_colours_mix_halfway() {
     let out = pose(&[
-        ("", Property::LightIntensity, Value::Float(0.0)),
-        ("", Property::Translation, Value::Vec2(Vec2::ZERO)),
+        ("", Property::PointLight2DIntensity, Value::Float(0.0)),
+        ("", Property::Translation2D, Value::Vec2(Vec2::ZERO)),
         (
             "",
             Property::SpriteColor,
@@ -34,8 +34,12 @@ fn numbers_vectors_and_colours_mix_halfway() {
         ),
     ]);
     let into = pose(&[
-        ("", Property::LightIntensity, Value::Float(2.0)),
-        ("", Property::Translation, Value::Vec2(Vec2::new(4.0, -2.0))),
+        ("", Property::PointLight2DIntensity, Value::Float(2.0)),
+        (
+            "",
+            Property::Translation2D,
+            Value::Vec2(Vec2::new(4.0, -2.0)),
+        ),
         (
             "",
             Property::SpriteColor,
@@ -44,11 +48,11 @@ fn numbers_vectors_and_colours_mix_halfway() {
     ]);
     let mid = blend(&[(&out, 0.5), (&into, 0.5)]);
     assert!(close(
-        mid.get("", Property::LightIntensity),
+        mid.get("", Property::PointLight2DIntensity),
         Value::Float(1.0)
     ));
     assert!(close(
-        mid.get("", Property::Translation),
+        mid.get("", Property::Translation2D),
         Value::Vec2(Vec2::new(2.0, -1.0))
     ));
     assert!(close(
@@ -62,9 +66,9 @@ fn numbers_vectors_and_colours_mix_halfway() {
 #[test]
 fn angles_mix_the_short_way_round() {
     let near_turn = 350f32.to_radians();
-    let out = pose(&[("", Property::Rotation, Value::Float(near_turn))]);
-    let into = pose(&[("", Property::Rotation, Value::Float(10f32.to_radians()))]);
-    let Some(Value::Float(mid)) = blend(&[(&out, 0.5), (&into, 0.5)]).get("", Property::Rotation)
+    let out = pose(&[("", Property::Rotation2D, Value::Float(near_turn))]);
+    let into = pose(&[("", Property::Rotation2D, Value::Float(10f32.to_radians()))]);
+    let Some(Value::Float(mid)) = blend(&[(&out, 0.5), (&into, 0.5)]).get("", Property::Rotation2D)
     else {
         panic!("a rotation");
     };
@@ -76,16 +80,16 @@ fn angles_mix_the_short_way_round() {
     );
     let end = blend(&[(&out, 0.0), (&into, 1.0)]);
     assert_eq!(
-        end.get("", Property::Rotation),
-        into.get("", Property::Rotation)
+        end.get("", Property::Rotation2D),
+        into.get("", Property::Rotation2D)
     );
 }
 
 #[test]
 fn angles_half_a_turn_apart_sweep_one_way_through_half_way() {
-    let out = pose(&[("", Property::Rotation, Value::Float(0.0))]);
-    let into = pose(&[("", Property::Rotation, Value::Float(PI))]);
-    let at = |w: f32| match blend(&[(&out, 1.0 - w), (&into, w)]).get("", Property::Rotation) {
+    let out = pose(&[("", Property::Rotation2D, Value::Float(0.0))]);
+    let into = pose(&[("", Property::Rotation2D, Value::Float(PI))]);
+    let at = |w: f32| match blend(&[(&out, 1.0 - w), (&into, w)]).get("", Property::Rotation2D) {
         Some(Value::Float(a)) => a,
         other => panic!("a rotation, not {other:?}"),
     };
@@ -109,10 +113,10 @@ fn angles_half_a_turn_apart_sweep_one_way_through_half_way() {
 
 #[test]
 fn an_input_of_weight_zero_is_absent() {
-    let base = pose(&[("", Property::LightIntensity, Value::Float(1.0))]);
+    let base = pose(&[("", Property::PointLight2DIntensity, Value::Float(1.0))]);
     let layer = pose(&[
-        ("", Property::LightIntensity, Value::Float(9.0)),
-        ("lamp", Property::LightRadius, Value::Float(5.0)),
+        ("", Property::PointLight2DIntensity, Value::Float(9.0)),
+        ("lamp", Property::PointLight2DRadius, Value::Float(5.0)),
     ]);
     let mixed = blend(&[(&base, 1.0), (&layer, 0.0)]);
     assert_eq!(
@@ -134,34 +138,34 @@ fn a_discrete_value_switches_at_half_weight() {
 #[test]
 fn a_property_only_one_input_holds_is_taken_at_full_weight() {
     let out = pose(&[
-        ("", Property::Scale, Value::Vec2(Vec2::ONE)),
-        ("lamp", Property::LightRadius, Value::Float(3.0)),
+        ("", Property::Scale2D, Value::Vec2(Vec2::ONE)),
+        ("lamp", Property::PointLight2DRadius, Value::Float(3.0)),
     ]);
-    let into = pose(&[("", Property::Scale, Value::Vec2(Vec2::splat(3.0)))]);
+    let into = pose(&[("", Property::Scale2D, Value::Vec2(Vec2::splat(3.0)))]);
     let mixed = blend(&[(&out, 0.75), (&into, 0.25)]);
     assert_eq!(mixed.len(), 2);
     assert_eq!(
-        mixed.get("lamp", Property::LightRadius),
+        mixed.get("lamp", Property::PointLight2DRadius),
         Some(Value::Float(3.0))
     );
     assert!(close(
-        mixed.get("", Property::Scale),
+        mixed.get("", Property::Scale2D),
         Value::Vec2(Vec2::splat(1.5))
     ));
 }
 
 #[test]
 fn many_inputs_weigh_in_and_bad_weights_count_as_none() {
-    let a = pose(&[("", Property::LightIntensity, Value::Float(0.0))]);
-    let b = pose(&[("", Property::LightIntensity, Value::Float(3.0))]);
-    let c = pose(&[("", Property::LightIntensity, Value::Float(6.0))]);
+    let a = pose(&[("", Property::PointLight2DIntensity, Value::Float(0.0))]);
+    let b = pose(&[("", Property::PointLight2DIntensity, Value::Float(3.0))]);
+    let c = pose(&[("", Property::PointLight2DIntensity, Value::Float(6.0))]);
     let mixed = blend(&[(&a, 1.0), (&b, 1.0), (&c, 2.0), (&a, f32::NAN)]);
     assert!(close(
-        mixed.get("", Property::LightIntensity),
+        mixed.get("", Property::PointLight2DIntensity),
         Value::Float(3.75)
     ));
     let none = blend(&[(&a, 0.0), (&c, -1.0)]);
     assert!(none.is_empty(), "weighing nothing is absent");
     assert!(blend(&[]).is_empty());
-    assert_eq!(mix(Property::Rotation, &[(Value::Int(1), 1.0)]), None);
+    assert_eq!(mix(Property::Rotation2D, &[(Value::Int(1), 1.0)]), None);
 }
