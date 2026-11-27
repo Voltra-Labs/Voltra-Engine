@@ -3762,6 +3762,19 @@ could put back a different one; **"touches" for the box** — see above.
     the type's default comes back on reading. Comparing field lists as a
     whole instead made one sprite on a non-default layer mix every field,
     and setting a layer copy the primary's whole sprite over the rest.
+  - **A map left out reads as empty.** Maps are skipped when empty
+    (`BTreeMap::is_empty`: tile data, a tile's custom values, a layer's
+    animations), so one side's map against the other's absence is walked
+    key by key, and `put` makes the map to add a first key. A field under
+    a missing entry, or a key of a map left out, finds *absent*: written
+    out, it is taken out where the rest have it (frame 5 picked "Full"
+    where the primary has no data for it resets the others' frame 5). The
+    proposed alternative — filling every left-out field from the type's
+    default tree — cannot work: serde hands a serializer nothing of a
+    skipped field but its name (`skip_field`), and the default is
+    serialized with the same skips, so the default tree lacks exactly
+    those fields. Any other field left out is one place, written whole or
+    left out whole.
   - A component every selected entity has is **shared** and editable;
     where its fields differ they are **mixed**. A component only some have
     is **partial**: its section is not drawn, and it is listed greyed,
@@ -3779,13 +3792,18 @@ could put back a different one; **"touches" for the box** — see above.
     difference is found. A widget that commits a choice `touch`es its
     place (`mixed::touch`, kept in egui's memory for the frame, handed to
     `MultiEdit::touch`) and the place is written to all regardless —
-    Unity's behaviour. The shared number field touches on Enter, the
-    shared checkbox on a click, and every dropdown or selectable button
-    over a component field (`mixed::chosen`): sorting layer, collider
-    shape, joint kind, emitter shape, simulation and preset, flipbook
-    timing, text alignment, bus, follow target, stack and slider
-    directions and alignments, line joints, caps and texture, a tile's
-    shape.
+    Unity's behaviour. The shared number field touches when it is left
+    with a number typed into its `—` (Enter, Tab, a click away; not
+    Escape, not left untouched), the shared checkbox on a click, and every
+    dropdown or selectable button over a component field
+    (`mixed::chosen`): sorting layer, simulation, text alignment, bus,
+    follow target, stack and slider directions and alignments, line
+    joints, caps and texture, a half tile's side. **A touch never names a
+    whole component**, and one that picks an enum's variant — joint kind,
+    emitter shape, flipbook timing, a tile's shape, a slider part —
+    is a `Touch::Variant`: written only where the entity holds another
+    variant there, so a kind picked again keeps each one already of it
+    with its own limits, motor and sizes.
   - **Mixed display**, two levels. Every section gets a line under its
     rule naming its mixed fields (`≠ Sprite: color, flip_x`, each path on
     hover), whatever its widgets. The shared widgets in
@@ -3803,7 +3821,11 @@ could put back a different one; **"touches" for the box** — see above.
     (`done_for_each`) — a bone's "Set rest" and "Reset to rest", a
     skeleton's "Reset pose", a skinned sprite's "Use the skeleton's
     bones", "Generate mesh" and "Auto weights", a collider's "Fit to
-    sprite", a caster's "Use own polygon", and ticking "casts shadows".
+    sprite" and its kind (each of another kind converted from its own
+    size, each already of it kept — three boxes of 1, 2 and 3 stay so), a
+    particle preset (applied to each emitter, its texture, flipbook and
+    layers kept), a caster's "Use own polygon", and ticking "casts
+    shadows".
     The prefab bar's Revert, Revert instance and Apply act on the
     primary's instance and record their own entry, so they are drawn
     before the edit is begun, outside it.
@@ -3837,7 +3859,10 @@ could put back a different one; **"touches" for the box** — see above.
   stays nameless. A copied prefab instance renamed so has its overrides
   refreshed in the same entry, so its name is an override rather than a
   second, separate edit.
-- **Not yet**: the rest of the sections' rows showing `—` themselves
+- **Not yet**: a map entry whose fields are all set back to their
+  defaults is kept as a plain entry on the rest (the panel drops a plain
+  one on the primary; nothing generic knows a plain entry is
+  droppable); the rest of the sections' rows showing `—` themselves
   (they carry the section's line); choosing the primary's own value in a
   dropdown deep inside a value — a curve key's ease, an animator asset's
   fields — writes nothing (no touch); writing a field into another
@@ -3861,13 +3886,19 @@ components; one field written leaving three sprites' differing colours
 alone; a sorting layer set and unset on three sprites writing nothing
 else; one sprite on another layer mixing the layer alone; a joint's
 `break_force` set and unset without its anchors or bodies; a touched field
-written as the primary had it; a primary despawned writing nothing; a box's
+written as the primary had it; a primary despawned writing nothing;
+tile data emptied on the primary leaving the rest's other frames, a first
+frame's data added to the rest, "Full" picked again where the primary has
+no data, a joint kind picked again turning only the other kinds; a box's
 half extent left off a circle, a new shape written whole; added and removed
 on all; done for each; a game's component; three frames of a drag over
 three sprites one undo entry, undone back; a component added to all undone
 from all and redone on all), `inspector::mixed` tests (mixed sections drawn
 twice write nothing; touches taken once), `serial_tree::tests` (absent
-fields and keys as places of their own, put adding and removing them) and
+fields and keys as places of their own, put adding and removing them, a
+map left out walked as empty, fields under a missing entry absent),
+`inspector::collider` tests (a kind picked again keeping three sizes),
+`inspector::particles` tests (a preset keeping each emitter's texture) and
 the registry's tree tests (every built-in round trips through a tree),
 `gizmo::follow` tests (each tool's rule, a collapsed axis, which followers
 ride on a selected parent), `selection::tests` (primary order, toggle,

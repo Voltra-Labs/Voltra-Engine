@@ -48,8 +48,10 @@ inspector edits what they share:
   and not edited; **add to the rest** gives it to the others, and then
   it is. Adding a component none has adds it to all.
 - Picking a value from a dropdown, ticking a box, or typing a number into
-  a `—` field and pressing Enter sets it on all of them, even when it is
-  the value the last picked already had.
+  a `—` field and leaving it sets it on all of them, even when it is the
+  value the last picked already had. Picking a kind again (a collider's,
+  a joint's) turns only the ones of another kind; each of that kind keeps
+  its own sizes.
 - Typing a name names them all.
 - However many are selected, an edit — a whole drag — is one undo step.
 - While playing (or recording on the timeline), only the last picked is
