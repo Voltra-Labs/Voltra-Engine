@@ -24,6 +24,15 @@ use voltra_scene::{hierarchy, ComponentRegistry, Replicated, SceneId};
 
 use crate::NetId;
 
+/// What [`Stash::keep`] asks of the entities it meets.
+pub(crate) struct KeepIds<'a> {
+    /// The number the server sends an entity by, if it has one.
+    pub(crate) net_id: &'a dyn Fn(Entity) -> Option<NetId>,
+    /// Whether a replicated entity stays in the world: the server still
+    /// sends it.
+    pub(crate) stays: &'a dyn Fn(Entity) -> bool,
+}
+
 /// The records of a replicated entity set aside, and the number the server
 /// sent it by, when it had one.
 #[derive(Debug, Default)]
@@ -38,14 +47,22 @@ impl Stash {
     /// id (`net_id` names the server's numbers), so each comes back with
     /// its own spawn; a non-replicated one goes with the replicated entity
     /// above it. `replicated` names the components the wire brings.
+    ///
+    /// A replicated descendant for which `stays` answers true — one the
+    /// server still sends this client — is neither kept nor despawned: it
+    /// is unparented, with what hangs under it, and left in the world.
+    /// The hierarchy is not replicated, so the client's tree can be one the
+    /// server has since changed (a turret moved to another tank), and the
+    /// server is the one that says what is out of interest.
     pub(crate) fn keep(
         &mut self,
         world: &mut World,
         registry: &ComponentRegistry,
         replicated: &[&str],
         entity: Entity,
-        net_id: &dyn Fn(Entity) -> Option<NetId>,
+        ids: &KeepIds<'_>,
     ) {
+        let mut staying = Vec::new();
         let mut groups: Vec<Entity> = vec![entity];
         while let Some(top) = groups.pop() {
             let mut records = Vec::new();
@@ -73,21 +90,26 @@ impl Stash {
                     break;
                 }
                 for child in hierarchy::children_of(world, current) {
-                    if world.get::<Replicated>(child).is_some() {
-                        groups.push(child);
-                    } else {
+                    if world.get::<Replicated>(child).is_none() {
                         frontier.push(child);
+                    } else if (ids.stays)(child) {
+                        staying.push(child);
+                    } else {
+                        groups.push(child);
                     }
                 }
             }
             let Some(id) = records.first().map(|record| record.id) else {
                 continue;
             };
-            let net = net_id(top);
+            let net = (ids.net_id)(top);
             if let Some(net) = net {
                 self.by_net.insert(net, id);
             }
             self.kept.insert(id, (net, records));
+        }
+        for child in staying {
+            hierarchy::clear_parent(world, child);
         }
         hierarchy::despawn_recursive(world, entity);
     }
@@ -163,7 +185,11 @@ mod tests {
 
         let mut stash = Stash::default();
         let net = |e: Entity| (e == turret).then_some(9);
-        stash.keep(&mut world, &registry, &["Transform"], ship, &net);
+        let ids = KeepIds {
+            net_id: &net,
+            stays: &|_| false,
+        };
+        stash.keep(&mut world, &registry, &["Transform"], ship, &ids);
         assert_eq!(world.entity_count(), 0, "despawned, all of it");
         assert_eq!(stash.len(), 2, "the ship and its turret, each its own");
 
@@ -187,5 +213,33 @@ mod tests {
 
         stash.forget(9);
         assert_eq!(stash.len(), 0, "the turret despawned for real");
+    }
+
+    #[test]
+    fn a_replicated_child_the_server_still_sends_stays_in_the_world() {
+        let registry = ComponentRegistry::with_defaults();
+        let mut world = World::new();
+        let tank = world.spawn();
+        world.insert(tank, SceneId::new());
+        world.insert(tank, Replicated::default());
+        let turret = world.spawn();
+        world.insert(turret, SceneId::new());
+        world.insert(turret, Replicated::default());
+        hierarchy::set_parent(&mut world, turret, tank).expect("parents");
+        let barrel = world.spawn();
+        world.insert(barrel, SceneId::new());
+        hierarchy::set_parent(&mut world, barrel, turret).expect("parents");
+
+        let mut stash = Stash::default();
+        let ids = KeepIds {
+            net_id: &|_| None,
+            stays: &|e| e == turret,
+        };
+        stash.keep(&mut world, &registry, &[], tank, &ids);
+        assert!(!world.is_alive(tank));
+        assert!(world.is_alive(turret) && world.is_alive(barrel), "left be");
+        assert_eq!(hierarchy::parent_of(&world, turret), None, "unparented");
+        assert_eq!(hierarchy::parent_of(&world, barrel), Some(turret));
+        assert_eq!(stash.len(), 1, "only the tank set aside");
     }
 }

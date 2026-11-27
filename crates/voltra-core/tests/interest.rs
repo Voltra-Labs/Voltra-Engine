@@ -554,3 +554,48 @@ fn a_client_joining_late_is_sent_what_is_near_it_and_finds_its_level_again() {
     let back = copy(client, door_id).expect("relevant now");
     assert_eq!(client.get::<Sprite>(back).map(|s| s.sort_order), Some(9));
 }
+
+#[test]
+fn a_child_moved_off_its_parent_on_the_server_stays_when_the_parent_goes() {
+    let mut rig = Rig::new(LinkConditions::default(), interest(10.0));
+    // A tank and its turret, from the level both ends loaded.
+    let (tank_id, turret_id) = (SceneId::new(), SceneId::new());
+    let level = move |world: &mut World| {
+        let tank = world.spawn();
+        world.insert(tank, tank_id);
+        world.insert(tank, Transform::from_translation(Vec2::new(2.0, 0.0)));
+        world.insert(tank, Replicated::default());
+        let turret = world.spawn();
+        world.insert(turret, turret_id);
+        world.insert(turret, Transform::from_translation(Vec2::new(0.0, 1.0)));
+        world.insert(turret, Replicated::default());
+        hierarchy::set_parent(world, turret, tank).expect("parents");
+        (tank, turret)
+    };
+    let (tank, turret) = level(rig.world());
+    let peer = rig.join(|world| {
+        level(world);
+    });
+    owned(rig.world(), Vec2::ZERO, peer);
+    rig.step(60);
+    let before = copy(rig.clients[0].world(), turret_id).expect("adopted");
+
+    // The server lifts the turret off and drives the tank away: the tank
+    // leaves this client's interest, the turret does not.
+    hierarchy::clear_parent(rig.world(), turret);
+    place(rig.world(), turret, Vec2::new(2.0, 1.0));
+    place(rig.world(), tank, Vec2::new(60.0, 0.0));
+    rig.step(60);
+    let client = rig.clients[0].world();
+    assert!(copy(client, tank_id).is_none(), "the tank went");
+    assert_eq!(
+        copy(client, turret_id),
+        Some(before),
+        "the turret is the same copy, never despawned"
+    );
+    assert_eq!(hierarchy::parent_of(client, before), None);
+    assert_eq!(
+        client.get::<Transform>(before).map(|t| t.translation),
+        Some(Vec2::new(2.0, 1.0))
+    );
+}

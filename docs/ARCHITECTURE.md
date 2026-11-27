@@ -8290,7 +8290,11 @@ replication message.
 - **Hierarchies follow their root.** A replicated child is relevant
   exactly when its topmost replicated ancestor is — placed by the root's
   position, not its own — so a client never holds half a hierarchy (a
-  turret without its tank).
+  turret without its tank). The hierarchy itself is not replicated, so a
+  client's tree can be one the server has since changed: when a culled
+  entity is set aside, a replicated child of it on the client that the
+  server still sends (it was moved off on the server) is unparented and
+  left in the world, not despawned with it.
 - **Leaving is a cull, sent as a despawn is**: in every snapshot until
   one carrying it is acknowledged (`culled`, beside `despawned`), and the
   client despawns the entity and everything under it. Unreal closes the

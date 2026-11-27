@@ -1,7 +1,7 @@
 //! A schema and a snapshot taken in: the server's component names mapped
 //! to this build's, then spawns, despawns and values applied to the world.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,6 +10,7 @@ use voltra_net::PeerId;
 use voltra_scene::{hierarchy, ComponentRegistry, Prefabs, Replicated};
 
 use super::samples::Samples;
+use super::stash::KeepIds;
 use super::{spawn, Bound, Correction, ReplicationClient, Schema};
 use crate::wire::{Snapshot, MAX_LISTED};
 use crate::Timeline;
@@ -79,6 +80,13 @@ impl ReplicationClient {
         // Out of interest first: set aside as they are, before a despawn
         // in the same snapshot takes a parent, and before a spawn brings
         // one back.
+        // What this snapshot culls, as entities: a replicated child the
+        // server did not cull stays when its parent goes.
+        let culled: HashSet<Entity> = snapshot
+            .culled
+            .iter()
+            .filter_map(|id| self.bound.get(id).map(|b| b.entity))
+            .collect();
         for id in snapshot.culled {
             let Some(bound) = self.bound.remove(&id) else {
                 continue;
@@ -91,10 +99,12 @@ impl ReplicationClient {
             // was set aside then.
             if world.is_alive(bound.entity) {
                 let by_entity = &self.by_entity;
+                let ids = KeepIds {
+                    net_id: &|e| by_entity.get(&e).copied(),
+                    stays: &|e| by_entity.contains_key(&e) && !culled.contains(&e),
+                };
                 self.stash
-                    .keep(world, registry, &schema.replicated, bound.entity, &|e| {
-                        by_entity.get(&e).copied()
-                    });
+                    .keep(world, registry, &schema.replicated, bound.entity, &ids);
             }
             self.by_entity.remove(&bound.entity);
         }
@@ -251,8 +261,12 @@ impl ReplicationClient {
                         // Under interest, never sent may be only far
                         // away: set aside, to come back as the level had
                         // it when the server sends it.
+                        let ids = KeepIds {
+                            net_id: &|_| None,
+                            stays: &|e| self.by_entity.contains_key(&e),
+                        };
                         self.stash
-                            .keep(world, registry, &schema.replicated, entity, &|_| None);
+                            .keep(world, registry, &schema.replicated, entity, &ids);
                     } else {
                         hierarchy::despawn_recursive(world, entity);
                     }
