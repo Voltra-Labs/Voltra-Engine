@@ -15,6 +15,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_physics::{CollisionEvent, Contact, JointBroken};
+use voltra_render::glam::Vec2;
 use voltra_scene::{ComponentRegistry, Prefabs};
 
 use crate::app::tick_audio::TickAudio;
@@ -43,6 +44,10 @@ pub struct Tick<'a> {
     /// Seconds this tick covers: the frame's delta in the per-frame hook, the
     /// fixed step in the fixed one.
     pub delta: f32,
+    /// The world's gravity, in world units per second squared: what the
+    /// physics step pulls bodies by ([`App::gravity`]), for a game moving a
+    /// character itself to fall by the same. Godot's `get_gravity()`.
+    pub gravity: Vec2,
     /// What the last physics step found overlapping.
     ///
     /// State, not a stream: the same resting contact is here on every step it
@@ -176,6 +181,7 @@ impl App {
                 net: &mut self.net,
                 window: &mut self.game_window,
                 delta,
+                gravity: self.gravity,
                 contacts: self.physics_world.contacts(),
                 events,
                 broken_joints,

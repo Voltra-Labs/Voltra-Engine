@@ -193,6 +193,10 @@ fn fingerprint() -> u64 {
         std::mem::size_of::<T>().hash(hasher);
         std::mem::align_of::<T>().hash(hasher);
     }
+    fn component<T: 'static>(hasher: &mut impl Hasher) {
+        mix::<T>(hasher);
+        layout::<T>(hasher);
+    }
     // SipHash with fixed keys: the same answer in every process.
     let mut hasher = std::hash::DefaultHasher::new();
     mix::<dyn crate::Game>(&mut hasher);
@@ -200,9 +204,26 @@ fn fingerprint() -> u64 {
     mix::<voltra_ecs::World>(&mut hasher);
     mix::<voltra_ecs::Entity>(&mut hasher);
     mix::<voltra_scene::ComponentRegistry>(&mut hasher);
-    mix::<voltra_scene::Transform>(&mut hasher);
-    mix::<voltra_scene::Sprite>(&mut hasher);
-    mix::<voltra_scene::RigidBody>(&mut hasher);
+    // The components the sample games read out of the world directly. A
+    // `TypeId` moves with the crate's metadata, not with a field added, so
+    // each is hashed with its layout too: a library built before
+    // `CharacterBody2D` grew a field would otherwise pass and read
+    // garbage through it.
+    component::<voltra_scene::Transform>(&mut hasher);
+    component::<voltra_scene::Sprite>(&mut hasher);
+    component::<voltra_scene::RigidBody>(&mut hasher);
+    component::<voltra_scene::Collider>(&mut hasher);
+    component::<voltra_scene::Sensor>(&mut hasher);
+    component::<voltra_scene::CharacterBody2D>(&mut hasher);
+    component::<voltra_scene::CharacterContact>(&mut hasher);
+    component::<voltra_scene::Camera>(&mut hasher);
+    component::<voltra_scene::Name>(&mut hasher);
+    component::<voltra_scene::Text>(&mut hasher);
+    component::<voltra_scene::AudioSource>(&mut hasher);
+    component::<voltra_scene::ParticleEmitter>(&mut hasher);
+    component::<voltra_scene::PrefabInstance>(&mut hasher);
+    component::<voltra_scene::PrefabPart>(&mut hasher);
+    component::<voltra_scene::Tilemap>(&mut hasher);
     mix::<voltra_physics::CollisionEvent>(&mut hasher);
     mix::<voltra_physics::JointBroken>(&mut hasher);
     mix::<voltra_render::glam::Vec2>(&mut hasher);
