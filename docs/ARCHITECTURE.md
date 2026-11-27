@@ -3532,9 +3532,10 @@ the sector between the cone's outer edges, and every one of those three
 asks it:
 
 - **The view**: `light::gather` keeps a light whose `Reach::bounds` meets
-  the view — the box around a turned view's rect since stage 124. A sector's box is its centre, its two edges' ends and the
-  disc's extreme along each axis the cone faces — so a cone wider than a
-  half turn still reaches round behind its centre.
+  the view — the box around a turned view's rect since stage 124. A
+  sector's box is its centre, its two edges' ends and the disc's extreme
+  along each axis the cone faces — so a cone wider than a half turn still
+  reaches round behind its centre.
 - **The quad**: the light instance carries that box as fractions of its
   radius and `vs_light` draws over it instead of the square; the fragment
   shader is unchanged (`local` is still in radii from the centre).
@@ -4756,9 +4757,11 @@ smoothing, drag margins and limits; Cinemachine's dead zone and lookahead.
   authored case, and any entity may follow (a light trailing the player).
 - **Per frame, gated on the simulation** (`camera_rig::update`, after the
   tick and animations, before the audio whose listener rides the camera).
-- **A shake never drifts the camera**: last frame's offset is taken off
-  before following and the new one added after (`ShakeState::applied`), so
-  following works from the rest position. The first frame — and after
+- **A shake never drifts the camera**: since stage 124 it moves the
+  *view*, never the transform (below), so following works from the rest
+  position. (Before, last frame's offset was taken off the transform and
+  the new one added: an absolute writer — a tween, a clip — in between
+  left the difference behind for good.) The first frame — and after
   `snap()` — lands on the target instead of travelling.
 - A parented follower is placed in world space through its parent's matrix.
   A missing target holds it still and warns once.
@@ -4783,9 +4786,15 @@ counter-clockwise, the view's; `0` upright, a non-finite one read as
 upright): the view matrix turns back about the view's centre after moving
 it to the origin, and `viewport_to_world` / `world_to_viewport` go through
 the view's own axes, so picking inverts exactly what the matrix draws.
-`camera::view` and `camera::shots` take the entity's **world** rotation
-(`camera::placement`, through its parents; scale is still read for
-nothing, a mirrored camera turned rather than flipped). Godot's
+`camera::view` and `camera::shots` take the entity's own rotation
+(`camera::placement`) — and its parents' too only with
+`Camera::inherit_rotation` (default off, not written then; Godot's
+`ignore_rotation` the other way up): a camera hung off a rolling ball or a
+character turning with its floor stayed upright before views turned, and
+still does unless asked. Scale is still read for nothing, a mirrored
+camera turned rather than flipped. The turn is normalised into `-π..=π`
+and snapped to exactly `0` within `camera::UPRIGHT` (1e-6), so a parent's
+`0.3` under a child's `−0.3`, or a whole turn, is upright — and snaps. Godot's
 `Camera2D.rotation` (with `ignore_rotation` off), Unity's orthographic
 camera turned about its view axis; Bevy's 2D camera is its transform, turn
 and all. One field on `Camera2D`, not a second camera type: the turn is
@@ -4821,15 +4830,32 @@ part of where a 2D view is, and every caller that never turns pays nothing.
   (`View::set_mode` restores position, zoom and turn). The selected
   camera's rectangle is drawn turned (`Camera2D::corners`).
 
-**A shake turns too.** `CameraShake::max_angle` (radians, default `0`, not
-written when `0`) is rotational trauma: `noise(t, 3.9) × max_angle ×
-trauma²`, a third channel of the same three-sine noise, phased off the
-offset's two. It is taken off and put back exactly as the offset is
-(`ShakeState::applied_angle`), so a shake never drifts the camera's turn and
-a turn the game makes between frames is kept. `applied_offset` /
-`applied_angle` say what is on the transform now (the editor's overlay
-reads the first). Eiserloh's talk shakes the angle the same way; the
-default stays still because a turned camera is a choice, not a default.
+**A shake turns too, and shakes the view (stage 124).**
+`CameraShake::max_angle` (radians, default `0`, not written when `0`) is
+rotational trauma: `noise(t, 3.9) × max_angle × trauma²`, a third channel
+of the same three-sine noise, phased off the offset's two. Eiserloh's talk
+shakes the angle the same way; the default stays still because a turned
+camera is a choice, not a default.
+
+- **On the view, not the transform** — Cinemachine's noise, a step after
+  the camera is placed. `shake::update` only works out this frame's
+  offset and angle (`applied_offset` / `applied_angle`), and
+  `camera::eye` — what `camera::view` and `camera::shots` place a view by
+  — adds them to `placement`: the offset along the view's own axes, the
+  angle to its turn. Nothing writes the transform, so an absolute writer
+  (a tween or clip on the rotation) rests exactly where it wrote and a
+  relative one keeps all it added. The stage-69 take-off-and-put-back
+  could not tell the two apart.
+- **What sees the shake**: everything drawn through the view — culling,
+  parallax, lighting, picking through it, the editor's camera rectangle.
+  **What does not**: the follower (it moves the rest position), the
+  transform's readers (physics, replication, a game reading the camera's
+  position) and the **audio listener**, which rides the transform — ears
+  steady while the picture shakes, as the shake is a picture effect and a
+  panning that jitters with it would only be noise.
+- **A shake needs a camera** on its entity now: without a view there is
+  nothing to shake (before, any entity's transform shook; no shipped scene
+  shook anything else).
 
 **Several targets are framed (stage 124).** `CameraFollow2D::targets`
 (not written when empty) frames with `target`: the follower aims at the
@@ -4858,7 +4884,21 @@ Godot has none built in.
   follower holds still, as one missing target always did.
 - **The bounds take the turned view's box**, so a turned camera's view
   stays inside them too; the zoom fits the box seen along the turned
-  view's axes.
+  view's axes. The dead zone, offset and bounds stay **world-aligned** on
+  a turned camera (they are boxes in the level, as authored); only what
+  the view shows turns.
+- **Each camera's own aspect**: the fit and the bounds use what the
+  camera draws into (`camera::aspect`, as `Shot::view` draws it) — its
+  render texture's shape, or its viewport's share of the screen — not the
+  window's, so a split-screen half or a minimap frames right.
+  `camera_rig::update` takes the screen's aspect and the textures.
+- **The fit makes room for the slack**: the box is grown by the dead zone
+  and `|offset|`, since the camera may sit that far off the group's
+  middle, so a fitted member stays on screen wherever the dead zone lets
+  the camera rest. The lead is not included: it is a passing motion, and
+  growing by it would pump the zoom with the group's speed.
+- **A follower naming itself** is left out of its group, with its own
+  warning, once — not "missing".
 - **Editor overlay** (`view/follow.rs`): the selected follower's dead zone
   — around where it rests, less its offset, so the box is where the
   *target* moves freely — its bounds, and with more than one target the
@@ -4869,30 +4909,37 @@ Godot has none built in.
 - **Not yet**: a screen-aligned marquee through a turned Game view (the box
   is a world box, drawn turned, taken as drawn); a control that turns the
   editor's own camera; the audio listener's ears do not turn with it (pan
-  is on world x); per-member weights and radii in a group.
+  is on world x); per-member weights and radii in a group; a turned
+  view's rect, rather than its box, for the follower's bounds.
 
 Pinned by `camera_rig/tests.rs` (landing on the target and easing the same
 at any frame rate, a dead zone held then left, bounds clamping a view and
-centring one too big, a lead at half a second, a missing target holding,
-a parented follower, a shake fading back to rest, a copied target
-remapped), `camera_rig/group_tests.rs` (two targets framed at their middle
-and zoomed in and out to the limits, the zoom eased, a despawned target
-dropped without a lead jump and all gone holding, a turned camera zoomed
-to the turned box, every target remapped, an old single-target file read
-and written back unchanged), `camera_rig/shake_tests.rs` (a turning shake
-fading back to the rest angle over three knocks, none without
-`max_angle`, a game's turn kept), `follow/zoom.rs`, `camera/tests.rs` (a
-click through a turned camera picks the sprite drawn there and not the
-one an upright view would; the view turning through its parents),
-`batch/cull_tests.rs` and `light/tests.rs` (a view at 45° keeping a
-sprite and a light seen only because it is turned and leaving out one past
-its box; a pinned parallax layer centred on a turned screen),
-`camera/shots.rs` (a turned shot not snapped), `voltra-render`'s camera
-tests (matrix, pick and draw agree turned; the box at 45°; upright
-unchanged to the bit) and the editor's `view/follow.rs` and
+centring one too big, a lead at half a second, a missing target holding, a
+parented follower, a shake fading back to rest, a copied target remapped),
+`camera_rig/group_tests.rs` (two targets framed at their middle and zoomed
+in and out to the limits, the zoom eased, a despawned target dropped
+without a lead jump and all gone holding, a turned camera zoomed to the
+turned box, every target remapped, an old single-target file read and
+written back unchanged), `camera_rig/shake_tests.rs` (a turning shake
+moving the view and fading to rest with the transform untouched, an
+absolute writer resting exactly and a relative one keeping what it added,
+the offset along the turned view, none without `max_angle`),
+`follow/zoom.rs`, `group_tests.rs` again (a left-half split-screen camera
+fitting its half, the fit growing by the dead zone and offset, a follower
+naming itself), `tests/camera_aspect.rs` (a render-texture camera zoomed
+to its 4:1 texture, on a GPU), `camera/placement_tests.rs` (a click
+through a turned camera picks the sprite drawn there and not the one an
+upright view would; its own turn by default and its parents' with
+`inherit_rotation`; cancelling and whole turns upright; a viewport's
+aspect), `batch/cull_tests.rs` and `light/tests.rs` (a view at 45° keeping
+a sprite and a light seen only because it is turned and leaving out one
+past its box; a pinned parallax layer centred on a turned screen),
+`camera/shots.rs` (a turned shot not snapped), `voltra-render`'s
+`camera/turned_tests.rs` (matrix, pick and draw agree turned; the box at
+45°; upright unchanged to the bit) and the editor's `view/follow.rs` and
 `view/overlay.rs`; and `app::camera_rig` (following only while the game
-runs). The `character` example follows with all of it and shakes on a
-hard landing.
+runs). The `character` example follows with all of it and shakes on a hard
+landing.
 
 ### A state machine chooses the clip; the player plays it
 

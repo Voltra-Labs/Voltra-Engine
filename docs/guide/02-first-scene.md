@@ -134,9 +134,10 @@ A scene is drawn through its **active `Camera`** with the highest
 priority: Scene ▸ Spawn camera, or add the component to any entity. Its
 `size` is half the height of world it shows; the Game toggle on the
 viewport shows the scene through it. **Turn** the camera's entity, and the
-view turns with it — through its parents, so a camera hung off a ship
-turns with the ship. What a turned camera sees is culled, picked and lit
-as drawn; a pixel-perfect camera stops snapping while it is turned.
+view turns with it; tick **turn with parent** for it to turn with its
+parents too — a camera hung off a ship — rather than stay upright while
+it rides them. What a turned camera sees is culled, picked and lit as
+drawn; a pixel-perfect camera stops snapping while it is turned.
 
 Two components move a camera while the game runs (its inspector's **Add
 follow** and **Add shake**):
@@ -146,10 +147,12 @@ follow** and **Add shake**):
   bounds its view stays inside. **Also frames** adds more targets: it aims
   at the middle of the box around all of them, and **zoom to fit** eases
   the camera's size so they all show, with a margin, between a least and
-  a greatest size. A target that leaves the scene drops out of the group.
+  a greatest size — fitted to what that camera draws into, a split-screen
+  half or a render texture. A target that leaves the scene drops out of the group.
   With the follower selected, the viewport draws its dead zone (rose),
   its bounds (faded rose) and the group's box (green).
 - **`CameraShake`** shakes it by trauma a game adds —
   `world.get_mut::<CameraShake>(camera)` then `.add_trauma(0.5)` — moving
-  it up to `max offset` and, with a **max angle**, turning it too. It
-  always settles back where the camera rests.
+  its view up to `max offset` and, with a **max angle**, turning it too.
+  The shake moves only what the camera shows, never its transform, so it
+  always settles back where the camera rests — whatever else moves it.
