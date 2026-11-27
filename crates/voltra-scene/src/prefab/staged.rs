@@ -27,6 +27,10 @@ use crate::format::{ComponentRegistry, EntityRecord, SceneError, SceneFile, VERS
 use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 
+mod order;
+
+use order::parents_first;
+
 /// The name a parent link is stored under in a scene file.
 const PARENT: &str = "Parent";
 
@@ -247,32 +251,6 @@ impl StagedScene {
             self.renamed.entry(record.id).or_insert(*fresh);
         }
     }
-}
-
-/// Every index once, each after its parent — but for a loop of links,
-/// which is entered wherever it is first met.
-fn parents_first(parent: &[Option<usize>]) -> Vec<usize> {
-    let mut placed = vec![false; parent.len()];
-    let mut in_chain = vec![false; parent.len()];
-    let mut order = Vec::with_capacity(parent.len());
-    let mut chain = Vec::new();
-    for start in 0..parent.len() {
-        let mut cursor = Some(start);
-        while let Some(index) = cursor {
-            if placed[index] || in_chain[index] {
-                break;
-            }
-            in_chain[index] = true;
-            chain.push(index);
-            cursor = parent[index];
-        }
-        for index in chain.drain(..).rev() {
-            in_chain[index] = false;
-            placed[index] = true;
-            order.push(index);
-        }
-    }
-    order
 }
 
 #[cfg(test)]
