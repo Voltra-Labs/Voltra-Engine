@@ -69,9 +69,9 @@ pub use conditions::{ConditionStats, Conditioned, LinkConditions, LinkControl};
 pub use config::{NetConfig, MAX_MESSAGE_LIMIT, PROTOCOL_VERSION};
 pub use connection::ConnectionStats;
 pub use discovery::{
-    advertise, Advert, Advertise, DiscoveryError, DiscoveryLimits, DiscoveryResponder,
-    DiscoveryStats, LanSearch, SearchOptions, ServerInfo, DEFAULT_DISCOVERY_PORT, MAX_ANSWER_SIZE,
-    MAX_GAME_ID, MAX_SERVER_NAME, PROBE_SIZE,
+    advertise, is_local, Advert, Advertise, DiscoveryError, DiscoveryLimits, DiscoveryResponder,
+    DiscoveryScope, DiscoveryStats, LanSearch, SearchOptions, ServerInfo, DEFAULT_DISCOVERY_PORT,
+    MAX_ANSWER_SIZE, MAX_GAME_ID, MAX_SERVER_NAME, PROBE_SIZE,
 };
 pub use endpoint::{Endpoint, SendError};
 pub use event::{DisconnectReason, NetEvent, PeerId};

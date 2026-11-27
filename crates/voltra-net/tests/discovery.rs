@@ -89,11 +89,17 @@ fn a_server_of_another_build_is_listed_as_incompatible_and_another_game_not_at_a
     let mut search = search_for(&[&same, &other_build, &other_game], "arena", 0xF1);
     let mut elsewhere = advert(0xF1);
     elsewhere.game = "platformer".into();
+    // Servers on one machine: each on ports of its own.
+    let other_build_advert = Advert {
+        udp_port: Some(7787),
+        websocket_port: Some(7788),
+        ..advert(0xF2)
+    };
     let found = run(
         &mut search,
         &mut [
             (&mut same, advert(0xF1)),
-            (&mut other_build, advert(0xF2)),
+            (&mut other_build, other_build_advert),
             (&mut other_game, elsewhere),
         ],
         // Run to the timeout: the other game must stay out of the list.
@@ -211,4 +217,86 @@ fn a_search_with_nobody_there_finishes_empty_at_its_timeout() {
     search.poll(Duration::from_millis(300));
     assert!(search.is_finished());
     assert!(search.servers().is_empty());
+}
+
+#[test]
+fn a_game_id_past_the_cap_is_matched_as_it_travels() {
+    use voltra_net::MAX_GAME_ID;
+    // 38 bytes: the probe carries its first 32, the responder must match
+    // those against its own id cut the same way.
+    let game = "an-arena-with-a-rather-long-game-id-xy";
+    assert_eq!(game.len(), 38);
+    assert!(game.len() > MAX_GAME_ID);
+    let mut server = responder();
+    let mut search = search_for(&[&server], game, 0xF1);
+    let long = Advert {
+        game: game.to_owned(),
+        ..advert(0xF1)
+    };
+    let found = run(&mut search, &mut [(&mut server, long)], 1);
+
+    assert_eq!(found.len(), 1, "answered: {:?}", server.stats());
+    assert_eq!(found[0].game, &game[..MAX_GAME_ID]);
+    assert_eq!(server.stats().other_game, 0);
+}
+
+#[test]
+fn a_responder_answers_the_local_network_unless_told_otherwise() {
+    use voltra_net::{advertise, Advertise, DiscoveryScope, HostOptions};
+    let mut server = responder();
+    assert_eq!(server.scope(), DiscoveryScope::Local);
+    // Loopback is local: answered.
+    let mut search = search_for(&[&server], "arena", 0xF1);
+    assert_eq!(
+        run(&mut search, &mut [(&mut server, advert(0xF1))], 1).len(),
+        1
+    );
+    assert_eq!(server.stats().out_of_scope, 0);
+
+    // A host's options carry the scope to the socket it opens.
+    let public = advertise(&HostOptions {
+        bind: LOOPBACK.into(),
+        discovery: Some(Advertise {
+            port: 0,
+            scope: DiscoveryScope::Anyone,
+            ..Advertise::default()
+        }),
+        ..HostOptions::default()
+    })
+    .expect("a socket")
+    .expect("asked for");
+    assert_eq!(public.scope(), DiscoveryScope::Anyone);
+}
+
+#[test]
+fn one_server_answering_from_two_sockets_is_listed_once() {
+    // Two responders advertising the same address and ports — one server
+    // reached two ways, as broadcast and a direct probe of it can — are
+    // one server to join.
+    let mut first = responder();
+    let mut second = responder();
+    let mut search = search_for(&[&first, &second], "arena", 0xF1);
+    let found = run(
+        &mut search,
+        &mut [(&mut first, advert(0xF1)), (&mut second, advert(0xF1))],
+        2,
+    );
+    assert_eq!(found.len(), 1, "{found:?}");
+
+    // Another server on the same machine, on other ports, is another
+    // (fresh responders: each run starts its clock again).
+    let mut one = responder();
+    let mut another = responder();
+    let mut search = search_for(&[&one, &another], "arena", 0xF1);
+    let other_ports = Advert {
+        udp_port: Some(7787),
+        websocket_port: None,
+        ..advert(0xF1)
+    };
+    let found = run(
+        &mut search,
+        &mut [(&mut one, advert(0xF1)), (&mut another, other_ports)],
+        2,
+    );
+    assert_eq!(found.len(), 2, "{found:?}");
 }

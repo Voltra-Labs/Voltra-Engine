@@ -136,16 +136,10 @@ impl LanSearch {
             let (len, from) = match self.socket.recv_from(&mut buffer) {
                 Ok(read) => read,
                 Err(e) if e.kind() == ErrorKind::WouldBlock => return,
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        ErrorKind::ConnectionReset
-                            | ErrorKind::ConnectionRefused
-                            | ErrorKind::Interrupted
-                    ) =>
-                {
-                    continue
-                }
+                // About some other datagram — an ICMP unreachable for a
+                // probe, one too long for the buffer (Windows' 10040): the
+                // search goes on.
+                Err(e) if crate::udp::is_transient(&e) => continue,
                 Err(e) => {
                     log::warn!("discovery stopped listening: {e}");
                     self.finished = true;
@@ -159,7 +153,16 @@ impl LanSearch {
                 continue;
             }
             let info = self.server_info(answer, from);
-            match self.servers.iter().position(|known| known.from == from) {
+            // One server is one place to join: its address and game ports,
+            // not where its answer came from — so another socket's answer
+            // for the same ports updates it rather than listing it twice,
+            // and an answer for other ports never hides it.
+            let same = |known: &ServerInfo| {
+                known.from.ip() == info.from.ip()
+                    && known.udp == info.udp
+                    && known.websocket == info.websocket
+            };
+            match self.servers.iter().position(same) {
                 Some(known) => self.servers[known] = info,
                 None if self.servers.len() < MAX_SERVERS => self.servers.push(info),
                 None => {}

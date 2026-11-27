@@ -93,7 +93,7 @@ impl Transport for UdpTransport {
 /// socket: an ICMP "port unreachable" for an earlier send (Windows hands it
 /// to the next `recv_from` as a reset), an interrupted call, or Windows'
 /// "message too long" for a truncated datagram.
-fn is_transient(error: &io::Error) -> bool {
+pub(crate) fn is_transient(error: &io::Error) -> bool {
     const WSAEMSGSIZE: i32 = 10040;
     matches!(
         error.kind(),

@@ -14,7 +14,10 @@
 //! an answer is at most [`MAX_ANSWER_SIZE`], smaller, so a forged source
 //! address gets no amplification; answers are rate-limited per source and
 //! in all ([`DiscoveryLimits`]); a datagram of any other size, another
-//! magic, version or kind is dropped unread. Godot's and Unity's LAN
+//! magic, version or kind is dropped unread; and by default only sources
+//! on the local network are answered ([`DiscoveryScope`]) — a broadcast
+//! never crosses a router, so a probe from anywhere else is a stranger's.
+//! Godot's and Unity's LAN
 //! samples (and Minecraft's, Factorio's) have the same shape: a broadcast
 //! probe on a known port, unicast answers.
 
@@ -25,11 +28,13 @@ mod limiter;
 mod packet;
 #[cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
 mod responder;
+mod scope;
 #[cfg_attr(target_arch = "wasm32", allow(dead_code, unused_imports))]
 mod search;
 
 pub use limiter::DiscoveryLimits;
 pub use responder::{DiscoveryResponder, DiscoveryStats};
+pub use scope::{is_local, DiscoveryScope};
 pub use search::LanSearch;
 
 use std::fmt;
@@ -70,10 +75,13 @@ pub struct Advertise {
     /// The server's name in a client's list.
     pub name: String,
     /// The game id probes are matched against (a client asks for its own
-    /// game's servers only). At most [`MAX_GAME_ID`] bytes.
+    /// game's servers only). At most [`MAX_GAME_ID`] bytes travel; a
+    /// longer one is matched as cut.
     pub game: String,
     /// How often it answers.
     pub limits: DiscoveryLimits,
+    /// Whom it answers: the local network only, by default.
+    pub scope: DiscoveryScope,
 }
 
 impl Default for Advertise {
@@ -83,6 +91,7 @@ impl Default for Advertise {
             name: "Voltra server".to_owned(),
             game: String::new(),
             limits: DiscoveryLimits::default(),
+            scope: DiscoveryScope::Local,
         }
     }
 }
@@ -96,7 +105,9 @@ pub fn advertise(
         return Ok(None);
     };
     let at = SocketAddr::new(options.bind, advertise.port);
-    DiscoveryResponder::with_limits(at, advertise.limits).map(Some)
+    let mut responder = DiscoveryResponder::with_limits(at, advertise.limits)?;
+    responder.set_scope(advertise.scope);
+    Ok(Some(responder))
 }
 
 /// What a server says about itself to a probe.

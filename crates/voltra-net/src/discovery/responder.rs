@@ -4,8 +4,8 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use super::limiter::{DiscoveryLimits, Limiter};
-use super::packet::{Answer, Probe};
-use super::{Advert, DiscoveryError, PROBE_SIZE};
+use super::packet::{cut, Answer, Probe};
+use super::{Advert, DiscoveryError, DiscoveryScope, MAX_GAME_ID, PROBE_SIZE};
 
 /// The most datagrams one [`poll`](DiscoveryResponder::poll) reads: a flood
 /// costs a bounded amount of work a tick, and the rest wait in (or fall
@@ -23,6 +23,9 @@ pub struct DiscoveryStats {
     pub other_game: u64,
     /// Datagrams that were no probe of ours: dropped unread.
     pub malformed: u64,
+    /// Datagrams from outside the responder's [`DiscoveryScope`]: dropped
+    /// unread.
+    pub out_of_scope: u64,
 }
 
 /// Answers LAN discovery probes on a UDP port of its own, polled once a
@@ -33,13 +36,18 @@ pub struct DiscoveryResponder {
     socket: std::net::UdpSocket,
     local: SocketAddr,
     limiter: Limiter,
+    scope: DiscoveryScope,
     stats: DiscoveryStats,
+    /// Whether the socket's last read failed, so a lasting failure is
+    /// warned of once, not every tick.
+    failing: bool,
 }
 
 impl std::fmt::Debug for DiscoveryResponder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DiscoveryResponder")
             .field("local", &self.local)
+            .field("scope", &self.scope)
             .field("stats", &self.stats)
             .finish_non_exhaustive()
     }
@@ -62,7 +70,9 @@ impl DiscoveryResponder {
             socket,
             local,
             limiter: Limiter::new(limits),
+            scope: DiscoveryScope::default(),
             stats: DiscoveryStats::default(),
+            failing: false,
         })
     }
 
@@ -78,6 +88,16 @@ impl DiscoveryResponder {
     /// The address it listens at, with the real port when `0` was asked.
     pub fn local_socket(&self) -> SocketAddr {
         self.local
+    }
+
+    /// Whom it answers: [`DiscoveryScope::Local`] unless set.
+    pub fn scope(&self) -> DiscoveryScope {
+        self.scope
+    }
+
+    /// Answers only `scope`'s sources from now on.
+    pub fn set_scope(&mut self, scope: DiscoveryScope) {
+        self.scope = scope;
     }
 
     /// What it has answered and dropped so far.
@@ -104,21 +124,22 @@ impl DiscoveryResponder {
             let (len, from) = match self.socket.recv_from(&mut buffer) {
                 Ok(read) => read,
                 Err(e) if e.kind() == ErrorKind::WouldBlock => return,
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        ErrorKind::ConnectionReset
-                            | ErrorKind::ConnectionRefused
-                            | ErrorKind::Interrupted
-                    ) =>
-                {
-                    continue
-                }
+                // About some other datagram (one too long for the buffer,
+                // on Windows): this read is lost, the socket is fine.
+                Err(e) if crate::udp::is_transient(&e) => continue,
                 Err(e) => {
-                    log::warn!("discovery stopped reading: {e}");
+                    if !self.failing {
+                        log::warn!("discovery could not read: {e}");
+                    }
+                    self.failing = true;
                     return;
                 }
             };
+            self.failing = false;
+            if !self.scope.admits(from.ip()) {
+                self.stats.out_of_scope += 1;
+                continue;
+            }
             let Ok(probe) = Probe::decode(&buffer[..len.min(buffer.len())]) else {
                 self.stats.malformed += 1;
                 continue;
@@ -129,7 +150,9 @@ impl DiscoveryResponder {
             let Some(advert) = made.as_ref() else {
                 continue;
             };
-            if !probe.game.is_empty() && probe.game != advert.game {
+            // The game id as it travels: one past the cap is matched cut,
+            // as the probe for it was.
+            if !probe.game.is_empty() && probe.game != cut(&advert.game, MAX_GAME_ID) {
                 self.stats.other_game += 1;
                 continue;
             }
