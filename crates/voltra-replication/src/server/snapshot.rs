@@ -58,7 +58,15 @@ pub(crate) fn build(
     tick: ServerTick,
     budget: usize,
 ) -> Vec<u8> {
-    let despawned: Vec<NetId> = view.despawned.iter().copied().take(MAX_DESPAWNS).collect();
+    // The real despawns first, then the answers to asks for entities gone.
+    let despawned: Vec<NetId> = view
+        .despawned
+        .iter()
+        .filter(|id| !view.asked_gone.contains(id))
+        .chain(view.asked_gone.iter())
+        .copied()
+        .take(MAX_DESPAWNS)
+        .collect();
     let culled: Vec<NetId> = view
         .interest
         .culled

@@ -29,8 +29,7 @@ impl ReplicationServer {
             let id = match self.ids.get(&entity) {
                 Some(&id) => id,
                 None => {
-                    let id = self.next_id;
-                    self.next_id = self.next_id.wrapping_add(1).max(1);
+                    let id = self.issued.issue();
                     self.ids.insert(entity, id);
                     id
                 }

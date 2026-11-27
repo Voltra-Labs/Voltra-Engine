@@ -61,7 +61,7 @@ pub struct ReplicationServer {
     step: f32,
     ids: HashMap<Entity, NetId>,
     tracked: BTreeMap<NetId, Tracked>,
-    next_id: NetId,
+    issued: ask::Issued,
     clients: BTreeMap<PeerId, ClientView>,
     /// Every connected client, replicated to or not.
     connected: BTreeSet<PeerId>,
@@ -102,7 +102,7 @@ impl ReplicationServer {
             step,
             ids: HashMap::new(),
             tracked: BTreeMap::new(),
-            next_id: 1,
+            issued: ask::Issued::default(),
             clients: BTreeMap::new(),
             connected: BTreeSet::new(),
             audience: None,
@@ -202,6 +202,7 @@ impl ReplicationServer {
                 view,
                 update.resync,
                 &self.tracked,
+                self.issued,
                 self.components.len(),
                 self.tick,
             );

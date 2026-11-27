@@ -8066,7 +8066,11 @@ connections and the scene; `voltra-core` drives it from the loop and
   ask for an entity it no longer has with a despawn, which travels in
   every snapshot until acknowledged: despawned while its view was being
   started over (no spawn sent, so none owed), it would otherwise be
-  asked for for good. A client's streamed region still leaves them out
+  asked for for good. Only an id the server has issued is answered so,
+  and at most 256 such despawns (`MAX_ASKED_GONE`, four messages' worth)
+  wait per client, counted apart from the real ones, which are never
+  refused and go first in a snapshot: a client asking for made-up ids and
+  never acknowledging cannot grow what the server keeps (`server/ask.rs`). A client's streamed region still leaves them out
   (`Replicas::LeaveOut`).
   Pinned by `tests/opening_level.rs` (the opening level; both ends
   changing scene together, the server first and the client first; a

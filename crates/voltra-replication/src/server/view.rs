@@ -93,6 +93,10 @@ pub(crate) struct ClientView {
     pub(crate) entities: BTreeMap<NetId, EntityView>,
     /// Despawns not yet acknowledged: in every snapshot until one is.
     pub(crate) despawned: BTreeSet<NetId>,
+    /// The ones among `despawned` that answer the client's asks for an
+    /// entity gone (`ask.rs`), counted apart: capped, and sent after the
+    /// real ones.
+    pub(crate) asked_gone: BTreeSet<NetId>,
     /// The interest this client is sent by (stage 127); all of it unused
     /// without interest management.
     pub(crate) interest: ClientInterest,
@@ -128,6 +132,7 @@ impl ClientView {
         let tick = sent.tick;
         for id in sent.despawned {
             self.despawned.remove(&id);
+            self.asked_gone.remove(&id);
         }
         for id in sent.culled {
             // Acknowledged: the client has despawned it and set it aside.
