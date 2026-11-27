@@ -3,6 +3,7 @@
 
 use voltra_net::{Endpoint, PeerId};
 
+use super::resync::wait_over;
 use super::{ReplicationClient, MAX_PENDING_INPUTS};
 use crate::wire::{self, ClientMessage, InputTick};
 use crate::ViewTime;
@@ -49,7 +50,9 @@ impl ReplicationClient {
             newest: self.received.newest,
             mask: self.received.mask,
             inputs: self.inputs.iter().skip(skip).cloned().collect(),
-            resync: self.resync.listed(),
+            resync: self
+                .resync
+                .listed(self.now, wait_over(endpoint.stats(PeerId::SERVER))),
         };
         if let Err(error) = endpoint.send(
             PeerId::SERVER,

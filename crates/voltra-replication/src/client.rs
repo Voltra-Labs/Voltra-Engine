@@ -109,6 +109,9 @@ pub struct ReplicationClient {
     input_ack: InputTick,
     inputs: VecDeque<(InputTick, Option<ViewTime>, Vec<u8>)>,
     resync: resync::Resync,
+    /// The time the last receive was given: what a send measures the wait
+    /// before an ask is listed again by.
+    now: Duration,
     predicted: Option<NetId>,
     correction: Option<Correction>,
     local: Option<PeerId>,
@@ -135,6 +138,7 @@ impl ReplicationClient {
             input_ack: 0,
             inputs: VecDeque::new(),
             resync: resync::Resync::default(),
+            now: Duration::ZERO,
             predicted: None,
             correction: None,
             local: None,
@@ -226,6 +230,7 @@ impl ReplicationClient {
         mut prefabs: Option<&mut Prefabs>,
         now: Duration,
     ) -> Vec<Entity> {
+        self.now = now;
         for event in endpoint.events() {
             match event {
                 // A new session: what the last one bound means nothing now.
