@@ -3,9 +3,9 @@
 
 use voltra_ecs::Entity;
 use voltra_net::{LobbyPhase, PeerId};
-use voltra_scene::{Text, UiButton, UiTextField, UiToggle};
+use voltra_scene::{UiButton, UiTextField, UiToggle};
 
-use super::list::hidden;
+use super::list::{hidden, set_words};
 use super::{labels, LobbyScreen};
 use crate::app::Tick;
 
@@ -34,7 +34,7 @@ impl LobbyScreen {
                 let rows = lobby
                     .entries()
                     .iter()
-                    .map(|entry| (labels::player(entry, lobby.host(), me), false))
+                    .map(|entry| labels::player(entry, lobby.host(), me))
                     .collect();
                 let startable =
                     session.is_host() && me.is_some_and(|me: PeerId| lobby.can_start(me).is_ok());
@@ -79,11 +79,8 @@ impl LobbyScreen {
     }
 }
 
-/// Sets the text of `label`, if there is one and it differs.
+/// Sets the text of `label`, if there is one: as written, since a status
+/// may carry an address or a reason from elsewhere.
 fn say(tick: &mut Tick<'_>, label: Option<Entity>, words: &str) {
-    if let Some(text) = label.and_then(|e| tick.world.get_mut::<Text>(e)) {
-        if text.content != words {
-            text.content = words.to_owned();
-        }
-    }
+    set_words(tick.world, label, words);
 }

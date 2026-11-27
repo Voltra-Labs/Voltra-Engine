@@ -31,7 +31,7 @@
             components: {
                 "Name": "Status",
                 "Parent": "01a2c000-0000-7000-8000-000000000001",
-                "Text": (content:"",font:None,size:16.0,pixels_per_em:48,color:(0.8,0.85,1.0,1.0),align:Center,sort_order:100),
+                "Text": (content:"",font:None,rich:false,size:16.0,pixels_per_em:48,color:(0.8,0.85,1.0,1.0),align:Center,sort_order:100),
                 "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(0.0,0.0),offset_max:(0.0,22.0),slot:1),
             },
         ),
@@ -119,8 +119,17 @@
             components: {
                 "Name": "Server label",
                 "Parent": "01a2c000-0000-7000-8000-00000000000b",
-                "Text": (content:"Server  1/4",font:None,size:16.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
-                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+                "Text": (content:"Server",font:None,rich:false,size:16.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.62,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000001a",
+            components: {
+                "Name": "Server detail",
+                "Parent": "01a2c000-0000-7000-8000-00000000000b",
+                "Text": (content:"1/4",font:None,rich:false,size:16.0,pixels_per_em:48,color:(0.65,0.8,1.0,1.0),align:Right,sort_order:100),
+                "UiRect": (anchor_min:(0.62,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
             },
         ),
         (
@@ -188,8 +197,17 @@
             components: {
                 "Name": "Player label",
                 "Parent": "01a2c000-0000-7000-8000-000000000012",
-                "Text": (content:"Player  (host)  ready",font:None,size:16.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
-                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+                "Text": (content:"Player",font:None,rich:false,size:16.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Left,sort_order:100),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.62,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a2c000-0000-7000-8000-00000000001b",
+            components: {
+                "Name": "Player detail",
+                "Parent": "01a2c000-0000-7000-8000-000000000012",
+                "Text": (content:"host · ready",font:None,rich:false,size:16.0,pixels_per_em:48,color:(0.65,0.8,1.0,1.0),align:Right,sort_order:100),
+                "UiRect": (anchor_min:(0.62,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
             },
         ),
         (

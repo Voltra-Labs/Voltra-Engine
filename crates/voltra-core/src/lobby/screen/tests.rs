@@ -95,12 +95,14 @@ fn is_hidden(world: &World, name: &str) -> bool {
     voltra_scene::ui::hidden::is_hidden(world, named(world, name))
 }
 
+/// The texts of `control` and under it, in order, joined by ` | `: a
+/// button's one label, a row's name and detail.
 fn label(world: &World, control: Entity) -> String {
-    voltra_scene::hierarchy::descendants(world, control)
-        .into_iter()
-        .chain([control])
-        .find_map(|e| world.get::<Text>(e).map(|t| t.content.clone()))
-        .unwrap_or_default()
+    std::iter::once(control)
+        .chain(voltra_scene::hierarchy::descendants(world, control))
+        .filter_map(|e| world.get::<Text>(e).map(|t| t.content.clone()))
+        .collect::<Vec<_>>()
+        .join(" | ")
 }
 
 fn disabled(world: &World, name: &str) -> bool {
@@ -173,12 +175,12 @@ fn hosting_alone_shows_the_room_and_the_host_starts_once_ready() {
     assert!(h.session.net().is_server(), "{}", status(&h));
     assert!(is_hidden(world, "Lobby menu"));
     assert!(!is_hidden(world, "Lobby room"));
-    assert_eq!(player_labels(&h), ["Ada (you)  host  not ready"]);
+    assert_eq!(player_labels(&h), ["Ada | you · host · not ready"]);
     assert!(disabled(world, "Start"), "nobody is ready");
 
     press(&mut h, "Ready");
     h.session.step(2, FRAME);
-    assert_eq!(player_labels(&h), ["Ada (you)  host  ready"]);
+    assert_eq!(player_labels(&h), ["Ada | you · host · ready"]);
     assert!(!disabled(h.session.world(), "Start"));
 
     press(&mut h, "Start");
@@ -233,7 +235,7 @@ fn a_host_found_on_the_lan_is_joined_from_its_row() {
         std::thread::sleep(Duration::from_millis(5));
     }
     let row = *rows(&guest).first().expect("the host listed");
-    assert_eq!(label(guest.session.world(), row), "Ada's game  1/8");
+    assert_eq!(label(guest.session.world(), row), "Ada's game | 1/8");
 
     press_entity(&mut guest, row);
     for _ in 0..300 {
@@ -246,9 +248,52 @@ fn a_host_found_on_the_lan_is_joined_from_its_row() {
     }
     assert_eq!(
         player_labels(&guest),
-        ["Ada  host  not ready", "Bob (you)  not ready"],
+        ["Ada | host · not ready", "Bob | you · not ready"],
         "{}",
         status(&guest)
     );
     assert!(disabled(guest.session.world(), "Start"), "not the host");
+}
+
+#[test]
+fn someone_elses_words_are_never_read_as_markup() {
+    // The shipped prefab draws them plain.
+    let mut h = harness(config("Ada", 1));
+    h.session.step(1, FRAME);
+    let world = h.session.world();
+    for part in [
+        "Status",
+        "Server label",
+        "Server detail",
+        "Player label",
+        "Player detail",
+    ] {
+        let text = world.get::<Text>(named(world, part)).expect("a text");
+        assert!(!text.rich, "{part} is rich");
+    }
+
+    // A game's own prefab may make them rich: the words are escaped there,
+    // and come out as typed.
+    let hostile = "[size=1e30][color=#0000][font=../x.ttf]Eve[icon=a.png]";
+    let mut world = World::new();
+    let rich = world.spawn();
+    world.insert(rich, Text::new("before"));
+    let plain = world.spawn();
+    world.insert(
+        plain,
+        Text {
+            rich: false,
+            ..Text::new("before")
+        },
+    );
+    super::list::set_words(&mut world, Some(rich), hostile);
+    super::list::set_words(&mut world, Some(plain), hostile);
+    let shown = world.get::<Text>(rich).expect("a text");
+    let parsed = voltra_scene::text::markup::parse(&shown.content);
+    assert_eq!(parsed.text, hostile, "drawn as typed");
+    assert_eq!(parsed.runs.len(), 1);
+    assert_eq!(
+        world.get::<Text>(plain).map(|t| t.content.as_str()),
+        Some(hostile)
+    );
 }

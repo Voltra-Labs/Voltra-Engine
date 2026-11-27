@@ -82,14 +82,14 @@ impl LobbyScreen {
             tick,
             parts.get("Servers"),
             parts.get("Server row"),
-            "Server label",
+            ("Server label", "Server detail"),
             "Server",
         );
         let players = List::new(
             tick,
             parts.get("Players"),
             parts.get("Player row"),
-            "Player label",
+            ("Player label", "Player detail"),
             "Player",
         );
         let mut screen = Self {

@@ -2,9 +2,11 @@
 //! of the prefab's template row per item, the template kept, hidden, for
 //! the next time.
 
-use voltra_ecs::Entity;
+use voltra_ecs::{Entity, World};
+use voltra_scene::text::markup;
 use voltra_scene::{hierarchy, Name, Text, UiButton, UiHidden, UiRect};
 
+use super::labels::Row;
 use crate::app::Tick;
 
 /// One list of the screen and the rows in it now.
@@ -12,13 +14,16 @@ use crate::app::Tick;
 pub(super) struct List {
     list: Option<Entity>,
     template: Option<Entity>,
-    /// The template's text part, by name.
+    /// The template's text part for the name, by name.
     label: &'static str,
+    /// The template's text part for the detail, by name. A prefab without
+    /// one shows it after the name, in the label.
+    detail: &'static str,
     /// What each row is named, `<prefix>: <n>`.
     prefix: &'static str,
     rows: Vec<Entity>,
     /// What the rows show, to fill again only on a change.
-    shown: Vec<(String, bool)>,
+    shown: Vec<Row>,
 }
 
 impl List {
@@ -27,7 +32,7 @@ impl List {
         tick: &mut Tick<'_>,
         list: Option<Entity>,
         template: Option<Entity>,
-        label: &'static str,
+        (label, detail): (&'static str, &'static str),
         prefix: &'static str,
     ) -> Self {
         if let Some(template) = template {
@@ -37,6 +42,7 @@ impl List {
             list,
             template,
             label,
+            detail,
             prefix,
             rows: Vec::new(),
             shown: Vec::new(),
@@ -53,9 +59,8 @@ impl List {
         self.rows.iter().position(|&row| tick.ui.clicked(row))
     }
 
-    /// Shows `items` — each its words and whether it is greyed — copying
-    /// the template again only if they changed.
-    pub(super) fn show(&mut self, tick: &mut Tick<'_>, items: Vec<(String, bool)>) {
+    /// Shows `items`, copying the template again only if they changed.
+    pub(super) fn show(&mut self, tick: &mut Tick<'_>, items: Vec<Row>) {
         if items == self.shown {
             return;
         }
@@ -68,7 +73,7 @@ impl List {
                 hierarchy::despawn_recursive(tick.world, row);
             }
         }
-        for (slot, (words, greyed)) in items.iter().enumerate() {
+        for (slot, item) in items.iter().enumerate() {
             let copy = match tick.duplicate(template) {
                 Ok(copy) => copy,
                 Err(e) => {
@@ -91,19 +96,43 @@ impl List {
                 rect.slot = i32::try_from(slot).unwrap_or(i32::MAX);
             }
             if let Some(button) = world.get_mut::<UiButton>(row) {
-                button.disabled = *greyed;
+                button.disabled = item.greyed;
             }
-            let label = copy.entities.iter().copied().find(|&e| {
-                world
-                    .get::<Name>(e)
-                    .is_some_and(|n| n.as_str() == self.label)
-            });
-            if let Some(text) = label.and_then(|e| world.get_mut::<Text>(e)) {
-                text.content.clone_from(words);
+            let part = |world: &World, name: &str| {
+                copy.entities
+                    .iter()
+                    .copied()
+                    .find(|&e| world.get::<Name>(e).is_some_and(|n| n.as_str() == name))
+            };
+            let label = part(world, self.label);
+            match part(world, self.detail) {
+                Some(detail) => {
+                    set_words(world, label, &item.name);
+                    set_words(world, Some(detail), &item.detail);
+                }
+                None => {
+                    let both = format!("{}  {}", item.name, item.detail);
+                    set_words(world, label, &both);
+                }
             }
             self.rows.push(row);
         }
         self.shown = items;
+    }
+}
+
+/// Sets `entity`'s text to `words` as written: escaped where the text is
+/// rich, so someone else's name is never read as tags.
+pub(super) fn set_words(world: &mut World, entity: Option<Entity>, words: &str) {
+    if let Some(text) = entity.and_then(|e| world.get_mut::<Text>(e)) {
+        let shown = if text.rich {
+            markup::escape(words)
+        } else {
+            words.into()
+        };
+        if text.content != shown {
+            text.content = shown.into_owned();
+        }
     }
 }
 
