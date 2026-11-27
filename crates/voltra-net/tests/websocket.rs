@@ -129,24 +129,39 @@ fn a_message_longer_than_a_datagram_ends_its_stream() {
 
 #[test]
 fn a_connection_that_never_shakes_hands_is_dropped_after_the_timeout() {
+    // One handshake at a time: the real client gets in only if the silent
+    // one's slot is freed when its time is up.
     let limits = WebSocketLimits {
         handshake_timeout: Duration::from_millis(50),
+        max_handshakes: 1,
         ..Default::default()
     };
     let mut server = WebSocketServer::bind_with("127.0.0.1:0", limits).expect("listens");
     let _silent = TcpStream::connect(server.local_socket()).expect("connects");
-    let mut client = WebSocketClient::connect(server.local_socket());
 
-    // Driven by the caller's clock: a second of it passes in a few updates.
-    let start = Instant::now();
-    let mut now = Duration::ZERO;
-    while !client.is_open() && start.elapsed() < Duration::from_secs(3) {
-        now += Duration::from_millis(100);
-        server.update(now).expect("updates");
-        client.update(now).expect("updates");
+    // The silent one is taken in on the caller's clock at zero (its
+    // connect has returned, so it waits to be accepted), then the clock
+    // passes the timeout.
+    for _ in 0..5 {
+        server.update(Duration::ZERO).expect("updates");
         std::thread::sleep(Duration::from_millis(2));
     }
-    assert!(client.is_open(), "a real client still gets in");
+    let after = Duration::from_millis(100);
+    server.update(after).expect("updates");
+
+    // The clock stands still from here: however slowly the machine runs,
+    // the real client's own handshake never times out.
+    let mut client = WebSocketClient::connect(server.local_socket());
+    let start = Instant::now();
+    while !client.is_open() && start.elapsed() < Duration::from_secs(10) {
+        server.update(after).expect("updates");
+        client.update(after).expect("updates");
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(
+        client.is_open(),
+        "the slot was freed, and a real client got in"
+    );
     assert_eq!(server.stream_count(), 1, "the silent one never did");
 }
 
