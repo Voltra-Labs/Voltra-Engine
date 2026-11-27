@@ -6,7 +6,7 @@
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{IVec2, Vec2};
-use voltra_scene::hierarchy::world_matrix;
+use voltra_scene::hierarchy::world_matrix_2d;
 use voltra_scene::Tilemap;
 
 /// Below this the layer's matrix is treated as collapsed; matches the
@@ -17,7 +17,7 @@ const MIN_DETERMINANT: f32 = 1e-12;
 /// is not a layer, is collapsed to nothing, or has sizeless tiles.
 pub fn cell_under(world: &World, layer: Entity, at: Vec2) -> Option<IVec2> {
     let map = world.get::<Tilemap>(layer)?;
-    let matrix = world_matrix(world, layer);
+    let matrix = world_matrix_2d(world, layer);
     if matrix.determinant().abs() < MIN_DETERMINANT {
         return None;
     }
@@ -29,7 +29,7 @@ pub fn cell_under(world: &World, layer: Entity, at: Vec2) -> Option<IVec2> {
 /// cell, or of a rectangle of them, is drawn through.
 pub fn corners(world: &World, layer: Entity, a: IVec2, b: IVec2) -> Option<[Vec2; 4]> {
     let map = world.get::<Tilemap>(layer)?;
-    let matrix = world_matrix(world, layer);
+    let matrix = world_matrix_2d(world, layer);
     let min = map.cell_origin(a.min(b));
     let max = map.cell_origin(a.max(b) + IVec2::ONE);
     Some(

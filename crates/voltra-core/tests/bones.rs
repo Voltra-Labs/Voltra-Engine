@@ -10,7 +10,7 @@ use voltra_assets::AssetPath;
 use voltra_core::{App, Headless, ScreenshotError, WindowConfig};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::hierarchy::world_matrix;
+use voltra_scene::hierarchy::world_matrix_2d;
 use voltra_scene::{Bone2D, Name};
 
 fn walker() -> Headless {
@@ -32,11 +32,11 @@ fn named(world: &World, name: &str) -> Entity {
 fn tip(world: &World, bone: &str) -> Vec2 {
     let entity = named(world, bone);
     let length = world.get::<Bone2D>(entity).expect("a bone").length;
-    world_matrix(world, entity).transform_point2(Vec2::new(length, 0.0))
+    world_matrix_2d(world, entity).transform_point2(Vec2::new(length, 0.0))
 }
 
 fn at(world: &World, name: &str) -> Vec2 {
-    world_matrix(world, named(world, name)).transform_point2(Vec2::ZERO)
+    world_matrix_2d(world, named(world, name)).transform_point2(Vec2::ZERO)
 }
 
 #[test]

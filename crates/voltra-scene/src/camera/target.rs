@@ -8,7 +8,7 @@ use voltra_render::Texture;
 /// monitor, a mirror. A sprite or a UI image naming the same file as its
 /// texture shows what it sees, the same frame.
 ///
-/// Unity's `Camera2D.targetTexture`, Godot's camera inside a `SubViewport`.
+/// Unity's `Camera.targetTexture`, Godot's camera inside a `SubViewport`.
 /// A separate component, not a field of the camera, because a path is not
 /// `Copy` and the camera is read by value everywhere.
 ///

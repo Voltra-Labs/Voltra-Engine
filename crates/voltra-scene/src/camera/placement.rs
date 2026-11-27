@@ -9,7 +9,7 @@ use voltra_render::glam::Vec2;
 
 use super::{Camera2D, CameraTarget};
 use crate::camera_rig::CameraShake;
-use crate::hierarchy::world_matrix;
+use crate::hierarchy::world_matrix_2d;
 use crate::transform::Transform2D;
 
 /// Turns closer to upright than this are upright: a parent's `0.3` under a
@@ -43,7 +43,7 @@ pub fn normalised_turn(turn: f32) -> f32 {
 /// its parents): a camera on a rolling ball stays upright unless asked.
 /// Normalised by [`normalised_turn`].
 pub fn placement(world: &World, entity: Entity) -> (Vec2, f32) {
-    let matrix = world_matrix(world, entity);
+    let matrix = world_matrix_2d(world, entity);
     let position = matrix.transform_point2(Vec2::ZERO);
     let inherit = world
         .get::<Camera2D>(entity)

@@ -74,9 +74,9 @@ impl std::error::Error for HierarchyError {}
 /// moves to where those values put it inside the new frame. Unity offers both
 /// ("world position stays" is its default); the editor chooses per action, and
 /// the primitive stays the one that does not silently rewrite data. See
-/// [`set_world_transform`] for the other half.
+/// [`set_world_transform_2d`] for the other half.
 ///
-/// [`set_world_transform`]: super::world_transform::set_world_transform
+/// [`set_world_transform_2d`]: super::world_transform::set_world_transform_2d
 pub fn set_parent(world: &mut World, child: Entity, parent: Entity) -> Result<(), HierarchyError> {
     can_parent(world, child, parent)?;
     let id = *world

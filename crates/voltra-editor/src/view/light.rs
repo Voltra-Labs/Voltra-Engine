@@ -8,7 +8,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_render::LineBatch;
-use voltra_scene::hierarchy::world_matrix;
+use voltra_scene::hierarchy::world_matrix_2d;
 use voltra_scene::PointLight2D;
 
 /// The light's own warm white: not a gizmo axis, the camera's amber, the
@@ -28,7 +28,7 @@ pub fn draw(world: &World, entity: Entity, lines: &mut LineBatch) {
     let Some(light) = world.get::<PointLight2D>(entity) else {
         return;
     };
-    let placed = light.placed(world_matrix(world, entity));
+    let placed = light.placed(world_matrix_2d(world, entity));
     // Drawn exactly when the renderer draws it: a light that gives nothing
     // (no radius, a cone that shines nowhere, a value that is not a number)
     // has no reach to outline.

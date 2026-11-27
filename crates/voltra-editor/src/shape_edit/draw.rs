@@ -4,7 +4,7 @@ use voltra_core::egui::Response;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
-use voltra_scene::hierarchy::world_matrix;
+use voltra_scene::hierarchy::world_matrix_2d;
 
 use super::handle::{self, Handle};
 use super::{polygon, viewport_of, ShapeEdit};
@@ -29,7 +29,7 @@ impl ShapeEdit {
         let Some((points, closed)) = polygon(frame.world, entity, self.which()) else {
             return;
         };
-        let matrix = world_matrix(frame.world, entity);
+        let matrix = world_matrix_2d(frame.world, entity);
         let placed: Vec<Vec2> = points.iter().map(|p| matrix.transform_point2(*p)).collect();
         // World units per screen pixel, so the squares keep their size on
         // screen whatever the zoom.

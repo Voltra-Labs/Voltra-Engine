@@ -15,7 +15,7 @@
 //! **The hierarchy is a transform relationship, not a container.** Despawning a
 //! parent does not despawn its children, and a scene file is a flat list of
 //! entities in identity order rather than a nested tree. That is Unity's shape
-//! (a `Transform2D` with a parent pointer) rather than Godot's (a node tree that
+//! (a `Transform` with a parent pointer) rather than Godot's (a node tree that
 //! *is* the scene): a flat file keeps the diff of a moved entity to one line,
 //! and keeps the loader from having to reason about order.
 //!
@@ -31,7 +31,11 @@ pub use link::{
     is_ancestor, parent_of, roots, set_parent, HierarchyError, MAX_DEPTH,
 };
 pub use parent::Parent;
+// The 0.4 names, where 0.4 had them.
+#[allow(deprecated)]
+pub use crate::renamed::{parent_matrix, set_world_transform, world_matrix, world_transform};
 pub use resolve::resolve_parents;
 pub use world_transform::{
-    is_root, parent_matrix, set_world_transform, world_matrix, world_transform, WorldTransforms2D,
+    is_root, parent_matrix_2d, set_world_transform_2d, world_matrix_2d, world_transform_2d,
+    WorldTransforms2D,
 };

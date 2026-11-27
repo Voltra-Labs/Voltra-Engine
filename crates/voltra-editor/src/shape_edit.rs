@@ -24,7 +24,7 @@ use voltra_core::egui::{Key, PointerButton, Response, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::hierarchy::world_matrix;
+use voltra_scene::hierarchy::world_matrix_2d;
 use voltra_scene::{CasterShape, Line2D, Polygon2D, ShadowCaster2D};
 
 use handle::Handle;
@@ -166,7 +166,7 @@ impl ShapeEdit {
             self.set_editing(None);
             return None;
         }
-        let matrix = world_matrix(frame.world, entity);
+        let matrix = world_matrix_2d(frame.world, entity);
         let inverse = matrix.inverse();
         if matrix.determinant() == 0.0 || !inverse.is_finite() {
             // Scaled to nothing: no pointer position maps back into its

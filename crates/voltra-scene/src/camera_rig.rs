@@ -20,7 +20,7 @@ pub use shake::{CameraShake, ShakeState};
 use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 
-use crate::hierarchy::{parent_matrix, world_matrix};
+use crate::hierarchy::{parent_matrix_2d, world_matrix_2d};
 use crate::Transform2D;
 
 /// Moves every following entity towards its target, then runs every
@@ -48,13 +48,13 @@ pub fn update(
 
 /// Where `entity` is in the world.
 fn world_position(world: &World, entity: voltra_ecs::Entity) -> Vec2 {
-    world_matrix(world, entity).transform_point2(Vec2::ZERO)
+    world_matrix_2d(world, entity).transform_point2(Vec2::ZERO)
 }
 
 /// Puts `entity` at `position` in the world, through its parent if it has
 /// one.
 fn set_world_position(world: &mut World, entity: voltra_ecs::Entity, position: Vec2) {
-    let parent = parent_matrix(world, entity);
+    let parent = parent_matrix_2d(world, entity);
     let local = if parent.determinant().abs() > f32::EPSILON {
         parent.inverse().transform_point2(position)
     } else {

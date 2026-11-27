@@ -2,7 +2,7 @@
 
 /// A rectangle of the target, in fractions of it from its top-left: `x`
 /// and `y` where it starts, `width` and `height` how much of it it covers.
-/// Unity's `Camera2D.rect`, with y down as the screen's is.
+/// Unity's `Camera.rect`, with y down as the screen's is.
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Viewport {
     /// Left edge, as a fraction of the window's width, `0` to `1`.

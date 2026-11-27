@@ -5,7 +5,7 @@ use super::generate::from_outline;
 use super::pose::{bone_segments, deformed, skin_pose};
 use super::weights::automatic;
 use super::*;
-use crate::hierarchy::{set_parent, world_matrix};
+use crate::hierarchy::{set_parent, world_matrix_2d};
 use crate::{Bone2D, ComponentRegistry, Name, SceneId, Skeleton2D, Transform2D};
 
 fn named(world: &mut World, name: &str, transform: Transform2D) -> Entity {
@@ -49,7 +49,7 @@ fn arm(world: &mut World, at: Vec2) -> (Entity, Entity, Entity) {
 
 fn pose_of(world: &World, entity: Entity) -> (SkinnedSprite, super::pose::SkinPose) {
     let skinned = world.get::<SkinnedSprite>(entity).expect("skinned").clone();
-    let pose = skin_pose(world, entity, &skinned, &|e| world_matrix(world, e));
+    let pose = skin_pose(world, entity, &skinned, &|e| world_matrix_2d(world, e));
     (skinned, pose)
 }
 

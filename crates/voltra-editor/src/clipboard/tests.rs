@@ -85,7 +85,7 @@ fn a_duplicated_child_stays_under_its_parent_where_it_was() {
         .expect("something to copy");
     let (_, tops) = paste(&mut world, &registry, &clip).expect("spawns");
     assert_eq!(hierarchy::parent_of(&world, tops[0]), Some(parent));
-    let at = hierarchy::world_transform(&world, tops[0]).translation;
+    let at = hierarchy::world_transform_2d(&world, tops[0]).translation;
     assert!((at - Vec2::new(6.0, 0.0)).length() < 1e-5, "{at}");
 }
 
@@ -104,7 +104,7 @@ fn a_paste_whose_parent_is_gone_lands_where_the_copy_was_taken() {
     let mut other = World::new();
     let (_, tops) = paste(&mut other, &registry, &clip).expect("spawns");
     assert_eq!(hierarchy::parent_of(&other, tops[0]), None);
-    let at = hierarchy::world_transform(&other, tops[0]).translation;
+    let at = hierarchy::world_transform_2d(&other, tops[0]).translation;
     assert!((at - Vec2::new(6.0, 0.0)).length() < 1e-5, "{at}");
 }
 

@@ -9,7 +9,7 @@ impl App {
     /// Where every anchor stands and how far it reaches: the
     /// [`StreamingAnchor`]s, or the active cameras when there are none.
     pub(super) fn streaming_anchors(&self, default_radius: f32) -> Vec<(Vec2, f32)> {
-        let at = |entity| hierarchy::world_transform(&self.world, entity).translation;
+        let at = |entity| hierarchy::world_transform_2d(&self.world, entity).translation;
         let anchors: Vec<(Vec2, f32)> = self
             .world
             .query::<StreamingAnchor>()

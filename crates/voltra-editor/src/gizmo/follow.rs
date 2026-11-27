@@ -73,7 +73,7 @@ pub fn followers(
         .tops(world)
         .into_iter()
         .filter(|&entity| entity != primary && world.get::<Transform2D>(entity).is_some())
-        .map(|entity| (entity, hierarchy::world_transform(world, entity)))
+        .map(|entity| (entity, hierarchy::world_transform_2d(world, entity)))
         .collect()
 }
 

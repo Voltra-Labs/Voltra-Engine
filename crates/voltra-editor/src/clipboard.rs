@@ -81,7 +81,7 @@ fn copy(
                 .and_then(|parent| world.get::<SceneId>(parent).copied()),
             world: world
                 .get::<Transform2D>(top)
-                .map(|_| hierarchy::world_transform(world, top)),
+                .map(|_| hierarchy::world_transform_2d(world, top)),
         });
         for entity in std::iter::once(top).chain(hierarchy::descendants(world, top)) {
             if let Some(record) = record_entity(world, registry, entity) {
@@ -124,7 +124,7 @@ fn paste(
         let under = parent.is_some_and(|parent| hierarchy::set_parent(world, root, parent).is_ok());
         if !under {
             if let Some(placed) = &top.world {
-                hierarchy::set_world_transform(world, root, placed);
+                hierarchy::set_world_transform_2d(world, root, placed);
             }
         }
     }

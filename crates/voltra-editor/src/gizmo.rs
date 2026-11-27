@@ -128,7 +128,7 @@ impl Gizmo {
             // is; the entity stores a transform local to its parent. This is
             // the one conversion between the two, and it is why the drag
             // arithmetic needs to know nothing about the hierarchy.
-            if !hierarchy::set_world_transform(frame.world, entity, &updated) {
+            if !hierarchy::set_world_transform_2d(frame.world, entity, &updated) {
                 // Despawned mid-drag, its Transform2D removed, or its parent
                 // collapsed to a point. Ending the drag is the whole response:
                 // there is nothing left to transform.
@@ -142,7 +142,7 @@ impl Gizmo {
             for &(follower, from) in &self.followers {
                 // One that went away mid-drag is simply left behind.
                 let to = follow::follow(tool, &start, &updated, &from);
-                hierarchy::set_world_transform(frame.world, follower, &to);
+                hierarchy::set_world_transform_2d(frame.world, follower, &to);
             }
             return GizmoOutcome {
                 consumed: true,
@@ -162,7 +162,7 @@ impl Gizmo {
         }
         // Where the entity is drawn, not what it stores: the handles are over
         // the picture, and so is the grab that lands on one.
-        let start = hierarchy::world_transform(frame.world, entity);
+        let start = hierarchy::world_transform_2d(frame.world, entity);
         let origin = frame.camera.world_to_viewport(start.translation, viewport);
         let Some(handle) = grab_handle(tool, local, origin, &start) else {
             return GizmoOutcome::default();
@@ -194,7 +194,7 @@ impl Gizmo {
         if frame.world.get::<Transform2D>(entity).is_none() {
             return;
         }
-        let transform = hierarchy::world_transform(frame.world, entity);
+        let transform = hierarchy::world_transform_2d(frame.world, entity);
 
         // A drag keeps drawing the gizmo it began with, so switching tools
         // mid-drag cannot leave the picture disagreeing with the arithmetic.

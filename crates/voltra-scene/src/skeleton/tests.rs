@@ -2,7 +2,7 @@ use voltra_render::glam::Vec2;
 
 use super::ik::{apply, problem, IkProblem};
 use super::*;
-use crate::hierarchy::{set_parent, world_matrix};
+use crate::hierarchy::{set_parent, world_matrix_2d};
 use crate::{Name, Transform2D};
 
 /// A skeleton at `at` with an arm: an upper bone one unit long and a lower
@@ -35,11 +35,11 @@ fn named(world: &mut World, name: &str, transform: Transform2D) -> Entity {
 }
 
 fn tip(world: &World, lower: Entity) -> Vec2 {
-    world_matrix(world, lower).transform_point2(Vec2::X)
+    world_matrix_2d(world, lower).transform_point2(Vec2::X)
 }
 
 fn elbow(world: &World, lower: Entity) -> Vec2 {
-    world_matrix(world, lower).transform_point2(Vec2::ZERO)
+    world_matrix_2d(world, lower).transform_point2(Vec2::ZERO)
 }
 
 #[test]
@@ -52,7 +52,7 @@ fn the_tip_reaches_a_target_in_reach() {
     let wanted = Vec2::new(3.0, -1.0) + goal;
     assert!(reached.distance(wanted) < 1e-4, "{reached} for {wanted}");
     // The elbow bends to the left of the reach by default.
-    let at = world_matrix(&world, root).transform_point2(Vec2::ZERO);
+    let at = world_matrix_2d(&world, root).transform_point2(Vec2::ZERO);
     assert!((wanted - at).perp_dot(elbow(&world, lower) - at) > 0.0);
     // Solved, a second pass changes nothing.
     let before = elbow(&world, lower);
@@ -91,7 +91,7 @@ fn a_mirrored_skeleton_still_reaches() {
         t.scale = Vec2::new(-1.0, 1.0);
     }
     apply(&mut world);
-    let wanted = world_matrix(&world, target).transform_point2(Vec2::ZERO);
+    let wanted = world_matrix_2d(&world, target).transform_point2(Vec2::ZERO);
     assert!(tip(&world, lower).distance(wanted) < 1e-4);
 }
 

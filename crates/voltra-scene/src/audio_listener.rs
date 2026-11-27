@@ -3,7 +3,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
-use crate::hierarchy::world_matrix;
+use crate::hierarchy::world_matrix_2d;
 
 /// The ears. One per scene.
 ///
@@ -68,7 +68,7 @@ pub fn active(world: &World) -> Option<Entity> {
 /// plays every source unpositioned and says so once.
 pub fn position(world: &World) -> Option<Vec2> {
     let entity = active(world)?;
-    Some(world_matrix(world, entity).transform_point2(Vec2::ZERO))
+    Some(world_matrix_2d(world, entity).transform_point2(Vec2::ZERO))
 }
 
 #[cfg(test)]

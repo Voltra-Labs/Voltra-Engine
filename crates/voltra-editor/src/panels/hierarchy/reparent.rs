@@ -40,7 +40,7 @@ pub(super) fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Repa
     };
     editor.history.begin("Reparent", view, [id]);
 
-    let placement = hierarchy::world_transform(frame.world, child);
+    let placement = hierarchy::world_transform_2d(frame.world, child);
     let outcome = match parent {
         Some(parent) => hierarchy::set_parent(frame.world, child, parent),
         None => {
@@ -51,7 +51,7 @@ pub(super) fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, reparent: Repa
 
     match outcome {
         Ok(()) => {
-            hierarchy::set_world_transform(frame.world, child, &placement);
+            hierarchy::set_world_transform_2d(frame.world, child, &placement);
             // The dragged row, not whatever was selected before: the drag says
             // which entity the user is thinking about.
             editor.selection.set(Some(child));

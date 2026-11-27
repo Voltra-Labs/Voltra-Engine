@@ -5,7 +5,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::{IVec2, Vec2};
 
 use super::{TileValue, Tilemap};
-use crate::hierarchy::world_matrix;
+use crate::hierarchy::world_matrix_2d;
 
 /// Below this the layer's matrix is treated as collapsed, as picking does.
 const MIN_DETERMINANT: f32 = 1e-12;
@@ -15,7 +15,7 @@ const MIN_DETERMINANT: f32 = 1e-12;
 /// collapsed to nothing.
 pub fn cell_under(world: &World, layer: Entity, at: Vec2) -> Option<IVec2> {
     let map = world.get::<Tilemap>(layer)?;
-    let matrix = world_matrix(world, layer);
+    let matrix = world_matrix_2d(world, layer);
     if matrix.determinant().abs() < MIN_DETERMINANT {
         return None;
     }

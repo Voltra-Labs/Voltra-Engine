@@ -48,7 +48,7 @@ pub(crate) fn join_selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
         .selection
         .iter()
         .find(|&e| e != primary && frame.world.is_alive(e) && is_body(frame.world, e));
-    let at = hierarchy::world_transform(frame.world, primary);
+    let at = hierarchy::world_transform_2d(frame.world, primary);
     let own = frame.world.get::<Joint2D>(primary).is_none();
     let joint = hinge(frame.world, primary, other, own);
 
@@ -90,10 +90,10 @@ pub(crate) fn join_selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
 /// A hinge at `primary`'s centre, to `other` or the world, at the angle
 /// the two stand at; naming `primary` as `a` unless the joint goes `on` it.
 fn hinge(world: &World, primary: Entity, other: Option<Entity>, on: bool) -> Joint2D {
-    let at = hierarchy::world_transform(world, primary);
+    let at = hierarchy::world_transform_2d(world, primary);
     let (b, anchor_b, angle_b) = match other {
         Some(other) => {
-            let placed = hierarchy::world_transform(world, other);
+            let placed = hierarchy::world_transform_2d(world, other);
             (
                 world.get::<SceneId>(other).copied(),
                 // In `other`'s space as the solver holds it: unscaled.

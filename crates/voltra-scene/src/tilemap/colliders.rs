@@ -36,7 +36,7 @@ use voltra_render::glam::{Mat3, Vec2};
 
 use super::{solid_boxes, Tilemap};
 use crate::collider::ConvexPolygon;
-use crate::hierarchy::world_matrix;
+use crate::hierarchy::world_matrix_2d;
 use crate::{Collider2D, CollisionLayers, PhysicsMaterial, RigidBody2D, Sensor, Transform2D};
 
 /// Marks a collider generated from a solid tilemap layer.
@@ -70,7 +70,7 @@ impl Inputs {
             revision: map.revision().get(),
             shapes: shapes_hash(map),
             tile_size: map.tile_size,
-            world: world_matrix(world, layer),
+            world: world_matrix_2d(world, layer),
             layers: world.get::<CollisionLayers>(layer).copied(),
             material: world.get::<PhysicsMaterial>(layer).copied(),
             sensor: world.get::<Sensor>(layer).is_some(),

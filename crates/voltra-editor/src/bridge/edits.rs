@@ -163,7 +163,7 @@ fn run(
             if world.get::<voltra_scene::Transform2D>(target).is_none() {
                 return Err("it has no transform to drag".into());
             }
-            let start = voltra_scene::hierarchy::world_transform(world, target);
+            let start = voltra_scene::hierarchy::world_transform_2d(world, target);
             let updated = crate::gizmo::drag_to(
                 target,
                 tool,
@@ -172,7 +172,7 @@ fn run(
                 (*to).into(),
                 &editor.snap,
             );
-            if !voltra_scene::hierarchy::set_world_transform(world, target, &updated) {
+            if !voltra_scene::hierarchy::set_world_transform_2d(world, target, &updated) {
                 return Err("its transform could not be set".into());
             }
             Ok((Some(target), describe(world, target)?))

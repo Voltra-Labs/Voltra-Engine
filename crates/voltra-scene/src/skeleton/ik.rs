@@ -17,7 +17,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use super::{skeleton_of, Bone2D};
-use crate::hierarchy::{parent_matrix, parent_of, world_matrix};
+use crate::hierarchy::{parent_matrix_2d, parent_of, world_matrix_2d};
 use crate::keyframes::target::resolve;
 
 /// Bends the limb ending in this bone towards a target.
@@ -129,8 +129,8 @@ fn solve(world: &mut World, lower: Entity) {
     ) else {
         return;
     };
-    let goal = world_matrix(world, target).transform_point2(Vec2::ZERO);
-    let root = world_matrix(world, upper).transform_point2(Vec2::ZERO);
+    let goal = world_matrix_2d(world, target).transform_point2(Vec2::ZERO);
+    let root = world_matrix_2d(world, upper).transform_point2(Vec2::ZERO);
     let (joint, tip) = ends(world, lower, bone.length);
     let (upper_length, lower_length) = (root.distance(joint), joint.distance(tip));
     if !(goal.is_finite() && upper_length > 1e-6 && lower_length > 1e-6) {
@@ -146,7 +146,7 @@ fn solve(world: &mut World, lower: Entity) {
 
 /// Where `bone` starts and where its tip is, in the world.
 fn ends(world: &World, bone: Entity, length: f32) -> (Vec2, Vec2) {
-    let matrix = world_matrix(world, bone);
+    let matrix = world_matrix_2d(world, bone);
     (
         matrix.transform_point2(Vec2::ZERO),
         matrix.transform_point2(Vec2::new(length, 0.0)),
@@ -164,7 +164,7 @@ fn turn(world: &mut World, entity: Entity, angle: f32) {
     if !angle.is_finite() {
         return;
     }
-    let mirrored = parent_matrix(world, entity).determinant() < 0.0;
+    let mirrored = parent_matrix_2d(world, entity).determinant() < 0.0;
     if let Some(transform) = world.get_mut::<crate::Transform2D>(entity) {
         transform.rotation += if mirrored { -angle } else { angle };
     }

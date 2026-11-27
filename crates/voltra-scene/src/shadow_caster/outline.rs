@@ -9,7 +9,7 @@ use voltra_render::Occluder;
 
 use super::silhouette::{sprite_outlines, SpriteShapes};
 use super::{CasterShape, ShadowCaster2D};
-use crate::hierarchy::{world_matrix, WorldTransforms2D};
+use crate::hierarchy::{world_matrix_2d, WorldTransforms2D};
 use crate::tilemap::TileCollider;
 use crate::{Collider2D, Tilemap, Transform2D};
 
@@ -69,7 +69,7 @@ pub fn outlines_of(
         Vec::new()
     };
     let mut out = Vec::new();
-    let matrix = || world_matrix(world, entity);
+    let matrix = || world_matrix_2d(world, entity);
     outlines(world, entity, caster, matrix, &boxes, sprites, &mut out);
     out
 }

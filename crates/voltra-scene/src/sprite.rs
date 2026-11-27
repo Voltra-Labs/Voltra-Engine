@@ -81,7 +81,7 @@ pub struct Sprite2D {
     pub frame: u32,
     /// A rectangle of the texture, in texels, for a sheet with no atlas file.
     ///
-    /// Godot's `region_rect` and Bevy's `Sprite2D::rect`, and worth keeping
+    /// Godot's `region_rect` and Bevy's `Sprite::rect`, and worth keeping
     /// beside the atlas: a UI element cut once out of a shared sheet does not
     /// need a file of its own. The atlas wins when both are set — a sprite
     /// that names one is asking for its frames.

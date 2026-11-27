@@ -124,7 +124,7 @@ fn plan(world: &mut World, entities: &[Entity]) -> Vec<Entity> {
     for entity in kept {
         let parent_going = hierarchy::parent_of(world, entity).is_some_and(|p| seen.contains(&p));
         if parent_going {
-            let placed = hierarchy::world_transform(world, entity);
+            let placed = hierarchy::world_transform_2d(world, entity);
             hierarchy::clear_parent(world, entity);
             world.insert(entity, placed);
         }

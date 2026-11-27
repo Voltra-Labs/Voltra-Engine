@@ -28,3 +28,41 @@ pub type Collider = crate::Collider2D;
 /// Renamed [`WorldTransforms2D`](crate::WorldTransforms2D) in 0.5.
 #[deprecated(since = "0.5.0", note = "renamed `WorldTransforms2D`")]
 pub type WorldTransforms = crate::WorldTransforms2D;
+
+/// Renamed [`world_matrix_2d`](crate::hierarchy::world_matrix_2d) in 0.5.
+#[deprecated(since = "0.5.0", note = "renamed `world_matrix_2d`")]
+pub fn world_matrix(
+    world: &voltra_ecs::World,
+    entity: voltra_ecs::Entity,
+) -> voltra_render::glam::Mat3 {
+    crate::hierarchy::world_matrix_2d(world, entity)
+}
+
+/// Renamed [`parent_matrix_2d`](crate::hierarchy::parent_matrix_2d) in 0.5.
+#[deprecated(since = "0.5.0", note = "renamed `parent_matrix_2d`")]
+pub fn parent_matrix(
+    world: &voltra_ecs::World,
+    entity: voltra_ecs::Entity,
+) -> voltra_render::glam::Mat3 {
+    crate::hierarchy::parent_matrix_2d(world, entity)
+}
+
+/// Renamed [`world_transform_2d`](crate::hierarchy::world_transform_2d) in 0.5.
+#[deprecated(since = "0.5.0", note = "renamed `world_transform_2d`")]
+pub fn world_transform(
+    world: &voltra_ecs::World,
+    entity: voltra_ecs::Entity,
+) -> crate::Transform2D {
+    crate::hierarchy::world_transform_2d(world, entity)
+}
+
+/// Renamed [`set_world_transform_2d`](crate::hierarchy::set_world_transform_2d)
+/// in 0.5.
+#[deprecated(since = "0.5.0", note = "renamed `set_world_transform_2d`")]
+pub fn set_world_transform(
+    world: &mut voltra_ecs::World,
+    entity: voltra_ecs::Entity,
+    target: &crate::Transform2D,
+) -> bool {
+    crate::hierarchy::set_world_transform_2d(world, entity, target)
+}

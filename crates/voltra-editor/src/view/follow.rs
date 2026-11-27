@@ -11,7 +11,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_render::LineBatch;
 use voltra_scene::format::entity_with_id;
-use voltra_scene::hierarchy::world_matrix;
+use voltra_scene::hierarchy::world_matrix_2d;
 use voltra_scene::CameraFollow2D;
 
 /// The dead zone: a rose no gizmo axis, overlay or the camera's amber uses.
@@ -35,7 +35,7 @@ pub fn draw(world: &World, entity: Entity, lines: &mut LineBatch) {
         return;
     };
     // Where it rests: a shake moves the view, never the transform.
-    let here = world_matrix(world, entity).transform_point2(Vec2::ZERO);
+    let here = world_matrix_2d(world, entity).transform_point2(Vec2::ZERO);
     let half = rig.dead_zone.max(Vec2::ZERO);
     if half != Vec2::ZERO {
         let centre = here - rig.offset;
@@ -52,7 +52,7 @@ pub fn draw(world: &World, entity: Entity, lines: &mut LineBatch) {
         .iter()
         .filter_map(|&id| entity_with_id(world, id))
         .filter(|&target| target != entity)
-        .map(|target| world_matrix(world, target).transform_point2(Vec2::ZERO))
+        .map(|target| world_matrix_2d(world, target).transform_point2(Vec2::ZERO))
         .filter(|at| at.is_finite())
         .collect();
     let Some(&first) = at.first() else {

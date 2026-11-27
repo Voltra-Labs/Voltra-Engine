@@ -6,7 +6,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
 use super::outline::collider_outline;
-use crate::hierarchy::world_matrix;
+use crate::hierarchy::world_matrix_2d;
 use crate::sprite::quad::quad;
 use crate::sprite::sheets::Sheets;
 use crate::{Collider2D, Sprite2D};
@@ -29,7 +29,7 @@ pub const EDIT_CIRCLE_SIDES: usize = 16;
 pub fn starting_polygon(world: &World, entity: Entity, sheets: Sheets<'_>) -> Option<Vec<Vec2>> {
     if world.get::<Collider2D>(entity).is_some() {
         let outline = collider_outline(world, entity, EDIT_CIRCLE_SIDES)?;
-        let inverse = world_matrix(world, entity).inverse();
+        let inverse = world_matrix_2d(world, entity).inverse();
         if !inverse.is_finite() {
             return None;
         }
@@ -90,7 +90,7 @@ mod tests {
 
     /// Where the polygon lands once the entity's matrix carries it.
     fn placed(world: &World, entity: Entity, points: &[Vec2]) -> Vec<Vec2> {
-        let matrix = world_matrix(world, entity);
+        let matrix = world_matrix_2d(world, entity);
         points.iter().map(|p| matrix.transform_point2(*p)).collect()
     }
 

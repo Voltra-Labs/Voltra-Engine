@@ -17,7 +17,7 @@ use voltra_core::egui::{Key, Response, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
-use voltra_scene::hierarchy::world_matrix;
+use voltra_scene::hierarchy::world_matrix_2d;
 use voltra_scene::skinned::{pose, weights};
 use voltra_scene::SkinnedSprite;
 
@@ -96,7 +96,7 @@ impl WeightPaint {
         // Where each vertex is drawn now, and the brush taken into the
         // mesh's own space by the nearest one — so it paints what is under
         // it whatever the pose.
-        let posed = pose::skin_pose(world, entity, &skinned, &|e| world_matrix(world, e));
+        let posed = pose::skin_pose(world, entity, &skinned, &|e| world_matrix_2d(world, e));
         let drawn = pose::deformed(&skinned, &posed);
         let under: Vec<usize> = drawn
             .iter()
@@ -130,7 +130,7 @@ impl WeightPaint {
             .hover_pos()
             .map(|p| crate::picking::world_at(scene, p, frame));
         let world = &*frame.world;
-        let posed = pose::skin_pose(world, entity, &skinned, &|e| world_matrix(world, e));
+        let posed = pose::skin_pose(world, entity, &skinned, &|e| world_matrix_2d(world, e));
         let drawn = pose::deformed(&skinned, &posed);
         let held = weights::of_bone(&skinned.mesh, self.bone);
         let lines = frame.lines();

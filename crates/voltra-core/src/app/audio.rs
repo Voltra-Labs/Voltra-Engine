@@ -157,7 +157,7 @@ impl SceneAudio {
 
 /// Where `entity` is in world space, composed through its parents.
 fn position_of(world: &World, entity: Entity) -> Vec2 {
-    voltra_scene::hierarchy::world_matrix(world, entity).transform_point2(Vec2::ZERO)
+    voltra_scene::hierarchy::world_matrix_2d(world, entity).transform_point2(Vec2::ZERO)
 }
 
 /// The gain and pan a source should be heard at from `listener`.

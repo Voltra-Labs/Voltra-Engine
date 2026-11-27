@@ -144,7 +144,7 @@ impl ReplicationServer {
         let at = world
             .get::<Transform2D>(entity)
             .is_some()
-            .then(|| hierarchy::world_transform(world, entity).translation);
+            .then(|| hierarchy::world_transform_2d(world, entity).translation);
         if let Some(tracked) = self.tracked.get_mut(&id) {
             tracked.place.root = root;
             tracked.place.at = at;
