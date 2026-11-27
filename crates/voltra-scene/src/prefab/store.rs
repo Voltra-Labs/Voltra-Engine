@@ -41,6 +41,9 @@ pub struct Prefabs {
     /// Prefabs being read again because a file they hold an instance of
     /// changed, by path, with the handle each keeps.
     stale: HashMap<AssetPath, Handle<Prefab>>,
+    /// Files read as levels ([`Prefabs::load_scene`]), apart from the
+    /// prefabs.
+    scenes: HashMap<AssetPath, Handle<Prefab>>,
 }
 
 impl Prefabs {
@@ -65,6 +68,7 @@ impl Prefabs {
             empty,
             registry,
             stale: HashMap::new(),
+            scenes: HashMap::new(),
         }
     }
 
@@ -86,16 +90,10 @@ impl Prefabs {
     /// [`load`](Self::load) from inside the reading of `stack`, the
     /// prefabs whose stored instances led here, outermost first.
     fn load_at(&mut self, path: &AssetPath, stack: &mut Vec<AssetPath>) -> Handle<Prefab> {
-        let mut kept = self.stale.remove(path);
         if let Some(&handle) = self.by_path.get(path) {
-            let prefab = self.get(handle);
-            // Read as a scene's file, and now instanced: followed now.
-            if prefab.resolved || prefab.file.is_none() {
-                return handle;
-            }
-            self.by_path.remove(path);
-            kept = Some(handle);
+            return handle;
         }
+        let kept = self.stale.remove(path);
         let stored = match kept {
             Some(handle) => self.get(handle).stored_file().cloned().ok_or(None),
             None => self.read(path, Some(MAX_PREFAB_BYTES)).map_err(Some),
@@ -112,15 +110,14 @@ impl Prefabs {
         self.put(path, prefab, kept)
     }
 
-    /// The handle for the scene at `path`, read as [`load`](Self::load)
-    /// reads a prefab if this is the first time — but as a level is: the
-    /// instances it holds are not followed (a sync after the load brings
-    /// them in step, in the world) and no prefab limit applies, as none
-    /// applied to a scene before. One copy is kept. If the same file is
-    /// later [`load`](Self::load)ed as a prefab, it is followed then, under
-    /// the same handle.
+    /// The handle for the scene at `path`, read if this is the first time
+    /// — as a level is, not as a prefab: the instances it holds are not
+    /// followed (a sync after the load brings them in step, in the world)
+    /// and no prefab limit applies, as none applied to a scene before.
+    /// Cached apart from the prefabs, so which is asked for first never
+    /// changes how a file is read; a file used both ways is held twice.
     pub fn load_scene(&mut self, path: &AssetPath) -> Handle<Prefab> {
-        if let Some(&handle) = self.by_path.get(path) {
+        if let Some(&handle) = self.scenes.get(path) {
             return handle;
         }
         let prefab = match self.read(path, None) {
@@ -134,7 +131,9 @@ impl Prefabs {
                 Prefab::empty()
             }
         };
-        self.put(path, prefab, None)
+        let handle = self.store.insert(prefab);
+        self.scenes.insert(path.clone(), handle);
+        handle
     }
 
     /// `stored`, the file at `path`, with the prefabs its instances name
@@ -164,7 +163,6 @@ impl Prefabs {
                 stored: None,
                 source: Some(path.clone()),
                 problems: vec![problem],
-                resolved: true,
             };
         }
         stack.push(path.clone());
@@ -215,7 +213,6 @@ impl Prefabs {
             stored,
             source: Some(path.clone()),
             problems,
-            resolved: true,
         }
     }
 

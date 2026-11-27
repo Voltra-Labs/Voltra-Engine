@@ -23,7 +23,7 @@ use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 
 use super::compare::parent_record;
-use super::membership::{is_added, members};
+use super::membership::Children;
 use super::sync::sync_with;
 use super::{Prefab, PrefabInstance};
 
@@ -129,6 +129,8 @@ pub(super) fn resolve(
         .map(|(record, &entity)| (record.id, entity))
         .collect();
 
+    // Gathered once: each sync changes only its own instance.
+    let children = Children::of(&world);
     let mut total = stored.entities.len();
     let mut changed = false;
     let mut too_large = false;
@@ -153,21 +155,7 @@ pub(super) fn resolve(
             }
             continue;
         }
-        let file_ids: HashSet<SceneId> = prefab
-            .file
-            .as_ref()
-            .map(|f| f.entities.iter().map(|r| r.id).collect())
-            .unwrap_or_default();
-        let (_, added) = members(&world, root, &mut |world, child| {
-            is_added(world, child, &file_ids, &mut |source, record| {
-                sources
-                    .get(source)
-                    .and_then(|p| p.file.as_ref())
-                    .is_none_or(|f| f.entities.iter().any(|r| r.id == record))
-            })
-        });
-        let added: HashSet<Entity> = added.into_iter().collect();
-        match sync_with(&mut world, registry, prefab, root, Some(&added)) {
+        match sync_with(&mut world, registry, prefab, root, &children) {
             Ok((report, inner)) => {
                 changed |= !report.is_empty();
                 queue.extend(inner);

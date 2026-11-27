@@ -49,8 +49,9 @@ impl Instance {
 ///   is not positional and is not given one.
 /// - **Every root is linked to the prefab's source** with a
 ///   [`PrefabInstance`], replacing whatever link the record itself carried:
-///   a root is an instance of the file it was just spawned from. A child's
-///   own link is kept — that child is a nested instance.
+///   a root is an instance of the file it was just spawned from, in its own
+///   right ([`PrefabInstance::own`]). A child's link is kept — that child is
+///   a nested instance, a part of this one.
 /// - **Every entity is told which record it is** with a [`PrefabPart`],
 ///   overriding nothing, which is what [`sync`] keeps it in step by.
 ///
@@ -125,6 +126,12 @@ fn spawn_copy(
         // own instances carry.
         if at.is_some() {
             world.insert(entity, PrefabPart::new(record.id));
+            // An instance the file holds is a nested part of this one, here,
+            // whatever it was where the file was cut: the roots are linked
+            // as instances of their own below.
+            if let Some(link) = world.get_mut::<PrefabInstance>(entity) {
+                link.own = false;
+            }
         }
     }
 

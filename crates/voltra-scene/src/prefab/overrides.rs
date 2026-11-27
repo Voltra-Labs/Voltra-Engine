@@ -11,15 +11,14 @@
 
 use voltra_ecs::{Entity, World};
 
-use std::collections::HashSet;
-
-use super::compare::{canonical, differences, ids_to_records};
+use super::compare::{canonical, differences};
 use super::instances::sync_in;
-use super::membership::{instance_root, members_in};
+use super::membership::{belongs_to, instance_root, members, Children};
 use super::sync::SyncReport;
 use super::{PrefabInstance, PrefabPart, Prefabs};
-use crate::format::{ComponentRegistry, EntityRecord, SceneError};
+use crate::format::{entity_with_id, ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy;
+use crate::scene_id::SceneId;
 
 /// The record `entity`'s part names, in its instance's prefab, with whether
 /// the entity is that instance's root. `None` for an entity that is no part,
@@ -29,7 +28,7 @@ fn record_of<'p>(
     prefabs: &'p mut Prefabs,
     entity: Entity,
 ) -> Option<(&'p EntityRecord, bool)> {
-    let root = instance_root(world, prefabs, entity)?;
+    let root = instance_root(world, entity)?;
     let source = world.get::<PrefabInstance>(root)?.source.clone();
     let record = world.get::<PrefabPart>(entity)?.record;
     let handle = prefabs.load(&source);
@@ -51,9 +50,16 @@ pub fn refresh_overrides(
         return Ok(false);
     };
     let want = canonical(registry, record)?;
-    let to_record = match instance_root(world, prefabs, entity) {
-        Some(root) => ids_to_records(world, &members_in(world, prefabs, root).0),
-        None => Default::default(),
+    // A value naming another entity of the instance is compared in records,
+    // looked up only when one names one: a frame refreshes every selected
+    // part, and walking the world for each would cost every frame.
+    let root = instance_root(world, entity);
+    let to_record = |id: SceneId| {
+        let other = entity_with_id(world, id)?;
+        if !root.is_some_and(|root| belongs_to(world, other, root)) {
+            return None;
+        }
+        world.get::<PrefabPart>(other).map(|part| part.record)
     };
     let differ = differences(world, registry, entity, is_root, &want, &to_record)?;
     let Some(part) = world.get_mut::<PrefabPart>(entity) else {
@@ -75,7 +81,7 @@ pub fn revert(
     entity: Entity,
     name: Option<&str>,
 ) -> Result<SyncReport, SceneError> {
-    let Some(root) = instance_root(world, prefabs, entity) else {
+    let Some(root) = instance_root(world, entity) else {
         return Ok(SyncReport::default());
     };
     if let Some(part) = world.get_mut::<PrefabPart>(entity) {
@@ -97,7 +103,7 @@ pub fn revert_instance(
     prefabs: &mut Prefabs,
     root: Entity,
 ) -> Result<SyncReport, SceneError> {
-    for entity in members_in(world, prefabs, root).0 {
+    for entity in members(world, root, &Children::of(world)).0 {
         if let Some(part) = world.get_mut::<PrefabPart>(entity) {
             part.overridden.clear();
         }
@@ -122,19 +128,15 @@ fn sync_root(
 /// does not spawn them back. Answers the root it wrote to; nothing when
 /// `entity` is the root itself (the whole instance goes — an instance added
 /// to another among them) or belongs to no instance.
-pub fn note_removed(world: &mut World, prefabs: &mut Prefabs, entity: Entity) -> Option<Entity> {
-    let root = instance_root(world, prefabs, entity)?;
+pub fn note_removed(world: &mut World, entity: Entity) -> Option<Entity> {
+    let root = instance_root(world, entity)?;
     if root == entity {
         return None;
     }
-    let (members, _) = members_in(world, prefabs, root);
-    let under: HashSet<Entity> = std::iter::once(entity)
+    let records: Vec<_> = std::iter::once(entity)
         .chain(hierarchy::descendants(world, entity))
-        .collect();
-    let records: Vec<_> = members
-        .iter()
-        .filter(|e| under.contains(e))
-        .filter_map(|&e| world.get::<PrefabPart>(e).map(|part| part.record))
+        .filter(|&e| belongs_to(world, e, root))
+        .filter_map(|e| world.get::<PrefabPart>(e).map(|part| part.record))
         .collect();
     let link = world.get_mut::<PrefabInstance>(root)?;
     for record in records {

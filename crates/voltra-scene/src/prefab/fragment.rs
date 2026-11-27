@@ -3,7 +3,7 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
-use super::{PrefabInstance, Prefabs};
+use super::PrefabInstance;
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile, VERSION};
 use crate::hierarchy::{descendants, is_ancestor};
 use crate::transform::Transform;
@@ -33,13 +33,9 @@ use crate::transform::Transform;
 /// root, and a file that leads with it reads the way the hierarchy does. An
 /// entity without a [`crate::SceneId`] is transient and left out, as a save
 /// leaves it out.
-///
-/// `prefabs` tells which instance an entity belongs to: one dropped under
-/// a part of another is its own (see [`super::instance_root`]).
 pub fn fragment(
     world: &World,
     registry: &ComponentRegistry,
-    prefabs: &mut Prefabs,
     root: Entity,
 ) -> Result<SceneFile, SceneError> {
     let mut entities = Vec::new();
@@ -52,7 +48,7 @@ pub fn fragment(
         // The file is a prefab of its own: which record of some other one
         // an entity was is no part of it — unless that other one is an
         // instance inside the file.
-        let stored_inside = super::instance_root(world, prefabs, entity)
+        let stored_inside = super::instance_root(world, entity)
             .is_some_and(|at| at != root && is_ancestor(world, root, at));
         if !stored_inside {
             record.components.remove(super::PrefabPart::NAME);

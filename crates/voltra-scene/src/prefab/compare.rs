@@ -44,7 +44,7 @@ pub(super) fn canonical(
 /// [`canonical`] values) — changed, missing or extra — among those a sync
 /// tracks. What an instance part overrides.
 ///
-/// `to_record` takes the instance's own ids to its records' — what a value
+/// `to_record` takes one of the instance's own ids to its record's — what a value
 /// naming another entity of the instance (a joint's bodies) is compared in.
 pub(super) fn differences(
     world: &World,
@@ -52,7 +52,7 @@ pub(super) fn differences(
     entity: Entity,
     is_root: bool,
     want: &BTreeMap<String, Box<RawValue>>,
-    to_record: &HashMap<SceneId, SceneId>,
+    to_record: &dyn Fn(SceneId) -> Option<SceneId>,
 ) -> Result<BTreeSet<String>, SceneError> {
     let mut differ = BTreeSet::new();
     for name in registry.names() {
@@ -62,7 +62,7 @@ pub(super) fn differences(
         let have = match registry.save_one(world, entity, name).transpose()? {
             Some(value) => Some(
                 registry
-                    .rewrite_refs(name, &value, &|id| to_record.get(&id).copied())?
+                    .rewrite_refs(name, &value, to_record)?
                     .unwrap_or(value),
             ),
             None => None,

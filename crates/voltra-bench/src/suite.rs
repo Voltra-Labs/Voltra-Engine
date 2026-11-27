@@ -15,6 +15,7 @@ mod batch;
 mod frame;
 mod keyframes;
 mod physics;
+mod prefab;
 mod scene;
 mod text;
 mod tilemap;
@@ -86,6 +87,7 @@ pub fn all() -> Vec<Bench> {
     benches.extend(ui::benches());
     benches.extend(text::benches());
     benches.extend(scene::benches());
+    benches.extend(prefab::benches());
     benches.extend(keyframes::benches());
     benches.extend(frame::benches());
     benches

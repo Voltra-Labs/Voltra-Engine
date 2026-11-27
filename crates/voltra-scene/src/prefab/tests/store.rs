@@ -69,3 +69,34 @@ fn reloading_a_path_nobody_loaded_does_nothing() {
     assert!(prefabs.reload(&path("ship.ron")).is_empty());
     assert_eq!(prefabs.len(), 1);
 }
+
+/// A level past the prefab limit: one entity whose name makes it so.
+fn write_big(root: &std::path::Path) -> AssetPath {
+    let name = "x".repeat(MAX_PREFAB_BYTES as usize + 1);
+    let text = format!(
+        r#"(version: 1, entities: [(id: "019fe500-0000-7000-8000-000000000b16", components: {{"Name": "{name}"}})])"#
+    );
+    std::fs::write(root.join("big.ron"), text).expect("written");
+    path("big.ron")
+}
+
+#[test]
+fn a_level_past_the_prefab_limit_reads_as_a_scene_whichever_is_asked_first() {
+    for scene_first in [true, false] {
+        let root = scratch_root();
+        let big = write_big(&root);
+        let mut prefabs = Prefabs::new(&root);
+
+        let (scene, prefab) = if scene_first {
+            let scene = prefabs.load_scene(&big);
+            (scene, prefabs.load(&big))
+        } else {
+            let prefab = prefabs.load(&big);
+            (prefabs.load_scene(&big), prefab)
+        };
+
+        assert_eq!(prefabs.get(scene).len(), 1, "a level has no limit");
+        assert!(prefabs.get(prefab).is_empty(), "a prefab has one");
+        assert_ne!(scene, prefab);
+    }
+}

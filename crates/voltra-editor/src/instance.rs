@@ -43,7 +43,7 @@ pub(crate) fn revert(
     entity: Entity,
     name: Option<&str>,
 ) {
-    let Some(root) = prefab::instance_root(frame.world, frame.prefabs, entity) else {
+    let Some(root) = prefab::instance_root(frame.world, entity) else {
         return;
     };
     recorded(

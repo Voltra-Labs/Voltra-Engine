@@ -22,15 +22,53 @@ impl Prefabs {
     /// Empty when nothing changed: a path nothing loaded, a file that reads
     /// as it did, or one that will not read — which keeps the previous
     /// prefab, for the reason every other store gives: an editor mid-save
-    /// leaves it truncated. A file read as a scene's
-    /// ([`load_scene`](Self::load_scene)) is read again as one, alone.
+    /// leaves it truncated. A file read as a level
+    /// ([`load_scene`](Self::load_scene)) is read again as one too.
     pub fn reload(&mut self, path: &AssetPath) -> Vec<AssetPath> {
+        let scene = self.reload_scene(path);
+        let mut changed = self.reload_prefab(path);
+        if scene && changed.is_empty() {
+            changed.push(path.clone());
+        }
+        changed
+    }
+
+    /// The level read at `path` read again, if one was: whether it changed.
+    fn reload_scene(&mut self, path: &AssetPath) -> bool {
+        let Some(&handle) = self.scenes.get(path) else {
+            return false;
+        };
+        let stored = match self.read(path, None) {
+            Ok(file) => file,
+            Err(e) => {
+                log::warn!(
+                    "scene {}: {e}; keeping the previously loaded one",
+                    path.as_str()
+                );
+                return false;
+            }
+        };
+        if self.get(handle).file.as_ref() == Some(&stored) {
+            return false;
+        }
+        *self
+            .store
+            .get_mut(handle)
+            .expect("Prefabs never removes, so every handle it issued resolves") = Prefab {
+            file: Some(stored),
+            source: Some(path.clone()),
+            ..Prefab::default()
+        };
+        log::info!("reloaded scene {}", path.as_str());
+        true
+    }
+
+    /// The prefab at `path` read again, if one was, then its dependents.
+    fn reload_prefab(&mut self, path: &AssetPath) -> Vec<AssetPath> {
         let Some(&handle) = self.by_path.get(path) else {
             return Vec::new();
         };
-        let resolved = self.get(handle).resolved;
-        let limit = resolved.then_some(MAX_PREFAB_BYTES);
-        let stored = match self.read(path, limit) {
+        let stored = match self.read(path, Some(MAX_PREFAB_BYTES)) {
             Ok(file) => file,
             Err(e) => {
                 log::warn!(
@@ -42,16 +80,6 @@ impl Prefabs {
         };
         if self.get(handle).stored_file() == Some(&stored) {
             return Vec::new();
-        }
-        if !resolved {
-            let prefab = Prefab {
-                file: Some(stored),
-                source: Some(path.clone()),
-                ..Prefab::default()
-            };
-            self.put(path, prefab, Some(handle));
-            log::info!("reloaded {}", path.as_str());
-            return vec![path.clone()];
         }
         let dependents = self.dependents(path);
         for dependent in &dependents {
@@ -75,8 +103,8 @@ impl Prefabs {
     /// through another, `path` itself left out — each after every one of
     /// them it holds an instance of (by its longest chain of holding back
     /// to `path`), and by path among equals, so the order is the same every
-    /// time. A file read as a scene's is not one: its instances are synced
-    /// in the world, by their own files.
+    /// time. A file read as a level is not one: its instances are synced in
+    /// the world, by their own files.
     pub fn dependents(&self, path: &AssetPath) -> Vec<AssetPath> {
         let cached: HashMap<AssetPath, Vec<AssetPath>> = self
             .by_path
@@ -84,9 +112,6 @@ impl Prefabs {
             .chain(self.stale.iter())
             .filter_map(|(at, &handle)| {
                 let prefab = self.get(handle);
-                if !prefab.resolved {
-                    return None;
-                }
                 Some((at.clone(), nested_in(prefab.stored_file()?)))
             })
             .collect();
@@ -138,11 +163,9 @@ impl Prefabs {
             .by_path
             .iter()
             .filter(|(_, &handle)| {
-                let prefab = self.get(handle);
-                prefab.resolved
-                    && prefab
-                        .stored_file()
-                        .is_some_and(|file| !nested_in(file).is_empty())
+                self.get(handle)
+                    .stored_file()
+                    .is_some_and(|file| !nested_in(file).is_empty())
             })
             .map(|(path, _)| path.clone())
             .collect();

@@ -5,7 +5,7 @@ use voltra_ecs::{Entity, World};
 
 use std::collections::HashSet;
 
-use super::membership::members_in;
+use super::membership::{members, Children};
 use super::sync::{sync_with, SyncReport};
 use super::{PrefabInstance, Prefabs};
 use crate::format::{ComponentRegistry, SceneError};
@@ -14,18 +14,14 @@ use crate::hierarchy;
 /// Every instance root in `world` not under another instance, with its
 /// link's source.
 fn instance_roots(world: &World) -> Vec<(Entity, AssetPath)> {
-    let roots: Vec<(Entity, AssetPath)> = world
+    world
         .query::<PrefabInstance>()
-        .map(|(entity, link)| (entity, link.source.clone()))
-        .collect();
-    roots
-        .iter()
         .filter(|(entity, _)| {
-            !roots
+            hierarchy::ancestors(world, *entity)
                 .iter()
-                .any(|(other, _)| other != entity && hierarchy::is_ancestor(world, *other, *entity))
+                .all(|&above| world.get::<PrefabInstance>(above).is_none())
         })
-        .cloned()
+        .map(|(entity, link)| (entity, link.source.clone()))
         .collect()
 }
 
@@ -76,7 +72,16 @@ pub fn sync_in(
     root: Entity,
 ) -> Result<SyncReport, SceneError> {
     let mut total = SyncReport::default();
-    sync_tree(world, registry, prefabs, root, &|_| true, &mut total)?;
+    let children = Children::of(world);
+    sync_tree(
+        world,
+        registry,
+        prefabs,
+        root,
+        &children,
+        &|_| true,
+        &mut total,
+    )?;
     Ok(total)
 }
 
@@ -87,12 +92,26 @@ fn sync_matching(
     matches: impl Fn(&AssetPath) -> bool,
 ) -> SyncReport {
     let mut total = SyncReport::default();
-    for (root, _) in instance_roots(world) {
+    let roots = instance_roots(world);
+    // An outermost root is an instance in its own right, whatever a file
+    // from before stage 126 says: remembered, so it stays one when moved
+    // under another instance.
+    for (root, _) in &roots {
+        if let Some(link) = world.get_mut::<PrefabInstance>(*root) {
+            link.own = true;
+        }
+    }
+    // Gathered once: the syncs below change only their own instances.
+    let children = Children::of(world);
+    for (root, _) in roots {
         if !world.is_alive(root) {
             continue;
         }
         // Logged where it failed; the rest go on.
-        sync_tree(world, registry, prefabs, root, &matches, &mut total).ok();
+        sync_tree(
+            world, registry, prefabs, root, &children, &matches, &mut total,
+        )
+        .ok();
     }
     if !total.is_empty() {
         log::info!(
@@ -114,6 +133,7 @@ fn sync_tree(
     registry: &ComponentRegistry,
     prefabs: &mut Prefabs,
     root: Entity,
+    children: &Children,
     matches: &dyn Fn(&AssetPath) -> bool,
     total: &mut SyncReport,
 ) -> Result<(), SceneError> {
@@ -127,14 +147,12 @@ fn sync_tree(
         let Some(source) = world.get::<PrefabInstance>(at).map(|l| l.source.clone()) else {
             continue;
         };
-        let (_, added) = members_in(world, prefabs, at);
         if !matches(&source) {
-            queue.extend(added);
+            queue.extend(members(world, at, children).1);
             continue;
         }
-        let added: HashSet<Entity> = added.into_iter().collect();
         let handle = prefabs.load(&source);
-        match sync_with(world, registry, prefabs.get(handle), at, Some(&added)) {
+        match sync_with(world, registry, prefabs.get(handle), at, children) {
             Ok((report, inner)) => {
                 total.add(report);
                 queue.extend(inner);

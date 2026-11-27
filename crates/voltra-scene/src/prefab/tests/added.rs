@@ -28,7 +28,7 @@ fn write_gem(prefabs: &mut Prefabs, color: [f32; 4]) -> AssetPath {
     );
     world.insert(gem, Sprite::new(color));
     let target = path("gem.prefab.ron");
-    let file = fragment(&world, &registry(), prefabs, gem).expect("cut");
+    let file = fragment(&world, &registry(), gem).expect("cut");
     crate::format::write(&file, &prefabs.root().join(target.as_str())).expect("written");
     target
 }
@@ -102,7 +102,7 @@ fn a_prefab_dropped_under_a_scene_instance_survives_its_sync_and_an_apply() {
     let other = spawned(&mut world, &mut prefabs, &target);
     let dropped = spawned(&mut world, &mut prefabs, &gem);
     set_parent(&mut world, dropped, coin).expect("a plain reparent");
-    assert_eq!(instance_root(&world, &mut prefabs, dropped), Some(dropped));
+    assert_eq!(instance_root(&world, dropped), Some(dropped));
 
     // The variant's instances synced, and the gem's.
     sync_all(&mut world, &registry(), &mut prefabs);
@@ -155,4 +155,26 @@ fn a_prefab_made_from_a_selection_inside_a_variant_stays_in_it() {
     let coin = spawned(&mut world, &mut prefabs, &target);
     sync_all(&mut world, &registry(), &mut prefabs);
     assert_eq!(crate::hierarchy::descendants(&world, coin).len(), before);
+}
+
+#[test]
+fn a_prefab_added_whose_file_is_gone_is_kept() {
+    let root = scratch_root();
+    let mut prefabs = Prefabs::new(&root);
+    let base = write_coin(&mut prefabs, RED, 1.0);
+    let gem = write_gem(&mut prefabs, YELLOW);
+    let mut world = World::new();
+    let coin = spawned(&mut world, &mut prefabs, &base);
+    let dropped = spawned(&mut world, &mut prefabs, &gem);
+    set_parent(&mut world, dropped, coin).expect("a plain reparent");
+    std::fs::remove_file(root.join(gem.as_str())).expect("removed");
+
+    let mut fresh = Prefabs::new(&root);
+    sync_all(&mut world, &registry(), &mut fresh);
+    assert!(world.is_alive(dropped), "kept with its file gone");
+    write_coin(&mut fresh, GREEN, 1.0);
+    let changed = fresh.reload(&base);
+    sync_sources(&mut world, &registry(), &mut fresh, &changed);
+    assert!(world.is_alive(dropped), "and through the coin's edit");
+    assert_eq!(color_of(&world, coin), GREEN);
 }

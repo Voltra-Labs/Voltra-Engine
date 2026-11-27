@@ -13,6 +13,7 @@ use voltra_ecs::{Entity, World};
 
 use super::cycle::{nested_in, reaches};
 use super::instances::sync_sources;
+use super::membership::{members, Children};
 use super::write::WriteError;
 use super::{PrefabInstance, PrefabPart, Prefabs, SyncReport};
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile, VERSION};
@@ -73,12 +74,20 @@ pub fn apply(
         entities: Vec::new(),
     });
     let known: HashSet<SceneId> = resolved.entities.iter().map(|r| r.id).collect();
+    // The instance's own parts — not those of an instance added to it, which
+    // name records of their own file, even ones this file has too (a coin
+    // dropped into a coin).
+    let belongs: HashSet<Entity> = members(world, root, &Children::of(world))
+        .0
+        .into_iter()
+        .collect();
     // Which record each entity is: its part's, where the file has that
     // record; its own id otherwise — what the instance added, and what an
     // instance dropped into it brought, is a record of its own from now on.
     let record_of = |world: &World, entity: Entity| {
         world
             .get::<PrefabPart>(entity)
+            .filter(|_| belongs.contains(&entity))
             .map(|p| p.record)
             .filter(|record| known.contains(record))
             .or_else(|| world.get::<SceneId>(entity).copied())
@@ -163,9 +172,16 @@ pub fn apply(
 
     // The instance is the prefab now.
     for &entity in &entities {
-        let own = !world
-            .get::<PrefabPart>(entity)
-            .is_some_and(|part| known.contains(&part.record));
+        // An instance added to this one is a nested part of it now.
+        if !belongs.contains(&entity) {
+            if let Some(link) = world.get_mut::<PrefabInstance>(entity) {
+                link.own = false;
+            }
+        }
+        let own = !belongs.contains(&entity)
+            || !world
+                .get::<PrefabPart>(entity)
+                .is_some_and(|part| known.contains(&part.record));
         match (own, world.get::<SceneId>(entity).copied()) {
             (true, Some(id)) => {
                 world.insert(entity, PrefabPart::new(id));

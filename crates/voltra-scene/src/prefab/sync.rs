@@ -41,7 +41,7 @@ use voltra_ecs::{Entity, World};
 
 use super::adopt::adopt;
 use super::compare::{canonical, differences, ids_to_records, parent_record, subtree, STRUCTURE};
-use super::membership::{is_added, members};
+use super::membership::{members, Children};
 use super::{Prefab, PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::{self, Parent};
@@ -82,28 +82,28 @@ impl SyncReport {
 /// Keeps the instance rooted at `root` in step with `prefab`.
 ///
 /// An instance added under one of its parts — linked, its part naming no
-/// record of `prefab` — is left alone, as an entity the instance added is;
-/// [`super::sync_in`] syncs it with its own file too.
+/// in its own right ([`PrefabInstance::own`]) — is left alone, as an entity
+/// the instance added is; [`super::sync_in`] syncs it with its own file
+/// too.
 pub fn sync(
     world: &mut World,
     registry: &ComponentRegistry,
     prefab: &Prefab,
     root: Entity,
 ) -> Result<SyncReport, SceneError> {
-    sync_with(world, registry, prefab, root, None).map(|(report, _)| report)
+    let children = Children::of(world);
+    sync_with(world, registry, prefab, root, &children).map(|(report, _)| report)
 }
 
-/// [`sync`], told which entities under `root` are the roots of instances
-/// added to it — worked out with their own files at hand
-/// (`membership.rs`); `None` takes every linked entity whose part names no
-/// record of `prefab` as one. Answers those roots, still alive, for the
-/// caller to sync in turn.
+/// [`sync`], with the world's `children` gathered once by a caller syncing
+/// many instances. Answers the roots of the instances added to this one,
+/// still alive, for the caller to sync in turn.
 pub(super) fn sync_with(
     world: &mut World,
     registry: &ComponentRegistry,
     prefab: &Prefab,
     root: Entity,
-    added: Option<&HashSet<Entity>>,
+    children: &Children,
 ) -> Result<(SyncReport, Vec<Entity>), SceneError> {
     let Some(file) = prefab.file.as_ref() else {
         // A file that would not read: keeping the instance as it is beats
@@ -129,11 +129,7 @@ pub(super) fn sync_with(
 
     // The instance's parts, by record — not those of an instance added to
     // it, which are its own file's.
-    let file_ids: HashSet<SceneId> = file.entities.iter().map(|r| r.id).collect();
-    let (members, added) = members(world, root, &mut |world, child| match added {
-        Some(added) => added.contains(&child),
-        None => is_added(world, child, &file_ids, &mut |_, _| true),
-    });
+    let (members, added) = members(world, root, children);
     let mut parts: HashMap<SceneId, Entity> = HashMap::new();
     for &entity in &members {
         if let Some(part) = world.get::<PrefabPart>(entity) {
@@ -177,7 +173,9 @@ pub(super) fn sync_with(
             .get::<PrefabPart>(entity)
             .map(|part| part.overridden.clone())
             .unwrap_or_default();
-        let differ = differences(world, registry, entity, entity == root, &want, &to_record)?;
+        let differ = differences(world, registry, entity, entity == root, &want, &|id| {
+            to_record.get(&id).copied()
+        })?;
         if differ.difference(&overridden).next().is_some() {
             report.touched.push(entity);
         }

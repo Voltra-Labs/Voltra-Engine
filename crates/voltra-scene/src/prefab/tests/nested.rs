@@ -106,7 +106,7 @@ fn write_coin_with_spark(prefabs: &mut Prefabs) {
     let glow = children_of(&world, top)[0];
     let spark = named(&mut world, "spark", Vec2::ZERO);
     set_parent(&mut world, spark, glow).expect("a plain reparent");
-    let file = fragment(&world, &registry(), prefabs, top).expect("cut");
+    let file = fragment(&world, &registry(), top).expect("cut");
     crate::format::write(&file, &prefabs.root().join(coin.as_str())).expect("written");
 }
 
@@ -237,7 +237,7 @@ fn write_holder(prefabs: &mut Prefabs, name: &str, inner: &[&AssetPath]) -> Asse
         set_parent(&mut world, one, top).expect("a plain reparent");
     }
     let target = path(&format!("{name}.prefab.ron"));
-    let file = fragment(&world, &registry(), prefabs, top).expect("cut");
+    let file = fragment(&world, &registry(), top).expect("cut");
     crate::format::write(&file, &prefabs.root().join(target.as_str())).expect("written");
     target
 }

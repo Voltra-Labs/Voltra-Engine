@@ -46,7 +46,7 @@ pub(super) fn write_coin(prefabs: &mut Prefabs, color: [f32; 4], intensity: f32)
     }
     set_parent(&mut world, glow, coin).expect("parented under the fixed id");
     // Written as an edit on disk is: the store finds out on its reload.
-    let file = fragment(&world, &registry(), prefabs, coin).expect("cut");
+    let file = fragment(&world, &registry(), coin).expect("cut");
     crate::format::write(&file, &prefabs.root().join(target.as_str())).expect("written");
     target
 }

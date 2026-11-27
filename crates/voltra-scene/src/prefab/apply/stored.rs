@@ -8,11 +8,11 @@ use ron::value::RawValue;
 use voltra_ecs::{Entity, World};
 
 use super::super::compare::parent_record;
+use super::super::membership::instance_root;
 use super::super::overrides::refresh_overrides;
 use super::super::resolve::{spawn_stored, written};
 use super::super::{PrefabInstance, PrefabPart, Prefabs};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError, SceneFile};
-use crate::hierarchy;
 use crate::scene_id::SceneId;
 
 /// Puts back on `records` — written from `kept`, the instance at `root` —
@@ -38,10 +38,6 @@ pub(super) fn restore(
         by_id.entry(record.id).or_insert(record);
     }
     let present: HashSet<SceneId> = records.iter().map(|r| r.id).collect();
-    let mut is_added: HashMap<Entity, bool> = HashMap::new();
-    for (record, &entity) in records.iter().zip(kept) {
-        is_added.insert(entity, !by_id.contains_key(&record.id));
-    }
 
     for (record, &entity) in records.iter_mut().zip(kept) {
         if let Some(was) = by_id.get(&record.id) {
@@ -56,12 +52,11 @@ pub(super) fn restore(
         let Some(part) = world.get::<PrefabPart>(entity) else {
             continue;
         };
-        let Some(holder) = nearest_link(world, entity, root) else {
+        // Its part names a record of the instance added to this one it is
+        // in, which becomes an instance stored in the file.
+        let Some(holder) = instance_root(world, entity).filter(|&h| h != root) else {
             continue;
         };
-        if !is_added.get(&holder).copied().unwrap_or(false) {
-            continue;
-        }
         let Some(source) = world
             .get::<PrefabInstance>(holder)
             .map(|l| l.source.clone())
@@ -146,15 +141,6 @@ pub(super) fn refresh(
         }
     }
     written(&world, registry, &entities)
-}
-
-/// The nearest of `entity` and its ancestors carrying a link, short of
-/// `root`.
-fn nearest_link(world: &World, entity: Entity, root: Entity) -> Option<Entity> {
-    std::iter::once(entity)
-        .chain(hierarchy::ancestors(world, entity))
-        .take_while(|&e| e != root)
-        .find(|&e| world.get::<PrefabInstance>(e).is_some())
 }
 
 /// The outermost of `record` and the records above it carrying a link: the

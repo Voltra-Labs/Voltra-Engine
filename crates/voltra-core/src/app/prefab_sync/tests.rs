@@ -26,14 +26,7 @@ fn write_coin(root: &std::path::Path, color: [f32; 4]) {
     world.insert(coin, Name::new("coin"));
     world.insert(coin, Transform::default());
     world.insert(coin, Sprite::new(color));
-    let mut prefabs = voltra_scene::Prefabs::new(root);
-    let file = prefab::fragment(
-        &world,
-        &ComponentRegistry::with_defaults(),
-        &mut prefabs,
-        coin,
-    )
-    .expect("cut");
+    let file = prefab::fragment(&world, &ComponentRegistry::with_defaults(), coin).expect("cut");
     voltra_scene::format::write(&file, &root.join("coin.prefab.ron")).expect("written");
 }
 

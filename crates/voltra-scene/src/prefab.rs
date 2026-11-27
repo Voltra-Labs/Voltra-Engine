@@ -53,7 +53,7 @@ pub use overrides::{note_removed, refresh_overrides, revert, revert_instance};
 pub use resolve::{ResolveProblem, MAX_DEPTH, MAX_RECORDS};
 pub use spawn::{spawn, spawn_scene, Instance};
 pub use staged::StagedScene;
-pub use store::Prefabs;
+pub use store::{Prefabs, MAX_PREFAB_BYTES};
 pub use sync::{sync, SyncReport};
 pub use variant::{variant, variant_name};
 pub use write::{write, WriteError};
@@ -73,9 +73,6 @@ pub struct Prefab {
     source: Option<AssetPath>,
     /// Why instances stored in it were left as the file has them.
     problems: Vec<ResolveProblem>,
-    /// Whether the store followed its stored instances when it read it —
-    /// not for a file read as a level's ([`Prefabs::load_scene`]).
-    resolved: bool,
 }
 
 impl Prefab {

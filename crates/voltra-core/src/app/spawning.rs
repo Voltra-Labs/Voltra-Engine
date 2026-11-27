@@ -59,7 +59,7 @@ impl Tick<'_> {
     /// made with. What a screen built from a template row does once per
     /// row.
     pub fn duplicate(&mut self, entity: Entity) -> Result<Instance, SceneError> {
-        let file = prefab::fragment(self.world, self.registry, self.prefabs, entity)?;
+        let file = prefab::fragment(self.world, self.registry, entity)?;
         let copy = Prefab::new(file)?;
         let instance = prefab::spawn(self.world, self.registry, &copy, &Transform::default())?;
         for &made in &instance.entities {
