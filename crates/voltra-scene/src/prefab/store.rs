@@ -1,5 +1,6 @@
 //! Prefabs, keyed by the path a game or a scene names them with.
 
+mod read;
 mod reload;
 
 use std::collections::HashMap;
@@ -10,7 +11,7 @@ use voltra_assets::{AssetPath, Assets, Handle};
 use super::cycle::nested_counted;
 use super::resolve::{resolve, ResolveProblem, MAX_DEPTH, MAX_LINKS, MAX_SOURCES};
 use super::Prefab;
-use crate::format::{ComponentRegistry, SceneError, SceneFile};
+use crate::format::{ComponentRegistry, SceneFile};
 
 /// The largest prefab file the store reads: a prefab is an asset read from
 /// disk, and one this size is a mistake or an attack, not a template.
@@ -285,35 +286,5 @@ impl Prefabs {
     /// Whether no prefab is loaded.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
-    }
-
-    /// Reads and parses one file, refusing one past `limit` bytes (a
-    /// prefab's [`MAX_PREFAB_BYTES`]; none for a scene's) or of another
-    /// version. The only place this type touches the disk.
-    fn read(&self, path: &AssetPath, limit: Option<u64>) -> Result<SceneFile, SceneError> {
-        let full = self.root.join(path.as_str());
-        let too_large = |limit: u64| {
-            SceneError::Io(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("larger than {limit} bytes, the most a prefab may be"),
-            ))
-        };
-        if let Some(limit) = limit {
-            if !voltra_assets::fs::is_packed(&full) {
-                if let Ok(meta) = std::fs::metadata(&full) {
-                    if meta.len() > limit {
-                        return Err(too_large(limit));
-                    }
-                }
-            }
-        }
-        let text = voltra_assets::fs::read_to_string(&full)?;
-        if let Some(limit) = limit.filter(|&limit| text.len() as u64 > limit) {
-            return Err(too_large(limit));
-        }
-        let file: SceneFile = ron::from_str(&text).map_err(SceneError::Parse)?;
-        Ok(Prefab::new(file)?
-            .file
-            .expect("Prefab::new keeps the file it checked"))
     }
 }
