@@ -26,6 +26,7 @@ mod partial;
 mod particles;
 mod path_field;
 mod prefab;
+mod replicated;
 mod sections;
 mod shadow_caster;
 mod shapes2d;

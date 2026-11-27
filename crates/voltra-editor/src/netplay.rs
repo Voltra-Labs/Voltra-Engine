@@ -222,12 +222,18 @@ pub(crate) fn status(editor: &Editor, frame: &UiFrame<'_>) -> serde_json::Value 
             })
         })
     };
+    let replication = frame.net.replication().and_then(|r| r.server());
     let server: Vec<_> = frame
         .net
         .peers()
         .collect::<Vec<_>>()
         .into_iter()
-        .filter_map(|p| peer(frame.net, p))
+        .filter_map(|p| {
+            let mut connection = peer(frame.net, p)?;
+            connection["relevant"] =
+                json!(replication.and_then(|s| s.stats(p)).map(|s| s.relevant));
+            Some(connection)
+        })
         .collect();
     let clients: Vec<_> = editor
         .netplay

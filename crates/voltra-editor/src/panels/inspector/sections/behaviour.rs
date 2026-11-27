@@ -1,15 +1,16 @@
 //! The sections of how an entity moves, lights, frames and sounds: its
-//! skin and bones, parallax, light, joint, animation, camera and sound.
+//! skin and bones, parallax, light, joint, animation, camera, sound and
+//! replication.
 
 use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
-use voltra_scene::{AudioSource, Camera, Parallax, Transform};
+use voltra_scene::{AudioSource, Camera, Parallax, Replicated, Transform};
 
 use super::super::mixed;
 use super::super::{
     animation_player, animator, audio_source, camera, camera_rig, camera_view, global_light, joint,
-    light, parallax, skeleton, skinned,
+    light, parallax, replicated, skeleton, skinned,
 };
 use super::gate;
 use crate::editor::Editor;
@@ -174,6 +175,15 @@ pub(in crate::panels::inspector) fn show(
             frame.audio,
             &mut editor.audition,
         ));
+    }
+    if let Some(sent) = gate(
+        frame.world.get_mut::<Replicated>(entity),
+        multi,
+        Replicated::NAME,
+    ) {
+        ui.separator();
+        mixed::marker(ui, multi, &[Replicated::NAME]);
+        claim = claim.or(replicated::show(ui, sent));
     }
     claim
 }

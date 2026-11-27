@@ -11,14 +11,17 @@ use voltra_net::ConnectionStats;
 use super::tick_net::Net;
 
 /// The counters' names, which the editor's profiler and a bridge client
-/// read back.
-pub const NET_COUNTERS: [&str; 6] = [
+/// read back. `net relevant` is a server's: the replicated entities
+/// relevant to its clients at the last snapshot, summed over them — every
+/// entity once per client without interest management.
+pub const NET_COUNTERS: [&str; 7] = [
     "net rtt ms",
     "net bytes out",
     "net bytes in",
     "net packets out",
     "net packets in",
     "net peers",
+    "net relevant",
 ];
 
 impl Net {
@@ -59,6 +62,14 @@ impl Net {
             return;
         }
         let (total, peers) = self.totals();
+        let relevant: usize = match self.replication.as_ref().and_then(|r| r.server()) {
+            Some(server) => server
+                .clients()
+                .filter_map(|peer| server.stats(peer))
+                .map(|stats| stats.relevant)
+                .sum(),
+            None => 0,
+        };
         // A peer that left takes its totals with it: never a negative frame.
         let delta = |now: u64, then: u64| now.saturating_sub(then) as f64;
         let values = [
@@ -68,6 +79,7 @@ impl Net {
             delta(total.packets_sent, self.counted.packets_sent),
             delta(total.packets_received, self.counted.packets_received),
             peers as f64,
+            relevant as f64,
         ];
         for (name, value) in NET_COUNTERS.into_iter().zip(values) {
             voltra_profile::count(name, value);

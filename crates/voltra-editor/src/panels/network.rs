@@ -81,14 +81,28 @@ fn contents(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
         return;
     }
     ui.strong("Server");
+    let server = frame.net.replication().and_then(|r| r.server());
     egui::Grid::new("network-server")
         .striped(true)
         .show(ui, |ui| {
             header(ui);
             for peer in frame.net.peers().collect::<Vec<_>>() {
                 connection(ui, &format!("{peer}"), frame.net, peer);
+                match server.and_then(|s| s.stats(peer)) {
+                    Some(stats) => ui.label(stats.relevant.to_string()),
+                    None => ui.weak("–"),
+                }
+                .on_hover_text("replicated entities relevant to this client");
+                ui.end_row();
             }
         });
+    if let Some(interest) = server.and_then(|s| s.interest()) {
+        ui.weak(format!(
+            "interest: {:.1} units (leaving at {:.1}); circles on each map",
+            interest.radius,
+            interest.leave_radius(interest.radius)
+        ));
+    }
     ui.separator();
     for (n, client) in editor.netplay.clients().iter().enumerate() {
         ui.strong(format!("Client {}", n + 1));
@@ -97,6 +111,7 @@ fn contents(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
             .show(ui, |ui| {
                 header(ui);
                 connection(ui, "server", client.net(), PeerId::SERVER);
+                ui.end_row();
             });
         if let Some(stats) = client
             .net()
@@ -116,7 +131,14 @@ fn contents(editor: &mut Editor, ui: &mut Ui, frame: &UiFrame<'_>) {
 }
 
 fn header(ui: &mut Ui) {
-    for title in ["peer", "RTT", "sent", "received", "packets out/in"] {
+    for title in [
+        "peer",
+        "RTT",
+        "sent",
+        "received",
+        "packets out/in",
+        "relevant",
+    ] {
         ui.weak(title);
     }
     ui.end_row();
@@ -135,7 +157,6 @@ fn connection(ui: &mut Ui, name: &str, net: &voltra_core::Net, peer: PeerId) {
             ui.weak("connecting…");
         }
     }
-    ui.end_row();
 }
 
 fn kilobytes(bytes: u64) -> String {
@@ -143,7 +164,9 @@ fn kilobytes(bytes: u64) -> String {
 }
 
 /// The client's replicated entities as dots, framed on the server's: a
-/// lagging or missing one shows as a dot apart from the rest.
+/// lagging or missing one shows as a dot apart from the rest. With
+/// interest management, a circle round each of the client's interest
+/// points: the radius it is sent the world within.
 fn map(ui: &mut Ui, client: &Headless, frame: &UiFrame<'_>) {
     let positions = |world: &voltra_ecs::World| -> Vec<voltra_render::glam::Vec2> {
         world
@@ -175,6 +198,25 @@ fn map(ui: &mut Ui, client: &Headless, frame: &UiFrame<'_>) {
             rect.bottom() - 6.0 - t.y * (MAP - 12.0),
         )
     };
+    let server_side = frame.net.replication().and_then(|r| r.server());
+    if let (Some(replication), Some(peer)) = (server_side, client.net().local_id()) {
+        if let Some(interest) = replication.interest() {
+            // The map scales each axis to fit, so a circle of the world
+            // is an ellipse on it.
+            let radius = Vec2::new(
+                interest.radius / span.x * (MAP - 12.0),
+                interest.radius / span.y * (MAP - 12.0),
+            );
+            let stroke = egui::Stroke::new(1.0, ui.visuals().weak_text_color());
+            for &point in replication.interest_points(peer) {
+                painter.add(egui::Shape::ellipse_stroke(
+                    to_screen(point),
+                    radius,
+                    stroke,
+                ));
+            }
+        }
+    }
     for p in &server {
         painter.circle_filled(to_screen(*p), 4.0, Color32::from_gray(90));
     }
