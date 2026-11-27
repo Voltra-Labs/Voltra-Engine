@@ -4040,17 +4040,35 @@ and there was no prefab *of* a prefab.
   *nested* one, whose entities are parts of the outer instance (their
   parts name the outer file's records), and an *added* one — a prefab
   dropped under a part, or made there from a selection — whose parts name
-  its own file's. A linked entity whose part names no record of the outer
-  file but one of its own is added (Unity tells its added nested prefab
-  instances apart the same way, by whose file the object belongs to); one
-  whose own file will not read counts as added, so it is kept rather than
-  despawned. A sync of the outer instance leaves it out, as it leaves an
-  added entity; `sync_in` (and `sync_all`, `sync_sources`, the store's
-  resolve) syncs it with its own file after, inwards. `instance_root`,
-  `note_removed` and `fragment` take the store to tell the two apart.
-  Before this a prefab dropped under a variant's root, or under a part of
-  any instance in a scene, was despawned by the next sync as lost parts.
-  An Apply writes it into the file as a stored instance, linked.
+  its own file's. **Which is which is recorded**, on the link:
+  `PrefabInstance::own` (Unity's added-objects list, kept on the added
+  instance). A spawn links its roots as their own and clears it on the
+  nested links it copies; Create prefab's link is its own; a link read
+  without it — every file before this stage — is a nested part, which is
+  what those files meant, and `sync_all` marks every outermost root as its
+  own, so an old top-level instance moved under another stays one (written
+  as `own: true` on the next save). A first version inferred it from the
+  records a part names and was wrong both ways: a coin dropped into a coin
+  names the coin's own records (taken for parts, two entities claiming one
+  record, and Apply wrote the coin into itself past the cycle check), and a
+  row cut from a selection holding a coin holds it under the coin file's
+  own id (deleted from the row, kept in its instances as "added"). A sync
+  of the outer instance leaves an own one out, as it leaves an added
+  entity; `sync_in` (and `sync_all`, `sync_sources`, the store's resolve)
+  syncs it with its own file after, inwards. `instance_root` walks up: the
+  nearest link, then outwards through every one it is a nested part of, to
+  the first in its own right. Apply writes an added instance into the file
+  as a stored one (it is a nested part of the instance from then on), and
+  refuses one of the file itself as the cycle it is.
+- **Cost.** One children map per `sync_all` / `sync_in` / resolve, not one
+  per instance; outermost roots found by walking up, not by comparing every
+  pair; `refresh_overrides` walks only upwards, and looks an entity a value
+  names up only when one does. `sync_all` of 3000 two-entity coin instances
+  among 20 000 other entities, in step (the dev profile, this container):
+  380 ms before this stage (337a286), 177 ms now — and 2.76 s at the first
+  version of the added-instance rule, which built the map per instance;
+  `refresh_overrides` of one part 24 µs. Pinned as the bench
+  `prefab/sync-all/3000-instances-20000-entities`.
 - **Apply keeps stored instances**: the instance's records are written as
   before, then each record the file had takes back the file's link and
   part, one the instance added keeps the link and parts of a prefab dropped
@@ -4067,8 +4085,10 @@ and there was no prefab *of* a prefab.
 - **Levels are read as scenes**: an additive load reads its file through
   `Prefabs::load_scene` — no prefab byte limit (a scene never had one),
   its instances not followed (the sync after the load brings them in step,
-  in the world), one copy cached. The same file later instanced as a
-  prefab is followed then, under the same handle.
+  in the world), one copy. Cached apart from the prefabs, so which is
+  asked for first never changes how a file is read; one used both ways is
+  held twice. `prefab::write` answers what its refresh read again, as
+  `reload` does, since a reload after it finds nothing changed.
 - **Loops**: the store follows root links now, so `nested_sources` and
   `reaches` count a variant's base. Refused before writing at every place
   one can be made — `prefab::write`, Apply, `prefab::variant`, a save in
@@ -4133,9 +4153,7 @@ variant's root `Transform` is its own whole, as every instance root's is,
 so a base edit to the root's rotation or scale does not reach it (Unity
 keeps root position and rotation per instance and lets scale follow; a
 split `Transform` override is the field-level overrides stage 64 left
-out); an instance its outer file stops holding stays in an outer instance
-in a scene, as that instance's own, when the inner file still has the
-record its root names (it cannot be told from one added there).
+out).
 
 Pinned by:
 - `prefab::tests::variant`: a variant naming its base and spawning it; a
@@ -4148,7 +4166,15 @@ Pinned by:
   loop of one and of two files written on disk, and one through a nested
   (not root) instance, read with a `Cycle` problem and reloaded without
   recursing; a chain past `MAX_DEPTH` stopping.
-- `prefab::tests::added`: a prefab dropped under a variant's root in its
+- `prefab::tests::own`: a coin dropped into a coin following its own file,
+  nothing lost or doubled, and Apply refusing it as a cycle with nothing
+  written; a coin deleted from a row cut around it leaving the row's
+  instances; a file from before reading its nested instance as a part and
+  saving it so, its outermost root marked its own.
+- `prefab::tests::store`: a level past the prefab limit read as a scene and
+  refused as a prefab, whichever is asked for first.
+- `prefab::tests::added`: one whose file is gone kept through syncs; a
+  prefab dropped under a variant's root in its
   mode kept by the save, a second save, and following its own file; one
   dropped under a scene instance of a variant surviving `sync_all`,
   following its file, and Applied into the variant, linked; one made from
@@ -8545,6 +8571,7 @@ moves only when the code it times does:
 | `text/layout/{paragraph-1k,labels-100}` | `Fonts::layout_uncached`: 1 000 characters shaped and wrapped at 400 px; 100 HUD labels — what a changed text costs |
 | `text/layout/{paragraph-1k,labels-100}-cached` | the same through `Fonts::layout`'s cache, warm (stage 108) — what a frame showing the same text again costs |
 | `scene/parse/{250,500}-entities`, `scene/load/250-entities` | `ron::from_str::<SceneFile>`, and that plus `from_scene_file` |
+| `prefab/sync-all/3000-instances-20000-entities` | `prefab::sync_all` over a level already in step: 3000 two-entity coin instances among 20 000 other entities (stage 126) |
 | `frame/headless/sandbox-640x360` | `Headless::screenshot` of `sandbox.ron`: record, submit, lavapipe, read back |
 
 GPU benchmarks are recorded as skipped, and never compared, where there is
