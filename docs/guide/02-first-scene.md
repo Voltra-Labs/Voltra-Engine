@@ -102,6 +102,23 @@ scene comes back as it was, undo history and all, and every instance has
 the prefab's changes. An instance inside the prefab opens in turn, one
 level deeper.
 
+A prefab inside another stays linked to its own file: edit and save the
+inner one (a coin inside a `row.prefab.ron`) and every row in the scene
+picks the change up without the row being saved again — but for what the
+row changed on that coin, which stays the row's.
+
+A **variant** is a prefab that starts as another and changes some of it — a
+blue coin that is otherwise the coin. Right-click a prefab in the asset
+browser, "Create variant" (or **Create variant** in prefab mode's bar):
+`coin Variant.prefab.ron` appears beside it. Open it and edit it like any
+prefab; what you change is recorded as its overrides, listed in the
+inspector on its root. Every later edit to the coin reaches the variant and
+its instances, except what the variant overrides — and an instance of the
+variant can override that in turn. **Apply to prefab** on an instance of a
+variant writes the variant; to change the base, Apply from inside the
+variant's prefab mode, or edit the base itself. A prefab cannot hold
+itself, directly or through a variant: saving one that would is refused.
+
 ## Atlases
 
 An atlas is a sheet of pictures and the `.atlas.ron` that cuts it into
