@@ -1,7 +1,10 @@
 // The arena's web build joining a native arena server over WebSocket: the
-// page's `?join=ws://…` names the server, the server logs the browser
-// joining and spawns its player, and the page — once replication has sent
-// that player — predicts it. On WebGPU and WebGL2, a peer each.
+// page's `?join=ws://…` names the server (a page has no LAN search: it
+// joins by address), `?bot` readies it up in the server's lobby and — the
+// lobby's first player, its host — starts the match; the server logs the
+// browser joining and spawns its player, and the page — once replication
+// has sent that player — predicts it. On WebGPU and WebGL2, a peer each:
+// the second drops into the match the first started.
 //
 //   node crates/voltra-player/web/test/arena.mjs [--skip-build] [--out DIR]
 //
@@ -29,7 +32,7 @@ const serverLog = [];
 const server = spawn(
   join(target, "debug", exe),
   ["--asset-root", join(workspace, "games/arena/assets"), "--udp", "off", "--ws", "0",
-    "--seconds", "240", "--port-file", portFile],
+    "--discovery", "off", "--min-players", "1", "--seconds", "240", "--port-file", portFile],
   { env: { ...process.env, RUST_LOG: "info" }, stdio: ["ignore", "ignore", "pipe"] },
 );
 // `onEveryBackend` exits the process when it is done: the server goes too.
@@ -73,7 +76,7 @@ let joined = 0;
 try {
   await onEveryBackend({
     site,
-    url: `${web.url}?join=ws://127.0.0.1:${port}/`,
+    url: `${web.url}?join=ws://127.0.0.1:${port}/&bot`,
     name: "arena",
     initScript: keepLog,
     check: async (page) => {

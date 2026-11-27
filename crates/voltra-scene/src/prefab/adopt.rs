@@ -75,7 +75,9 @@ pub(super) fn adopt(
         .collect();
     for &(entity, record) in &matched {
         let want = canonical(registry, record)?;
-        let overridden = differences(world, registry, entity, entity == root, &want, &to_record)?;
+        let overridden = differences(world, registry, entity, entity == root, &want, &|id| {
+            to_record.get(&id).copied()
+        })?;
         world.insert(
             entity,
             PrefabPart {

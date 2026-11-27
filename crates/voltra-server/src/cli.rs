@@ -35,6 +35,8 @@ pub fn main(name: &str, make: impl FnOnce(&mut Args) -> App) -> ExitCode {
         }
     };
     let app = make(&mut args);
+    // What the command line says wins over the game's defaults.
+    args.apply_flags();
     match run(app, *args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
@@ -61,8 +63,11 @@ fn run(mut app: App, args: Args) -> Result<(), String> {
     for address in &addresses {
         log::info!("listening on {address}");
     }
+    if let Some(at) = server.discovery_addr() {
+        log::info!("answering LAN probes on udp://{at}");
+    }
     if let Some(file) = &args.port_file {
-        let lines: String = addresses
+        let mut lines: String = addresses
             .iter()
             .filter_map(|address| match address {
                 Address::Udp(at) => Some(format!("udp {}\n", at.port())),
@@ -70,6 +75,9 @@ fn run(mut app: App, args: Args) -> Result<(), String> {
                 _ => None,
             })
             .collect();
+        if let Some(at) = server.discovery_addr() {
+            lines.push_str(&format!("discovery {}\n", at.port()));
+        }
         std::fs::write(file, lines)
             .map_err(|e| format!("could not write {}: {e}", file.display()))?;
     }

@@ -16,7 +16,7 @@ fn write(root: &Path, language: &str, body: &str) {
     .expect("the table");
 }
 
-fn tables() -> PathBuf {
+fn tables() -> voltra_testkit::Scratch {
     let root = scratch_root();
     write(&root, "en", r#""greet": "Hello", "bye": "Goodbye""#);
     write(&root, "es", r#""greet": "Hola""#);
@@ -70,7 +70,8 @@ fn applied_fonts_become_the_fallback_chain() {
 
 #[test]
 fn a_key_reads_in_the_current_language() {
-    let mut locale = Locale::open(tables(), "en");
+    let root = tables();
+    let mut locale = Locale::open(&root, "en");
     assert_eq!(locale.text("greet"), "Hello");
     assert!(locale.set_language("es"));
     assert_eq!(locale.language(), "es");
@@ -79,7 +80,8 @@ fn a_key_reads_in_the_current_language() {
 
 #[test]
 fn a_missing_string_shows_its_key() {
-    let locale = Locale::open(tables(), "es");
+    let root = tables();
+    let locale = Locale::open(&root, "es");
     assert_eq!(locale.text("bye"), "bye");
     assert_eq!(locale.text("bye"), "bye", "and again, warned once");
     assert!(locale.missing.borrow().contains("bye"));
@@ -87,7 +89,8 @@ fn a_missing_string_shows_its_key() {
 
 #[test]
 fn a_language_with_no_table_shows_keys_and_says_so() {
-    let mut locale = Locale::open(tables(), "en");
+    let root = tables();
+    let mut locale = Locale::open(&root, "en");
     assert!(!locale.set_language("fr"));
     assert_eq!(locale.language(), "fr");
     assert_eq!(locale.text("greet"), "greet");
@@ -96,7 +99,8 @@ fn a_language_with_no_table_shows_keys_and_says_so() {
 
 #[test]
 fn keyed_texts_follow_the_language_and_plain_ones_stay() {
-    let mut locale = Locale::open(tables(), "en");
+    let root = tables();
+    let mut locale = Locale::open(&root, "en");
     let mut world = World::new();
     let keyed = world.spawn();
     world.insert(

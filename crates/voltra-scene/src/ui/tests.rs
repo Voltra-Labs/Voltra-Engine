@@ -20,7 +20,7 @@ fn element(world: &mut World, rect: UiRect) -> Entity {
 }
 
 fn fonts() -> Fonts {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     copy_bundled_font(&root, DEFAULT_FONT);
     Fonts::new(root)
 }

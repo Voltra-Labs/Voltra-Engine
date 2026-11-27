@@ -1,6 +1,7 @@
 # 9. Effects and animation
 
-Particles, drawn lines and shapes, and characters made of bones. Every one
+Particles, drawn lines and shapes, state machines that crossfade clips
+and blend them in trees, and characters made of bones. Every one
 of them is a component, edited in the inspector, saved in the scene file and
 drawn in painter's order with the sprites (`sort_order`, sorting layers,
 lights).
@@ -56,6 +57,161 @@ Scene ▸ Spawn line, Spawn polygon and Spawn trail make one of each:
 **Edit points** in a line's or a polygon's inspector puts handles on the
 points in the viewport: drag one, press the middle of a side to add one
 there, right-click one to remove it. `Esc` ends it.
+
+## State machines and crossfades
+
+An **`Animator`** chooses which clip an entity's `AnimationPlayer` plays.
+It runs a state machine, a `*.animator.ron` file: parameters the game sets
+(`set_float`, `set_bool`, `trigger`), states that each play a clip, and
+transitions between them. Give a transition a `duration` and the animator
+crossfades instead of cutting: for that many seconds the clip leaving keeps
+playing, the new one starts, and each property is written with their mix.
+
+```ron
+transitions: [
+    (from: Some("idle"), to: "run", conditions: [Greater("speed", 0.1)], duration: 0.15),
+    (from: Some("run"), to: "idle", conditions: [Less("speed", 0.1)], duration: 0.2),
+    (from: Some("idle"), to: "fidget", exit_time: Some(3.0)),
+],
+```
+
+Positions, scales, colours and intensities mix in proportion, rotations
+the short way round, and a sprite frame switches half way. A property only
+one of the two clips animates keeps that clip's value. A transition that
+fires mid-fade fades on from what is showing, so nothing jumps. No
+`duration` is `0`: a cut, as before.
+
+`exit_time` is how much of the state's clip must play first: below `1.0` a
+point in each loop (`0.5`, half way through any loop), from `1.0` up a
+number of loops of a clip that loops — the `fidget` above waits for three
+idles. On a clip that does not loop, `1.0` and above wait for its end; a
+clip of no length (one key) never makes a transition wait.
+
+The inspector lists a machine's transitions under the animator, each with
+its fade in seconds; **Save** writes those durations into the file —
+only them: a transition the editor ignored for a typo stays in the file
+for you to fix (written as plain RON, without its comments) — and
+**Revert** reads it back. Every entity running the machine
+fades the new way at once.
+
+## Blend trees
+
+A state can play a **blend tree** instead of one clip: several clips at
+once, each weighted by where a float parameter puts the game among them.
+A `Blend1D` places clips along one parameter — between two thresholds the
+two clips there mix in proportion, past either end the end clip plays:
+
+```ron
+(name: "move", tree: Blend1D(parameter: "speed", children: [
+    (threshold: 0.0, clip: Path("animations/hero/idle.anim.ron")),
+    (threshold: 1.5, clip: Path("animations/hero/walk.anim.ron")),
+    (threshold: 3.5, clip: Path("animations/hero/run.anim.ron")),
+])),
+```
+
+A `Blend2D` places them at points over two parameters, `x` and `y` — a
+stick's direction, say, with an idle at `(0.0, 0.0)` and a walk each way
+at `(1.0, 0.0)`, `(0.0, 1.0)` and so on. The game's point mixes the three
+clips of the triangle around it; outside every triangle, the two of the
+nearest edge. The weights follow the parameters every frame, with no
+transition.
+
+A tree's clips play **in step**: each is the same fraction through its own
+cycle, and the tree's length is their weighted average, so a walk sliding
+into a run keeps its stride. A state's `exit_time` counts the tree's loops.
+Transitions into and out of a tree state crossfade as any other does.
+
+A tree whose parameter is not a float, or not there, reads `0` and says so
+in the log; an empty tree plays nothing. The inspector shows each tree
+under **blend trees**: pick its parameters, drag thresholds and points,
+drop a clip from the browser onto a row to change it or onto **add** to
+add one, **Clear** a row to take its clip out — **Save** writes the trees
+with the fades. `crates/voltra-core/examples/character.rs` blends idle,
+walk and run by speed on the ground and crossfades to a jump or a fall
+(`assets/animations/hero.animator.ron`).
+
+## Layers
+
+A machine's states are its first layer. Under `layers` it can have more,
+each a state machine of its own — its own states, transitions and start —
+played over the ones before it and reading the same parameters:
+
+```ron
+layers: [
+    (
+        name: "upper",
+        mask: ["arm"],
+        states: [
+            (name: "rest"),
+            (name: "wave", clip: Path("animations/hero/wave.anim.ron")),
+        ],
+        transitions: [
+            (from: Some("rest"), to: "wave", conditions: [If("wave")]),
+            (from: Some("wave"), to: "rest", exit_time: Some(1.0)),
+        ],
+    ),
+    (name: "breath", blend: Additive, weight: 0.5,
+     states: [(name: "in", clip: Path("animations/hero/breath.anim.ron"))]),
+],
+```
+
+- **`mask`** lists the entities the layer may animate, by their path
+  under the animator's entity; each brings everything under it, so
+  `"arm"` is the arm and its hand. No mask is everything. The wave above
+  moves the arm, whatever its clip keys elsewhere.
+- **`weight`** (`0` to `1`, default `1`) is how much of the layer shows.
+  A game can change it while playing: `animator.set_layer_weight("upper",
+  0.3)`. At `0` the layer writes nothing at all; in between, what it
+  animates moves that fraction of the way from what is under it — also
+  for a property nothing under it animates, which moves from the value it
+  had before the layer touched it. If your game moves such a property
+  itself (`translation += velocity * dt`), the layer goes over the game's
+  motion; a value the game sets outright every frame shows as set, so to
+  layer over that, move a parent instead.
+- **`blend: Additive`** adds the layer's clips' *change from their first
+  frame*, times the weight, to what is under it: a breath keyed from
+  `(1.0, 1.0)` to `(1.05, 1.05)` grows any state's scale by up to 0.05.
+  Key an additive clip from where it starts, often no change at all. A
+  sprite frame cannot be added, and an additive layer's frame replaces
+  the one under it. The default, `Override`, replaces what is under it.
+- A state with neither a clip nor a tree plays nothing — in a layer, the
+  usual way to show nothing until a transition calls for something
+  (`rest` above). A layer that has played a clip to its end keeps its
+  last frame; when it stops animating something, that goes back to what
+  is under it.
+
+The inspector lists a machine's layers — weight, blend, and the mask
+(**add to mask** offers the named entities under the animator's) — and
+every layer's transitions and trees; **Save** writes them with the rest.
+The character example adds a squash on every landing with an additive
+layer, whichever state it is in.
+
+## Recording keys in the Timeline
+
+Select an entity with an **AnimationPlayer** that names a clip — or one
+of its named children — and the **Timeline** shows the clip: a row per
+track, keys as diamonds, the playhead on top. **Preview** shows the clip
+at the playhead in the viewport, without changing the scene.
+
+Press **Record** (it turns the preview on) and editing an entity under
+the player keys the clip instead of the scene: drag one with the move,
+turn or scale tool, or change a position, a colour or a frame in the
+inspector, and the new value is keyed at the playhead. A property the
+clip did not animate gets a track, starting from the value it had, so a
+move recorded at one second moves from where the entity stood. The scene
+itself keeps its values; switch Record off to edit it again.
+
+The Timeline has its own **Undo** and **Redo**: `Ctrl+Z` over the
+Timeline — or anywhere while recording — takes back the last change to the
+clip, a whole drag at once; elsewhere it is the scene's. **Copy** takes
+the selected key, or every key at the playhead when none is selected;
+**Paste** puts them at the playhead — one key into the selected track if
+it animates the same property, so a position copied off one entity can be
+pasted onto another's, and otherwise each key back into its own track.
+`Ctrl+C`, `Ctrl+X` (copy, then delete what was copied), `Ctrl+V` and
+`Delete` do the same with the pointer over the Timeline. While recording,
+**Set rest** on a bone and **Fit to sprite** on a collider use the scene's
+own values, not the pose. **Save** writes the clip.
 
 ## Bones
 

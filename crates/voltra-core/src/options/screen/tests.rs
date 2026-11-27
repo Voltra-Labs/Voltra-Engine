@@ -111,7 +111,8 @@ fn choose(h: &mut Harness, name: &str, steps: i32) {
 
 #[test]
 fn the_screen_lists_a_volume_per_bus_and_a_row_per_action() {
-    let h = harness(&voltra_testkit::scratch_root());
+    let scratch = voltra_testkit::scratch_root();
+    let h = harness(&scratch);
     let world = h.session.world();
     for bus in ["master", "music", "sfx", "ui"] {
         assert!(label(world, &format!("Volume: {bus}")).ends_with("100%"));
@@ -136,7 +137,8 @@ fn the_screen_lists_a_volume_per_bus_and_a_row_per_action() {
 
 #[test]
 fn the_tabs_show_one_page_at_a_time() {
-    let mut h = harness(&voltra_testkit::scratch_root());
+    let scratch = voltra_testkit::scratch_root();
+    let mut h = harness(&scratch);
     let hidden = |h: &Harness, name: &str| {
         let world = h.session.world();
         world
@@ -152,7 +154,8 @@ fn the_tabs_show_one_page_at_a_time() {
 
 #[test]
 fn escape_closes_an_open_list_before_the_screen() {
-    let mut h = harness(&voltra_testkit::scratch_root());
+    let scratch = voltra_testkit::scratch_root();
+    let mut h = harness(&scratch);
     press(&mut h, "Display mode");
     assert!(h.session.ui().open_list().is_some(), "the list is open");
     tap(&mut h.session, KeyCode::Escape);
@@ -200,7 +203,8 @@ fn a_rebound_key_is_shown_used_and_kept() {
 
 #[test]
 fn cancel_backs_out_of_a_rebind_then_out_of_the_screen() {
-    let mut h = harness(&voltra_testkit::scratch_root());
+    let scratch = voltra_testkit::scratch_root();
+    let mut h = harness(&scratch);
     press(&mut h, "Controls tab");
     press(&mut h, "Binding: jump");
     tap(&mut h.session, KeyCode::Escape);
@@ -215,7 +219,8 @@ fn cancel_backs_out_of_a_rebind_then_out_of_the_screen() {
 
 #[test]
 fn the_display_rows_reach_the_window() {
-    let mut h = harness(&voltra_testkit::scratch_root());
+    let scratch = voltra_testkit::scratch_root();
+    let mut h = harness(&scratch);
     choose(&mut h, "Display mode", 1);
     assert_eq!(h.session.window().fullscreen(), Fullscreen::Borderless);
     assert_eq!(shown(h.session.world(), "Display mode"), "Fullscreen");
@@ -244,7 +249,8 @@ fn the_display_rows_reach_the_window() {
 
 #[test]
 fn a_volume_slider_sets_its_bus() {
-    let mut h = harness(&voltra_testkit::scratch_root());
+    let scratch = voltra_testkit::scratch_root();
+    let mut h = harness(&scratch);
     press(&mut h, "Audio tab");
     let slider = named(h.session.world(), "Volume: music");
     h.session.focus(Some(slider));

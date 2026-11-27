@@ -32,6 +32,16 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
     );
     if root == entity {
         ui.label(RichText::new(format!("instance of {}", source.as_str())).weak());
+        let handle = frame.prefabs.load(&source);
+        if let Some(base) = frame.prefabs.get(handle).base() {
+            ui.label(RichText::new(format!("a variant of {}", base.as_str())).weak())
+                .on_hover_text(
+                    "Apply writes the variant; open it (Edit prefab) and Apply there to change the base",
+                );
+        }
+        for problem in frame.prefabs.get(handle).problems() {
+            ui.colored_label(ui.visuals().warn_fg_color, problem.to_string());
+        }
     } else {
         ui.label(RichText::new(format!("part of an instance of {}", source.as_str())).weak());
     }
@@ -61,6 +71,10 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
         });
     }
     if let Some(name) = revert {
+        // A prefab reads, and is read onto, the authored scene, not a pose.
+        editor
+            .timeline
+            .end_record(frame.world, frame.animation_clips);
         crate::instance::revert(editor, frame, entity, Some(&name));
     }
 
@@ -71,6 +85,9 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
                 .on_hover_text("write this instance over its file; every other instance follows")
                 .clicked()
             {
+                editor
+                    .timeline
+                    .end_record(frame.world, frame.animation_clips);
                 crate::instance::apply(editor, frame, root);
             }
             if ui
@@ -78,6 +95,9 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
                 .on_hover_text("every override and every deleted part back to the prefab's")
                 .clicked()
             {
+                editor
+                    .timeline
+                    .end_record(frame.world, frame.animation_clips);
                 crate::instance::revert_instance(editor, frame, root);
             }
         });

@@ -14,3 +14,10 @@ cargo xtask dist --web --manifest games/{{package}}/build.ron     # for a browse
 The code is `src/lib.rs`; the first scene is `assets/scenes/main.ron`. In
 the editor, Play runs the game, and saving a change to `src/` rebuilds it
 and swaps it in while it plays.
+
+`assets/prefabs/options.prefab.ron` and `assets/prefabs/lobby.prefab.ron`
+are the engine's options and lobby screens, yours to restyle (keep the
+parts' names): open them from a menu with `OptionsScreen::open` and
+`LobbyScreen::open` — the lobby hosts, finds games on the LAN, joins by
+address, and answers `Started` when the host starts the match
+(`tests/lobby.rs`).

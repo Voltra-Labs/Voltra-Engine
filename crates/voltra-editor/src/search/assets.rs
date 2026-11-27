@@ -132,13 +132,8 @@ fn walk_into(root: &Path, dir: Option<&AssetPath>, found: &mut Vec<Entry>) {
 mod tests {
     use super::*;
 
-    fn project() -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!(
-            "voltra-asset-search-{}-{:?}",
-            std::process::id(),
-            std::thread::current().id()
-        ));
-        let _ = std::fs::remove_dir_all(&root);
+    fn project() -> voltra_testkit::Scratch {
+        let root = voltra_testkit::Scratch::new("voltra-asset-search");
         for path in [
             "sprites/coin.png",
             "sprites/coin.atlas.ron",

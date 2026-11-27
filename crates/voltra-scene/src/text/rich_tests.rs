@@ -9,7 +9,7 @@ use super::shape::{glyphs, layout_at};
 use super::*;
 
 fn fonts() -> Fonts {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     copy_workspace_asset(&root, DEFAULT_FONT);
     copy_workspace_asset(&root, NOTO_ARABIC);
     Fonts::new(root)

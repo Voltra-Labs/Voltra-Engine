@@ -36,6 +36,26 @@ pub struct CharacterBody2D {
     pub stop_on_slope: bool,
     /// The most surfaces one move slides along.
     pub max_slides: u32,
+    /// The most force, in newtons (world units of mass × units per second
+    /// squared), it pushes a dynamic body it walks into with: an impulse
+    /// of at most `push_force × delta` a move, along the contact's normal at
+    /// the contact point, so a heavier crate moves less and one pushed low
+    /// may tip. Never faster than the character moves into it; a body it
+    /// stands on is pressed when landed on, not again while stood on. Zero
+    /// pushes nothing — the body is a wall, as any other.
+    pub push_force: f32,
+    /// Whether walking up or down a floor's slope covers the same ground
+    /// across `up` per second as walking on the flat — Godot's
+    /// `floor_constant_speed`, measured across rather than along the slope.
+    /// Off, the part of a walk going into a slope is taken off — slower up
+    /// it — and down one it walks off into the air for `snap` to bring back.
+    /// On, the velocity kept is the walk across, with no part up or down —
+    /// but for, with `stop_on_slope` off, the slide down the slope.
+    pub constant_speed_on_slopes: bool,
+    /// Whether a turning floor turns the character's own `Transform`
+    /// rotation with it, as well as carrying it round. Off keeps it as it
+    /// was — a capsule stays upright on a tilting platform.
+    pub carry_rotation: bool,
     /// What the last move touched. Never saved.
     #[serde(skip)]
     pub contact: CharacterContact,
@@ -77,6 +97,9 @@ impl Default for CharacterBody2D {
             step_height: 0.05,
             stop_on_slope: true,
             max_slides: 4,
+            push_force: 0.0,
+            constant_speed_on_slopes: false,
+            carry_rotation: false,
             contact: CharacterContact::default(),
         }
     }
@@ -118,6 +141,8 @@ mod tests {
         let back: CharacterBody2D = ron::from_str("(snap: 0.0)").expect("reads");
         assert_eq!(back.snap, 0.0);
         assert_eq!(back.max_slides, 4);
+        assert_eq!(back.push_force, 0.0, "pushes nothing unless told to");
+        assert!(!back.constant_speed_on_slopes && !back.carry_rotation);
         assert_eq!(
             CharacterBody2D {
                 up: Vec2::ZERO,

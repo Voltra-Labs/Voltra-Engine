@@ -19,19 +19,19 @@
 //! the second read (the first being the check) is the part left to the
 //! budget.
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
 use voltra_jobs::{JobPool, Task};
-use voltra_scene::format::texture_paths;
+use voltra_scene::format::{texture_paths, EntityRecord};
 use voltra_scene::prefab::StagedScene;
-use voltra_scene::{ComponentRegistry, Replicated, SceneError};
+use voltra_scene::{ComponentRegistry, Replicated, SceneError, SceneId};
 
+mod step;
 mod sync;
-
-use super::decodes::Decodes;
-use crate::app::App;
+mod textures;
 
 /// What a step did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +52,22 @@ pub(super) enum Step {
 struct Parsed {
     staged: StagedScene,
     textures: Vec<AssetPath>,
+    /// The replicated records set aside ([`Replicas::SetAside`]).
+    set_aside: Vec<EntityRecord>,
+}
+
+/// What a load does with the file's replicated entities.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Replicas {
+    /// Spawns them with the rest: no session, or the server's end.
+    Spawn,
+    /// Leaves them out: a client's streamed region, whose entities carry
+    /// fresh ids on both ends, so the server's copy can never be its own.
+    LeaveOut,
+    /// Leaves them out of the world and hands them over
+    /// ([`SceneBuild::take_set_aside`]): a client's level, whose server
+    /// copies are dressed in them as they arrive.
+    SetAside,
 }
 
 #[derive(Debug)]
@@ -77,33 +93,72 @@ enum Phase {
 pub(super) struct SceneBuild {
     path: AssetPath,
     phase: Phase,
+    /// The replicated records set aside, once read, until taken.
+    set_aside: Vec<EntityRecord>,
+    /// The ids of the replicated entities it has spawned, as each lands:
+    /// what a client lets go of from its stash when the load goes.
+    replicated: Vec<SceneId>,
 }
 
 impl SceneBuild {
     /// Starts reading `path` under `root` on `jobs`. `registry` checks the
-    /// components; `skip_replicated` leaves out what a replication client
-    /// gets from its server instead.
+    /// components; `replicas` says what becomes of the replicated entities;
+    /// `keep_ids`, when given, spawns each under its file's id
+    /// ([`StagedScene::keep_ids`]) — a networked session's level — but for
+    /// the ids it holds, which outlive the change (persistent entities)
+    /// and are left out with what hangs under them.
     pub(super) fn start(
         jobs: &JobPool,
         root: PathBuf,
         path: &AssetPath,
         registry: ComponentRegistry,
-        skip_replicated: bool,
+        replicas: Replicas,
+        keep_ids: Option<HashSet<SceneId>>,
     ) -> Self {
         let task_path = path.clone();
         let task = jobs.submit(move || {
             let mut staged = StagedScene::read(&root, &task_path)?;
-            if skip_replicated {
-                staged.skip(|record| record.components.contains_key(Replicated::NAME));
+            let replicated =
+                |record: &EntityRecord| record.components.contains_key(Replicated::NAME);
+            let set_aside = match replicas {
+                Replicas::Spawn => Vec::new(),
+                Replicas::LeaveOut => {
+                    staged.skip(replicated);
+                    Vec::new()
+                }
+                Replicas::SetAside => staged.take(replicated),
+            };
+            if let Some(staying) = keep_ids {
+                if !staying.is_empty() {
+                    staged.skip(|record| staying.contains(&record.id));
+                }
+                staged.keep_ids();
             }
             staged.check(&registry)?;
             let textures = texture_paths(staged.records());
-            Ok(Parsed { staged, textures })
+            Ok(Parsed {
+                staged,
+                textures,
+                set_aside,
+            })
         });
         Self {
             path: path.clone(),
             phase: Phase::Reading(task),
+            set_aside: Vec::new(),
+            replicated: Vec::new(),
         }
+    }
+
+    /// The replicated records set aside ([`Replicas::SetAside`]), once the
+    /// file is read; empty before, and after the first take.
+    pub(super) fn take_set_aside(&mut self) -> Vec<EntityRecord> {
+        std::mem::take(&mut self.set_aside)
+    }
+
+    /// The ids of the replicated entities it has spawned so far.
+    pub(super) fn replicated_ids(&self) -> &[SceneId] {
+        &self.replicated
     }
 
     /// The file it is reading.
@@ -154,141 +209,5 @@ impl SceneBuild {
             Phase::Done(entities) => entities,
             _ => Vec::new(),
         }
-    }
-}
-
-impl App {
-    /// Advances `build` by one unit, or finds it waiting.
-    pub(super) fn step_build(
-        &mut self,
-        build: &mut SceneBuild,
-        decodes: &mut Decodes,
-        jobs: &JobPool,
-    ) -> Step {
-        match std::mem::replace(&mut build.phase, Phase::Failed) {
-            Phase::Reading(mut task) => match task.poll() {
-                None => {
-                    build.phase = Phase::Reading(task);
-                    Step::Waiting
-                }
-                Some(Err(error)) => {
-                    log::error!("could not load scene {}: {error}", build.path.as_str());
-                    Step::Failed
-                }
-                Some(Ok(parsed)) => {
-                    let textures = self.request_decodes(parsed.textures, decodes, jobs);
-                    build.phase = Phase::Decoding {
-                        staged: parsed.staged,
-                        textures,
-                        done: 0,
-                    };
-                    Step::Worked
-                }
-            },
-            Phase::Decoding {
-                staged,
-                textures,
-                mut done,
-            } => {
-                while done < textures.len() && !decodes.is_pending(&textures[done]) {
-                    done += 1;
-                }
-                let Some(path) = textures.get(done) else {
-                    build.phase = Phase::Spawning(staged);
-                    return Step::Worked;
-                };
-                let step = match decodes.poll(path) {
-                    Some(decoded) => {
-                        self.admit_decoded(decoded);
-                        done += 1;
-                        Step::Worked
-                    }
-                    None => Step::Waiting,
-                };
-                build.phase = Phase::Decoding {
-                    staged,
-                    textures,
-                    done,
-                };
-                step
-            }
-            Phase::Spawning(mut staged) => match staged.spawn_next(&mut self.world, &self.registry)
-            {
-                Ok(Some(entity)) => {
-                    self.resolve_entity(entity);
-                    build.phase = Phase::Spawning(staged);
-                    Step::Worked
-                }
-                Ok(None) => {
-                    let entities = staged.entities().to_vec();
-                    let instances = self.instance_roots(&entities);
-                    build.phase = Phase::Syncing {
-                        entities,
-                        instances,
-                        done: 0,
-                    };
-                    Step::Worked
-                }
-                Err(error) => {
-                    log::error!("could not load scene {}: {error}", build.path.as_str());
-                    staged.despawn(&mut self.world);
-                    Step::Failed
-                }
-            },
-            Phase::Syncing {
-                entities,
-                instances,
-                done,
-            } => {
-                let Some(&root) = instances.get(done) else {
-                    build.phase = Phase::Done(entities);
-                    return Step::Done;
-                };
-                self.sync_instance(root);
-                build.phase = Phase::Syncing {
-                    entities,
-                    instances,
-                    done: done + 1,
-                };
-                Step::Worked
-            }
-            Phase::Done(entities) => {
-                build.phase = Phase::Done(entities);
-                Step::Done
-            }
-            Phase::Failed => Step::Failed,
-        }
-    }
-
-    /// The textures of `paths` this load must wait for, each decode started
-    /// unless another load already has. None without a texture store (a
-    /// run with no window has nothing to upload to).
-    fn request_decodes(
-        &self,
-        paths: Vec<AssetPath>,
-        decodes: &mut Decodes,
-        jobs: &JobPool,
-    ) -> Vec<AssetPath> {
-        let Some(textures) = self.textures.as_ref() else {
-            return Vec::new();
-        };
-        let wanted: Vec<AssetPath> = paths
-            .into_iter()
-            .filter(|path| decodes.is_pending(path) || textures.needs_decode(path))
-            .collect();
-        for path in &wanted {
-            decodes.request(jobs, textures.root(), path);
-        }
-        wanted
-    }
-
-    /// Uploads pixels decoded on the pool, if there is still a device.
-    fn admit_decoded(&mut self, decoded: voltra_assets::DecodedTexture) {
-        let (Some(textures), Some(renderer)) = (self.textures.as_mut(), self.renderer.as_ref())
-        else {
-            return;
-        };
-        let context = renderer.context();
-        textures.admit_decoded(context.device(), context.queue(), decoded);
     }
 }

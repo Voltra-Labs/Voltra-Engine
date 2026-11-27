@@ -91,15 +91,41 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
         claim = claim.or(active(&response, "Edit character"));
         ui.end_row();
 
-        ui.label("");
-        if ui
-            .checkbox(&mut body.stop_on_slope, "stop on slope")
-            .on_hover_text("standing on a slope holds still instead of sliding down it")
-            .changed()
-        {
-            claim = claim.or(Some("Edit character"));
-        }
+        ui.label("push").on_hover_text(
+            "the most force it shoves a dynamic body it walks into with; 0 pushes nothing",
+        );
+        let response = ui.add(
+            DragValue::new(&mut body.push_force)
+                .speed(0.5)
+                .range(0.0..=f32::MAX)
+                .suffix(" N"),
+        );
+        claim = claim.or(active(&response, "Edit character"));
         ui.end_row();
+
+        for (value, label, hint) in [
+            (
+                &mut body.stop_on_slope,
+                "stop on slope",
+                "standing on a slope holds still instead of sliding down it",
+            ),
+            (
+                &mut body.constant_speed_on_slopes,
+                "constant speed on slopes",
+                "up or down a slope it covers the same ground across as on the flat",
+            ),
+            (
+                &mut body.carry_rotation,
+                "carry rotation",
+                "a turning floor turns it too, not only carries it round",
+            ),
+        ] {
+            ui.label("");
+            if ui.checkbox(value, label).on_hover_text(hint).changed() {
+                claim = claim.or(Some("Edit character"));
+            }
+            ui.end_row();
+        }
     });
     let contact = body.contact;
     let touching: Vec<&str> = [

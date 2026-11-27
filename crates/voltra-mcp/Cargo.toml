@@ -24,5 +24,6 @@ ron.workspace = true
 log.workspace = true
 
 [dev-dependencies]
+image.workspace = true
 rmcp = { workspace = true, features = ["client"] }
 voltra-testkit.workspace = true

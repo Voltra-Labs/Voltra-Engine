@@ -26,7 +26,7 @@ impl TextureSizes for Sizes {
 
 const ATLAS: &str = "(version: 1, grid: Some((cell: (16, 16), columns: 4, rows: 1)))";
 
-fn atlases() -> (Atlases, AssetPath, std::path::PathBuf) {
+fn atlases() -> (Atlases, AssetPath, voltra_testkit::Scratch) {
     let root = scratch_root();
     std::fs::write(root.join("ground.atlas.ron"), ATLAS).expect("the fixture writes");
     (

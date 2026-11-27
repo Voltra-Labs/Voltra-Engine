@@ -94,8 +94,7 @@ impl Snap {
         if !self.show_grid || !(self.step.is_finite() && self.step > 0.0) {
             return;
         }
-        let half = camera.half_extents();
-        let (min, max) = (camera.position - half, camera.position + half);
+        let (min, max) = camera.visible_bounds();
         let mut step = self.step;
         while (max.x - min.x) / step > 100.0 || (max.y - min.y) / step > 100.0 {
             step *= 2.0;

@@ -21,7 +21,7 @@ use voltra_ecs::World;
 use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, OneWay, Transform};
 
-use super::{colliders, QueryFilter};
+use super::{colliders, Poses, QueryFilter};
 use crate::narrow::manifold;
 
 mod advance;
@@ -71,12 +71,24 @@ pub fn cast(
     motion: Vec2,
     filter: QueryFilter,
 ) -> Option<ShapeHit> {
+    cast_among(world, None, shape, at, motion, filter)
+}
+
+/// [`cast`], with `poses` read in place of the world's.
+pub(crate) fn cast_among(
+    world: &World,
+    poses: Option<&Poses>,
+    shape: &Collider,
+    at: &Transform,
+    motion: Vec2,
+    filter: QueryFilter,
+) -> Option<ShapeHit> {
     if !motion.is_finite() || shape.is_degenerate(at) {
         return None;
     }
     let (min, max) = swept_bounds(shape, at, motion);
     let mut nearest: Option<ShapeHit> = None;
-    for (entity, collider, transform) in colliders(world, filter) {
+    for (entity, collider, transform) in colliders(world, poses, filter) {
         let (cmin, cmax) = collider.world_aabb(transform);
         if cmin.x > max.x || cmin.y > max.y || cmax.x < min.x || cmax.y < min.y {
             continue;

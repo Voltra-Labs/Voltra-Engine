@@ -8,13 +8,16 @@
 
 use std::time::Duration;
 
-use serde::Serialize;
 use voltra_net::{
-    Address, ChannelId, ConnectionStats, DisconnectReason, Endpoint, HostOptions, Message,
-    NetConfig, NetEvent, PeerId, SendError, SessionError, Transport,
+    Address, ConnectionStats, DisconnectReason, Endpoint, HostOptions, NetConfig, PeerId,
+    SessionError, Transport,
 };
 
 use super::App;
+
+mod discovery;
+mod lobby;
+mod messages;
 
 /// The game's network session: none, a server, or a client.
 ///
@@ -34,10 +37,23 @@ pub struct Net {
     pub(super) replication: Option<voltra_replication::Replication>,
     /// The session replication refused, so the error is logged once.
     pub(super) replication_refused: bool,
+    /// The server's past collider poses, for lag compensation: made with
+    /// its replication, read only while that is a server.
+    pub(super) lag: Option<voltra_physics::PoseHistory>,
     /// The connection totals the last frame's counters were taken from.
     pub(super) counted: voltra_net::ConnectionStats,
     /// Whether the profiler's net counters are left alone.
     pub(super) uncounted: bool,
+    /// The lobby's settings, when the game turned it on.
+    lobby_config: Option<voltra_net::LobbyConfig>,
+    /// The session's lobby, made at its first receive.
+    pub(super) lobby: Option<voltra_net::LobbySession>,
+    /// The session could not carry the lobby, and it was said once.
+    lobby_refused: bool,
+    /// A hosting session's answers to LAN probes.
+    advertising: Option<discovery::Advertising>,
+    /// The last search for servers on the LAN.
+    search: Option<voltra_net::LanSearch>,
     /// The session's clock: the sum of the frames' deltas, so a headless
     /// run is as deterministic as its steps.
     now: Duration,
@@ -58,6 +74,9 @@ impl Net {
         self.endpoint = Some(endpoint);
         self.replication = None;
         self.replication_refused = false;
+        self.lobby = None;
+        self.lobby_refused = false;
+        self.advertising = None;
         self.stopping = false;
         self.goodbye_heard = false;
     }
@@ -66,19 +85,22 @@ impl Net {
     /// players, WebSockets for browser ones — from the next frame. With
     /// [`HostOptions::listen`] this game plays too, as
     /// [`PeerId::SERVER`]: a listen server, whose own player joins in the
-    /// next frame's events like any other. Fails if a port will not open,
-    /// and always in a browser, which cannot listen.
+    /// next frame's events like any other. With
+    /// [`HostOptions::discovery`] it answers LAN probes too (a port that
+    /// will not open for those is a warning). Fails if a game port will
+    /// not open, and always in a browser, which cannot listen.
     pub fn host(&mut self, options: &HostOptions) -> Result<(), SessionError> {
         let mut options = options.clone();
         options.config = self.session_config(options.config);
         self.start(voltra_net::host(&options)?);
+        self.advertise_host(&options);
         Ok(())
     }
 
     /// Joins the server at `server` — `udp://host:port` or `ws://host:port`
     /// natively, a `ws://` or `wss://` URL in a browser. A
-    /// [`NetEvent::Connected`] says when it let us in, a
-    /// [`NetEvent::Disconnected`] that it would not.
+    /// [`NetEvent::Connected`](voltra_net::NetEvent::Connected) says when it let us in, a
+    /// [`NetEvent::Disconnected`](voltra_net::NetEvent::Disconnected) that it would not.
     pub fn join(&mut self, server: &str, config: NetConfig) -> Result<(), SessionError> {
         let config = self.session_config(config);
         self.start(voltra_net::join(server, config)?);
@@ -158,62 +180,6 @@ impl Net {
         self.endpoint.as_ref().is_some_and(Endpoint::host_plays)
     }
 
-    /// Queues `bytes` for `peer` on `channel`, sent at the end of the frame.
-    pub fn send(
-        &mut self,
-        peer: PeerId,
-        channel: ChannelId,
-        bytes: &[u8],
-    ) -> Result<(), SendError> {
-        match self.endpoint.as_mut() {
-            Some(endpoint) => endpoint.send(peer, channel, bytes),
-            None => Err(SendError::NotConnected(peer)),
-        }
-    }
-
-    /// Queues `value` (serde, as `postcard`) for `peer` on `channel`.
-    pub fn send_message<T: Serialize + ?Sized>(
-        &mut self,
-        peer: PeerId,
-        channel: ChannelId,
-        value: &T,
-    ) -> Result<(), SendError> {
-        match self.endpoint.as_mut() {
-            Some(endpoint) => endpoint.send_message(peer, channel, value),
-            None => Err(SendError::NotConnected(peer)),
-        }
-    }
-
-    /// Queues `bytes` for every connected peer; answers those it could not
-    /// be queued for, and why.
-    pub fn broadcast(&mut self, channel: ChannelId, bytes: &[u8]) -> Vec<(PeerId, SendError)> {
-        match self.endpoint.as_mut() {
-            Some(endpoint) => endpoint.broadcast(channel, bytes),
-            None => Vec::new(),
-        }
-    }
-
-    /// The messages this frame's receive brought, whole and in each
-    /// channel's order. Decode one with [`Message::decode`].
-    pub fn received(&self) -> &[Message] {
-        self.endpoint.as_ref().map_or(&[], Endpoint::messages)
-    }
-
-    /// Takes this frame's messages, so each is handled exactly once however
-    /// many hooks look.
-    pub fn take_received(&mut self) -> Vec<Message> {
-        self.endpoint
-            .as_mut()
-            .map(Endpoint::take_messages)
-            .unwrap_or_default()
-    }
-
-    /// What happened this frame: peers joining and leaving, kicks,
-    /// timeouts, a connect that failed.
-    pub fn events(&self) -> &[NetEvent] {
-        self.endpoint.as_ref().map_or(&[], Endpoint::events)
-    }
-
     /// Ends the connection to `peer`.
     pub fn disconnect(&mut self, peer: PeerId) {
         if let Some(endpoint) = self.endpoint.as_mut() {
@@ -256,16 +222,21 @@ impl Net {
         if let Some(endpoint) = self.endpoint.as_mut() {
             endpoint.receive(self.now);
         }
+        self.receive_lobby();
+        self.poll_discovery();
         self.goodbye_heard = self.stopping;
     }
 
     pub(super) fn flush(&mut self) {
+        self.send_lobby();
         if let Some(endpoint) = self.endpoint.as_mut() {
             endpoint.flush(self.now);
         }
         if self.goodbye_heard {
             self.endpoint = None;
             self.replication = None;
+            self.lobby = None;
+            self.advertising = None;
             self.stopping = false;
             self.goodbye_heard = false;
         }

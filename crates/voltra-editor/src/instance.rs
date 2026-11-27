@@ -83,11 +83,14 @@ pub(crate) fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, root: Entity) 
     else {
         return;
     };
-    // Every instance of the file changes, not only this one.
+    // Every instance of the file changes, not only this one — and every
+    // instance of a variant of it, or of a prefab it is nested in.
+    let mut sources = vec![source.clone()];
+    sources.extend(frame.prefabs.dependents(&source));
     let roots: Vec<Entity> = frame
         .world
         .query::<PrefabInstance>()
-        .filter(|(_, link)| link.source == source)
+        .filter(|(_, link)| sources.contains(&link.source))
         .map(|(e, _)| e)
         .collect();
     let ids: Vec<SceneId> = roots

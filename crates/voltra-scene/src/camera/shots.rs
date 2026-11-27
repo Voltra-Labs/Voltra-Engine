@@ -5,8 +5,7 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_render::{Camera2D, Texture};
 
-use super::{Camera, CameraTarget};
-use crate::hierarchy::world_matrix;
+use super::{eye, Camera, CameraTarget};
 
 /// One camera's part of a frame.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -15,20 +14,33 @@ pub struct Shot {
     pub entity: Entity,
     /// The camera component.
     pub camera: Camera,
-    /// Where it is in the world.
+    /// Where its view is in the world, shake and all.
     pub position: Vec2,
+    /// How far it is turned, counter-clockwise, in radians, shake and all.
+    pub rotation: f32,
     /// The render texture it draws into, or `None` for the screen.
     pub target: Option<Handle<Texture>>,
 }
 
 impl Shot {
     /// Its view on a target `width` × `height` pixels: the aspect theirs,
-    /// and, pixel-perfect, the position moved by less than a pixel so the
-    /// target's pixel edges fall on the world's pixel grid.
+    /// turned as the camera is, and, pixel-perfect, the position moved by
+    /// less than a pixel so the target's pixel edges fall on the world's
+    /// pixel grid.
+    ///
+    /// **A turned view is not snapped**: its pixels run along other axes
+    /// than the world's grid, so no shift lines the two up, and a sprite
+    /// seen turned is resampled whatever the camera does. The snap comes
+    /// back once the camera is upright again.
     pub fn view(&self, width: u32, height: u32) -> Camera2D {
         let (w, h) = (width.max(1) as f32, height.max(1) as f32);
         let mut position = self.position;
-        if self.camera.pixel_perfect && self.camera.size.is_finite() && self.camera.size > 0.0 {
+        let upright = super::normalised_turn(self.rotation) == 0.0;
+        if self.camera.pixel_perfect
+            && upright
+            && self.camera.size.is_finite()
+            && self.camera.size > 0.0
+        {
             // World units across one pixel of the target.
             let pixel = 2.0 * self.camera.size / h;
             // The view's left and bottom edges onto whole pixels.
@@ -37,6 +49,7 @@ impl Shot {
             position = (edge / pixel).round() * pixel + half;
         }
         Camera2D::new(position, self.camera.zoom(), w / h)
+            .with_rotation(super::normalised_turn(self.rotation))
     }
 }
 
@@ -59,10 +72,12 @@ pub fn shots(world: &World) -> Vec<Shot> {
                 Some(t) => Some(t.handle?),
                 None => None,
             };
+            let (position, rotation) = eye(world, entity);
             let shot = Shot {
                 entity,
                 camera: *camera,
-                position: world_matrix(world, entity).transform_point2(Vec2::ZERO),
+                position,
+                rotation,
                 target,
             };
             Some((shot, target.is_none(), camera.priority, entity.index()))
@@ -164,6 +179,7 @@ mod tests {
                 ..Camera::default()
             },
             position: Vec2::new(0.013, -0.041),
+            rotation: 0.0,
             target: None,
         };
         // 4 units over 64 pixels: a pixel is 1/16.
@@ -182,5 +198,25 @@ mod tests {
             ..shot
         };
         assert_eq!(loose.view(65, 64).position, shot.position);
+        let turned = Shot {
+            rotation: 0.3,
+            ..shot
+        };
+        let view = turned.view(65, 64);
+        assert_eq!(view.position, shot.position, "a turned view is not snapped");
+        assert_eq!(view.rotation, 0.3);
+    }
+
+    #[test]
+    fn a_shot_turns_as_its_camera_does_in_the_world() {
+        let mut world = World::new();
+        let e = camera(&mut world, Camera::default(), 2.0);
+        world
+            .get_mut::<Transform>(e)
+            .expect("spawned with one")
+            .rotation = 0.5;
+        let shots = shots(&world);
+        assert!((shots[0].rotation - 0.5).abs() < 1e-6);
+        assert!((shots[0].view(10, 10).rotation - 0.5).abs() < 1e-6);
     }
 }

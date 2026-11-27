@@ -34,10 +34,38 @@ bounce of one, bricks taken on `Began`.
 
 ## Characters
 
-`CharacterBody2D` moves a kinematic body by sliding along what it hits,
-with a floor, slopes and steps — what a platformer's walker wants instead
-of a dynamic body tipping over. `OneWay` makes a platform passable from
-below. `games/platformer` uses both.
+`CharacterBody2D` goes on a collider with no `RigidBody`: the physics
+step does not move it (to the bodies it moves, it is a wall), the game does,
+with `move_and_slide`, which slides it along what it hits, with a floor,
+slopes and steps — what a platformer's walker wants instead of a dynamic
+body tipping over. `OneWay` makes a platform passable from below. The game
+moves it in `fixed_update`, falling by the world's gravity, `tick.gravity`:
+
+```rust
+velocity.x = tick.input.action_axis("move_left", "move_right") * 4.0;
+velocity += tick.gravity * tick.delta;
+if let Some(slide) = move_and_slide(tick.world, player, velocity, tick.delta) {
+    velocity = slide.velocity; // less what went into walls, floors, ceilings
+}
+```
+
+Three more fields (Inspector ▸ Character), all off by default:
+
+- **`push_force`** (newtons) — a dynamic body it walks into is shoved,
+  at the contact point (a tall crate pushed low tips), by up to that force
+  and never faster than the character walks. A heavier crate moves less
+  and slows the character to its pace; a light one is walked on at about
+  full speed, and one pinned against a wall stops it as a wall does. A
+  crate is pressed when landed on, not while stood on, so it can sleep. The body still stops the character for that step, so neither goes
+  through the other, nor a crate through the wall behind it.
+- **`constant_speed_on_slopes`** — up or down a slope it covers the same
+  ground across per second as on the flat, and stays on a slope walked
+  down without needing `snap`.
+- **`carry_rotation`** — a turning platform turns the character's own
+  rotation too, not only carries it round. Off keeps a capsule upright.
+
+`games/platformer`'s walker is one: it pushes the level's crates — the
+dark one is heavier — and climbs the hill at walking speed.
 
 ## Tiles
 
@@ -80,6 +108,61 @@ In the scene file it reads:
 tile_data: {0: (shape: Slope(left: 0.0, right: 0.5)), 1: (shape: Slope(left: 0.5, right: 1.0)),
             3: (shape: Empty, custom: {"ladder": true})},
 ```
+
+## Joints
+
+A `Joint2D` holds two bodies together, or one to the world. It lives on
+any entity: `a` is the first body (none: the entity itself), `b` the
+second (none: the world, and `anchor_b` is then a point in the world).
+Physics ▸ Join selection hinges the selected bodies; the inspector's Joint
+section picks the kind and edits every part of it. An anchor is in its
+body's own space, turned and moved with it but never scaled:
+`Joint2D::anchor_on(transform, point)` gives the anchor at a world point.
+A motor, spring or limit taken off while the game runs stops acting on the
+next step.
+
+- **`Revolute`** — a hinge. Optional `limit`, `motor` and `spring` (a
+  `RestSpring` turning it back to `rest` radians: a door that closes
+  itself, a flipper).
+- **`Distance`** — a rod, a rope (`min` 0), or a spring about `length`.
+- **`Weld`** — the two held as one.
+- **`Wheel`** — put it on the wheel, `b` the chassis: the wheel's anchor
+  stays on a line along `axis` (in the chassis's space), sprung by a
+  suspension `RestSpring`, and turns freely; a `motor` drives the car,
+  and a motor at speed zero is a brake.
+- **`Prismatic`** — a slider: `a` moves only along `axis` (in `b`'s
+  space), its angle held; `limit`, a `LinearMotor` and a `spring` along
+  the axis. A lift, a piston, a drawer.
+- **`Mouse`** — `a`'s anchor pulled to the target, `anchor_b`, by a
+  spring no stronger than `max_force`. Move the target to drag the body.
+
+A car's front wheel, in the scene file:
+
+```ron
+"Joint2D": (b: Some("…chassis id…"), anchor_b: (0.7, -0.6),
+            kind: Wheel(axis: (0.0, 1.0),
+                        spring: Some((hertz: 4.0, damping_ratio: 0.7)),
+                        motor: Some((speed: -10.0, max_torque: 20.0))))
+```
+
+While the scene plays in the editor, dragging a dynamic body (anywhere
+the gizmo is not) pulls it with a mouse joint, through the solver: it
+swings, collides and drags what it is joined to.
+
+**Breaking.** `break_force` (newtons) and `break_torque` (newton-metres)
+on any joint — off by default — break it when the load passes them: the
+`Joint2D` is removed and `tick.broken_joints` reports it once, as
+`tick.events` reports a touch:
+
+```rust
+for broken in tick.broken_joints {
+    // The joint is already gone; the plank it held now falls.
+    log::info!("a joint on {:?} broke under {} N", broken.entity, broken.force);
+}
+```
+
+A bridge of planks with `break_force` set gives way under a heavy enough
+crate. Stopping play in the editor puts every broken joint back.
 
 ## Queries
 

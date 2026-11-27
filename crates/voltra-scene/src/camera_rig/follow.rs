@@ -1,21 +1,35 @@
-//! Following a target: smoothed, with a dead zone, a lead, and limits.
+//! Following a target, or framing several: smoothed, with a dead zone, a
+//! lead, limits and a zoom.
+
+mod group;
+mod limits;
+mod step;
+mod zoom;
+
+pub(super) use step::update;
+pub use zoom::FollowZoom;
 
 use serde::{Deserialize, Serialize};
-use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 
-use super::{set_world_position, world_position};
-use crate::format::{entity_with_id, SceneRefs};
+use crate::format::SceneRefs;
 use crate::scene_id::SceneId;
-use crate::Camera;
 
-/// Keeps the entity — usually a camera — on `target`.
+/// Keeps the entity — usually a camera — on `target`, or on the middle of
+/// the box around `target` and every one of `targets`: Cinemachine's
+/// Target Group, a group of one being one target.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CameraFollow2D {
     /// What it follows, by identity; `None` follows nothing.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub target: Option<SceneId>,
+    /// More it frames with `target`, by identity: it aims at the middle of
+    /// the box around all of them. Empty — the default, and not written —
+    /// is `target` alone. A target that leaves the scene drops out of the
+    /// box; with none left, it holds still.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub targets: Vec<SceneId>,
     /// Where it sits from the target, in world units: a camera that shows
     /// more of what is above the player than below.
     pub offset: Vec2,
@@ -34,20 +48,30 @@ pub struct CameraFollow2D {
     /// inside, its view and all. `None` is unbounded.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bounds: Option<FollowBounds>,
+    /// Zooms a camera on it so its targets fit, with a margin, between two
+    /// sizes. `None` — the default, and not written — keeps the camera's
+    /// size; on an entity without a [`Camera`] it does nothing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub zoom: Option<FollowZoom>,
     /// What it remembers from frame to frame. Never saved.
     #[serde(skip)]
     pub state: FollowState,
 }
 
 /// A follower's memory between frames.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct FollowState {
-    /// Where the target was last frame, for its velocity; `None` snaps on
-    /// the next frame.
+    /// Where the target — the group's middle — was last frame, for its
+    /// velocity; `None` snaps on the next frame.
     last_target: Option<Vec2>,
     lead: Vec2,
-    /// The target last said missing, so it is said once.
-    missing: Option<SceneId>,
+    /// Which of the group were there last frame, hashed: a change moves
+    /// the middle without the group moving.
+    members: u64,
+    /// The targets already said missing, so each is said once.
+    missing: Vec<SceneId>,
+    /// Whether it named itself as a target last frame, so that is said once.
+    named_itself: bool,
 }
 
 /// A rectangle in the world.
@@ -63,11 +87,13 @@ impl Default for CameraFollow2D {
     fn default() -> Self {
         Self {
             target: None,
+            targets: Vec::new(),
             offset: Vec2::ZERO,
             smoothing: 5.0,
             dead_zone: Vec2::ZERO,
             look_ahead: 0.0,
             bounds: None,
+            zoom: None,
             state: FollowState::default(),
         }
     }
@@ -85,6 +111,28 @@ impl CameraFollow2D {
         }
     }
 
+    /// Framing every one of `targets` — the first as [`Self::target`] —
+    /// with the defaults.
+    pub fn framing(targets: impl IntoIterator<Item = SceneId>) -> Self {
+        let mut targets = targets.into_iter();
+        Self {
+            target: targets.next(),
+            targets: targets.collect(),
+            ..Self::default()
+        }
+    }
+
+    /// Everything it frames: `target`, then `targets`, each once.
+    pub fn group(&self) -> Vec<SceneId> {
+        let mut group: Vec<SceneId> = Vec::with_capacity(self.targets.len() + 1);
+        for id in self.target.iter().chain(&self.targets) {
+            if !group.contains(id) {
+                group.push(*id);
+            }
+        }
+        group
+    }
+
     /// Lands on the target next frame instead of travelling to it — after
     /// a teleport, a scene change, a new target.
     pub fn snap(&mut self) {
@@ -98,98 +146,8 @@ impl SceneRefs for CameraFollow2D {
         if let Some(id) = self.target {
             self.target = Some(map(id).unwrap_or(id));
         }
-    }
-}
-
-/// One frame of every follower.
-pub(super) fn update(world: &mut World, delta: f32, aspect: f32) {
-    let followers: Vec<Entity> = world
-        .query::<CameraFollow2D>()
-        .map(|(entity, _)| entity)
-        .collect();
-    for entity in followers {
-        follow_one(world, entity, delta, aspect);
-    }
-}
-
-fn follow_one(world: &mut World, entity: Entity, delta: f32, aspect: f32) {
-    let Some(rig) = world.get::<CameraFollow2D>(entity).cloned() else {
-        return;
-    };
-    let Some(id) = rig.target else {
-        return;
-    };
-    let Some(target) = entity_with_id(world, id).filter(|&t| t != entity) else {
-        if rig.state.missing != Some(id) {
-            log::warn!("a follower's target {id:?} is not in the scene; it holds still");
-            if let Some(rig) = world.get_mut::<CameraFollow2D>(entity) {
-                rig.state.missing = Some(id);
-            }
+        for id in &mut self.targets {
+            *id = map(*id).unwrap_or(*id);
         }
-        return;
-    };
-    let at = world_position(world, target);
-    let here = world_position(world, entity);
-    let half_view = world
-        .get::<Camera>(entity)
-        .map_or(Vec2::ZERO, |c| Vec2::new(c.size * aspect.max(0.0), c.size));
-
-    let first = rig.state.last_target.is_none();
-    let rate = if first || rig.smoothing <= 0.0 || !rig.smoothing.is_finite() {
-        1.0
-    } else {
-        1.0 - (-rig.smoothing * delta).exp()
-    };
-    let velocity = match rig.state.last_target {
-        Some(was) if delta > 0.0 => (at - was) / delta,
-        _ => Vec2::ZERO,
-    };
-    let wanted_lead = velocity * rig.look_ahead.max(0.0);
-    let lead = if first {
-        Vec2::ZERO
-    } else {
-        rig.state.lead + (wanted_lead - rig.state.lead) * rate
-    };
-
-    let aim = at + rig.offset + lead;
-    let goal = clamp_to(
-        dead_zone(here, aim, rig.dead_zone.max(Vec2::ZERO)),
-        rig.bounds,
-        half_view,
-    );
-    let next = here + (goal - here) * rate;
-    if next.is_finite() {
-        set_world_position(world, entity, next);
     }
-    if let Some(rig) = world.get_mut::<CameraFollow2D>(entity) {
-        rig.state.last_target = Some(at);
-        rig.state.lead = if lead.is_finite() { lead } else { Vec2::ZERO };
-        rig.state.missing = None;
-    }
-}
-
-/// Where the centre should be for `aim` to sit inside a box of `half`
-/// around it, moving as little as possible from `here`.
-fn dead_zone(here: Vec2, aim: Vec2, half: Vec2) -> Vec2 {
-    let offset = aim - here;
-    here + offset - offset.clamp(-half, half)
-}
-
-/// `centre` moved so a view of `half` around it stays inside `bounds`; a
-/// view wider than the bounds is centred on them.
-fn clamp_to(centre: Vec2, bounds: Option<FollowBounds>, half: Vec2) -> Vec2 {
-    let Some(FollowBounds { min, max }) = bounds else {
-        return centre;
-    };
-    let (lo, hi) = (min.min(max), min.max(max));
-    let mut out = centre;
-    for axis in 0..2 {
-        let (from, to) = (lo[axis] + half[axis], hi[axis] - half[axis]);
-        out[axis] = if from > to {
-            (lo[axis] + hi[axis]) * 0.5
-        } else {
-            centre[axis].clamp(from, to)
-        };
-    }
-    out
 }

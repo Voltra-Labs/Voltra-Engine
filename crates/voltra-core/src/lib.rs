@@ -8,8 +8,10 @@
 pub mod app;
 pub mod game;
 pub mod input;
+pub mod lobby;
 pub mod logging;
 pub mod options;
+mod prefab_parts;
 pub mod saves;
 pub mod start;
 mod storage;
@@ -49,8 +51,8 @@ pub use voltra_nav as nav;
 pub use voltra_net as net;
 // What the server sends its clients, and the prediction a game steps.
 pub use voltra_physics::{
-    character, move_and_slide, query, CollisionEvent, Contact, QueryFilter, RayHit, ShapeHit,
-    Slide, Touch,
+    character, move_and_slide, query, rewind, CollisionEvent, Contact, JointBroken, QueryFilter,
+    RayHit, Rewound, ShapeHit, Slide, Touch,
 };
 pub use voltra_replication as replication;
 

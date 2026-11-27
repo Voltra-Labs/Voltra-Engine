@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use rmcp::model::{CallToolRequestParams, CallToolResult, ClientConfig};
 use rmcp::service::{RoleClient, RunningService};
@@ -26,7 +26,7 @@ pub fn repo_project() -> Project {
 }
 
 /// A scratch project with a copy of the repository's scenes, to write to.
-pub fn scratch_project() -> (Project, PathBuf) {
+pub fn scratch_project() -> (Project, voltra_testkit::Scratch) {
     let root = voltra_testkit::scratch_root();
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     copy_dir(&source, &root.join("assets"));

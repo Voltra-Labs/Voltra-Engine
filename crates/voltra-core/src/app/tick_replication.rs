@@ -43,12 +43,14 @@ impl Net {
         self.replication_config.is_some()
     }
 
-    /// `config` with replication's channels, when it is on.
+    /// `config` with replication's channels, when it is on, and the
+    /// lobby's: the config a session is made with.
     pub(super) fn session_config(&self, config: NetConfig) -> NetConfig {
-        match &self.replication_config {
+        let config = match &self.replication_config {
             Some(replication) => replication.net_config(config),
             None => config,
-        }
+        };
+        self.lobby_session_config(config)
     }
 
     /// This session's replication, once it has started.
@@ -73,6 +75,24 @@ impl Net {
                 log::warn!("{peer}'s input would not decode: {error}");
                 None
             }
+        }
+    }
+
+    /// Sets the points `peer` is sent the world around on a server, besides
+    /// the entities it owns: a spectator's camera, say. Replaces the last
+    /// it was given, until the peer leaves; at most
+    /// [`MAX_INTEREST_POINTS`](voltra_replication::MAX_INTEREST_POINTS).
+    /// `false` off a replicating server or for a peer not joined to it.
+    /// Changes nothing without
+    /// [`ReplicationConfig::interest`](voltra_replication::ReplicationConfig::interest).
+    pub fn set_interest_points(
+        &mut self,
+        peer: PeerId,
+        points: Vec<voltra_render::glam::Vec2>,
+    ) -> bool {
+        match self.replication.as_mut().and_then(Replication::server_mut) {
+            Some(server) => server.set_interest_points(peer, points),
+            None => false,
         }
     }
 
@@ -111,7 +131,19 @@ impl Net {
             self.replication_refused = true;
             return;
         }
+        self.lag = None;
         self.replication = Some(if endpoint.is_server() {
+            self.lag = config.lag_compensation.map(|lag| {
+                if lag.max_rewind > lag.history {
+                    log::warn!(
+                        "lag compensation keeps {:?} of history; a rewind is bounded by it, \
+                         not by max_rewind {:?}",
+                        lag.history,
+                        lag.max_rewind
+                    );
+                }
+                voltra_physics::PoseHistory::covering(lag.history, step)
+            });
             Replication::Server(Box::new(ReplicationServer::new(
                 config.clone(),
                 registry,
@@ -142,9 +174,24 @@ impl App {
             return;
         };
         match replication {
-            Replication::Server(server) => server.receive(endpoint),
+            Replication::Server(server) => {
+                server.receive(endpoint);
+                // With a lobby, the match goes to its players only: not to
+                // a peer that has not joined, nor one refused and waiting
+                // out its grace.
+                match &self.net.lobby {
+                    Some(lobby) => {
+                        server.set_audience(lobby.lobby().entries().iter().map(|entry| entry.peer));
+                    }
+                    None => server.clear_audience(),
+                }
+            }
             Replication::Client(client) => {
-                let prefabs = super::spawning::prefab_store(&mut self.prefabs, &self.asset_root);
+                let prefabs = super::spawning::prefab_store(
+                    &mut self.prefabs,
+                    &self.asset_root,
+                    &self.registry,
+                );
                 let made = client.receive(
                     endpoint,
                     &mut self.world,

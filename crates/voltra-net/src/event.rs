@@ -40,7 +40,9 @@ pub enum DisconnectReason {
     /// The server had no room.
     ServerFull,
     /// The other end speaks another protocol version, or another game's
-    /// [`NetConfig::protocol`](crate::NetConfig::protocol) or channel layout.
+    /// [`NetConfig::protocol`](crate::NetConfig::protocol), channel layout
+    /// or [`NetConfig::layer_version`](crate::NetConfig::layer_version)
+    /// (another build's replication wire).
     ProtocolMismatch,
     /// The other end broke the protocol — a malformed packet, a message
     /// past the limits — and was cut off (or cut us off for it).
@@ -93,7 +95,9 @@ impl fmt::Display for DisconnectReason {
             Self::Closed => "closed by the other end",
             Self::Kicked => "kicked",
             Self::ServerFull => "the server is full",
-            Self::ProtocolMismatch => "a different protocol",
+            Self::ProtocolMismatch => {
+                "a different protocol (version, game, channels or replication wire)"
+            }
             Self::Violation => "a protocol violation",
             Self::Shutdown => "the server shut down",
             Self::Timeout => "timed out",

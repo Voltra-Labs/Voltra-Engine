@@ -5,6 +5,8 @@ use voltra_scene::ui::stack::Direction;
 use voltra_scene::{UiSlider, UiSliderPart};
 
 use super::active;
+use super::mixed;
+use voltra_scene::format::serial_tree::Step;
 
 pub(super) fn show(ui: &mut Ui, slider: &mut UiSlider) -> Option<&'static str> {
     ui.separator();
@@ -34,10 +36,9 @@ pub(super) fn show(ui: &mut Ui, slider: &mut UiSlider) -> Option<&'static str> {
         ui.label("direction");
         ui.horizontal(|ui| {
             for (label, direction) in [("row", Direction::Row), ("column", Direction::Column)] {
-                if ui
-                    .selectable_value(&mut slider.direction, direction, label)
-                    .changed()
-                {
+                let response = ui.selectable_value(&mut slider.direction, direction, label);
+                let path = vec![Step::Field("direction")];
+                if mixed::chosen(ui, response, "UiSlider", path).changed() {
                     claim = Some("Edit slider");
                 }
             }
@@ -56,7 +57,8 @@ pub(super) fn show_part(ui: &mut Ui, part: &mut UiSliderPart) -> Option<&'static
             ("fill", UiSliderPart::Fill),
             ("handle", UiSliderPart::Handle),
         ] {
-            if ui.selectable_value(part, kind, label).changed() {
+            let response = ui.selectable_value(part, kind, label);
+            if mixed::chosen_variant(ui, response, "UiSliderPart", Vec::new()).changed() {
                 claim = Some("Edit slider part");
             }
         }

@@ -29,3 +29,4 @@ base64.workspace = true
 # The bridge test decodes its screenshots.
 [dev-dependencies]
 image.workspace = true
+voltra-testkit.workspace = true

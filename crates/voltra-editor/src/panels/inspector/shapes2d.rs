@@ -9,8 +9,10 @@ use voltra_render::wgpu;
 use voltra_scene::{Curve, Line2D, LineCap, LineJoint, LineTexture, Polygon2D, Trail2D};
 
 use super::active;
+use super::mixed;
 use super::path_field::{self, PathEdit};
 use crate::shape_edit::{Points, ShapeEdit};
+use voltra_scene::format::serial_tree::Step;
 
 /// What the three need besides themselves.
 pub(super) struct Context<'a> {
@@ -34,7 +36,7 @@ pub(super) fn line(ui: &mut Ui, line: &mut Line2D, cx: Context<'_>) -> Option<&'
         ui.label("joints");
         claim = claim.or(pick(
             ui,
-            "line_joint",
+            "joint",
             &mut line.joint,
             &[
                 (LineJoint::Miter, "miter"),
@@ -54,15 +56,15 @@ pub(super) fn line(ui: &mut Ui, line: &mut Line2D, cx: Context<'_>) -> Option<&'
             (LineCap::Round, "round"),
         ];
         ui.label("begin cap");
-        claim = claim.or(pick(ui, "line_begin_cap", &mut line.begin_cap, &caps));
+        claim = claim.or(pick(ui, "begin_cap", &mut line.begin_cap, &caps));
         ui.end_row();
         ui.label("end cap");
-        claim = claim.or(pick(ui, "line_end_cap", &mut line.end_cap, &caps));
+        claim = claim.or(pick(ui, "end_cap", &mut line.end_cap, &caps));
         ui.end_row();
         ui.label("texture");
         claim = claim.or(pick(
             ui,
-            "line_texture_mode",
+            "texture_mode",
             &mut line.texture_mode,
             &[
                 (LineTexture::Stretch, "stretched"),
@@ -186,9 +188,10 @@ fn colour(ui: &mut Ui, color: &mut [f32; 4], label: &'static str) -> Option<&'st
     claim
 }
 
+/// A dropdown for the line's field named `field`.
 fn pick<T: PartialEq + Copy>(
     ui: &mut Ui,
-    salt: &str,
+    field: &'static str,
     value: &mut T,
     options: &[(T, &str)],
 ) -> Option<&'static str> {
@@ -197,11 +200,13 @@ fn pick<T: PartialEq + Copy>(
         .find(|(option, _)| option == value)
         .map_or("?", |(_, name)| *name);
     let mut claim = None;
-    egui::ComboBox::from_id_salt(salt)
+    egui::ComboBox::from_id_salt(("line", field))
         .selected_text(current)
         .show_ui(ui, |ui| {
             for (option, name) in options {
-                if ui.selectable_label(option == value, *name).clicked() && option != value {
+                let response = ui.selectable_label(option == value, *name);
+                let path = vec![Step::Field(field)];
+                if mixed::chosen(ui, response, "Line2D", path).clicked() && option != value {
                     *value = *option;
                     claim = Some("Edit line");
                 }

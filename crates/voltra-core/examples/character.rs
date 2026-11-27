@@ -1,10 +1,14 @@
 //! A character moved by `move_and_slide`: walls stop it, slopes are walked
-//! up or slid down by their angle, a floor of tiles has no seams, a low step
-//! is stepped onto, a jump ends on a ceiling, a one-way platform is jumped
+//! up — at the speed it walks on the flat — or slid down by their angle, a
+//! crate is pushed, a floor of tiles has no seams, a low step is stepped
+//! onto, a jump ends on a ceiling, a one-way platform is jumped
 //! up through, a lift — an animation clip — carries it, and the camera
 //! follows with slack, a lead and the level's bounds, and shakes on a hard
-//! landing. A state machine picks the character's idle, run, jump or fall
-//! clip from what the step sets.
+//! landing. A state machine picks the character's motion from what the step
+//! sets: on the ground a blend tree mixes idle, walk and run by its speed —
+//! it speeds up over a moment, so the mix passes through the walk — and in
+//! the air a jump or fall clip. An additive layer squashes it on every
+//! landing, over whatever the ground or air state plays.
 //!
 //! Run it with `cargo run -p voltra-core --example character`. `A`/`D` or
 //! the arrow keys walk, `Space` jumps.
@@ -18,11 +22,14 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
     AnimationPlayer, Animator, Camera, CameraFollow2D, CameraShake, CharacterBody2D, Collider,
-    FollowBounds, OneWay, SceneId, Sprite, Transform,
+    FollowBounds, OneWay, RigidBody, SceneId, Sprite, Transform,
 };
 
 /// World units per second at full tilt.
 const WALK_SPEED: f32 = 3.5;
+/// World units per second gained (or lost) each second towards the speed
+/// the stick asks for.
+const ACCELERATION: f32 = 12.0;
 /// Upward speed a jump starts with.
 const JUMP_SPEED: f32 = 6.5;
 /// World units per second squared, down.
@@ -56,11 +63,13 @@ fn main() {
                 .world
                 .get::<CharacterBody2D>(me)
                 .is_some_and(CharacterBody2D::is_on_floor);
-            velocity.x = tick
+            let wanted = tick
                 .input
                 .action_axis("move_left", "move_right")
                 .clamp(-1.0, 1.0)
                 * WALK_SPEED;
+            let step = ACCELERATION * tick.delta;
+            velocity.x += (wanted - velocity.x).clamp(-step, step);
             velocity.y -= GRAVITY * tick.delta;
             if jump.replace(false) && grounded {
                 velocity.y = JUMP_SPEED;
@@ -81,11 +90,16 @@ fn main() {
                         }
                     }
                     velocity = slide.velocity;
-                    // What the state machine reads: it picks the clip.
+                    // What the state machine reads: it picks the state, and
+                    // `speed` weighs the ground's idle, walk and run.
                     if let Some(animator) = tick.world.get_mut::<Animator>(me) {
                         animator.set_float("speed", velocity.x.abs());
                         animator.set_float("rising", velocity.y);
                         animator.set_bool("grounded", slide.contact.on_floor);
+                        if landed {
+                            // The impact layer's squash, over the rest.
+                            animator.trigger("landed");
+                        }
                     }
                 }
                 None => log::error!("the character lost its body or collider"),
@@ -152,6 +166,15 @@ fn spawn_level(app: &mut App) -> Entity {
     // A wall at the left end, and a ceiling low enough to bump.
     block(app, Vec2::new(-6.25, 1.5), Vec2::new(0.25, 1.5), 0.0, stone);
     block(app, Vec2::new(-3.0, 1.6), Vec2::new(1.5, 0.15), 0.0, stone);
+    // A crate to push, a dynamic body the step moves.
+    let crate_ = block(
+        app,
+        Vec2::new(-4.5, 0.4),
+        Vec2::splat(0.3),
+        0.0,
+        [0.75, 0.5, 0.3, 1.0],
+    );
+    app.world.insert(crate_, RigidBody::new_dynamic(1.0));
     // A low step, stepped onto, and a high one, jumped onto.
     block(app, Vec2::new(1.5, 0.02), Vec2::new(0.5, 0.02), 0.0, moss);
     block(app, Vec2::new(3.0, 0.2), Vec2::new(0.5, 0.2), 0.0, moss);
@@ -196,8 +219,16 @@ fn spawn_level(app: &mut App) -> Entity {
             half_extents: Vec2::splat(0.5),
         },
     );
-    app.world.insert(me, CharacterBody2D::default());
-    // Idle, run, jump and fall, each a clip that squashes and tints it.
+    app.world.insert(
+        me,
+        CharacterBody2D {
+            push_force: 15.0,
+            constant_speed_on_slopes: true,
+            ..CharacterBody2D::default()
+        },
+    );
+    // Idle, walk, run, jump and fall, each a clip that squashes and tints
+    // it, and a layer that squashes it on landing.
     match AssetPath::new("animations/hero.animator.ron") {
         Ok(machine) => {
             app.world.insert(me, Animator::new(machine));

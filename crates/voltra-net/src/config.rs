@@ -15,7 +15,8 @@ pub const PROTOCOL_VERSION: u16 = 1;
 pub const MAX_MESSAGE_LIMIT: usize = 16 * 1024 * 1024;
 
 /// How a session behaves. Client and server must agree on
-/// [`protocol`](Self::protocol), [`channels`](Self::channels),
+/// [`protocol`](Self::protocol), [`layer_version`](Self::layer_version),
+/// [`lobby_version`](Self::lobby_version), [`channels`](Self::channels),
 /// [`max_message_size`](Self::max_message_size) and
 /// [`channel_budget`](Self::channel_budget): together they make the
 /// fingerprint checked at the handshake, so a mismatch is refused there
@@ -25,6 +26,19 @@ pub struct NetConfig {
     /// The game's own protocol: a number it changes whenever its messages
     /// do, so an old client is refused instead of misreading a new server.
     pub protocol: u64,
+    /// The wire version of the engine layer carried on this session's
+    /// channels — replication sets its own (`REPLICATION_WIRE_VERSION`)
+    /// when it is on — so a peer whose layer reads other bytes is refused
+    /// at the handshake rather than failing every decode after it. `0`,
+    /// the default, is no layer, and leaves the fingerprint as it was.
+    pub layer_version: u32,
+    /// The wire version of the lobby carried on this session —
+    /// [`LOBBY_WIRE_VERSION`](crate::LOBBY_WIRE_VERSION) when
+    /// [`LobbyConfig::net_config`](crate::LobbyConfig::net_config) made it —
+    /// so a peer whose lobby reads other bytes, or that has none, is
+    /// refused at the handshake. `0`, the default, is no lobby, and leaves
+    /// the fingerprint as it was.
+    pub lobby_version: u32,
     /// The channels, in [`ChannelId`](crate::ChannelId) order. At most
     /// [`MAX_CHANNELS`]; more are dropped.
     pub channels: Vec<ChannelKind>,
@@ -54,6 +68,8 @@ impl Default for NetConfig {
     fn default() -> Self {
         Self {
             protocol: 0,
+            layer_version: 0,
+            lobby_version: 0,
             channels: DEFAULT_CHANNELS.to_vec(),
             max_clients: 64,
             max_message_size: 64 * 1024,
@@ -84,8 +100,19 @@ impl NetConfig {
         fragments_for(self.max_message_size) as u16
     }
 
-    /// What both ends must agree on, hashed (FNV-1a, 64-bit).
-    pub(crate) fn fingerprint(&self) -> u64 {
+    /// What both ends must agree on, hashed (FNV-1a, 64-bit): the number
+    /// the handshake compares, and LAN discovery advertises so a client
+    /// can tell a server it could join from one it could not. Hash the
+    /// config a session is actually made with (after
+    /// `ReplicationConfig::net_config` and
+    /// [`LobbyConfig::net_config`](crate::LobbyConfig::net_config)); the
+    /// limits are brought into range first, as an endpoint does.
+    pub fn fingerprint(&self) -> u64 {
+        self.clone().validated().raw_fingerprint()
+    }
+
+    /// [`fingerprint`](Self::fingerprint) of a config already validated.
+    pub(crate) fn raw_fingerprint(&self) -> u64 {
         let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
         let mut eat = |bytes: &[u8]| {
             for &byte in bytes {
@@ -94,6 +121,14 @@ impl NetConfig {
             }
         };
         eat(&self.protocol.to_le_bytes());
+        if self.layer_version != 0 {
+            eat(&self.layer_version.to_le_bytes());
+        }
+        // Tagged, so a lobby version is never read as a layer version.
+        if self.lobby_version != 0 {
+            eat(b"lobby");
+            eat(&self.lobby_version.to_le_bytes());
+        }
         eat(&(self.max_message_size as u64).to_le_bytes());
         eat(&(self.channel_budget as u64).to_le_bytes());
         for kind in &self.channels {
@@ -120,6 +155,22 @@ mod tests {
             ..NetConfig::default()
         }
         .validated();
+        let other_layer = NetConfig {
+            layer_version: 2,
+            ..NetConfig::default()
+        }
+        .validated();
+        let other_lobby = NetConfig {
+            lobby_version: 2,
+            ..NetConfig::default()
+        }
+        .validated();
+        let lobby_as_layer = NetConfig {
+            layer_version: 2,
+            lobby_version: 0,
+            ..NetConfig::default()
+        }
+        .validated();
         let other_timeout = NetConfig {
             timeout: Duration::from_secs(1),
             ..NetConfig::default()
@@ -128,6 +179,9 @@ mod tests {
 
         assert_ne!(base.fingerprint(), other_game.fingerprint());
         assert_ne!(base.fingerprint(), other_channels.fingerprint());
+        assert_ne!(base.fingerprint(), other_layer.fingerprint());
+        assert_ne!(base.fingerprint(), other_lobby.fingerprint());
+        assert_ne!(other_lobby.fingerprint(), lobby_as_layer.fingerprint());
         assert_eq!(base.fingerprint(), other_timeout.fingerprint());
     }
 

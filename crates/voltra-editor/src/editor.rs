@@ -1,5 +1,7 @@
 //! The editor's shared state and its frame layout.
 
+mod play;
+
 use voltra_core::egui::Ui;
 use voltra_core::{UiFrame, VoiceId};
 use voltra_scene::ComponentRegistry;
@@ -12,7 +14,7 @@ use crate::paint::Paint;
 use crate::panels;
 use crate::panels::assets::AssetBrowser;
 use crate::panels::profiler::ProfilerPanel;
-use crate::play::{Play, PlayContext, PlayState};
+use crate::play::{Play, PlayState};
 use crate::scene_dialogs::SceneDialogs;
 use crate::selection::Selection;
 use crate::shape_edit::ShapeEdit;
@@ -35,6 +37,8 @@ pub struct Editor {
     pub(crate) gizmo: Gizmo,
     /// The box being drawn over the viewport to select, if any.
     pub(crate) marquee: Marquee,
+    /// The body pulled with the pointer while the scene plays, if any.
+    pub(crate) grab: crate::grab::Grab,
     /// The armed paint tool and its brush. While armed with a layer selected,
     /// it has the viewport instead of the gizmo.
     pub(crate) paint: Paint,
@@ -147,6 +151,10 @@ impl Editor {
                 Some(action) if self.atlas_editor.has_pointer(ui.ctx()) => {
                     self.atlas_editor.shortcut(action);
                 }
+                // Over the timeline, or while it records, the clip's.
+                Some(action) if self.timeline.has_keys(ui.ctx(), true) => {
+                    self.timeline.undo_redo(action, frame.animation_clips);
+                }
                 Some(shortcut::UndoAction::Undo) => self.undo(frame),
                 Some(shortcut::UndoAction::Redo) => self.redo(frame),
                 None => {}
@@ -172,6 +180,13 @@ impl Editor {
         // has to be opened to see it is not a state indicator.
         panels::toolbar::show(self, ui, frame);
         panels::hierarchy::show(self, ui, frame);
+        // While recording, the two panels that edit entities edit the pose,
+        // and what they move is keyed rather than authored.
+        let posed = crate::timeline::root(frame.world, self.selection.live_primary(frame.world));
+        if editing {
+            self.timeline
+                .begin_record(frame.world, frame.animation_clips, posed);
+        }
         panels::inspector::show(self, ui, frame);
         // After the two side panels, so it is docked between them rather than
         // across the whole window: its drop targets are the viewport above and
@@ -182,6 +197,8 @@ impl Editor {
         // Last, so it takes whatever room the docked panels left rather than
         // the other way round.
         panels::viewport::show(self, ui, frame);
+        // The scene as authored again, before anything else reads it.
+        self.timeline.end_record(frame.world, frame.animation_clips);
         // Floating windows, over the docked panels.
         panels::profiler::show(self, ui, frame);
         panels::network::show(self, ui, frame);
@@ -204,14 +221,15 @@ impl Editor {
             self.history.end_frame(view);
             // After the history has its after side, for the frame about to
             // be drawn; lifted again first thing next frame.
-            let posed = self.selection.live_primary(frame.world);
+            let selected = self.selection.live_primary(frame.world);
+            let posed = crate::timeline::root(frame.world, selected);
             self.timeline
                 .pose(frame.world, frame.animation_clips, posed);
             // Live particles only, which no record holds: after the history
             // so it never sees them, and ahead of the draw that shows them.
             let dt = ui.ctx().input(|i| i.stable_dt);
             let gpu = frame.gpu_particles();
-            self.particle_preview.update(frame.world, posed, dt, gpu);
+            self.particle_preview.update(frame.world, selected, dt, gpu);
         } else {
             self.particle_preview.stop(frame.world);
         }
@@ -255,61 +273,6 @@ impl Editor {
         // A shape drag held through the redo would write the pointer
         // straight back over what it restored.
         self.shape.cancel_drag();
-    }
-
-    /// Enters play, snapshotting the scene the first time — and, the first
-    /// time, starting a fresh game from the loaded library, whose turns run
-    /// until Stop. A paused session resumes the game it had.
-    pub(crate) fn start_play(&mut self, frame: &mut UiFrame<'_>) {
-        let from_editing = self.play.state() == PlayState::Editing;
-        self.play.play(
-            PlayContext {
-                registry: &self.registry,
-                selected: &mut self.selection,
-                gizmo: &mut self.gizmo,
-            },
-            frame,
-        );
-        if from_editing && self.play.state() == PlayState::Playing {
-            frame.set_game(self.game.new_game());
-            crate::netplay::begin(self, frame);
-        }
-    }
-
-    /// Stops stepping and leaves the scene where it is.
-    pub(crate) fn pause_play(&mut self, frame: &mut UiFrame<'_>) {
-        self.play.pause(frame);
-    }
-
-    /// Runs exactly one fixed step, while paused.
-    pub(crate) fn step_play(&mut self, frame: &mut UiFrame<'_>) {
-        self.play.step(frame);
-    }
-
-    /// Leaves play and puts the snapshot back. Returns whether it had to.
-    ///
-    /// `Scene ▸ Open`, `Scene ▸ Clear` and `Scene ▸ Save` all call this first.
-    /// Each of them means something incoherent mid-play — Open discards the
-    /// world the snapshot belongs to, Save writes a mid-flight scene as if it
-    /// were the authored one — and stopping first is both Unity's answer and
-    /// cheaper than three special cases.
-    pub(crate) fn stop_play(&mut self, frame: &mut UiFrame<'_>) -> bool {
-        if self.play.state() == PlayState::Editing {
-            return false;
-        }
-        // The clients and the game first: they belong to the session the
-        // restore discards.
-        crate::netplay::end(self, frame);
-        frame.set_game(None);
-        self.play.stop(
-            PlayContext {
-                registry: &self.registry,
-                selected: &mut self.selection,
-                gizmo: &mut self.gizmo,
-            },
-            frame,
-        );
-        true
     }
 }
 

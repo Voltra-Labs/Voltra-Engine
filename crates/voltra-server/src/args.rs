@@ -6,8 +6,17 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+mod discovery_flags;
+mod lobby_flags;
+
+pub use discovery_flags::DiscoveryFlags;
+pub use lobby_flags::LobbyFlags;
+
 use crate::{ServerOptions, DEFAULT_TICK_RATE};
-use voltra_core::net::{HostOptions, NetConfig, DEFAULT_UDP_PORT, DEFAULT_WEBSOCKET_PORT};
+use voltra_core::net::{
+    Advertise, HostOptions, NetConfig, DEFAULT_DISCOVERY_PORT, DEFAULT_UDP_PORT,
+    DEFAULT_WEBSOCKET_PORT,
+};
 
 /// What `--help` prints.
 pub const USAGE: &str = "\
@@ -24,8 +33,18 @@ Options:
       --tick HZ          Ticks a second (default 60)
       --max-clients N    Clients at once (default 64)
       --protocol N       The game's protocol number clients must match (default 0)
+      --discovery PORT|off  UDP port to answer LAN probes on (default 7779)
+      --discovery-public Answer LAN probes from any address, not only private,
+                         VPN-mesh (100.64/10), link-local and loopback ones (a
+                         broadcast never crosses a router: only a stranger
+                         probes from elsewhere)
+      --name NAME        What LAN searches list the server as (default \"Voltra server\")
+      --game ID          The game id LAN probes are matched against
+      --lobby            Hold a lobby before the match (a game's server may already)
+      --min-players N    The fewest players its match starts with (implies --lobby)
+      --max-players N    The lobby's slots (implies --lobby)
       --seconds N        Stop after N seconds (default: run until killed)
-      --port-file FILE   Once listening, write `udp PORT` and `ws PORT` lines here
+      --port-file FILE   Once listening, write `udp PORT`, `ws PORT`, `discovery PORT` lines here
   -h, --help             Print this message";
 
 /// What the server was asked to do.
@@ -50,6 +69,25 @@ pub struct Args {
     pub seconds: Option<Duration>,
     /// Where to write the ports once listening.
     pub port_file: Option<PathBuf>,
+    /// The lobby's rules the command line changed — laid over the lobby a
+    /// game's server sets in [`ServerOptions::lobby`] (or the engine's
+    /// default one) once the game has had its say.
+    pub lobby: LobbyFlags,
+    /// The discovery flags the command line gave, laid over
+    /// [`HostOptions::discovery`] the same way.
+    pub discovery: DiscoveryFlags,
+}
+
+impl Args {
+    /// Lays the command line's lobby and discovery flags over what the
+    /// game's server set in [`options`](Self::options): call it once the
+    /// game has had its say (`cli::main` does).
+    pub fn apply_flags(&mut self) {
+        let lobby = self.lobby.clone();
+        lobby.apply(&mut self.options);
+        let discovery = self.discovery.clone();
+        discovery.apply(&mut self.options);
+    }
 }
 
 /// Everything a command line can get wrong.
@@ -88,12 +126,19 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, ArgError>
                 udp_port: Some(DEFAULT_UDP_PORT),
                 websocket_port: Some(DEFAULT_WEBSOCKET_PORT),
                 config: NetConfig::default(),
+                discovery: Some(Advertise {
+                    port: DEFAULT_DISCOVERY_PORT,
+                    ..Advertise::default()
+                }),
                 ..HostOptions::default()
             },
             tick_rate: DEFAULT_TICK_RATE,
+            lobby: None,
         },
         seconds: None,
         port_file: None,
+        lobby: LobbyFlags::default(),
+        discovery: DiscoveryFlags::default(),
     };
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -122,6 +167,21 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, ArgError>
                 parsed.seconds = Some(Duration::from_secs(seconds));
             }
             "--port-file" => parsed.port_file = Some(value("--port-file")?.into()),
+            "--discovery" => {
+                parsed.discovery.port = Some(port("--discovery", value("--discovery")?)?);
+            }
+            "--discovery-public" => parsed.discovery.public = true,
+            "--name" => parsed.discovery.name = Some(value("--name")?),
+            "--game" => parsed.discovery.game = Some(value("--game")?),
+            "--lobby" => parsed.lobby.on = true,
+            "--min-players" => {
+                parsed.lobby.on = true;
+                parsed.lobby.min_players = Some(number("--min-players", value("--min-players")?)?);
+            }
+            "--max-players" => {
+                parsed.lobby.on = true;
+                parsed.lobby.max_players = Some(number("--max-players", value("--max-players")?)?);
+            }
             flag if flag.starts_with('-') => return Err(ArgError::UnknownFlag(arg)),
             _ if parsed.scene.is_some() => return Err(ArgError::ExtraScene(arg)),
             _ => parsed.scene = Some(arg),
@@ -151,80 +211,4 @@ fn number<T: std::str::FromStr + PartialOrd + Default>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn run(args: &[&str]) -> Result<Parsed, ArgError> {
-        parse(args.iter().map(|a| a.to_string()))
-    }
-
-    #[test]
-    fn the_defaults_host_both_transports_at_sixty_ticks() {
-        let Ok(Parsed::Run(args)) = run(&[]) else {
-            panic!("runs");
-        };
-        assert_eq!(args.options.tick_rate, 60);
-        assert_eq!(args.options.host.udp_port, Some(7777));
-        assert_eq!(args.options.host.websocket_port, Some(7778));
-        assert_eq!(args.scene, None);
-    }
-
-    #[test]
-    fn every_flag_is_read() {
-        let Ok(Parsed::Run(args)) = run(&[
-            "scenes/arena.ron",
-            "--asset-root",
-            "game/assets",
-            "--bind",
-            "127.0.0.1",
-            "--udp",
-            "0",
-            "--ws",
-            "off",
-            "--tick",
-            "30",
-            "--max-clients",
-            "8",
-            "--protocol",
-            "42",
-            "--seconds",
-            "5",
-            "--port-file",
-            "ports.txt",
-        ]) else {
-            panic!("runs");
-        };
-        assert_eq!(args.scene.as_deref(), Some("scenes/arena.ron"));
-        assert_eq!(args.asset_root, Some(PathBuf::from("game/assets")));
-        assert_eq!(args.options.host.bind, IpAddr::from([127, 0, 0, 1]));
-        assert_eq!(args.options.host.udp_port, Some(0));
-        assert_eq!(args.options.host.websocket_port, None);
-        assert_eq!(args.options.tick_rate, 30);
-        assert_eq!(args.options.host.config.max_clients, 8);
-        assert_eq!(args.options.host.config.protocol, 42);
-        assert_eq!(args.seconds, Some(Duration::from_secs(5)));
-        assert_eq!(args.port_file, Some(PathBuf::from("ports.txt")));
-    }
-
-    #[test]
-    fn mistakes_are_refused() {
-        assert_eq!(run(&["--tick"]), Err(ArgError::MissingValue("--tick")));
-        assert_eq!(
-            run(&["--tick", "0"]),
-            Err(ArgError::BadValue("--tick", "0".into()))
-        );
-        assert_eq!(
-            run(&["--udp", "seventy"]),
-            Err(ArgError::BadValue("--udp", "seventy".into()))
-        );
-        assert_eq!(
-            run(&["--loud"]),
-            Err(ArgError::UnknownFlag("--loud".into()))
-        );
-        assert_eq!(
-            run(&["a.ron", "b.ron"]),
-            Err(ArgError::ExtraScene("b.ron".into()))
-        );
-        assert_eq!(run(&["--help"]), Ok(Parsed::Help));
-    }
-}
+mod tests;

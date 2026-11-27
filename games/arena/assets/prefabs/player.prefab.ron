@@ -1,5 +1,7 @@
 // A player: what the server spawns for each peer, and what every client
-// spawns from the same file when the server says so.
+// spawns from the same file when the server says so. Its collider is what
+// a zap hits, remembered tick by tick on the server (LagCompensated) so a
+// zap is tested where its shooter saw it. No body: nothing pushes it.
 (
     version: 1,
     entities: [
@@ -12,6 +14,8 @@
                 "Player": (speed:5.0,bounds:(8.0,4.0)),
                 "Score": (0),
                 "Replicated": (priority:4.0),
+                "Collider": Box(half_extents:(0.5,0.5)),
+                "LagCompensated": (),
             },
         ),
     ],

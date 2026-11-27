@@ -11,7 +11,7 @@ use crate::sprite::sheets::Sheets;
 use crate::{Sprite, Transform};
 
 fn fonts() -> Fonts {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     copy_bundled_font(&root, DEFAULT_FONT);
     Fonts::new(root)
 }
@@ -196,7 +196,8 @@ mod in_the_world {
     #[test]
     fn text_is_drawn_between_sprites_by_sort_order() {
         let mut fonts = fonts();
-        let atlases = Atlases::new(scratch_root());
+        let scratch = scratch_root();
+        let atlases = Atlases::new(&scratch);
         let mut world = World::new();
         spawn(&mut world, Sprite::default().with_sort_order(2), Vec2::ZERO);
         let mut label = Text::new("H");

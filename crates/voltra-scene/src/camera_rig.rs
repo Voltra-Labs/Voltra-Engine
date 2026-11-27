@@ -2,8 +2,9 @@
 //!
 //! Godot's `Camera2D` does both itself — position smoothing, drag margins,
 //! limits — and Unity hands them to Cinemachine; here they are two
-//! components, [`CameraFollow2D`] and [`CameraShake`], on any entity, so a
-//! light can follow the player the way a camera does. Neither is a field of
+//! components, [`CameraFollow2D`] on any entity, so a light can follow the
+//! player the way a camera does, and [`CameraShake`] on a camera, whose
+//! view it shakes. Neither is a field of
 //! [`Camera`](crate::Camera): a camera that does not move is the common
 //! authored case, and its file should not carry a rig.
 //!
@@ -13,7 +14,7 @@
 pub mod follow;
 pub mod shake;
 
-pub use follow::{CameraFollow2D, FollowBounds, FollowState};
+pub use follow::{CameraFollow2D, FollowBounds, FollowState, FollowZoom};
 pub use shake::{CameraShake, ShakeState};
 
 use voltra_ecs::World;
@@ -22,20 +23,26 @@ use voltra_render::glam::Vec2;
 use crate::hierarchy::{parent_matrix, world_matrix};
 use crate::Transform;
 
-/// Moves every following entity towards its target, then shakes every
-/// shaking one, by `delta` seconds; `aspect` is the frame's width over its
-/// height, for a camera's view.
+/// Moves every following entity towards its target, then runs every
+/// shake, by `delta` seconds. A camera's view is as wide as what it draws
+/// into ([`camera::aspect`](crate::camera::aspect)): its viewport's share
+/// of a screen of `screen_aspect` (width over height), or its render
+/// texture's, found in `textures`.
 ///
-/// A shake's offset from the frame before is taken off first, so following
-/// works from where the camera rests and a shake never drifts it.
-pub fn update(world: &mut World, delta: f32, aspect: f32) {
+/// A shake moves the view, not the transform, so following works from
+/// where the camera rests and a shake never drifts it.
+pub fn update(
+    world: &mut World,
+    delta: f32,
+    screen_aspect: f32,
+    textures: Option<&voltra_assets::Textures>,
+) {
     let delta = if delta.is_finite() {
         delta.max(0.0)
     } else {
         0.0
     };
-    shake::settle(world);
-    follow::update(world, delta, aspect);
+    follow::update(world, delta, screen_aspect, textures);
     shake::update(world, delta);
 }
 
@@ -58,5 +65,9 @@ fn set_world_position(world: &mut World, entity: voltra_ecs::Entity, position: V
     }
 }
 
+#[cfg(test)]
+mod group_tests;
+#[cfg(test)]
+mod shake_tests;
 #[cfg(test)]
 mod tests;

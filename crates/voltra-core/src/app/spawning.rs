@@ -13,7 +13,8 @@ use voltra_assets::{AssetPath, Atlases, Clips, Fonts, Handle, Textures};
 use voltra_ecs::{Entity, World};
 use voltra_render::wgpu;
 use voltra_scene::{
-    prefab, AudioSource, Instance, Prefab, Prefabs, SceneError, Sprite, Text, Tilemap, Transform,
+    prefab, AudioSource, ComponentRegistry, Instance, Prefab, Prefabs, SceneError, Sprite, Text,
+    Tilemap, Transform,
 };
 
 use crate::app::tick::Tick;
@@ -75,17 +76,26 @@ impl Tick<'_> {
 /// Lazy rather than built at `resumed` like the stores that need a device: a
 /// prefab is a file and nothing else, so a headless run — every test, a
 /// server — can spawn one. The root is the same one `resumed` resolves.
+///
+/// It reads the instances a prefab holds (a variant's base, a nested
+/// prefab) through the app's `registry`, so a game's own components follow
+/// too; a registry swapped since (the editor loading a game) is taken up
+/// here, and the prefabs holding instances read again through it.
 pub(super) fn prefab_store<'a>(
     prefabs: &'a mut Option<Prefabs>,
     asset_root: &Option<PathBuf>,
+    registry: &ComponentRegistry,
 ) -> &'a mut Prefabs {
-    prefabs.get_or_insert_with(|| {
-        Prefabs::new(
+    let store = prefabs.get_or_insert_with(|| {
+        Prefabs::with_registry(
             asset_root
                 .clone()
                 .unwrap_or_else(voltra_assets::default_root),
+            registry.clone(),
         )
-    })
+    });
+    store.use_registry(registry);
+    store
 }
 
 /// Resolves the asset handles one entity's components name, against
@@ -226,7 +236,7 @@ impl App {
 
     /// The prefab store, for a game loading its prefabs before the first tick.
     pub fn prefabs(&mut self) -> &mut Prefabs {
-        prefab_store(&mut self.prefabs, &self.asset_root)
+        prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
     }
 
     /// Spawns a copy of the prefab at `path` while the world is being set up.
@@ -237,7 +247,7 @@ impl App {
     /// resumes, which is what it already does for every entity a game
     /// inserted by hand.
     pub fn spawn(&mut self, path: &AssetPath, at: &Transform) -> Result<Instance, SceneError> {
-        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root);
+        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = prefabs.load(path);
         let instance = prefab::spawn(&mut self.world, &self.registry, prefabs.get(handle), at)?;
         // Queued as well, for a call made after the loop is already running —
@@ -248,119 +258,4 @@ impl App {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::cell::RefCell;
-    use std::rc::Rc;
-    use voltra_render::glam::Vec2;
-    use voltra_scene::{ComponentRegistry, Name, SceneId};
-    use voltra_testkit::scratch_root;
-
-    /// An asset root holding `coin.ron`: one named, positioned entity.
-    fn root_with_a_coin() -> PathBuf {
-        let root = scratch_root();
-        let mut world = voltra_ecs::World::new();
-        let coin = world.spawn();
-        world.insert(coin, SceneId::new());
-        world.insert(coin, Name::new("coin"));
-        world.insert(coin, Transform::default());
-        voltra_scene::format::save(
-            &world,
-            &ComponentRegistry::with_defaults(),
-            &root.join("coin.ron"),
-        )
-        .expect("the fixture writes");
-        root
-    }
-
-    fn coin() -> AssetPath {
-        AssetPath::new("coin.ron").expect("valid")
-    }
-
-    #[test]
-    fn a_tick_spawns_a_prefab_where_it_is_told() {
-        let spawned = Rc::new(RefCell::new(Vec::new()));
-        let seen = spawned.clone();
-        let mut app = App::default()
-            .with_asset_root(root_with_a_coin())
-            .with_simulation()
-            .with_update(move |tick| {
-                let coin = tick.prefab(&coin());
-                let instance = tick
-                    .spawn(coin, &Transform::from_translation(Vec2::new(3.0, 4.0)))
-                    .expect("the prefab reads");
-                seen.borrow_mut().extend(instance.roots);
-            });
-
-        app.advance(1.0 / 60.0);
-
-        let roots = spawned.borrow();
-        assert_eq!(roots.len(), 1);
-        assert_eq!(
-            app.world.get::<Transform>(roots[0]).map(|t| t.translation),
-            Some(Vec2::new(3.0, 4.0))
-        );
-        assert!(app.spawned.is_empty(), "the queue was resolved and emptied");
-    }
-
-    #[test]
-    fn a_tick_that_spawns_every_frame_makes_one_per_frame() {
-        let mut app = App::default()
-            .with_asset_root(root_with_a_coin())
-            .with_simulation()
-            .with_update(|tick| {
-                let coin = tick.prefab(&coin());
-                tick.spawn(coin, &Transform::default()).expect("reads");
-            });
-
-        for _ in 0..3 {
-            app.advance(1.0 / 60.0);
-        }
-
-        assert_eq!(app.world.component_count::<Name>(), 3);
-    }
-
-    #[test]
-    fn a_forged_handle_spawns_nothing_rather_than_panicking() {
-        let mut app = App::default()
-            .with_asset_root(scratch_root())
-            .with_simulation()
-            .with_update(|tick| {
-                let instance = tick
-                    .spawn(Handle::forge(40, 0), &Transform::default())
-                    .expect("not an error");
-                assert!(instance.entities.is_empty());
-            });
-
-        app.advance(1.0 / 60.0);
-
-        assert_eq!(app.world.entity_count(), 0);
-    }
-
-    #[test]
-    fn an_entity_despawned_by_the_tick_that_made_it_is_skipped() {
-        let mut app = App::default()
-            .with_asset_root(root_with_a_coin())
-            .with_simulation()
-            .with_update(|tick| {
-                let coin = tick.prefab(&coin());
-                let instance = tick.spawn(coin, &Transform::default()).expect("reads");
-                for entity in instance.entities {
-                    tick.world.despawn(entity);
-                }
-            });
-
-        app.advance(1.0 / 60.0);
-
-        assert_eq!(app.world.entity_count(), 0);
-    }
-
-    #[test]
-    fn a_game_can_load_its_prefabs_before_the_first_tick() {
-        let mut app = App::default().with_asset_root(root_with_a_coin());
-
-        let handle = app.prefabs().load(&coin());
-
-        assert_eq!(app.prefabs().get(handle).len(), 1);
-    }
-}
+mod tests;

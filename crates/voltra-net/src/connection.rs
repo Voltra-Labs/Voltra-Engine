@@ -32,6 +32,11 @@ pub struct ConnectionStats {
     /// The smoothed round-trip time; [`INITIAL_RTT`]'s 100 ms until the
     /// first is measured.
     pub rtt: Duration,
+    /// How much the round trip varies: RFC 6298's `RTTVAR`, the smoothed
+    /// distance of each sample from the smoothed round trip. Zero until
+    /// the first is measured. `rtt + 4 × rtt_variation` is TCP's bound on
+    /// a round trip this link plausibly takes.
+    pub rtt_variation: Duration,
     /// Datagrams sent.
     pub packets_sent: u64,
     /// Datagrams received (duplicates included).
@@ -59,8 +64,8 @@ pub(crate) struct Connection {
     last_received: Duration,
     last_sent: Option<Duration>,
     ack_owed: bool,
-    /// Smoothed RTT in seconds; `None` until measured.
-    rtt: Option<f64>,
+    /// Smoothed RTT and its variation in seconds; `None` until measured.
+    rtt: Option<(f64, f64)>,
     stats: ConnectionStats,
 }
 
@@ -149,13 +154,19 @@ impl Connection {
             }
         }) {
             let sample = now.saturating_sub(at).as_secs_f64();
-            let rtt = match self.rtt {
-                None => sample,
-                // An eighth of the way toward each sample: RFC 6298's alpha.
-                Some(rtt) => rtt + (sample - rtt) / 8.0,
+            let (rtt, variation) = match self.rtt {
+                None => (sample, sample / 2.0),
+                // RFC 6298: the variation a quarter of the way toward each
+                // sample's distance (beta), from the RTT before it moves; the
+                // RTT an eighth of the way toward the sample (alpha).
+                Some((rtt, variation)) => (
+                    rtt + (sample - rtt) / 8.0,
+                    variation + ((sample - rtt).abs() - variation) / 4.0,
+                ),
             };
-            self.rtt = Some(rtt);
+            self.rtt = Some((rtt, variation));
             self.stats.rtt = Duration::from_secs_f64(rtt.max(0.0));
+            self.stats.rtt_variation = Duration::from_secs_f64(variation.max(0.0));
         }
         for frame in frames(body) {
             let frame = frame?;
@@ -173,9 +184,10 @@ impl Connection {
     /// hold them, at most `max_packets_per_flush`; or one empty packet if
     /// an ack is owed or the line has been quiet for `keepalive`.
     pub(crate) fn flush(&mut self, now: Duration, config: &NetConfig) -> Vec<Vec<u8>> {
-        let resend_after =
-            Duration::from_secs_f64(self.rtt.unwrap_or(INITIAL_RTT.as_secs_f64()) * RESEND_FACTOR)
-                .clamp(MIN_RESEND, MAX_RESEND);
+        let resend_after = Duration::from_secs_f64(
+            self.rtt.map_or(INITIAL_RTT.as_secs_f64(), |(rtt, _)| rtt) * RESEND_FACTOR,
+        )
+        .clamp(MIN_RESEND, MAX_RESEND);
         let acks = self.received.acks().unwrap_or_default();
         let mut packets = Vec::new();
         let mut open: Option<(PayloadWriter, Vec<Carried>, u16)> = None;

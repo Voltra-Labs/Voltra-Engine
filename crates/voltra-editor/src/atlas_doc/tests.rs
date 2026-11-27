@@ -1,14 +1,7 @@
-use std::path::PathBuf;
-
 use super::*;
 
-fn root() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!(
-        "voltra-atlas-doc-{}-{:?}",
-        std::process::id(),
-        std::thread::current().id()
-    ));
-    let _ = std::fs::remove_dir_all(&dir);
+fn root() -> voltra_testkit::Scratch {
+    let dir = voltra_testkit::Scratch::new("voltra-atlas-doc");
     std::fs::create_dir_all(dir.join("sprites")).expect("scratch");
     dir
 }

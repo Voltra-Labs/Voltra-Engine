@@ -54,6 +54,7 @@ fn the_library_is_accepted_and_registers_the_games_components() {
 
     for name in [
         "Walker",
+        "WalkerMotion",
         "Coin",
         "Goal",
         "CoinCounter",

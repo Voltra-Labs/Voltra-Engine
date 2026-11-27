@@ -76,7 +76,8 @@ mod tests {
 
     #[test]
     fn a_rebound_key_drives_its_action_in_the_next_run() {
-        let dir = voltra_testkit::scratch_root().join("user");
+        let scratch = voltra_testkit::scratch_root();
+        let dir = scratch.join("user");
         let held = Rc::new(Cell::new(false));
         let mut first = game(&dir, held.clone());
         tap(&mut first, KeyCode::F1);
@@ -105,7 +106,8 @@ mod tests {
 
     #[test]
     fn a_reset_saved_leaves_no_controls_behind() {
-        let dir = voltra_testkit::scratch_root().join("user");
+        let scratch = voltra_testkit::scratch_root();
+        let dir = scratch.join("user");
         let app = App::default()
             .with_actions(map())
             .with_save_dir(&dir)

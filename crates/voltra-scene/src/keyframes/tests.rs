@@ -30,7 +30,7 @@ fn path(name: &str) -> AssetPath {
 }
 
 fn store_with(name: &str, text: &str) -> AnimationClips {
-    let root = voltra_testkit::scratch_root();
+    let root = voltra_testkit::scratch_root().keep();
     std::fs::write(root.join(name), text).expect("writes");
     AnimationClips::new(root)
 }
@@ -168,3 +168,7 @@ fn the_shipped_clip_reads_whole() {
     assert!(clip.tracks.iter().all(|t| t.keys.len() == 3));
     assert_eq!(clip.duration(), 1.5);
 }
+
+mod fade;
+mod layers;
+mod synced;

@@ -1,5 +1,5 @@
-//! The tools that build, test and package, and the one that places a
-//! prefab.
+//! The tools that build, test and package, and the ones that place a
+//! prefab and make a variant of one.
 
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::CallToolResult;
@@ -35,6 +35,14 @@ pub struct DistArgs {
     /// `build.ron`.
     #[serde(default)]
     pub manifest: Option<String>,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+pub struct VariantArgs {
+    /// The prefab the variant follows, as an asset path.
+    pub base: String,
+    /// The new variant's asset path, e.g. "prefabs/coin Variant.prefab.ron".
+    pub path: String,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
@@ -124,6 +132,20 @@ impl VoltraMcp {
             &args.prefab,
             Vec2::new(args.x, args.y),
             args.parent.as_deref(),
+        ))
+    }
+
+    #[tool(
+        description = "Make a variant of a prefab: a new prefab file whose root is an instance of the base, following every later edit to it but for what the variant overrides (edit those in the editor's prefab mode). Never overwrites a file."
+    )]
+    fn prefab_variant(
+        &self,
+        Parameters(args): Parameters<VariantArgs>,
+    ) -> Result<CallToolResult, ErrorData> {
+        answer(prefab::prefab_variant(
+            &self.project,
+            &args.base,
+            &args.path,
         ))
     }
 }

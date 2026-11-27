@@ -106,7 +106,7 @@ fn a_click_outside_closes_the_list_unchanged() {
 fn an_open_list_is_drawn_over_everything_with_its_items() {
     let root = scratch_root();
     copy_bundled_font(&root, DEFAULT_FONT);
-    let fonts = Fonts::new(root);
+    let fonts = Fonts::new(&root);
     let mut world = World::new();
     let choice = dropdown(&mut world, Vec2::new(10.0, 10.0));
     let mut state = UiControls::default();

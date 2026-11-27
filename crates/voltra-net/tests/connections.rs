@@ -186,6 +186,9 @@ fn every_reliable_message_arrives_once_and_in_order_where_asked() {
     let stats = sim.server.stats(PeerId(1)).expect("connected");
     assert!(stats.resent > 0, "the loss was real: {stats:?}");
     assert!(stats.rtt >= Duration::from_millis(60), "{stats:?}");
+    // Jitter on the link, and the round trip varies by it.
+    assert!(stats.rtt_variation > Duration::ZERO, "{stats:?}");
+    assert!(stats.rtt_variation < stats.rtt, "{stats:?}");
 }
 
 #[test]

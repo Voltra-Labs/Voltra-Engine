@@ -26,26 +26,50 @@ pub(super) struct Context<'a> {
     pub queue: &'a wgpu::Queue,
 }
 
-pub(super) fn show(ui: &mut Ui, world: &mut World, cx: Context<'_>) -> Option<&'static str> {
+/// A button that works a skinned sprite out from its own texture and
+/// bones: done by [`apply`] to every selected entity on its own terms,
+/// where copying the primary's result would give each the primary's mesh.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Action {
+    /// Every bone under its skeleton, by path.
+    UseSkeletonBones,
+    /// A mesh from its texture's outline, weights guessed.
+    GenerateMesh,
+    /// Each vertex held by its nearest bones.
+    AutoWeights,
+}
+
+impl Action {
+    /// What to call the edit.
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            Self::UseSkeletonBones => "Set skinned bones",
+            Self::GenerateMesh => "Generate skinned mesh",
+            Self::AutoWeights => "Auto weights",
+        }
+    }
+}
+
+/// The section, and a button pressed, for the caller to [`apply`].
+pub(super) fn show(
+    ui: &mut Ui,
+    world: &mut World,
+    cx: Context<'_>,
+) -> (Option<&'static str>, Option<Action>) {
     let entity = cx.entity;
-    let current = world.get::<SkinnedSprite>(entity)?.clone();
+    let Some(current) = world.get::<SkinnedSprite>(entity).cloned() else {
+        return (None, None);
+    };
     ui.separator();
     ui.label(RichText::new("Skinned sprite").strong());
-    // Read before the component is borrowed: the skeleton's bones by path,
-    // and where the component's own bones lie in the mesh's space.
     let skeleton = skeleton_of(world, entity);
-    let available: Vec<String> = skeleton.map_or_else(Vec::new, |root| {
-        paths(world, root)
-            .into_iter()
-            .filter(|(path, e)| !path.is_empty() && world.get::<Bone2D>(*e).is_some())
-            .map(|(path, _)| path)
-            .collect()
-    });
-    let segments = pose::bone_segments(world, entity, &current);
     let outline = traced(&current, cx.textures, cx.silhouettes);
 
-    let skinned = world.get_mut::<SkinnedSprite>(entity)?;
+    let Some(skinned) = world.get_mut::<SkinnedSprite>(entity) else {
+        return (None, None);
+    };
     let mut claim = None;
+    let mut action = None;
     let committed = skinned
         .texture
         .as_ref()
@@ -82,8 +106,7 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, cx: Context<'_>) -> Option<&'
         .on_hover_text("every bone under the skeleton, by path")
         .clicked()
     {
-        skinned.bones = available.clone();
-        claim = Some("Set skinned bones");
+        action = Some(Action::UseSkeletonBones);
     }
 
     ui.label(
@@ -99,22 +122,15 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, cx: Context<'_>) -> Option<&'
             .add_enabled(outline.is_some(), Button::new("Generate mesh"))
             .on_hover_text("from the texture's opaque outline, cut on a grid; weights guessed")
             .clicked();
-        if let (true, Some((outline, size))) = (generate_clicked, &outline) {
-            let ppu = skinned.pixels_per_unit.max(1.0);
-            let units = generate::outline_in_units(outline, *size, ppu);
-            let extent = *size / ppu;
-            let cell = (extent.min_element() / 4.0).max(extent.max_element() / 48.0);
-            skinned.mesh = generate::from_outline(&units, cell, |p| generate::uv_at(p, *size, ppu));
-            weights::automatic(&mut skinned.mesh, &segments);
-            claim = Some("Generate skinned mesh");
+        if generate_clicked {
+            action = Some(Action::GenerateMesh);
         }
         if ui
             .add_enabled(!skinned.bones.is_empty(), Button::new("Auto weights"))
             .on_hover_text("each vertex held by its nearest bones")
             .clicked()
         {
-            weights::automatic(&mut skinned.mesh, &segments);
-            claim = Some("Auto weights");
+            action = Some(Action::AutoWeights);
         }
     });
 
@@ -155,7 +171,65 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, cx: Context<'_>) -> Option<&'
             );
         });
     }
-    claim
+    (claim, action)
+}
+
+/// Does `action` to `entity`'s skinned sprite from its own skeleton,
+/// texture and bones; whether it changed anything. An entity without one,
+/// or without what the action works from, is left as it was.
+pub(super) fn apply(
+    action: Action,
+    world: &mut World,
+    entity: Entity,
+    textures: &Textures,
+    silhouettes: Option<&mut Silhouettes>,
+) -> bool {
+    let Some(current) = world.get::<SkinnedSprite>(entity).cloned() else {
+        return false;
+    };
+    // Read before the component is borrowed: the skeleton's bones by path,
+    // and where the component's own bones lie in the mesh's space.
+    let available: Vec<String> = skeleton_of(world, entity).map_or_else(Vec::new, |root| {
+        paths(world, root)
+            .into_iter()
+            .filter(|(path, e)| !path.is_empty() && world.get::<Bone2D>(*e).is_some())
+            .map(|(path, _)| path)
+            .collect()
+    });
+    let segments = pose::bone_segments(world, entity, &current);
+    let outline = match action {
+        Action::GenerateMesh => traced(&current, textures, silhouettes),
+        _ => None,
+    };
+    let Some(skinned) = world.get_mut::<SkinnedSprite>(entity) else {
+        return false;
+    };
+    match action {
+        Action::UseSkeletonBones => {
+            if skinned.bones == available {
+                return false;
+            }
+            skinned.bones = available;
+        }
+        Action::GenerateMesh => {
+            let Some((outline, size)) = outline else {
+                return false;
+            };
+            let ppu = skinned.pixels_per_unit.max(1.0);
+            let units = generate::outline_in_units(&outline, size, ppu);
+            let extent = size / ppu;
+            let cell = (extent.min_element() / 4.0).max(extent.max_element() / 48.0);
+            skinned.mesh = generate::from_outline(&units, cell, |p| generate::uv_at(p, size, ppu));
+            weights::automatic(&mut skinned.mesh, &segments);
+        }
+        Action::AutoWeights => {
+            if skinned.bones.is_empty() {
+                return false;
+            }
+            weights::automatic(&mut skinned.mesh, &segments);
+        }
+    }
+    true
 }
 
 /// The largest outline of the component's whole texture and the texture's

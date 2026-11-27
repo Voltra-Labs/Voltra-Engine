@@ -208,7 +208,8 @@ mod tests {
     fn a_handle_that_resolves_to_nothing_plays_silence_rather_than_panicking() {
         // A forged handle names a slot the store never allocated. `Clips::get`
         // would panic on it; the tick path must not.
-        let clips = Clips::new(scratch_root());
+        let root = scratch_root();
+        let clips = Clips::new(&root);
         let mut audio = Audio::silent();
         let mut tick = TickAudio::new(&mut audio, Some(&clips));
 

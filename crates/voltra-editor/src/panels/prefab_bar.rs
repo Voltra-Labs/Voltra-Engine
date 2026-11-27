@@ -1,5 +1,5 @@
 //! The row prefab mode adds to the toolbar: the trail from the scene to
-//! the prefab being edited, the way back, and Save.
+//! the prefab being edited, the way back, Save, and a variant of it.
 //!
 //! Unity's Prefab Mode breadcrumb, with its back arrow. A row on screen
 //! rather than the window title alone, because the one thing an author
@@ -44,6 +44,17 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             .clicked()
         {
             scene_dialogs::save(editor, frame);
+        }
+        if let Some(path) = editor.document.path().cloned() {
+            if ui
+                .button("Create variant")
+                .on_hover_text("a new prefab following this one as saved, beside it")
+                .clicked()
+            {
+                if let Err(e) = crate::prefab::create_variant(editor, frame, &path) {
+                    log::error!("{e}");
+                }
+            }
         }
         ui.label(RichText::new("editing a prefab: its instances follow what is saved").weak());
     });

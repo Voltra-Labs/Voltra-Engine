@@ -1,11 +1,12 @@
 //! Whether a prefab would end up containing an instance of itself.
 //!
-//! Nothing recurses through a nested instance today — a spawn copies the
-//! records a file holds, and a nested instance is records like any other — so
-//! a cycle cannot hang a spawn. It is refused anyway, at the one place one can
-//! be made: the stage that propagates prefab edits *will* walk these links,
-//! and a scene saved with a loop in it before then is a file that stage has to
-//! reject. Unity and Godot both refuse a prefab that contains itself at save.
+//! The store follows every instance a prefab holds — a variant's base, a
+//! prefab nested inside — to bring it in step (`resolve.rs`), so a loop is
+//! a file that can never be read whole. It is refused at every place one
+//! can be made — `prefab::write`, Apply, a variant, a save in the editor —
+//! as Unity and Godot refuse a prefab that contains itself at save; one
+//! made by hand on disk is caught by the store, which bounds its walk and
+//! reports the loop rather than recursing into it.
 
 use std::collections::HashSet;
 
@@ -13,45 +14,49 @@ use voltra_assets::AssetPath;
 
 use super::{Prefab, PrefabInstance, Prefabs};
 use crate::format::SceneFile;
-use crate::hierarchy::Parent;
 
 impl Prefab {
-    /// The prefabs this one holds instances of.
-    ///
-    /// Only links on records parented inside the file: a root's own link is
-    /// replaced by every spawn, so it says nothing about what this file
-    /// contains.
+    /// The prefabs this one holds instances of — a variant's base among
+    /// them — each once.
     pub fn nested_sources(&self) -> Vec<AssetPath> {
         self.file.as_ref().map_or_else(Vec::new, nested_in)
     }
 }
 
-/// See [`Prefab::nested_sources`].
+/// Every prefab a link in `file` names, each once: a root's (a variant's
+/// base) as much as a nested instance's, since the store follows both.
 pub(super) fn nested_in(file: &SceneFile) -> Vec<AssetPath> {
-    let ids: HashSet<_> = file.entities.iter().map(|record| record.id).collect();
-    let mut found = Vec::new();
+    nested_counted(file).0
+}
 
+/// [`nested_in`], with how many records carry a link — what the store's
+/// [`super::MAX_LINKS`] counts. Linear; a link that will not read is warned
+/// of once per file, not once per link.
+pub(super) fn nested_counted(file: &SceneFile) -> (Vec<AssetPath>, usize) {
+    let mut found = Vec::new();
+    let mut seen = HashSet::new();
+    let mut links = 0;
+    let mut unreadable = 0usize;
     for record in &file.entities {
         let Some(link) = record.components.get(PrefabInstance::NAME) else {
             continue;
         };
-        let parented_inside = record
-            .components
-            .get("Parent")
-            .and_then(|raw| raw.into_rust::<Parent>().ok())
-            .is_some_and(|parent| ids.contains(&parent.id));
-        if !parented_inside {
-            continue;
-        }
+        links += 1;
         match link.into_rust::<PrefabInstance>() {
-            Ok(link) => found.push(link.source),
+            Ok(link) => {
+                if seen.insert(link.source.clone()) {
+                    found.push(link.source);
+                }
+            }
             // A link that does not read is a broken record a load would
             // already refuse; it is no evidence of a cycle either way.
-            Err(e) => log::warn!("a nested prefab link could not be read: {e}"),
+            Err(_) => unreadable += 1,
         }
     }
-
-    found
+    if unreadable > 0 {
+        log::warn!("{unreadable} nested prefab link(s) could not be read");
+    }
+    (found, links)
 }
 
 /// The first prefab, from `sources` and everything they nest in turn, that is

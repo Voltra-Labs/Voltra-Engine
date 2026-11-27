@@ -11,18 +11,19 @@ impl App {
     /// camera follows what is drawn, and an editor that is authoring does
     /// not have its scene camera chase the entity being placed. After the
     /// tick and the animations, so it follows where they left the target,
-    /// and before the audio, whose ears ride on the camera.
+    /// and before the audio, whose ears ride on the camera (on its transform: a
+    /// shake moves the view, not the ears).
     pub(super) fn update_camera_rigs(&mut self, delta: f32) {
         if !self.simulation.is_running() {
             return;
         }
-        // The window's shape, for how wide a camera's view is; square
-        // before there is a window.
+        // The window's shape — square before there is a window — and the
+        // render textures, for how wide each camera's own view is.
         let aspect = self
             .renderer
             .as_ref()
             .map_or(1.0, |renderer| renderer.camera.aspect);
-        camera_rig::update(&mut self.world, delta, aspect);
+        camera_rig::update(&mut self.world, delta, aspect, self.textures.as_ref());
     }
 }
 

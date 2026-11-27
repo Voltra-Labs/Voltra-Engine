@@ -4,9 +4,10 @@
 use voltra_assets::AssetPath;
 use voltra_core::{App, Headless};
 use voltra_ecs::Entity;
+use voltra_platformer::ladder::Climbing;
 use voltra_platformer::{walker, Platformer, FIRST_LEVEL};
 use voltra_render::glam::Vec2;
-use voltra_scene::{RigidBody, Transform};
+use voltra_scene::Transform;
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -65,13 +66,8 @@ fn the_walker_climbs_the_ladder_and_falls_off_it_when_it_leaves() {
     session.step(30, FRAME);
     let climbed = at(&session, me).y;
     assert!(climbed > foot + 0.8, "from {foot} to {climbed}");
-    assert_eq!(
-        session
-            .world()
-            .get::<RigidBody>(me)
-            .expect("a body")
-            .gravity_scale,
-        0.0,
+    assert!(
+        session.world().get::<Climbing>(me).is_some(),
         "no gravity on a ladder"
     );
 
@@ -79,12 +75,42 @@ fn the_walker_climbs_the_ladder_and_falls_off_it_when_it_leaves() {
     put(&mut session, me, Vec2::new(12.0, 0.5));
     session.step(30, FRAME);
     assert!(at(&session, me).y < 0.0, "it fell: {}", at(&session, me).y);
-    assert_eq!(
-        session
-            .world()
-            .get::<RigidBody>(me)
-            .expect("a body")
-            .gravity_scale,
-        1.0
+    assert!(session.world().get::<Climbing>(me).is_none());
+}
+
+fn named(session: &Headless, name: &str) -> Entity {
+    session
+        .world()
+        .query::<voltra_scene::Name>()
+        .find(|(_, n)| n.as_str() == name)
+        .map(|(e, _)| e)
+        .expect("the level has it")
+}
+
+/// How far the walker shoves the crate called `name`, walking left into it
+/// for a second from `from`.
+fn shove(name: &str, from: Vec2) -> f32 {
+    let (mut session, me) = level();
+    let crate_ = named(&session, name);
+    put(&mut session, me, from);
+    session.step(30, FRAME);
+    let start = at(&session, crate_).x;
+    assert!(session.press("move_left"));
+    session.step(60, FRAME);
+    let crate_x = at(&session, crate_).x;
+    assert!(
+        at(&session, me).x > crate_x,
+        "the walker stays its side of the crate"
     );
+    start - crate_x
+}
+
+#[test]
+fn the_walker_pushes_the_crates_and_the_heavy_one_less() {
+    // Right of each, on the ground.
+    let light = shove("Crate 2", Vec2::new(-1.5, -1.8));
+    let heavy = shove("Heavy crate", Vec2::new(-4.0, -1.8));
+    assert!(light > 1.0, "pushed along: {light}");
+    assert!(heavy > 0.1, "the heavy one moves too: {heavy}");
+    assert!(heavy < light, "{heavy} against {light}");
 }

@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use voltra_ecs::{Entity, World};
 
+use super::blend::Mixing;
 use super::value::{Value, ValueKind};
 use crate::{GlobalLight2D, PointLight2D, Sprite, Text, Tilemap, Transform};
 
@@ -14,7 +15,7 @@ use crate::{GlobalLight2D, PointLight2D, Sprite, Text, Tilemap, Transform};
 /// kind, and its two arms in [`read`](Self::read) and
 /// [`write`](Self::write) — Godot's property tracks with the property
 /// list spelled out.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum Property {
     /// `Transform::translation`, in the parent's space.
     Translation,
@@ -74,6 +75,20 @@ impl Property {
             | Self::GlobalLightColor
             | Self::TilemapColor => ValueKind::Color,
             Self::SpriteFrame => ValueKind::Int,
+        }
+    }
+
+    /// How two clips' values of it mix in a blend: a rotation the short way
+    /// round, a frame by switching, everything else linearly.
+    ///
+    /// Not the same as how one clip moves between its own keys: a rotation
+    /// keyed `0` then `2π` is a whole turn (see [`Rotation`](Self::Rotation)),
+    /// but two clips holding those angles mean one pose.
+    pub fn mixing(self) -> Mixing {
+        match (self, self.kind()) {
+            (Self::Rotation, _) => Mixing::Angle,
+            (_, ValueKind::Int) => Mixing::Discrete,
+            _ => Mixing::Linear,
         }
     }
 

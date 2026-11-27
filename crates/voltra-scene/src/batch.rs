@@ -210,6 +210,7 @@ impl SpriteBatch {
     /// [`push_quad_on`](Self::push_quad_on) for corners and UVs known to be
     /// parallelograms — a tile's, a rectangle sampling a rectangle of its
     /// sheet however the tile is turned — without asking.
+    #[inline]
     pub(crate) fn push_rect_on(
         &mut self,
         matrix: Mat3,
@@ -224,6 +225,7 @@ impl SpriteBatch {
     }
 
     /// Appends an instance already placed and culled.
+    #[inline]
     pub(crate) fn append_quad(&mut self, quad: QuadInstance, surface: Surface) {
         let at = self.quads.len() as u32;
         self.quads.push(quad);
@@ -248,6 +250,7 @@ impl SpriteBatch {
     /// the same surface and draws the same kind, ending where these start;
     /// as a range of its own otherwise. Never across a GPU emitter, which
     /// must draw between the two.
+    #[inline]
     pub(crate) fn extend_ranges(&mut self, surface: Surface, primitives: Primitives) {
         let Surface {
             texture,

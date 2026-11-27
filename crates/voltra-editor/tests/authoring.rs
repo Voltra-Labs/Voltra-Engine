@@ -54,7 +54,7 @@ const EXPECTED: &str = r#"(
 #[test]
 #[ignore = "launches the editor: needs a display and a GPU adapter"]
 fn the_packer_and_the_atlas_editor_through_the_bridge() {
-    let assets = project("authoring");
+    let (_project, assets) = project("authoring");
     sprite(&assets, "coin.png", "sprites/coin.png");
     sprite(&assets, "coin.png", "sprites/loose/coin.png");
     sprite(&assets, "ground.png", "sprites/loose/tiles/ground.png");
@@ -217,7 +217,7 @@ fn pick(client: &mut voltra_bridge::BridgeClient, from: [u32; 2], to: [u32; 2]) 
 #[test]
 #[ignore = "launches the editor: needs a display and a GPU adapter"]
 fn the_tilemap_tools_through_the_bridge() {
-    let assets = project("tiles");
+    let (_project, assets) = project("tiles");
     sprite(&assets, "ground.png", "sprites/ground.png");
     // The ground sheet cut into 8×8 tiles: a palette 8 across and 2 down,
     // frames 0..8 on top and 8..16 below.

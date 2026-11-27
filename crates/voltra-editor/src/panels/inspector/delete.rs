@@ -17,6 +17,10 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         .on_hover_text("Delete")
         .clicked()
     {
+        // The record of a delete is the authored scene, not a pose.
+        editor
+            .timeline
+            .end_record(frame.world, frame.animation_clips);
         crate::delete::selection(editor, frame);
     }
 }

@@ -11,7 +11,7 @@ fn write(root: &std::path::Path, name: &str, text: &str) {
     std::fs::write(path, text).expect("written");
 }
 
-fn flash_root() -> std::path::PathBuf {
+fn flash_root() -> voltra_testkit::Scratch {
     let root = scratch_root();
     write(&root, "materials/flash.wgsl", FLASH);
     write(
@@ -30,7 +30,8 @@ fn path(raw: &str) -> AssetPath {
 
 #[test]
 fn a_material_loads_composed_and_laid_out() {
-    let mut materials = Materials::new(flash_root());
+    let root = flash_root();
+    let mut materials = Materials::new(&root);
     let handle = materials.load(&path("materials/flash.material.ron"));
     let material = materials.get(handle).expect("loaded");
     assert!(material.is_usable(), "{:?}", material.error);

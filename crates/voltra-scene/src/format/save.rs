@@ -71,7 +71,10 @@ pub fn to_scene_file(world: &World, registry: &ComponentRegistry) -> Result<Scen
 
     // Ordering by id is ordering by creation, because the ids are UUIDv7. That
     // makes the file deterministic and puts new entities at the end rather than
-    // in the middle of someone's diff.
+    // in the middle of someone's diff. An entity a prefab sync added to an
+    // instance has a derived id carrying its instance root's time
+    // (`SceneId::derived`), so it sorts among that instance, the same place
+    // every save.
     entities.sort_by_key(|record| record.id);
 
     Ok(SceneFile {

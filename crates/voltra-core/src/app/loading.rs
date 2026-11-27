@@ -173,7 +173,45 @@ impl App {
 
     /// Whether this end is a replication client, whose server sends the
     /// replicated entities a load would otherwise make a second copy of.
-    fn is_replication_client(&self) -> bool {
+    pub(in crate::app) fn is_replication_client(&self) -> bool {
         matches!(self.net.replication(), Some(Replication::Client(_)))
+    }
+
+    /// On a replication client, lets go of the level entities it set aside
+    /// out of interest without the server ever sending them: the level
+    /// they came from is going (a scene change).
+    pub(in crate::app) fn forget_unsent_level(&mut self) {
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.forget_unsent();
+        }
+    }
+
+    /// On a replication client, asks the server to send again what a sweep
+    /// of the old level took (`ReplicationClient::resync_despawned`).
+    pub(in crate::app) fn resync_swept(&mut self) {
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.resync_despawned(&self.world);
+        }
+    }
+
+    /// On a replication client, sets aside the replicated entities of the
+    /// level it is loading, for the server's copies to be spawned from as
+    /// they arrive (`ReplicationClient::keep_level`).
+    pub(in crate::app) fn keep_level(&mut self, records: Vec<voltra_scene::format::EntityRecord>) {
+        if records.is_empty() {
+            return;
+        }
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.keep_level(&self.world, &self.registry, records);
+        }
+    }
+
+    /// [`forget_unsent_level`](Self::forget_unsent_level), of the entities
+    /// `ids` names alone: the replicated entities of regions unloading,
+    /// while the rest of the level stays.
+    fn forget_unsent_of(&mut self, ids: &[voltra_scene::SceneId]) {
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.forget_unsent_of(ids);
+        }
     }
 }

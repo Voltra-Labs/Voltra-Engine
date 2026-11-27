@@ -65,14 +65,18 @@ impl From<SceneError> for WriteError {
 ///
 /// Refreshed here rather than left to the file watcher: whoever writes a
 /// prefab is about to spawn it, and the watcher's event arrives frames later.
-/// A path nothing has loaded is left unloaded.
+/// A path nothing has loaded is left unloaded. Answers what that refresh
+/// read again — the file and every loaded prefab that follows it, what
+/// [`Prefabs::reload`] answers — for the caller to bring their instances in
+/// step ([`super::sync_sources`]); a reload of its own after this one finds
+/// nothing changed.
 pub fn write(
     world: &World,
     registry: &ComponentRegistry,
     prefabs: &mut Prefabs,
     root: Entity,
     target: &AssetPath,
-) -> Result<(), WriteError> {
+) -> Result<Vec<AssetPath>, WriteError> {
     let file = fragment(world, registry, root)?;
 
     if let Some(through) = reaches(prefabs, nested_in(&file), target) {
@@ -87,6 +91,5 @@ pub fn write(
         std::fs::create_dir_all(parent).map_err(SceneError::Io)?;
     }
     crate::format::write(&file, &path)?;
-    prefabs.reload(target);
-    Ok(())
+    Ok(prefabs.reload(target))
 }

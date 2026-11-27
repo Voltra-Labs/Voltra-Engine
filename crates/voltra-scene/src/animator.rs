@@ -2,26 +2,43 @@
 //! sets.
 //!
 //! A [`StateMachine`] (a `*.animator.ron` file) holds parameters — floats,
-//! bools, triggers — states, each playing an animation clip, and
+//! bools, triggers — states, each playing an animation clip or a
+//! [`BlendTree`] of clips weighted by float parameters, and
 //! transitions between them, each a list of conditions on the parameters
 //! and an optional exit time. An [`Animator`] runs one on its entity: a
 //! game writes `speed` and `grounded` and triggers `jump`, and the animator
 //! moves to the state they call for and has the entity's
-//! [`AnimationPlayer`] play its clip. Unity's `Animator` and
-//! `AnimatorController`; Godot's `AnimationTree` state machine. No blending
-//! yet: a transition cuts.
+//! [`AnimationPlayer`] play its clip — or a tree's clips, synced, at the
+//! weights the parameters give, every frame — cutting to it, or
+//! crossfading over the transition's `duration`, which the player mixes.
+//! Unity's `Animator` and `AnimatorController`; Godot's `AnimationTree`
+//! state machine.
 
+mod bare;
+mod check;
 pub mod component;
+pub mod graph;
+pub mod layer;
+mod layers;
 pub mod machine;
+mod progress;
+mod save;
+mod step;
+pub mod tree;
 
+pub use crate::keyframes::LayerBlend;
 pub use component::{Animator, AnimatorState};
-pub use machine::{Condition, ParamValue, Parameter, State, StateMachine, Transition};
+pub use graph::Graph;
+pub use layer::Layer;
+pub use machine::{Condition, Motion, ParamValue, Parameter, State, StateMachine, Transition};
+pub use tree::{BlendTree, Child1D, Child2D};
 
 use voltra_ecs::{Entity, World};
 
 use crate::keyframes::AnimationClips;
 use crate::ron_store::{RonAsset, RonStore};
-use crate::AnimationPlayer;
+
+use step::{step, Slot};
 
 /// Reads state machines from an asset root — a [`RonStore`].
 pub type StateMachines = RonStore<StateMachine>;
@@ -35,137 +52,53 @@ impl RonAsset for StateMachine {
 }
 
 /// Moves every animator to the state its parameters call for, and starts
-/// that state's clip.
+/// that state's clip — cutting to it, or fading into it over the
+/// transition's `duration` — and so each of its machine's layers, played
+/// by a layer of the entity's player at the layer's weight, mask and blend.
 ///
 /// Once per frame, before the players advance, so a clip a transition
 /// starts plays from this frame. At most one transition per animator per
-/// frame: two states whose conditions both hold would otherwise trade
-/// places for ever inside one frame. An animator whose machine has no
-/// states — or will not read — does nothing.
+/// frame and layer: two states whose conditions both hold would otherwise
+/// trade places for ever inside one frame. Layer 0 first, then the layers
+/// bottom up, so a trigger layer 0 spends is spent for the layers too. An
+/// animator whose machine has no states — or will not read — does nothing.
+/// The layers an animator gave a player are taken out once it runs a
+/// machine without layers, runs none, or is removed.
 pub fn evaluate(world: &mut World, machines: &mut StateMachines, clips: &mut AnimationClips) {
+    // Layers an animator made outlive it on the player: taken out here.
+    layers::release_orphans(world);
     let animators: Vec<Entity> = world
         .query::<Animator>()
         .filter(|(_, a)| a.machine.is_some())
         .map(|(entity, _)| entity)
         .collect();
     for entity in animators {
-        step(world, machines, clips, entity);
+        run(world, machines, clips, entity);
     }
 }
 
-fn step(
+fn run(
     world: &mut World,
     machines: &mut StateMachines,
     clips: &mut AnimationClips,
     entity: Entity,
 ) {
-    let Some(animator) = world.get::<Animator>(entity) else {
-        return;
-    };
-    let Some(path) = animator.machine.clone() else {
+    let Some(path) = world
+        .get::<Animator>(entity)
+        .and_then(|a| a.machine.clone())
+    else {
         return;
     };
     let handle = machines.load(&path);
     let machine = machines.get(handle);
-    let current = animator
-        .state
-        .current
-        .as_deref()
-        .filter(|_| animator.state.machine.as_ref() == Some(&path))
-        .and_then(|name| machine.state(name));
-    let next = match current {
-        // Started, restarted, given another machine, or its state is gone
-        // from a reloaded one: the start state.
-        None => machine.start_state().map(|s| (s.clone(), Vec::new())),
-        Some(state) => {
-            let progress = progress(world, clips, entity, state);
-            machine
-                .transitions
-                .iter()
-                .find(|t| leaves(t, &state.name) && passes(t, machine, animator, progress))
-                .and_then(|t| {
-                    let to = machine.state(&t.to)?.clone();
-                    let spent: Vec<String> = t
-                        .conditions
-                        .iter()
-                        .map(|c| c.parameter().to_owned())
-                        .filter(|name| {
-                            matches!(machine.parameter(name), Some(ParamValue::Trigger(_)))
-                        })
-                        .collect();
-                    Some((to, spent))
-                })
-        }
-    };
-    let Some((state, spent)) = next else {
+    layers::begin(world, entity, &path);
+    step(world, machine, machine.graph(), clips, entity, Slot::Base);
+    if !layers::sync(world, entity, machine) {
         return;
-    };
-    if let Some(animator) = world.get_mut::<Animator>(entity) {
-        animator.state.current = Some(state.name.clone());
-        animator.state.machine = Some(path);
-        for name in spent {
-            animator.reset_trigger(&name);
-        }
     }
-    match world.get_mut::<AnimationPlayer>(entity) {
-        Some(player) => {
-            player.play(state.clip.clone());
-            player.speed = state.speed;
-        }
-        None => {
-            let mut player = AnimationPlayer::new(state.clip.clone());
-            player.speed = state.speed;
-            world.insert(entity, player);
-        }
+    for (i, layer) in machine.layers.iter().enumerate() {
+        step(world, machine, layer.graph(), clips, entity, Slot::Layer(i));
     }
-}
-
-/// Whether `transition` leaves the state named `current`: from it, or from
-/// any state but the one it goes to.
-fn leaves(transition: &Transition, current: &str) -> bool {
-    match &transition.from {
-        Some(from) => from == current,
-        None => transition.to != current,
-    }
-}
-
-/// How far through its clip the entity's player is in `state`, `0..=1`;
-/// one for a clip that has ended, or has no length.
-fn progress(world: &World, clips: &mut AnimationClips, entity: Entity, state: &State) -> f32 {
-    let Some(player) = world.get::<AnimationPlayer>(entity) else {
-        return 0.0;
-    };
-    let handle = clips.load(&state.clip);
-    let duration = clips.get(handle).duration();
-    if duration <= 0.0 || (!player.playing && player.time() >= duration) {
-        return 1.0;
-    }
-    (player.time() / duration).clamp(0.0, 1.0)
-}
-
-fn passes(
-    transition: &Transition,
-    machine: &StateMachine,
-    animator: &Animator,
-    progress: f32,
-) -> bool {
-    if transition.exit_time.is_some_and(|at| progress < at) {
-        return false;
-    }
-    transition.conditions.iter().all(|condition| {
-        let name = condition.parameter();
-        let value = animator
-            .parameter(name)
-            .filter(|v| machine.parameter(name).is_some_and(|m| m.same_kind(*v)))
-            .or(machine.parameter(name));
-        match (condition, value) {
-            (Condition::If(_), Some(ParamValue::Bool(b) | ParamValue::Trigger(b))) => b,
-            (Condition::IfNot(_), Some(ParamValue::Bool(b) | ParamValue::Trigger(b))) => !b,
-            (Condition::Greater(_, at), Some(ParamValue::Float(v))) => v > *at,
-            (Condition::Less(_, at), Some(ParamValue::Float(v))) => v < *at,
-            _ => false,
-        }
-    })
 }
 
 #[cfg(test)]

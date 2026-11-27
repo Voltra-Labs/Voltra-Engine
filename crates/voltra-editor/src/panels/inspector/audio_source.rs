@@ -6,7 +6,9 @@ use voltra_core::{Audio, VoiceId};
 use voltra_scene::AudioSource;
 
 use super::active;
+use super::mixed;
 use super::path_field::{self, PathEdit};
+use voltra_scene::format::serial_tree::Step;
 
 /// What the bus box shows for a source on the master, whose stored name is
 /// empty so the file stays as it was before buses existed.
@@ -133,7 +135,11 @@ fn bus_ui(ui: &mut Ui, source: &mut AudioSource, audio: &mut Audio) -> Option<&'
         .selected_text(&shown)
         .show_ui(ui, |ui| {
             for name in audio.buses().names() {
-                if ui.selectable_label(name == shown, name).clicked() && name != shown {
+                let clicked = ui.selectable_label(name == shown, name).clicked();
+                if clicked {
+                    mixed::touch(ui, "AudioSource", vec![Step::Field("bus")]);
+                }
+                if clicked && name != shown {
                     picked = Some(name.to_owned());
                 }
             }

@@ -26,6 +26,7 @@ pub mod hierarchy;
 pub mod interpolate;
 pub mod joint;
 pub mod keyframes;
+pub mod lag_compensated;
 pub mod light;
 pub mod line2d;
 pub mod locale;
@@ -66,7 +67,7 @@ pub use audio_source::AudioSource;
 pub use batch::{GpuEmitterDraw, MeshVertex, SpriteBatch, SpriteRange, Surface, TriangleMesh};
 pub use body::{BodyType, RigidBody};
 pub use camera::{Camera, CameraTarget, Viewport};
-pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds};
+pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds, FollowZoom};
 pub use character::{CharacterBody2D, CharacterContact};
 pub use collider::{Collider, ConvexPolygon, PolygonError, WorldShape};
 pub use curve::{Curve, CurveKey};
@@ -76,8 +77,12 @@ pub use global_light::GlobalLight2D;
 pub use gradient::{Gradient, GradientKey};
 pub use hierarchy::{Parent, WorldTransforms};
 pub use interpolate::Interpolate;
-pub use joint::{AngleLimit, Joint2D, JointImpulses, JointKind, Motor, Spring};
+pub use joint::{
+    AngleLimit, Joint2D, JointImpulses, JointKind, LinearMotor, Motor, RestSpring, Spring,
+    TranslationLimit,
+};
 pub use keyframes::{AnimationClip, AnimationClips, AnimationPlayer};
+pub use lag_compensated::LagCompensated;
 pub use light::{LightCone, LightShadows, PointLight2D};
 pub use line2d::{Line2D, LineCap, LineJoint, LineTexture};
 pub use locale::Locale;

@@ -31,7 +31,7 @@ use voltra_ecs::Entity;
 use voltra_scene::{hierarchy, prefab, Persistent, Transform};
 
 use super::budget::FrameBudget;
-use super::build::{SceneBuild, Step};
+use super::build::{Replicas, SceneBuild, Step};
 use super::streaming::Streaming;
 use super::Loading;
 use crate::app::scenes::Request;
@@ -140,12 +140,31 @@ impl App {
             Some(screen) => self.spawn_loading_screen(screen),
             None => Vec::new(),
         };
-        let root = prefab_store(&mut self.prefabs, &self.asset_root)
+        let root = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
             .root()
             .to_path_buf();
         let registry = self.registry.clone();
-        let skip = self.is_replication_client();
-        let build = SceneBuild::start(self.scenes.loading.pool.get(), root, path, registry, skip);
+        // A networked session's level is held under its file's ids on both
+        // ends; a client sets its replicated entities aside for the
+        // server's copies to be spawned from as they arrive.
+        let replicas = if self.is_replication_client() {
+            Replicas::SetAside
+        } else {
+            Replicas::Spawn
+        };
+        let keep_ids = self
+            .net
+            .replicates()
+            .then(|| crate::app::scenes::surviving_ids(&self.world));
+        self.forget_unsent_level();
+        let build = SceneBuild::start(
+            self.scenes.loading.pool.get(),
+            root,
+            path,
+            registry,
+            replicas,
+            keep_ids,
+        );
         self.scenes.loading.change = Some(SceneChange {
             build,
             screen,
@@ -180,6 +199,11 @@ impl App {
             if !change.swept && change.build.is_read() {
                 self.sweep_for_change(&change.screen, &mut loading.streaming);
                 change.swept = true;
+                // After the sweep, which a server copy of the old level
+                // that arrived early went with (it is sent again).
+                let set_aside = change.build.take_set_aside();
+                self.keep_level(set_aside);
+                self.resync_swept();
             }
             budget.end(unit);
             if outcome != Step::Worked {
@@ -228,7 +252,7 @@ impl App {
 
     /// Spawns the loading screen prefab, its assets resolved this frame.
     fn spawn_loading_screen(&mut self, path: &AssetPath) -> Vec<Entity> {
-        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root);
+        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = prefabs.load(path);
         match prefab::spawn(
             &mut self.world,

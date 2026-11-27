@@ -1,5 +1,5 @@
 use std::cell::Cell;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 
 use voltra_assets::AssetPath;
@@ -31,7 +31,7 @@ fn write_scene(root: &Path, name: &str, entities: &[&str]) {
     std::fs::write(full, ron::to_string(&file).expect("serialises")).expect("writes");
 }
 
-fn root_with_levels() -> PathBuf {
+fn root_with_levels() -> voltra_testkit::Scratch {
     let root = scratch_root();
     write_scene(&root, "scenes/level2.ron", &["ground", "goal"]);
     write_scene(&root, "scenes/overlay.ron", &["banner"]);

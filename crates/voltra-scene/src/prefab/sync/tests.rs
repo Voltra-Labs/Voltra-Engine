@@ -263,7 +263,7 @@ fn sync_source_reaches_only_that_prefab_s_instances() {
     made.world
         .insert(made.coin, Sprite::new([0.0, 0.0, 1.0, 1.0]));
     write(&made.world);
-    assert!(prefabs.reload(&source()));
+    assert!(!prefabs.reload(&source()).is_empty());
     let report = sync_source(&mut scene, &registry(), &mut prefabs, &source());
     assert_eq!(report.changed, 1);
     assert_eq!(

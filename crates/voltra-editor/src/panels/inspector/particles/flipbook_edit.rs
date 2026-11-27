@@ -6,7 +6,9 @@ use voltra_scene::particles::{Flipbook, FlipbookTiming};
 use voltra_scene::ParticleEmitter;
 
 use super::super::active;
+use super::super::mixed;
 use super::super::path_field::{self, PathEdit};
+use voltra_scene::format::serial_tree::Step;
 
 const EDIT: &str = "Edit flipbook";
 
@@ -61,11 +63,17 @@ pub(super) fn show(
                 "frames / s"
             })
             .show_ui(ui, |ui| {
-                if ui.selectable_label(over_life, "times per life").clicked() && !over_life {
+                let timing = || vec![Step::Field("flipbook"), Step::Inner, Step::Field("timing")];
+                let life = ui.selectable_label(over_life, "times per life").clicked();
+                let rate = ui.selectable_label(!over_life, "frames / s").clicked();
+                if life || rate {
+                    mixed::touch_variant(ui, "ParticleEmitter", timing());
+                }
+                if life && !over_life {
                     flipbook.timing = FlipbookTiming::OverLife { cycles: 1.0 };
                     claim = Some(EDIT);
                 }
-                if ui.selectable_label(!over_life, "frames / s").clicked() && over_life {
+                if rate && over_life {
                     flipbook.timing = FlipbookTiming::PerSecond { fps: 12.0 };
                     claim = Some(EDIT);
                 }

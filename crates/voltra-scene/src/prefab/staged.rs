@@ -9,7 +9,8 @@
 //! this is the part that makes that possible here — the caller decides when
 //! to stop.
 //!
-//! The rules are `spawn_scene`'s: fresh ids, parent links and references
+//! The rules are `spawn_scene`'s: fresh ids (or the file's own, with
+//! [`StagedScene::keep_ids`]), parent links and references
 //! inside the file remapped, a link to a parent outside it cut, nothing
 //! placed or linked. What differs is the order: **parents before children**,
 //! so every entity is complete — its parent resolved — the moment it is
@@ -27,6 +28,10 @@ use crate::format::{ComponentRegistry, EntityRecord, SceneError, SceneFile, VERS
 use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
 
+mod order;
+
+use order::parents_first;
+
 /// The name a parent link is stored under in a scene file.
 const PARENT: &str = "Parent";
 
@@ -39,6 +44,8 @@ pub struct StagedScene {
     fresh: Vec<SceneId>,
     /// File id to fresh id, for every record kept.
     renamed: HashMap<SceneId, SceneId>,
+    /// Whether each record keeps its file's id rather than a fresh one.
+    authored: bool,
     /// Fresh id to the entity it became, once spawned.
     spawned: HashMap<SceneId, Entity>,
     entities: Vec<Entity>,
@@ -59,11 +66,12 @@ impl StagedScene {
             records: file.entities,
             fresh: Vec::new(),
             renamed: HashMap::new(),
+            authored: false,
             spawned: HashMap::new(),
             entities: Vec::new(),
             roots: Vec::new(),
         };
-        staged.reorder(|_| false);
+        let _ = staged.reorder(|_| false);
         Ok(staged)
     }
 
@@ -79,11 +87,31 @@ impl StagedScene {
     /// file — a client leaving the server's replicated entities to the
     /// server. Only before the first spawn; after it, nothing changes.
     pub fn skip(&mut self, skip: impl Fn(&EntityRecord) -> bool) {
+        self.take(skip);
+    }
+
+    /// [`skip`](Self::skip), answering what it left out, parents first —
+    /// a replication client keeps the level's replicated entities aside, to
+    /// dress the server's copies in when they arrive.
+    pub fn take(&mut self, take: impl Fn(&EntityRecord) -> bool) -> Vec<EntityRecord> {
         if !self.entities.is_empty() {
-            log::warn!("a staged scene can only skip records before it starts spawning");
+            log::warn!("a staged scene can only leave records out before it starts spawning");
+            return Vec::new();
+        }
+        self.reorder(take)
+    }
+
+    /// Spawns every entity under its file's id rather than a fresh one
+    /// ([`spawn_scene_as_authored`](super::spawn_scene_as_authored)'s rule):
+    /// the level of a networked session, which both ends must hold under
+    /// one id per entity. Only before the first spawn.
+    pub fn keep_ids(&mut self) {
+        if !self.entities.is_empty() {
+            log::warn!("a staged scene can only keep its ids before it starts spawning");
             return;
         }
-        self.reorder(skip);
+        self.authored = true;
+        self.name_records();
     }
 
     /// Reads every registered component of every record as its type, the
@@ -209,9 +237,10 @@ impl StagedScene {
         self.spawned.clear();
     }
 
-    /// Puts the records kept in parent-first order and gives each a fresh
-    /// id. `skip` drops a record and its subtree.
-    fn reorder(&mut self, skip: impl Fn(&EntityRecord) -> bool) {
+    /// Puts the records kept in parent-first order and names each. `skip`
+    /// drops a record and its subtree; answers what it dropped, parents
+    /// first.
+    fn reorder(&mut self, skip: impl Fn(&EntityRecord) -> bool) -> Vec<EntityRecord> {
         let records = std::mem::take(&mut self.records);
         // The first record under a duplicated id is the one a link names,
         // as it is in a load.
@@ -236,43 +265,39 @@ impl StagedScene {
         }
 
         let mut slots: Vec<Option<EntityRecord>> = records.into_iter().map(Some).collect();
-        self.records = order
+        let (kept, left_out): (Vec<usize>, Vec<usize>) =
+            order.into_iter().partition(|&index| !dropped[index]);
+        self.records = kept
             .into_iter()
-            .filter(|&index| !dropped[index])
             .filter_map(|index| slots[index].take())
             .collect();
-        self.fresh = self.records.iter().map(|_| SceneId::new()).collect();
+        self.name_records();
+        left_out
+            .into_iter()
+            .filter_map(|index| slots[index].take())
+            .collect()
+    }
+
+    /// Gives each record the id it spawns under — a fresh one, or its own
+    /// when [`keep_ids`](Self::keep_ids) asked — and maps the file's ids to
+    /// them for the links.
+    fn name_records(&mut self) {
+        self.fresh = self
+            .records
+            .iter()
+            .map(|record| {
+                if self.authored {
+                    record.id
+                } else {
+                    SceneId::new()
+                }
+            })
+            .collect();
         self.renamed = HashMap::with_capacity(self.records.len());
         for (record, fresh) in self.records.iter().zip(&self.fresh) {
             self.renamed.entry(record.id).or_insert(*fresh);
         }
     }
-}
-
-/// Every index once, each after its parent — but for a loop of links,
-/// which is entered wherever it is first met.
-fn parents_first(parent: &[Option<usize>]) -> Vec<usize> {
-    let mut placed = vec![false; parent.len()];
-    let mut in_chain = vec![false; parent.len()];
-    let mut order = Vec::with_capacity(parent.len());
-    let mut chain = Vec::new();
-    for start in 0..parent.len() {
-        let mut cursor = Some(start);
-        while let Some(index) = cursor {
-            if placed[index] || in_chain[index] {
-                break;
-            }
-            in_chain[index] = true;
-            chain.push(index);
-            cursor = parent[index];
-        }
-        for index in chain.drain(..).rev() {
-            in_chain[index] = false;
-            placed[index] = true;
-            order.push(index);
-        }
-    }
-    order
 }
 
 #[cfg(test)]

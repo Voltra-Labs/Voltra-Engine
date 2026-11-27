@@ -6,23 +6,34 @@
 //! component on the server — the game reads the inputs and moves the
 //! entity itself.
 
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
+use glam::Vec2;
 use voltra_ecs::{Entity, World};
 use voltra_net::{Endpoint, NetEvent, PeerId};
-use voltra_scene::{ComponentRegistry, PrefabInstance, Replicated, ReplicatedComponent, SceneId};
+use voltra_scene::{ComponentRegistry, ReplicatedComponent};
 
 use crate::acks::ReceivedTicks;
-use crate::wire::{self, ClientMessage, Control, NetId, ServerTick, Spawn, MAX_LISTED};
-use crate::{NetOwner, ReplicationConfig};
+use crate::wire::{self, ClientMessage, Control, NetId, ServerTick, MAX_LISTED};
+use crate::{Interest, InterestGrid, ReplicationConfig};
 
+mod ask;
+mod audience;
 mod inputs;
+mod interest_points;
+mod lag;
+mod refresh;
+mod relevance;
 mod snapshot;
 mod view;
 
 use snapshot::Tracked;
-use view::{ClientView, Value};
+use view::ClientView;
+
+/// The most interest points the game may set for one client
+/// ([`ReplicationServer::set_interest_points`]): each is a query of the
+/// grid every snapshot, so a few cameras or sights, not a path of them.
+pub const MAX_INTEREST_POINTS: usize = 16;
 
 /// What the server knows of one client's replication, for a profiler, a
 /// stats overlay or a test.
@@ -36,6 +47,9 @@ pub struct ClientReplicationStats {
     pub input_ack: u32,
     /// Its inputs dropped because too many were waiting.
     pub inputs_dropped: u64,
+    /// The replicated entities relevant to it at the last snapshot: all of
+    /// them without interest management.
+    pub relevant: usize,
 }
 
 /// Replication on a server: call [`receive`](Self::receive) after the
@@ -47,24 +61,51 @@ pub struct ReplicationServer {
     step: f32,
     ids: HashMap<Entity, NetId>,
     tracked: BTreeMap<NetId, Tracked>,
-    next_id: NetId,
+    issued: ask::Issued,
     clients: BTreeMap<PeerId, ClientView>,
+    /// Every connected client, replicated to or not.
+    connected: BTreeSet<PeerId>,
+    /// The clients replicated to, when the game names them
+    /// ([`set_audience`](Self::set_audience)); `None` is every connected one.
+    audience: Option<BTreeSet<PeerId>>,
     tick: ServerTick,
     last_snapshot: ServerTick,
+    /// Interest management, when on: its values checked, and the grid it
+    /// rebuilds each snapshot.
+    interest: Option<(Interest, InterestGrid)>,
+    /// The points the game watches for each client, beside its entities.
+    points: HashMap<PeerId, Vec<Vec2>>,
 }
 
 impl ReplicationServer {
     /// A server replicating what `registry` marks replicated, at a tick of
     /// `step` seconds.
     pub fn new(config: ReplicationConfig, registry: &ComponentRegistry, step: f32) -> Self {
+        let interest = config
+            .interest
+            .and_then(Interest::checked)
+            .map(|interest| (interest, InterestGrid::new(interest)));
+        if let Some((interest, _)) = &interest {
+            log::info!(
+                "replication: each client sent what is within {} units of its interest \
+                 (cells of {}, leaving at {})",
+                interest.radius,
+                interest.cell_size,
+                interest.leave_radius(interest.radius)
+            );
+        }
         Self {
             config,
+            interest,
+            points: HashMap::new(),
             components: registry.replicated(),
             step,
             ids: HashMap::new(),
             tracked: BTreeMap::new(),
-            next_id: 1,
+            issued: ask::Issued::default(),
             clients: BTreeMap::new(),
+            connected: BTreeSet::new(),
+            audience: None,
             tick: 0,
             last_snapshot: 0,
         }
@@ -80,7 +121,13 @@ impl ReplicationServer {
         self.tick
     }
 
-    /// The clients it replicates to.
+    /// A server tick's length, in seconds.
+    pub fn step(&self) -> f32 {
+        self.step
+    }
+
+    /// The clients it replicates to: every connected one, or those of
+    /// them in its [`audience`](Self::set_audience).
     pub fn clients(&self) -> impl Iterator<Item = PeerId> + '_ {
         self.clients.keys().copied()
     }
@@ -97,6 +144,10 @@ impl ReplicationServer {
             complete: view.last_complete,
             input_ack: view.inputs.consumed,
             inputs_dropped: view.inputs.dropped,
+            relevant: match self.interest {
+                Some(_) => view.interest.relevant.len(),
+                None => self.tracked.len(),
+            },
         })
     }
 
@@ -107,10 +158,15 @@ impl ReplicationServer {
         for event in endpoint.events() {
             match *event {
                 NetEvent::Connected(peer) if peer != PeerId::SERVER => {
-                    self.clients.insert(peer, ClientView::default());
+                    self.connected.insert(peer);
+                    if self.admits(peer) {
+                        self.clients.insert(peer, ClientView::default());
+                    }
                 }
                 NetEvent::Disconnected { peer, .. } => {
+                    self.connected.remove(&peer);
                     self.clients.remove(&peer);
+                    self.points.remove(&peer);
                 }
                 NetEvent::Connected(_) => {}
             }
@@ -140,10 +196,16 @@ impl ReplicationServer {
                 inputs,
                 self.config.max_input_size,
                 self.config.max_buffered_inputs,
+                self.tick,
             );
-            for id in update.resync.into_iter().take(MAX_LISTED) {
-                view.resync(id, self.components.len());
-            }
+            ask::answer(
+                view,
+                update.resync,
+                &self.tracked,
+                self.issued,
+                self.components.len(),
+                self.tick,
+            );
         }
     }
 
@@ -152,7 +214,7 @@ impl ReplicationServer {
     pub fn begin_step(&mut self) {
         self.tick = self.tick.wrapping_add(1).max(1);
         for view in self.clients.values_mut() {
-            view.inputs.next();
+            view.inputs.next(self.tick);
         }
     }
 
@@ -185,6 +247,7 @@ impl ReplicationServer {
                 components: self.components.iter().map(|c| c.name.to_owned()).collect(),
                 step: self.step,
                 snapshot_interval: self.config.snapshot_interval.max(1),
+                interest: self.interest.is_some(),
             };
             match endpoint.send(peer, channels.control, &wire::encode(&schema)) {
                 Ok(()) => view.schema_sent = true,
@@ -201,116 +264,32 @@ impl ReplicationServer {
         }
         self.last_snapshot = self.tick;
         self.refresh(world, registry);
+        let culling = match &mut self.interest {
+            Some((_, grid)) => {
+                relevance::update(grid, &self.tracked, &mut self.clients, &self.points);
+                true
+            }
+            None => false,
+        };
 
         for (&peer, view) in &mut self.clients {
             if !view.schema_sent {
                 continue;
             }
+            let relevant = std::mem::take(&mut view.interest.relevant);
             let bytes = snapshot::build(
                 view,
                 &self.tracked,
+                culling.then_some(relevant.as_slice()),
                 self.tick,
                 self.config.bytes_per_snapshot,
             );
+            view.interest.relevant = relevant;
             while view.sent.len() > self.config.history.max(1) {
                 view.sent.pop_front();
             }
             if let Err(error) = endpoint.send(peer, channels.state, &bytes) {
                 log::warn!("{peer}: snapshot {} not sent: {error}", self.tick);
-            }
-        }
-    }
-
-    /// Reads the world: every replicated entity's spawn and components as
-    /// they are now, and the entities gone since the last read.
-    fn refresh(&mut self, world: &mut World, registry: &ComponentRegistry) {
-        let live: Vec<(Entity, f32)> = world
-            .query::<Replicated>()
-            .map(|(entity, replicated)| (entity, replicated.priority))
-            .collect();
-
-        let mut seen = HashMap::with_capacity(live.len());
-        for (entity, priority) in live {
-            let id = match self.ids.get(&entity) {
-                Some(&id) => id,
-                None => {
-                    let id = self.next_id;
-                    self.next_id = self.next_id.wrapping_add(1).max(1);
-                    self.ids.insert(entity, id);
-                    id
-                }
-            };
-            seen.insert(id, ());
-            let scene_id = match world.get::<SceneId>(entity) {
-                Some(&id) => id,
-                None => {
-                    let fresh = SceneId::new();
-                    world.insert(entity, fresh);
-                    fresh
-                }
-            };
-            let spawn_value = Spawn {
-                id: scene_id,
-                prefab: world
-                    .get::<PrefabInstance>(entity)
-                    .map(|p| p.source.as_str().to_owned()),
-                owner: world.get::<NetOwner>(entity).map(|o| o.0 .0),
-            };
-            let spawn_bytes = wire::encode(&spawn_value);
-            let previous = self.tracked.get(&id);
-            let spawn = match previous {
-                Some(p) if *p.spawn == *spawn_bytes => p.spawn.clone(),
-                _ => Arc::from(spawn_bytes),
-            };
-            let components: Vec<Value> = self
-                .components
-                .iter()
-                .enumerate()
-                .map(|(index, &component)| {
-                    let bytes = match registry.encode_replicated(component, world, entity)? {
-                        Ok(bytes) => bytes,
-                        Err(error) => {
-                            log::warn!("{} would not encode: {error}", component.name);
-                            return None;
-                        }
-                    };
-                    // The previous Arc when unchanged: views compare by value,
-                    // and sharing keeps a still world from allocating.
-                    match previous.and_then(|p| p.components[index].as_ref()) {
-                        Some(old) if **old == *bytes => Some(old.clone()),
-                        _ => Some(Arc::from(bytes)),
-                    }
-                })
-                .collect();
-            self.tracked.insert(
-                id,
-                Tracked {
-                    entity,
-                    spawn,
-                    spawn_value,
-                    components,
-                    priority,
-                },
-            );
-        }
-
-        let gone: Vec<NetId> = self
-            .tracked
-            .keys()
-            .copied()
-            .filter(|id| !seen.contains_key(id))
-            .collect();
-        for id in gone {
-            if let Some(tracked) = self.tracked.remove(&id) {
-                self.ids.remove(&tracked.entity);
-            }
-            for view in self.clients.values_mut() {
-                // Only a client that may have it needs telling.
-                if let Some(entity) = view.entities.remove(&id) {
-                    if entity.sent_spawn.is_some() {
-                        view.despawned.insert(id);
-                    }
-                }
             }
         }
     }

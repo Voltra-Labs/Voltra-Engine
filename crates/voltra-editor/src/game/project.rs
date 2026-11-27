@@ -116,8 +116,7 @@ mod tests {
 
     #[test]
     fn the_asset_root_is_beside_the_manifest() {
-        let dir = std::env::temp_dir().join(format!("voltra-assets-of-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("dir");
+        let dir = voltra_testkit::Scratch::new("voltra-assets-of");
         let manifest = dir.join("build.ron");
         std::fs::write(&manifest, r#"(version: 1, name: "G", assets: "content")"#).expect("write");
         assert_eq!(assets_of(&manifest), Ok(dir.join("content")));

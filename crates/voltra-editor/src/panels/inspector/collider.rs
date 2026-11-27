@@ -5,10 +5,10 @@ use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_render::glam::Vec2;
 use voltra_scene::{Collider, ConvexPolygon};
 
-use super::active;
+mod kind;
 
-/// The kinds a collider can be switched between, in the order offered.
-const KINDS: [&str; 4] = ["Box", "Circle", "Capsule", "Polygon"];
+use super::active;
+use kind::{converted, KINDS};
 
 /// What the panel asks of the inspector once it has drawn.
 #[derive(Debug, Default, PartialEq)]
@@ -18,6 +18,20 @@ pub(super) struct Outcome {
     /// The fit button was pressed: shape the collider as its sprite's
     /// silhouette, which only the inspector can trace.
     pub fit_to_sprite: bool,
+    /// A kind picked from the dropdown, changed or not: the inspector
+    /// turns every selected collider of another kind into it, each from
+    /// its own size ([`reshape`]), rather than copy the primary's.
+    pub kind: Option<&'static str>,
+}
+
+/// `collider` turned into `kind` at about the size it had; whether it was
+/// another kind.
+pub(super) fn reshape(collider: &mut Collider, kind: &str) -> bool {
+    if collider.kind() == kind {
+        return false;
+    }
+    *collider = converted(collider, kind);
+    true
 }
 
 /// The collider's kind and sizes. `textured_sprite` offers the fit.
@@ -31,7 +45,9 @@ pub(super) fn show(ui: &mut Ui, collider: &mut Collider, textured_sprite: bool) 
         .selected_text(kind)
         .show_ui(ui, |ui| {
             for option in KINDS {
-                ui.selectable_value(&mut kind, option, option);
+                if ui.selectable_value(&mut kind, option, option).clicked() {
+                    outcome.kind = Some(option);
+                }
             }
         });
     if kind != collider.kind() {
@@ -190,49 +206,6 @@ fn split_longest_edge(points: &mut Vec<Vec2>) {
     points.insert(i + 1, (a + b) * 0.5 + outward);
 }
 
-/// `collider` as a shape of `kind`, covering about what it covered.
-fn converted(collider: &Collider, kind: &str) -> Collider {
-    let extent = match collider {
-        Collider::Box { half_extents } => *half_extents,
-        Collider::Circle { radius } => Vec2::splat(*radius),
-        Collider::Capsule {
-            half_height,
-            radius,
-        } => Vec2::new(*radius, half_height.max(*radius)),
-        Collider::Polygon { points, radius } => {
-            points
-                .points()
-                .iter()
-                .fold(Vec2::ZERO, |most, p| most.max(p.abs()))
-                + Vec2::splat(*radius)
-        }
-    };
-    let extent = if extent.x > 0.0 && extent.y > 0.0 && extent.is_finite() {
-        extent
-    } else {
-        Vec2::splat(voltra_scene::Sprite::HALF_EXTENT)
-    };
-    match kind {
-        "Circle" => Collider::Circle {
-            radius: extent.max_element(),
-        },
-        "Capsule" => Collider::Capsule {
-            half_height: extent.y.max(extent.x),
-            radius: extent.x,
-        },
-        "Polygon" => match ConvexPolygon::rectangle(extent) {
-            Ok(points) => Collider::Polygon {
-                points,
-                radius: 0.0,
-            },
-            Err(_) => Collider::default(),
-        },
-        _ => Collider::Box {
-            half_extents: extent,
-        },
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -247,6 +220,7 @@ mod tests {
                 let mut outcome = Outcome {
                     claim: Some("unset"),
                     fit_to_sprite: true,
+                    kind: Some("unset"),
                 };
                 let ctx = Context::default();
                 let _ = ctx.run_ui(Default::default(), |ui| {
@@ -260,27 +234,41 @@ mod tests {
     }
 
     #[test]
-    fn switching_kind_keeps_about_the_same_size() {
-        let wide = Collider::Box {
-            half_extents: Vec2::new(1.0, 2.0),
-        };
-        assert_eq!(
-            converted(&wide, "Capsule"),
-            Collider::Capsule {
-                half_height: 2.0,
-                radius: 1.0
-            }
-        );
-        assert_eq!(converted(&wide, "Circle"), Collider::Circle { radius: 2.0 });
-        let polygon = converted(&wide, "Polygon");
-        assert_eq!(converted(&polygon, "Box"), wide);
-        assert_eq!(polygon.kind(), "Polygon");
-    }
+    fn a_kind_picked_again_keeps_each_colliders_own_size() {
+        use crate::multi_edit::MultiEdit;
+        use voltra_ecs::World;
+        use voltra_scene::ComponentRegistry;
 
-    #[test]
-    fn a_collider_of_no_size_converts_to_a_sprites_size() {
-        let nothing = Collider::Circle { radius: 0.0 };
-        assert_eq!(converted(&nothing, "Box"), Collider::default());
+        let registry = ComponentRegistry::with_defaults();
+        let mut world = World::new();
+        let boxed = |x: f32| Collider::Box {
+            half_extents: Vec2::splat(x),
+        };
+        let entities: Vec<_> = [boxed(1.0), Collider::Circle { radius: 2.0 }, boxed(3.0)]
+            .into_iter()
+            .map(|collider| {
+                let e = world.spawn();
+                world.insert(e, collider);
+                e
+            })
+            .collect();
+        let mut multi = MultiEdit::begin(&world, &registry, entities[2], entities.clone());
+        // "Box" picked again on the primary, as the inspector does it.
+        for &each in &entities {
+            if let Some(collider) = world.get_mut::<Collider>(each) {
+                reshape(collider, "Box");
+            }
+        }
+        multi.done_for_each("Collider");
+        assert!(multi.finish(&mut world, &registry).is_empty());
+        let sizes: Vec<_> = entities
+            .iter()
+            .map(|&e| world.get::<Collider>(e).copied())
+            .collect();
+        assert_eq!(
+            sizes,
+            [Some(boxed(1.0)), Some(boxed(2.0)), Some(boxed(3.0))]
+        );
     }
 
     #[test]

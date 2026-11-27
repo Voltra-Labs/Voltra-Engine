@@ -6,7 +6,7 @@ fn path(raw: &str) -> AssetPath {
 }
 
 /// A scratch root holding the default font where `Fonts::new` looks for it.
-fn root_with_default() -> PathBuf {
+fn root_with_default() -> voltra_testkit::Scratch {
     let root = scratch_root();
     copy_bundled_font(&root, DEFAULT_FONT);
     root
@@ -18,7 +18,8 @@ fn face(fonts: &Fonts, handle: Handle<Font>) -> &fontdue::Font {
 
 #[test]
 fn the_default_font_is_loaded_at_construction() {
-    let fonts = Fonts::new(root_with_default());
+    let root = root_with_default();
+    let fonts = Fonts::new(&root);
     let font = fonts.try_get(fonts.default_font()).expect("resolves");
     assert!(font.face().is_some());
     assert_eq!(
@@ -30,7 +31,8 @@ fn the_default_font_is_loaded_at_construction() {
 
 #[test]
 fn a_missing_default_is_a_faceless_slot_not_a_panic() {
-    let fonts = Fonts::new(scratch_root());
+    let scratch = scratch_root();
+    let fonts = Fonts::new(&scratch);
     let font = fonts.try_get(fonts.default_font()).expect("still resolves");
     assert!(font.face().is_none());
     assert!(fonts
@@ -127,7 +129,8 @@ fn reloading_a_path_nobody_loaded_does_nothing() {
 
 #[test]
 fn prepare_rasterizes_each_glyph_once_per_size() {
-    let mut fonts = Fonts::new(root_with_default());
+    let root = root_with_default();
+    let mut fonts = Fonts::new(&root);
     let handle = fonts.default_font();
 
     fonts.prepare(handle, "aab", 32);
@@ -142,7 +145,8 @@ fn prepare_rasterizes_each_glyph_once_per_size() {
 
 #[test]
 fn a_glyph_with_ink_gets_a_rect_and_a_space_does_not() {
-    let mut fonts = Fonts::new(root_with_default());
+    let root = root_with_default();
+    let mut fonts = Fonts::new(&root);
     let handle = fonts.default_font();
     fonts.prepare(handle, "A ", 32);
 
@@ -166,7 +170,7 @@ mod layout {
     }
 
     fn wrapped(content: &str, wrap: Wrap) -> TextLayout {
-        let fonts = Fonts::new(root_with_default());
+        let fonts = Fonts::new(root_with_default().keep());
         let layout = fonts
             .layout_plain(fonts.default_font(), content, 32, wrap)
             .expect("a face");

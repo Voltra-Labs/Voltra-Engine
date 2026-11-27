@@ -1,0 +1,13 @@
+// The character example's walk: a bob between the idle's breath and the
+// run's — the middle of the move state's blend tree.
+(
+    looping: true,
+    tracks: [
+        (property: Scale, keys: [
+            (time: 0.0, value: Vec2((0.42, 0.58)), ease: EaseInOut),
+            (time: 0.25, value: Vec2((0.39, 0.61)), ease: EaseInOut),
+            (time: 0.5, value: Vec2((0.42, 0.58))),
+        ]),
+        (property: SpriteColor, keys: [(time: 0.0, value: Color((1.0, 0.72, 0.28, 1.0)))]),
+    ],
+)

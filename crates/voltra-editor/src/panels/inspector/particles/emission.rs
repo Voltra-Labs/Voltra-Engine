@@ -5,6 +5,8 @@ use voltra_scene::particles::EmitShape;
 use voltra_scene::ParticleEmitter;
 
 use super::super::active;
+use super::super::mixed;
+use voltra_scene::format::serial_tree::Step;
 
 const EDIT: &str = "Edit emission shape";
 
@@ -20,6 +22,9 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
                     let picked = ui
                         .selectable_label(current == std::mem::discriminant(&shape), shape.label())
                         .clicked();
+                    if picked {
+                        mixed::touch_variant(ui, "ParticleEmitter", vec![Step::Field("shape")]);
+                    }
                     if picked && current != std::mem::discriminant(&shape) {
                         emitter.shape = shape;
                         claim = Some(EDIT);

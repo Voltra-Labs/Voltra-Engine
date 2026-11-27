@@ -4,9 +4,14 @@
 use serde::{Deserialize, Serialize};
 use voltra_assets::AssetPath;
 
+use super::graph::Graph;
+use super::layer::Layer;
+use super::tree::BlendTree;
+
 /// A state machine: the states an [`Animator`](super::Animator) moves
 /// between, each playing a clip, and the conditions on its parameters that
-/// move it.
+/// move it — and, over those, any [`layers`](Self::layers), each a state
+/// machine of its own reading the same parameters.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct StateMachine {
@@ -19,6 +24,11 @@ pub struct StateMachine {
     pub states: Vec<State>,
     /// Tried in order; the first whose conditions hold is taken.
     pub transitions: Vec<Transition>,
+    /// Machines played over this one, bottom up. Layer 0 is the fields
+    /// above, so a file without `layers` is the one-layer machine it always
+    /// was, and is written back without them.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<Layer>,
 }
 
 /// A named value a game sets and the transitions read.
@@ -49,16 +59,48 @@ impl ParamValue {
     }
 }
 
-/// One state: a clip, played at a speed.
+/// One state: a clip or a blend tree, played at a speed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct State {
     /// The name transitions refer to it by.
     pub name: String,
-    /// The `.anim.ron` it plays — looping or not as the clip says.
-    pub clip: AssetPath,
+    /// The `.anim.ron` it plays — looping or not as the clip says. Written
+    /// bare (`clip: Path("idle.anim.ron")`), as before trees could stand in
+    /// for it, and left out for a state that plays a tree.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "super::bare")]
+    pub clip: Option<AssetPath>,
+    /// The clips it plays together instead, mixed by parameters — written
+    /// bare too: `tree: Blend1D(parameter: "speed", children: [...])`.
+    /// A state with both plays the tree.
+    #[serde(default, skip_serializing_if = "Option::is_none", with = "super::bare")]
+    pub tree: Option<BlendTree>,
     /// A multiple of the clip's speed.
     #[serde(default = "one", skip_serializing_if = "is_one")]
     pub speed: f32,
+}
+
+/// What a state plays.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Motion<'a> {
+    /// One clip.
+    Clip(&'a AssetPath),
+    /// A blend tree with at least one clip.
+    Tree(&'a BlendTree),
+    /// Nothing: no clip, or an empty tree.
+    Nothing,
+}
+
+impl State {
+    /// What it plays: its tree when it has one — nothing when that tree
+    /// is empty — else its clip.
+    pub fn motion(&self) -> Motion<'_> {
+        match (&self.tree, &self.clip) {
+            (Some(tree), _) if tree.is_empty() => Motion::Nothing,
+            (Some(tree), _) => Motion::Tree(tree),
+            (None, Some(clip)) => Motion::Clip(clip),
+            (None, None) => Motion::Nothing,
+        }
+    }
 }
 
 fn one() -> f32 {
@@ -81,9 +123,21 @@ pub struct Transition {
     #[serde(default)]
     pub conditions: Vec<Condition>,
     /// How much of the state's clip, as a fraction of its length, must have
-    /// played first — `1.0` waits for a clip that does not loop to end.
+    /// played first. Below one, the point in each loop: `0.5` is half way
+    /// through any loop. One or more counts loops on a clip that loops —
+    /// `2.5` waits for two loops and a half — and is the end of one that
+    /// does not. A clip of no length has nothing to wait for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exit_time: Option<f32>,
+    /// Seconds to crossfade into `to`'s clip, the one leaving still playing
+    /// meanwhile; `0`, the default, cuts. Per transition, with no machine-
+    /// wide default: one place to look.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub duration: f32,
+}
+
+fn is_zero(value: &f32) -> bool {
+    *value == 0.0
 }
 
 /// A test of one parameter.
@@ -111,14 +165,28 @@ impl Condition {
 }
 
 impl StateMachine {
-    /// The state named `name`.
-    pub fn state(&self, name: &str) -> Option<&State> {
-        self.states.iter().find(|s| s.name == name)
+    /// Layer 0: the top-level states and transitions.
+    pub fn graph(&self) -> Graph<'_> {
+        Graph {
+            start: &self.start,
+            states: &self.states,
+            transitions: &self.transitions,
+        }
     }
 
-    /// The state it starts in: `start`, or the first.
+    /// The state of layer 0 named `name`.
+    pub fn state(&self, name: &str) -> Option<&State> {
+        self.graph().state(name)
+    }
+
+    /// The state layer 0 starts in: `start`, or the first.
     pub fn start_state(&self) -> Option<&State> {
-        self.state(&self.start).or(self.states.first())
+        self.graph().start_state()
+    }
+
+    /// The layer named `name`: the first of that name.
+    pub fn layer(&self, name: &str) -> Option<&Layer> {
+        self.layers.iter().find(|l| l.name == name)
     }
 
     /// The parameter named `name`'s starting value.
@@ -127,64 +195,5 @@ impl StateMachine {
             .iter()
             .find(|p| p.name == name)
             .map(|p| p.value)
-    }
-
-    /// The machine as an animator can trust it: transitions naming a state
-    /// that is not there, or testing a parameter that is not — or one of
-    /// the wrong kind — dropped, with a warning naming `source`; two states
-    /// of one name keep the first.
-    ///
-    /// Dropped rather than refusing the file, as a clip's bad keys are: an
-    /// author mid-edit should still see the rest run.
-    pub fn checked(mut self, source: &str) -> Self {
-        let mut seen = std::collections::HashSet::new();
-        self.states.retain(|state| {
-            let fresh = seen.insert(state.name.clone());
-            if !fresh {
-                log::warn!(
-                    "{source}: a second state named {:?}; the first is kept",
-                    state.name
-                );
-            }
-            fresh
-        });
-        if !self.start.is_empty() && self.state(&self.start).is_none() {
-            log::warn!(
-                "{source}: the start state {:?} is not there; starting in the first",
-                self.start
-            );
-            self.start.clear();
-        }
-        let machine = self.clone();
-        self.transitions.retain(|t| {
-            let known = |name: &str| machine.state(name).is_some();
-            if !known(&t.to) || t.from.as_deref().is_some_and(|from| !known(from)) {
-                log::warn!(
-                    "{source}: a transition to {:?} names a state that is not there; dropped",
-                    t.to
-                );
-                return false;
-            }
-            for condition in &t.conditions {
-                if let Some(problem) = machine.condition_problem(condition) {
-                    log::warn!("{source}: a transition to {:?} {problem}; dropped", t.to);
-                    return false;
-                }
-            }
-            true
-        });
-        self
-    }
-
-    fn condition_problem(&self, condition: &Condition) -> Option<String> {
-        let name = condition.parameter();
-        let Some(value) = self.parameter(name) else {
-            return Some(format!("tests {name:?}, which is not a parameter"));
-        };
-        let fits = match condition {
-            Condition::If(_) | Condition::IfNot(_) => !matches!(value, ParamValue::Float(_)),
-            Condition::Greater(..) | Condition::Less(..) => matches!(value, ParamValue::Float(_)),
-        };
-        (!fits).then(|| format!("tests {name:?} as the wrong kind"))
     }
 }

@@ -8,13 +8,30 @@
 //! save see only what was authored, so scrubbing is never an edit. Unity's
 //! preview mode keeps the authored values aside for the same reason; Godot,
 //! which writes the pose into the scene, needs a RESET track to undo it.
+//! Record mode ([`record`]) is the one exception: while it is on, the pose
+//! is laid again for the panels that edit entities, and what they move is
+//! keyed instead of authored.
+//!
+//! A clip's edits have an undo history of their own ([`history`]), and keys
+//! a clipboard of their own ([`clipboard`]).
 
-use std::collections::HashSet;
+pub(crate) mod clipboard;
+mod history;
+mod record;
+
+use std::collections::{HashMap, HashSet};
 
 use voltra_assets::AssetPath;
+use voltra_core::egui::{Context, Rect};
 use voltra_ecs::{Entity, World};
+use voltra_scene::hierarchy::parent_of;
 use voltra_scene::keyframes::{target, Property, Value};
-use voltra_scene::{AnimationClips, AnimationPlayer};
+use voltra_scene::{AnimationClip, AnimationClips, AnimationPlayer};
+
+use crate::undo::shortcut::UndoAction;
+use clipboard::CopiedKey;
+use history::ClipHistory;
+use record::Recording;
 
 /// What the timeline remembers between frames.
 #[derive(Default)]
@@ -30,10 +47,39 @@ pub(crate) struct Timeline {
     /// The "add track" row's choices.
     pub new_target: String,
     pub new_property: Option<Property>,
+    /// Whether an edit to an entity under the previewing player — a gizmo
+    /// move, an inspector field — keys itself at the playhead. Only with
+    /// the preview on.
+    pub record: bool,
+    /// Keys copied, to paste at the playhead.
+    pub copied: Vec<CopiedKey>,
+    /// Where the panel was drawn last frame, if it was: the undo and
+    /// clipboard keys over it are the clip's.
+    pub rect: Option<Rect>,
     /// The clip the panel last showed; another one starts it afresh.
     open: Option<AssetPath>,
+    /// Each clip's own undo history, by path, from when it was first shown.
+    histories: HashMap<AssetPath, ClipHistory>,
     /// What the pose covered, to put back.
     covered: Vec<(Entity, Property, Value)>,
+    /// The frame being recorded, between the editing panels.
+    recording: Option<Recording>,
+}
+
+/// The entity whose player the timeline shows for `selected`: the selected
+/// entity, or the nearest above it whose player names a clip — so selecting
+/// an arm keeps its body's clip open, to key the arm in.
+pub(crate) fn root(world: &World, selected: Option<Entity>) -> Option<Entity> {
+    let mut at = selected?;
+    loop {
+        let plays = world
+            .get::<AnimationPlayer>(at)
+            .is_some_and(|p| p.clip.is_some());
+        if plays {
+            return Some(at);
+        }
+        at = parent_of(world, at)?;
+    }
 }
 
 impl Timeline {
@@ -47,6 +93,70 @@ impl Timeline {
         self.selected = None;
         self.new_target.clear();
         self.new_property = None;
+    }
+
+    /// Records the open clip's edits since the last entry as one entry, once
+    /// `settled` — nothing held, nothing typed. Starts its history the first
+    /// time it is shown.
+    pub fn settle(&mut self, path: &AssetPath, clip: &AnimationClip, settled: bool) {
+        self.histories
+            .entry(path.clone())
+            .or_insert_with(|| ClipHistory::new(clip))
+            .settle(clip, settled);
+    }
+
+    /// Whether the open clip has an edit to undo, and one to redo.
+    pub fn can_undo_redo(&self, path: &AssetPath, clip: &AnimationClip) -> (bool, bool) {
+        self.histories
+            .get(path)
+            .map_or((false, false), |h| (h.can_undo(clip), h.can_redo()))
+    }
+
+    /// Takes back, or puts back, the open clip's last edit. Answers whether
+    /// there was one.
+    pub fn undo_redo(&mut self, action: UndoAction, clips: &mut AnimationClips) -> bool {
+        let Some(path) = self.open.clone() else {
+            return false;
+        };
+        let Some(history) = self.histories.get_mut(&path) else {
+            return false;
+        };
+        let handle = clips.load(&path);
+        let clip = clips.get_mut(handle);
+        let done = match action {
+            UndoAction::Undo => history.undo(clip),
+            UndoAction::Redo => history.redo(clip),
+        };
+        if done {
+            self.dirty.insert(path);
+            let gone = self
+                .selected
+                .is_some_and(|(t, k)| clip.tracks.get(t).is_none_or(|track| k >= track.keys.len()));
+            if gone {
+                self.selected = None;
+            }
+        } else {
+            log::info!(
+                "nothing to {} in {}",
+                match action {
+                    UndoAction::Undo => "undo",
+                    UndoAction::Redo => "redo",
+                },
+                path.as_str()
+            );
+        }
+        done
+    }
+
+    /// Whether the undo and clipboard keys are the clip's: the pointer is
+    /// over the panel — or, for undo, record is on, every edit then being
+    /// a key.
+    pub fn has_keys(&self, ctx: &Context, undo: bool) -> bool {
+        let over = self
+            .rect
+            .zip(ctx.pointer_hover_pos())
+            .is_some_and(|(rect, at)| rect.contains(at));
+        self.rect.is_some() && (over || (undo && self.record && self.preview))
     }
 
     /// Puts back the authored values the last pose covered. The first thing

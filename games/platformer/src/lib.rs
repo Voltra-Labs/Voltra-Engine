@@ -3,14 +3,15 @@
 //!
 //! What the two turns are for, in the smallest game that shows it. The edge
 //! — the frame the jump key went down — is read in [`Game::update`], because
-//! that is the only place an edge is seen exactly once. The forces are
-//! applied in [`Game::fixed_update`], because a velocity written per frame is
-//! scaled by the frame rate. Unity and Godot split `Update`/`FixedUpdate`
+//! that is the only place an edge is seen exactly once. The walker is
+//! moved in [`Game::fixed_update`], because a move made per frame is scaled
+//! by the frame rate. Unity and Godot split `Update`/`FixedUpdate`
 //! and `_process`/`_physics_process` over the same two facts.
 //!
 //! The level is `scenes/platformer.ron`, authored like any scene; the game
 //! finds what it acts on there by its own components ([`components`]): the
-//! [`Walker`](components::Walker) the keys move, every
+//! [`Walker`](components::Walker) the keys move — a `CharacterBody2D` that
+//! pushes the level's crates — every
 //! [`Coin`](components::Coin), the [`Goal`](components::Goal) and the
 //! [`CoinCounter`](components::CoinCounter). `A`/`D` or the arrows walk,
 //! `Space` jumps, F5 saves, F9 loads, F1 then a key rebinds the jump — and
@@ -54,6 +55,8 @@ pub struct Platformer {
     rebinding: bool,
     /// The pause menu or the options screen, when one is over the level.
     menu: menu::Menu,
+    /// The walker was found to be no character, and that was said.
+    warned_not_character: bool,
 }
 
 impl Game for Platformer {
@@ -122,7 +125,8 @@ impl Game for Platformer {
         if self.menu.is_open() {
             // Paused: the walker stands where it is, whatever is held.
             self.jump = false;
-            walker::halt(tick.world, walker);
+            let moved = walker::halt(tick, walker);
+            self.warn_unless(moved);
             return;
         }
         let worth = coins::take(tick, walker);
@@ -143,6 +147,18 @@ impl Game for Platformer {
         let jump = std::mem::take(&mut self.jump);
         walker::steer(tick, walker, jump);
         ladder::climb(tick, walker);
+        let moved = walker::step(tick, walker);
+        self.warn_unless(moved);
+    }
+}
+
+impl Platformer {
+    /// Says once, not every step, that the walker could not be moved.
+    fn warn_unless(&mut self, moved: bool) {
+        if !moved && !self.warned_not_character {
+            log::warn!("the walker needs a CharacterBody2D, a Collider and a Transform to move");
+        }
+        self.warned_not_character |= !moved;
     }
 }
 

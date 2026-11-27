@@ -8,16 +8,14 @@
 use voltra_core::Tick;
 use voltra_ecs::{Entity, World};
 use voltra_scene::tilemap::query::custom_under;
-use voltra_scene::{RigidBody, Transform};
+use voltra_scene::Transform;
 
 /// World units per second the walker climbs at.
 const CLIMB_SPEED: f32 = 3.0;
 
-/// On the walker while it is on a ladder: the gravity it had, to give back.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Climbing {
-    gravity_scale: f32,
-}
+/// On the walker while it is on a ladder: it does not fall.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Climbing;
 
 /// Whether the walker's middle is over a ladder tile.
 pub fn on_ladder(world: &World, walker: Entity) -> bool {
@@ -28,38 +26,26 @@ pub fn on_ladder(world: &World, walker: Entity) -> bool {
 }
 
 /// Climbs the walker while it is on a ladder: no gravity, up and down at
-/// [`CLIMB_SPEED`], held still with neither. Off one, gravity comes back.
-/// Call after the walk has set the horizontal speed.
+/// [`CLIMB_SPEED`], held still with neither. Off one, it falls again. Call
+/// after the walk has set the horizontal speed, and before the walker's
+/// step moves it.
 pub fn climb(tick: &mut Tick<'_>, walker: Entity) {
     let on = on_ladder(tick.world, walker);
-    let climbing = tick.world.get::<Climbing>(walker).copied();
+    if !on {
+        tick.world.remove::<Climbing>(walker);
+        return;
+    }
+    // The keys say, jump or not: up is jump too, and a jump at full speed
+    // would fling the walker off the top of the ladder.
     let direction = tick
         .input
         .action_axis("move_down", "move_up")
         .clamp(-1.0, 1.0);
-    let Some(body) = tick.world.get_mut::<RigidBody>(walker) else {
-        return;
-    };
-    match (on, climbing) {
-        (true, None) => {
-            let held = Climbing {
-                gravity_scale: body.gravity_scale,
-            };
-            body.gravity_scale = 0.0;
-            body.velocity.y = direction * CLIMB_SPEED;
-            tick.world.insert(walker, held);
-        }
-        (true, Some(_)) => {
-            // The keys say, jump or not: up is jump too, and a jump at full
-            // speed would fling the walker off the top of the ladder.
-            body.velocity.y = direction * CLIMB_SPEED;
-        }
-        (false, Some(held)) => {
-            body.gravity_scale = held.gravity_scale;
-            tick.world.remove::<Climbing>(walker);
-        }
-        (false, None) => {}
-    }
+    let mut velocity = crate::walker::velocity(tick.world, walker);
+    velocity.y = direction * CLIMB_SPEED;
+    tick.world
+        .insert(walker, crate::components::WalkerMotion { velocity });
+    tick.world.insert(walker, Climbing);
 }
 
 #[cfg(test)]

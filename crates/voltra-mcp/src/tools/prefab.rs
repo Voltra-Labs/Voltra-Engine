@@ -1,4 +1,4 @@
-//! Placing a prefab in a scene file.
+//! Placing a prefab in a scene file, and making a variant of one.
 
 use serde_json::json;
 use voltra_ecs::World;
@@ -73,4 +73,28 @@ pub fn prefab_instantiate(
         "entities": instance.entities.len(),
         "prefab": prefab_asset.as_str(),
     }))
+}
+
+/// A variant of the prefab at `base`, written to `path`: a new prefab whose
+/// root is an instance of the base, following every later edit to it but
+/// for what the variant is edited to override. Refused for a path already
+/// there (never an overwrite) and for one the base already holds an
+/// instance of. Answers both paths.
+pub fn prefab_variant(project: &Project, base: &str, path: &str) -> ToolResult {
+    let (base_asset, base_full) = project.resolve(base).map_err(ToolError::from_cause)?;
+    let (target, target_full) = project.resolve(path).map_err(ToolError::from_cause)?;
+    if !base_full.is_file() {
+        return Err(ToolError(format!("{} is not there", base_asset.as_str())));
+    }
+    if target_full.exists() {
+        return Err(ToolError(format!(
+            "{} is there already: a variant is a new file",
+            target.as_str()
+        )));
+    }
+    let registry = ComponentRegistry::with_defaults();
+    let mut prefabs = Prefabs::with_registry(project.assets(), registry.clone());
+    prefab::variant(&registry, &mut prefabs, &base_asset, &target)
+        .map_err(ToolError::from_cause)?;
+    Ok(json!({ "variant": target.as_str(), "base": base_asset.as_str() }))
 }

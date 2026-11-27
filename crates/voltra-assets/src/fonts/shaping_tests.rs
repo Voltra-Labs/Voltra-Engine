@@ -10,7 +10,7 @@ fn path(raw: &str) -> AssetPath {
 }
 
 fn fonts() -> Fonts {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     for font in [DEFAULT_FONT, NOTO_ARABIC, NOTO_DEVANAGARI, NOTO_HEBREW] {
         copy_workspace_asset(&root, font);
     }

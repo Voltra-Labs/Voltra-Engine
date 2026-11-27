@@ -85,7 +85,8 @@ fn rise(session: &mut Headless, key: KeyCode) -> f32 {
 
 #[test]
 fn jump_rebound_in_the_options_is_jump_in_the_next_session() {
-    let dir = voltra_testkit_free_scratch();
+    let scratch = voltra_testkit_free_scratch();
+    let dir = scratch.0.clone();
     {
         let mut first = session(&dir);
         tap(&mut first, KeyCode::Escape);
@@ -131,7 +132,8 @@ fn jump_rebound_in_the_options_is_jump_in_the_next_session() {
 
 #[test]
 fn the_level_stands_still_under_the_pause_menu() {
-    let mut paused = session(&voltra_testkit_free_scratch());
+    let scratch = voltra_testkit_free_scratch();
+    let mut paused = session(&scratch.0);
     tap(&mut paused, KeyCode::Escape);
     let start = height(&paused);
     assert!(
@@ -141,9 +143,21 @@ fn the_level_stands_still_under_the_pause_menu() {
     assert!((height(&paused) - start).abs() < 0.05);
 }
 
+/// A folder removed when dropped (kept for a failed test when
+/// `VOLTRA_KEEP_SCRATCH` is set), as `voltra_testkit::Scratch` is.
+struct Folder(std::path::PathBuf);
+
+impl Drop for Folder {
+    fn drop(&mut self) {
+        if !(std::thread::panicking() && std::env::var_os("VOLTRA_KEEP_SCRATCH").is_some()) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+}
+
 /// A fresh folder for the player's files. The crate has no dev-dependencies
 /// (see its manifest), so not `voltra_testkit::scratch_root`.
-fn voltra_testkit_free_scratch() -> std::path::PathBuf {
+fn voltra_testkit_free_scratch() -> Folder {
     use std::sync::atomic::{AtomicU32, Ordering};
     static NEXT: AtomicU32 = AtomicU32::new(0);
     let dir = std::env::temp_dir().join(format!(
@@ -153,5 +167,5 @@ fn voltra_testkit_free_scratch() -> std::path::PathBuf {
     ));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("a scratch folder");
-    dir
+    Folder(dir)
 }

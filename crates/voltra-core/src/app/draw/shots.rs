@@ -10,7 +10,7 @@ use voltra_scene::camera::Shot;
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{SortingLayers, SpriteBatch, TileMeshCache};
 
-use super::parts::{clock_seconds, view_max, view_min};
+use super::parts::clock_seconds;
 use crate::app::gpu_particles::GpuParticleRings;
 use crate::app::scene_draws::{prepare_materials, scene_draws};
 
@@ -88,8 +88,7 @@ impl ShotDraw<'_> {
         self.renderer.camera = view;
         let sheets = Sheets::new(self.atlases, self.textures)
             .with_fonts(self.fonts)
-            .seen_from(view.position)
-            .visible_in(view_min(&view), view_max(&view))
+            .through(&view)
             .at_time(clock_seconds(self.elapsed))
             .with_layers(self.sorting_layers);
         let sheets = match self.materials {
@@ -129,8 +128,8 @@ impl ShotDraw<'_> {
         self.renderer.lighting = voltra_scene::light::gather_through(
             self.world,
             &shot.camera,
-            view_min(&view),
-            view_max(&view),
+            view.visible_bounds().0,
+            view.visible_bounds().1,
             sprites,
             Some(self.textures),
         );

@@ -3,7 +3,7 @@
 //! still in between — and a file that will not load changing nothing.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -31,7 +31,7 @@ fn names(world: &World) -> Vec<String> {
         .collect()
 }
 
-fn root() -> PathBuf {
+fn root() -> voltra_testkit::Scratch {
     let root = scratch_root();
     write_scene(
         &root,
@@ -50,7 +50,7 @@ fn root() -> PathBuf {
 
 /// An app whose tick asks for `target` on its first frame and records what
 /// every frame's tick sees.
-fn app_changing_to(root: &PathBuf, target: &str) -> (App, Rc<RefCell<Vec<Seen>>>) {
+fn app_changing_to(root: &Path, target: &str) -> (App, Rc<RefCell<Vec<Seen>>>) {
     let seen = Rc::new(RefCell::new(Vec::new()));
     let log = seen.clone();
     let target = path(target);

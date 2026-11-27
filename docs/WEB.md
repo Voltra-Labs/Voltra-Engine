@@ -82,6 +82,12 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
 - **The log** goes to the browser's console (F12), and a game that cannot
   start says why on the page.
 - **No hot reload**, and no files outside the pack.
+- **The network is WebSockets only.** A page joins a server by its
+  address (`ws://` or `wss://`); it cannot host, and it cannot look for
+  games on the LAN — a browser has no UDP, let alone broadcast. The lobby
+  screen greys Host and Find on LAN there, and `tick.net.discover` answers
+  `DiscoveryError::Unsupported`; the lobby itself works as natively, over
+  the WebSocket (docs/guide/08-networking.md).
 
 ## Checking a web build
 

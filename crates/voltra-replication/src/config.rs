@@ -2,6 +2,8 @@
 
 use voltra_net::{ChannelId, ChannelKind, NetConfig, DEFAULT_CHANNELS};
 
+use crate::{Interest, LagCompensation};
+
 /// The three channels replication owns, beside the game's.
 ///
 /// Its own, so the game's messages never queue behind a snapshot and a
@@ -84,6 +86,16 @@ pub struct ReplicationConfig {
     /// The least interpolation delay, in snapshot intervals, whatever the
     /// measured jitter: two snapshots must be in hand to draw between.
     pub min_delay_snapshots: f32,
+    /// Interest management: each client is sent only the entities near what
+    /// it watches. `None`, the default, sends every client every replicated
+    /// entity. Only the server's is read.
+    pub interest: Option<Interest>,
+    /// Lag compensation: how much of the past the server keeps of its
+    /// `LagCompensated` colliders, and how far back a client's shot may be
+    /// tested. On by default — it records only what a game marks; `None`
+    /// keeps nothing, and every rewound query is a query of the world as
+    /// it is. Only the server's is read.
+    pub lag_compensation: Option<LagCompensation>,
 }
 
 impl Default for ReplicationConfig {
@@ -97,21 +109,27 @@ impl Default for ReplicationConfig {
             max_input_size: 256,
             input_redundancy: 8,
             min_delay_snapshots: 1.0,
+            interest: None,
+            lag_compensation: Some(LagCompensation::default()),
         }
     }
 }
 
 impl ReplicationConfig {
-    /// `base` with replication's channels in place: extended with the
+    /// `base` with replication's channels in place — extended with the
     /// game's own channel kinds kept, the three put where
-    /// [`channels`](Self::channels) says. Both ends must make their
+    /// [`channels`](Self::channels) says — and its wire version
+    /// ([`REPLICATION_WIRE_VERSION`](crate::REPLICATION_WIRE_VERSION)) as
+    /// the session's `layer_version`. Both ends must make their
     /// session's config this way — the handshake's fingerprint covers the
-    /// channel layout, so a client without them is refused at the door.
+    /// channel layout and the layer version, so a client without them, or
+    /// with another build's replication wire, is refused at the door.
     ///
     /// A game channel already at one of those ids is overwritten, with a
     /// warning: pick other ids for replication if a game needs more than
     /// the default three.
     pub fn net_config(&self, mut base: NetConfig) -> NetConfig {
+        base.layer_version = crate::REPLICATION_WIRE_VERSION;
         for (id, kind) in self.channels.kinds() {
             let index = usize::from(id.0);
             if base.channels.len() <= index {
@@ -142,6 +160,7 @@ mod tests {
         assert_eq!(net.channels.len(), 6);
         assert_eq!(&net.channels[..3], &DEFAULT_CHANNELS);
         assert!(config.channels.fit(&net));
+        assert_eq!(net.layer_version, crate::REPLICATION_WIRE_VERSION);
         assert!(!config.channels.fit(&NetConfig::default()));
         // Idempotent.
         assert_eq!(config.net_config(net.clone()), net);

@@ -115,7 +115,7 @@ fn sprite_of(read: &Value, name: &str) -> String {
 #[test]
 #[ignore = "launches the editor: needs a display and a GPU adapter"]
 fn a_prefab_edited_in_its_mode_and_the_searches_through_the_bridge() {
-    let assets = project("prefab-mode");
+    let (_project, assets) = project("prefab-mode");
     level(&assets);
     let (editor, mut client) = launch(&assets);
     let _ = &editor;

@@ -33,6 +33,36 @@ A scene is a RON file — one entry per entity, a map of components — that
 reads well in a diff and merges in version control. Open it in a text
 editor and look.
 
+## Many at once
+
+Ctrl-click or Shift-click in the hierarchy, or drag a box in the
+viewport, to select several. The gizmo moves them together, and the
+inspector edits what they share:
+
+- A field they all agree on shows its value; one that differs shows `—`
+  (a number), a half-ticked box, or a `≠` beside its label — and each
+  section names its differing fields in a line under its rule. Edit a
+  field and only that field is written to all of them: select three
+  sprites of three colours, tick `flip x`, and each keeps its colour.
+- A component only some have is listed, greyed, as `Collider (2 of 3)`,
+  and not edited; **add to the rest** gives it to the others, and then
+  it is. Adding a component none has adds it to all.
+- Picking a value from a dropdown, ticking a box, or typing a number into
+  a `—` field and leaving it sets it on all of them, even when it is the
+  value the last picked already had. Picking a kind again (a collider's,
+  a joint's) turns only the ones of another kind; each of that kind keeps
+  its own sizes.
+- Typing a name names them all.
+- However many are selected, an edit — a whole drag — is one undo step.
+- While playing (or recording on the timeline), only the last picked is
+  edited.
+
+Ctrl+D duplicates the selection (Ctrl+C / Ctrl+V copy and paste it).
+Each copy is named apart from its new siblings, as in Unity: `Coin`
+becomes `Coin (1)`, then `Coin (2)` — the first number no sibling has,
+any number the original carried stripped first. A copy pasted where
+nothing shares its name keeps it.
+
 ## Play it without the editor
 
 ```sh
@@ -71,6 +101,23 @@ coin.prefab.ron`). Edit it with every tool, **Save**, then **◀ Back**: the
 scene comes back as it was, undo history and all, and every instance has
 the prefab's changes. An instance inside the prefab opens in turn, one
 level deeper.
+
+A prefab inside another stays linked to its own file: edit and save the
+inner one (a coin inside a `row.prefab.ron`) and every row in the scene
+picks the change up without the row being saved again — but for what the
+row changed on that coin, which stays the row's.
+
+A **variant** is a prefab that starts as another and changes some of it — a
+blue coin that is otherwise the coin. Right-click a prefab in the asset
+browser, "Create variant" (or **Create variant** in prefab mode's bar):
+`coin Variant.prefab.ron` appears beside it. Open it and edit it like any
+prefab; what you change is recorded as its overrides, listed in the
+inspector on its root. Every later edit to the coin reaches the variant and
+its instances, except what the variant overrides — and an instance of the
+variant can override that in turn. **Apply to prefab** on an instance of a
+variant writes the variant; to change the base, Apply from inside the
+variant's prefab mode, or edit the base itself. A prefab cannot hold
+itself, directly or through a variant: saving one that would is refused.
 
 ## Atlases
 
@@ -127,3 +174,32 @@ Each stroke is one undo entry. `W`, `E` or `R` go back to the transform
 tools. A layer's terrains, chosen in its inspector, paint tiles that join
 up with their neighbours. What a tile does in the physics, and values a
 game reads off it, are in [chapter 4](04-physics.md#tiles).
+
+## Cameras
+
+A scene is drawn through its **active `Camera`** with the highest
+priority: Scene ▸ Spawn camera, or add the component to any entity. Its
+`size` is half the height of world it shows; the Game toggle on the
+viewport shows the scene through it. **Turn** the camera's entity, and the
+view turns with it; tick **turn with parent** for it to turn with its
+parents too — a camera hung off a ship — rather than stay upright while
+it rides them. What a turned camera sees is culled, picked and lit as
+drawn; a pixel-perfect camera stops snapping while it is turned.
+
+Two components move a camera while the game runs (its inspector's **Add
+follow** and **Add shake**):
+
+- **`CameraFollow2D`** keeps it on a **target** — smoothed, with a dead
+  zone the target moves in freely, a lead of the target's velocity, and
+  bounds its view stays inside. **Also frames** adds more targets: it aims
+  at the middle of the box around all of them, and **zoom to fit** eases
+  the camera's size so they all show, with a margin, between a least and
+  a greatest size — fitted to what that camera draws into, a split-screen
+  half or a render texture. A target that leaves the scene drops out of the group.
+  With the follower selected, the viewport draws its dead zone (rose),
+  its bounds (faded rose) and the group's box (green).
+- **`CameraShake`** shakes it by trauma a game adds —
+  `world.get_mut::<CameraShake>(camera)` then `.add_trauma(0.5)` — moving
+  its view up to `max offset` and, with a **max angle**, turning it too.
+  The shake moves only what the camera shows, never its transform, so it
+  always settles back where the camera rests — whatever else moves it.

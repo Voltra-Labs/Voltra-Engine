@@ -82,17 +82,8 @@ pub fn prepare_build_dir(dir: &Path, marker: &str) -> io::Result<()> {
 mod tests {
     use super::*;
 
-    fn scratch() -> PathBuf {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("after 1970")
-            .as_nanos();
-        let dir = std::env::temp_dir().join(format!(
-            "voltra-xtask-{nanos}-{:?}",
-            std::thread::current().id()
-        ));
-        std::fs::create_dir_all(&dir).expect("scratch dir");
-        dir
+    fn scratch() -> voltra_testkit::Scratch {
+        voltra_testkit::Scratch::new("voltra-xtask")
     }
 
     #[test]
@@ -127,14 +118,16 @@ mod tests {
 
     #[test]
     fn a_new_build_folder_is_created() {
-        let dir = scratch().join("dist").join("Game");
+        let scratch = scratch();
+        let dir = scratch.join("dist").join("Game");
         prepare_build_dir(&dir, "build.ron").expect("creates");
         assert!(dir.is_dir());
     }
 
     #[test]
     fn a_previous_build_is_emptied() {
-        let dir = scratch().join("Game");
+        let scratch = scratch();
+        let dir = scratch.join("Game");
         std::fs::create_dir_all(&dir).expect("dir");
         std::fs::write(dir.join("build.ron"), "old").expect("file");
         std::fs::write(dir.join("stale.png"), "old").expect("file");
@@ -147,7 +140,8 @@ mod tests {
 
     #[test]
     fn a_folder_that_is_not_a_build_is_never_emptied() {
-        let dir = scratch().join("Documents");
+        let scratch = scratch();
+        let dir = scratch.join("Documents");
         std::fs::create_dir_all(&dir).expect("dir");
         std::fs::write(dir.join("thesis.docx"), "years of work").expect("file");
 

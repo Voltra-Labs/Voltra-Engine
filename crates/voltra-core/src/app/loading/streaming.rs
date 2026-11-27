@@ -36,14 +36,15 @@
 //! [`Persistent`]: voltra_scene::Persistent
 
 mod anchors;
+mod slot;
 mod stats;
+mod switch;
 
 use voltra_assets::AssetPath;
-use voltra_ecs::Entity;
 use voltra_scene::WorldRegions;
 
 use super::budget::FrameBudget;
-use super::build::{SceneBuild, Step};
+use super::build::{Replicas, SceneBuild, Step};
 use super::unload::Unload;
 use super::Loading;
 use crate::app::scenes::Request;
@@ -51,6 +52,7 @@ use crate::app::spawning::prefab_store;
 use crate::app::tick::Tick;
 use crate::app::App;
 
+use slot::Slot;
 use stats::stats_of;
 pub use stats::StreamingStats;
 
@@ -58,15 +60,6 @@ pub use stats::StreamingStats;
 /// to keep the workers fed, few enough that a fast anchor does not queue a
 /// world's worth of reads it will have left behind by the time they run.
 const LOADS_PER_THREAD: usize = 2;
-
-#[derive(Debug)]
-enum Slot {
-    Unloaded,
-    Loading(SceneBuild),
-    Loaded(Vec<Entity>),
-    Unloading(Unload),
-    Broken,
-}
 
 #[derive(Debug)]
 struct StreamedWorld {
@@ -160,6 +153,8 @@ impl App {
         // A scene change is taking the world away: no region starts or
         // stops until it is done, but a stopped world's go on going.
         let mut order: Vec<(f32, usize)> = Vec::new();
+        // The replicated entities of the regions going, by id.
+        let mut going = Vec::new();
         if let (Some(world), false) = (streaming.world.as_mut(), changing) {
             let anchors = self.streaming_anchors(world.regions.load_radius);
             let margin = world.regions.unload_margin;
@@ -181,13 +176,15 @@ impl App {
                     // spawn put in so far goes.
                     Slot::Loading(build) if !kept => {
                         let entities = build.entities().to_vec();
+                        going.extend_from_slice(build.replicated_ids());
                         *slot = if entities.is_empty() {
                             Slot::Unloaded
                         } else {
                             Slot::Unloading(Unload::new(entities))
                         };
                     }
-                    Slot::Loaded(entities) if !kept => {
+                    Slot::Loaded(entities, ids) if !kept => {
+                        going.append(ids);
                         *slot = Slot::Unloading(Unload::new(std::mem::take(entities)));
                     }
                     _ => {}
@@ -200,18 +197,33 @@ impl App {
             // Nearest first, as many as the pool can usefully take.
             starts.sort_by(|a, b| a.0.total_cmp(&b.0));
             let limit = (jobs.threads() * LOADS_PER_THREAD).max(LOADS_PER_THREAD);
-            let root = prefab_store(&mut self.prefabs, &self.asset_root)
+            let root = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
                 .root()
                 .to_path_buf();
-            let skip = self.is_replication_client();
+            // A region's ids are fresh on each end, so a client's copy of
+            // its replicated entities could never be the server's.
+            let replicas = if self.is_replication_client() {
+                Replicas::LeaveOut
+            } else {
+                Replicas::Spawn
+            };
             for (reach, index) in starts.into_iter().take(limit.saturating_sub(active)) {
                 let scene = &world.regions.regions[index].scene;
-                let build =
-                    SceneBuild::start(jobs, root.clone(), scene, self.registry.clone(), skip);
-                world.slots[index] = Slot::Loading(build);
+                let build = SceneBuild::start(
+                    jobs,
+                    root.clone(),
+                    scene,
+                    self.registry.clone(),
+                    replicas,
+                    None,
+                );
+                world.slots[index] = Slot::Loading(Box::new(build));
                 order.push((reach, index));
             }
             order.sort_by(|a, b| a.0.total_cmp(&b.0));
+        }
+        if !going.is_empty() {
+            self.forget_unsent_of(&going);
         }
 
         // Loads, nearest first, and unloads take turns.
@@ -238,7 +250,8 @@ impl App {
                             if let Slot::Loading(build) =
                                 std::mem::replace(&mut world.slots[index], Slot::Unloaded)
                             {
-                                world.slots[index] = Slot::Loaded(build.into_entities());
+                                let ids = build.replicated_ids().to_vec();
+                                world.slots[index] = Slot::Loaded(build.into_entities(), ids);
                             }
                         }
                         Step::Failed => {
@@ -281,47 +294,5 @@ impl App {
             }
         }
         streaming.stats = stats_of(streaming);
-    }
-
-    /// Stops streaming the current world, if any — its regions going over
-    /// the frames to come — and starts on `next`, if it reads.
-    fn switch_world(&mut self, streaming: &mut Streaming, next: Option<AssetPath>) {
-        if let Some(old) = streaming.world.take() {
-            for slot in old.slots {
-                match slot {
-                    Slot::Loading(build) => {
-                        streaming
-                            .orphans
-                            .push(Unload::new(build.entities().to_vec()));
-                    }
-                    Slot::Loaded(entities) => streaming.orphans.push(Unload::new(entities)),
-                    Slot::Unloading(unload) => streaming.orphans.push(unload),
-                    Slot::Unloaded | Slot::Broken => {}
-                }
-            }
-            log::info!("stopped streaming {}", old.path.as_str());
-        }
-        let Some(path) = next else {
-            return;
-        };
-        let root = prefab_store(&mut self.prefabs, &self.asset_root)
-            .root()
-            .to_path_buf();
-        match WorldRegions::read(&root, &path) {
-            Ok(regions) => {
-                log::info!(
-                    "streaming {} ({} regions)",
-                    path.as_str(),
-                    regions.regions.len()
-                );
-                let slots = regions.regions.iter().map(|_| Slot::Unloaded).collect();
-                streaming.world = Some(StreamedWorld {
-                    path,
-                    regions,
-                    slots,
-                });
-            }
-            Err(error) => log::error!("could not stream {}: {error}", path.as_str()),
-        }
     }
 }

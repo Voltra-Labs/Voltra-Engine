@@ -25,6 +25,18 @@ pub struct PrefabInstance {
     /// empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub removed: Vec<SceneId>,
+    /// Whether this root is an instance in its own right — a spawn's root,
+    /// or one dropped or linked under a part of another instance afterwards
+    /// — rather than a nested part of the instance around it, whose file
+    /// holds it. Unity's added-objects list, kept on the added instance:
+    /// the record its part names cannot tell the two apart, since an
+    /// instance of a coin dropped into a coin names the coin's own records.
+    /// A sync of the instance around it leaves an own one out and syncs it
+    /// with its own file. Not written when false; a link read without it —
+    /// every file before stage 126 — is a nested part, which is what those
+    /// files meant, and an outermost root is its own whatever it says.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own: bool,
 }
 
 impl PrefabInstance {
@@ -32,11 +44,13 @@ impl PrefabInstance {
     /// reads one out of a file without spawning it has to agree with.
     pub const NAME: &'static str = "PrefabInstance";
 
-    /// An instance of `source` with nothing removed.
+    /// An instance of `source` in its own right, with nothing removed: what
+    /// a spawn links its roots with.
     pub fn new(source: AssetPath) -> Self {
         Self {
             source,
             removed: Vec::new(),
+            own: true,
         }
     }
 }

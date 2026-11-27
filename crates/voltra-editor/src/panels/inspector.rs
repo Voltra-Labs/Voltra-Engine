@@ -17,13 +17,18 @@ mod delete;
 mod game_components;
 mod global_light;
 mod joint;
+mod lag_compensated;
 mod light;
 mod light_layers;
+mod mixed;
 mod name;
 mod parallax;
+mod partial;
 mod particles;
 mod path_field;
 mod prefab;
+mod replicated;
+mod sections;
 mod shadow_caster;
 mod shapes2d;
 mod skeleton;
@@ -49,13 +54,12 @@ mod ui_tooltip;
 
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_core::UiFrame;
-use voltra_render::glam::Vec2;
-use voltra_scene::{
-    hierarchy, ui, AudioSource, Camera, Collider, Parallax, ParticleEmitter, Sprite, Text, Tilemap,
-    Transform, UiButton, UiLayout, UiRect, UiStack,
-};
+use voltra_ecs::Entity;
+use voltra_scene::hierarchy;
 
 use crate::editor::Editor;
+use crate::multi_edit::MultiEdit;
+use crate::play::PlayState;
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::right("inspector")
@@ -79,308 +83,77 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // body by `entity` makes every id here a function of the entity too, so
             // a selection change is a real id change and egui starts clean.
             ui.push_id(entity, |ui| {
-                // One entity is edited at a time; with more selected, say so,
-                // so an edit here is not taken for an edit to all of them.
+                // Only while editing, and not while the timeline records:
+                // recording keys the primary alone, and while playing the
+                // world is the simulation's — writing a value loaded from
+                // text would reset the rest's running state (particles,
+                // animators, joint impulses).
+                let alone =
+                    editor.timeline.is_recording() || editor.play.state() != PlayState::Editing;
+                let selected: Vec<Entity> = if alone {
+                    vec![entity]
+                } else {
+                    std::iter::once(entity)
+                        .chain(
+                            editor
+                                .selection
+                                .iter()
+                                .filter(|&e| e != entity && frame.world.is_alive(e)),
+                        )
+                        .collect()
+                };
                 let more = match editor.selection.len() {
                     0 | 1 => String::new(),
-                    n => format!(" — the last picked of {n}"),
+                    n if alone => format!(" — the last picked of {n}, edited alone"),
+                    n => format!(" — {n} selected, the last picked shown"),
                 };
                 ui.label(format!(
                     "Entity {} (gen {}){more}",
                     entity.index(),
                     entity.generation()
-                ));
+                ))
+                .on_hover_text(if selected.len() > 1 {
+                    "an edit writes the field changed to every selected entity"
+                } else if editor.selection.len() > 1 {
+                    "while playing or recording, only this one is edited"
+                } else {
+                    "the entity the inspector edits"
+                });
 
                 // The name, then what it hangs off. Both are identity rather
                 // than geometry, so they sit above the components.
-                let mut claim: Option<&'static str> = name::show(ui, frame.world, entity);
+                let mut claim: Option<&'static str> = name::show(ui, frame.world, &selected);
                 if let Some(parent) = hierarchy::parent_of(frame.world, entity) {
                     ui.label(
                         RichText::new(format!("child of {}", name::of(frame.world, parent))).weak(),
                     );
                 }
                 ui.separator();
+                // Its prefab's buttons act on this entity's instance alone,
+                // each as an entry of its own: outside what is written
+                // across, which would copy a revert onto the rest.
                 prefab::show(editor, ui, frame, entity);
-                if let Some(transform) = frame.world.get_mut::<Transform>(entity) {
-                    claim = transform::show(ui, transform);
+                if !frame.world.is_alive(entity) {
+                    return;
                 }
-                let parent_rect = ui_parent_rect(ui, frame, entity);
-                let stacked = hierarchy::parent_of(frame.world, entity)
-                    .is_some_and(|parent| frame.world.get::<UiStack>(parent).is_some());
-                if let Some(rect) = frame.world.get_mut::<UiRect>(entity) {
-                    claim = claim.or(ui_rect::show(ui, rect, parent_rect, stacked));
+                let mut multi = MultiEdit::begin(frame.world, &editor.registry, entity, selected);
+                // Touches left by a frame whose sections never ran.
+                mixed::take_touched(ui);
+                let added = partial::show(ui, frame.world, &editor.registry, &multi);
+                if !added.is_empty() {
+                    frame.resolve_assets_of(&added);
+                    claim = claim.or(Some("Add component"));
                 }
-                let shown = frame.world.get::<Sprite>(entity).map_or(0, |s| s.frame);
-                if let Some(button) = frame.world.get_mut::<UiButton>(entity) {
-                    claim = claim.or(ui_button::show(ui, button, shown));
+                claim = claim.or(sections::show(editor, ui, frame, entity, &mut multi));
+                for (name, path, how) in mixed::take_touched(ui) {
+                    multi.touch(name, path, how);
                 }
-                claim = claim.or(ui_stack::show(ui, frame.world, entity));
-                claim = claim.or(ui_controls::show(ui, frame.world, entity));
-                let on_screen = ui::is_ui(frame.world, entity);
-                // Both are read before the world is borrowed mutably below:
-                // the thumbnail map and the atlas store hang off `frame`, and
-                // a widget holding a component out of `frame.world` rules out
-                // asking `frame` anything else.
-                let preview = frame
-                    .world
-                    .get::<Sprite>(entity)
-                    .and_then(|sprite| sprite.texture_handle)
-                    .and_then(|handle| frame.thumbnail(handle));
-                let frames_in_atlas = frame
-                    .world
-                    .get::<Sprite>(entity)
-                    .and_then(|sprite| sprite.atlas_handle)
-                    .and_then(|handle| frame.atlases.try_get(handle))
-                    .map(|atlas| atlas.len())
-                    .unwrap_or(0);
-
-                if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
-                    ui.separator();
-                    claim = claim.or(sprite::show(
-                        ui,
-                        sprite,
-                        frame.textures,
-                        frame.atlases,
-                        frame.device,
-                        frame.queue,
-                        preview,
-                    ));
-                }
-                if let Some(sprite) = frame.world.get_mut::<Sprite>(entity) {
-                    let materials = frame.materials.as_deref_mut();
-                    claim = claim.or(sprite_material::show(ui, &mut sprite.material, materials));
-                }
-                claim = claim.or(ui_slice::show(ui, frame.world, entity));
-                if frame.world.get::<Sprite>(entity).is_some() {
-                    ui.separator();
-                    claim = claim.or(animation::show(ui, frame.world, entity, frames_in_atlas));
-                }
-                let sheet = frame
-                    .world
-                    .get::<Tilemap>(entity)
-                    .and_then(|map| map.texture_handle)
-                    .and_then(|handle| frame.thumbnail(handle));
-                if let Some(map) = frame.world.get_mut::<Tilemap>(entity) {
-                    ui.separator();
-                    claim = claim.or(tilemap::show(
-                        ui,
-                        map,
-                        frame.textures,
-                        frame.atlases,
-                        frame.device,
-                        frame.queue,
-                        tilemap::Palette {
-                            sheet,
-                            paint: &mut editor.paint,
-                            window: &mut editor.tile_palette.open,
-                        },
-                    ));
-                }
-                if let Some(map) = frame.world.get_mut::<Tilemap>(entity) {
-                    let materials = frame.materials.as_deref_mut();
-                    claim = claim.or(sprite_material::show(ui, &mut map.material, materials));
-                }
-                if let Some(text) = frame.world.get_mut::<Text>(entity) {
-                    ui.separator();
-                    claim = claim.or(text::show(ui, text, frame.fonts, on_screen));
-                }
-                if let Some(emitter) = frame.world.get_mut::<ParticleEmitter>(entity) {
-                    ui.separator();
-                    claim = claim.or(particles::show(
-                        ui,
-                        emitter,
-                        particles::Stores {
-                            textures: frame.textures,
-                            atlases: frame.atlases,
-                            device: frame.device,
-                            queue: frame.queue,
-                        },
-                    ));
-                }
-                if let Some(line) = frame.world.get_mut::<voltra_scene::Line2D>(entity) {
-                    ui.separator();
-                    claim = claim.or(shapes2d::line(
-                        ui,
-                        line,
-                        shapes2d::Context {
-                            entity,
-                            shape: &mut editor.shape,
-                            textures: frame.textures,
-                            device: frame.device,
-                            queue: frame.queue,
-                        },
-                    ));
-                }
-                if let Some(polygon) = frame.world.get_mut::<voltra_scene::Polygon2D>(entity) {
-                    ui.separator();
-                    claim = claim.or(shapes2d::polygon(
-                        ui,
-                        polygon,
-                        shapes2d::Context {
-                            entity,
-                            shape: &mut editor.shape,
-                            textures: frame.textures,
-                            device: frame.device,
-                            queue: frame.queue,
-                        },
-                    ));
-                }
-                if let Some(trail) = frame.world.get_mut::<voltra_scene::Trail2D>(entity) {
-                    ui.separator();
-                    claim = claim.or(shapes2d::trail(
-                        ui,
-                        trail,
-                        shapes2d::Context {
-                            entity,
-                            shape: &mut editor.shape,
-                            textures: frame.textures,
-                            device: frame.device,
-                            queue: frame.queue,
-                        },
-                    ));
-                }
-                claim = claim.or(skinned::show(
-                    ui,
-                    frame.world,
-                    skinned::Context {
-                        entity,
-                        paint: &mut editor.weight_paint,
-                        textures: frame.textures,
-                        silhouettes: frame.silhouettes.as_deref_mut(),
-                        device: frame.device,
-                        queue: frame.queue,
-                    },
-                ));
-                let asked = skeleton::show(ui, frame.world, entity);
-                claim = claim.or(asked.claim);
-                if asked.child_bone {
-                    crate::spawn::record(editor, frame, "Add child bone", |frame| {
-                        crate::spawn::child_bone(frame, entity)
-                    });
-                }
-                if let Some(layer) = frame.world.get_mut::<Parallax>(entity) {
-                    ui.separator();
-                    claim = claim.or(parallax::show(ui, layer));
-                }
-                if let Some(lamp) = frame.world.get_mut::<voltra_scene::PointLight2D>(entity) {
-                    ui.separator();
-                    claim = claim.or(light::show(
-                        ui,
-                        lamp,
-                        frame.textures,
-                        frame.device,
-                        frame.queue,
-                    ));
-                }
-                if frame.world.get::<voltra_scene::Joint2D>(entity).is_some() {
-                    let ends = joint::ends(frame.world, entity);
-                    if let Some(j) = frame.world.get_mut::<voltra_scene::Joint2D>(entity) {
-                        ui.separator();
-                        claim = claim.or(joint::show(ui, j, &ends));
-                    }
-                }
-                claim = claim.or(animation_player::show(ui, frame.world, entity));
-                claim = claim.or(animator::show(
-                    ui,
-                    frame.world,
-                    frame.state_machines,
-                    entity,
-                ));
-                if let Some(glow) = frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity) {
-                    ui.separator();
-                    claim = claim.or(global_light::show(ui, glow));
-                }
-                if let Some(camera) = frame.world.get_mut::<Camera>(entity) {
-                    ui.separator();
-                    claim = claim.or(camera::show(ui, camera));
-                }
-                if frame.world.get::<Camera>(entity).is_some() {
-                    claim = claim.or(camera_view::show(ui, frame.world, entity));
-                }
-                claim = claim.or(camera_rig::show(ui, frame.world, entity));
-                if let Some(source) = frame.world.get_mut::<AudioSource>(entity) {
-                    ui.separator();
-                    claim = claim.or(audio_source::show(
-                        ui,
-                        source,
-                        frame.clips,
-                        frame.audio,
-                        &mut editor.audition,
-                    ));
-                }
-                // Keyed off the collider rather than off the filter itself:
-                // both filter components are absent by default, and an entity
-                // whose filter cannot be reached until it has one would never
-                // get its first.
-                // A solid layer too: its generated boxes copy the filter off
-                // the layer, so the layer is where it is authored.
-                let solid_layer = frame
-                    .world
-                    .get::<Tilemap>(entity)
-                    .is_some_and(|map| map.collision);
-                let has_collider = frame.world.get::<Collider>(entity).is_some();
-                let textured = frame
-                    .world
-                    .get::<Sprite>(entity)
-                    .is_some_and(|sprite| sprite.texture.is_some());
-                if let Some(shape) = frame.world.get_mut::<Collider>(entity) {
-                    ui.separator();
-                    let outcome = collider::show(ui, shape, textured);
-                    claim = claim.or(outcome.claim);
-                    if outcome.fit_to_sprite {
-                        claim = claim.or(fit_to_sprite(frame, entity));
-                    }
-                }
-                if has_collider || solid_layer {
-                    ui.separator();
-                    claim = claim.or(collision::show(ui, frame.world, entity));
-                }
-                claim = claim.or(character::show(ui, frame.world, entity));
-                claim = claim.or(game_components::show(
-                    ui,
-                    frame.world,
-                    entity,
-                    &editor.registry,
-                ));
-                // Keyed off the shape it would take — a collider, a solid
-                // layer's boxes, a sprite's quad — or off the caster itself.
-                let has_sprite = frame.world.get::<Sprite>(entity).is_some();
-                let casts = frame
-                    .world
-                    .get::<voltra_scene::ShadowCaster2D>(entity)
-                    .is_some();
-                if has_collider || solid_layer || has_sprite || casts {
-                    // Read before the world is borrowed mutably below: the
-                    // sprite's quad is resolved against the frame's sheets.
-                    let starting = voltra_scene::shadow_caster::starting_polygon(
-                        frame.world,
-                        entity,
-                        frame.sheets(),
-                    );
-                    ui.separator();
-                    claim = claim.or(shadow_caster::show(
-                        ui,
-                        frame.world,
-                        entity,
-                        shadow_caster::Context {
-                            has_collider: has_collider || solid_layer,
-                            starting,
-                            textured_sprite: frame
-                                .world
-                                .get::<Sprite>(entity)
-                                .is_some_and(|sprite| sprite.texture.is_some()),
-                            shape: &mut editor.shape,
-                        },
-                    ));
-                }
-                // Every drawable's named layer, under its own section's
-                // fields: one rule, one widget, wherever the component is.
-                claim = claim.or(sorting_layer::show_for(
-                    ui,
-                    frame.world,
-                    entity,
-                    frame.sorting_layers,
-                ));
+                // What the sections did to the primary, written into the rest
+                // of the selection before the history takes the frame's after
+                // side: one entry for all of them.
+                let written = multi.finish(frame.world, &editor.registry);
+                // Loaded from text, the rest carry no handles yet.
+                frame.resolve_assets_of(&written);
                 // A field held down or focused keeps one entry open for the
                 // whole edit, the way a gizmo drag does. Collected and applied
                 // here rather than pushed from inside the widget helpers: they
@@ -396,48 +169,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
         });
 }
 
-/// The box `entity`'s `UiRect` is anchored in, as the viewport lays it out:
-/// its nearest UI ancestor's rect, or the whole viewport.
-fn ui_parent_rect(ui: &Ui, frame: &UiFrame<'_>, entity: voltra_ecs::Entity) -> ui::Rect {
-    let (width, height) = frame.viewport_size();
-    let screen = Vec2::new(width as f32, height as f32) / ui.ctx().pixels_per_point();
-    let layout = UiLayout::from_world(frame.world, screen);
-    hierarchy::ancestors(frame.world, entity)
-        .into_iter()
-        .find_map(|ancestor| layout.rect(ancestor))
-        .unwrap_or(ui::Rect::screen(screen))
-}
-
 /// What to call an edit made through this widget this frame, if it is live.
 ///
 /// Dragged *or* focused: a `DragValue` can also be clicked into and typed in,
 /// and an entry that closed between two keystrokes would be one undo per
 /// character.
-/// Shapes `entity`'s collider as the convex hull of its sprite's opaque
-/// pixels, grown to eight corners at most; a sprite with nothing opaque, or
-/// silhouettes not loaded, leaves it as it was and says why.
-fn fit_to_sprite(frame: &mut UiFrame<'_>, entity: voltra_ecs::Entity) -> Option<&'static str> {
-    let points: Vec<Vec2> = frame
-        .sprite_silhouette(entity)
-        .into_iter()
-        .flatten()
-        .collect();
-    match voltra_scene::ConvexPolygon::enclosing(&points) {
-        Ok(points) => {
-            let collider = frame.world.get_mut::<Collider>(entity)?;
-            *collider = Collider::Polygon {
-                points,
-                radius: 0.0,
-            };
-            Some("Fit collider to sprite")
-        }
-        Err(error) => {
-            log::warn!("cannot fit the collider to the sprite: {error} in its silhouette");
-            None
-        }
-    }
-}
-
 pub(super) fn active(response: &egui::Response, label: &'static str) -> Option<&'static str> {
     (response.dragged() || response.has_focus()).then_some(label)
 }

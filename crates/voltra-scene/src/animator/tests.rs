@@ -5,6 +5,7 @@ use voltra_ecs::{Entity, World};
 
 use super::*;
 use crate::keyframes::{self, AnimationClips};
+use crate::AnimationPlayer;
 use crate::Transform;
 
 const MACHINE: &str = r#"(
@@ -45,14 +46,22 @@ struct Rig {
 
 impl Rig {
     fn new(machine: &str) -> Self {
-        let root = voltra_testkit::scratch_root();
+        Self::with_clips(
+            machine,
+            &[
+                ("idle", LOOP),
+                ("run", LOOP),
+                ("jump", LOOP),
+                ("land", ONCE),
+            ],
+        )
+    }
+
+    /// A rig whose clips are `clips`, each `name.anim.ron`.
+    fn with_clips(machine: &str, clips: &[(&str, &str)]) -> Self {
+        let root = voltra_testkit::scratch_root().keep();
         std::fs::write(root.join("hero.animator.ron"), machine).expect("writes");
-        for (name, text) in [
-            ("idle", LOOP),
-            ("run", LOOP),
-            ("jump", LOOP),
-            ("land", ONCE),
-        ] {
+        for (name, text) in clips {
             std::fs::write(root.join(format!("{name}.anim.ron")), text).expect("writes");
         }
         let mut world = World::new();
@@ -88,6 +97,10 @@ impl Rig {
         player.clip.as_ref().map(|p| p.as_str().to_owned())
     }
 }
+
+mod crossfade;
+mod layers;
+mod tree;
 
 #[test]
 fn it_starts_in_the_start_state_and_gives_its_entity_a_player() {
@@ -212,16 +225,29 @@ fn the_shipped_machine_reads_whole_and_names_clips_that_are_there() {
     let mut machines = StateMachines::new(&root);
     let handle = machines.load(&path("animations/hero.animator.ron"));
     let machine = machines.get(handle);
-    assert_eq!(machine.states.len(), 4);
-    assert_eq!(machine.transitions.len(), 4, "none dropped");
+    assert_eq!(machine.states.len(), 3);
+    assert_eq!(machine.transitions.len(), 3, "none dropped");
+    assert!(
+        machine.transitions.iter().all(|t| t.duration > 0.0),
+        "every move crossfades"
+    );
+    let tree = machine.state("move").and_then(|s| s.tree.as_ref());
+    assert_eq!(tree.map(BlendTree::len), Some(3), "idle, walk and run");
+    let impact = machine.layer("impact").expect("the landing's layer");
+    assert_eq!(impact.blend, crate::keyframes::LayerBlend::Additive);
+    assert_eq!(impact.transitions.len(), 2, "none dropped");
     let mut clips = AnimationClips::new(&root);
-    for state in &machine.states {
-        assert!(
-            root.join(state.clip.as_str()).is_file(),
-            "{}",
-            state.clip.as_str()
-        );
-        let clip = clips.load(&state.clip);
-        assert!(!clips.get(clip).is_empty(), "{} reads", state.clip.as_str());
+    let layered = impact.states.iter().filter(|s| s.clip.is_some());
+    for state in machine.states.iter().chain(layered) {
+        let named: Vec<&AssetPath> = match state.motion() {
+            Motion::Clip(clip) => vec![clip],
+            Motion::Tree(tree) => tree.clips().collect(),
+            Motion::Nothing => panic!("{} plays nothing", state.name),
+        };
+        for clip in named {
+            assert!(root.join(clip.as_str()).is_file(), "{}", clip.as_str());
+            let handle = clips.load(clip);
+            assert!(!clips.get(handle).is_empty(), "{} reads", clip.as_str());
+        }
     }
 }

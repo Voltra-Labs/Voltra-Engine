@@ -390,7 +390,7 @@ mod frame_tests {
 
     /// One 32×16 cell, so the frame is not the unit square and not square.
     fn atlases() -> (Atlases, AssetPath) {
-        let root = scratch_root();
+        let root = scratch_root().keep();
         std::fs::write(
             root.join("wide.atlas.ron"),
             "(version: 1, grid: Some((cell: (32, 16), columns: 1, rows: 1)))",

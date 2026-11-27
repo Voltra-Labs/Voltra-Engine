@@ -12,3 +12,6 @@ publish = false
 voltra-player.workspace = true
 # The asset pack's format, which the web player reads back.
 voltra-assets.workspace = true
+
+[dev-dependencies]
+voltra-testkit.workspace = true

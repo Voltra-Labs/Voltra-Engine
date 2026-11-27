@@ -133,7 +133,7 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
                     "the editor is playing: stop first, edits land in the authored scene".into(),
                 );
             }
-            let answer = edits::apply(editor, frame.world, command)?;
+            let answer = edits::apply(editor, frame.world, frame.prefabs, command)?;
             // What the edit wrote names its texture, atlas, font or clip by
             // path; the handles that draw them are this session's, so they
             // are looked up now — or a textured sprite spawned here draws
@@ -264,9 +264,9 @@ fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, command: &Command) -> Res
                 "gone": report.gone,
             }))
         }
-        Command::PrefabOpen { .. } | Command::PrefabClose { .. } => {
-            prefab_mode::apply(editor, frame, command)
-        }
+        Command::PrefabOpen { .. }
+        | Command::PrefabClose { .. }
+        | Command::PrefabVariant { .. } => prefab_mode::apply(editor, frame, command),
         Command::HierarchySearch { .. } | Command::AssetSearch { .. } => {
             search::apply(editor, frame, command)
         }

@@ -3,6 +3,7 @@
 use serde::Deserialize;
 use serde_json::{json, Value};
 use voltra_core::{App, Headless, ScreenshotError, WindowConfig};
+use voltra_render::glam::Vec2;
 use voltra_scene::{Name, SceneId, Transform};
 
 use super::ToolError;
@@ -14,6 +15,8 @@ pub const MAX_FRAMES: u32 = 6000;
 const MAX_LOG_LINES: usize = 200;
 /// The most entities a run with no report list sums up.
 const MAX_SUMMARY: usize = 100;
+/// The widest and tallest screenshot a run takes, in pixels.
+const MAX_SHOT_SIDE: u32 = 2048;
 
 /// An action held down over frames of the run.
 #[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
@@ -74,9 +77,21 @@ pub fn run_scene(project: &Project, request: &RunRequest) -> Result<RunOutcome, 
     } else {
         1.0 / 60.0
     };
-    let app = App::new(WindowConfig::default()).with_asset_root(project.assets());
-    let mut session =
-        Headless::open(app, &asset).map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?;
+    // A screen the HUD is laid out on, as a player's window is one: its
+    // buttons take their faces and the controls their input. Without one a
+    // shot drew every button in its sprite's own colour. The shot's size
+    // when one is asked for, so the HUD is laid out where it is drawn;
+    // else the window the app is made with.
+    let window = WindowConfig::default();
+    let (width, height) = request
+        .screenshot
+        .map_or((window.width, window.height), |(width, height)| {
+            shot_size(width, height)
+        });
+    let app = App::new(window).with_asset_root(project.assets());
+    let mut session = Headless::open(app, &asset)
+        .map_err(|e| ToolError(format!("{}: {e}", asset.as_str())))?
+        .with_screen(Vec2::new(width as f32, height as f32));
 
     // This blocking thread's recorder, emptied: a pool thread may have
     // profiled a run before.
@@ -136,7 +151,8 @@ pub fn run_scene(project: &Project, request: &RunRequest) -> Result<RunOutcome, 
     let (png, screenshot) = match request.screenshot {
         None => (None, Value::Null),
         Some((width, height)) => {
-            match session.screenshot(width.clamp(1, 2048), height.clamp(1, 2048)) {
+            let (width, height) = shot_size(width, height);
+            match session.screenshot(width, height) {
                 Ok(shot) => match shot.png_bytes() {
                     Ok(bytes) => (
                         Some(bytes),
@@ -179,4 +195,48 @@ fn summary(world: &voltra_ecs::World) -> Value {
         .collect();
     named.truncate(MAX_SUMMARY);
     Value::Array(named)
+}
+
+/// A screenshot's size as asked, within one pixel and [`MAX_SHOT_SIDE`].
+fn shot_size(width: u32, height: u32) -> (u32, u32) {
+    (
+        width.clamp(1, MAX_SHOT_SIDE),
+        height.clamp(1, MAX_SHOT_SIDE),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_shot_draws_the_hud_s_buttons_with_their_faces() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let project = Project::new(root, None);
+        let outcome = run_scene(
+            &project,
+            &RunRequest {
+                scene: "scenes/platformer.ron".into(),
+                frames: 2,
+                delta: 1.0 / 60.0,
+                inputs: Vec::new(),
+                report: Vec::new(),
+                screenshot: Some((640, 360)),
+                profile: false,
+            },
+        )
+        .expect("runs");
+        let Some(png) = outcome.png else {
+            // No adapter on this machine: nothing drawn to look at.
+            return;
+        };
+        let shot = image::load_from_memory(&png).expect("a png").to_rgba8();
+        // Inside the Save button, clear of its label: its face, not the
+        // sprite's own white.
+        let pixel = shot.get_pixel(20, 72).0;
+        assert!(
+            pixel[..3].iter().all(|&c| c < 160),
+            "the button's face, got {pixel:?}"
+        );
+    }
 }

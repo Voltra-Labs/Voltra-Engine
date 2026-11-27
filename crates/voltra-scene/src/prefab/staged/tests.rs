@@ -198,3 +198,39 @@ fn a_loop_of_links_still_spawns_every_entity() {
     spawn_all(&mut staged, &mut world);
     assert_eq!(world.entity_count(), 2);
 }
+
+#[test]
+fn kept_ids_are_the_file_s_and_taken_records_come_back_parents_first() {
+    let file = tree();
+    let ids: Vec<SceneId> = file.entities.iter().map(|record| record.id).collect();
+    let mut staged = StagedScene::new(file).expect("this version");
+    // The branch and the leaf under it taken; the rest kept as authored.
+    let taken = staged.take(|record| {
+        record
+            .components
+            .get("Name")
+            .is_some_and(|name| name.get_ron().contains("branch"))
+    });
+    staged.keep_ids();
+    let names: Vec<String> = taken
+        .iter()
+        .filter_map(|record| {
+            record
+                .components
+                .get("Name")
+                .map(|n| n.get_ron().to_owned())
+        })
+        .collect();
+    assert_eq!(names, ["\"branch\"", "\"leaf\""], "parents first");
+
+    let mut world = World::new();
+    spawn_all(&mut staged, &mut world);
+    assert_eq!(world.entity_count(), 2, "the trunk and the rock");
+    for (entity, id) in world.query::<SceneId>() {
+        assert!(
+            ids.contains(id),
+            "{} under its file's id",
+            name_of(&world, entity)
+        );
+    }
+}

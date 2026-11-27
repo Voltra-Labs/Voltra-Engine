@@ -13,7 +13,8 @@ use voltra_core::egui::{self, Color32, RichText, TextEdit, Ui};
 use voltra_ecs::{Entity, World};
 use voltra_scene::ComponentRegistry;
 
-use super::active;
+use super::{active, mixed};
+use crate::multi_edit::MultiEdit;
 
 /// The engine's own names: what the rest of the inspector shows.
 fn engine_names() -> &'static [&'static str] {
@@ -30,14 +31,21 @@ fn game_names(registry: &ComponentRegistry) -> Vec<&'static str> {
 }
 
 /// Every game component on `entity`, editable, and a way to add the rest.
-/// Draws nothing for a registry with no game in it.
+/// Draws nothing for a registry with no game in it. With several selected,
+/// one only some of them have is neither shown nor offered here — the
+/// inspector lists it with the others like it — and what differs across
+/// them is named under each.
 pub(super) fn show(
     ui: &mut Ui,
     world: &mut World,
     entity: Entity,
     registry: &ComponentRegistry,
+    multi: &MultiEdit,
 ) -> Option<&'static str> {
-    let names = game_names(registry);
+    let names: Vec<&'static str> = game_names(registry)
+        .into_iter()
+        .filter(|name| multi.editable(&[name]))
+        .collect();
     if names.is_empty() {
         return None;
     }
@@ -51,6 +59,7 @@ pub(super) fn show(
     let mut claim = None;
     for name in held {
         claim = claim.or(component(ui, world, entity, registry, name));
+        mixed::marker(ui, multi, &[name]);
     }
 
     let addable: Vec<&str> = missing
@@ -241,10 +250,11 @@ mod tests {
         let coin = world.spawn();
         world.insert(coin, Coin { value: 3 });
         let mut claim = Some("unset");
+        let multi = MultiEdit::begin(&world, &registry, coin, [coin]);
 
         let ctx = Context::default();
         let _ = ctx.run_ui(Default::default(), |ui| {
-            claim = show(ui, &mut world, coin, &registry);
+            claim = show(ui, &mut world, coin, &registry, &multi);
         });
 
         assert_eq!(claim, None);

@@ -93,14 +93,22 @@ impl Transport for UdpTransport {
 /// socket: an ICMP "port unreachable" for an earlier send (Windows hands it
 /// to the next `recv_from` as a reset), an interrupted call, or Windows'
 /// "message too long" for a truncated datagram.
-fn is_transient(error: &io::Error) -> bool {
-    const WSAEMSGSIZE: i32 = 10040;
+pub(crate) fn is_transient(error: &io::Error) -> bool {
     matches!(
         error.kind(),
         io::ErrorKind::ConnectionReset
             | io::ErrorKind::ConnectionRefused
             | io::ErrorKind::Interrupted
-    ) || error.raw_os_error() == Some(WSAEMSGSIZE) && cfg!(windows)
+    ) || is_too_long(error)
+}
+
+/// Whether `error` is Windows' "message too long": a datagram longer than
+/// the buffer arrived, and was cut. Elsewhere the read succeeds with the
+/// buffer filled, so a reader that sizes its buffer one past the largest
+/// message it takes treats both the same: a datagram it does not want.
+pub(crate) fn is_too_long(error: &io::Error) -> bool {
+    const WSAEMSGSIZE: i32 = 10040;
+    cfg!(windows) && error.raw_os_error() == Some(WSAEMSGSIZE)
 }
 
 #[cfg(test)]

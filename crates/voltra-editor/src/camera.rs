@@ -109,6 +109,7 @@ impl ViewportCamera {
         if reset {
             camera.position = self.home_position;
             camera.set_zoom(self.home_zoom);
+            camera.rotation = 0.0;
             log::info!("camera reset");
         }
     }

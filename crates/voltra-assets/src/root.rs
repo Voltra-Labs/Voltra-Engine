@@ -109,31 +109,25 @@ mod tests {
 
     /// A scratch tree with an `assets` directory `depth` levels above `start`.
     ///
-    /// Returns `(start_dir, expected_assets_dir)`.
-    fn tree_with_assets_above(depth: usize) -> (PathBuf, PathBuf) {
-        let nanos = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("the clock is after 1970")
-            .as_nanos();
-        let base = std::env::temp_dir().join(format!(
-            "voltra-root-{nanos}-{:?}",
-            std::thread::current().id()
-        ));
+    /// Returns `(scratch, start_dir, expected_assets_dir)`: the tree goes
+    /// when `scratch` drops.
+    fn tree_with_assets_above(depth: usize) -> (voltra_testkit::Scratch, PathBuf, PathBuf) {
+        let base = voltra_testkit::Scratch::new("voltra-root");
         let assets = base.join("assets");
         std::fs::create_dir_all(&assets).expect("assets dir");
 
-        let mut start = base.clone();
+        let mut start = base.to_path_buf();
         for level in 0..depth {
             start = start.join(format!("level{level}"));
         }
         std::fs::create_dir_all(&start).expect("start dir");
 
-        (start, assets)
+        (base, start, assets)
     }
 
     #[test]
     fn the_environment_override_wins_over_everything() {
-        let (start, assets) = tree_with_assets_above(1);
+        let (_start_tree, start, assets) = tree_with_assets_above(1);
         let forced = start.join("somewhere-else");
 
         let root = resolve_root(
@@ -152,8 +146,8 @@ mod tests {
         // `cargo run -p voltra-editor` sets CARGO_MANIFEST_DIR to the *member*
         // crate, not the workspace root, so the walk upwards is the whole
         // point: `crates/voltra-editor` has no `assets` and the root does.
-        let (manifest, assets) = tree_with_assets_above(2);
-        let (exe, other_assets) = tree_with_assets_above(1);
+        let (_manifest_tree, manifest, assets) = tree_with_assets_above(2);
+        let (_exe_tree, exe, other_assets) = tree_with_assets_above(1);
 
         let root = resolve_root(None, Some(manifest), Some(exe), Path::new("."));
 
@@ -163,7 +157,7 @@ mod tests {
 
     #[test]
     fn the_executable_directory_is_used_when_there_is_no_manifest() {
-        let (exe, assets) = tree_with_assets_above(0);
+        let (_exe_tree, exe, assets) = tree_with_assets_above(0);
 
         let root = resolve_root(None, None, Some(exe), Path::new("."));
 
@@ -172,7 +166,7 @@ mod tests {
 
     #[test]
     fn a_directory_with_no_assets_anywhere_falls_back_to_the_cwd() {
-        let (start, _) = tree_with_assets_above(0);
+        let (_start_tree, start, _) = tree_with_assets_above(0);
         let barren = start.join("no-assets-here");
         std::fs::create_dir_all(&barren).expect("barren dir");
         let cwd = Path::new("/some/working/dir");
@@ -190,13 +184,13 @@ mod tests {
         // MAX_ASCENT levels up is found; one more is not. An unbounded walk
         // from a temp directory would happily adopt an `assets` sitting near
         // the drive root and resolve every path against a stranger's files.
-        let (deep, assets) = tree_with_assets_above(MAX_ASCENT);
+        let (_deep_tree, deep, assets) = tree_with_assets_above(MAX_ASCENT);
         assert_eq!(
             resolve_root(None, None, Some(deep), Path::new("/cwd")),
             assets
         );
 
-        let (too_deep, _) = tree_with_assets_above(MAX_ASCENT + 1);
+        let (_too_deep_tree, too_deep, _) = tree_with_assets_above(MAX_ASCENT + 1);
         assert_eq!(
             resolve_root(None, None, Some(too_deep), Path::new("/cwd")),
             Path::new("/cwd").join("assets"),

@@ -215,7 +215,7 @@ mod tests {
 
     /// A scratch tree: two directories, a PNG, a file with no loader, a
     /// dotfile.
-    fn tree() -> std::path::PathBuf {
+    fn tree() -> voltra_testkit::Scratch {
         let root = voltra_testkit::scratch_root();
         std::fs::create_dir_all(root.join("sprites")).expect("sprites dir");
         std::fs::create_dir_all(root.join("Scenes")).expect("scenes dir");

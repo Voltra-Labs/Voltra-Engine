@@ -18,9 +18,8 @@ const WAIT: Duration = Duration::from_secs(30);
 
 /// A project of its own: the engine's input map and layers, and a scene
 /// holding one replicated box.
-fn project() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("voltra-netplay-test-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+fn project() -> (voltra_testkit::Scratch, PathBuf) {
+    let dir = voltra_testkit::Scratch::new("voltra-netplay-test");
     let assets = dir.join("assets");
     let engine = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
     for file in ["default.input.ron", "default.layers.ron"] {
@@ -39,7 +38,7 @@ fn project() -> PathBuf {
         r#"(version: 1, name: "Netplay Test", scene: "scenes/box.ron")"#,
     )
     .expect("the manifest");
-    assets
+    (dir, assets)
 }
 
 /// The editor process, killed when the test ends however it ends.
@@ -128,7 +127,7 @@ fn counter(profile: &Value, name: &str) -> Option<Value> {
 #[test]
 #[ignore = "launches the editor: needs a display and a GPU adapter"]
 fn two_clients_played_with_100_ms_of_latency_and_the_net_counters_read_back() {
-    let assets = project();
+    let (_project, assets) = project();
     let (editor, mut client) = launch(&assets);
     let start = Instant::now();
     while call(&editor, &mut client, Command::Status)["entities"] != 1 {

@@ -178,6 +178,7 @@ pub(crate) fn enter(
     let camera = *frame.camera;
     // A prefab's root is saved at the origin, so that is where it is.
     frame.camera.position = Vec2::ZERO;
+    frame.camera.rotation = 0.0;
     editor.prefab_mode.stack.push(Parked {
         scene,
         document: std::mem::take(&mut editor.document),

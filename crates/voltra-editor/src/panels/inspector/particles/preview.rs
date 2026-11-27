@@ -9,8 +9,11 @@ use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_scene::particles::presets::Preset;
 use voltra_scene::ParticleEmitter;
 
-pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'static str> {
-    let mut claim = None;
+/// The controls, and a preset picked — for the caller to apply to every
+/// selected emitter from its own, which keeps each one's texture, flipbook
+/// and layers.
+pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<Preset> {
+    let mut picked = None;
     let count_id = ui.id().with("burst_count");
     let mut count: u32 = ui.ctx().data(|d| d.get_temp(count_id)).unwrap_or(20);
     ui.horizontal(|ui| {
@@ -34,8 +37,7 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
             .show_ui(ui, |ui| {
                 for preset in Preset::ALL {
                     if ui.selectable_label(false, preset.label()).clicked() {
-                        *emitter = preset.apply(emitter);
-                        claim = Some("Apply particle preset");
+                        picked = Some(preset);
                     }
                 }
             })
@@ -46,5 +48,5 @@ pub(super) fn show(ui: &mut Ui, emitter: &mut ParticleEmitter) -> Option<&'stati
         d.insert_temp(count_id, count);
     });
     ui.label(RichText::new("previews while selected, without playing").weak());
-    claim
+    picked
 }

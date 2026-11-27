@@ -152,7 +152,7 @@ mod tests {
         };
         write(3.0);
         let mut app = App {
-            asset_root: Some(root.clone()),
+            asset_root: Some(root.to_path_buf()),
             ..App::default()
         };
         let path = AssetPath::new("pose.anim.ron").expect("valid");

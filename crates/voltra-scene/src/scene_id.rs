@@ -26,6 +26,45 @@ impl SceneId {
     pub fn new() -> Self {
         Self(Uuid::now_v7())
     }
+
+    /// The same identity every time for the same two: what `record`, a
+    /// record of some prefab, becomes inside the instance whose own id is
+    /// `within`.
+    ///
+    /// For an entity a prefab sync adds to an instance — a record the file
+    /// gained — so that two readings of one stored instance (a prefab read
+    /// by the store, and the same file opened in prefab mode) give the
+    /// added entity one id, and an instance of the outer file keeps naming
+    /// it. A UUID v7 carrying `within`'s timestamp, its other bits a 128-bit
+    /// mix of the two: a save orders by id, and this sorts it among the
+    /// entities of its instance rather than anywhere in the file, the same
+    /// place every time.
+    pub fn derived(within: SceneId, record: SceneId) -> Self {
+        let (a, b) = (within.0.as_u128(), record.0.as_u128());
+        let words = [(a >> 64) as u64, a as u64, (b >> 64) as u64, b as u64];
+        let mut high = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut low = 0xc2b2_ae3d_27d4_eb4f_u64;
+        for word in words {
+            high = mix(high ^ word);
+            low = mix(low.rotate_left(29) ^ word ^ high);
+        }
+        let mut bytes = ((u128::from(high) << 64) | u128::from(low)).to_be_bytes();
+        // The first 48 bits of a v7 are its milliseconds: `within`'s.
+        bytes[..6].copy_from_slice(&within.0.as_bytes()[..6]);
+        Self(
+            uuid::Builder::from_bytes(bytes)
+                .with_variant(uuid::Variant::RFC4122)
+                .with_version(uuid::Version::SortRand)
+                .into_uuid(),
+        )
+    }
+}
+
+/// SplitMix64's finaliser: every input bit reaches every output bit.
+fn mix(mut x: u64) -> u64 {
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
 }
 
 impl Default for SceneId {
@@ -63,6 +102,32 @@ mod tests {
         let created = ids.clone();
         ids.sort();
         assert_eq!(ids, created, "v7 ids must already be in creation order");
+    }
+
+    #[test]
+    fn a_derived_id_is_the_same_for_the_same_two_and_differs_otherwise() {
+        let (a, b) = (SceneId::new(), SceneId::new());
+
+        assert_eq!(SceneId::derived(a, b), SceneId::derived(a, b));
+        assert_ne!(SceneId::derived(a, b), SceneId::derived(b, a));
+        assert_ne!(SceneId::derived(a, b), a);
+        assert_ne!(SceneId::derived(a, b), SceneId::derived(a, SceneId::new()));
+    }
+
+    #[test]
+    fn a_derived_id_sorts_with_the_instance_it_was_made_in() {
+        let within = SceneId(
+            "019fe500-0000-7000-8000-000000000001"
+                .parse()
+                .expect("a uuid"),
+        );
+        let later = SceneId::new();
+
+        let made = SceneId::derived(within, later);
+
+        assert_eq!(made.0.as_bytes()[..6], within.0.as_bytes()[..6]);
+        assert!(made < later, "with its instance, not where it was made");
+        assert_eq!(made.0.get_version_num(), 7);
     }
 
     #[test]

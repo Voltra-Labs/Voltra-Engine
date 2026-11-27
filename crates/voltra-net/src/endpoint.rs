@@ -91,7 +91,7 @@ impl Endpoint {
         let config = config.validated();
         Self {
             transport,
-            fingerprint: config.fingerprint(),
+            fingerprint: config.raw_fingerprint(),
             config,
             role,
             connections: BTreeMap::new(),

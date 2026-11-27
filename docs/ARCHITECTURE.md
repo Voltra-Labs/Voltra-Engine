@@ -86,7 +86,7 @@ version bump is a one-line change.
 | `voltra-audio` | The mixer, decoding, and the output device | `Audio`, `Mixer`, `Voice`, `Clip`, `PlayParams`, `VoiceId`, `decode`, `spatial` |
 | `voltra-render` | GPU device, swapchain, frame recording, the egui backend | `GpuContext`, `Renderer`, `RenderTarget`, `EguiBackend` |
 | `voltra-scene` | Scene components and their geometry | `AudioSource`, `AudioListener`, `Transform`, `Sprite`, `SpriteBatch`, `pick::sprite_at`, `SceneFile`, `ComponentRegistry`, `SceneId`, `RigidBody`, `Collider`, `PhysicsMaterial`, `CollisionLayers`, `Sensor`, `Name`, `Parent`, `WorldTransforms` |
-| `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit` |
+| `voltra-physics` | Simulation over those components: integration, contact detection, the solver that resolves them, and the questions a game asks of them — now or as they were | `PhysicsWorld`, `PhysicsClock`, `candidate_pairs`, `Contact`, `Overlaps`, `step`, `SolverParams`, `ImpulseCache`, `Touching`, `CollisionEvent`, `query::ray`, `QueryFilter`, `RayHit`, `PoseHistory`, `Rewound` |
 | `voltra-nav` | Navigation grids baked from the scene's colliders, A* paths through them | `NavGrid`, `NavSettings`, `Path` |
 | `voltra-net` | Every socket: datagram transports (UDP, WebSocket native and in the browser, in-memory, conditioned) and the connections over them. Owns `tungstenite` | `Transport`, `Address`, `UdpTransport`, `WebSocketServer`, `WebSocketClient`, `BrowserWebSocket`, `MemoryNetwork`, `Conditioned`, `MultiTransport`, `Endpoint`, `NetConfig`, `ChannelKind`, `ChannelId`, `PeerId`, `NetEvent`, `DisconnectReason`, `Message` |
 | `voltra-bridge` | The editor bridge: commands to a running editor and their answers, JSON lines over a loopback socket. No MCP, no async runtime | `BridgeServer`, `BridgeClient`, `Command`, `Pending` |
@@ -94,7 +94,7 @@ version bump is a one-line change.
 | `voltra-core` | Event loop, OS window, input, frame timing, the egui seam, the game's network session and its replication | `App`, `UiFrame`, `EguiLayer`, `Input`, `Clock`, `Net` |
 | `voltra-editor` | Editor binary and its panels | `main`, `Editor` |
 | `voltra-player` | Player binary: a scene, a window, no editor | `main`, `args::Args`, `scene::load` |
-| `voltra-replication` | The server's world sent to its clients: snapshots and deltas within a per-client budget, interpolation of remote entities, prediction of the owned one | `ReplicationServer`, `ReplicationClient`, `ReplicationConfig`, `Timeline`, `Prediction`, `NetOwner` |
+| `voltra-replication` | The server's world sent to its clients: snapshots and deltas within a per-client budget, interpolation of remote entities, prediction of the owned one, the view time lag compensation rewinds to | `ReplicationServer`, `ReplicationClient`, `ReplicationConfig`, `Timeline`, `Prediction`, `NetOwner`, `LagCompensation`, `ViewTime` |
 | `voltra-server` | A dedicated server: a scene headless at a fixed tick, hosted over UDP and WebSockets; a library a game's own server binary is built on | `Server`, `ServerOptions`, `Pacer` |
 | `voltra-testkit` | Headless GPU scaffolding for tests. `publish = false`, and only ever a `[dev-dependencies]` entry | `headless_device`, `read_texture`, `read_buffer`, `scratch_root`, `write_png` |
 
@@ -716,6 +716,25 @@ integration test is its own binary and each crate its own tree, so the
 alternative is the same 120 lines copied per crate — it was already at two
 copies with a third due. `voltra-testkit` is `publish = false` and appears only
 under `[dev-dependencies]`, so it is not part of the shipped dependency graph.
+
+**A scratch folder goes with its test (stage 130).** `scratch_root()` answers
+a `Scratch` guard that dereferences to its `Path` and removes the folder when
+dropped — they had piled up under the temp dir until a workspace's test runs
+filled the disk. Every folder sits under `voltra-scratch/<pid>-<nanos>/`, and
+each test process holds a lock on its own `.lock` there for its life (a
+`File::try_lock` in a static, released by the system at exit); the first
+scratch folder a process makes sweeps the folders of processes whose lock it
+can take — but for one under a minute old (by the time in its name), whose
+process may have made it and not yet locked it. That catches what no guard can: a test binary killed mid-run, and a
+helper that hands its folder to a store outliving it (`Scratch::keep`). Set
+`VOLTRA_KEEP_SCRATCH` (any value) to keep a failed test's folder — the guard
+then leaves it and says where on stderr — and to sweep nothing. The editor's,
+player's, server's and xtask's test helpers use `Scratch::new(prefix)`; the
+game crates have no dev-dependencies, so their two folders clean up by hand
+on the same terms. Not covered: `target/hot-reload-scratch` (the hot reload
+test's own build of the engine, kept between runs on purpose — several GB in
+debug) and what `cargo xtask guide` writes in the tree (`games/my-game`,
+`target/guide-*`, as a reader following the guide would have them).
 
 ### Hot reload swaps contents under a stable handle
 
@@ -2231,7 +2250,9 @@ no source and links nothing.
 another holds that instance's entities in full, plus its link. A spawn copies
 records and never follows a link, so a cycle cannot hang a spawn today. It is
 refused anyway, at the one place one can be made — `prefab::write` — because the
-propagation stage *will* walk these links. `prefab::reaches` walks the nested
+propagation stage *will* walk these links. (Stage 126 does: nested instances
+are now stored linked and the store follows them; see "An instance follows
+its file".) `prefab::reaches` walks the nested
 sources (links on records parented inside the file; a root's link says nothing
 about content) through the `Prefabs` cache with a visited set, so a diamond is
 walked once and a hand-written loop that misses the target ends.
@@ -2713,6 +2734,10 @@ camera, `0.3` is far hills.
   layer repeats, so a world without one draws exactly as before. Picking sees
   the original only: the copies are the same decoration again. The
   platformer's hills repeat every 30 units, so the range never ends.
+- **Under a turned camera** (stage 124) the displacement stays a
+  translation; the view's turn applies after it, so every layer turns with
+  the world about the camera's centre, and repeats cover the turned view's
+  box.
 
 ### The batch draws what the camera sees, chunk by chunk for tilemaps
 
@@ -2726,7 +2751,8 @@ batch_stress` (a 512 × 64 tilemap and 5 000 sprites, a ~21 × 12 view):
 
 - **`Sheets::visible_in(min, max)`** carries the world rectangle the camera
   sees; the draw path sets it from the camera it draws with
-  (`position ± half_extents`). `None`, the default, culls nothing — picks,
+  (`Sheets::through(&view)`: `Camera2D::visible_bounds`, the box around
+  the turned rect since stage 124). `None`, the default, culls nothing — picks,
   tests and the screen-space UI batch (whose quads are in pixels, not world
   units) are unaffected.
 - **Per quad**, in `SpriteBatch::push_quad`, on the corners as drawn: one
@@ -3527,9 +3553,10 @@ the sector between the cone's outer edges, and every one of those three
 asks it:
 
 - **The view**: `light::gather` keeps a light whose `Reach::bounds` meets
-  the view. A sector's box is its centre, its two edges' ends and the
-  disc's extreme along each axis the cone faces — so a cone wider than a
-  half turn still reaches round behind its centre.
+  the view — the box around a turned view's rect since stage 124. A
+  sector's box is its centre, its two edges' ends and the disc's extreme
+  along each axis the cone faces — so a cone wider than a half turn still
+  reaches round behind its centre.
 - **The quad**: the light instance carries that box as fractions of its
   radius and `vs_light` draws over it instead of the square; the fragment
   shader is unchanged (`local` is still in radii from the centre).
@@ -3685,8 +3712,8 @@ and what an undo or Stop puts back.
   key, not while a text field has the keyboard): every selected entity and
   everything under each, one entry; a child selected with its parent is
   recorded once.
-- The inspector says "the last picked of N" when more than one is
-  selected; editing several at once is not built.
+- The inspector edits what the selection shares (stage 125, below); it
+  says "N selected, the last picked shown" when more than one is.
 
 Rejected: **a hashed set** — the primary would be arbitrary and an undo
 could put back a different one; **"touches" for the box** — see above.
@@ -3727,20 +3754,181 @@ could put back a different one; **"touches" for the box** — see above.
   header is ignored; with it, it is parsed as a scene file is, through the
   same registry (a component the build does not know survives as
   unknown), capped at 16 MiB.
-- **Not yet**: editing a component across the selection; numbering the
-  names of duplicates.
+- **Editing many at once (stage 125, `editor::multi_edit`).** The
+  inspector still draws the primary — every section edits one `&mut T`,
+  and a game's components are edited as their RON — and what that did is
+  turned into an edit of the rest, through the registry rather than per
+  panel. Before the sections draw, `MultiEdit::begin` takes the
+  primary's components as `SerialTree`s (`format::serial_tree`: the
+  type's serializer calls recorded, names and all, replayed into RON byte
+  for byte); after, `finish` takes them again, finds where they differ
+  (`differences`: the deepest places where the shapes still agree — one
+  float of `half_extents`, or the collider itself when a box became a
+  circle) and writes **only those places** into each other entity's own
+  tree, loaded back through the registry. Unity's `SerializedObject` over
+  several targets, with property paths; Godot's `MultiNodeEdit`, which
+  sets the one property on every node. Chosen over a per-field wrapper
+  every panel would opt into because it needs nothing of forty-odd
+  sections and holds for a game's components unchanged — a field edited
+  inside a game component's text writes that field alone. `ron::Value`
+  was the obvious tree and does not work: reading RON into it drops struct
+  and variant names, so a written-back enum no longer reads.
+  - **Fields by name, written or not.** `skip_serializing_if` makes a
+    struct's field list depend on its values — a sprite's sorting layer, a
+    joint's `b` and `break_force`, a tilemap's tile data are written only
+    off their defaults — so structs are walked over the union of both
+    sides' field names, and maps over both sides' keys. A field one side
+    leaves out is a place of its own, *absent* there (`Found::Absent`), and
+    writing it puts the field in or takes it out (`SerialTree::put`), so
+    the type's default comes back on reading. Comparing field lists as a
+    whole instead made one sprite on a non-default layer mix every field,
+    and setting a layer copy the primary's whole sprite over the rest.
+  - **A map left out reads as empty.** Maps are skipped when empty
+    (`BTreeMap::is_empty`: tile data, a tile's custom values, a layer's
+    animations), so one side's map against the other's absence is walked
+    key by key, and `put` makes the map to add a first key. A field under
+    a missing entry, or a key of a map left out, finds *absent*: written
+    out, it is taken out where the rest have it (frame 5 picked "Full"
+    where the primary has no data for it resets the others' frame 5). The
+    proposed alternative — filling every left-out field from the type's
+    default tree — cannot work: serde hands a serializer nothing of a
+    skipped field but its name (`skip_field`), and the default is
+    serialized with the same skips, so the default tree lacks exactly
+    those fields. Any other field left out is one place, written whole or
+    left out whole.
+  - A component every selected entity has is **shared** and editable;
+    where its fields differ they are **mixed**. A component only some have
+    is **partial**: its section is not drawn, and it is listed greyed,
+    `Collider (2 of 3)`, with "add to the rest" (its template, to each
+    that lacks it) where it has a template. One none has is editable:
+    adding it to the primary adds it to all; removing a shared one removes
+    it from all.
+  - An entity whose value has no such place — a circle, for a box's half
+    extent; a shorter list; another variant — is left alone for that
+    field. **A list that grows or shrinks is one place**: adding a point,
+    a terrain or an animation writes the primary's whole list over the
+    rest's. A field is compared as its file writes it: floats by their
+    bits, every NaN equal to every NaN, `-0.0` apart from `0.0`.
+  - **Choosing what the primary already has** moves nothing on it, so no
+    difference is found. A widget that commits a choice `touch`es its
+    place (`mixed::touch`, kept in egui's memory for the frame, handed to
+    `MultiEdit::touch`) and the place is written to all regardless —
+    Unity's behaviour. The shared number field touches when it is left
+    with a number typed into its `—` (Enter, Tab, a click away; not
+    Escape, not left untouched), the shared checkbox on a click, and every
+    dropdown or selectable button over a component field
+    (`mixed::chosen`): sorting layer, simulation, text alignment, bus,
+    follow target, stack and slider directions and alignments, line
+    joints, caps and texture, a half tile's side. **A touch never names a
+    whole component**, and one that picks an enum's variant — joint kind,
+    emitter shape, flipbook timing, a tile's shape, a slider part —
+    is a `Touch::Variant`: written only where the entity holds another
+    variant there, so a kind picked again keeps each one already of it
+    with its own limits, motor and sizes.
+  - **Mixed display**, two levels. Every section gets a line under its
+    rule naming its mixed fields (`≠ Sprite: color, flip_x`, each path on
+    hover), whatever its widgets. The shared widgets in
+    `panels/inspector/mixed.rs` show it in the row: a `DragValue` reads
+    `—` (`custom_formatter`), a checkbox is half-ticked
+    (`Checkbox::indeterminate`), and a widget with no mixed state — a
+    colour button, an angle, a dropdown — shows the primary's value with
+    its row's label marked `≠`. Transform and Sprite use them so far.
+  - **The name** is written to all by the name field itself, not by the
+    trees: an entity without one has an empty one, so names never make a
+    partial; differing names show an empty field reading `—`.
+  - **Actions done per entity**: a button that works a value out from the
+    entity's own state is done to each selected entity on its own terms,
+    and then tells the edit not to copy the primary's result
+    (`done_for_each`) — a bone's "Set rest" and "Reset to rest", a
+    skeleton's "Reset pose", a skinned sprite's "Use the skeleton's
+    bones", "Generate mesh" and "Auto weights", a collider's "Fit to
+    sprite" and its kind (each of another kind converted from its own
+    size, each already of it kept — three boxes of 1, 2 and 3 stay so), a
+    particle preset (applied to each emitter, its texture, flipbook and
+    layers kept), a caster's "Use own polygon", and ticking "casts
+    shadows".
+    The prefab bar's Revert, Revert instance and Apply act on the
+    primary's instance and record their own entry, so they are drawn
+    before the edit is begun, outside it.
+  - **One undo step**: the history already watches the whole selection
+    from the top of the frame, so what `finish` writes — before the
+    history takes the after side — folds into the primary's entry, held
+    open by the same claim. A drag over three sprites is one `Ctrl+Z`.
+  - **Only while editing, and not while the timeline records.** Recording
+    keys the primary alone. While playing the world is the simulation's,
+    and a value loaded back from its tree replaces the whole component,
+    resetting what serde skips — live particles, an animator's state,
+    joint impulses, a player's time — so the inspector edits the primary
+    alone, as before. A primary gone by the end of the frame writes
+    nothing.
+  - Parent, prefab part and instance links are never written across:
+    structure is each entity's own.
+- **Numbered duplicates (stage 125, `clipboard::numbering`).** Duplicate
+  and paste name each copied top apart from the siblings it lands among:
+  kept when none has its name (a paste into another scene is still
+  `Player`), else its base — a ` (n)` suffix stripped — with the first
+  number from 1 that no sibling has: `Coin` → `Coin (1)`, `Coin` beside
+  `Coin (1)` and `Coin (3)` → `Coin (2)`, `Coin (4)` beside `Coin` to
+  `Coin (4)` → `Coin (5)`. Unity's `GetUniqueNameForSibling` (its
+  `ObjectNames.GetUniqueName`, "the next available increment"); Godot
+  increments a trailing number the same way, without the brackets.
+  Siblings are the new parent's children, or the scene's roots. Tops of
+  one paste are numbered in order, each apart from those before it, and
+  later ones not yet numbered are not in its way: two copies of `Coin`
+  pasted where nothing is called that are `Coin` and `Coin (1)`. What is
+  under a top keeps its names (its siblings are copies too); nameless
+  stays nameless. A copied prefab instance renamed so has its overrides
+  refreshed in the same entry, so its name is an override rather than a
+  second, separate edit.
+- **Not yet**: a map entry whose fields are all set back to their
+  defaults is kept as a plain entry on the rest (the panel drops a plain
+  one on the primary; nothing generic knows a plain entry is
+  droppable); the rest of the sections' rows showing `—` themselves
+  (they carry the section's line); choosing the primary's own value in a
+  dropdown deep inside a value — a curve key's ease, an animator asset's
+  fields — writes nothing (no touch); writing a field into another
+  entity's live value rather than through its tree, which would let
+  multi-editing run while playing; a list edited element-wise across
+  lists of different lengths; a section over a partial component
+  editable on the entities that have it; Unity's "Center" pivot.
 
 Pinned by `clipboard::tests` (a parent and child selected together copied
 once with fresh ids, the copy's child under the copy's parent; a duplicated
 child under its old parent where it was; a paste into an empty world where
 the copy was taken; the text round trips, other text is not a clip, broken
-text is an error), `gizmo::follow` tests (each tool's rule, a collapsed axis,
-which followers ride on a selected parent), `selection::tests` (primary order, toggle, Shift ranges both
-ways and without an order, the box replacing or extending, ids round
-trip), `pick::region` tests (wholly inside, origins, HUD never, a layer
-by its tiles, topmost last, outlines), `delete::tests` (one entry for the
-set and its children, undone back selected in order; nothing selected
-records nothing), and the undo and play tests, now over sets.
+text is an error; a duplicate taking the first number its siblings leave,
+`Coin (4)` to `Coin (5)`, a child among its parent's children, a paste
+numbered only where its name is taken, nameless staying so),
+`clipboard::numbering` tests (the suffix split as Unity writes it, the
+first free number, a number past `u64` or at its end, copies side by side,
+copies not yet numbered out of the way), `multi_edit::tests` (equal and
+differing fields, nested places, floats exact and NaN equal; partial
+components; one field written leaving three sprites' differing colours
+alone; a sorting layer set and unset on three sprites writing nothing
+else; one sprite on another layer mixing the layer alone; a joint's
+`break_force` set and unset without its anchors or bodies; a touched field
+written as the primary had it; a primary despawned writing nothing;
+tile data emptied on the primary leaving the rest's other frames, a first
+frame's data added to the rest, "Full" picked again where the primary has
+no data, a joint kind picked again turning only the other kinds; a box's
+half extent left off a circle, a new shape written whole; added and removed
+on all; done for each; a game's component; three frames of a drag over
+three sprites one undo entry, undone back; a component added to all undone
+from all and redone on all), `inspector::mixed` tests (mixed sections drawn
+twice write nothing; touches taken once), `serial_tree::tests` (absent
+fields and keys as places of their own, put adding and removing them, a
+map left out walked as empty, fields under a missing entry absent),
+`inspector::collider` tests (a kind picked again keeping three sizes),
+`inspector::particles` tests (a preset keeping each emitter's texture) and
+the registry's tree tests (every built-in round trips through a tree),
+`gizmo::follow` tests (each tool's rule, a collapsed axis, which followers
+ride on a selected parent), `selection::tests` (primary order, toggle,
+Shift ranges both ways and without an order, the box replacing or
+extending, ids round trip), `pick::region` tests (wholly inside, origins,
+HUD never, a layer by its tiles, topmost last, outlines), `delete::tests`
+(one entry for the set and its children, undone back selected in order;
+nothing selected records nothing), and the undo and play tests, now over
+sets.
 
 ### An instance follows its file, but for what it overrides
 
@@ -3807,12 +3995,10 @@ Rejected:
   editor was closed needs no base when the overrides are already recorded.
 
 **Not yet.**
-- Nested instances are parts of the outer prefab; an edit to the inner file
-  reaches them only once the outer one is saved again.
 - Moving a part out of its instance is not recorded: a sync spawns its record
-  back.
-- Overrides on entities edited by something other than the selection — a
-  tick, a script — are not recorded until they are selected.
+  back (under a fresh id, since stage 126, when its own is taken).
+- Overrides on entities edited by something other than the selection or the
+  bridge — a tick, a script — are not recorded until they are selected.
 
 Pinned by:
 - `prefab::sync` tests: a fresh instance already in step through pretty text;
@@ -3826,6 +4012,214 @@ Pinned by:
 - `delete::tests`: a deleted part noted in the same entry.
 - `app::scenes::tests`: a scene saved with an older copy of a prefab arriving
   in step.
+
+**Stage 126 — variants, and nested prefabs that follow their file.** Before
+this a prefab holding an instance of another held it baked: its records in
+full, synced as parts of the outer prefab, so an edit to the inner file
+reached instances of the outer one only once the outer file was saved again;
+and there was no prefab *of* a prefab.
+
+- **An instance stored in a prefab file is stored as a scene stores one**:
+  its records in full, the `PrefabInstance` on its root, a `PrefabPart`
+  (record of the inner file, overridden components) on each. A **variant**
+  is a file whose root is such an instance — of its base — and a **nested
+  prefab** is one inside a file. One format for every stored instance,
+  scene or prefab, so the variant's overrides on its base are the same
+  component-level overrides an instance in a scene has on its prefab, and
+  an instance of a variant is a second layer over the first: base →
+  variant → instance, each layer keeping what it overrides.
+- **The store reads a file as what it spawns** (`prefab/resolve.rs`): each
+  outermost stored instance in it is brought in step with its own file —
+  read first, recursively, through the store — by stage 64's `sync`, in a
+  scratch world over the file's records, written back out (`Prefab::file`;
+  the file as on disk is kept beside it when that changed something). Every
+  existing caller — a spawn, a sync, Apply, prefab mode — sees the result
+  and needs no change. `Prefabs` now holds a `ComponentRegistry` for this
+  (`with_registry`; `App`'s store takes the app's, and follows a swapped one
+  by `ComponentRegistry::stamp`, new for every registry and change).
+- **A reload reaches the files that follow it.** `Prefabs::reload(path)`
+  re-reads `path`, then every loaded prefab holding an instance of it,
+  directly or through another (`dependents`, each after every one it holds
+  an instance of, by path among equals — the same order every time), from
+  what each holds — and answers them all, or nothing for a file that reads
+  as it did; `prefab::sync_sources` brings their
+  instances in step. So saving the inner prefab (in its mode, or on disk,
+  the watcher's hot reload) moves instances of the outer one in the open
+  scene, and of every variant, without the outer file or the variant being
+  saved. Apply's undo entry covers the dependents' instances too.
+- **A record a sync adds gets `SceneId::derived(instance root, record)`**
+  — not a fresh id — so the store's reading of an outer file and the same
+  file opened in prefab mode (its world synced) give an entity the inner
+  file gained one id, and an instance of the outer file keeps naming it. A
+  v7 carrying the instance root's timestamp, the rest a mix of the two: a
+  save orders by id, so it sorts among its instance, the same place every
+  save. A fresh id where the world already holds that one.
+- **An instance added inside another is its own** (`prefab/membership.rs`).
+  Under an instance's root there can be two kinds of instance root: a
+  *nested* one, whose entities are parts of the outer instance (their
+  parts name the outer file's records), and an *added* one — a prefab
+  dropped under a part, or made there from a selection — whose parts name
+  its own file's. **Which is which is recorded**, on the link:
+  `PrefabInstance::own` (Unity's added-objects list, kept on the added
+  instance). A spawn links its roots as their own and clears it on the
+  nested links it copies; Create prefab's link is its own; a link read
+  without it — every file before this stage — is a nested part, which is
+  what those files meant, and `sync_all` marks every outermost root as its
+  own, so an old top-level instance moved under another stays one (written
+  as `own: true` on the next save). A first version inferred it from the
+  records a part names and was wrong both ways: a coin dropped into a coin
+  names the coin's own records (taken for parts, two entities claiming one
+  record, and Apply wrote the coin into itself past the cycle check), and a
+  row cut from a selection holding a coin holds it under the coin file's
+  own id (deleted from the row, kept in its instances as "added"). A sync
+  of the outer instance leaves an own one out, as it leaves an added
+  entity; `sync_in` (and `sync_all`, `sync_sources`, the store's resolve)
+  syncs it with its own file after, inwards. `instance_root` walks up: the
+  nearest link, then outwards through every one it is a nested part of, to
+  the first in its own right. Apply writes an added instance into the file
+  as a stored one (it is a nested part of the instance from then on), and
+  refuses one of the file itself as the cycle it is. Its records are
+  written under `SceneId::derived(added root, the record its part names)`,
+  and a sync never spawns a record an instance added there already stands
+  for under that id — so undoing the Apply (the dropped instance back as
+  it was, its own; the file still written) and syncing leaves one copy, not
+  the dropped one and the file's beside it, and Apply again writes the same
+  records.
+- **Cost.** One children map per `sync_all` / `sync_in` / resolve, not one
+  per instance; outermost roots found by walking up, not by comparing every
+  pair; `refresh_overrides` walks only upwards, and looks an entity a value
+  names up only when one does. `sync_all` of 3000 two-entity coin instances
+  among 20 000 other entities, in step (the dev profile, this container):
+  380 ms before this stage (337a286), 177 ms now — and 2.76 s at the first
+  version of the added-instance rule, which built the map per instance;
+  `refresh_overrides` of one part 24 µs. Pinned as the bench
+  `prefab/sync-all/3000-instances-20000-entities`.
+- **Apply keeps stored instances**: the instance's records are written as
+  before, then each record the file had takes back the file's link and
+  part, one the instance added keeps the link and parts of a prefab dropped
+  into it (becoming a stored instance), a stored part the instance deleted
+  is remembered in its stored root's `removed`, and what every stored part
+  overrides is worked out again against its own file (`apply/stored.rs`).
+  **Apply on an instance of a variant writes the variant** — its edits
+  become the variant's overrides, the base is left alone; to change the
+  base, open the variant in prefab mode and Apply its root there (it is an
+  instance of the base), or open the base. Unity asks which, per property;
+  one rule per button is ours, and the inspector says so on a variant's
+  instance. `fragment` (Create prefab from selection) keeps the parts of an
+  instance inside the selection, not around it, so it stays linked.
+- **Levels are read as scenes**: an additive load reads its file through
+  `Prefabs::load_scene` — no prefab byte limit (a scene never had one),
+  its instances not followed (the sync after the load brings them in step,
+  in the world), one copy. Cached apart from the prefabs, so which is
+  asked for first never changes how a file is read; one used both ways is
+  held twice. `prefab::write` answers what its refresh read again, as
+  `reload` does, since a reload after it finds nothing changed.
+- **Loops**: the store follows root links now, so `nested_sources` and
+  `reaches` count a variant's base. Refused before writing at every place
+  one can be made — `prefab::write`, Apply, `prefab::variant`, a save in
+  the editor (a variant of itself, a chain back, a prefab nesting itself
+  through a variant). One made by hand on disk is caught while reading: the
+  instance that closes the loop is left as its file has it and the prefab
+  carries a `ResolveProblem::Cycle` (logged, and shown in the inspector);
+  no recursion past it. Bounded besides: `MAX_DEPTH` (32) prefabs deep,
+  `MAX_RECORDS` (2¹⁷) records once resolved (a few small files nesting each
+  other many times would otherwise ask for billions), `MAX_LINKS` (2¹⁴)
+  linked records and `MAX_SOURCES` (256) different prefabs per file (past
+  either, none are followed: a crafted file of links to missing paths would
+  otherwise be that many failed reads), and `MAX_PREFAB_BYTES` (16 MiB) per
+  prefab file, checked before the read. The scans over a file's links are
+  linear, and a file's problems and unreadable links are logged once, not
+  once per instance or link.
+- **Old files read as they did.** A prefab saved before this holds its
+  nested instance baked with no parts; reading it adopts the instance by
+  name, as an old scene's are (stage 64), which records everything that
+  differs as overridden — so it spawns as it was saved, and follows the
+  inner file once saved again (prefab mode's Save writes the parts). No
+  migration step.
+- **Variants are made** from a prefab tile's menu in the asset browser
+  ("Create variant") or prefab mode's bar, as `<name> Variant.prefab.ron`
+  beside the base, numbered when taken (`prefab::variant`, `variant_name`;
+  the bridge's `prefab_variant`, MCP's `prefab_variant`). Opened in prefab
+  mode, a variant's root is an instance of its base, so every edit there is
+  recorded as the variant's override by the same `refresh_overrides`, and
+  its Save writes them. Edits through the bridge now refresh the overrides
+  of what they touch in their own entry, selected or not.
+
+Why this shape. Unity's variant is a prefab asset holding a `PrefabInstance`
+of the base plus a list of property modifications, and its nested prefabs
+are the same instance-plus-modifications inside the outer asset — the shape
+here, by component rather than property (stage 64's rejected field-level
+overrides still apply). Godot's inherited scene names the base with
+`instance=` and stores only the properties changed, per node path. Both
+store a *sparse* delta; we store the instance whole, as a scene does,
+because every reader of a scene file — a streamed region, the dedicated
+server, an older build, a broken base — then still gets the variant as last
+saved instead of an entity with missing components, and because one format
+for stored instances means one sync, one adoption and one override rule for
+scenes and prefabs alike. The cost is redundancy on disk and a diff of the
+variant when it is next saved after a base edit.
+
+Rejected:
+- **`base: "path"` plus a list of overrides in the variant file** — a second
+  format beside the scene's, which every reader would have to resolve.
+- **Nested instances linked in the world** (an entity of an outer instance
+  a part of the inner file's): one `PrefabPart` per entity cannot hold both
+  the outer file's override and the scene's; resolving the outer file in
+  the store keeps the layers in their own files.
+- **Resolving only when a prefab is spawned, not when it is read** — the
+  store hands out `&Prefab`; a level read through it (a scene change) has
+  its instances resolved once at read, and the sync after the load then
+  finds them in step.
+
+Not yet: a variant of a prefab with several roots follows each root, but a
+root the base gains later is not added to it; Apply asks no question of
+where an edit goes (variant or base, per component, as Unity does); a
+variant's root `Transform` is its own whole, as every instance root's is,
+so a base edit to the root's rotation or scale does not reach it (Unity
+keeps root position and rotation per instance and lets scale follow; a
+split `Transform` override is the field-level overrides stage 64 left
+out).
+
+Pinned by:
+- `prefab::tests::variant`: a variant naming its base and spawning it; a
+  base edit reaching a variant and an instance of it; the variant's
+  override kept and an instance's winning over it, then the variant's
+  changed reaching the plain instance; a chain of two variants; Apply from
+  an instance of a variant writing the variant, not the base.
+- `prefab::tests::loops`: a variant of itself and a chain back refused with
+  nothing written; a prefab nesting itself through its variant refused; a
+  loop of one and of two files written on disk, and one through a nested
+  (not root) instance, read with a `Cycle` problem and reloaded without
+  recursing; a chain past `MAX_DEPTH` stopping.
+- `prefab::tests::own`: a coin dropped into a coin following its own file,
+  nothing lost or doubled, and Apply refusing it as a cycle with nothing
+  written; a coin deleted from a row cut around it leaving the row's
+  instances; a file from before reading its nested instance as a part and
+  saving it so, its outermost root marked its own.
+- `prefab::tests::store`: a level past the prefab limit read as a scene and
+  refused as a prefab, whichever is asked for first.
+- `prefab::tests::added`: an Apply with a dropped gem undone, synced twice,
+  redone, and applied again — one gem each time, and in a fresh instance;
+  one whose file is gone kept through syncs; a
+  prefab dropped under a variant's root in its
+  mode kept by the save, a second save, and following its own file; one
+  dropped under a scene instance of a variant surviving `sync_all`,
+  following its file, and Applied into the variant, linked; one made from
+  a selection inside a variant staying in it.
+- `prefab::tests::nested`: an inner edit reaching an instance of the outer
+  prefab with its outer override kept and the outer file untouched; a
+  record the inner file gains reaching the outer under the same id read by
+  the store, read again and opened as prefab mode opens it; Apply on an
+  outer instance keeping its inner instances linked; an outer file from
+  before reading as it was and following once saved again; a diamond (one
+  file nesting two that both nest a coin) reading each file once and a coin
+  edit reaching both branches, in the dependents' stable order.
+- `app::prefab_sync::tests`: a base changed on disk reaching an instance of
+  its variant through the hot reload path; `SceneId::derived`'s test.
+- `voltra-editor/tests/prefab_variant.rs` (Xvfb, in CI): a variant made
+  twice (numbered), edited in prefab mode into an override; the base's
+  shine edited, and the plain coin's, the variant's and the one nested in
+  an unsaved row prefab all following, the variant's colour kept.
 
 ### Joints are solved as Box2D v3 solves them, inside every sub-step
 
@@ -3880,21 +4274,149 @@ held). Box2D's three, with its math (`b2SolveRevoluteJoint`,
 
 Rejected: **joints on the body, Unity's shape** — one per entity here;
 **XPBD joints** — the contacts are TGS Soft, and two solvers on one body
-fight; **wheel and prismatic joints now** — the same machinery with an axis,
-when a vehicle needs them.
+fight.
 
-- **Not yet**: wheel, prismatic, motor and mouse joints; a revolute joint's
-  spring; breaking under force; joints on bodies without a collider turning
-  (no inertia without a shape, as before).
+**Stage 122 — wheel, prismatic and mouse joints; springs; breaking.**
+Box2D v3's `b2WheelJoint`, `b2PrismaticJoint` and `b2MouseJoint`, worked
+from its known design and the in-repo solver that already follows it (no
+source to hand): the same soft constraints (`b2MakeSoft`), warm started,
+solved and relaxed in every sub-step.
+
+- **Which body is which: the joint lives on the body that moves**, as a
+  revolute's lives on the body that turns. Box2D's wheel and prismatic put
+  the axis on body A and slide B along it; here `a` — the wheel, the slider
+  — is Box2D's B, and the **axis is in `b`'s space** (the world's when `b`
+  is the world), so a wheel's motor speed is the wheel's, as a revolute's
+  is, and the common case — a slider on its own entity, held to the world —
+  names neither body and has a world axis. The arm on the base reaches to
+  the *mover's* anchor (Box2D's `d + rA`). `solver/joint/line.rs` is the
+  geometry both share; `slide.rs` their spring and limits along it.
+- **`Wheel { axis, spring, limit, motor }`**: the wheel's anchor kept on
+  the line (soft, as every joint's), the suspension a `RestSpring` (hz,
+  damping, a rest along the axis; `None` slides freely, Box2D's
+  `enableSpring` off), translation limits, and the revolute's angular
+  `Motor` turning the wheel against `b`. Box2D's order: motor, spring,
+  limits, line. Unity's `WheelJoint2D` (a `JointSuspension2D` of frequency
+  and damping ratio, a `JointMotor2D`) is the same shape; Godot builds a
+  wheel from two nodes (`GrooveJoint2D` + `DampedSpringJoint2D`), which is
+  two components here for what is one constraint. Unity's `SliderJoint2D`
+  is the prismatic, its `TargetJoint2D` (target, max force, frequency,
+  damping) the mouse joint.
+- **`Prismatic { axis, reference_angle, limit, motor, spring }`**: the line
+  and the angle solved together as Box2D's 2×2 block (a push across the
+  line turns the bodies too); a `LinearMotor` (speed, `max_force`), a
+  `RestSpring` and limits along the axis, in Box2D's order: spring, motor,
+  limits, then the block. A zero axis joins nothing, as a
+  joint naming a missing body does; the inspector edits an axis as an angle,
+  so it cannot make one.
+- **`Mouse { max_force, hertz, damping_ratio }`**: `a`'s anchor pulled to
+  `b`'s — the **target is `anchor_b`**, a world point when `b` is the world,
+  so a game moves it by writing the field. The general two-body case is the
+  same constraint (the point constraint's own mass matrix), so a body can be
+  pulled to another. Soft in the relax pass too, as Box2D's; with no
+  frequency it pulls as hard as a joint holds its anchors; the accumulated
+  impulse is capped at `max_force · h`. Box2D's fixed angular damping
+  (0.5 Hz) is left out — a hardcoded spring nobody can set — so a body
+  picked off its centre swings about the grip. A `Mouse()` written with no
+  fields takes that testbed tuning (1000 N, 5 Hz, 0.7), each field
+  defaulting on its own.
+- **Revolute `spring: Option<RestSpring>`** towards `rest`, radians from
+  the reference, before the motor (Box2D's order). Unwrapped, as the limit
+  is: an axle wound three turns winds its spring three turns.
+  `RestSpring` is one struct for the three kinds that rest somewhere along a
+  coordinate; a distance joint's `Spring` rests at its `length`.
+- **Breaking: `break_force` / `break_torque: Option<f32>` on `Joint2D`**,
+  `None` (not written) never. After the step, each joint's load is its
+  impulses over the *sub-step* — they are a sub-step's, warm started in
+  each — exactly Box2D's `b2Joint_GetConstraintForce` (`impulse · inv_h`):
+  every linear part at once (the anchors', the line's and along it), every
+  angular part at once (spring, motor, limits, held angle). Measured once
+  the step is solved, so it is the settled load, not a sub-step's spike.
+  Past it the **component is removed** and a `JointBroken { entity, a, b,
+  force, torque }` raised once — Unity's breakable joint (removed, then
+  `OnJointBreak2D`), not Box2D's report-only event: a joint left in place
+  holds again next step and reports again. Removed at run time only: an
+  editor Stop restores the scene file's joint; a scene never says broken.
+  The events ride beside the collisions — `PhysicsWorld::broken_joints`,
+  and `Tick::broken_joints` handed out as `Tick::events` are (the fixed
+  tick the step before it, the per-frame tick every step since its last
+  turn, gathered by `app/pending_physics.rs`). A joint whose entity or
+  body a game despawned between steps joins nothing and breaks nothing.
+- **A part switched off stops pushing.** Every impulse is warm started and
+  stored back each step, so a motor, spring or limit removed at run time
+  (or a spring at zero hertz, or a kind changed) would warm start its last
+  impulse for ever: nothing else decays it. Box2D's `Enable*` setters reset
+  the part's impulse; here games and the inspector edit the component
+  directly, so `prepare_joints` keeps only the impulses of the parts the
+  kind has and uses now (`solver/joint/active.rs`), and clamps a motor's or
+  a mouse joint's to its current cap over the sub-step. A lowered
+  `max_torque` is felt from the next step.
+- **Singular is relative.** The point constraint's and the prismatic's 2×2
+  effective mass is singular when `det <= ε · k11 · k22`
+  (`solver/joint/block.rs`, Box2D's `b2Solve22`), not below a fixed `ε`:
+  `det` goes as the inverse mass squared, so a fixed threshold dropped the
+  joint on a body of a few tonnes with its anchor near the centre.
+- **Anchors are unscaled.** An anchor is in its body's space as rotation
+  and translation only — the solver turns it by the body's angle and never
+  scales it. `Joint2D::anchor_in_world` and `Joint2D::anchor_on` are that
+  rule, and the overlay, `join_selection` and the play-mode grab all use
+  them, so a hinge put on a stretched sprite holds where it was put.
+- **Sleep**: a motor on any kind, or a mouse joint, drives its island; and
+  a driven joint now **wakes** its bodies at the start of the step — a motor
+  or a hand put on a sleeping body changed nothing else sleep would notice.
+- **Overlay**: a wheel or slider with a zero axis joins nothing in the
+  solver, and the overlay draws nothing for it.
+- **Editor**: the inspector lists every kind (`JointKind::NAMES`,
+  `JointKind::named` the parameters a new one starts from) with its axis,
+  suspension, limits, motor and spring rows, the target for a mouse joint,
+  and both thresholds (switched on at 1000, not at zero, which would break
+  on the next step). The overlay draws a wheel's or slider's axis between
+  its limits with a mark at each, a hinge limit's two rays and `a`'s own
+  axis. **Play-mode drag** (`grab.rs`): a primary drag the gizmo did not
+  take, starting on a dynamic body while playing, spawns a transient entity
+  (no `SceneId`: never saved or snapshot) with a mouse joint at the point
+  pressed — Box2D's testbed tuning, 5 Hz, ratio 0.7, `1000 · mass` N — and
+  moves its target with the pointer; release, Stop (before the restore,
+  which despawns only the scene's entities) or the body going lets go.
+  Unity and Godot have no such drag; their play-mode handles are gizmos,
+  which stay — a gizmo teleports, the joint pulls through the solver.
+
+- **Not yet**: joints on bodies without a collider turning (no inertia
+  without a shape, as before); a motor joint (Box2D's `b2MotorJoint`,
+  driving one body's offset and angle to another's — no game needs it
+  yet); a gear or pulley joint; a mouse joint's angular damping; breaking
+  that leaves the component flagged rather than removed; a break that
+  replicates (stage 130's dogfood: `Joint2D` is not a replicated
+  component, so a client's copy of a joint between replicated bodies is
+  its own — it is solved against the transforms the server sends and
+  breaks, or not, by the client's own physics, and its `JointBroken` is
+  the client's event. A server's break reached a client in that run only
+  through the transforms; a game that needs the client to know replicates
+  a component of its own).
 
 Pinned by `tests/joints.rs` (a rod and a pin pendulum keeping their length
 through a swing; a rod between two falling bodies; a rope slack then taut; a
 spring stretched by `g/k` and settled; a weld holding a plank level; a limit
 stopping a hinge and resting on it; a motor at its speed on its axle; joined
 bodies passing through each other unless asked; a hanging pendulum sleeping
-while a motor's wheel does not), `prefab::sync` (a joint inside a prefab
-joining the instance's own bodies, and following an edit) and the scene
-component's format test.
+while a motor's wheel does not; a parked car's suspension settling on a
+slope and a wheel motor driving one; a slider driven to each limit and held
+on its line, and one hanging on its spring at `rest − g/k`; a mouse joint
+pulling a body to its target, and one too weak to hold it up; a revolute
+spring turning a bar back to rest; a rod breaking once past its force while
+a hanging one holds, then both bodies despawned with the steps going on; a
+joint to a body despawned between steps; a weld breaking past its torque),
+`tests/joint_switches.rs` (a motor, spring and limit switched off at run time
+on a wheel, a slider and a hinge, each then coasting or falling),
+`tests/heavy_joints.rs` (a mouse joint, a pin and a slider holding ten-tonne
+bodies),
+`prefab::sync` (a joint inside a prefab joining the instance's own bodies,
+and following an edit), the scene component's format tests (every kind and
+both thresholds round-trip; a 0.3 revolute reads unchanged and writes no new
+field; a short wheel or slider takes its axis), the overlay's (an axis
+between its limits; a hinge's rays), the tick's (each hook handed a break
+once) and the editor's grab (a press pulls the grip to the pointer; ground
+and a static body grab nothing; a despawned body is let go).
 
 ### Property animation is clips of eased keys, bound by name from a player
 
@@ -3951,8 +4473,8 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
 - **The clip is an asset, not the scene**: its edits are held in the store
   (`AnimationClips::get_mut`, played at once by every player of it) and
   marked unsaved until **Save** (`AnimationClips::save`, pretty RON through a
-  temporary file) or **Revert** (a reload); they are not in the undo
-  history.
+  temporary file) or **Revert** (a reload); they are not in the scene's undo
+  history — since stage 121 they are in the clip's own (below).
 - **Preview poses between frames.** The scene is drawn before the editor's
   UI, so `Timeline::pose` writes the clip at the playhead as the editor's
   last act in a frame (after the history's after side) and `Timeline::lift`
@@ -3961,22 +4483,279 @@ Godot's `Animation` + `AnimationPlayer`, cut to what a 2D game keys.
   authored, so scrubbing is never an edit — Unity's preview mode keeps
   authored values aside for the same reason; Godot, which writes the pose
   into the scene, needs a RESET track. The cost: the gizmo and the
-  inspector show the authored values while the preview is on.
-- **Not yet**: record mode (an edit in the viewport keying itself), curve
-  editing, copying keys, a clip's undo, playing the preview in time.
+  inspector show the authored values while the preview is on — except
+  while recording (stage 121, below).
+- **Sampling is apart from writing (stage 119).** `AnimationClip::sample`
+  answers a `Pose` — at most one value per (target, property), targets in
+  `target::canonical` spelling so `"/arm//hand/"` and `"arm/hand"` are one
+  entry — and `Pose::apply` writes it; `AnimationClip::apply` is the two
+  in a row. Between them, **`keyframes::blend(&[(&Pose, weight)])`** mixes
+  N weighted poses into one, so a property several clips animate is written
+  once with their mix. N inputs, not two: a crossfade is two, a blend tree
+  several, a layer one more over the rest — the mechanism lives here, below
+  the animator, because it is about values and clips, and every way of
+  playing more than one clip at once needs it. Unity's playable mixer and
+  Godot's `AnimationTree` blend nodes sit in the same place: under the
+  state machine, over the clips.
+- **How values mix is the property's** (`Property::mixing`): positions,
+  scales, colours and intensities `Linear`ly; a rotation the short way
+  round (`Angle`: `350°` and `10°` through `0°`) — not the clip's own rule,
+  where keys at `0` and `2π` are a turn, because two clips' angles are two
+  poses, not a spin; a sprite frame `Discrete`ly, the heaviest input's
+  (the later of two equal — a crossfade switches at `w >= 0.5`). Each
+  property is mixed among only the inputs that hold it, weights renormalized
+  there: one only one clip animates is that clip's at full weight, never
+  pulled towards a default nobody stated. An angle is mixed the short way
+  from the *first* input — a fixed side, so two angles exactly half a turn
+  apart sweep one way through the fade instead of flipping at `w = 0.5` —
+  then re-wound as the heaviest input is, so a fade ends on its clip's own
+  value. **Weight zero is absent**: an input that does not weigh a finite
+  positive amount is left out, and a property only such inputs hold is not
+  in the mix — a blend's weights are shares of one whole (a crossfade's
+  `1 - w` and `w`), not opacities. Layers (121) composite their result over
+  the lower ones (lerp or add by the layer's weight); they do not feed a
+  layer to `blend` as one more input.
+- **A player crossfades** (`AnimationPlayer::cross_fade(clip, seconds)`):
+  the clip it played keeps playing from where it was (its own clock, its
+  own speed), the new one starts, and the incoming weight runs `0 → 1`
+  linearly in unscaled seconds; the last frame writes the new clip alone
+  and the fade ends. Unity's `CrossFade`, Godot's `xfade_time`. A fade
+  interrupted by another freezes the mix last written as a `Pose` and fades
+  from that (Unity's interrupted transition: from what was showing, not
+  from either clip). `play` and `restart` cut a fade short; a duration that
+  is not positive is `play`. A paused player (`playing` off) holds its
+  fade. A new clip that does not loop and ends first is held on its last
+  frame while the fade runs on; the player is kept playing until the fade
+  is over — "ended" is the fade's own flag, so a pause is still a pause —
+  and stops then. The fade is never saved, like the clock. A target
+  despawned or a clip reloaded mid-fade costs only its own values, as
+  without a fade; a miss is warned of under the clip it is from — the
+  outgoing side's once per fade, never as the new clip's. The clocks run
+  in `keyframes/frame.rs`, the fade's state is `keyframes/fade.rs`.
+- **`played`** counts the seconds of the clip played since it started,
+  through every loop — what an animator's exit time above one counts.
+- **Synced clips (stage 120)**: a player plays either its `clip` or a
+  `SyncedClips` — clips on one clock in *normalized* time, each mixed at a
+  weight (`play_synced`, `cross_fade_synced`, `synced_mut().weights_mut()`
+  to move the weights while the clock keeps its place, `stop`). The set's
+  length is the weight-averaged length of its weighted clips that have
+  one, so each clip is sampled at the same fraction of its own length — a
+  walk and a run keep their stride (Unity's blend-tree sync, Godot's
+  blend-space `sync`). A clip of no length weighs in the mix but not the
+  length — a set whose weighted clips are all of no length keeps its phase
+  where it was rather than snapping to the start; the set loops when any of
+  its clips does, and a clip that does not, in a set that loops, holds its
+  end after the first loop (its start, playing backwards). A set with
+  nothing to write (no clip that reads, at a weight) holds its clock, as an
+  empty clip does. Either side of a fade may be a set; the side faded out
+  keeps the weights it had. A `clip` written over a set plays (the field is
+  the older way in). The set is never saved. Being on the player, not the
+  animator, a set is the one shape anything playing clips together uses —
+  a blend tree today, a layer's motion in 121.
+- **The hot path (stage 120)**: a blend tree samples several clips per
+  entity per frame, so the stage-119 mixing was made to scale. A `Pose` is
+  kept **sorted** by (target, property): `get`/`set` binary-search, a
+  clip's tracks — mostly in order already — append in one comparison, and
+  `blend` walks its inputs side by side once (the next key is the least any
+  input has not passed), with no linear scan per property and no
+  allocation per property (none at all for up to eight inputs).
+  `blend_into` and `AnimationClip::sample_into` reuse a buffer; `advance`
+  samples every player through a few buffers, finds targets through **one
+  index of the hierarchy per frame** (`target::Children`, rather than
+  `children_of` scanning the world per path segment) with the last target
+  remembered (a sorted pose resolves each target once, no map), keeps a
+  fade's last mix by copying into the names it already owns
+  (`Pose::copy_from`: no `String` per fade frame in the steady state) and
+  formats a warning only when it warns. Measured with `voltra-bench run
+  --filter keyframes` (release; the median of 21 samples, after: the best
+  of three runs; the bench's 8 named children × 3 tracks, 100 players):
 
-Rejected: **a state machine or blending now** — Unity's `Animator`, Godot's
-`AnimationTree` — a subsystem of its own, when a game needs one; **curves
-on arbitrary fields by reflection**; **ids as targets**.
+  | benchmark | before (`c2cd5ca`) | after |
+  | --- | --- | --- |
+  | `keyframes/sample/24-tracks` | 1.03 µs | 0.74 µs |
+  | `keyframes/blend/3x24` | 7.01 µs | 1.53 µs |
+  | `keyframes/advance/100-playing` | 842 µs | 184 µs |
+  | `keyframes/advance/100-crossfading` | 1.50 ms | 365 µs |
+  | `keyframes/advance/100-blending-3` | — | 477 µs |
+
+  A three-clip tree on 100 entities costs less now than one clip on 100
+  entities did before.
+- **Layers (stage 121)**: a player plays, over its own motion, a list of
+  `PlayerLayer`s, bottom up — each a whole `AnimationPlayer` of its own
+  (a clip or a synced set, its clock, speed and fade, driven by the same
+  `play`/`cross_fade` calls; its own layers are not played), a `weight`
+  (clamped to `0..=1`, NaN is 0), a `mask` (target paths, each with
+  everything under it — `"arm"` is the arm and `"arm/hand"`; empty is all)
+  and a `blend`, `LayerBlend::Override` or `Additive`. One layer per slot,
+  not one motion and many weights, because an animator's layer has its own
+  current state, its own fades and its own clock (Unity's layers, Godot's
+  `AnimationTree` blend nodes over filtered tracks; Bevy's `AnimationGraph`
+  has additive and masks per node, the same shape below a graph).
+  - **A composite on top of `blend`, not one more input to it**
+    (`keyframes::composite`): a blend's weights are shares of a whole, so a
+    property one input holds is taken whole; a layer's weight is an
+    opacity. **Override** is `mix(property, [(under, 1-w), (layer, w)])`
+    — exactly `under` at 0, exactly the layer at 1, continuous between, an
+    angle the short way and a frame switching at `w >= 0.5`, the same rules
+    as a fade. **Additive** is `under + w · change`, numbers only; a
+    discrete property (a frame) in an additive layer overrides. Scale adds
+    too (Unity multiplies a humanoid's; a sprite's scale keyed `1 → 1.05`
+    breathes the same either way, and adding needs no rule for zero).
+  - **The change is from the clip's first frame** — Unity's default
+    reference pose: an additive clip is authored as itself, a breath from
+    rest, and needs no second clip or setting naming its reference. Each
+    clip is sampled twice (at its time and at 0) and subtracted
+    (`composite::subtract`; an angle as numbers, so a spin keyed `0 → 2π`
+    adds a turn). Inside an additive layer a clip that does not animate a
+    property adds nothing to it, so a fade or a tree mixing two changes
+    pads the side without it with a change of nothing (`composite::pad`) —
+    the shares-of-a-whole rule would otherwise hold the other side's
+    change whole until the fade ended.
+  - **What is under a property the motion does not animate** is the
+    world's value — but the world holds what the layer wrote last frame,
+    and compositing over it would compound (an override at `0.01` creeping,
+    frame by frame, to the layer's value). So the player keeps, per
+    property a layer writes, the value under the layers and the value
+    written (`keyframes/underneath.rs`): while the world still holds what
+    was written, the kept value is what is under. Once something else
+    writes it (a game, the editor), **the change it made goes under**:
+    `under + (now - written)` for a number, the value whole for a discrete
+    one. Taking `now` whole would compound with the common read-modify-
+    write (`translation += v * dt` under an additive bob put the bob under
+    itself every frame — an additive `+0.2` with the game adding `0.01`
+    ten times came to 3.3, not 1.3), and an override below one would damp
+    the game's motion. A game that *sets* the value each frame converges,
+    the same way, on showing what it sets (exactly, while the layer holds
+    still; one frame of the layer's change behind while it moves) — so a
+    layer over a property a game drives outright is effectively off for
+    it: put the game's motion on a parent. When the motion animates the
+    property, what is under is its value, fresh each frame. Unity keeps
+    the scene's defaults for a related reason (write defaults). A property no layer writes any more —
+    weight 0, a state that drops it, the layer taken out, the motion
+    animating it now — is **handed back**: what was under is written once,
+    if nothing else wrote it since. So a weight is continuous down to 0
+    and 0 is exactly a no-op, and a weight cut to 0 leaves nothing behind.
+  - **A layer that has ended or is paused holds its pose** over what is
+    under it (sampled at its clock, which does not move): a squash played
+    once stays on its last frame instead of vanishing — the base motion's
+    "an ended player writes nothing" rule would, under a layer, remove its
+    contribution.
+  - **Layer 0 is exactly today's path**: a player with no layers (and no
+    values left to hand back) is advanced by the code it was before —
+    `advance` sorts players into plain and layered, and only the layered
+    ones pay for a second pass. The frame's sampling moved to
+    `keyframes/sample.rs` and the warnings to `keyframes/report.rs`, shared
+    by both paths; the layered frame is `keyframes/layered.rs`. A missed
+    value is warned of under the motion or layer it came from. Measured
+    with the same bench (release, best of three runs, `voltra-bench
+    compare` of before and after): the plain paths unchanged —
+    `100-playing` 183 → 183 µs, `100-blending-3` 482 → 481 µs,
+    `100-crossfading` 358 → 366 µs (+2.3%, within the run-to-run spread)
+    — and the new `100-layered` (each of 100 players an override layer
+    masked to half its parts at 0.7 and an additive breath over all, 24
+    tracks each: four clips sampled, two composites) at 1.13 ms, about
+    twice a three-clip tree.
+- **Record mode (stage 121)**: with **Record** on (it turns the preview on;
+  the preview off turns it off) the pose is laid again in the middle of the
+  editor's frame, after the hierarchy and before the inspector, so the two
+  panels that edit entities — the inspector and the viewport's gizmo —
+  show and start from what the viewport shows. Every animatable value of
+  every named entity under the player is read then; after the viewport,
+  each that moved (beyond `1e-5` relative, the float noise a gizmo's
+  world-space round trip leaves on rotation and scale) is keyed at the
+  playhead — into its track, or a new one, which starts with the
+  authored value at `0` so a move keyed half way moves *from* where the
+  entity stands — and the scene gets its authored values back before the
+  scene's history looks (`timeline/record.rs`). A recorded move is one clip
+  edit and no scene edit; the scene's history never sees the pose. Unity's
+  record mode, keyed by the same diff; unlike Unity, where assets and
+  scenes share one undo, the key goes into the clip's history. An action
+  that copies what the panels see into something no clip keys would author
+  the pose, so each closes the recording first (`Timeline::end_record`,
+  then acts on the authored scene): a prefab's Apply and Revert, the
+  inspector's Delete, a bone's **Set rest**, a collider's **Fit to
+  sprite**; a shadow caster's polygon from a sprite's quad (computed before
+  the click, from the frame shown) is not offered while recording. The timeline follows the player
+  **above** the selection too (the nearest ancestor whose player names a
+  clip), so selecting an arm keys the arm into its body's clip.
+- **A clip's own undo history (stage 121)** (`timeline/history.rs`), on
+  the Atlas Editor's precedent: snapshots of the clip, settled per gesture
+  (nothing held, nothing typed — a key dragged or a gizmo held while
+  recording is one entry), 200 deep, one history per clip path from when it
+  is first shown. A Revert or a reload from disk is an edit like any other,
+  so it can be undone. **Ctrl+Z over the timeline is the clip's — and
+  anywhere while recording**, every edit then being a key; elsewhere the
+  scene's. Undo and Redo buttons sit beside Record.
+- **Copying keys (stage 121)** (`timeline/clipboard.rs`): **Copy** takes
+  the selected key or, with none selected, every key at the playhead (a
+  column of the pose there); **Paste** puts them at the playhead, replacing
+  a key already there — a single key into the selected track when that
+  track animates the same property (a position copied off one entity
+  pasted onto another's; not a light's intensity into a rotation, though
+  both are numbers), otherwise each back into the track it came from, or
+  the track of its target and property, made if missing — so two tracks
+  of one target and property keep their own keys. Ctrl+C, Ctrl+X (cutting
+  what it copied: the key, or the column), Ctrl+V and Delete over the
+  timeline act on keys; the clipboard is the timeline's, not the system's.
+- **Not yet**: curve editing, playing the preview in time, selecting
+  several keys at once (a copy is one key or one column), a layer's own
+  reference pose for additive clips (it is the clip's first frame),
+  syncing a layer's clock to the motion's (Unity's synced layers), a
+  layer fading into a state that plays nothing (it cuts: fade the layer's
+  weight), a mask per property rather than per target.
+
+Rejected: **a state machine now** — Unity's `Animator`, Godot's
+`AnimationTree` — a subsystem of its own, when a game needs one (stage 70
+built it, beside); **curves on arbitrary fields by reflection**; **ids as
+targets**; **blending inside the animator** — the mixing is about clips
+and values, and blend trees and layers need it too; **fading by writing
+twice** (out then in, each at its weight): a value is written once, and a
+discrete property or a clamp in `Property::write` would not compose;
+**a layer as one more input to `blend`** (stage 121) — a masked layer at
+`0.01` would snap what nothing under it animates to its own value;
+**compositing over the world's current value** — it compounds into a
+creep; **recording through the scene's history** — a key is not a scene
+edit, and a Ctrl+Z in the viewport taking one back would be the Atlas
+Editor's problem again.
 
 Pinned by `keyframes/tests.rs` (a clip moving its player and a named child
 with an ease, looping; a paused player leaving its entity alone; a missing
 child costing one track; bad keys dropped and the rest played; a broken file
-repaired by a reload; a save read back; a sprite frame flipbook), the unit
-tests of eases, values, properties, tracks, target paths and the player's
-clock, `app::animation` (playing only while simulating, taking a reload),
+repaired by a reload; a save read back; a sprite frame flipbook),
+`keyframes/tests/fade.rs` (halfway values, the outgoing clip still playing,
+a rotation the short way, a frame switching past half way, a property only
+the outgoing side animates holding, an interrupt fading from the mix, a
+target despawned and a clip reloaded mid-fade, a paused fade and an
+incoming clip ending first and paused while held, the outgoing side's
+miss warned of as its own), `blend`'s unit tests (N inputs, weight zero
+absent, one-sided properties, angles half a turn apart not flipping), the unit tests of eases, values, poses, properties,
+tracks, target paths and the player's clock and `played`, `app::animation` (playing only while simulating, taking a reload),
 and the editor's `timeline` (a pose lifted back to the authored values), its
-ruler's scale and its key re-sort.
+ruler's scale and its key re-sort. Layers (stage 121): `keyframes/tests/
+layers.rs` (an override masked to an arm moving the arm and its hand and
+not the leg or the root, an additive breath added by weight with no creep
+over fifty frames, weight 0 identical to no layer, a property only a
+layer animates continuous near 0, at half and whole, and handed back at 0,
+a game turning a covered property step by step carrying its change under
+the layer undamped and a value set once shifting what is under, a layer
+taken out handing back, a game stepping a scale under an additive layer
+not adding it up (1.3, not 3.3), a game setting values outright each
+frame shown what it sets with no drift, a layer played once holding its last frame, an
+additive fade into a clip without a property mixing towards no change),
+`underneath.rs`'s (a number's change carried, a frame taken whole),
+`composite`'s unit tests (override exact at 0 and 1 and continuous near 0,
+the short way and the half-way switch, additive by weight and a frame
+overriding, a change from its reference and padding) and `layer.rs` (masks
+cover their subtree, weights clamp). Timeline (stage 121):
+`timeline/record/tests.rs` (a recorded move keyed at the playhead with the
+panels seeing the pose, a new track starting from the authored value, a
+gizmo's float noise not keyed, the scene left as authored; a drag of three
+frames one entry, undone and redone; nothing keyed without record; a key
+copied, pasted at the playhead and undone; a cut of the column at the
+playhead), `timeline/history.rs` and `timeline/clipboard.rs` (a column
+copied and pasted to its tracks, one key into the selected track of its
+property and not into another float's, keys of two tracks of one
+property going back to their own).
 
 ### Characters are cast and slid, not simulated
 
@@ -4026,17 +4805,84 @@ to keep and what it touched (`Slide`). Godot's `CharacterBody2D` and
   not moving up reaches down by `snap` — down a slope, off a small step.
 - The character is a collider without a rigid body: a static obstacle to
   the bodies the step moves. The inspector warns when it has one.
+- **It falls by the world's gravity, read off the tick** (`Tick::gravity`,
+  stage 123, Godot's `get_gravity()`): the game adds it to the velocity it
+  hands `move_and_slide`, so a game that changes `App::gravity` changes
+  how its characters fall along with its bodies.
+
+**Characters push dynamic bodies, and keep their speed on slopes** (stage
+123, `CharacterBody2D::push_force`, `constant_speed_on_slopes`, both
+`#[serde(default)]` and off by default, so every scene moves as before):
+
+- **A push is an impulse at the contact point, limited by a force**
+  (`character/push.rs`). Each dynamic body with mass a move meets while
+  moving into it is remembered — the harder of two meetings with one body —
+  and once the move is over it gets, along the contact's normal into it,
+  just the impulse that brings its contact point up to the character's speed
+  into it, and never more than `push_force × delta`. Mass and inertia are
+  the solver's own (`SolverBody::from_body`): a heavier crate takes the same
+  impulse with less speed, one met low turns, a locked one does not. The
+  point is the middle of where the two faces turned to each other overlap
+  across the normal — a face against a face its shared middle, a corner the
+  corner. Unity's `CharacterController` (`OnControllerColliderHit`) and
+  Godot's `CharacterBody2D` (a loop over `get_slide_collision`) leave this
+  to the game; we do it in the engine because every platformer writes the
+  same dozen lines, and gets the mass or the contact point wrong.
+- **The move still treats the body as solid**: the character stops at it
+  this move, and the body moves when the physics step that follows
+  integrates the impulse — so the character never tunnels into it, and the
+  solver, not the push, keeps a crate shoved at a wall out of the wall.
+  A velocity written wakes a sleeping body, as any game's write does.
+- **The character is slowed to what it pushes, not stopped and not
+  unslowed.** Unity keeps the controller's speed and lets the crate lag;
+  a wall takes it all. Neither feels like pushing: the velocity `Slide`
+  answers keeps, into a pushed wall or ceiling, the speed the body's contact
+  point was already moving away at when the move began (at most the
+  character's) — what the last push achieved once the solver had its say,
+  not the speed this push's impulse asks for, which a crate pinned against
+  a wall never reaches. A light crate is walked on at about full speed (its
+  own, less a step of the floor's friction), a heavy one at its pace,
+  building up as it does, and a pinned one takes it all, as a wall does — so
+  a game accelerating from the slide's velocity pushes smoothly and a walk
+  animation does not play against a crate that is not moving.
+- **A floor is pressed only on landing.** Landing on a body presses it, by
+  the speed of the fall; the floor the character already stands on is not
+  pressed again — what presses into it each move is only the step's pull of
+  gravity, and pressing a crate with that every step would keep it from
+  ever sleeping. The speed into a floor is taken off as on any floor: kept,
+  gravity would pile up in it while the crate on the ground cannot move.
+- **Constant speed on slopes covers the same ground across** (Godot's
+  `floor_constant_speed`, `character/slope.rs`): on the ground and not
+  rising, a floor met turns what is left of the move along it, as far
+  across as it had to go, and a walk down the slope it stands on runs along
+  it from the start rather than off into the air for `snap` to bring back
+  (it needs no snap at all). The velocity kept is the walk across, with no
+  part up or down, so the next move starts level and a crest is not flown
+  off — except, with `stop_on_slope` off, the part of the fall along the
+  slope, so a slope is still slid down and the slide gathers speed. Only a
+  move with a walk across is turned: standing, or sliding under gravity
+  alone, is left to the slope as without the option. Godot keeps the speed *along* the slope; across is what a level is
+  laid out in, so where a character is does not depend on the ground it
+  crossed. Off, nothing changes: the part of a
+  walk into a slope is taken off as before.
 
 Rejected: **a dynamic body with friction and a ground ray** — what the
-platformer example does, and it slides on slopes and pushes crates; fine for
-that game, not for a controller; **a capsule shape first** — the usual cure
+platformer's walker was until stage 123 (it slid on slopes; it now walks as
+a character with a push force); fine for a crate, not for a controller;
+**a capsule shape first** — the usual cure
 for seams, but a third collider shape touches every narrow-phase pair; the
 step handles seams for boxes, and a capsule can come with its own stage;
-**stepped or bisected casts** — approximate, and they tunnel.
+**stepped or bisected casts** — approximate, and they tunnel; **pushing by
+moving the body's transform** — through the solver's back, into walls;
+**the push applied during the move, the character moving on through the
+space it made** — the body would have to be cast out of the way first, and a
+body against a wall would let the character into it; **a push scaled by the
+character's mass** — a character has none; a force is what a designer tunes.
 
-- **Not yet**: moving platforms (the floor's motion carried), pushing
-  dynamic bodies, constant speed on slopes, one-way platforms, a capsule
-  (all but pushing and constant speed since landed: 68, 75a).
+- **Not yet**: a pushed body pushing back on the character (it is moved
+  by the game, not by contacts); a push from the character's own overlap
+  or snap (only motion pushes); the character's weight on what it stands
+  on (a seesaw is tipped by landing on it, not by standing).
 
 Pinned by `query/shape/tests.rs` (a box at a wall, onto a turned floor, a
 slide along a floor not hitting it, the way out of an overlap, a circle at
@@ -4047,8 +4893,18 @@ wall taking the speed into it, a gentle slope climbed and a steep one a
 wall, standing on a slope with and without `stop_on_slope`, a jump ending
 on a ceiling, snapping down a slope and falling off a ledge, pushed out of
 an overlap, a V corner, a floor of tiles without seams, a low ledge stepped
-onto and a high one not). `cargo run -p voltra-core --example character`
-walks it.
+onto and a high one not — `tests/character/slide.rs`; pushing a crate and
+walking on at about full speed, a heavier crate moving less and slowing it,
+a push of zero a wall, a crate against a wall never into it nor the
+character into the crate and, pinned, taking all of the walk, a crate stood
+on going to sleep, one met low turning and one met square not, a crate
+despawned mid-push and one stood on — `push.rs`; constant speed up and down
+a slope against off, on the flat the same, a jump off a slope not turned
+along it, with `stop_on_slope` off still sliding down and gathering speed —
+`slopes.rs`), `character/push.rs` (the contact point of two faces, a corner
+and a circle) and `character/slope.rs`. `cargo run -p voltra-core --example
+character` walks it and pushes a crate; the platformer's walker pushes its
+crates and climbs its hill at constant speed (`tests/terrain.rs`).
 
 ### Every shape is a hull grown by a radius; boxes and circles keep fast paths
 
@@ -4251,16 +5107,32 @@ platform moved by a kinematic body, an animation clip or the game's code
 carries the same; Godot's velocity-based carry misses the last two.
 `platform_velocity` is what a game adds to a jump off one.
 
-Rejected: **one-way as a collision-layer trick** — layers are symmetric;
-**a carry by the floor's `RigidBody` velocity** — see above.
+**A turning floor turns the character too, when it asks**
+(`CharacterBody2D::carry_rotation`, stage 123, off by default): the carry's
+turn since the floor was stood on is added to the character's own
+`Transform` rotation before the move, so the move casts the turned shape
+and an edge turned into the floor is pushed out of as any overlap. The
+turn is taken the short way round, in (−π, π]: a floor whose rotation
+crosses from π to −π turned a little, and its rider with it. Off is
+the default because the common character is a capsule kept upright; Godot
+leaves the body's rotation alone, Unity's `CharacterController` cannot turn
+at all. `up` stays the world's: a character turned by its floor still calls
+what faces `up` a floor.
 
-- **Not yet**: carrying the character's own rotation with a turning floor;
-  dynamic bodies riding animated (non-kinematic) platforms by friction.
+Rejected: **one-way as a collision-layer trick** — layers are symmetric;
+**a carry by the floor's `RigidBody` velocity** — see above; **turning `up`
+with the floor** — a floor tilted past `floor_max_angle` would still be one.
+
+- **Not yet**: dynamic bodies riding animated (non-kinematic) platforms
+  by friction.
 
 Pinned by `tests/one_way.rs` (a body landing on a platform, one thrown up
 from below passing through and landing on top, a solid one still stopping
 it, a character jumping up through and standing, a character carried by a
-platform moving, rising and turning, and nothing once it is gone), the
+platform moving, rising and turning, and nothing once it is gone),
+`tests/character/turning.rs` (turned with a tilting lift only with
+`carry_rotation`, carried round its centre either way, not turned once it
+is gone, and turned the short way as the lift's rotation crosses π), the
 cast's one-way test, and the component's format test. The `character`
 example has a one-way ledge and a lift moved by `animations/lift.anim.ron`.
 
@@ -4280,9 +5152,11 @@ smoothing, drag margins and limits; Cinemachine's dead zone and lookahead.
   authored case, and any entity may follow (a light trailing the player).
 - **Per frame, gated on the simulation** (`camera_rig::update`, after the
   tick and animations, before the audio whose listener rides the camera).
-- **A shake never drifts the camera**: last frame's offset is taken off
-  before following and the new one added after (`ShakeState::applied`), so
-  following works from the rest position. The first frame — and after
+- **A shake never drifts the camera**: since stage 124 it moves the
+  *view*, never the transform (below), so following works from the rest
+  position. (Before, last frame's offset was taken off the transform and
+  the new one added: an absolute writer — a tween, a clip — in between
+  left the difference behind for good.) The first frame — and after
   `snap()` — lands on the target instead of travelling.
 - A parented follower is placed in world space through its parent's matrix.
   A missing target holds it still and warns once.
@@ -4302,15 +5176,165 @@ Rejected: **follow and shake on `Camera`** (above); **random-jump shake** —
 a flicker, not a motion; **a dead zone in screen fractions** — Godot's
 margins; world units are independent of the window and testable headless.
 
-- **Not yet**: rotation shake (the `Camera2D` has no rotation), several
-  targets framed at once, an editor overlay of the dead zone and bounds.
+**The camera turns (stage 124).** `Camera2D` gains `rotation` (radians,
+counter-clockwise, the view's; `0` upright, a non-finite one read as
+upright): the view matrix turns back about the view's centre after moving
+it to the origin, and `viewport_to_world` / `world_to_viewport` go through
+the view's own axes, so picking inverts exactly what the matrix draws.
+`camera::view` and `camera::shots` take the entity's own rotation
+(`camera::placement`) — and its parents' too only with
+`Camera::inherit_rotation` (default off, not written then; Godot's
+`ignore_rotation` the other way up): a camera hung off a rolling ball or a
+character turning with its floor stayed upright before views turned, and
+still does unless asked. Scale is still read for nothing, a mirrored
+camera turned rather than flipped. The turn is normalised into `-π..=π`
+and snapped to exactly `0` within `camera::UPRIGHT` (1e-6), so a parent's
+`0.3` under a child's `−0.3`, or a whole turn, is upright — and snaps. Godot's
+`Camera2D.rotation` (with `ignore_rotation` off), Unity's orthographic
+camera turned about its view axis; Bevy's 2D camera is its transform, turn
+and all. One field on `Camera2D`, not a second camera type: the turn is
+part of where a 2D view is, and every caller that never turns pays nothing.
+
+- **What a turned view sees is the box around its turned rect**
+  (`Camera2D::visible_bounds`; `corners` for the rect itself). Every cull
+  already took a world box — sprites and glyphs per quad, tile chunks,
+  triangles, skinned meshes, particles in the batch, and lights by their
+  reach — so they all take this one, through `Sheets::through(&view)`,
+  which sets the parallax eye and the box together so no draw path can set
+  one without the other. Conservative: at 45° the box holds corners the
+  view does not show; a quad in them is drawn and clipped, as an
+  oversized quad always was. The editor's grid covers the same box.
+- **Pixel-perfect is off while turned** (`Shot::view`): a turned view's
+  pixels do not run along the world's grid, so no sub-pixel shift lines
+  them up, and a sprite seen turned is resampled whatever the camera does.
+  The snap comes back the frame the camera is upright again. Godot's
+  pixel snap has the same hole and leaves it.
+- **Parallax turns with the world about the camera**: a layer's
+  displacement stays a world-space translation by `camera × (1 − factor)`,
+  and the view's turn applies to everything after it — so a sky pinned to
+  the camera stays centred on screen and turns as the level does, the same
+  turn for every layer. Godot's `Parallax2D` under a turned `Camera2D`
+  behaves the same; turning a layer less than the world would be a second
+  rotation nobody asked for.
+- **Shots and split screen** turn per camera: each shot's view is its own
+  camera's, so one player's camera can turn while the other's does not,
+  and a render-texture camera turned draws its picture turned.
+- **The editor's own camera stays upright** (no control turns it; Reset
+  and prefab mode put it upright). The Game view shows a turned game
+  camera turned, and leaving it puts the editor camera's own turn back
+  (`View::set_mode` restores position, zoom and turn). The selected
+  camera's rectangle is drawn turned (`Camera2D::corners`).
+
+**A shake turns too, and shakes the view (stage 124).**
+`CameraShake::max_angle` (radians, default `0`, not written when `0`) is
+rotational trauma: `noise(t, 3.9) × max_angle × trauma²`, a third channel
+of the same three-sine noise, phased off the offset's two. Eiserloh's talk
+shakes the angle the same way; the default stays still because a turned
+camera is a choice, not a default.
+
+- **On the view, not the transform** — Cinemachine's noise, a step after
+  the camera is placed. `shake::update` only works out this frame's
+  offset and angle (`applied_offset` / `applied_angle`), and
+  `camera::eye` — what `camera::view` and `camera::shots` place a view by
+  — adds them to `placement`: the offset along the view's own axes, the
+  angle to its turn. Nothing writes the transform, so an absolute writer
+  (a tween or clip on the rotation) rests exactly where it wrote and a
+  relative one keeps all it added. The stage-69 take-off-and-put-back
+  could not tell the two apart.
+- **What sees the shake**: everything drawn through the view — culling,
+  parallax, lighting, picking through it, the editor's camera rectangle.
+  **What does not**: the follower (it moves the rest position), the
+  transform's readers (physics, replication, a game reading the camera's
+  position) and the **audio listener**, which rides the transform — ears
+  steady while the picture shakes, as the shake is a picture effect and a
+  panning that jitters with it would only be noise.
+- **A shake needs a camera** on its entity now: without a view there is
+  nothing to shake (before, any entity's transform shook; no shipped scene
+  shook anything else).
+
+**Several targets are framed (stage 124).** `CameraFollow2D::targets`
+(not written when empty) frames with `target`: the follower aims at the
+middle of the box around every one of them (`group()`: `target`, then
+`targets`, each once), and the dead zone, look-ahead and bounds work on
+that middle as they did on one target. `FollowZoom` (`zoom: Option`, not
+written when `None`) eases the camera's `size` — at the follower's
+smoothing, first frame snapping — to the size that shows the box plus
+`margin` on each side, through the camera's aspect and turn, within
+`min_size..=max_size` (either way round, inside `Camera`'s limits).
+Cinemachine's Target Group under a Framing Transposer with group framing;
+Godot has none built in.
+
+- **`target` stays, `targets` is added**: no migration — every older file
+  reads as a group of one and writes back the same, and the common single
+  target stays one field in a file. `CameraFollow2D::framing(ids)` builds a
+  group. `SceneRefs` remaps all of them, so a copied group follows the
+  copies.
+- **No weights or radii** per member (Cinemachine has both): a margin
+  covers the targets' size for a 2D group, and a weighted middle can come
+  when a game asks.
+- **A member that is gone drops out of the box**; a change in who is
+  present moves the middle without a velocity, so the lead does not jump.
+  Each missing id is said once — `debug` while others remain (an enemy
+  killed is how a group shrinks), `warn` when none is left and the
+  follower holds still, as one missing target always did.
+- **The bounds take the turned view's box**, so a turned camera's view
+  stays inside them too; the zoom fits the box seen along the turned
+  view's axes. The dead zone, offset and bounds stay **world-aligned** on
+  a turned camera (they are boxes in the level, as authored); only what
+  the view shows turns.
+- **Each camera's own aspect**: the fit and the bounds use what the
+  camera draws into (`camera::aspect`, as `Shot::view` draws it) — its
+  render texture's shape, or its viewport's share of the screen — not the
+  window's, so a split-screen half or a minimap frames right.
+  `camera_rig::update` takes the screen's aspect and the textures.
+- **The fit makes room for the slack**: the box is grown by the dead zone
+  and `|offset|`, since the camera may sit that far off the group's
+  middle, so a fitted member stays on screen wherever the dead zone lets
+  the camera rest. The lead is not included: it is a passing motion, and
+  growing by it would pump the zoom with the group's speed.
+- **A follower naming itself** is left out of its group, with its own
+  warning, once — not "missing".
+- **Editor overlay** (`view/follow.rs`): the selected follower's dead zone
+  — around where it rests, less its offset, so the box is where the
+  *target* moves freely — its bounds, and with more than one target the
+  group's box with the zoom's margin. The inspector lists the group
+  (add, remove), the zoom (margin, sizes) and the shake's `max angle`
+  (degrees, `ui.drag_angle`).
+
+- **Not yet**: a screen-aligned marquee through a turned Game view (the box
+  is a world box, drawn turned, taken as drawn); a control that turns the
+  editor's own camera; the audio listener's ears do not turn with it (pan
+  is on world x); per-member weights and radii in a group; a turned
+  view's rect, rather than its box, for the follower's bounds.
 
 Pinned by `camera_rig/tests.rs` (landing on the target and easing the same
 at any frame rate, a dead zone held then left, bounds clamping a view and
-centring one too big, a lead at half a second, a missing target holding,
-a parented follower, a shake fading back to rest, a copied target remapped)
-and `app::camera_rig` (following only while the game runs). The
-`character` example follows with all of it and shakes on a hard landing.
+centring one too big, a lead at half a second, a missing target holding, a
+parented follower, a shake fading back to rest, a copied target remapped),
+`camera_rig/group_tests.rs` (two targets framed at their middle and zoomed
+in and out to the limits, the zoom eased, a despawned target dropped
+without a lead jump and all gone holding, a turned camera zoomed to the
+turned box, every target remapped, an old single-target file read and
+written back unchanged), `camera_rig/shake_tests.rs` (a turning shake
+moving the view and fading to rest with the transform untouched, an
+absolute writer resting exactly and a relative one keeping what it added,
+the offset along the turned view, none without `max_angle`),
+`follow/zoom.rs`, `group_tests.rs` again (a left-half split-screen camera
+fitting its half, the fit growing by the dead zone and offset, a follower
+naming itself), `tests/camera_aspect.rs` (a render-texture camera zoomed
+to its 4:1 texture, on a GPU), `camera/placement_tests.rs` (a click
+through a turned camera picks the sprite drawn there and not the one an
+upright view would; its own turn by default and its parents' with
+`inherit_rotation`; cancelling and whole turns upright; a viewport's
+aspect), `batch/cull_tests.rs` and `light/tests.rs` (a view at 45° keeping
+a sprite and a light seen only because it is turned and leaving out one
+past its box; a pinned parallax layer centred on a turned screen),
+`camera/shots.rs` (a turned shot not snapped), `voltra-render`'s
+`camera/turned_tests.rs` (matrix, pick and draw agree turned; the box at
+45°; upright unchanged to the bit) and the editor's `view/follow.rs` and
+`view/overlay.rs`; and `app::camera_rig` (following only while the game
+runs). The `character` example follows with all of it and shakes on a hard
+landing.
 
 ### A state machine chooses the clip; the player plays it
 
@@ -4342,20 +5366,214 @@ none). Unity's `Animator` over an `AnimatorController`; Godot's
   versioned and spawned.
 - The browser lists `*.animator.ron` as `Animator`; the inspector edits an
   animator's machine and, while playing, its parameters.
+- **Crossfades (stage 119)**: a transition's `duration` (seconds, `serde`
+  default `0`, not written when `0`) is how long it fades; `0` cuts exactly
+  as before, so every older file plays as it did. Per transition only, with
+  no machine-wide default: one place to look — Unity's per-transition
+  duration, Godot's per-transition `xfade_time`. The animator only asks
+  (`AnimationPlayer::cross_fade`); the player mixes, through the keyframes
+  blend. The state changes at once — conditions and exit times read the
+  incoming state — and a transition taken mid-fade is an interrupt, which
+  fades from the mix showing. Entering the start state (first frame, a
+  reload that lost the state, a restart) cuts. A duration that is not a
+  time of zero or more loads as a cut, with a warning.
+- **Exit time counts loops** (stage 119): below `1.0` it is a point in each
+  loop, as before (`0.5`: half way through any loop); from `1.0` up, on a
+  clip that loops, a number of loops (`player.played() / length`: `2.5`
+  waits for two loops and a half) — Unity's normalized time. On a clip
+  that does not loop, anything from `1.0` up is its end (Unity keeps
+  counting past the end of a clip played once; here it has ended, and
+  waiting longer is a timer's job). A clip of no length has nothing to
+  wait for: every exit time has been reached, looping or not. `1.0` on a
+  looping clip used to never pass (the phase never reaches one); it is now
+  one loop.
+- **The inspector lists the machine's transitions** ("idle to run", "any to
+  jump") with each one's fade in seconds, under a collapsed header. The
+  edit is to the store (`StateMachines::get_mut`), seen by every animator
+  running the machine at once, and written by **Save** or dropped by
+  **Revert** — the timeline's clip precedent; whether it is edited is kept
+  in egui's memory under the machine's path. The field has no upper
+  bound: egui clamps the value a ranged `DragValue` is shown, so a cap
+  would rewrite a long fade typed in the file just by being opened.
+- **Save writes only what the inspector edits** (`StateMachines::save_edits`,
+  stage 119's `save_durations` grown by trees): the store holds the machine
+  *checked*, without the transitions, states and start loading dropped,
+  and saving that would delete an author's typo'd work. So the file is read
+  back as written (`RonStore::read_as_written`), each transition given the
+  duration of the loaded one it became (`StateMachine::take_durations`,
+  matched in order on from, to, conditions and exit time), each state —
+  the first of its name, as the check keeps — the loaded one's tree
+  (`take_trees`), and written (`RonStore::write`); a file that no longer
+  reads is not written over. It writes pretty RON, so the file's comments
+  go, as a clip's do.
+- **Blend trees (stage 120)**: a state's motion is a `clip` or a `tree` —
+  `Blend1D { parameter, children: [(threshold, clip)] }` or
+  `Blend2D { x, y, children: [(position, clip)] }` — and `State::motion()`
+  says which (a tree wins over a clip; an empty tree, or neither, plays
+  nothing). Both fields are **written bare** (`animator/bare.rs`:
+  `clip: Path("idle.anim.ron")`, `tree: Blend1D(...)`, either left out when
+  absent) so every file from before reads unchanged and the new field reads
+  the same way. Entering a tree state, the animator has the player
+  `cross_fade_synced` the tree's clips at the weights its parameters give;
+  every frame it stays, it writes the weights again (`tree.weights(input,
+  set.weights_mut())`), so they follow the game with no transition; a tree
+  whose clips changed under it (a reload, an inspector edit) has them
+  swapped in keeping the phase. A player since told to play a clip of its
+  own is left alone, as in a clip state. Exit times read the set's phase
+  and loops. The playing and the mixing stay the keyframes layer's
+  (`SyncedClips`, `blend`); the tree, its parameters and its geometry are
+  the animator's (`animator/tree.rs`).
+  - **1D** (`tree/line.rs`): the nearest thresholds at or below and at or
+    above the input mix linearly; past the ends, the end child (clamped,
+    no extrapolation); children at one threshold share its weight.
+  - **2D** (`tree/plane.rs`): the children are **Delaunay-triangulated**
+    (brute force: the triangles whose circumcircle holds no other child,
+    accepted in index order unless they overlap one already taken, so four
+    children on one circle split along one diagonal and the weights stay
+    continuous) and an input inside a triangle mixes its corners by
+    **barycentric** weights — at a child that child alone, on an edge its
+    two ends. Outside the hull it is clamped to the nearest point on an
+    edge and mixes that edge's two. One child plays alone; children all on
+    a line blend as 1D along it — and a triangle thinner than `1e-4` of
+    the children's spread counts as a line, since a sliver's weights swing
+    from one side to the other across a hair of input; coincident children
+    share. The geometry
+    runs in `f64` in a frame scaled to the children's spread, so one
+    epsilon serves any units. This is **Godot's `BlendSpace2D`** (auto
+    triangles, barycentric) — which, for Unity's *simple directional*
+    layout (an idle at the centre, one clip per direction), is exactly the
+    fan of triangles Unity blends over; unlike Unity it needs no rule
+    about one clip per direction and takes any layout. Unity's freeform
+    modes (gradient bands) were not copied: they cost a pass over every
+    pair of children per frame, and the triangle blend already gives
+    "nearest clips win" for a 2D game's stick or aim.
+  - **Lenient**, as the rest of the machine: a tree parameter that is not
+    a float, or not a parameter, reads `0`; a child at a threshold or point
+    that is not finite weighs nothing; an empty tree plays nothing;
+    a state with both clip and tree plays the tree — each warned of at
+    load, none removed, so a save writes them back as written. The weights
+    never hold a NaN: a bad input reads as `0`, and every degenerate layout
+    has a rule above.
+  - **The inspector** lists each tree under **blend trees**: a combo box per
+    parameter (the machine's floats; a name that is none of them is shown
+    as written, not replaced), a row per child (threshold, or `x` and `y`,
+    and the clip's path field — dropped from the browser or typed; its
+    **Clear** takes the child out), and an **add** field that appends a
+    child. Rows are keyed by index, so the path field (shared by every
+    inspector path) keeps the value its text was seeded from and reseeds
+    when the value moves under it — a row cleared above, a Revert, a hot
+    reload — rather than showing, and then committing, a stale path. Edited in the store and saved by the same **Save**/**Revert** as
+    the fades (`animator/edits.rs`).
+  - Unity's blend tree, Godot's `BlendSpace1D`/`BlendSpace2D`; Bevy's
+    `AnimationGraph` blends by weights a game writes, with no blend
+    spaces — our animator is that game, writing the weights from its
+    parameters.
 
-Rejected: **blending and crossfades now** — two clips writing one property
-need weights per track, a subsystem of its own; **sub-state machines and
-layers**; **a graph editor now** — the file is short and hot reloads.
+- **Layers (stage 121)**: a machine's top-level `states`, `transitions`
+  and `start` are **layer 0**; `layers: [...]` (optional, not written when
+  empty, so every older file reads and writes unchanged) are machines of
+  their own over it, bottom up — each a `name`, `weight` (default 1, not
+  written at 1), `mask`, `blend` (`Override` default, not written),
+  `start`, `states` and `transitions`, reading the machine's shared
+  parameters. Unity's animator layers, on Unity's shape: one parameter
+  set, a layer per body part or effect, each its own state machine.
+  `animator::evaluate` steps layer 0, then each layer in order (so a
+  trigger layer 0 spends is spent for the layers), through one stepping
+  function over a `Graph` (a borrowed view of a layer's start, states and
+  transitions; `animator/step.rs`, `graph.rs`). Each layer plays on the
+  player's `PlayerLayer` of the same place, kept in step by
+  `animator/layers.rs`: one per layer, the file's weight (or the game's,
+  `Animator::set_layer_weight` — Unity's `SetLayerWeight` — kept by name
+  until `restart`; of two layers of one name, the first's, as
+  `layer_state` reads the first), mask and blend written each frame; a
+  layer whose name moved in a reload starts over, one the machine lost is
+  taken out and hands back what it wrote. The player remembers that an
+  animator made its layers, and they are taken out (handing back) when
+  the animator runs a machine without layers — a swap, as the inspector
+  makes with a restart — runs none, or is removed; layers a game put on a
+  player itself are its own and left alone. Each layer's state is by name, as layer 0's
+  (`Animator::layer_state`). In a layer, **a state that plays nothing is
+  the usual "empty" state** and is not warned of (Unity's empty state);
+  in layer 0 it still is. Checked as layer 0 is, each against its own
+  states (a transition naming another layer's state is dropped); a weight
+  outside `0..=1` is warned of and clamped when played, kept as written.
+  Saving writes the layers' weights, masks and blends, and every layer's
+  fades and trees, matched by place onto the file as written
+  (`take_layer_settings`, and `take_durations`/`take_trees` over every
+  layer). The inspector lists **layers** — weight (a `DragValue` that
+  does not clamp the value it is shown, so a 1.5 in the file stays until
+  dragged), blend, and the mask as rows with **remove** and a box offering
+  the named entities under the animator's — and the transitions and trees
+  of every layer, each under its layer's name; while playing, each
+  layer's state. The `character` example's machine has an additive
+  `impact` layer: an empty `steady` state and a `squash` (`hero/land.
+  anim.ron`, keyed as a change from no change) the game triggers on every
+  landing, over the ground and air states.
 
-- **Not yet**: crossfades, blend trees, layers, a visual graph editor,
-  exit time counting loops of a looping clip.
+Rejected: **blending in the animator** — the mix is the keyframes layer's,
+which blend trees and layers reuse; **a machine-wide default duration** —
+two places to look for one fade; **eased fade curves** — linear is what
+Unity and Godot default to, and a curve can join later as a field;
+**sub-state machines**; **a graph editor now** — the file is short and hot
+reloads; **children each on their own clock** (stage 120) — a walk and a
+run blended out of phase slide the feet, which is what sync is for;
+**a `motion` enum field** in the file (`motion: Clip(...)`) — it would
+break every older file, where two optional fields written bare break
+none; **Unity's angle-sorted simple directional** — it is the Delaunay fan
+for its own layouts and undefined for others, so the triangulation is the
+general case at the same cost.
+
+- **Not yet**: of layers: synced layers (Unity's, a layer reusing
+  another's states with other clips), IK passes, a layer's own parameter
+  set, a mask per property; a visual graph editor, interruption
+  rules (Unity's interruption source and ordered interruption: here any
+  transition may interrupt a fade), a fade's offset into the incoming clip;
+  of blend trees: a tree as a tree's child (Unity's nested trees), a speed
+  per child, Unity's freeform (gradient band) 2D modes, the outgoing
+  tree's weights following the parameters through a fade (they hold),
+  caching a 2D tree's triangulation (it is recomputed per evaluation —
+  microseconds for the ten or so children a tree has; a machine-side cache
+  when a tree grows), and a visual blend-space view in the inspector.
 
 Pinned by `animator/tests.rs` (starting in the start state with a player
 added, a float moving between states at a state's speed, a trigger spent
 and an any-state transition not re-entering itself, exit times waiting for
 a clip, a reload keeping a state or restarting without it, bad transitions
-dropped, a broken file running nothing, the shipped machine reading whole).
-The `character` example's idle, run, jump and fall are a machine.
+dropped, a broken file running nothing, the shipped machine reading whole
+and crossfading every move) and `animator/tests/crossfade.rs` (a fade at
+half way, a transition mid-fade fading from the mix, a duration of zero
+cutting and not being written, a bad duration cutting, a machine reloaded
+and an entity despawned mid-fade, an exit time counting loops, an exit
+time above one on a clip played once and on one of no length) and
+`animator/save.rs` (a save keeping what loading dropped, and writing an
+edited tree) and `animator/tests/tree.rs` (a 1D tree's weights at, between
+and outside its thresholds every frame; a 2D tree at a child, on an edge,
+in a triangle and outside the hull; children in step and an exit time
+counting a tree's loops; an empty tree warning and playing nothing; a tree
+crossfading into a clip state and back; a reloaded tree's thresholds and
+clips taken at once, in step; a parameter that is not a float reading 0; a
+clip state written as it always was) and `animator/tests/layers.rs` (each
+layer in its own state over layer 0's, a trigger spent and the wave masked
+to the arm, an empty state playing nothing, an exit time back; a layer's
+weight set by the game and forgotten by a restart; a reload that renames a
+layer restarting it and one that drops them all handing back; a one-layer
+file written without `layers` and read back equal, a layered one too; a
+layer checked against its own states with its weight kept; a save writing
+the edited weight, mask, blend and a layer's fade and keeping a typo; a
+machine swapped for a one-layer one and an animator removed taking their
+layers out, a game's own layer left; a weight by a shared name reaching
+the first layer) and
+`tree/line.rs`, `tree/plane.rs`
+(the weights' edge cases: shared thresholds and points, a line, one child,
+a square on one circle, numbers that are not finite), and
+`keyframes/synced.rs`, `keyframes/tests/synced.rs` (the weight-averaged
+length and phases, weights moving without the clock, a set played once
+ending, a set faded into and out of).
+The `character` example's ground state is a blend tree of idle, walk
+(`hero/walk.anim.ron`, authored for it) and run by `speed` — the
+character accelerates, so the mix passes through the walk — and its jump
+and fall clips are crossfaded to and from it; its `impact` layer squashes
+it on landing.
 
 ### Navigation is a grid baked from colliders, in a crate of its own
 
@@ -4424,6 +5642,15 @@ has a template.
   the editor gives a spawned body.
 - Templates stand in for reflection: an AI client learns a component's
   fields from its default value, in the same text it will hand back.
+- **Fields by path (stage 125).** `save_tree` / `load_tree` answer any
+  registered component as a `SerialTree` — its `Serialize` calls recorded
+  with every name serde gives, replayed into RON byte for byte — which
+  `differences`, `find` and `put` address by a `TreePath` of `Field`,
+  `Index`, `Variant`, `Inner` and `Key` steps (Unity's property path). A
+  `Variant` step matches only its own variant, so a circle's `radius` is
+  never a capsule's. A field `skip_serializing_if` left out is *absent*,
+  not nowhere: `put` adds it, or takes it out to bring the default back.
+  What the inspector edits a selection through.
 
 Pinned by `format/registry/tests.rs` (every built-in but structure has a
 template that loads into an entity and saves back identical; `describe`
@@ -4479,6 +5706,15 @@ target and reads it back as RGBA (`Screenshot`, with `pixel`, `save_png`,
   shows them; a map that fails logs and answers black rather than panicking.
 - The device and the texture store are made on the first shot and reused;
   the targets resize to each shot's size.
+- **The HUD's controls need a screen.** A session without one
+  (`Headless::with_screen`) leaves the controls alone, so a shot draws
+  each button in its sprite's own colour, not its face — the platformer's
+  white Save and Fullscreen buttons, their white labels lost on them, in
+  the stage 130 dogfood pass. The MCP `run_scene` lays its HUD out on the
+  shot's size, or on the window its app is made with
+  (`WindowConfig::default()`) when no shot is asked for: a player always
+  has a window to lay it out on (pinned by `voltra-mcp`'s `tools/run.rs`
+  test).
 
 Pinned by `app/headless/tests.rs` (a red square in the middle of a 64×64
 shot through a camera, the clear colour at the corner, PNG bytes, a second
@@ -4907,7 +6143,17 @@ shipped build links it statically. `games/platformer` is the first: a
   (a build script of `voltra-core`), the engine version, the profile, and a
   fingerprint of the `TypeId`s and layouts of the types a game shares with
   its host; `Stamp::check` names the first that differs — the compiler
-  before the types it changes. In practice: build the editor and the game
+  before the types it changes. A `TypeId` moves with the crate's metadata,
+  not with a field added to the type, so every component the sample games
+  read out of the world directly is hashed with its size and alignment too
+  (stage 123, after a library built before `CharacterBody2D` grew three
+  fields passed the check and read its walker through the old layout):
+  `Transform`, `Sprite`, `RigidBody`, `Collider`, `Sensor`,
+  `CharacterBody2D`, `CharacterContact`, `Camera`, `Name`, `Text`,
+  `AudioSource`, `ParticleEmitter`, `PrefabInstance`, `PrefabPart` and
+  `Tilemap`. A component a new game reads joins the list; a change that
+  keeps a type's size (a field retyped to one as large) still passes, which
+  is why the editor and the game are built in one command. In practice: build the editor and the game
   in **one** `cargo build -p voltra-editor -p <game>`, so features unify.
   Each half otherwise carries its own copy of the engine, and that is
   sound exactly when the types are the same: `tests/plugin.rs` loads the
@@ -5424,7 +6670,8 @@ crisp while the camera moves.
   submitted before the next's uniforms are written.
 - **`Camera::pixel_perfect`** snaps the view so the target's pixel edges
   fall on the world's pixel grid (`Shot::view`): moved by under half a
-  pixel, never scaled. With nearest filtering —
+  pixel, never scaled — and not at all while the camera is turned (stage
+  124, under "A camera rig is two components"). With nearest filtering —
   `App::with_texture_filter(Filter::Nearest)`, the project's choice as
   Godot's `default_texture_filter` is — a sprite at whole texels lands
   texel for pixel.
@@ -5998,7 +7245,8 @@ server gave it (what replication will name an owner by).
   encryption. Request and response are padded to 64 bytes — more than any
   answer — so a spoofed source gets no amplification. The fingerprint
   hashes the game's `NetConfig::protocol`, the channel layout, the message
-  size and the channel budget: a mismatch is refused as
+  size and the channel budget (and the replication and lobby wire
+  versions, stages 127 and 129): a mismatch is refused as
   `ProtocolMismatch` at the door rather than misread later. A response
   from a connected address with a new nonce is that client restarted.
 - **Keep-alive, timeouts, reasons**: an empty payload when an ack is owed or
@@ -6405,8 +7653,9 @@ discard_changes }`, `HierarchySearch { query }` (matches and the parents
 kept) and `AssetSearch { query }`; `Status` gains `prefab_trail`.
 
 **Not yet**: Unity's "in context" mode (the level drawn dimmed behind the
-prefab); a variant (a prefab of a prefab with overrides); searching by a
-component's field values.
+prefab); searching by a component's field values. (A variant — a prefab of
+a prefab with overrides — is stage 126: opened here, its edits are its
+overrides on its base; see "An instance follows its file".)
 
 Pinned by `prefab_mode/swap.rs` tests (a prefab saved in its mode
 reaching the scene, an override kept; a prefab dropped into itself found
@@ -6770,6 +8019,66 @@ connections and the scene; `voltra-core` drives it from the loop and
   entities of the client's level the server never had (one it despawned
   before the client joined) — once only, since a replicated entity spawned
   on the client later races the server's spawn of the same.
+- **Both ends hold the level under the file's ids** (stage 130). A
+  dedicated server opens its scene as authored (`Headless::open`); a game's
+  binary opens its first one with `App::load_scene`, whose copy gave every
+  entity a fresh id — so no level entity of a client (or of a listen host)
+  was ever the other end's, every one was swept and sent back bare,
+  without the sprite the level gave it: the arena's coin was invisible and
+  its bot idle in every build (the tests open their scenes as authored,
+  which hid it). With replication on (`Net::replicates`), on either end,
+  **a level keeps its file's ids** on exactly these paths:
+  `Headless::open`; `App::load_scene` / `Tick::load_scene`
+  (`prefab::spawn_scene_as_authored`); `App::change_scene` /
+  `Tick::change_scene` (`StagedScene::keep_ids`). Fresh ids on the rest:
+  an additive load (`add_scene`, which may load a scene twice), a
+  streamed region (a world's regions are fresh on both ends, so a
+  client's region copy is never the server's), any load without
+  replication, and every prefab spawn. A record whose id a `Persistent`
+  entity holds — one that outlives the change — is left out, with what
+  hangs under it, so no two entities answer to one id.
+  **A client's change sets the level's replicated entities aside**
+  rather than spawning them (`Replicas::SetAside` →
+  `ReplicationClient::keep_level`): kept in the stash under their file's
+  ids, unnumbered, the server's copy of each is spawned from them when
+  its spawn arrives — sprite and children and all, whenever it comes,
+  before or after the client's own load — and one the server never
+  sends stays aside until the level goes — a coin taken before the
+  client loaded the level does not come back as a ghost. A synchronous
+  replace (`load_scene`) sets them aside the same way
+  (`spawn_scene_as_authored` answers what it left out). The set-aside
+  records outlive the session connecting (a game's opening level is
+  loaded before it joins) — and, by design, a reconnect: a client that
+  joins a server on another level without loading it keeps records
+  nothing matches, a stale `level_waiting`, until its next scene change;
+  bounded by one level and never spawned, so no ghost — and are counted
+  apart from interest (`ReplicaStats::level_waiting`). A server copy of the new level that
+  arrived before the change swept the old one went with it; the client
+  asks for it again (`resync_despawned`) rather than when it next
+  changes — and keeps asking (`client/resync.rs`), 64 a message at
+  most, the ones asked longest ago first, until its spawn arrives, the
+  server despawns it, it goes out of interest or the level goes: the ask
+  rides the lossy input channel. An ask is listed again only once its
+  answer could have come back — the round trip plus four times its
+  variation, RFC 6298's bound — since each ask the server reads starts
+  the entity over and sends it whole; the client knows an ask is
+  outstanding, so the throttle is the client's. The server answers an
+  ask for an entity it no longer has with a despawn, which travels in
+  every snapshot until acknowledged: despawned while its view was being
+  started over (no spawn sent, so none owed), it would otherwise be
+  asked for for good. Only an id the server has issued is answered so,
+  and at most 256 such despawns (`MAX_ASKED_GONE`, four messages' worth)
+  wait per client, counted apart from the real ones, which are never
+  refused and go first in a snapshot: a client asking for made-up ids and
+  never acknowledging cannot grow what the server keeps (`server/ask.rs`). A client's streamed region still leaves them out
+  (`Replicas::LeaveOut`).
+  Pinned by `tests/opening_level.rs` (the opening level; both ends
+  changing scene together, the server first and the client first; a
+  level reloaded over a persistent entity it holds, by load and by
+  change; a coin the server took before the client loaded its level, by
+  load and by change, not coming back; the asks lost for twenty frames
+  around a change, the coin still coming back; an ask whose entity the
+  server despawned while the answer was lost, settled).
 - **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
   datagram with room for its header, 60 KB/s at 60 Hz) bounds each
   client's snapshot. Due entities are taken by banked priority — each
@@ -6779,7 +8088,9 @@ connections and the scene; `voltra-core` drives it from the loop and
   until the next does not fit; a smaller one after it still may. A single
   update larger than the whole budget goes alone, with a warning, rather
   than starve. A snapshot that held everything due says so (`complete`).
-  No interest management: every client is sent every replicated entity.
+  With interest management (stage 127, below) the budget is shared only
+  by the entities relevant to that client; without it, every client is
+  sent every replicated entity.
 - **Untrusted input.** A snapshot or client message that will not decode
   is dropped whole; a client's lists are cut at 64; a component value that
   will not decode changes nothing. A client whose game despawned a
@@ -7009,6 +8320,617 @@ build, on WebGPU and WebGL2, joins a native `arena-server` over WebSocket
 from its page's `?join=`; the server spawns the page's player and the page
 logs that it predicts it. Guide chapter `docs/guide/08-networking.md`,
 whose checked blocks run the match test and the server for two seconds.
+### Each client is sent what is near what it watches, and what leaves is despawned on it
+
+Stage 127. `ReplicationConfig::interest: Option<Interest { radius,
+cell_size, hysteresis }>` — `None`, the default, sends what stage 114
+sent, every replicated entity to every client, with two bytes more on
+the wire: the snapshot's cull list, empty (one byte), and the schema's
+interest flag (one byte, once). Pinned: with a radius covering
+everything, every snapshot is the same size as with `None`, frame by
+frame, and the client ends with the same world. Only the server's is
+read. The wire change is `REPLICATION_WIRE_VERSION` 2, which the
+handshake checks (`NetConfig::layer_version`, in the fingerprint): a
+0.3 peer is refused with `ProtocolMismatch` at connect rather than
+failing every snapshot after it. Bump it on any change to a
+replication message.
+
+- **Relevance.** An entity is relevant to a client when it is within
+  `radius` of one of the client's *interest points* — where the entities
+  it owns (`NetOwner`) are, plus the points the game sets for it
+  (`tick.net.set_interest_points(peer, points)`: a spectator's camera, a
+  scout's sight; replaced by the next call, dropped when the peer leaves,
+  refused for a peer not joined, at most `MAX_INTEREST_POINTS` (16) —
+  each is a grid query every snapshot)
+  — or when it is `Replicated { always_relevant: true }`, or it has no
+  `Transform` (the match's state has nowhere to be far from). A
+  `Replicated::relevance_radius` replaces the session's radius for one
+  entity. The owned entity's root is always relevant to its owner,
+  wherever it is: a client never loses the entity it predicts. Both new
+  fields are `#[serde(default)]` and unwritten at their defaults, so every
+  scene written before reads and writes back unchanged; the inspector's
+  Replicated section edits them with the priority. Unreal's
+  `bAlwaysRelevant` and `NetCullDistanceSquared` per actor; Unity
+  Netcode's distance-based visibility and Godot's per-peer
+  `MultiplayerSynchronizer` visibility are the same switch with a
+  callback where this has a grid.
+- **The grid, not per-pair distance** (`interest/grid.rs`): a uniform
+  grid over the replicated roots, rebuilt each snapshot (a thousand hash
+  pushes is cheaper than tracking which entity moved out of which cell,
+  and a rebuilt grid cannot drift), and each client reads only the cells
+  within its leave radius of each of its points. Unreal's replication
+  graph keeps the same grid node (`UReplicationGraphNode_GridSpatialization2D`).
+  Per-pair distance is clients × entities every tick; the grid is entities
+  once plus each client's neighbourhood, and the snapshot that follows
+  reads only the relevant entities too (it read all of them before, to
+  find what was due). A cell size far below the radius would make the
+  range larger than the occupied cells, and the query reads those instead;
+  an entity with its own radius larger than the session's is checked
+  against every point, as no cell range covers it. Measured in release
+  at 1000 entities over a 400-unit map, radius 30, one point per client
+  (`voltra-bench`, `interest/…`, two runs): at **8 clients** the grid's
+  rebuild and queries take 22–33 µs and the per-pair check 14 µs — eight
+  thousand distances are cheap, and the rebuild is a fixed cost; at **64
+  clients** the grid is 60 µs and the pairs 124 µs, the grid flat in
+  clients where the pairs grow with them (and with the map, at a constant
+  density). Either is under 5 % of the frame. What interest buys is the
+  frame: a server step replicating the thousand moving entities to 8
+  clients is **0.71–0.76 ms with interest, 3.5–3.8 ms without** — the
+  snapshots read 20-odd relevant entities each instead of a thousand. The
+  grid is kept for the shape the plan is going to (more clients, larger
+  maps), and because what it costs at 8 is noise. Its cells hash with one
+  multiply (`CellHasher`; SipHash was a third of a rebuild) and keep their
+  lists across rebuilds.
+- **Hysteresis.** An entity enters at `radius` and leaves past
+  `radius × (1 + hysteresis)` (0.1 by default), so one on the edge is not
+  despawned and spawned every tick (pinned: moved back and forth across
+  the radius for four seconds under loss, the client keeps one copy).
+- **Hierarchies follow their root.** A replicated child is relevant
+  exactly when its topmost replicated ancestor is — placed by the root's
+  position, not its own — so a client never holds half a hierarchy (a
+  turret without its tank). The hierarchy itself is not replicated, so a
+  client's tree can be one the server has since changed: when a culled
+  entity is set aside, a replicated child of it on the client that the
+  server still sends (it was moved off on the server) is unparented and
+  left in the world, not despawned with it.
+- **Leaving is a cull, sent as a despawn is**: in every snapshot until
+  one carrying it is acknowledged (`culled`, beside `despawned`), and the
+  client despawns the entity and everything under it. Unreal closes the
+  actor's channel and destroys the actor on the client, and so does this
+  — nothing out of interest is left in a client's world to draw, collide
+  or be found by a query. But a spawn brings back only replicated
+  components, and an entity of the level carries more on the client (the
+  sprite it was loaded with, a prefab instance's overrides, its children
+  that only draw); destroyed outright, it would come back bare. So the
+  client sets its own state aside first (`client/stash.rs`): the entity
+  and its non-replicated descendants as records, by `SceneId`, without
+  the replicated components (the spawn brings them whole, and one the
+  server removed meanwhile must not come back). Unreal loses a startup
+  actor's non-replicated state this way; keeping a hidden copy in the
+  world instead would have every system skip it.
+- **Entering is a spawn**, with full state: a fresh view per client, so
+  every component the server has is due (a component changed or removed
+  while away arrives as it is now — pinned), acknowledged like any spawn.
+  The client spawns it from what it set aside under that id (same ids,
+  parents resolved once per snapshot), else by prefab, else bare, then
+  lays the replicated components over it. An entity is not sent again
+  while its cull is unacknowledged: a spawn overtaking its own cull would
+  be despawned by it. An acknowledgement of a snapshot older than a view
+  is of a copy the client no longer has, and is ignored (the same now
+  holds for `resync`).
+- **Despawned while away**: the server remembers per client which
+  entities it culled and the client acknowledged, and sends those a real
+  despawn, so the client lets go of what it set aside. A client that
+  joins late sweeps the level's replicated entities it was never sent
+  (stage 114's first complete snapshot) into the same store rather than
+  destroying them — under interest, never sent may mean only far away —
+  and spawns the level's copy back when one comes near. Those have no
+  number the server sends, so no despawn reaches them: they are let go of
+  when their level goes — a scene change lets go of every one
+  (`ReplicationClient::forget_unsent`, called by the loop), a region
+  unloaded of its own alone (`forget_unsent_of`, with the ids of the
+  replicated entities the region spawned, noted as each landed, so one
+  swept while the region was still loading is let go of too; stage 130 — it had let go of every swept entity, so a still-loaded
+  level's came back by prefab or bare). That covers a region loaded
+  before joining, whose entities carry fresh ids the server never sends.
+  One the server despawned before the client joined is kept until then.
+- **References** (`SceneRefs`: a joint's other body, a camera target) to
+  an entity out of interest name an id the client does not hold; they
+  resolve the way a reference to any id not yet spawned does, once both
+  are relevant — a joint to a body out of interest joins nothing on that
+  client (`joint_ends` finds bodies by id every step) until it is back. A game whose client-side logic needs the target relevant
+  marks it `always_relevant` or gives it a radius.
+- **Budget**: an irrelevant entity costs a client nothing — no view, no
+  bank, no bytes; the relevant ones are taken by banked priority within
+  `bytes_per_snapshot` as before (pinned: 300 entities moving far away
+  and 20 near under a 600-byte budget, every snapshot complete).
+- **Editor**: `Window ▸ Network` shows each client's relevant entities
+  in the server's table and draws each client's interest radius round its
+  points on its map; `net_play` answers `relevant` per server peer; the
+  profiler's `net relevant` counter sums them. `games/arena` opts in at a
+  radius of 20 (its floor is 17 × 9: everything stays relevant, the grid
+  still runs end to end) with its coin `always_relevant`; its match test
+  checks the server culls by interest and each client holds all four.
+- **Not yet**: interest by anything but distance (teams, line of sight,
+  a room graph — Unreal's other replication graph nodes); dormancy (an
+  entity at rest kept relevant but not compared each tick); the editor's
+  network play setting interest itself (it hosts with the default config,
+  so a game's interest applies to a dedicated or listen server it
+  starts).
+
+Pinned by `voltra-core/tests/interest.rs`: entering at the radius and
+leaving past it under 20 % loss, back again where the server has it, and
+let go of once despawned while away; what a late joiner swept let go
+of at a scene change; a child the server moved off its culled parent
+left in the world; the edge held for four seconds with
+one copy; always-relevant, positionless and own-radius entities; the
+owned entity's far root and a hierarchy that comes and goes whole;
+the owner despawned and a spectator point set; a level entity back with
+its sprite, a changed component and a removed one; the budget; the
+same snapshot sizes and world as `None`; a client joining late;
+(`tests/replication.rs`) a peer on the previous wire version refused;
+(`tests/streaming_replication.rs`) a region unloaded letting go of what
+was swept of it while the level's far door is kept and comes back with
+its sprite. Unit tests of
+the grid (radius, leave radius, own radius, a tiny cell, negative cells),
+the stash (kept but for the replicated components, a replicated child
+kept on its own, let go of), the view (a cull acknowledged, an old
+acknowledgement missing a new copy), `Interest`'s checks, `spawn_records`
+and `Replicated`'s format.
+
+### A shot is tested where its shooter saw the target, no further back than a bound
+
+Stage 128. A client draws remote entities a jitter buffer behind the
+newest snapshot (stage 115), which is a round trip and that buffer behind
+where the server has them. A server that tested a client's shot against
+the world as it is now would make every player lead their target by
+their own latency. So the server keeps the recent past of what can be
+shot and tests each shot there.
+
+- **What is remembered**: entities marked `LagCompensated` (voltra-scene,
+  a unit marker beside `Replicated`; registered, `"LagCompensated": ()`
+  in a file; the inspector's checkbox under *Replicated*, shown on any
+  replicated entity or one already marked). Each server tick, after the
+  fixed step, the loop records every marked entity's `Collider` and
+  `Transform` (`PoseHistory::record`, `voltra-physics/src/rewind.rs`) as
+  that tick — the tick the snapshot carries, so the history and what the
+  client draws are the same values. The *shape* is recorded with the pose
+  (a `Collider` is `Copy`; a crouch that swaps the box is tested at the box
+  it had). Sorted by entity, binary-searched; the ring reuses its oldest
+  tick's storage. A tick not after the newest (a new session) starts it
+  again. Unity Netcode's `PhysicsWorldHistory` keeps every collider; Source
+  keeps only players; this keeps what the game marks, so the walls cost
+  nothing and an unmarked game costs an empty query a tick.
+- **The view time travels with each input** (`ViewTime`: the server tick
+  and 256ths of the next, a few bytes; `ReplicationClient::queue_input`
+  takes it from the `Timeline`'s drawn moment when the input is made —
+  the frame the player was looking at). Per input, not per message or from
+  an RTT estimate: the server's input queue keeps each input's moment and
+  `ReplicationServer::view_time(peer)` is the one of the input this step
+  simulates. Valve computes the target from `cl_interp` and the latency
+  the server measures; reporting the drawn moment instead covers the
+  measured, moving jitter buffer of stage 115 exactly, which a fixed
+  `cl_interp` does not have. **Wire version 3** (`REPLICATION_WIRE_VERSION`):
+  the input list's entries grew the moment, so a 0.4-stage-127 peer is
+  refused at the handshake.
+- **The bound** (`LagCompensation { history, max_rewind, slack }`, a
+  field of `ReplicationConfig`, on by default; only the server's is
+  read): the reported moment is the client's word, so
+  `LagCompensation::target` takes it no later than the newest tick held
+  (a client claiming the future gets the present) and no further back
+  than what the server *measured* of that client allows —
+  `LagCompensation::allowed` of a `MeasuredLag`
+  (`ReplicationServer::measured_lag`): `rtt + 4 × rtt_variation` (TCP's
+  RFC 6298 bound on a round trip; voltra-net's connection now keeps
+  `RTTVAR` beside the smoothed RTT, `ConnectionStats::rtt_variation`),
+  plus two snapshot intervals (a client's jitter buffer is its worst
+  staleness — up to an interval of waiting for the next snapshot, plus
+  the jitter — and one interval on top), plus the ticks that input
+  waited in the server's queue (`InputQueue` notes each input's arrival
+  tick), plus `slack` (50 ms: the frame an input waits for the client's
+  fixed step, jitter the buffer saw and the round trip did not) — capped
+  by the absolute `max_rewind` (500 ms); `PoseHistory` then takes it no
+  earlier than its oldest tick (`history`, a second, Source's). A view
+  lags the server by a round trip, the jitter buffer and the queue wait:
+  a fixed bound alone is either too tight for a slow link and sparse
+  snapshots (the first 200 ms bound sat exactly at the cap at 40 ms each
+  way with a snapshot every three ticks, and missed a fifth of perfectly
+  aimed shots at 60 ms each way or 100 ms at every tick) or lets a quick
+  client claim a slow one's past. Relative, a player is rewound as far
+  as their link really is; the cap is what a *target* can feel at worst
+  — shot behind cover half a second after reaching it, by someone whose
+  link truly is a 300 ms round trip with a 100 ms buffer, past what an
+  action game is played over. Source rewinds by its client's
+  `cl_interp` plus measured latency up to `sv_maxunlag` (one second);
+  Overwatch favours the shooter within a bound and makes the rest lead.
+  Pinned: with `max_rewind` 50 ms, shots are tested three ticks back at
+  most and the laggy shooter misses; a forged client claiming the full
+  cap on a quick link is held under ten ticks.
+- **The query** (`voltra-physics/src/rewind/rewound.rs`): `Rewound` — the
+  same `ray`, `cast`, `point` and `overlap_aabb` as `query`, reading a
+  table of past poses in place of the world's. Each marked collider is put
+  between the two recorded ticks around the moment with the `Interpolate`
+  the client draws with (so the history interpolated is what the client
+  interpolated), everything unmarked is read where it is now. The live
+  world is never changed: `query`'s collider walk takes an optional
+  pose table (`query/poses.rs`), so there is nothing to swap in and out,
+  no state another system or a panic halfway could see. Source moves its
+  players back and forward around the test
+  (`StartLagCompensation`/`FinishLagCompensation`), which is cheaper per
+  query and needs every reader of a position to know a rewind is on;
+  Unity tests against a copied collision world. A table of a hundred poses
+  is the cost of one rewound query — measured below.
+- **Who is there**: an entity spawned after the moment (not in the tick at
+  or before it) is not; one despawned since is not either — it is not in
+  the world to report, as in Source, where a player gone is gone from
+  every rewind, and a hit on an entity that no longer exists would hand
+  the game an id it cannot use. One recorded before the moment and not
+  after (it lost its collider) is held at the earlier pose.
+- **Interest** (stage 127) is enforced: `Net::rewound` hides every
+  collider the server replicates — marked or not — that was not relevant
+  to the peer at the last snapshot: the client had no copy of it to aim
+  at. Read from the relevance set the snapshot already built, so it is a
+  set lookup per replicated collider; what is not replicated (the
+  level's walls, loaded on every end) stays, and a peer that is not one
+  of the server's clients (the listen host) or a session without
+  interest hides nothing.
+- **Moved in the fixed tick**: poses are recorded after each fixed step,
+  so a lag-compensated entity moved in the per-frame `update` is in the
+  history only from the next step, and the guide says so.
+- **Through `tick.net`** (`voltra-core/src/app/tick_lag.rs`):
+  `rewound(world, peer)` in the server's fixed tick — the world as `peer`
+  saw it when it made this step's input; the world as it is for a peer
+  with no input this step, the listen host, off a server, or with lag
+  compensation off. `rewind_target(peer)` says the tick it chose,
+  `rewound_to(world, tick)` rewinds to a tick of the game's own within the
+  same bound, `pose_history()` reads the ring. The shooter is where it is
+  now: it predicted itself, so the server's copy is where it fired from.
+- **The arena zaps**: a player zaps the nearest other player in reach
+  (`games/arena/src/zap.rs`; `Steer` grew `zap: Option<(i8, i8)>`, the
+  keys' `zap` action (Space) or the bot always, a second's cooldown on the server); a
+  zap that lands is worth a point. The server fires it from where the
+  shooter stood before the step's walk, as its client aimed, into
+  `tick.net.rewound`, and logs how many ticks back and whether the same
+  ray at the live world would have missed. Players gained a `Collider` and
+  `LagCompensated` in their prefab (no body: statics never pair).
+
+Measured in release (`voltra-bench`, `lag/…`, 100 lag-compensated boxes
+over a second of history, ten unmarked walls; two runs): a **rewound
+ray is 13–18 µs**, the same ray at the live world 5–7 µs — the table of
+a hundred past poses (two binary searches and an interpolation each, one
+hash insert) is most of the difference, and is made once per
+`rewound`, so a game testing several shots of one input asks once and
+casts many. Recording the hundred each tick is 2.6–4 µs. A zap a player
+a second at 60 Hz is noise beside a frame; a server testing every
+client's every input against a hundred targets (8 × 60 a second) spends
+under 1 % of its time there.
+
+- **Not yet**: rewinding anything but colliders (an animation's hitboxes
+  per bone, a sprite's frame); a rewound physics *step* (projectiles flown
+  in the past); relevance at the view time rather than at the last
+  snapshot (an entity that entered interest within the rewind is hittable
+  a few ticks early); a newly spawned entity is drawn at its spawn pose
+  for one interpolation delay before the server's history says it
+  existed, so a shot aimed at it in that time misses (the spawn sample
+  could be taken as valid from the moment it is first drawn); the editor
+  drawing a rewound pose.
+
+Pinned by `voltra-core/tests/lag_compensation.rs`, 40 ms each way: a
+client aiming at a target moving up to 8 units a second where it draws
+it — every shot hits the rewound world, most miss the live one, rewound
+5–12 ticks; at least 99 % of perfectly aimed shots hitting at 40 ms each
+way with a snapshot every three ticks, 60 ms with every three, and
+100 ms with every tick; a client forging the full cap's claim on a quick
+link held under ten ticks by its measured lag; `max_rewind` 50 ms
+holding every rewind to three ticks; no history, every query live; a
+far target and a far unmarked collider out of interest both hidden.
+`games/arena/tests/match.rs`: one of the two bots, its sends 60 ms
+slower, lands zaps the server tested further back than the other's
+(four ticks and more, the other's two or so), none past twelve (its
+measured lag allows about ten); an
+input made before its client drew anything carries no moment and is
+tested at the present. Unit
+tests of the ring (`rewind/tests.rs`: past pose hit and present missed
+and the reverse, interpolation between two ticks, spawned after,
+despawned, wraparound and the oldest clamp, newest-or-later and empty =
+live, unmarked live, every query, hidden, the recorded shape, a tick
+going back), of `ViewTime` and `LagCompensation` (in the bound, the far
+past clamped at the cap, a quick link held to its measured lag and each
+measurement widening it, the future clamped to now), of the input queue
+(each input's own view time and wait; none without input), and of
+voltra-net's round-trip variation (measured on a jittery link).
+
+### Before the match the server holds a lobby; on a LAN a server answers a probe
+
+Stage 129. Two pieces in `voltra-net`, both optional, wired through
+`tick.net`, and a screen in `voltra-core` that drives them.
+
+- **The lobby** (`voltra_net::lobby`): a `Lobby` — slots
+  (`max_players`), a minimum to start (`min_players`), entries in join
+  order (`peer`, `name`, `ready`), a host, a phase (`Waiting`,
+  `Playing`) — held by the server and changed only there, by its rules:
+  a join under a name (sanitised: see **Names** below; then made
+  unique as `Ada 2`); ready, before the match; start, by the host, only
+  with every player ready and enough of them; a leave.
+  `LobbySession` pumps it with the endpoint (`receive` after the
+  endpoint's, `send` before its flush — the loop does both): the server
+  sends every player the whole lobby whenever it changed, a client
+  mirrors it and asks (`Hello { name }`, `Ready`, `Start`). Both ends see
+  the same `LobbyEvent`s (`Joined`, `Left`, `Renamed`, `ReadyChanged`,
+  `HostChanged`, `Started`, `Finished`, and to a client `Refused`,
+  `Closed`), derived on both by diffing the lobby before and after —
+  leaves first, then joins and changes, then the phase, so `Started`
+  comes after every `Joined`. What this end's player does is an event
+  of the next frame, as everyone else's is. What "start" does is the
+  game's: the engine says when (the arena spawns a player per entry).
+- **Names** (`lobby/name.rs`) are untrusted text drawn beside others,
+  so Unicode's own tools decide, not a hand-written list: every format
+  character (general category Cf — zero-width ones, bidi overrides and
+  isolates, a BOM, tags) goes, but a ZWJ between two emoji and VS16
+  after an emoji or a keycap digit; control, private-use and
+  unassigned code points too; NFC before the cut, so a name is cut
+  between characters as typed; at most `MAX_MARKS_PER_BASE` (3)
+  combining marks on a base (Vietnamese needs two; Zalgo is capped);
+  uniqueness by the compatibility caseless match (D145: NFKC with full
+  case folding — `ＡＤＡ`, `ADA`, `ada`, `STRASSE`/`straße` are one
+  name). `unique_name` never answers longer than its cap, and
+  `max_name_chars` is always at least the digits of `max_players`, so a
+  full lobby's names can all be told apart. Leaf crates:
+  `unicode-normalization`, `unicode-general-category`, `caseless`.
+- **Bounded snapshot.** The whole lobby goes in one message, so its
+  worst case — every slot, every name at its longest in four-byte
+  characters — must fit: `max_name_chars` gives way in a lobby so large
+  it would pass `MAX_LOBBY_SNAPSHOT` (60 KiB, under the default 64 KiB
+  message limit; 255 slots take 58-character names), and
+  `LobbyConfig::net_config` raises a smaller `max_message_size` to that
+  constant — not to this config's own worst case: the limit is in the
+  fingerprint, and a client and a server with other slots or name
+  lengths must make the same session.
+- **Peers are counted out by the session, not by events.** A server
+  ignores lobby messages from a peer no longer connected (a hello and a
+  goodbye read in one receive would otherwise leave an entry nobody
+  takes out, a slot lost for good), and at the end of every receive
+  drops the entry of any non-host peer not connected. A connected peer
+  that has not said hello within `LobbyConfig::join_deadline` is cut
+  off, so silent connections cannot hold every session slot. The
+  deadline is the session's `NetConfig::timeout` plus `JOIN_GRACE`
+  (2 s): 12 s by default, and `join_timeout` may lengthen it, never
+  shorten it below that — a client the session keeps through an outage
+  must not lose its join to the same outage. With the lobby on, `tick.net`'s replication
+  server replicates only to lobby members
+  (`ReplicationServer::set_audience`): a peer not in it — not yet
+  joined, or refused and waiting out its grace — is sent nothing of
+  the match, which keeps `LateJoin::Refuse` true.
+- **A lobby made on a session under way catches up**: a listen host's
+  own player is in at once, a client already connected asks in at the
+  next send, and a server gives connected peers the join deadline from
+  then. `tick.net.enable_lobby` while a session's lobby runs leaves it
+  be (rebuilding it would empty the room and cut every client at the
+  join deadline), warns, and keeps the config for the next session.
+- **A match started and finished between two snapshots** is still both
+  events: the lobby counts the matches it started (`Lobby::matches`,
+  on the wire), the diff emits `Started` then `Finished` when the count
+  moved, and a client diffs each snapshot it reads in turn (and none
+  read after its goodbye).
+- **Its own channel**, reliable-ordered (`LobbyConfig::channel`, 6:
+  after the game's three and replication's three), not the game's
+  reliable channel — a lobby message must never be in the game's
+  `received()`, as a snapshot is not. Its wire is versioned
+  (`LOBBY_WIRE_VERSION` 1) in a field of its own,
+  `NetConfig::lobby_version`, hashed into the handshake fingerprint
+  behind a tag so it cannot collide with replication's
+  `layer_version`: a client with another build's lobby, or none, is
+  refused as `ProtocolMismatch` at the door. `NetConfig::fingerprint()`
+  is public now: discovery advertises it.
+- **Decided**: a full lobby, and a join while the match is played with
+  `LateJoin::Refuse` (the default), are told why
+  (`LobbyRefusal::{Full, MatchUnderway}`) on the lobby channel and cut
+  off after `refusal_grace` (2 s) unless they leave first — a reason
+  sent with a kick would be lost with the connection. `LateJoin::Play`
+  lets them into the match (the arena's: drop-in, drop-out); a spectator
+  queue is not built. The host is a listen server's own player — its
+  leaving is the session ending, which closes every client's lobby
+  (`Closed`); no migration. On a dedicated server it is the first
+  player in, passed to the next in join order when they leave; the
+  server's game may also start the match itself (`start()` there needs
+  readiness, not a host's word) — the "admin flag", which a game's
+  server binary owns. `finish()` (server) ends the match: back to
+  waiting, nobody ready. A message that does not decode gets its
+  sender kicked; a snapshot no server would send (a peer twice, more
+  entries than slots, a host not in it) is dropped by the client, and
+  its names are sanitised again.
+- **Where it sits.** UNET's `NetworkLobbyManager` (slots, ready flags,
+  `minPlayers`, the match started when all are ready) is the shape;
+  Godot's multiplayer demos and renet's examples write the same thing
+  as game code with RPCs, and Unity's Lobby and Steam's lobbies are
+  online services (a non-goal: no matchmaking, no relay). Engine code
+  because every networked game needs the same bounded, versioned
+  protocol, and the names it shows are untrusted input; the game's part
+  — what start loads, who spawns — stays the game's.
+- **LAN discovery** (`voltra_net::discovery`, native only): a host with
+  `HostOptions::discovery: Some(Advertise { port, name, game, limits })`
+  answers probes on a socket of its own (`DEFAULT_DISCOVERY_PORT` 7779,
+  one above the WebSocket port), polled with the session; a client's
+  `LanSearch` (or `tick.net.discover`) broadcasts a probe to
+  `255.255.255.255` and any `targets`, again every `resend` (500 ms),
+  and lists who answered — `ServerInfo { name, game, players,
+  max_players, in_match, compatible, udp, websocket }` — until its
+  `timeout` (1.5 s). `compatible` is the protocol version and the
+  fingerprint the client would join with (`Net::session_fingerprint`:
+  replication's channels and the lobby's in); another build is listed,
+  greyed by the screen, and would be refused at the handshake. A probe
+  names its game, and a server of another game does not answer.
+  Mirror's and UNET's `NetworkDiscovery` (a broadcast on a known port,
+  unicast answers, a key/version) is the shape; the fingerprint is our
+  key, so "same game, other build" is shown rather than hidden.
+- **Untrusted, bounded, no amplification.** A probe is exactly
+  `PROBE_SIZE` (192) bytes, padded; an answer is at most
+  `MAX_ANSWER_SIZE` (131: fixed fields, a 32-byte game id, a 64-byte
+  name), asserted at compile time to be no larger — a forged source
+  gets back no more than it sent. Answers are token-bucketed per source
+  IP (a burst of 4, then 2 a second) and in all (128, then 64 a second),
+  over a table of at most 1024 sources (idle ones forgotten to make
+  room; with none idle, a new source is not answered); at most 64
+  datagrams are read a poll. Anything of another size, magic, version or
+  kind is dropped unread and counted (`DiscoveryStats`). A client takes
+  only answers carrying its own probe's nonce, at most 64 servers, and
+  sanitises the names it shows. A server is listed once per address and
+  game ports, not per answering socket, so an answer for other ports
+  never replaces it. Read errors about another datagram (Windows'
+  `WSAEMSGSIZE` for one too long) neither end a search nor warn every
+  tick — `udp.rs`'s `is_transient` decides for both ends — and a game
+  id past `MAX_GAME_ID` is matched as cut, as its probe carried it.
+- **The local network only, by default** (`DiscoveryScope::Local`, in
+  `Advertise::scope`): a responder answers private, link-local and
+  loopback sources (`10/8`, `172.16/12`, `192.168/16`, `169.254/16`,
+  `127/8`, `100.64/10` — shared address space, carrier NAT and mesh
+  VPNs such as Tailscale's, never publicly routed — `fc00::/7`,
+  `fe80::/10`, `::1`, and IPv4-mapped ones) and
+  drops the rest unread (`DiscoveryStats::out_of_scope`). A broadcast
+  never crosses a router, so every probe a LAN game wants comes from
+  those ranges; a public responder serves only strangers — scanners,
+  and forged sources the rate limit alone would still answer a
+  trickle. `DiscoveryScope::Anyone` (`voltra-server
+  --discovery-public`) answers everyone, for a server probed by
+  address across networks; listen hosts from the lobby screen keep the
+  default.
+- **The probe socket is a warning, not a failed host**: a second server
+  on one machine cannot bind 7779 (std has no `SO_REUSEADDR`), and is
+  hosted, off the lists, with the reason logged. Container networks
+  and some VPNs drop broadcasts: `SearchOptions::targets` probes named
+  addresses (a subnet's broadcast address, `127.0.0.1`), which is how
+  every test here probes.
+- **The web**: no UDP, so `LanSearch::start` and
+  `DiscoveryResponder::bind` are `DiscoveryError::Unsupported` there
+  (the API compiles for `wasm32`); a page joins by address. The lobby
+  works over the page's WebSocket as natively.
+- **The lobby screen** (`voltra_core::lobby`, the options screen's
+  pattern): `assets/prefabs/lobby.prefab.ron` — a menu page (Name, Host,
+  Find on LAN and its `Servers` list, Address, Join) and a room page
+  (`Players`, Ready, Start, Leave), parts found by name
+  (`prefab_parts::Parts`, now shared with the options screen).
+  `LobbyScreen::open(tick, &LobbyScreenConfig)` turns the lobby on if
+  the game has not; `update` hosts (a listen server, advertised as
+  "<name>'s game"), searches, joins from a row or the address, readies
+  and starts, shows the page the session calls for, greys Start for all
+  but a host who may start, and answers `LobbyOutcome::Started` in the
+  frame the match begins. A row is two texts, the name (`Server
+  label`, `Player label`) and the screen's words about it (`Server
+  detail`, `Player detail`: "1/4 · full", "you · host · ready"),
+  right-aligned in another colour, so a name like "Eve host" reads as a
+  name only. Those and `Status` are not rich (`rich: false`), and the
+  screen escapes the words where a game's own prefab makes them rich
+  (`markup::escape`): a peer's name is never read as `[size=…]`,
+  `[color=…]`, `[font=…]` or `[icon=…]`. The parser itself shows a
+  `[size=]` past `markup::MAX_SIZE` (4096) as written. The list rows are copies of the prefab's
+  template rows, kept hidden and stamped again when what they show
+  changes. On the web Host and Find are greyed. `cargo xtask new-game`
+  copies the prefab, with a test (`tests/lobby.rs`) that hosts, readies
+  and starts from it.
+- **`voltra-server`**: answers probes by default (`--discovery
+  PORT|off`, `--discovery-public`, `--name`, `--game`), holds a lobby
+  with `--lobby`, `--min-players`, `--max-players`; both sets of flags
+  are read in any order and laid over what a game's server sets
+  (`ServerOptions::lobby`, `HostOptions::discovery`) by
+  `Args::apply_flags`, so the command line wins. It writes `discovery
+  PORT` to its port file. **`games/arena`** starts on the lobby screen (`--solo` to
+  play alone): two to four players, drop-in; its bots ready up and,
+  hosting, start; the server spawns a player per entry at `Started` and
+  per late join, and falls back to spawning on connect for a session
+  with no lobby (the editor's network play).
+- **Not yet**: host migration; a spectator queue for late joiners;
+  kicking or banning from the lobby screen; a password; teams or slots
+  with roles; chat; matchmaking, NAT punch-through, relays (0.4's
+  non-goals); IPv6 discovery (the probe socket is IPv4, multicast would
+  be the IPv6 way); several servers on one machine sharing the probe
+  port; a server id in the answer (one server answering on two
+  interfaces — broadcast and a loopback target — is listed twice, once
+  per address, and a forged answer for a server's own address and ports
+  replaces its entry: a nonce seen on the LAN is enough to forge one);
+  confusable scripts in names (Cyrillic `а` for Latin `a`: UTS #39's
+  skeletons would be the tool).
+
+Pinned by `voltra-net/tests/lobby.rs` over a lossy memory network: two
+players joining (names cleaned and made unique), readying, the
+non-host's start refused, the host's started everywhere with every
+`Joined` before `Started`, `finish` back to waiting; a full lobby
+refusing a third with its reason, which leaves; a late joiner refused
+or playing by `LateJoin`; a dedicated server's host passing on; a listen
+host hosting and its shutdown closing a client's lobby; a client of
+another lobby version, and one with none, refused as `ProtocolMismatch`;
+a malformed lobby message getting its sender kicked; a match started
+and finished between two snapshots seen as both events.
+`voltra-net/tests/lobby_peers.rs`: a hello and a goodbye in one server
+receive, four times over a two-slot lobby, leaving no entry; a peer that
+never says hello cut off at its join deadline, its slot free.
+`voltra-net/tests/discovery.rs` over loopback (a directed probe — the
+same packet a broadcast carries): a server found with how to join it;
+another build listed incompatible and another game not listed; 200
+probes from one source answered 4–6 times, none larger than a probe;
+junk of every size dropped unanswered while a real probe gets through; a
+search with nobody there finishing empty at its timeout. Unit tests of
+the names, the state machine, the wire (round trip, impossible lobbies
+refused, random bytes), the config (fingerprint moved, channel taken
+over, limits), the packets (round trip, the largest answer no larger
+than a probe, names cut on a character boundary, wrong size, magic,
+version, kind, random bytes) and the limiter (burst then rate, the
+total shared, the table bounded). `voltra-core/tests/lobby.rs`: a
+listen host and a client readying and starting through their ticks,
+no lobby message in the game's `received()`, the host's stop closing
+the client's lobby; a host found on the LAN by a client that can join
+it and listed incompatible to one without the lobby, whose join is then
+refused; with a lobby, replication only to its player, not to a
+connected peer that never joined, which is then cut off at the join
+deadline. `lobby/screen/tests.rs`: the shipped prefab's pages and
+templates; hosting alone, Ready, Start → `Started`, Leave back to the
+menu; a second screen finding the first on loopback and joining from
+its row. `voltra-server/tests/session.rs`: the binary found by a probe
+under its `--name`. `games/arena/tests/match.rs`: the arena's server
+found on the LAN as a compatible arena with no one in, two bots readying
+up and the first in starting the match, then playing it as before.
+
+### The 0.4 stages played together (stage 130)
+
+Each 0.4 stage (119–129) was reviewed alone; this pass ran the whole: every
+suite as CI does, the games played headless and shot, and the stages made
+to meet in throwaway probes — kept as tests where they found something.
+
+- **Found and fixed.** A networked build's opening level had fresh ids, so
+  no client entity was the server's (*Both ends hold the level under the
+  file's ids*, under replication above) — the arena's coin invisible and
+  its bot idle on native and web. A region unloading let go of every swept
+  level entity, not its own (interest, above). An MCP run's screenshot drew
+  HUD buttons unlaid out, in their sprites' white (the screenshot section).
+  Test scratch folders were never removed and filled the disk (testkit
+  section). The new benchmarks of a few microseconds or less
+  (`keyframes/sample`, `keyframes/blend`, `lag/*`, `interest/grid` ×2)
+  spread 24–74 % over three runs taken while another build shared the
+  machine; they now take three times the samples (`Config::steady`: a
+  median of more is not moved by a few bursts slowed whole) and keep
+  their limits. An A/A over six runs with nothing else running (the
+  one-minute load average 4.1, 2.7 and 2.0 at the first three runs as the
+  build before it wound down, under 1.5 from the fourth; `voltra-bench
+  noise`, best of three against best of three) found every benchmark's A/A under 10 %, each within its limit
+  but `interest/server-frame-without` (7.5 %), raised from 15 to
+  `noise::suggest`'s 20.
+- **Met and held** (probes; the first two kept as tests in
+  `voltra-editor`): a base's instance and its variant's multi-edited
+  together, each overriding against its own prefab and the base's edit
+  still reaching what neither overrides; a variant instance duplicated —
+  numbered, still the variant's, its overrides copied; a lag-compensated
+  `CharacterBody2D` moved by `move_and_slide`, hit where its shooter saw
+  it; the character example's blend tree, crossfades, landing squash,
+  crate push and a rotated camera, shot headless; the editor and the
+  platformer built together, the editor loading the game under its stamp;
+  the hot reload test with every new component type in the stamp.
+- **Needs no code.** A rotated camera and interest: relevance is a radius,
+  which a view's turn does not change. Multi-editing an animator's layers
+  or trees: they live in the `.animator.ron`; the component's runtime
+  state is not serialized, so nothing of it is written across.
+- **Not yet**: a joint's break replicating (the joints section); camera
+  shake in the editor's three-client network play was read, not run — a
+  shake is per camera entity and view-only, each client's world its own.
+
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
 Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
@@ -7366,6 +9288,7 @@ moves only when the code it times does:
 | `text/layout/{paragraph-1k,labels-100}` | `Fonts::layout_uncached`: 1 000 characters shaped and wrapped at 400 px; 100 HUD labels — what a changed text costs |
 | `text/layout/{paragraph-1k,labels-100}-cached` | the same through `Fonts::layout`'s cache, warm (stage 108) — what a frame showing the same text again costs |
 | `scene/parse/{250,500}-entities`, `scene/load/250-entities` | `ron::from_str::<SceneFile>`, and that plus `from_scene_file` |
+| `prefab/sync-all/3000-instances-20000-entities` | `prefab::sync_all` over a level already in step: 3000 two-entity coin instances among 20 000 other entities (stage 126) |
 | `frame/headless/sandbox-640x360` | `Headless::screenshot` of `sandbox.ron`: record, submit, lavapipe, read back |
 
 GPU benchmarks are recorded as skipped, and never compared, where there is
@@ -7799,9 +9722,12 @@ Same problem, same rule: read the source, not a tutorial.
 | Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |
 | Context menu | `Response::context_menu(\|ui\| …)` opens on a secondary click; close it from inside with `ui.close()` |
 | Strokes | `Painter::rect_stroke(rect, radius, stroke, StrokeKind)` takes a `StrokeKind` (`Inside`, `Middle`, `Outside`) |
-| `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before |
+| Angles | `ui.drag_angle(&mut radians)` edits radians shown as degrees, unwrapped, and marks the response changed only when the degrees moved |
+| `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before. A range clamps the value *as shown*, edited or not; `.clamp_existing_to_range(false)` clamps only what the user drags or types (the animator's layer weight, stage 121) |
 | Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
+| Mixed values | `DragValue::custom_formatter(\|_, _\| "—".into())` shows text in place of the number; focused, the text is selected whole, so typing replaces it. `Checkbox::new(..).indeterminate(true)` draws the half-ticked state (the value still toggles on click) |
 | Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
+| Ellipse | `egui::Shape::ellipse_stroke(center, radius: Vec2, stroke)` (epaint 0.35) draws an axis-aligned ellipse; the Network window's interest radius uses it, its map scaling each axis on its own |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes
 
@@ -7862,6 +9788,16 @@ Both differ from most training data and from every tutorial written against
 | Errors | `Gilrs::new()` returns `Error::NotImplemented(dummy)` on unsupported platforms — usable, but we just skip pads |
 | Filters | default filters apply a small stick dead zone and axis-to-button thresholds before we see values |
 
+### `std::net::UdpSocket` broadcast notes
+
+| Thing | std (Rust 1.9x) |
+| --- | --- |
+| Sending to `255.255.255.255` | needs `set_broadcast(true)` first, else `EACCES` (Linux) / `WSAEACCES` |
+| Receiving a broadcast | a socket bound to `0.0.0.0:port` gets them with no option set (Linux, Windows, macOS); one bound to `127.0.0.1` does not |
+| No route | in a container or VPN with no broadcast route `send_to` fails (`ENETUNREACH`): log it, probe named addresses instead |
+| One port, one socket | std sets no `SO_REUSEADDR`/`SO_REUSEPORT`: a second bind of the probe port on a machine fails with `AddrInUse` |
+| An oversized datagram | `recv_from` into a buffer one byte longer than the largest wanted: a read that fills it was something else (truncated silently on Unix, `WSAEMSGSIZE` on Windows) |
+
 ### `tungstenite` 0.30 notes
 
 | Thing | 0.30.0 |
@@ -7890,4 +9826,5 @@ Both differ from most training data and from every tutorial written against
 | Thing | 0.12.2 |
 | --- | --- |
 | Untyped numbers are quadratic (**fixed in 0.12.3**, which the workspace pins since stage 108: the search is bounded to the number's own characters) | Reading a number through `deserialize_any` — every number inside a `RawValue`, so every number of a scene file's components — calls `Parser::next_bytes_is_float`, which runs `src()[skip..].find("..")` over **the whole rest of the input** to rule out a range operator. With no `..` ahead (the usual case) each number scans to the end of the file: a scene's parse is O(numbers × bytes). Measured (stage 107): 250 entities 80 ms, 500 entities 310 ms, 1 000 entities 1.5 s, 2 000 entities 6 s. Typed fields (`f32` into a struct) go through `float()` and do not scan |
+| `ron::Value` loses names | `deserialize_any` reads `Box(half_extents: ..)` as an anonymous struct: the struct and variant names are dropped, so a `Value` written back no longer reads as the enum. To edit a value field by field, record the type's own `Serialize` calls (`serial_tree`) instead |
 | `RawValue` whitespace (0.12.3) | Non-comment whitespace around a nested `RawValue` is trimmed when it is read, so a pretty-printed file read and written again no longer grows blank space around unknown components |

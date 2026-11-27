@@ -160,3 +160,132 @@ fn the_server_owns_a_regions_replicated_entities_and_a_client_takes_its_copy() {
     );
     assert!(has_name(client.world(), "wall 1"), "the scenery stays");
 }
+
+/// One region of its own, far from everything, holding a replicated crate.
+fn write_lone_region(root: &Path, at: Vec2) -> AssetPath {
+    let mut world = WorldRegions::grid(at, Vec2::splat(CELL), 1, 1, |_, _| path("lone/r.ron"));
+    let mut scene = World::new();
+    let crate_ = scene.spawn();
+    scene.insert(crate_, SceneId::new());
+    scene.insert(crate_, Name::new("crate"));
+    scene.insert(
+        crate_,
+        Transform::from_translation(world.regions[0].center()),
+    );
+    scene.insert(crate_, Replicated::default());
+    let file = voltra_scene::format::to_scene_file(&scene, &ComponentRegistry::with_defaults())
+        .expect("saves");
+    let full = root.join("lone/r.ron");
+    std::fs::create_dir_all(full.parent().expect("a parent")).expect("dir");
+    std::fs::write(full, ron::to_string(&file).expect("serialises")).expect("writes");
+    world.load_radius = 2.0;
+    world.unload_margin = 1.0;
+    std::fs::write(
+        root.join("lone.world.ron"),
+        world.to_ron().expect("serialises"),
+    )
+    .expect("writes");
+    path("lone.world.ron")
+}
+
+#[test]
+fn a_region_unloaded_lets_go_of_what_was_swept_of_it_and_no_more() {
+    use voltra_core::replication::{Interest, NetOwner};
+    use voltra_scene::Sprite;
+
+    let root = scratch_root();
+    let far = Vec2::new(500.0, 500.0);
+    let file = write_lone_region(&root, far);
+    let config = ReplicationConfig {
+        interest: Some(Interest::new(10.0)),
+        ..ReplicationConfig::default()
+    };
+    // The level both ends load: a door far from the client's player, with
+    // a sprite of the level's own that the wire does not bring.
+    let door_id = SceneId::new();
+    let level = move |world: &mut World| {
+        let door = world.spawn();
+        world.insert(door, door_id);
+        world.insert(door, Transform::from_translation(Vec2::new(60.0, 0.0)));
+        world.insert(door, Replicated::default());
+        world.insert(door, Sprite::default().with_sort_order(9));
+        door
+    };
+    let network = MemoryNetwork::new();
+    let server_transport = network.endpoint();
+    let address = server_transport.address();
+    let mut server_app = App::default()
+        .with_asset_root(&root)
+        .with_replication(config.clone());
+    let door = level(&mut server_app.world);
+    let mut server = Headless::new(server_app);
+    server
+        .net_mut()
+        .host_on(server_transport, NetConfig::default());
+
+    // The client streams its lone region in before it joins: its crate is
+    // the client's own, with an id the server never sends.
+    let mut client_app = App::default()
+        .with_asset_root(&root)
+        .with_replication(config);
+    level(&mut client_app.world);
+    let anchor = anchor(&mut client_app.world, far + Vec2::splat(CELL / 2.0));
+    client_app.stream_world(&file);
+    let mut client = Headless::new(client_app);
+    for _ in 0..120 {
+        client.step(1, FRAME);
+        std::thread::sleep(Duration::from_millis(1));
+        if has_name(client.world(), "crate") {
+            break;
+        }
+    }
+    assert!(has_name(client.world(), "crate"), "the region is in");
+    client
+        .net_mut()
+        .join_on(network.endpoint(), address, NetConfig::default());
+    step(&mut server, &mut client, 60);
+    let peer = client.net().local_id().expect("joined");
+    let player = server.world_mut().spawn();
+    server.world_mut().insert(player, SceneId::new());
+    server
+        .world_mut()
+        .insert(player, Transform::from_translation(Vec2::ZERO));
+    server.world_mut().insert(player, Replicated::default());
+    server.world_mut().insert(player, NetOwner(peer));
+    step(&mut server, &mut client, 60);
+    let set_aside = |client: &Headless| {
+        client
+            .net()
+            .replication()
+            .and_then(|r| r.client())
+            .expect("a client")
+            .stats()
+            .out_of_interest
+    };
+    assert_eq!(set_aside(&client), 2, "the far door and the crate, swept");
+
+    // The client walks off: its region unloads, and what was swept of it
+    // goes. The level's door is still the level's.
+    client
+        .world_mut()
+        .insert(anchor, Transform::from_translation(Vec2::new(-1000.0, 0.0)));
+    step(&mut server, &mut client, 60);
+    assert_eq!(set_aside(&client), 1, "the door, kept");
+
+    // The door swings to the client: the level's own copy comes back.
+    server
+        .world_mut()
+        .insert(door, Transform::from_translation(Vec2::new(2.0, 0.0)));
+    step(&mut server, &mut client, 60);
+    let back = client
+        .world()
+        .query::<SceneId>()
+        .find(|(_, id)| **id == door_id)
+        .map(|(entity, _)| entity)
+        .expect("relevant now");
+    assert_eq!(
+        client.world().get::<Sprite>(back).map(|s| s.sort_order),
+        Some(9),
+        "with the sprite the level gave it"
+    );
+}

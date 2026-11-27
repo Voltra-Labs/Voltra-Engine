@@ -193,6 +193,10 @@ fn fingerprint() -> u64 {
         std::mem::size_of::<T>().hash(hasher);
         std::mem::align_of::<T>().hash(hasher);
     }
+    fn component<T: 'static>(hasher: &mut impl Hasher) {
+        mix::<T>(hasher);
+        layout::<T>(hasher);
+    }
     // SipHash with fixed keys: the same answer in every process.
     let mut hasher = std::hash::DefaultHasher::new();
     mix::<dyn crate::Game>(&mut hasher);
@@ -200,10 +204,70 @@ fn fingerprint() -> u64 {
     mix::<voltra_ecs::World>(&mut hasher);
     mix::<voltra_ecs::Entity>(&mut hasher);
     mix::<voltra_scene::ComponentRegistry>(&mut hasher);
-    mix::<voltra_scene::Transform>(&mut hasher);
-    mix::<voltra_scene::Sprite>(&mut hasher);
-    mix::<voltra_scene::RigidBody>(&mut hasher);
+    // The components the sample games read out of the world directly, and
+    // the camera rig a game drives (`add_trauma`, a group's targets). A
+    // `TypeId` moves with the crate's metadata, not with a field added, so
+    // each is hashed with its layout too: a library built before
+    // `CharacterBody2D` grew a field would otherwise pass and read
+    // garbage through it.
+    component::<voltra_scene::Transform>(&mut hasher);
+    component::<voltra_scene::Sprite>(&mut hasher);
+    component::<voltra_scene::RigidBody>(&mut hasher);
+    component::<voltra_scene::Collider>(&mut hasher);
+    component::<voltra_scene::Sensor>(&mut hasher);
+    component::<voltra_scene::CharacterBody2D>(&mut hasher);
+    component::<voltra_scene::CharacterContact>(&mut hasher);
+    component::<voltra_scene::Camera>(&mut hasher);
+    component::<voltra_scene::CameraFollow2D>(&mut hasher);
+    component::<voltra_scene::CameraShake>(&mut hasher);
+    component::<voltra_scene::Name>(&mut hasher);
+    component::<voltra_scene::Text>(&mut hasher);
+    component::<voltra_scene::AudioSource>(&mut hasher);
+    component::<voltra_scene::ParticleEmitter>(&mut hasher);
+    component::<voltra_scene::PrefabInstance>(&mut hasher);
+    component::<voltra_scene::PrefabPart>(&mut hasher);
+    component::<voltra_scene::Tilemap>(&mut hasher);
+    // Replication: a game marks its entities and hands the host its config.
+    component::<voltra_scene::Replicated>(&mut hasher);
+    component::<voltra_replication::NetOwner>(&mut hasher);
+    component::<voltra_replication::ReplicationConfig>(&mut hasher);
+    // Lag compensation: a game marks what is rewound, bounds it in the
+    // config (a field of `ReplicationConfig`, so also in its layout), and
+    // reads the past through `Rewound` and the view time its clients send.
+    component::<voltra_scene::LagCompensated>(&mut hasher);
+    component::<voltra_replication::LagCompensation>(&mut hasher);
+    component::<voltra_replication::ViewTime>(&mut hasher);
+    component::<voltra_replication::MeasuredLag>(&mut hasher);
+    // What `tick.net.stats` hands a game; it grew `rtt_variation`.
+    component::<voltra_net::ConnectionStats>(&mut hasher);
+    component::<voltra_physics::Rewound<'static>>(&mut hasher);
+    component::<voltra_physics::PoseHistory>(&mut hasher);
+    component::<voltra_net::NetConfig>(&mut hasher);
+    // The lobby and LAN discovery: what `tick.net.lobby()` hands a game,
+    // the events it reads, what it configures and the servers it lists.
+    component::<voltra_net::LobbyConfig>(&mut hasher);
+    component::<voltra_net::LobbySession>(&mut hasher);
+    component::<voltra_net::Lobby>(&mut hasher);
+    component::<voltra_net::LobbyEntry>(&mut hasher);
+    component::<voltra_net::LobbyEvent>(&mut hasher);
+    component::<voltra_net::LobbyError>(&mut hasher);
+    component::<voltra_net::LobbyPhase>(&mut hasher);
+    component::<voltra_net::LobbyRefusal>(&mut hasher);
+    component::<voltra_net::ServerInfo>(&mut hasher);
+    component::<voltra_net::SearchOptions>(&mut hasher);
+    component::<voltra_net::Advertise>(&mut hasher);
+    component::<voltra_net::Advert>(&mut hasher);
+    component::<voltra_net::DiscoveryLimits>(&mut hasher);
+    component::<voltra_net::DiscoveryScope>(&mut hasher);
+    component::<voltra_net::DiscoveryError>(&mut hasher);
+    component::<voltra_net::LanSearch>(&mut hasher);
+    component::<voltra_net::HostOptions>(&mut hasher);
+    component::<crate::lobby::LobbyScreen>(&mut hasher);
+    component::<crate::lobby::LobbyScreenConfig>(&mut hasher);
+    component::<crate::lobby::LobbyScreenError>(&mut hasher);
+    component::<crate::lobby::LobbyOutcome>(&mut hasher);
     mix::<voltra_physics::CollisionEvent>(&mut hasher);
+    mix::<voltra_physics::JointBroken>(&mut hasher);
     mix::<voltra_render::glam::Vec2>(&mut hasher);
     mix::<String>(&mut hasher);
     layout::<crate::Tick<'static>>(&mut hasher);

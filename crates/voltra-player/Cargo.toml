@@ -19,3 +19,6 @@ serde.workspace = true
 voltra-ecs.workspace = true
 voltra-scene.workspace = true
 log.workspace = true
+
+[dev-dependencies]
+voltra-testkit.workspace = true

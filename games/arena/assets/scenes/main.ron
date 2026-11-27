@@ -32,7 +32,7 @@
                 "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(0.45,0.45)),
                 "Sprite": (color:(1.0,0.85,0.2,1.0),sort_order:1),
                 "Coin": (),
-                "Replicated": (priority:2.0),
+                "Replicated": (priority:2.0,always_relevant:true),
             },
         ),
         (

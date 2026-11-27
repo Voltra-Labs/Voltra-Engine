@@ -25,7 +25,7 @@ impl voltra_assets::TextureSizes for Eight {
 /// An 8×8 texture opaque in its left half, a sprite showing it, and a store
 /// that has traced it.
 fn half_sprite(flip_x: bool) -> (World, Silhouettes, Atlases) {
-    let root = scratch_root();
+    let root = scratch_root().keep();
     // Left half opaque: four columns of eight.
     let pixels: Vec<u8> = (0..64u32)
         .flat_map(|i| [9, 9, 9, if i % 8 < 4 { 255 } else { 0 }])
@@ -61,7 +61,11 @@ fn half_sprite(flip_x: bool) -> (World, Silhouettes, Atlases) {
             ..ShadowCaster2D::default()
         },
     );
-    (world, Silhouettes::new(root), Atlases::new(scratch_root()))
+    (
+        world,
+        Silhouettes::new(root),
+        Atlases::new(scratch_root().keep()),
+    )
 }
 
 fn traced_bounds(flip_x: bool) -> (Vec2, Vec2) {
@@ -100,8 +104,10 @@ fn a_flipped_sprite_casts_its_mirrored_outline() {
 fn without_silhouettes_or_a_texture_a_sprite_caster_casts_nothing() {
     let (mut world, _, _) = half_sprite(false);
     assert!(occluders(&world, &WorldTransforms::from_world(&world), None).is_empty());
-    let atlases = Atlases::new(scratch_root());
-    let silhouettes = Silhouettes::new(scratch_root());
+    let scratch = scratch_root();
+    let atlases = Atlases::new(&scratch);
+    let scratch = scratch_root();
+    let silhouettes = Silhouettes::new(&scratch);
     let entity = world
         .query::<Sprite>()
         .map(|(e, _)| e)

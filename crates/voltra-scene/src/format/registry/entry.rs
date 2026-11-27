@@ -5,6 +5,7 @@ use ron::value::RawValue;
 use voltra_ecs::{Entity, World};
 
 use crate::format::error::SceneError;
+use crate::format::serial_tree::SerialTree;
 use crate::scene_id::SceneId;
 
 /// A registered type's save conversion: entity to stored value, or `None` when
@@ -36,6 +37,11 @@ pub(super) type HasFn = fn(&World, Entity) -> bool;
 /// written back, for comparing values whatever text they were stored as.
 pub(super) type NormalizeFn = fn(&RawValue) -> Result<Box<RawValue>, SceneError>;
 
+/// A registered type's value on an entity as a [`SerialTree`], or `None`
+/// when the entity has none: what a tool compares and writes field by
+/// field.
+pub(super) type TreeFn = fn(&World, Entity) -> Option<Result<SerialTree, SceneError>>;
+
 /// A registered type's references rewritten on an entity, for a type that
 /// names other entities — see [`super::refs`].
 pub(super) type RemapFn = fn(&mut World, Entity, &dyn Fn(SceneId) -> Option<SceneId>);
@@ -59,6 +65,7 @@ pub(super) struct Entry {
     pub(super) remove: RemoveFn,
     pub(super) has: HasFn,
     pub(super) normalize: NormalizeFn,
+    pub(super) tree: TreeFn,
     /// For a type naming other entities by id; `None` for every other.
     pub(super) refs: Option<(RemapFn, RewriteFn)>,
     /// For a type with a meaningful default; `None` for one without, or

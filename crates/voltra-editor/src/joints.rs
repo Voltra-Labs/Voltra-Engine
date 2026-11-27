@@ -47,35 +47,8 @@ pub(crate) fn join_selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
         .iter()
         .find(|&e| e != primary && frame.world.is_alive(e) && is_body(frame.world, e));
     let at = hierarchy::world_transform(frame.world, primary);
-    let (b, anchor_b, angle_b) = match other {
-        Some(other) => {
-            let placed = hierarchy::world_transform(frame.world, other);
-            let local = placed.matrix().inverse().transform_point2(at.translation);
-            (
-                frame.world.get::<SceneId>(other).copied(),
-                local,
-                placed.rotation,
-            )
-        }
-        None => (None, at.translation, 0.0),
-    };
     let own = frame.world.get::<Joint2D>(primary).is_none();
-    let joint = Joint2D {
-        a: if own {
-            None
-        } else {
-            frame.world.get::<SceneId>(primary).copied()
-        },
-        b,
-        anchor_a: Vec2::ZERO,
-        anchor_b,
-        kind: JointKind::Revolute {
-            reference_angle: at.rotation - angle_b,
-            limit: None,
-            motor: None,
-        },
-        ..Joint2D::default()
-    };
+    let joint = hinge(frame.world, primary, other, own);
 
     let touched: Vec<SceneId> = frame
         .world
@@ -112,6 +85,41 @@ pub(crate) fn join_selection(editor: &mut Editor, frame: &mut UiFrame<'_>) {
     editor.history.commit_including(view, made);
 }
 
+/// A hinge at `primary`'s centre, to `other` or the world, at the angle
+/// the two stand at; naming `primary` as `a` unless the joint goes `on` it.
+fn hinge(world: &World, primary: Entity, other: Option<Entity>, on: bool) -> Joint2D {
+    let at = hierarchy::world_transform(world, primary);
+    let (b, anchor_b, angle_b) = match other {
+        Some(other) => {
+            let placed = hierarchy::world_transform(world, other);
+            (
+                world.get::<SceneId>(other).copied(),
+                // In `other`'s space as the solver holds it: unscaled.
+                Joint2D::anchor_on(&placed, at.translation),
+                placed.rotation,
+            )
+        }
+        None => (None, at.translation, 0.0),
+    };
+    Joint2D {
+        a: if on {
+            None
+        } else {
+            world.get::<SceneId>(primary).copied()
+        },
+        b,
+        anchor_a: Vec2::ZERO,
+        anchor_b,
+        kind: JointKind::Revolute {
+            reference_angle: at.rotation - angle_b,
+            limit: None,
+            motor: None,
+            spring: None,
+        },
+        ..Joint2D::default()
+    }
+}
+
 /// Spawns a ball hung from the world on a rod, swinging from the side.
 pub(crate) fn spawn_pendulum(editor: &mut Editor, frame: &mut UiFrame<'_>) {
     spawn::record(editor, frame, "Spawn pendulum", |frame| {
@@ -135,4 +143,33 @@ pub(crate) fn spawn_pendulum(editor: &mut Editor, frame: &mut UiFrame<'_>) {
         );
         bob
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_hinge_to_a_scaled_body_holds_where_the_two_meet() {
+        let mut world = World::new();
+        let door = world.spawn();
+        world.insert(door, Transform::from_translation(Vec2::new(1.0, 0.0)));
+        world.insert(door, RigidBody::new_dynamic(1.0));
+        let frame = world.spawn();
+        let id = SceneId::new();
+        world.insert(frame, id);
+        world.insert(
+            frame,
+            Transform::from_translation(Vec2::new(0.0, 1.0)).with_scale(Vec2::splat(2.0)),
+        );
+        world.insert(frame, RigidBody::new_static());
+        let joint = hinge(&world, door, Some(frame), true);
+        assert_eq!(joint.b, Some(id));
+        // The door's centre in the frame's space, unscaled: what the solver
+        // turns back into the world at the door, not halfway to it.
+        let placed = world.get::<Transform>(frame).expect("placed");
+        let held = Joint2D::anchor_in_world(placed, joint.anchor_b);
+        assert!((held - Vec2::new(1.0, 0.0)).length() < 1e-5, "{held}");
+        assert!((joint.anchor_b - Vec2::new(1.0, -1.0)).length() < 1e-5);
+    }
 }

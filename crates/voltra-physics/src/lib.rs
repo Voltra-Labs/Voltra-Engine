@@ -18,6 +18,8 @@
 //!
 //! [`query`] asks the world without stepping it — rays, points, boxes and
 //! shape casts — and [`character`] moves a game's character with them.
+//! [`rewind`] asks the same of the world as it was a moment ago: a ring of
+//! past collider poses, for a server's lag-compensated hit tests.
 //!
 //! A fast body stops at what it meets instead of passing through it in one
 //! step: against static geometry always, against moving bodies when it is a
@@ -46,6 +48,7 @@ pub mod integrate;
 pub mod narrow;
 pub mod one_way;
 pub mod query;
+pub mod rewind;
 pub mod sleep;
 pub mod solver;
 pub mod step;
@@ -54,12 +57,13 @@ pub mod world;
 pub use broad::{candidate_pairs, sweep, Sweep};
 pub use character::{move_and_slide, Slide};
 pub use clock::PhysicsClock;
-pub use events::{CollisionEvent, Touch, Touching};
+pub use events::{CollisionEvent, JointBroken, Touch, Touching};
 pub use integrate::{integrate_positions, integrate_velocities};
 pub use narrow::{Contact, Manifold, ManifoldPoint};
 pub use one_way::OneWayPasses;
 pub use query::{QueryFilter, RayHit, ShapeHit};
+pub use rewind::{PoseHistory, Rewound};
 pub use sleep::{Sleep, SleepParams};
 pub use solver::{ImpulseCache, Softness, SolverBodies, SolverParams};
-pub use step::{step, step_sleeping, Overlaps};
+pub use step::{step, step_sleeping, Overlaps, Stepped};
 pub use world::PhysicsWorld;

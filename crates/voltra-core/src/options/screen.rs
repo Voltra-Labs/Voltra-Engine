@@ -18,8 +18,9 @@ use voltra_scene::{UiButton, UiDropdown, UiSlider, UiToggle};
 
 use super::settings::Settings;
 use crate::app::Tick;
+use crate::prefab_parts::Parts;
 use crate::window::Fullscreen;
-use rows::{Parts, Row};
+use rows::Row;
 
 /// The action that backs out: Escape, or a pad's East, in the default map.
 const CANCEL: &str = "ui_cancel";
@@ -92,7 +93,7 @@ impl OptionsScreen {
             tick.world.remove::<PrefabInstance>(entity);
             tick.world.remove::<PrefabPart>(entity);
         }
-        let parts = Parts::of(tick.world, &instance.entities);
+        let parts = Parts::of(tick.world, &instance.entities, "options");
 
         let mut settings = Settings::current(tick);
         if tick.saves.dir().is_some() {

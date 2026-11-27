@@ -174,6 +174,7 @@ impl ComponentRegistry {
             .find(|e| e.type_id == id)
             .ok_or(ReplicateError::NotRegistered(std::any::type_name::<T>()))?;
         entry.replicate = Some(fns);
+        self.stamp = super::next_stamp();
         Ok(())
     }
 

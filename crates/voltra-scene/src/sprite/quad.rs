@@ -295,7 +295,7 @@ mod tests {
 
     /// Four 16×16 frames in a row, as `coin.atlas.ron` on disk.
     fn atlases() -> (Atlases, AssetPath) {
-        let root = scratch_root();
+        let root = scratch_root().keep();
         std::fs::write(
             root.join("coin.atlas.ron"),
             "(version: 1, grid: Some((cell: (16, 16), columns: 4, rows: 1)))",
@@ -518,7 +518,7 @@ mod tests {
     /// A trimmed frame and a pivoted one, as the packer and the atlas
     /// editor write them.
     fn placed_atlases() -> (Atlases, AssetPath) {
-        let root = scratch_root();
+        let root = scratch_root().keep();
         std::fs::write(
             root.join("hero.atlas.ron"),
             "(version: 2, sheet: Some((64, 64)), frames: [

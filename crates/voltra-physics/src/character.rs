@@ -20,7 +20,13 @@
 //!
 //! Before it, the character is carried by the floor it stood on — however
 //! far that has moved and turned since (`CharacterContact::floor_pose`): a
-//! moving platform, whatever moves it.
+//! moving platform, whatever moves it — and, with `carry_rotation`, turned
+//! by as much.
+//!
+//! With `constant_speed_on_slopes`, a walk on a floor runs along it
+//! covering the same ground across as on the flat — see [`slope`]. With a
+//! `push_force`, the dynamic bodies it walks into are shoved once the move
+//! is over — see [`push`].
 //!
 //! After the move, a character that stood on a floor and is not moving up
 //! reaches down by `snap` for one, so walking down a slope or off a small
@@ -33,12 +39,19 @@ use voltra_ecs::{Entity, World};
 use voltra_render::glam::Vec2;
 use voltra_scene::{CharacterBody2D, CharacterContact, Collider, CollisionLayers, Transform};
 
-use crate::query::{self, QueryFilter, ShapeHit};
+use crate::query::{QueryFilter, ShapeHit};
 
 mod carry;
+mod inflated;
+mod push;
+mod slide;
+mod slope;
+mod snap;
 mod step;
 
 use carry::carry;
+use inflated::inflated;
+use slide::Mover;
 
 /// Below this a motion is no motion.
 const STILL: f32 = 1e-7;
@@ -99,9 +112,14 @@ pub fn move_and_slide(
     // Carried first, by the floor it stood on: a platform that moved under
     // it, or into it, takes it along. Put there outright — a wall it was
     // carried into is pushed out of by the move that follows.
-    let carried = carry(world, &body.contact, at.translation);
+    let (carried, turned) = carry(world, &body.contact, at.translation);
     at.translation += carried;
-    let mut slide = mover.slide(&body, &mut at, velocity, delta);
+    if body.carry_rotation {
+        // Turned with it too: the cast below is of the turned shape, and an
+        // edge turned into the floor is pushed out of as any overlap.
+        at.rotation += turned;
+    }
+    let (mut slide, pushes) = mover.slide(&body, &mut at, velocity, delta);
     if body.contact.on_floor
         && !slide.contact.on_floor
         && body.snap > 0.0
@@ -109,6 +127,9 @@ pub fn move_and_slide(
     {
         mover.snap(&mut at, &mut slide, body.snap);
     }
+    // Once the move is over and the world is free to write: the bodies it
+    // walked into, shoved for the step that follows to move.
+    push::apply(world, &pushes, body.push_force, delta, &mut slide.velocity);
 
     slide.contact.floor_pose = slide
         .contact
@@ -123,210 +144,10 @@ pub fn move_and_slide(
 
     if let Some(transform) = world.get_mut::<Transform>(entity) {
         transform.translation = at.translation;
+        transform.rotation = at.rotation;
     }
     if let Some(body) = world.get_mut::<CharacterBody2D>(entity) {
         body.contact = slide.contact;
     }
     Some(slide)
-}
-
-/// What every cast of one move shares.
-struct Mover<'w> {
-    world: &'w World,
-    /// The collider grown by the skin — see [`inflated`].
-    shape: Collider,
-    filter: QueryFilter,
-    up: Vec2,
-    /// The cosine of the steepest floor.
-    floor_cos: f32,
-}
-
-impl Mover<'_> {
-    fn cast(&self, at: &Transform, motion: Vec2) -> Option<ShapeHit> {
-        query::cast(self.world, &self.shape, at, motion, self.filter)
-    }
-
-    fn is_floor(&self, normal: Vec2) -> bool {
-        normal.dot(self.up) >= self.floor_cos
-    }
-
-    /// Records a surface as floor, wall or ceiling.
-    fn touch(&self, slide: &mut Slide, hit: ShapeHit) {
-        let rise = hit.normal.dot(self.up);
-        let contact = &mut slide.contact;
-        if rise >= self.floor_cos {
-            contact.on_floor = true;
-            contact.floor_normal = hit.normal;
-            contact.floor = Some(hit.entity);
-        } else if rise <= -self.floor_cos {
-            contact.on_ceiling = true;
-        } else {
-            contact.on_wall = true;
-            contact.wall_normal = hit.normal;
-        }
-        slide.hits.push(hit);
-    }
-
-    /// The cast-and-slide loop.
-    fn slide(
-        &self,
-        body: &CharacterBody2D,
-        at: &mut Transform,
-        velocity: Vec2,
-        delta: f32,
-    ) -> Slide {
-        let up = self.up;
-        let mut velocity = velocity;
-        let mut motion = velocity * delta;
-        // Gravity alone: straight down, nothing across.
-        let falling_only = motion.dot(up) < 0.0 && (motion - up * motion.dot(up)).length() < STILL;
-        let mut slide = Slide::default();
-        let mut previous: Option<Vec2> = None;
-        for _ in 0..body.max_slides.max(1) {
-            let Some(hit) = self.cast(at, motion) else {
-                at.translation += motion;
-                break;
-            };
-            if hit.depth > TOUCH {
-                // Inside the skin — or inside the collider: out to the skin
-                // first, then the same motion again.
-                self.touch(&mut slide, hit);
-                at.translation += hit.normal * hit.depth;
-                continue;
-            }
-            let length = motion.length();
-            if length < STILL {
-                self.touch(&mut slide, hit);
-                break;
-            }
-            let direction = motion / length;
-            at.translation += direction * hit.distance;
-            motion -= direction * hit.distance;
-
-            let floor = self.is_floor(hit.normal);
-            let grounded = body.contact.on_floor || slide.contact.on_floor;
-            let wall = !floor && hit.normal.dot(up) > -self.floor_cos;
-            if wall && grounded {
-                let across = motion - up * motion.dot(up);
-                if let Some(step) = self.step_up(at, across, body.step_height) {
-                    // Over it: a seam or a ledge, not a wall, and what it
-                    // stands on is what it landed on.
-                    self.touch(&mut slide, step.landing);
-                    *at = step.at;
-                    motion = across - step.covered;
-                    continue;
-                }
-            }
-            self.touch(&mut slide, hit);
-            if floor && body.stop_on_slope && falling_only {
-                // Landing, or standing, on a slope: stay put on it.
-                velocity -= up * velocity.dot(up).min(0.0);
-                break;
-            }
-            // On the ground, a wall is a wall however it leans: slid along as
-            // if upright, so a slope too steep to stand on is not climbed by
-            // walking into it. In the air its own normal applies, and it is
-            // slid down.
-            let normal = if !floor && grounded && hit.normal.dot(up) > 0.0 {
-                (hit.normal - up * hit.normal.dot(up)).normalize_or(hit.normal)
-            } else {
-                hit.normal
-            };
-            motion = off_surface(motion, normal);
-            velocity = off_surface(velocity, normal);
-            if let Some(before) = previous {
-                // A crease: sliding along this surface goes back into the last.
-                if motion.dot(before) < -STILL {
-                    motion = Vec2::ZERO;
-                }
-                if velocity.dot(before) < 0.0 {
-                    velocity = off_surface(velocity, before);
-                    if velocity.dot(normal) < 0.0 {
-                        velocity = Vec2::ZERO;
-                    }
-                }
-            }
-            previous = Some(normal);
-            if motion.length() < STILL {
-                break;
-            }
-        }
-        slide.velocity = velocity;
-        slide
-    }
-
-    /// Reaches down by `reach` for a floor, and stands on it.
-    fn snap(&self, at: &mut Transform, slide: &mut Slide, reach: f32) {
-        let Some(hit) = self.cast(at, -self.up * reach) else {
-            return;
-        };
-        if hit.depth > TOUCH || !self.is_floor(hit.normal) {
-            return;
-        }
-        at.translation -= self.up * hit.distance;
-        self.touch(slide, hit);
-    }
-}
-
-/// The collider grown by `skin` all round, in world units, with the
-/// transform it is cast from: the entity's place and turn.
-///
-/// Cast instead of the collider, it keeps the collider a skin from every
-/// surface along that surface's normal — exactly, whatever the angle of
-/// the move — and a collider that ends up nearer than the skin overlaps it,
-/// and is pushed back out. A circle, a capsule and a polygon grow round, by
-/// their radius, which is exactly that; a box grows square, so its corners
-/// stand a little further off, and a box character stands on a ledge's very
-/// edge as it always has.
-fn inflated(collider: &Collider, transform: &Transform, skin: f32) -> (Collider, Transform) {
-    let unit = Transform {
-        scale: Vec2::ONE,
-        ..*transform
-    };
-    match collider {
-        Collider::Box { .. } => (
-            Collider::Box {
-                half_extents: collider.world_half_extents(transform) + Vec2::splat(skin),
-            },
-            unit,
-        ),
-        Collider::Circle { .. } => (
-            Collider::Circle {
-                radius: collider.world_radius(transform) + skin,
-            },
-            unit,
-        ),
-        Collider::Capsule { .. } => {
-            let shape = collider.world_shape(transform);
-            let reach = match *shape.vertices() {
-                [low, high] => (high - low).length() * 0.5,
-                _ => 0.0,
-            };
-            let radius = shape.radius() + skin;
-            (
-                Collider::Capsule {
-                    half_height: reach + radius,
-                    radius,
-                },
-                unit,
-            )
-        }
-        // The points keep their scale, so the rounding is set in the units
-        // the scale will turn into world ones.
-        Collider::Polygon { points, .. } => {
-            let scale = transform.scale.abs().max_element();
-            (
-                Collider::Polygon {
-                    points: *points,
-                    radius: (collider.world_radius(transform) + skin) / scale,
-                },
-                *transform,
-            )
-        }
-    }
-}
-
-/// `vector` with whatever goes into a surface of `normal` taken off.
-fn off_surface(vector: Vec2, normal: Vec2) -> Vec2 {
-    vector - normal * vector.dot(normal).min(0.0)
 }

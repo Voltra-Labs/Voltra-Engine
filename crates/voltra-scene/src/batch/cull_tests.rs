@@ -95,3 +95,56 @@ fn a_parallax_layer_is_culled_where_it_is_drawn() {
 fn a_box_with_a_non_finite_edge_is_kept_rather_than_guessed_away() {
     assert!(view().sees(Vec2::new(f32::NAN, 0.0), Vec2::ONE));
 }
+
+/// A wide view — ten by two — turned 45°: the box around it reaches
+/// `6 / √2` each way.
+fn turned_view() -> voltra_render::Camera2D {
+    voltra_render::Camera2D::new(Vec2::ZERO, 1.0, 5.0).with_rotation(std::f32::consts::FRAC_PI_4)
+}
+
+#[test]
+fn a_view_turned_45_degrees_culls_by_the_box_around_its_turned_rect() {
+    let mut world = World::new();
+    // Up and right along the turned view's long axis: in sight only because
+    // the view is turned — upright, it shows one unit above its centre.
+    sprite_at(&mut world, Vec2::new(3.0, 3.0));
+    // Past the box's right edge, though the upright view would reach it.
+    sprite_at(&mut world, Vec2::new(4.9, 0.0));
+    let turned = Sheets::default().through(&turned_view());
+    assert_eq!(SpriteBatch::from_world(&world, turned).sprite_count(), 1);
+
+    let upright = Sheets::default().through(&voltra_render::Camera2D::new(Vec2::ZERO, 1.0, 5.0));
+    let mut kept = World::new();
+    sprite_at(&mut kept, Vec2::new(3.0, 3.0));
+    assert_eq!(
+        SpriteBatch::from_world(&kept, upright).sprite_count(),
+        0,
+        "upright, the same sprite is out of view"
+    );
+}
+
+#[test]
+fn a_parallax_layer_turns_with_the_world_about_the_turned_camera() {
+    // A sky pinned to the camera (factor 0) is drawn at the camera, so on a
+    // turned view it stays at the centre of the screen and turns with
+    // everything else about it: the same turn for every layer.
+    let mut world = World::new();
+    let sky = world.spawn();
+    world.insert(sky, SceneId::new());
+    world.insert(sky, Transform::default());
+    world.insert(sky, Sprite::default());
+    world.insert(sky, Parallax::new(Vec2::ZERO));
+    let view = voltra_render::Camera2D::new(Vec2::new(40.0, -7.0), 1.0, 1.0).with_rotation(0.8);
+    let drawn = crate::hierarchy::WorldTransforms::seen_from(&world, view.position)
+        .matrix(sky)
+        .transform_point2(Vec2::ZERO);
+    let on_screen = view.world_to_viewport(drawn, Vec2::splat(100.0));
+    assert!(
+        on_screen.abs_diff_eq(Vec2::splat(50.0), 1e-3),
+        "{on_screen}"
+    );
+    assert_eq!(
+        SpriteBatch::from_world(&world, Sheets::default().through(&view)).sprite_count(),
+        1
+    );
+}

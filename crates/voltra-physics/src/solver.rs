@@ -33,6 +33,7 @@ pub use body::{SolverBodies, SolverBody};
 pub use cache::{CachedImpulse, ContactKey, ImpulseCache};
 pub use constraint::{prepare, ContactConstraint};
 pub use contact::{apply_restitution, solve, warm_start};
+pub use joint::breaking::break_joints;
 pub use joint::{
     joint_ends, prepare_joints, solve_joints, store_joints, warm_start_joints, JointConstraint,
     JointEnds,

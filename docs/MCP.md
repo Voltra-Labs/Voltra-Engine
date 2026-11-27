@@ -47,6 +47,7 @@ not a compile):
 | `entity_rename` | An entity's name |
 | `component_set` / `component_remove` | One component, by registered name |
 | `prefab_instantiate` | A prefab placed in a scene, linked to its file |
+| `prefab_variant` | A new prefab whose root is an instance of a base, following it but for its overrides |
 | `asset_read` / `asset_write` | A RON asset's text; written only once it reads as what its name says (scene, `.anim.ron`, `.animator.ron`, `.input.ron`, `.atlas.ron`, `.layers.ron`) |
 | `run_scene` | The scene run headless for some frames, actions held on the frames given; answers where things ended up (or chosen entities in full), the engine's log, a screenshot, and with `profile` where each frame's time went |
 | `project_build` / `project_test` / `project_dist` | cargo, with arguments the tool builds |

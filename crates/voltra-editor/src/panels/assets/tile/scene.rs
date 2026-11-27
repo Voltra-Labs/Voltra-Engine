@@ -20,7 +20,8 @@ use crate::scene_dialogs::{self, Then};
 /// Double-clicked, a scene opens, through "save changes?" like every other
 /// way to Open — Unity's and Godot's gesture — and a file named as a prefab
 /// opens in prefab mode over the scene, as Unity's double-click on a prefab
-/// does. The menu offers either for any scene, since any can be instanced.
+/// does. The menu offers either for any scene, since any can be instanced,
+/// and for a prefab "Create variant": a new prefab that follows it.
 pub(super) fn tile(
     editor: &mut Editor,
     ui: &mut Ui,
@@ -54,6 +55,19 @@ pub(super) fn tile(
             .clicked()
         {
             editor.prefab_mode.request_edit(entry.path.clone());
+            ui.close();
+        }
+        if prefab
+            && ui
+                .button("Create variant")
+                .on_hover_text(
+                    "a new prefab following this one, but for what it is edited to override",
+                )
+                .clicked()
+        {
+            if let Err(e) = crate::prefab::create_variant(editor, frame, &entry.path) {
+                log::error!("{e}");
+            }
             ui.close();
         }
     });
