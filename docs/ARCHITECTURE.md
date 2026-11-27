@@ -8550,11 +8550,9 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   (`max_players`), a minimum to start (`min_players`), entries in join
   order (`peer`, `name`, `ready`), a host, a phase (`Waiting`,
   `Playing`) — held by the server and changed only there, by its rules:
-  a join under a name (sanitised: control characters and invisible
-  formatting ones — zero-width, bidi overrides, a BOM — taken out,
-  whitespace collapsed, cut to `max_name_chars` characters; then made
-  unique, case aside, as `Ada 2`); ready, before the match; start, by
-  the host, only with every player ready and enough of them; a leave.
+  a join under a name (sanitised: see **Names** below; then made
+  unique as `Ada 2`); ready, before the match; start, by the host, only
+  with every player ready and enough of them; a leave.
   `LobbySession` pumps it with the endpoint (`receive` after the
   endpoint's, `send` before its flush — the loop does both): the server
   sends every player the whole lobby whenever it changed, a client
@@ -8566,6 +8564,43 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   comes after every `Joined`. What this end's player does is an event
   of the next frame, as everyone else's is. What "start" does is the
   game's: the engine says when (the arena spawns a player per entry).
+- **Names** (`lobby/name.rs`) are untrusted text drawn beside others,
+  so Unicode's own tools decide, not a hand-written list: every format
+  character (general category Cf — zero-width ones, bidi overrides and
+  isolates, a BOM, tags) goes, but a ZWJ between two emoji and VS16
+  after an emoji or a keycap digit; control, private-use and
+  unassigned code points too; NFC before the cut, so a name is cut
+  between characters as typed; at most `MAX_MARKS_PER_BASE` (3)
+  combining marks on a base (Vietnamese needs two; Zalgo is capped);
+  uniqueness by the compatibility caseless match (D145: NFKC with full
+  case folding — `ＡＤＡ`, `ADA`, `ada`, `STRASSE`/`straße` are one
+  name). `unique_name` never answers longer than its cap, and
+  `max_name_chars` is always at least the digits of `max_players`, so a
+  full lobby's names can all be told apart. Leaf crates:
+  `unicode-normalization`, `unicode-general-category`, `caseless`.
+- **Bounded snapshot.** The whole lobby goes in one message, so its
+  worst case — every slot, every name at its longest in four-byte
+  characters — must fit: `max_name_chars` gives way in a lobby so large
+  it would pass `MAX_LOBBY_SNAPSHOT` (60 KiB, under the default 64 KiB
+  message limit; 255 slots take 58-character names), and
+  `LobbyConfig::net_config` raises a smaller `max_message_size` to it.
+- **Peers are counted out by the session, not by events.** A server
+  ignores lobby messages from a peer no longer connected (a hello and a
+  goodbye read in one receive would otherwise leave an entry nobody
+  takes out, a slot lost for good), and at the end of every receive
+  drops the entry of any non-host peer not connected. A connected peer
+  that has not said hello within `LobbyConfig::join_timeout` (5 s, at
+  least `MIN_JOIN_TIMEOUT`) is cut off, so silent connections cannot
+  hold every session slot. With the lobby on, `tick.net`'s replication
+  server replicates only to lobby members
+  (`ReplicationServer::set_audience`): a peer not in it — not yet
+  joined, or refused and waiting out its grace — is sent nothing of
+  the match, which keeps `LateJoin::Refuse` true.
+- **A match started and finished between two snapshots** is still both
+  events: the lobby counts the matches it started (`Lobby::matches`,
+  on the wire), the diff emits `Started` then `Finished` when the count
+  moved, and a client diffs each snapshot it reads in turn (and none
+  read after its goodbye).
 - **Its own channel**, reliable-ordered (`LobbyConfig::channel`, 6:
   after the game's three and replication's three), not the game's
   reliable channel — a lobby message must never be in the game's
@@ -8628,7 +8663,24 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   datagrams are read a poll. Anything of another size, magic, version or
   kind is dropped unread and counted (`DiscoveryStats`). A client takes
   only answers carrying its own probe's nonce, at most 64 servers, and
-  sanitises the names it shows.
+  sanitises the names it shows. A server is listed once per address and
+  game ports, not per answering socket, so an answer for other ports
+  never replaces it. Read errors about another datagram (Windows'
+  `WSAEMSGSIZE` for one too long) neither end a search nor warn every
+  tick — `udp.rs`'s `is_transient` decides for both ends — and a game
+  id past `MAX_GAME_ID` is matched as cut, as its probe carried it.
+- **The local network only, by default** (`DiscoveryScope::Local`, in
+  `Advertise::scope`): a responder answers private, link-local and
+  loopback sources (`10/8`, `172.16/12`, `192.168/16`, `169.254/16`,
+  `127/8`, `fc00::/7`, `fe80::/10`, `::1`, and IPv4-mapped ones) and
+  drops the rest unread (`DiscoveryStats::out_of_scope`). A broadcast
+  never crosses a router, so every probe a LAN game wants comes from
+  those ranges; a public responder serves only strangers — scanners,
+  and forged sources the rate limit alone would still answer a
+  trickle. `DiscoveryScope::Anyone` (`voltra-server
+  --discovery-public`) answers everyone, for a server probed by
+  address across networks; listen hosts from the lobby screen keep the
+  default.
 - **The probe socket is a warning, not a failed host**: a second server
   on one machine cannot bind 7779 (std has no `SO_REUSEADDR`), and is
   hosted, off the lists, with the reason logged. Container networks
@@ -8649,16 +8701,26 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   "<name>'s game"), searches, joins from a row or the address, readies
   and starts, shows the page the session calls for, greys Start for all
   but a host who may start, and answers `LobbyOutcome::Started` in the
-  frame the match begins. The list rows are copies of the prefab's
+  frame the match begins. A row is two texts, the name (`Server
+  label`, `Player label`) and the screen's words about it (`Server
+  detail`, `Player detail`: "1/4 · full", "you · host · ready"),
+  right-aligned in another colour, so a name like "Eve host" reads as a
+  name only. Those and `Status` are not rich (`rich: false`), and the
+  screen escapes the words where a game's own prefab makes them rich
+  (`markup::escape`): a peer's name is never read as `[size=…]`,
+  `[color=…]`, `[font=…]` or `[icon=…]`. The parser itself shows a
+  `[size=]` past `markup::MAX_SIZE` (4096) as written. The list rows are copies of the prefab's
   template rows, kept hidden and stamped again when what they show
   changes. On the web Host and Find are greyed. `cargo xtask new-game`
   copies the prefab, with a test (`tests/lobby.rs`) that hosts, readies
   and starts from it.
 - **`voltra-server`**: answers probes by default (`--discovery
-  PORT|off`, `--name`, `--game`), holds a lobby with `--lobby`,
-  `--min-players`, `--max-players` (laid over the one a game's server
-  sets in `ServerOptions::lobby`), and writes `discovery PORT` to its
-  port file. **`games/arena`** starts on the lobby screen (`--solo` to
+  PORT|off`, `--discovery-public`, `--name`, `--game`), holds a lobby
+  with `--lobby`, `--min-players`, `--max-players`; both sets of flags
+  are read in any order and laid over what a game's server sets
+  (`ServerOptions::lobby`, `HostOptions::discovery`) by
+  `Args::apply_flags`, so the command line wins. It writes `discovery
+  PORT` to its port file. **`games/arena`** starts on the lobby screen (`--solo` to
   play alone): two to four players, drop-in; its bots ready up and,
   hosting, start; the server spawns a player per entry at `Started` and
   per late join, and falls back to spawning on connect for a session
@@ -8668,7 +8730,13 @@ Stage 129. Two pieces in `voltra-net`, both optional, wired through
   with roles; chat; matchmaking, NAT punch-through, relays (0.4's
   non-goals); IPv6 discovery (the probe socket is IPv4, multicast would
   be the IPv6 way); several servers on one machine sharing the probe
-  port.
+  port; a server id in the answer (one server answering on two
+  interfaces — broadcast and a loopback target — is listed twice, once
+  per address, and a forged answer for a server's own address and ports
+  replaces its entry: a nonce seen on the LAN is enough to forge one);
+  confusable scripts in names (Cyrillic `а` for Latin `a`: UTS #39's
+  skeletons would be the tool); `100.64/10` (CGNAT, some VPN overlays)
+  counted as local.
 
 Pinned by `voltra-net/tests/lobby.rs` over a lossy memory network: two
 players joining (names cleaned and made unique), readying, the
@@ -8678,7 +8746,11 @@ refusing a third with its reason, which leaves; a late joiner refused
 or playing by `LateJoin`; a dedicated server's host passing on; a listen
 host hosting and its shutdown closing a client's lobby; a client of
 another lobby version, and one with none, refused as `ProtocolMismatch`;
-a malformed lobby message getting its sender kicked.
+a malformed lobby message getting its sender kicked; a match started
+and finished between two snapshots seen as both events.
+`voltra-net/tests/lobby_peers.rs`: a hello and a goodbye in one server
+receive, four times over a two-slot lobby, leaving no entry; a peer that
+never says hello cut off at its join deadline, its slot free.
 `voltra-net/tests/discovery.rs` over loopback (a directed probe — the
 same packet a broadcast carries): a server found with how to join it;
 another build listed incompatible and another game not listed; 200
@@ -8695,7 +8767,9 @@ listen host and a client readying and starting through their ticks,
 no lobby message in the game's `received()`, the host's stop closing
 the client's lobby; a host found on the LAN by a client that can join
 it and listed incompatible to one without the lobby, whose join is then
-refused. `lobby/screen/tests.rs`: the shipped prefab's pages and
+refused; with a lobby, replication only to its player, not to a
+connected peer that never joined, which is then cut off at the join
+deadline. `lobby/screen/tests.rs`: the shipped prefab's pages and
 templates; hosting alone, Ready, Start → `Started`, Leave back to the
 menu; a second screen finding the first on loopback and joining from
 its row. `voltra-server/tests/session.rs`: the binary found by a probe

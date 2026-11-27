@@ -215,14 +215,18 @@ may start the match itself (`start()` there needs no host's word, only
 the readiness). What "start" does is the game's: the engine only says
 when. Lobby messages travel on a channel of their own, so
 `tick.net.received()` never holds one; a client of another build's lobby
-is refused at the handshake.
+is refused at the handshake. A peer that connects and never joins is cut
+off after `join_timeout` (5 s), and with the lobby on, replication sends
+the world only to the lobby's players.
 
 The lobby screen does the clicking: `assets/prefabs/lobby.prefab.ron`
 (every `cargo xtask new-game` copies it) with `LobbyScreen::open(tick,
 &LobbyScreenConfig::for_game("my-game"))`, its `update(tick)` each frame
 until it answers `LobbyOutcome::Started`. It hosts, finds games on the
 LAN, joins by address, and in the room shows the players, Ready, and
-Start for the host. Restyle it in the editor; keep the parts' names.
+Start for the host. Restyle it in the editor; keep the parts' names. Names
+are other people's words: the rows and the status line are plain text
+(`rich: false`), not markup — a name of `[size=999]` shows as typed.
 
 ## Finding a game on the LAN
 
@@ -249,13 +253,15 @@ A search probes for `SearchOptions::timeout` (1.5 s), resending as it
 goes. A network that drops broadcasts (some VPNs and containers) is
 reached by naming addresses in `SearchOptions::targets`. A server answers
 each source a few times a second at most, with no more bytes than the
-probe brought. In a browser there is no UDP: join by address.
+probe brought, and only sources on the local network unless its
+`Advertise::scope` is `DiscoveryScope::Anyone`. In a browser there is no
+UDP: join by address.
 
 The tests probe over loopback, which every machine passes:
 
 <!-- ci -->
 ```sh
-cargo test -p voltra-net --test lobby --test discovery
+cargo test -p voltra-net --test lobby --test lobby_peers --test discovery
 ```
 
 ## Trying it
@@ -281,7 +287,7 @@ in it (`games/arena/src/bin/server.rs`, a few lines). `voltra-server`
 itself serves any scene with no game code — the same flags, `--help` for
 the rest (`--tick`, `--max-clients`, `--protocol`, `--bind`, `--lobby`,
 `--min-players`, `--max-players`, and `--discovery PORT|off`, `--name`,
-`--game` for the LAN):
+`--game`, `--discovery-public` for the LAN):
 
 <!-- ci -->
 ```sh
@@ -289,7 +295,11 @@ cargo run -p voltra-server -- scenes/sandbox.ron --udp 0 --ws 0 --seconds 2
 ```
 
 Without `--udp`/`--ws` it listens on 7777 and 7778, answers LAN probes
-on 7779, and without `--seconds` it runs until stopped.
+on 7779, and without `--seconds` it runs until stopped. It answers probes
+only from the local network (private, link-local and loopback
+addresses): a broadcast never crosses a router, so a probe from anywhere
+else is a stranger's. `--discovery-public` answers anyone, for a server
+you find by address across networks.
 
 At a desk: `cargo run -p arena` opens the lobby screen — Host in one
 window, Find on LAN (or Join by address) in another, Ready in both, Start
