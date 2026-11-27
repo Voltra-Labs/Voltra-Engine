@@ -8043,16 +8043,26 @@ connections and the scene; `voltra-core` drives it from the loop and
   ids, unnumbered, the server's copy of each is spawned from them when
   its spawn arrives — sprite and children and all, whenever it comes,
   before or after the client's own load — and one the server never
-  sends stays aside until the level goes. A server copy of the new level
-  that arrived before the change swept the old one went with it; the
-  client asks for it again at once (`resync_despawned`) rather than
-  when it next changes. A synchronous replace spawns them as authored
-  (the server's copies adopt them), sweeps, and asks again the same way.
-  A client's streamed region still leaves them out (`Replicas::LeaveOut`).
+  sends stays aside until the level goes — a coin taken before the
+  client loaded the level does not come back as a ghost. A synchronous
+  replace (`load_scene`) sets them aside the same way
+  (`spawn_scene_as_authored` answers what it left out). The set-aside
+  records outlive the session connecting (a game's opening level is
+  loaded before it joins), and are counted apart from interest
+  (`ReplicaStats::level_waiting`). A server copy of the new level that
+  arrived before the change swept the old one went with it; the client
+  asks for it again (`resync_despawned`) rather than when it next
+  changes — and keeps asking, in every message, the first 64 and then
+  the rest in turn (`client/resync.rs`), until its spawn arrives, the
+  server despawns it or the level goes: the ask rides the lossy input
+  channel. A client's streamed region still leaves them out
+  (`Replicas::LeaveOut`).
   Pinned by `tests/opening_level.rs` (the opening level; both ends
   changing scene together, the server first and the client first; a
   level reloaded over a persistent entity it holds, by load and by
-  change).
+  change; a coin the server took before the client loaded its level, by
+  load and by change, not coming back; the asks lost for twenty frames
+  around a change, the coin still coming back).
 - **Budget and priorities.** `bytes_per_snapshot` (1000 by default: one
   datagram with room for its header, 60 KB/s at 60 Hz) bounds each
   client's snapshot. Due entities are taken by banked priority — each
@@ -8881,9 +8891,10 @@ to meet in throwaway probes — kept as tests where they found something.
   spread 24–74 % over three runs taken while another build shared the
   machine; they now take three times the samples (`Config::steady`: a
   median of more is not moved by a few bursts slowed whole) and keep
-  their limits. An A/A over six runs on a quiet machine (load under 1.5
-  after the first; `voltra-bench noise`, best of three against best of
-  three) found every benchmark's A/A under 10 %, each within its limit
+  their limits. An A/A over six runs with nothing else running (the
+  one-minute load average 4.1, 2.7 and 2.0 at the first three runs as the
+  build before it wound down, under 1.5 from the fourth; `voltra-bench
+  noise`, best of three against best of three) found every benchmark's A/A under 10 %, each within its limit
   but `interest/server-frame-without` (7.5 %), raised from 15 to
   `noise::suggest`'s 20.
 - **Met and held** (probes; the first two kept as tests in

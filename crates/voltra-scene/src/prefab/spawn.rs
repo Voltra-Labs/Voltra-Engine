@@ -66,7 +66,14 @@ pub fn spawn(
     prefab: &Prefab,
     at: &Transform,
 ) -> Result<Instance, SceneError> {
-    spawn_copy(world, registry, prefab, Some(at), Ids::Fresh)
+    spawn_copy(
+        world,
+        registry,
+        prefab,
+        Some(at),
+        Ids::Fresh,
+        &HashSet::new(),
+    )
 }
 
 /// Spawns a copy of a whole scene file into `world`: an additive load, or the
@@ -81,7 +88,7 @@ pub fn spawn_scene(
     registry: &ComponentRegistry,
     scene: &Prefab,
 ) -> Result<Instance, SceneError> {
-    spawn_copy(world, registry, scene, None, Ids::Fresh)
+    spawn_copy(world, registry, scene, None, Ids::Fresh, &HashSet::new())
 }
 
 /// [`spawn_scene`], every entity keeping the id its record has: a level
@@ -91,37 +98,49 @@ pub fn spawn_scene(
 /// level copy is never the server's: it is swept, and the server's comes
 /// back bare or by prefab, without what the level gave it — a sprite.
 ///
-/// A record whose id `held` answers true — an entity that stays in the
-/// world through the change, a [`Persistent`](crate::Persistent) one the
-/// level also holds — is left out, with what hangs under it in the file:
-/// two entities never answer to one id. Ids the old level holds for the
-/// moment before it is swept are the caller's to answer false for.
+/// A record `leave_out` picks is not spawned, with what hangs under it in
+/// the file, and is answered beside the instance (in the file's order):
+/// one whose id an entity outliving the change holds (a
+/// [`Persistent`](crate::Persistent) one the level also holds), so no two
+/// entities answer to one id; a replication client's replicated ones, for
+/// the server's copies to be spawned from. Ids the old level holds for the
+/// moment before it is swept are the caller's not to pick.
 pub fn spawn_scene_as_authored(
     world: &mut World,
     registry: &ComponentRegistry,
     scene: &Prefab,
-    held: &dyn Fn(SceneId) -> bool,
-) -> Result<Instance, SceneError> {
-    spawn_copy(world, registry, scene, None, Ids::Authored(held))
+    leave_out: &dyn Fn(&EntityRecord) -> bool,
+) -> Result<(Instance, Vec<EntityRecord>), SceneError> {
+    let Some(file) = scene.file.as_ref() else {
+        return Ok((Instance::default(), Vec::new()));
+    };
+    let skipped = left_out(&file.entities, leave_out);
+    let records = file
+        .entities
+        .iter()
+        .filter(|record| skipped.contains(&record.id))
+        .cloned()
+        .collect();
+    let instance = spawn_copy(world, registry, scene, None, Ids::Authored, &skipped)?;
+    Ok((instance, records))
 }
 
 /// Which ids a copy's entities get.
-#[derive(Clone, Copy)]
-enum Ids<'a> {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ids {
     /// A fresh one each: a copy of a copy.
     Fresh,
-    /// Their records' own: the level as authored, but for the ones this
-    /// answers true for, left out.
-    Authored(&'a dyn Fn(SceneId) -> bool),
+    /// Their records' own: the level as authored.
+    Authored,
 }
 
-/// The records of `records` to leave out: those `held` answers true for,
-/// and every one under them in the file.
-fn left_out(records: &[EntityRecord], held: &dyn Fn(SceneId) -> bool) -> HashSet<SceneId> {
+/// The records of `records` to leave out: those `pick` picks, and every
+/// one under them in the file.
+fn left_out(records: &[EntityRecord], pick: &dyn Fn(&EntityRecord) -> bool) -> HashSet<SceneId> {
     let mut out: HashSet<SceneId> = records
         .iter()
+        .filter(|record| pick(record))
         .map(|record| record.id)
-        .filter(|&id| held(id))
         .collect();
     if out.is_empty() {
         return out;
@@ -159,15 +178,12 @@ fn spawn_copy(
     prefab: &Prefab,
     at: Option<&Transform>,
     ids: Ids,
+    skipped: &HashSet<SceneId>,
 ) -> Result<Instance, SceneError> {
     let Some(file) = prefab.file.as_ref() else {
         return Ok(Instance::default());
     };
 
-    let skipped = match ids {
-        Ids::Fresh => HashSet::new(),
-        Ids::Authored(held) => left_out(&file.entities, held),
-    };
     let records: Vec<&EntityRecord> = file
         .entities
         .iter()
@@ -181,7 +197,7 @@ fn spawn_copy(
         .iter()
         .map(|record| match ids {
             Ids::Fresh => SceneId::new(),
-            Ids::Authored(_) => record.id,
+            Ids::Authored => record.id,
         })
         .collect();
     let mut renamed: HashMap<SceneId, SceneId> = HashMap::with_capacity(fresh.len());

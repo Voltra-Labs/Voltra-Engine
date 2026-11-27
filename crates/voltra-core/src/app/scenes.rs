@@ -15,7 +15,8 @@ use std::collections::{HashMap, HashSet};
 
 use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
-use voltra_scene::{hierarchy, prefab, Persistent, SceneId};
+use voltra_scene::format::EntityRecord;
+use voltra_scene::{hierarchy, prefab, Persistent, Replicated, SceneId};
 
 use super::spawning::prefab_store;
 use super::tick::Tick;
@@ -90,7 +91,7 @@ impl App {
             match request {
                 Request::Replace(path) => self.replace_scene(&path),
                 Request::Add(path, load) => {
-                    if let Some(entities) = self.spawn_scene(&path, false) {
+                    if let Some((entities, _)) = self.spawn_scene(&path, false) {
                         log::info!("added {} ({} entities)", path.as_str(), entities.len());
                         self.scenes.loaded.insert(load, entities);
                     }
@@ -126,16 +127,20 @@ impl App {
     /// The old level holding the same ids for the moment between the spawn
     /// and the sweep is harmless: nothing reads an id in between. A record
     /// whose id a [`Persistent`] entity holds — one that outlives the
-    /// sweep — is left out, so no two entities answer to one id.
+    /// sweep — is left out, so no two entities answer to one id. A
+    /// replication client leaves the level's replicated records out too and
+    /// sets them aside for the server's copies, as a change over frames
+    /// does: the server says which of them still exist.
     fn replace_scene(&mut self, path: &AssetPath) {
         let authored = self.net.replicates();
-        let Some(arrived) = self.spawn_scene(path, authored) else {
+        let Some((arrived, set_aside)) = self.spawn_scene(path, authored) else {
             return;
         };
         // On a client, what the old level set aside goes with it.
         self.forget_unsent_level();
         let keep: HashSet<Entity> = arrived.iter().copied().collect();
         self.sweep_roots(&keep);
+        self.keep_level(set_aside);
         // What the server had sent of the new level went with the old one.
         self.resync_swept();
         // A change over frames underway, and the streamed world, were for
@@ -186,8 +191,15 @@ impl App {
     /// are queued for asset resolution.
     ///
     /// `authored` keeps the file's ids rather than giving each entity a
-    /// fresh one ([`prefab::spawn_scene_as_authored`]).
-    fn spawn_scene(&mut self, path: &AssetPath, authored: bool) -> Option<Vec<Entity>> {
+    /// fresh one ([`prefab::spawn_scene_as_authored`]), and answers beside
+    /// the entities the records it left out: those a persistent entity
+    /// holds, and on a replication client the replicated ones.
+    fn spawn_scene(
+        &mut self,
+        path: &AssetPath,
+        authored: bool,
+    ) -> Option<(Vec<Entity>, Vec<EntityRecord>)> {
+        let client = self.is_replication_client();
         let scenes = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = scenes.load_scene(path);
         let scene = scenes.get(handle);
@@ -202,16 +214,18 @@ impl App {
         }
         let spawned = if authored {
             let staying = surviving_ids(&self.world);
-            prefab::spawn_scene_as_authored(&mut self.world, &self.registry, scene, &|id| {
-                staying.contains(&id)
+            prefab::spawn_scene_as_authored(&mut self.world, &self.registry, scene, &|record| {
+                staying.contains(&record.id)
+                    || (client && record.components.contains_key(Replicated::NAME))
             })
         } else {
             prefab::spawn_scene(&mut self.world, &self.registry, scene)
+                .map(|instance| (instance, Vec::new()))
         };
         match spawned {
-            Ok(instance) => {
+            Ok((instance, left_out)) => {
                 self.spawned.extend_from_slice(&instance.entities);
-                Some(instance.entities)
+                Some((instance.entities, left_out))
             }
             Err(e) => {
                 log::error!(

@@ -70,9 +70,13 @@ user's side. 3D is not part of it: it comes next, with a plan of its own.
   `load_scene` or `change_scene` — under fresh ids, so no client entity
   was the server's: the arena's coin had no sprite and its bot stood
   still. With replication on, the level keeps its file's ids; a client
-  sets the level's replicated records aside and spawns the server's copy
-  of each from them when it arrives, so a coin keeps its sprite, and a
-  copy a change swept early is asked for again at once.
+  sets the level's replicated records aside — on `load_scene` as on
+  `change_scene` — and spawns the server's copy of each from them when it
+  arrives, so a coin keeps its sprite and one the server no longer has
+  (taken) stays gone. A copy a change swept early is asked for again, in
+  every message until it arrives, so a lost ask is not the end of it.
+  `ReplicaStats::level_waiting` counts what is set aside apart from
+  `out_of_interest`.
 - A level reloaded under its ids no longer spawns a twin of a
   `Persistent` entity it holds.
 - A region unloading on a replication client let go of every entity the

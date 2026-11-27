@@ -173,7 +173,7 @@ impl App {
 
     /// Whether this end is a replication client, whose server sends the
     /// replicated entities a load would otherwise make a second copy of.
-    fn is_replication_client(&self) -> bool {
+    pub(in crate::app) fn is_replication_client(&self) -> bool {
         matches!(self.net.replication(), Some(Replication::Client(_)))
     }
 
@@ -197,7 +197,7 @@ impl App {
     /// On a replication client, sets aside the replicated entities of the
     /// level it is loading, for the server's copies to be spawned from as
     /// they arrive (`ReplicationClient::keep_level`).
-    fn keep_level(&mut self, records: Vec<voltra_scene::format::EntityRecord>) {
+    pub(in crate::app) fn keep_level(&mut self, records: Vec<voltra_scene::format::EntityRecord>) {
         if records.is_empty() {
             return;
         }

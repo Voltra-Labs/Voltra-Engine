@@ -122,12 +122,20 @@ fn assert_dressed(server: &mut Headless, client: &mut Headless, coin_id: SceneId
 }
 
 /// A server and a client of one session, each with a tick that changes to
-/// `next` (behind no screen) once its flag is set.
-fn session(
-    root: &Path,
-    first: &str,
-    next: &str,
-) -> (Headless, Headless, Rc<Cell<bool>>, Rc<Cell<bool>>) {
+/// `next` (over frames, behind no screen) once its flag is set.
+fn session(root: &Path, first: &str, next: &str) -> Session {
+    session_by(root, first, next, true)
+}
+
+/// [`session`], each end going to `next` with `load_scene`, in one frame.
+fn session_loading(root: &Path, first: &str, next: &str) -> Session {
+    session_by(root, first, next, false)
+}
+
+/// A server, a client, and the flags that send each to the next level.
+type Session = (Headless, Headless, Rc<Cell<bool>>, Rc<Cell<bool>>);
+
+fn session_by(root: &Path, first: &str, next: &str, over_frames: bool) -> Session {
     let network = MemoryNetwork::new();
     let transport = network.endpoint();
     let address = transport.address();
@@ -138,7 +146,11 @@ fn session(
             .with_replication(ReplicationConfig::default())
             .with_update(move |tick| {
                 if go.replace(false) {
-                    tick.change_scene(&next, None);
+                    if over_frames {
+                        tick.change_scene(&next, None);
+                    } else {
+                        tick.load_scene(&next);
+                    }
                 }
             });
         app.load_scene(&scene(first));
@@ -265,4 +277,97 @@ fn a_level_reloaded_over_a_persistent_entity_it_holds_leaves_one_of_it() {
             .count();
         assert_eq!(holding, 1, "{label}: one entity under its id");
     }
+}
+
+#[test]
+fn a_level_entity_the_server_no_longer_has_does_not_come_back_on_a_client() {
+    // The server moves on to b and its coin is taken; then the client
+    // loads b, in one frame or over several.
+    for change in [false, true] {
+        let root = scratch_root();
+        let coin_id = SceneId::new();
+        write_level(&root, "a", None);
+        write_level(&root, "b", Some(coin_id));
+        let (mut server, mut client, go_server, go_client) = if change {
+            session(&root, "a", "b")
+        } else {
+            session_loading(&root, "a", "b")
+        };
+        go_server.set(true);
+        step(&mut server, &mut client, 30);
+        let theirs: Vec<Entity> = server
+            .world()
+            .query::<Replicated>()
+            .map(|(e, _)| e)
+            .collect();
+        assert_eq!(theirs.len(), 1, "the server's coin");
+        for coin in theirs {
+            voltra_scene::hierarchy::despawn_recursive(server.world_mut(), coin);
+        }
+        step(&mut server, &mut client, 30);
+        go_client.set(true);
+        step(&mut server, &mut client, 150);
+        assert!(
+            replicated(&client).is_empty(),
+            "change {change}: no ghost of the taken coin"
+        );
+        assert_eq!(named(client.world(), "Coin"), 0, "change {change}");
+        assert_eq!(named(client.world(), "Wall"), 1, "change {change}: b is in");
+    }
+}
+
+#[test]
+fn a_level_entity_asked_for_again_comes_back_though_the_asks_are_lost() {
+    use voltra_core::net::{Conditioned, LinkConditions};
+
+    let root = scratch_root();
+    let coin_id = SceneId::new();
+    write_level(&root, "a", None);
+    write_level(&root, "b", Some(coin_id));
+    let network = MemoryNetwork::new();
+    let transport = network.endpoint();
+    let address = transport.address();
+    let app = |go: Rc<Cell<bool>>| {
+        let next = scene("b");
+        let mut app = App::default()
+            .with_asset_root(&root)
+            .with_replication(ReplicationConfig::default())
+            .with_update(move |tick| {
+                if go.replace(false) {
+                    tick.change_scene(&next, None);
+                }
+            });
+        app.load_scene(&scene("a"));
+        app
+    };
+    let (go_server, go_client) = (Rc::new(Cell::new(false)), Rc::new(Cell::new(false)));
+    let mut server = Headless::new(app(go_server.clone()));
+    server.net_mut().host_on(transport, NetConfig::default());
+    let link = Conditioned::new(network.endpoint(), LinkConditions::default(), 7);
+    let control = link.control();
+    let mut client = Headless::new(app(go_client.clone()));
+    client
+        .net_mut()
+        .join_on(link, address, NetConfig::default());
+    step(&mut server, &mut client, 90);
+
+    // The server changes first, so its coin reaches the client in a, and
+    // the client's change sweeps it: the client must ask for it again,
+    // while everything it sends is lost.
+    go_server.set(true);
+    step(&mut server, &mut client, 40);
+    control.set(LinkConditions {
+        loss: 1.0,
+        ..LinkConditions::default()
+    });
+    go_client.set(true);
+    step(&mut server, &mut client, 20);
+    control.set(LinkConditions::default());
+    step(&mut server, &mut client, 120);
+    let coins = replicated(&client);
+    assert_eq!(coins.len(), 1, "asked for until it came");
+    assert_eq!(
+        client.world().get::<Sprite>(coins[0]).map(|s| s.sort_order),
+        Some(7)
+    );
 }
