@@ -6,7 +6,7 @@
 //! component on the server — the game reads the inputs and moves the
 //! entity itself.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use glam::Vec2;
 use voltra_ecs::{Entity, World};
@@ -17,6 +17,7 @@ use crate::acks::ReceivedTicks;
 use crate::wire::{self, ClientMessage, Control, NetId, ServerTick, MAX_LISTED};
 use crate::{Interest, InterestGrid, ReplicationConfig};
 
+mod audience;
 mod inputs;
 mod interest_points;
 mod lag;
@@ -61,6 +62,11 @@ pub struct ReplicationServer {
     tracked: BTreeMap<NetId, Tracked>,
     next_id: NetId,
     clients: BTreeMap<PeerId, ClientView>,
+    /// Every connected client, replicated to or not.
+    connected: BTreeSet<PeerId>,
+    /// The clients replicated to, when the game names them
+    /// ([`set_audience`](Self::set_audience)); `None` is every connected one.
+    audience: Option<BTreeSet<PeerId>>,
     tick: ServerTick,
     last_snapshot: ServerTick,
     /// Interest management, when on: its values checked, and the grid it
@@ -97,6 +103,8 @@ impl ReplicationServer {
             tracked: BTreeMap::new(),
             next_id: 1,
             clients: BTreeMap::new(),
+            connected: BTreeSet::new(),
+            audience: None,
             tick: 0,
             last_snapshot: 0,
         }
@@ -117,7 +125,8 @@ impl ReplicationServer {
         self.step
     }
 
-    /// The clients it replicates to.
+    /// The clients it replicates to: every connected one, or those of
+    /// them in its [`audience`](Self::set_audience).
     pub fn clients(&self) -> impl Iterator<Item = PeerId> + '_ {
         self.clients.keys().copied()
     }
@@ -148,9 +157,13 @@ impl ReplicationServer {
         for event in endpoint.events() {
             match *event {
                 NetEvent::Connected(peer) if peer != PeerId::SERVER => {
-                    self.clients.insert(peer, ClientView::default());
+                    self.connected.insert(peer);
+                    if self.admits(peer) {
+                        self.clients.insert(peer, ClientView::default());
+                    }
                 }
                 NetEvent::Disconnected { peer, .. } => {
+                    self.connected.remove(&peer);
                     self.clients.remove(&peer);
                     self.points.remove(&peer);
                 }
