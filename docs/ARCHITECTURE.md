@@ -8227,9 +8227,17 @@ whose checked blocks run the match test and the server for two seconds.
 ### Each client is sent what is near what it watches, and what leaves is despawned on it
 
 Stage 127. `ReplicationConfig::interest: Option<Interest { radius,
-cell_size, hysteresis }>` — `None`, the default, is stage 114 exactly
-(pinned: with a radius covering everything, a client is sent the same
-snapshots byte for byte as with `None`). Only the server's is read.
+cell_size, hysteresis }>` — `None`, the default, sends what stage 114
+sent, every replicated entity to every client, with two bytes more on
+the wire: the snapshot's cull list, empty (one byte), and the schema's
+interest flag (one byte, once). Pinned: with a radius covering
+everything, every snapshot is the same size as with `None`, frame by
+frame, and the client ends with the same world. Only the server's is
+read. The wire change is `REPLICATION_WIRE_VERSION` 2, which the
+handshake checks (`NetConfig::layer_version`, in the fingerprint): a
+0.3 peer is refused with `ProtocolMismatch` at connect rather than
+failing every snapshot after it. Bump it on any change to a
+replication message.
 
 - **Relevance.** An entity is relevant to a client when it is within
   `radius` of one of the client's *interest points* — where the entities
@@ -8348,7 +8356,8 @@ one copy; always-relevant, positionless and own-radius entities; the
 owned entity's far root and a hierarchy that comes and goes whole;
 the owner despawned and a spectator point set; a level entity back with
 its sprite, a changed component and a removed one; the budget; the
-byte-for-byte equality with `None`; a client joining late. Unit tests of
+same snapshot sizes and world as `None`; a client joining late;
+(`tests/replication.rs`) a peer on the previous wire version refused. Unit tests of
 the grid (radius, leave radius, own radius, a tiny cell, negative cells),
 the stash (kept but for the replicated components, a replicated child
 kept on its own, let go of), the view (a cull acknowledged, an old

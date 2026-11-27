@@ -464,8 +464,12 @@ fn relevant_entities_share_the_budget_and_far_ones_cost_nothing() {
     }
 }
 
+/// `None` and a radius covering everything send snapshots of the same
+/// size, frame by frame, and leave the same world. (Both are this
+/// build's wire: `None` costs one byte a snapshot over stage 114's, the
+/// empty cull list — `REPLICATION_WIRE_VERSION` 2.)
 #[test]
-fn interest_covering_everything_sends_byte_for_byte_what_none_does() {
+fn interest_covering_everything_sends_what_none_does() {
     let run = |config: ReplicationConfig| {
         let mut rig = Rig::new(LinkConditions::default(), config);
         let peer = rig.join(|_| {});
@@ -493,13 +497,20 @@ fn interest_covering_everything_sends_byte_for_byte_what_none_does() {
                 .expect("replicating");
             bytes.push((stats.snapshot_bytes, stats.relevant));
         }
-        (bytes, replicated(rig.clients[0].world()).len())
+        // Ids are fresh each run: the world compared by what is in it.
+        let mut seen: Vec<Transform> = replicated(rig.clients[0].world()).into_values().collect();
+        seen.sort_by(|a, b| {
+            (a.translation.x, a.translation.y)
+                .partial_cmp(&(b.translation.x, b.translation.y))
+                .expect("finite")
+        });
+        (bytes, seen)
     };
     let (none, seen_none) = run(ReplicationConfig::default());
     let (all, seen_all) = run(interest(1.0e6));
-    assert_eq!(seen_none, 40, "its own and 39 movers");
+    assert_eq!(seen_none.len(), 40, "its own and 39 movers");
     assert_eq!(seen_all, seen_none);
-    assert_eq!(all, none, "the same snapshots, frame by frame");
+    assert_eq!(all, none, "the same snapshot sizes, frame by frame");
 }
 
 #[test]
