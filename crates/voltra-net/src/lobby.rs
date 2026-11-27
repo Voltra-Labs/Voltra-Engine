@@ -43,8 +43,10 @@ pub use refusal::LobbyRefusal;
 pub use session::LobbySession;
 pub use state::{Lobby, LobbyEntry, LobbyPhase};
 
-/// The version of the lobby's messages. Bump it on any change to
-/// `lobby/wire.rs`: it is in the handshake's fingerprint
+/// The version of the lobby's messages. Bumped on any change to
+/// `lobby/wire.rs` after a release has shipped with this one (an
+/// unreleased wire changes under it freely): it is in the handshake's
+/// fingerprint
 /// ([`NetConfig::lobby_version`](crate::NetConfig::lobby_version)), so
 /// builds that would misread each other's lobby never connect.
 pub const LOBBY_WIRE_VERSION: u32 = 1;
