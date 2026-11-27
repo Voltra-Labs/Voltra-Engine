@@ -160,6 +160,7 @@ impl App {
         // A scene change is taking the world away: no region starts or
         // stops until it is done, but a stopped world's go on going.
         let mut order: Vec<(f32, usize)> = Vec::new();
+        let mut unloaded = false;
         if let (Some(world), false) = (streaming.world.as_mut(), changing) {
             let anchors = self.streaming_anchors(world.regions.load_radius);
             let margin = world.regions.unload_margin;
@@ -188,6 +189,7 @@ impl App {
                         };
                     }
                     Slot::Loaded(entities) if !kept => {
+                        unloaded = true;
                         *slot = Slot::Unloading(Unload::new(std::mem::take(entities)));
                     }
                     _ => {}
@@ -212,6 +214,9 @@ impl App {
                 order.push((reach, index));
             }
             order.sort_by(|a, b| a.0.total_cmp(&b.0));
+        }
+        if unloaded {
+            self.forget_unsent_level();
         }
 
         // Loads, nearest first, and unloads take turns.

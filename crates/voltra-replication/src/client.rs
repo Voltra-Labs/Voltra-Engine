@@ -192,6 +192,14 @@ impl ReplicationClient {
         self.input_ack
     }
 
+    /// Lets go of the level entities set aside at the first complete
+    /// snapshot that the server never sent: call it when the level they
+    /// came from goes (a scene change, a region unloaded), or they would be
+    /// kept for the session. What the server culled is kept — it knows.
+    pub fn forget_unsent(&mut self) {
+        self.stash.forget_unnumbered();
+    }
+
     /// Queues an input for the server, sent with the next few
     /// [`send`](Self::send)s until acknowledged.
     pub fn queue_input(&mut self, tick: InputTick, bytes: Vec<u8>) {

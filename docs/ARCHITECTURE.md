@@ -8326,9 +8326,13 @@ replication message.
   joins late sweeps the level's replicated entities it was never sent
   (stage 114's first complete snapshot) into the same store rather than
   destroying them — under interest, never sent may mean only far away —
-  and spawns the level's copy back when one comes near. One the server
-  despawned before the client joined stays in the store, a record per
-  entity of the level, until the session ends.
+  and spawns the level's copy back when one comes near. Those have no
+  number the server sends, so no despawn reaches them: they are let go of
+  when their level goes — a scene change, a region unloaded
+  (`ReplicationClient::forget_unsent`, called by the loop) — which also
+  covers a region loaded before joining, whose entities carry fresh ids
+  the server never sends. One the server despawned before the client
+  joined is kept until then.
 - **References** (`SceneRefs`: a joint's other body, a camera target) to
   an entity out of interest name an id the client does not hold; they
   resolve the way a reference to any id not yet spawned does, once both
@@ -8351,11 +8355,15 @@ replication message.
   entity at rest kept relevant but not compared each tick); the editor's
   network play setting interest itself (it hosts with the default config,
   so a game's interest applies to a dedicated or listen server it
-  starts); a store bound for level entities a late joiner never sees.
+  starts); letting go of a swept entity of one region alone (any region
+  unloaded lets go of every swept entity, so one of the still-loaded
+  level comes back by prefab or bare).
 
 Pinned by `voltra-core/tests/interest.rs`: entering at the radius and
 leaving past it under 20 % loss, back again where the server has it, and
-let go of once despawned while away; the edge held for four seconds with
+let go of once despawned while away; what a late joiner swept let go
+of at a scene change; a child the server moved off its culled parent
+left in the world; the edge held for four seconds with
 one copy; always-relevant, positionless and own-radius entities; the
 owned entity's far root and a hierarchy that comes and goes whole;
 the owner despawned and a spectator point set; a level entity back with

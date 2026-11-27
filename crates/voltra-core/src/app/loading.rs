@@ -176,4 +176,13 @@ impl App {
     fn is_replication_client(&self) -> bool {
         matches!(self.net.replication(), Some(Replication::Client(_)))
     }
+
+    /// On a replication client, lets go of the level entities it set aside
+    /// out of interest without the server ever sending them: the level
+    /// they came from is going (a scene change, a region unloaded).
+    fn forget_unsent_level(&mut self) {
+        if let Some(client) = self.net.replication_mut().and_then(Replication::client_mut) {
+            client.forget_unsent();
+        }
+    }
 }

@@ -79,13 +79,20 @@ impl Rig {
     /// A client joined, and its peer once it is in. `level` runs on its
     /// world first: the level it loaded.
     fn join(&mut self, level: impl FnOnce(&mut World)) -> PeerId {
+        self.join_with(|app| app, level)
+    }
+
+    /// [`join`](Self::join), its app shaped by `app` first.
+    fn join_with(
+        &mut self,
+        app: impl FnOnce(App) -> App,
+        level: impl FnOnce(&mut World),
+    ) -> PeerId {
         let seed = 10 + self.clients.len() as u64;
         let transport = Conditioned::new(self.network.endpoint(), self.link, seed);
-        let mut client = Headless::new(
-            App::default()
-                .with_game(Rules)
-                .with_replication(self.config.clone()),
-        );
+        let mut client = Headless::new(app(App::default()
+            .with_game(Rules)
+            .with_replication(self.config.clone())));
         level(client.world_mut());
         client
             .net_mut()
@@ -598,4 +605,52 @@ fn a_child_moved_off_its_parent_on_the_server_stays_when_the_parent_goes() {
         client.get::<Transform>(before).map(|t| t.translation),
         Some(Vec2::new(2.0, 1.0))
     );
+}
+
+#[test]
+fn what_a_late_joiner_swept_is_let_go_of_with_its_level() {
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    let root = voltra_testkit::scratch_root();
+    std::fs::create_dir_all(root.join("scenes")).expect("a folder");
+    std::fs::write(root.join("scenes/next.ron"), "(version: 1, entities: [])").expect("written");
+    let mut rig = Rig::new(LinkConditions::default(), interest(10.0));
+    let door_id = SceneId::new();
+    let level = move |world: &mut World| {
+        let door = world.spawn();
+        world.insert(door, door_id);
+        world.insert(door, Transform::from_translation(Vec2::new(60.0, 0.0)));
+        world.insert(door, Replicated::default());
+    };
+    level(rig.world());
+    let change = Rc::new(Cell::new(false));
+    let asked = change.clone();
+    let peer = rig.join_with(
+        |app| {
+            app.with_asset_root(root.clone()).with_update(move |tick| {
+                if asked.replace(false) {
+                    let next = voltra_assets::AssetPath::new("scenes/next.ron").expect("a path");
+                    tick.change_scene(&next, None);
+                }
+            })
+        },
+        level,
+    );
+    owned(rig.world(), Vec2::ZERO, peer);
+    rig.step(60);
+    let set_aside = |rig: &Rig| {
+        rig.clients[0]
+            .net()
+            .replication()
+            .and_then(|r| r.client())
+            .expect("a client")
+            .stats()
+            .out_of_interest
+    };
+    assert_eq!(set_aside(&rig), 1, "the far door, swept and set aside");
+
+    change.set(true);
+    rig.step(60);
+    assert_eq!(set_aside(&rig), 0, "its level went, and it with it");
 }

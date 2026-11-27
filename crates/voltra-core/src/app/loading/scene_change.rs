@@ -145,6 +145,7 @@ impl App {
             .to_path_buf();
         let registry = self.registry.clone();
         let skip = self.is_replication_client();
+        self.forget_unsent_level();
         let build = SceneBuild::start(self.scenes.loading.pool.get(), root, path, registry, skip);
         self.scenes.loading.change = Some(SceneChange {
             build,

@@ -14,7 +14,14 @@
 //! come back.
 //!
 //! Kept until the entity comes back, the server despawns it for real, or
-//! the session ends. Bounded by what the server knows it culled.
+//! the session ends. What the server culled is bounded by what it knows it
+//! culled: a real despawn reaches each. What the first complete snapshot
+//! swept (a level entity the server never sent, which under interest may
+//! be only far away) has no number the server sends; it is bounded by the
+//! level, and let go of when the level goes
+//! ([`ReplicationClient::forget_unsent`](crate::ReplicationClient::forget_unsent):
+//! a scene change, a region unloaded — a region's entities have fresh ids
+//! the server never sends, so they would otherwise stay).
 
 use std::collections::HashMap;
 
@@ -145,6 +152,12 @@ impl Stash {
         }
     }
 
+    /// Lets go of what was set aside with no number the server sends it by:
+    /// the level entities swept, never sent.
+    pub(crate) fn forget_unnumbered(&mut self) {
+        self.kept.retain(|_, (net, _)| net.is_some());
+    }
+
     /// Lets go of everything: a new session.
     pub(crate) fn clear(&mut self) {
         self.kept.clear();
@@ -241,5 +254,11 @@ mod tests {
         assert_eq!(hierarchy::parent_of(&world, turret), None, "unparented");
         assert_eq!(hierarchy::parent_of(&world, barrel), Some(turret));
         assert_eq!(stash.len(), 1, "only the tank set aside");
+        stash.forget_unnumbered();
+        assert_eq!(
+            stash.len(),
+            0,
+            "swept, never sent: let go of with the level"
+        );
     }
 }
