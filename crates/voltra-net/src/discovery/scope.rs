@@ -12,9 +12,12 @@ use std::net::IpAddr;
 /// answers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DiscoveryScope {
-    /// Only private, link-local and loopback sources: IPv4 `10/8`,
-    /// `172.16/12`, `192.168/16`, `169.254/16`, `127/8`; IPv6 `fc00::/7`,
-    /// `fe80::/10`, `::1` (and those IPv4 ones as IPv6-mapped).
+    /// Only private, shared, link-local and loopback sources: IPv4
+    /// `10/8`, `172.16/12`, `192.168/16`, `100.64/10` (shared address
+    /// space: carrier NAT, and mesh VPNs such as Tailscale's — never
+    /// routed on the public internet), `169.254/16`, `127/8`; IPv6
+    /// `fc00::/7`, `fe80::/10`, `::1` (and those IPv4 ones as
+    /// IPv6-mapped).
     #[default]
     Local,
     /// Any source: a server probed by address across networks
@@ -32,10 +35,15 @@ impl DiscoveryScope {
     }
 }
 
-/// Whether `ip` is a private, link-local or loopback address.
+/// Whether `ip` is a private, shared (`100.64/10`), link-local or
+/// loopback address: one no public route leads to.
 pub fn is_local(ip: IpAddr) -> bool {
     match ip {
-        IpAddr::V4(v4) => v4.is_private() || v4.is_link_local() || v4.is_loopback(),
+        IpAddr::V4(v4) => {
+            let [a, b, ..] = v4.octets();
+            let shared = a == 100 && b & 0xc0 == 64;
+            v4.is_private() || shared || v4.is_link_local() || v4.is_loopback()
+        }
         IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
             Some(v4) => is_local(IpAddr::V4(v4)),
             None => {
@@ -71,6 +79,9 @@ mod tests {
             "fe80::1",
             "febf::1",
             "::ffff:192.168.0.5",
+            "100.64.0.1",
+            "100.101.102.103",
+            "100.127.255.255",
         ] {
             assert!(is_local(ip(local)), "{local}");
             assert!(DiscoveryScope::Local.admits(ip(local)), "{local}");
@@ -81,7 +92,8 @@ mod tests {
             "172.32.0.1",
             "192.169.0.1",
             "169.255.0.1",
-            "100.64.0.1",
+            "100.63.255.255",
+            "100.128.0.1",
             "1.1.1.1",
             "2001:db8::1",
             "fec0::1",

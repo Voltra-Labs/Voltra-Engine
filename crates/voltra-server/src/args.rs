@@ -35,8 +35,9 @@ Options:
       --protocol N       The game's protocol number clients must match (default 0)
       --discovery PORT|off  UDP port to answer LAN probes on (default 7779)
       --discovery-public Answer LAN probes from any address, not only private,
-                         link-local and loopback ones (a broadcast never crosses
-                         a router: only a stranger probes from elsewhere)
+                         VPN-mesh (100.64/10), link-local and loopback ones (a
+                         broadcast never crosses a router: only a stranger
+                         probes from elsewhere)
       --name NAME        What LAN searches list the server as (default \"Voltra server\")
       --game ID          The game id LAN probes are matched against
       --lobby            Hold a lobby before the match (a game's server may already)

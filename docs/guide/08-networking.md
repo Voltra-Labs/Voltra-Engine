@@ -296,7 +296,7 @@ cargo run -p voltra-server -- scenes/sandbox.ron --udp 0 --ws 0 --seconds 2
 
 Without `--udp`/`--ws` it listens on 7777 and 7778, answers LAN probes
 on 7779, and without `--seconds` it runs until stopped. It answers probes
-only from the local network (private, link-local and loopback
+only from the local network (private, link-local, loopback and VPN-mesh
 addresses): a broadcast never crosses a router, so a probe from anywhere
 else is a stranger's. `--discovery-public` answers anyone, for a server
 you find by address across networks.
