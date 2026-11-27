@@ -14,9 +14,21 @@ impl Net {
     /// before they host or join — it adds its channel and wire version to
     /// the session's config ([`LobbyConfig::net_config`]), which the
     /// handshake checks.
+    ///
+    /// Called while a session's lobby is running, it leaves that lobby be
+    /// — rebuilding it would empty the room, and every client would be
+    /// cut off at the join deadline — and says so: `config` is the next
+    /// session's.
     pub fn enable_lobby(&mut self, config: LobbyConfig) {
+        if self.lobby.is_some() {
+            log::warn!(
+                "the lobby is already running for this session; its new config applies \
+                 from the next session"
+            );
+            self.lobby_config = Some(config);
+            return;
+        }
         self.lobby_config = Some(config);
-        self.lobby = None;
         self.lobby_refused = false;
     }
 

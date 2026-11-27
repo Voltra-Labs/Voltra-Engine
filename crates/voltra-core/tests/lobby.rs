@@ -308,3 +308,45 @@ fn with_a_lobby_the_match_is_replicated_to_its_players_only() {
     assert_eq!(server.net().endpoint().map(Endpoint::peer_count), Some(1));
     assert!(player.net().lobby().is_some_and(|l| l.is_in()));
 }
+
+#[test]
+fn turning_the_lobby_on_again_mid_session_keeps_the_room() {
+    let network = MemoryNetwork::new();
+    let transport = network.endpoint();
+    let address = transport.address();
+    let short = NetConfig {
+        timeout: Duration::from_secs(1),
+        ..NetConfig::default()
+    };
+    let mut host = Headless::new(App::default().with_lobby(lobby("Host")));
+    host.net_mut().host_on(transport, short.clone());
+    if let Some(endpoint) = host.net_mut().endpoint_mut() {
+        endpoint.set_host_plays(true);
+    }
+    let mut guest = Headless::new(App::default().with_lobby(lobby("Guest")));
+    guest.net_mut().join_on(network.endpoint(), address, short);
+    for _ in 0..60 {
+        host.step(1, FRAME);
+        guest.step(1, FRAME);
+    }
+    let in_room = |end: &Headless| end.net().lobby().map_or(0, |l| l.lobby().len());
+    assert_eq!((in_room(&host), in_room(&guest)), (2, 2));
+
+    // The game turns it on again, with other rules: the live room stays,
+    // nobody is cut off at a join deadline (3 s here), the rules wait.
+    host.net_mut().enable_lobby(LobbyConfig {
+        max_players: 3,
+        ..lobby("Host")
+    });
+    for _ in 0..300 {
+        host.step(1, FRAME);
+        guest.step(1, FRAME);
+    }
+    assert_eq!((in_room(&host), in_room(&guest)), (2, 2));
+    assert!(guest.net().lobby().is_some_and(|l| l.is_in()));
+    assert_eq!(
+        host.net().lobby().map(|l| l.lobby().max_players()),
+        Some(8),
+        "the running lobby kept its rules"
+    );
+}
