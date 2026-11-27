@@ -127,3 +127,29 @@ Each stroke is one undo entry. `W`, `E` or `R` go back to the transform
 tools. A layer's terrains, chosen in its inspector, paint tiles that join
 up with their neighbours. What a tile does in the physics, and values a
 game reads off it, are in [chapter 4](04-physics.md#tiles).
+
+## Cameras
+
+A scene is drawn through its **active `Camera`** with the highest
+priority: Scene ▸ Spawn camera, or add the component to any entity. Its
+`size` is half the height of world it shows; the Game toggle on the
+viewport shows the scene through it. **Turn** the camera's entity, and the
+view turns with it — through its parents, so a camera hung off a ship
+turns with the ship. What a turned camera sees is culled, picked and lit
+as drawn; a pixel-perfect camera stops snapping while it is turned.
+
+Two components move a camera while the game runs (its inspector's **Add
+follow** and **Add shake**):
+
+- **`CameraFollow2D`** keeps it on a **target** — smoothed, with a dead
+  zone the target moves in freely, a lead of the target's velocity, and
+  bounds its view stays inside. **Also frames** adds more targets: it aims
+  at the middle of the box around all of them, and **zoom to fit** eases
+  the camera's size so they all show, with a margin, between a least and
+  a greatest size. A target that leaves the scene drops out of the group.
+  With the follower selected, the viewport draws its dead zone (rose),
+  its bounds (faded rose) and the group's box (green).
+- **`CameraShake`** shakes it by trauma a game adds —
+  `world.get_mut::<CameraShake>(camera)` then `.add_trauma(0.5)` — moving
+  it up to `max offset` and, with a **max angle**, turning it too. It
+  always settles back where the camera rests.

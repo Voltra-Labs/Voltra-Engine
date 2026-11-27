@@ -439,6 +439,7 @@ Version 0.3 closes the 2D base and adds networking (stages 88–118, below).
 | 121 | Animator layers (masks, override, additive); timeline record mode, key copy, clip undo | done |
 | 122 | Joints: wheel, prismatic, mouse; revolute spring; breaking | done |
 | 123 | Characters push bodies, keep speed on slopes, turn with their floor | done |
+| 124 | The camera turns: rotated views, rotational shake, group framing | done |
 
 ## Contributing
 

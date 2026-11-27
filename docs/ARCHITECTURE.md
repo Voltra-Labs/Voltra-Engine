@@ -2713,6 +2713,10 @@ camera, `0.3` is far hills.
   layer repeats, so a world without one draws exactly as before. Picking sees
   the original only: the copies are the same decoration again. The
   platformer's hills repeat every 30 units, so the range never ends.
+- **Under a turned camera** (stage 124) the displacement stays a
+  translation; the view's turn applies after it, so every layer turns with
+  the world about the camera's centre, and repeats cover the turned view's
+  box.
 
 ### The batch draws what the camera sees, chunk by chunk for tilemaps
 
@@ -2726,7 +2730,8 @@ batch_stress` (a 512 × 64 tilemap and 5 000 sprites, a ~21 × 12 view):
 
 - **`Sheets::visible_in(min, max)`** carries the world rectangle the camera
   sees; the draw path sets it from the camera it draws with
-  (`position ± half_extents`). `None`, the default, culls nothing — picks,
+  (`Sheets::through(&view)`: `Camera2D::visible_bounds`, the box around
+  the turned rect since stage 124). `None`, the default, culls nothing — picks,
   tests and the screen-space UI batch (whose quads are in pixels, not world
   units) are unaffected.
 - **Per quad**, in `SpriteBatch::push_quad`, on the corners as drawn: one
@@ -3527,7 +3532,7 @@ the sector between the cone's outer edges, and every one of those three
 asks it:
 
 - **The view**: `light::gather` keeps a light whose `Reach::bounds` meets
-  the view. A sector's box is its centre, its two edges' ends and the
+  the view — the box around a turned view's rect since stage 124. A sector's box is its centre, its two edges' ends and the
   disc's extreme along each axis the cone faces — so a cone wider than a
   half turn still reaches round behind its centre.
 - **The quad**: the light instance carries that box as fractions of its
@@ -4773,15 +4778,121 @@ Rejected: **follow and shake on `Camera`** (above); **random-jump shake** —
 a flicker, not a motion; **a dead zone in screen fractions** — Godot's
 margins; world units are independent of the window and testable headless.
 
-- **Not yet**: rotation shake (the `Camera2D` has no rotation), several
-  targets framed at once, an editor overlay of the dead zone and bounds.
+**The camera turns (stage 124).** `Camera2D` gains `rotation` (radians,
+counter-clockwise, the view's; `0` upright, a non-finite one read as
+upright): the view matrix turns back about the view's centre after moving
+it to the origin, and `viewport_to_world` / `world_to_viewport` go through
+the view's own axes, so picking inverts exactly what the matrix draws.
+`camera::view` and `camera::shots` take the entity's **world** rotation
+(`camera::placement`, through its parents; scale is still read for
+nothing, a mirrored camera turned rather than flipped). Godot's
+`Camera2D.rotation` (with `ignore_rotation` off), Unity's orthographic
+camera turned about its view axis; Bevy's 2D camera is its transform, turn
+and all. One field on `Camera2D`, not a second camera type: the turn is
+part of where a 2D view is, and every caller that never turns pays nothing.
+
+- **What a turned view sees is the box around its turned rect**
+  (`Camera2D::visible_bounds`; `corners` for the rect itself). Every cull
+  already took a world box — sprites and glyphs per quad, tile chunks,
+  triangles, skinned meshes, particles in the batch, and lights by their
+  reach — so they all take this one, through `Sheets::through(&view)`,
+  which sets the parallax eye and the box together so no draw path can set
+  one without the other. Conservative: at 45° the box holds corners the
+  view does not show; a quad in them is drawn and clipped, as an
+  oversized quad always was. The editor's grid covers the same box.
+- **Pixel-perfect is off while turned** (`Shot::view`): a turned view's
+  pixels do not run along the world's grid, so no sub-pixel shift lines
+  them up, and a sprite seen turned is resampled whatever the camera does.
+  The snap comes back the frame the camera is upright again. Godot's
+  pixel snap has the same hole and leaves it.
+- **Parallax turns with the world about the camera**: a layer's
+  displacement stays a world-space translation by `camera × (1 − factor)`,
+  and the view's turn applies to everything after it — so a sky pinned to
+  the camera stays centred on screen and turns as the level does, the same
+  turn for every layer. Godot's `Parallax2D` under a turned `Camera2D`
+  behaves the same; turning a layer less than the world would be a second
+  rotation nobody asked for.
+- **Shots and split screen** turn per camera: each shot's view is its own
+  camera's, so one player's camera can turn while the other's does not,
+  and a render-texture camera turned draws its picture turned.
+- **The editor's own camera stays upright** (no control turns it; Reset
+  and prefab mode put it upright). The Game view shows a turned game
+  camera turned, and leaving it puts the editor camera's own turn back
+  (`View::set_mode` restores position, zoom and turn). The selected
+  camera's rectangle is drawn turned (`Camera2D::corners`).
+
+**A shake turns too.** `CameraShake::max_angle` (radians, default `0`, not
+written when `0`) is rotational trauma: `noise(t, 3.9) × max_angle ×
+trauma²`, a third channel of the same three-sine noise, phased off the
+offset's two. It is taken off and put back exactly as the offset is
+(`ShakeState::applied_angle`), so a shake never drifts the camera's turn and
+a turn the game makes between frames is kept. `applied_offset` /
+`applied_angle` say what is on the transform now (the editor's overlay
+reads the first). Eiserloh's talk shakes the angle the same way; the
+default stays still because a turned camera is a choice, not a default.
+
+**Several targets are framed (stage 124).** `CameraFollow2D::targets`
+(not written when empty) frames with `target`: the follower aims at the
+middle of the box around every one of them (`group()`: `target`, then
+`targets`, each once), and the dead zone, look-ahead and bounds work on
+that middle as they did on one target. `FollowZoom` (`zoom: Option`, not
+written when `None`) eases the camera's `size` — at the follower's
+smoothing, first frame snapping — to the size that shows the box plus
+`margin` on each side, through the camera's aspect and turn, within
+`min_size..=max_size` (either way round, inside `Camera`'s limits).
+Cinemachine's Target Group under a Framing Transposer with group framing;
+Godot has none built in.
+
+- **`target` stays, `targets` is added**: no migration — every older file
+  reads as a group of one and writes back the same, and the common single
+  target stays one field in a file. `CameraFollow2D::framing(ids)` builds a
+  group. `SceneRefs` remaps all of them, so a copied group follows the
+  copies.
+- **No weights or radii** per member (Cinemachine has both): a margin
+  covers the targets' size for a 2D group, and a weighted middle can come
+  when a game asks.
+- **A member that is gone drops out of the box**; a change in who is
+  present moves the middle without a velocity, so the lead does not jump.
+  Each missing id is said once — `debug` while others remain (an enemy
+  killed is how a group shrinks), `warn` when none is left and the
+  follower holds still, as one missing target always did.
+- **The bounds take the turned view's box**, so a turned camera's view
+  stays inside them too; the zoom fits the box seen along the turned
+  view's axes.
+- **Editor overlay** (`view/follow.rs`): the selected follower's dead zone
+  — around where it rests, less its offset, so the box is where the
+  *target* moves freely — its bounds, and with more than one target the
+  group's box with the zoom's margin. The inspector lists the group
+  (add, remove), the zoom (margin, sizes) and the shake's `max angle`
+  (degrees, `ui.drag_angle`).
+
+- **Not yet**: a screen-aligned marquee through a turned Game view (the box
+  is a world box, drawn turned, taken as drawn); a control that turns the
+  editor's own camera; the audio listener's ears do not turn with it (pan
+  is on world x); per-member weights and radii in a group.
 
 Pinned by `camera_rig/tests.rs` (landing on the target and easing the same
 at any frame rate, a dead zone held then left, bounds clamping a view and
 centring one too big, a lead at half a second, a missing target holding,
-a parented follower, a shake fading back to rest, a copied target remapped)
-and `app::camera_rig` (following only while the game runs). The
-`character` example follows with all of it and shakes on a hard landing.
+a parented follower, a shake fading back to rest, a copied target
+remapped), `camera_rig/group_tests.rs` (two targets framed at their middle
+and zoomed in and out to the limits, the zoom eased, a despawned target
+dropped without a lead jump and all gone holding, a turned camera zoomed
+to the turned box, every target remapped, an old single-target file read
+and written back unchanged), `camera_rig/shake_tests.rs` (a turning shake
+fading back to the rest angle over three knocks, none without
+`max_angle`, a game's turn kept), `follow/zoom.rs`, `camera/tests.rs` (a
+click through a turned camera picks the sprite drawn there and not the
+one an upright view would; the view turning through its parents),
+`batch/cull_tests.rs` and `light/tests.rs` (a view at 45° keeping a
+sprite and a light seen only because it is turned and leaving out one past
+its box; a pinned parallax layer centred on a turned screen),
+`camera/shots.rs` (a turned shot not snapped), `voltra-render`'s camera
+tests (matrix, pick and draw agree turned; the box at 45°; upright
+unchanged to the bit) and the editor's `view/follow.rs` and
+`view/overlay.rs`; and `app::camera_rig` (following only while the game
+runs). The `character` example follows with all of it and shakes on a
+hard landing.
 
 ### A state machine chooses the clip; the player plays it
 
@@ -6099,7 +6210,8 @@ crisp while the camera moves.
   submitted before the next's uniforms are written.
 - **`Camera::pixel_perfect`** snaps the view so the target's pixel edges
   fall on the world's pixel grid (`Shot::view`): moved by under half a
-  pixel, never scaled. With nearest filtering —
+  pixel, never scaled — and not at all while the camera is turned (stage
+  124, under "A camera rig is two components"). With nearest filtering —
   `App::with_texture_filter(Filter::Nearest)`, the project's choice as
   Godot's `default_texture_filter` is — a sprite at whole texels lands
   texel for pixel.
@@ -8474,6 +8586,7 @@ Same problem, same rule: read the source, not a tutorial.
 | Colour picker | `color_edit_button_*` edits inside a popup, so its own `Response` is never dragged or focused while the value moves. Its popup id is `ui.auto_id_with("popup")` read *before* the button is allocated; `auto_id_with` does not advance the counter, so the caller can read the same id and ask `Popup::is_id_open` |
 | Context menu | `Response::context_menu(\|ui\| …)` opens on a secondary click; close it from inside with `ui.close()` |
 | Strokes | `Painter::rect_stroke(rect, radius, stroke, StrokeKind)` takes a `StrokeKind` (`Inside`, `Middle`, `Outside`) |
+| Angles | `ui.drag_angle(&mut radians)` edits radians shown as degrees, unwrapped, and marks the response changed only when the degrees moved |
 | `DragValue` | bounds with `.range(a..=b)` (not `clamp_range`); `.speed`, `.suffix` as before. A range clamps the value *as shown*, edited or not; `.clamp_existing_to_range(false)` clamps only what the user drags or types (the animator's layer weight, stage 121) |
 | Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
 | Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
