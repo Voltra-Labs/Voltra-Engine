@@ -630,7 +630,8 @@ clustered lighting; terrain rendering and editing; LOD and occlusion
 culling; decals; 3D particles; morph targets; 3D inverse kinematics and
 ragdoll tooling; 3D navigation meshes (`voltra-nav` stays a 2D grid);
 vehicles; a 3D text label; order-independent transparency; pointer input
-into a UI shown on a 3D surface; HRTF and Doppler. Each is a later stage
+into a UI shown on a 3D surface; HRTF and Doppler; physical light units
+and exposure; a shader graph. Each is a later stage
 with its own spec, not scaffolding in this one.
 
 ### Rejected
