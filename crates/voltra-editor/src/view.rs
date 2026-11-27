@@ -13,6 +13,7 @@
 
 pub mod bones;
 pub mod caster;
+pub mod follow;
 pub mod light;
 pub mod overlay;
 pub mod regions;

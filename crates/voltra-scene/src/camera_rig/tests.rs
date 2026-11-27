@@ -8,16 +8,16 @@ use crate::hierarchy::{resolve_parents, set_parent};
 use crate::scene_id::SceneId;
 use crate::{Camera, ComponentRegistry, Transform};
 
-const DT: f32 = 1.0 / 60.0;
+pub(super) const DT: f32 = 1.0 / 60.0;
 
-fn placed(world: &mut World, at: Vec2) -> Entity {
+pub(super) fn placed(world: &mut World, at: Vec2) -> Entity {
     let entity = world.spawn();
     world.insert(entity, SceneId::new());
     world.insert(entity, Transform::from_translation(at));
     entity
 }
 
-fn rig(world: &mut World, target: Entity, follow: CameraFollow2D) -> Entity {
+pub(super) fn rig(world: &mut World, target: Entity, follow: CameraFollow2D) -> Entity {
     let camera = placed(world, Vec2::ZERO);
     world.insert(camera, Camera::new(2.0));
     let id = *world.get::<SceneId>(target).expect("an id");
@@ -31,11 +31,11 @@ fn rig(world: &mut World, target: Entity, follow: CameraFollow2D) -> Entity {
     camera
 }
 
-fn at(world: &World, entity: Entity) -> Vec2 {
+pub(super) fn at(world: &World, entity: Entity) -> Vec2 {
     world.get::<Transform>(entity).expect("placed").translation
 }
 
-fn near(a: Vec2, b: Vec2) -> bool {
+pub(super) fn near(a: Vec2, b: Vec2) -> bool {
     a.distance(b) < 1e-4
 }
 

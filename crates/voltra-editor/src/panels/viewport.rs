@@ -220,6 +220,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 view::overlay::draw(world, entity, aspect, lines);
                 view::caster::draw(&outlines, lines);
                 view::light::draw(world, entity, lines);
+                view::follow::draw(world, entity, lines);
             }
             // Every bone, over the art it moves, the selected one lit.
             let selected = editor.selection.live_primary(frame.world);

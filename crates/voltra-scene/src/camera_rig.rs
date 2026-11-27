@@ -13,7 +13,7 @@
 pub mod follow;
 pub mod shake;
 
-pub use follow::{CameraFollow2D, FollowBounds, FollowState};
+pub use follow::{CameraFollow2D, FollowBounds, FollowState, FollowZoom};
 pub use shake::{CameraShake, ShakeState};
 
 use voltra_ecs::World;
@@ -58,5 +58,9 @@ fn set_world_position(world: &mut World, entity: voltra_ecs::Entity, position: V
     }
 }
 
+#[cfg(test)]
+mod group_tests;
+#[cfg(test)]
+mod shake_tests;
 #[cfg(test)]
 mod tests;

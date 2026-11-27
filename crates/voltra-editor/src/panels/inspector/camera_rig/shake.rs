@@ -22,6 +22,13 @@ pub(super) fn shake(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'
                 &mut rig.max_offset,
                 "how far it moves at full trauma",
             ));
+            ui.label("max angle")
+                .on_hover_text("how far it turns either way at full trauma");
+            claim = claim.or(super::active(
+                &ui.drag_angle(&mut rig.max_angle),
+                "Edit camera rig",
+            ));
+            ui.end_row();
             claim = claim.or(number(
                 ui,
                 "frequency",

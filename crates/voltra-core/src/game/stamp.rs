@@ -204,7 +204,8 @@ fn fingerprint() -> u64 {
     mix::<voltra_ecs::World>(&mut hasher);
     mix::<voltra_ecs::Entity>(&mut hasher);
     mix::<voltra_scene::ComponentRegistry>(&mut hasher);
-    // The components the sample games read out of the world directly. A
+    // The components the sample games read out of the world directly, and
+    // the camera rig a game drives (`add_trauma`, a group's targets). A
     // `TypeId` moves with the crate's metadata, not with a field added, so
     // each is hashed with its layout too: a library built before
     // `CharacterBody2D` grew a field would otherwise pass and read
@@ -217,6 +218,8 @@ fn fingerprint() -> u64 {
     component::<voltra_scene::CharacterBody2D>(&mut hasher);
     component::<voltra_scene::CharacterContact>(&mut hasher);
     component::<voltra_scene::Camera>(&mut hasher);
+    component::<voltra_scene::CameraFollow2D>(&mut hasher);
+    component::<voltra_scene::CameraShake>(&mut hasher);
     component::<voltra_scene::Name>(&mut hasher);
     component::<voltra_scene::Text>(&mut hasher);
     component::<voltra_scene::AudioSource>(&mut hasher);

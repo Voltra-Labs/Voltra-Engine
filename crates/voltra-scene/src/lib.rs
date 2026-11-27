@@ -66,7 +66,7 @@ pub use audio_source::AudioSource;
 pub use batch::{GpuEmitterDraw, MeshVertex, SpriteBatch, SpriteRange, Surface, TriangleMesh};
 pub use body::{BodyType, RigidBody};
 pub use camera::{Camera, CameraTarget, Viewport};
-pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds};
+pub use camera_rig::{CameraFollow2D, CameraShake, FollowBounds, FollowZoom};
 pub use character::{CharacterBody2D, CharacterContact};
 pub use collider::{Collider, ConvexPolygon, PolygonError, WorldShape};
 pub use curve::{Curve, CurveKey};
