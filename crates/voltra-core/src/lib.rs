@@ -49,8 +49,8 @@ pub use voltra_nav as nav;
 pub use voltra_net as net;
 // What the server sends its clients, and the prediction a game steps.
 pub use voltra_physics::{
-    character, move_and_slide, query, CollisionEvent, Contact, JointBroken, QueryFilter, RayHit,
-    ShapeHit, Slide, Touch,
+    character, move_and_slide, query, rewind, CollisionEvent, Contact, JointBroken, QueryFilter,
+    RayHit, Rewound, ShapeHit, Slide, Touch,
 };
 pub use voltra_replication as replication;
 

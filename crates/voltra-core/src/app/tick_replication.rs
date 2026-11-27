@@ -129,7 +129,19 @@ impl Net {
             self.replication_refused = true;
             return;
         }
+        self.lag = None;
         self.replication = Some(if endpoint.is_server() {
+            self.lag = config.lag_compensation.map(|lag| {
+                if lag.max_rewind > lag.history {
+                    log::warn!(
+                        "lag compensation keeps {:?} of history; a rewind is bounded by it, \
+                         not by max_rewind {:?}",
+                        lag.history,
+                        lag.max_rewind
+                    );
+                }
+                voltra_physics::PoseHistory::covering(lag.history, step)
+            });
             Replication::Server(Box::new(ReplicationServer::new(
                 config.clone(),
                 registry,

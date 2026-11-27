@@ -231,6 +231,14 @@ fn fingerprint() -> u64 {
     component::<voltra_scene::Replicated>(&mut hasher);
     component::<voltra_replication::NetOwner>(&mut hasher);
     component::<voltra_replication::ReplicationConfig>(&mut hasher);
+    // Lag compensation: a game marks what is rewound, bounds it in the
+    // config (a field of `ReplicationConfig`, so also in its layout), and
+    // reads the past through `Rewound` and the view time its clients send.
+    component::<voltra_scene::LagCompensated>(&mut hasher);
+    component::<voltra_replication::LagCompensation>(&mut hasher);
+    component::<voltra_replication::ViewTime>(&mut hasher);
+    component::<voltra_physics::Rewound<'static>>(&mut hasher);
+    component::<voltra_physics::PoseHistory>(&mut hasher);
     component::<voltra_net::NetConfig>(&mut hasher);
     mix::<voltra_physics::CollisionEvent>(&mut hasher);
     mix::<voltra_physics::JointBroken>(&mut hasher);

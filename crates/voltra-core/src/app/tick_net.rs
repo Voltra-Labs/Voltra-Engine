@@ -34,6 +34,9 @@ pub struct Net {
     pub(super) replication: Option<voltra_replication::Replication>,
     /// The session replication refused, so the error is logged once.
     pub(super) replication_refused: bool,
+    /// The server's past collider poses, for lag compensation: made with
+    /// its replication, read only while that is a server.
+    pub(super) lag: Option<voltra_physics::PoseHistory>,
     /// The connection totals the last frame's counters were taken from.
     pub(super) counted: voltra_net::ConnectionStats,
     /// Whether the profiler's net counters are left alone.

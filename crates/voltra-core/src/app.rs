@@ -30,6 +30,7 @@ mod thumbnails;
 mod tick;
 mod tick_audio;
 mod tick_controls;
+mod tick_lag;
 pub mod tick_net;
 mod tick_replication;
 mod tick_theme;

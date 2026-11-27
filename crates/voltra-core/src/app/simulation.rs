@@ -103,6 +103,9 @@ impl App {
                 let _step = voltra_profile::scope("step");
                 self.physics_world.step_once(&mut self.world, self.gravity);
             }
+            // Where the lag-compensated colliders ended this step: the
+            // server's tick, as its snapshot will say.
+            self.net.record_poses(&self.world);
             // Every step's events, not just the last one's: the per-frame tick
             // gets one turn per frame and a frame can owe several steps.
             self.pending_physics.gather(&self.physics_world);
