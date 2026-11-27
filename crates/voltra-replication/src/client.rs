@@ -19,7 +19,7 @@ use std::time::Duration;
 
 use voltra_ecs::{Entity, World};
 use voltra_net::{Endpoint, NetEvent, PeerId};
-use voltra_scene::{ComponentRegistry, Prefabs, ReplicatedComponent, SceneId};
+use voltra_scene::{ComponentRegistry, Prefabs, ReplicatedComponent};
 
 use crate::acks::ReceivedTicks;
 use crate::wire::{Control, InputTick, NetId, ServerTick, Snapshot};
@@ -27,6 +27,7 @@ use crate::{ReplicationConfig, Timeline, ViewTime};
 
 mod apply;
 mod interpolate;
+mod level;
 mod samples;
 mod send;
 mod spawn;
@@ -191,21 +192,6 @@ impl ReplicationClient {
     /// The newest of this client's inputs the server has simulated.
     pub fn input_ack(&self) -> InputTick {
         self.input_ack
-    }
-
-    /// Lets go of the level entities set aside at the first complete
-    /// snapshot that the server never sent: call it when the level they
-    /// came from goes (a scene change, a region unloaded), or they would be
-    /// kept for the session. What the server culled is kept — it knows.
-    pub fn forget_unsent(&mut self) {
-        self.stash.forget_unnumbered();
-    }
-
-    /// [`forget_unsent`](Self::forget_unsent), of the entities `ids` names
-    /// alone: when one region of a streamed world unloads, the rest of the
-    /// level — and its swept entities — stays.
-    pub fn forget_unsent_of(&mut self, ids: &[SceneId]) {
-        self.stash.forget_unnumbered_of(ids);
     }
 
     fn forget(&mut self) {
