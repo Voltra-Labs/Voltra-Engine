@@ -25,7 +25,9 @@ const FRAME: f32 = 1.0 / 60.0;
 
 pub(super) fn benches() -> Vec<Bench> {
     vec![
-        Bench::new("interest/grid/1k-entities-8-clients", 15.0, |config| {
+        // Tens of microseconds: three runs spread 24 % on a 4-core
+        // container (stage 130), so the limit is the comparer's suggestion.
+        Bench::new("interest/grid/1k-entities-8-clients", 50.0, |config| {
             grid(config, CLIENTS)
         }),
         Bench::new("interest/per-pair/1k-entities-8-clients", 15.0, |config| {
@@ -33,7 +35,7 @@ pub(super) fn benches() -> Vec<Bench> {
         }),
         // Where the two cross: the grid's rebuild is flat in clients, the
         // pairs grow with them.
-        Bench::new("interest/grid/1k-entities-64-clients", 15.0, |config| {
+        Bench::new("interest/grid/1k-entities-64-clients", 50.0, |config| {
             grid(config, 64)
         }),
         Bench::new("interest/per-pair/1k-entities-64-clients", 15.0, |config| {

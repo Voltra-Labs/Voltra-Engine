@@ -8837,6 +8837,42 @@ under its `--name`. `games/arena/tests/match.rs`: the arena's server
 found on the LAN as a compatible arena with no one in, two bots readying
 up and the first in starting the match, then playing it as before.
 
+### The 0.4 stages played together (stage 130)
+
+Each 0.4 stage (119–129) was reviewed alone; this pass ran the whole: every
+suite as CI does, the games played headless and shot, and the stages made
+to meet in throwaway probes — kept as tests where they found something.
+
+- **Found and fixed.** A networked build's opening level had fresh ids, so
+  no client entity was the server's (*Both ends hold the level under the
+  file's ids*, under replication above) — the arena's coin invisible and
+  its bot idle on native and web. A region unloading let go of every swept
+  level entity, not its own (interest, above). An MCP run's screenshot drew
+  HUD buttons unlaid out, in their sprites' white (the screenshot section).
+  Test scratch folders were never removed and filled the disk (testkit
+  section). Four new benchmarks' limits sat under their own run-to-run
+  spread — `interest/grid` ×2, `keyframes/sample`, `keyframes/blend`,
+  `lag/live-ray` — and are raised to the comparer's suggestion.
+- **Met and held** (probes; the first two kept as tests in
+  `voltra-editor`): a base's instance and its variant's multi-edited
+  together, each overriding against its own prefab and the base's edit
+  still reaching what neither overrides; a variant instance duplicated —
+  numbered, still the variant's, its overrides copied; a lag-compensated
+  `CharacterBody2D` moved by `move_and_slide`, hit where its shooter saw
+  it; the character example's blend tree, crossfades, landing squash,
+  crate push and a rotated camera, shot headless; the editor and the
+  platformer built together, the editor loading the game under its stamp;
+  the hot reload test with every new component type in the stamp.
+- **Needs no code.** A rotated camera and interest: relevance is a radius,
+  which a view's turn does not change. Multi-editing an animator's layers
+  or trees: they live in the `.animator.ron`; the component's runtime
+  state is not serialized, so nothing of it is written across.
+- **Not yet**: a joint's break replicating (the joints section); camera
+  shake in the editor's three-client network play was read, not run — a
+  shake is per camera entity and view-only, each client's world its own;
+  `batch/sprites/10k` spreads 74 % run to run here against its 40 % limit
+  (stage 107's, left as CI measured it).
+
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
 Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
