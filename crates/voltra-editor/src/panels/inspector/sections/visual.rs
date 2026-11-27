@@ -1,21 +1,19 @@
 //! The sections of what an entity is and draws: its prefab, transform, UI
-//! box and controls, sprite, tilemap, text, particles, shapes, skin and
-//! bones, parallax, light, joint, animation, camera and sound.
+//! box and controls, sprite, tilemap, text, particles and shapes.
 
 use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, ui, AudioSource, Camera, Parallax, ParticleEmitter, Sprite, Text, Tilemap,
-    Transform, UiButton, UiLayout, UiRect, UiStack,
+    hierarchy, ui, ParticleEmitter, Sprite, Text, Tilemap, Transform, UiButton, UiLayout, UiRect,
+    UiStack,
 };
 
 use super::super::mixed::{self, Fields};
 use super::super::{
-    animation, animation_player, animator, audio_source, camera, camera_rig, camera_view,
-    global_light, joint, light, parallax, particles, prefab, shapes2d, skeleton, skinned, sprite,
-    sprite_material, text, tilemap, transform, ui_button, ui_controls, ui_rect, ui_slice, ui_stack,
+    animation, particles, prefab, shapes2d, sprite, sprite_material, text, tilemap, transform,
+    ui_button, ui_controls, ui_rect, ui_slice, ui_stack,
 };
 use super::gate;
 use crate::editor::Editor;
@@ -224,132 +222,6 @@ pub(in crate::panels::inspector) fn show(
                 device: frame.device,
                 queue: frame.queue,
             },
-        ));
-    }
-    if multi.editable(&["SkinnedSprite"]) {
-        mixed::marker(ui, multi, &["SkinnedSprite"]);
-        claim = claim.or(skinned::show(
-            ui,
-            frame.world,
-            skinned::Context {
-                entity,
-                paint: &mut editor.weight_paint,
-                textures: frame.textures,
-                silhouettes: frame.silhouettes.as_deref_mut(),
-                device: frame.device,
-                queue: frame.queue,
-            },
-        ));
-    }
-    let bones = ["Skeleton2D", "Bone2D", "TwoBoneIk"];
-    let asked = if multi.editable(&bones) {
-        mixed::marker(ui, multi, &bones);
-        skeleton::show(ui, frame.world, entity)
-    } else {
-        skeleton::Asked::default()
-    };
-    claim = claim.or(asked.claim);
-    if asked.set_rest {
-        // A rest copies the transform: the authored one, never
-        // a recorded pose.
-        editor
-            .timeline
-            .end_record(frame.world, frame.animation_clips);
-        // Each bone's from its own transform, not the primary's copied.
-        let bones: Vec<Entity> = multi.all().collect();
-        for bone in bones {
-            let pose = frame.world.get::<Transform>(bone).copied();
-            if let (Some(pose), Some(bone)) =
-                (pose, frame.world.get_mut::<voltra_scene::Bone2D>(bone))
-            {
-                bone.rest = pose;
-                claim = Some("Set bone rest pose");
-            }
-        }
-        multi.done_for_each("Bone2D");
-    }
-    if asked.child_bone {
-        crate::spawn::record(editor, frame, "Add child bone", |frame| {
-            crate::spawn::child_bone(frame, entity)
-        });
-    }
-    if let Some(layer) = gate(frame.world.get_mut::<Parallax>(entity), multi, "Parallax") {
-        ui.separator();
-        mixed::marker(ui, multi, &["Parallax"]);
-        claim = claim.or(parallax::show(ui, layer));
-    }
-    if let Some(lamp) = gate(
-        frame.world.get_mut::<voltra_scene::PointLight2D>(entity),
-        multi,
-        "PointLight2D",
-    ) {
-        ui.separator();
-        mixed::marker(ui, multi, &["PointLight2D"]);
-        claim = claim.or(light::show(
-            ui,
-            lamp,
-            frame.textures,
-            frame.device,
-            frame.queue,
-        ));
-    }
-    if frame.world.get::<voltra_scene::Joint2D>(entity).is_some() && multi.editable(&["Joint2D"]) {
-        let ends = joint::ends(frame.world, entity);
-        if let Some(j) = frame.world.get_mut::<voltra_scene::Joint2D>(entity) {
-            ui.separator();
-            mixed::marker(ui, multi, &["Joint2D"]);
-            claim = claim.or(joint::show(ui, j, &ends));
-        }
-    }
-    if multi.editable(&["AnimationPlayer"]) {
-        mixed::marker(ui, multi, &["AnimationPlayer"]);
-        claim = claim.or(animation_player::show(ui, frame.world, entity));
-    }
-    if multi.editable(&["Animator", "AnimationPlayer"]) {
-        mixed::marker(ui, multi, &["Animator"]);
-        claim = claim.or(animator::show(
-            ui,
-            frame.world,
-            frame.state_machines,
-            entity,
-        ));
-    }
-    if let Some(glow) = gate(
-        frame.world.get_mut::<voltra_scene::GlobalLight2D>(entity),
-        multi,
-        "GlobalLight2D",
-    ) {
-        ui.separator();
-        mixed::marker(ui, multi, &["GlobalLight2D"]);
-        claim = claim.or(global_light::show(ui, glow));
-    }
-    if let Some(camera) = gate(frame.world.get_mut::<Camera>(entity), multi, "Camera") {
-        ui.separator();
-        mixed::marker(ui, multi, &["Camera"]);
-        claim = claim.or(camera::show(ui, camera));
-    }
-    if frame.world.get::<Camera>(entity).is_some() && multi.editable(&["Camera", "CameraTarget"]) {
-        mixed::marker(ui, multi, &["CameraTarget"]);
-        claim = claim.or(camera_view::show(ui, frame.world, entity));
-    }
-    let rig = ["CameraFollow2D", "CameraShake"];
-    if multi.editable(&rig) {
-        mixed::marker(ui, multi, &rig);
-        claim = claim.or(camera_rig::show(ui, frame.world, entity));
-    }
-    if let Some(source) = gate(
-        frame.world.get_mut::<AudioSource>(entity),
-        multi,
-        "AudioSource",
-    ) {
-        ui.separator();
-        mixed::marker(ui, multi, &["AudioSource"]);
-        claim = claim.or(audio_source::show(
-            ui,
-            source,
-            frame.clips,
-            frame.audio,
-            &mut editor.audition,
         ));
     }
     claim

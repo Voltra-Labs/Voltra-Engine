@@ -6,6 +6,7 @@
 //! ([`MultiEdit::editable`]), with a line under its rule naming the fields
 //! that differ ([`super::mixed::marker`]).
 
+mod behaviour;
 mod physics;
 mod visual;
 
@@ -26,6 +27,7 @@ pub(super) fn show(
     multi: &mut MultiEdit,
 ) -> Option<&'static str> {
     let claim = visual::show(editor, ui, frame, entity, multi);
+    let claim = claim.or(behaviour::show(editor, ui, frame, entity, multi));
     claim.or(physics::show(editor, ui, frame, entity, multi))
 }
 
