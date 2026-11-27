@@ -9,6 +9,7 @@ mod bench;
 mod dist;
 mod files;
 mod guide;
+mod migrate;
 mod new_game;
 mod pack;
 mod pack_atlas;
@@ -44,6 +45,12 @@ Tasks:
         sheet to 4096; --trim cuts transparent borders off. --root is
         the asset root the texture hint is written against (default:
         assets/)
+  migrate [FOLDER]... [--check]
+        Rewrite every scene, prefab and clip under each FOLDER (default:
+        the asset root of each build.ron in the workspace) as the engine
+        reads and writes it: the current format, renamed components under
+        their new names. With --check, write nothing, list what is out of
+        date and fail if anything is
   guide
         Run the user guide's checked commands (docs/guide), in order, as
         someone following it from a clean checkout would
@@ -64,6 +71,7 @@ fn main() -> ExitCode {
         Some("new-game") => new_game_command(args),
         Some("pack-atlas") => pack_atlas::run(args, &workspace_root()),
         Some("guide") => guide::run(&workspace_root()),
+        Some("migrate") => migrate::run(args, &workspace_root()),
         Some("bench") => bench::run(args, &workspace_root()),
         Some("-h" | "--help") | None => {
             println!("{USAGE}");

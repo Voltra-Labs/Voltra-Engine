@@ -138,6 +138,12 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      # Every shipped scene, prefab and clip is in the current format, as
+      # the engine's own writer puts it (docs/ARCHITECTURE.md, stage 132).
+      - name: Shipped files migrated
+        if: runner.os == 'Linux'
+        run: cargo xtask migrate --check
+
       - name: Tests
         # The headless render tests skip themselves when no GPU adapter is
         # present, which is the normal case on hosted runners. They still guard

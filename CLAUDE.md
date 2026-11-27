@@ -66,6 +66,7 @@ cargo xtask new-game my-game                                # a game crate in ga
 cargo xtask guide                                           # run docs/guide's <!-- ci --> blocks, as CI does
 cargo xtask pack-atlas <folder>                             # PNGs into one sheet + .atlas.ron (stage 95)
 cargo xtask bench [--compare FILE]                          # benchmarks in release; regression check (stage 107)
+cargo xtask migrate [--check]                               # scenes, prefabs, clips to the current format (stage 132)
 cargo run -p voltra-server -- scenes/sandbox.ron            # a scene served headless (UDP 7777, WS 7778)
 cargo run -p arena -- --host                                # networked sample; --join udp://HOST:7777 to join
 cargo run -p arena --bin arena-server -- --asset-root games/arena/assets  # its dedicated server

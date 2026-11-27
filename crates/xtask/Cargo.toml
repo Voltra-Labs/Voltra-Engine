@@ -12,6 +12,11 @@ publish = false
 voltra-player.workspace = true
 # The asset pack's format, which the web player reads back.
 voltra-assets.workspace = true
+# `migrate`: scenes and clips read and written by the engine's own code.
+voltra-scene.workspace = true
+voltra-ecs.workspace = true
+serde.workspace = true
+ron.workspace = true
 
 [dev-dependencies]
 voltra-testkit.workspace = true
