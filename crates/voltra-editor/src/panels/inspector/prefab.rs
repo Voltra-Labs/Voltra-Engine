@@ -32,6 +32,16 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
     );
     if root == entity {
         ui.label(RichText::new(format!("instance of {}", source.as_str())).weak());
+        let handle = frame.prefabs.load(&source);
+        if let Some(base) = frame.prefabs.get(handle).base() {
+            ui.label(RichText::new(format!("a variant of {}", base.as_str())).weak())
+                .on_hover_text(
+                    "Apply writes the variant; open it (Edit prefab) and Apply there to change the base",
+                );
+        }
+        for problem in frame.prefabs.get(handle).problems() {
+            ui.colored_label(ui.visuals().warn_fg_color, problem.to_string());
+        }
     } else {
         ui.label(RichText::new(format!("part of an instance of {}", source.as_str())).weak());
     }

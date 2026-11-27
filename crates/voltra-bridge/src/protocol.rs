@@ -313,6 +313,15 @@ pub enum Command {
         #[serde(default)]
         discard_changes: bool,
     },
+    /// Writes a variant of the prefab at `path` beside it — a prefab whose
+    /// root is an instance of it, following every edit to it but for what
+    /// the variant is edited to override — as the asset browser's "Create
+    /// variant" does, and answers the new file's path
+    /// (`<name> Variant.prefab.ron`, numbered when taken).
+    PrefabVariant {
+        /// The base prefab's asset path.
+        path: String,
+    },
     /// Puts `query` in the hierarchy's search box — words a name holds,
     /// `t:Component` for a component every match has — and answers the
     /// entities it matches and the rows kept to show where they are.

@@ -323,7 +323,10 @@ fn write_ship(root: &std::path::Path, name: &str) {
 }
 
 mod link;
+mod loops;
+mod nested;
 mod store;
+mod variant;
 mod write;
 
 mod whole_scenes {

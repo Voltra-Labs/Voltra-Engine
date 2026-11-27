@@ -144,7 +144,11 @@ impl App {
         match replication {
             Replication::Server(server) => server.receive(endpoint),
             Replication::Client(client) => {
-                let prefabs = super::spawning::prefab_store(&mut self.prefabs, &self.asset_root);
+                let prefabs = super::spawning::prefab_store(
+                    &mut self.prefabs,
+                    &self.asset_root,
+                    &self.registry,
+                );
                 let made = client.receive(
                     endpoint,
                     &mut self.world,

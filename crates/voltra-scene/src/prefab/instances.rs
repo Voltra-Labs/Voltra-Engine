@@ -48,6 +48,21 @@ pub fn sync_source(
     sync_matching(world, registry, prefabs, |path| path == source)
 }
 
+/// Syncs the instances of every prefab in `sources` — what
+/// [`Prefabs::reload`] answers: the file that changed, and every variant
+/// and outer prefab that follows it.
+pub fn sync_sources(
+    world: &mut World,
+    registry: &ComponentRegistry,
+    prefabs: &mut Prefabs,
+    sources: &[AssetPath],
+) -> SyncReport {
+    if sources.is_empty() {
+        return SyncReport::default();
+    }
+    sync_matching(world, registry, prefabs, |path| sources.contains(path))
+}
+
 fn sync_matching(
     world: &mut World,
     registry: &ComponentRegistry,

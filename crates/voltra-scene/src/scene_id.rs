@@ -26,6 +26,38 @@ impl SceneId {
     pub fn new() -> Self {
         Self(Uuid::now_v7())
     }
+
+    /// The same identity every time for the same two: what `record`, a
+    /// record of some prefab, becomes inside the instance whose own id is
+    /// `within`.
+    ///
+    /// For an entity a prefab sync adds to an instance — a record the file
+    /// gained — so that two readings of one stored instance (a prefab read
+    /// by the store, and the same file opened in prefab mode) give the
+    /// added entity one id, and an instance of the outer file keeps naming
+    /// it. A UUID v8 of a 128-bit mix of the two: never one of [`new`]'s
+    /// v7s, and it does not sort by creation.
+    ///
+    /// [`new`]: Self::new
+    pub fn derived(within: SceneId, record: SceneId) -> Self {
+        let (a, b) = (within.0.as_u128(), record.0.as_u128());
+        let words = [(a >> 64) as u64, a as u64, (b >> 64) as u64, b as u64];
+        let mut high = 0x9e37_79b9_7f4a_7c15_u64;
+        let mut low = 0xc2b2_ae3d_27d4_eb4f_u64;
+        for word in words {
+            high = mix(high ^ word);
+            low = mix(low.rotate_left(29) ^ word ^ high);
+        }
+        let bytes = ((u128::from(high) << 64) | u128::from(low)).to_be_bytes();
+        Self(uuid::Builder::from_custom_bytes(bytes).into_uuid())
+    }
+}
+
+/// SplitMix64's finaliser: every input bit reaches every output bit.
+fn mix(mut x: u64) -> u64 {
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
 }
 
 impl Default for SceneId {
@@ -63,6 +95,16 @@ mod tests {
         let created = ids.clone();
         ids.sort();
         assert_eq!(ids, created, "v7 ids must already be in creation order");
+    }
+
+    #[test]
+    fn a_derived_id_is_the_same_for_the_same_two_and_differs_otherwise() {
+        let (a, b) = (SceneId::new(), SceneId::new());
+
+        assert_eq!(SceneId::derived(a, b), SceneId::derived(a, b));
+        assert_ne!(SceneId::derived(a, b), SceneId::derived(b, a));
+        assert_ne!(SceneId::derived(a, b), a);
+        assert_ne!(SceneId::derived(a, b), SceneId::derived(a, SceneId::new()));
     }
 
     #[test]

@@ -140,7 +140,7 @@ impl App {
             Some(screen) => self.spawn_loading_screen(screen),
             None => Vec::new(),
         };
-        let root = prefab_store(&mut self.prefabs, &self.asset_root)
+        let root = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
             .root()
             .to_path_buf();
         let registry = self.registry.clone();
@@ -228,7 +228,7 @@ impl App {
 
     /// Spawns the loading screen prefab, its assets resolved this frame.
     fn spawn_loading_screen(&mut self, path: &AssetPath) -> Vec<Entity> {
-        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root);
+        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = prefabs.load(path);
         match prefab::spawn(
             &mut self.world,

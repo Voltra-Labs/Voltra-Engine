@@ -4,8 +4,9 @@ use serde_json::{json, Value};
 use voltra_bridge::Command;
 use voltra_ecs::{Entity, World};
 use voltra_scene::edit::{self, find};
+use voltra_scene::format::entity_with_id;
 use voltra_scene::hierarchy::descendants;
-use voltra_scene::SceneId;
+use voltra_scene::{prefab, PrefabPart, Prefabs, SceneId};
 
 use crate::editor::Editor;
 use crate::undo::SceneView;
@@ -13,9 +14,14 @@ use crate::undo::SceneView;
 /// Applies an edit command to `world` as one undo entry named by the
 /// command, and answers what the entity is now. A refused edit records
 /// nothing.
+///
+/// An edit to a part of a prefab instance records what that now overrides
+/// in the same entry, as the inspector's edits do on the selection — the
+/// bridge edits what it names, selected or not.
 pub(crate) fn apply(
     editor: &mut Editor,
     world: &mut World,
+    prefabs: &mut Prefabs,
     command: &Command,
 ) -> Result<Value, String> {
     let label = command.label();
@@ -42,13 +48,24 @@ pub(crate) fn apply(
         registry: &editor.registry,
         selected: editor.selection.ids(world),
     };
-    editor.history.begin(label, view, touched);
+    editor.history.begin(label, view, touched.clone());
 
     let outcome = run(editor, world, command);
     let made: Vec<SceneId> = match &outcome {
         Ok((Some(entity), _)) => world.get::<SceneId>(*entity).copied().into_iter().collect(),
         _ => Vec::new(),
     };
+    let parts: Vec<Entity> = touched
+        .iter()
+        .chain(&made)
+        .filter_map(|&id| entity_with_id(world, id))
+        .filter(|&e| world.get::<PrefabPart>(e).is_some())
+        .collect();
+    for entity in parts {
+        if let Err(error) = prefab::refresh_overrides(world, &editor.registry, prefabs, entity) {
+            log::error!("could not compare an instance with its prefab: {error}");
+        }
+    }
     let view = SceneView {
         world,
         registry: &editor.registry,

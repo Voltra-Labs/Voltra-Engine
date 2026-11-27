@@ -35,6 +35,16 @@ use crate::scene_id::SceneId;
 #[derive(Clone)]
 pub struct ComponentRegistry {
     entries: Vec<Entry>,
+    /// Which registration this is: new for every registry and every change
+    /// to one, kept by a clone — so a holder of a copy can tell it is stale.
+    stamp: u64,
+}
+
+/// The stamps handed out so far.
+static STAMPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn next_stamp() -> u64 {
+    STAMPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 impl ComponentRegistry {
@@ -42,7 +52,15 @@ impl ComponentRegistry {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+            stamp: next_stamp(),
         }
+    }
+
+    /// The same for a registry and its clones until either changes: what
+    /// a store holding a copy (the prefab store, which reads stored
+    /// instances through one) checks to know its copy is out of date.
+    pub fn stamp(&self) -> u64 {
+        self.stamp
     }
 
     /// Adds a component type under `name`, which is what appears in the file.
@@ -53,6 +71,7 @@ impl ComponentRegistry {
     where
         T: Serialize + DeserializeOwned + 'static,
     {
+        self.stamp = next_stamp();
         self.entries.push(Entry {
             name,
             save: |world, entity| {
@@ -225,6 +244,15 @@ impl ComponentRegistry {
         };
         (entry.remove)(world, entity);
         true
+    }
+}
+
+impl std::fmt::Debug for ComponentRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ComponentRegistry")
+            .field("types", &self.entries.len())
+            .field("stamp", &self.stamp)
+            .finish()
     }
 }
 

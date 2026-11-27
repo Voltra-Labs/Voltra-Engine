@@ -13,7 +13,8 @@ use voltra_assets::{AssetPath, Atlases, Clips, Fonts, Handle, Textures};
 use voltra_ecs::{Entity, World};
 use voltra_render::wgpu;
 use voltra_scene::{
-    prefab, AudioSource, Instance, Prefab, Prefabs, SceneError, Sprite, Text, Tilemap, Transform,
+    prefab, AudioSource, ComponentRegistry, Instance, Prefab, Prefabs, SceneError, Sprite, Text,
+    Tilemap, Transform,
 };
 
 use crate::app::tick::Tick;
@@ -75,17 +76,26 @@ impl Tick<'_> {
 /// Lazy rather than built at `resumed` like the stores that need a device: a
 /// prefab is a file and nothing else, so a headless run — every test, a
 /// server — can spawn one. The root is the same one `resumed` resolves.
+///
+/// It reads the instances a prefab holds (a variant's base, a nested
+/// prefab) through the app's `registry`, so a game's own components follow
+/// too; a registry swapped since (the editor loading a game) is taken up
+/// here, and the prefabs holding instances read again through it.
 pub(super) fn prefab_store<'a>(
     prefabs: &'a mut Option<Prefabs>,
     asset_root: &Option<PathBuf>,
+    registry: &ComponentRegistry,
 ) -> &'a mut Prefabs {
-    prefabs.get_or_insert_with(|| {
-        Prefabs::new(
+    let store = prefabs.get_or_insert_with(|| {
+        Prefabs::with_registry(
             asset_root
                 .clone()
                 .unwrap_or_else(voltra_assets::default_root),
+            registry.clone(),
         )
-    })
+    });
+    store.use_registry(registry);
+    store
 }
 
 /// Resolves the asset handles one entity's components name, against
@@ -226,7 +236,7 @@ impl App {
 
     /// The prefab store, for a game loading its prefabs before the first tick.
     pub fn prefabs(&mut self) -> &mut Prefabs {
-        prefab_store(&mut self.prefabs, &self.asset_root)
+        prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
     }
 
     /// Spawns a copy of the prefab at `path` while the world is being set up.
@@ -237,7 +247,7 @@ impl App {
     /// resumes, which is what it already does for every entity a game
     /// inserted by hand.
     pub fn spawn(&mut self, path: &AssetPath, at: &Transform) -> Result<Instance, SceneError> {
-        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root);
+        let prefabs = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = prefabs.load(path);
         let instance = prefab::spawn(&mut self.world, &self.registry, prefabs.get(handle), at)?;
         // Queued as well, for a call made after the loop is already running —

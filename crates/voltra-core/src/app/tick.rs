@@ -186,7 +186,11 @@ impl App {
                 events,
                 broken_joints,
                 audio: TickAudio::new(&mut self.audio, self.clips.as_ref()),
-                prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
+                prefabs: super::spawning::prefab_store(
+                    &mut self.prefabs,
+                    &self.asset_root,
+                    &self.registry,
+                ),
                 registry: &self.registry,
                 spawned: &mut self.spawned,
             };

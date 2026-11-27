@@ -42,7 +42,7 @@ fn a_reload_swaps_the_prefab_under_the_same_handle() {
     assert!(prefabs.get(handle).is_empty());
 
     write_ship(&root, "late.ron");
-    assert!(prefabs.reload(&path("late.ron")));
+    assert!(!prefabs.reload(&path("late.ron")).is_empty());
 
     assert_eq!(prefabs.get(handle).len(), 1);
 }
@@ -56,7 +56,7 @@ fn a_reload_that_will_not_read_keeps_the_previous_prefab() {
 
     std::fs::write(root.join("ship.ron"), "(version: 1, entit").expect("the truncation");
 
-    assert!(!prefabs.reload(&path("ship.ron")));
+    assert!(prefabs.reload(&path("ship.ron")).is_empty());
     assert_eq!(prefabs.get(handle).len(), 1);
 }
 
@@ -66,6 +66,6 @@ fn reloading_a_path_nobody_loaded_does_nothing() {
     write_ship(&root, "ship.ron");
     let mut prefabs = Prefabs::new(&root);
 
-    assert!(!prefabs.reload(&path("ship.ron")));
+    assert!(prefabs.reload(&path("ship.ron")).is_empty());
     assert_eq!(prefabs.len(), 1);
 }

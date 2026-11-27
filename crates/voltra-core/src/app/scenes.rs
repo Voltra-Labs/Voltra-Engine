@@ -172,7 +172,7 @@ impl App {
     /// Reads `path` and spawns a copy of it, or logs why not. The entities
     /// are queued for asset resolution.
     fn spawn_scene(&mut self, path: &AssetPath) -> Option<Vec<Entity>> {
-        let scenes = prefab_store(&mut self.prefabs, &self.asset_root);
+        let scenes = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry);
         let handle = scenes.load(path);
         let scene = scenes.get(handle);
         // A prefab with no source is the stand-in for a file that would not

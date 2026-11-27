@@ -251,3 +251,43 @@ async fn a_prefab_is_placed_in_a_scene_linked_to_its_file() {
     .await;
     assert_eq!(itself.is_error, Some(true));
 }
+
+#[tokio::test]
+async fn a_variant_of_a_prefab_is_written_linked_to_its_base() {
+    let (project, _root) = scratch_project();
+    let client = client_for(project).await;
+    let made = call(
+        &client,
+        "prefab_variant",
+        json!({ "base": "prefabs/coin.ron", "path": "prefabs/gold.prefab.ron" }),
+    )
+    .await;
+    assert_ne!(made.is_error, Some(true), "{}", text_of(&made));
+    let variant = parsed(&text_of(
+        &call(
+            &client,
+            "scene_read",
+            json!({ "path": "prefabs/gold.prefab.ron" }),
+        )
+        .await,
+    ));
+    let root = &variant["entities"][0];
+    assert!(root["components"]["PrefabInstance"]
+        .as_str()
+        .expect("linked to its base")
+        .contains("coin.ron"));
+    let again = call(
+        &client,
+        "prefab_variant",
+        json!({ "base": "prefabs/coin.ron", "path": "prefabs/gold.prefab.ron" }),
+    )
+    .await;
+    assert_eq!(again.is_error, Some(true), "never an overwrite");
+    let itself = call(
+        &client,
+        "prefab_variant",
+        json!({ "base": "prefabs/gold.prefab.ron", "path": "prefabs/coin.ron" }),
+    )
+    .await;
+    assert_eq!(itself.is_error, Some(true));
+}

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use voltra_bridge::Command;
 use voltra_ecs::World;
-use voltra_scene::{Name, SceneId};
+use voltra_scene::{Name, Prefabs, SceneId};
 
 use super::apply;
 use crate::editor::Editor;
@@ -31,6 +31,11 @@ fn undo(editor: &mut Editor, host: &mut Host) -> bool {
     editor.history.undo(ctx, host)
 }
 
+/// A store with nothing in it: these edits touch no prefab instance.
+fn prefabs() -> Prefabs {
+    Prefabs::new(std::env::temp_dir())
+}
+
 fn spawn(name: &str, parent: Option<&str>) -> Command {
     Command::Spawn {
         name: Some(name.into()),
@@ -48,7 +53,13 @@ fn a_bridge_spawn_is_one_undo_entry_and_undo_takes_it_out() {
     let mut host = Host {
         world: World::new(),
     };
-    let answer = apply(&mut editor, &mut host.world, &spawn("Crate", None)).expect("spawns");
+    let answer = apply(
+        &mut editor,
+        &mut host.world,
+        &mut prefabs(),
+        &spawn("Crate", None),
+    )
+    .expect("spawns");
     assert!(answer["id"].as_str().is_some());
     assert_eq!(host.world.query::<SceneId>().count(), 1);
     assert_eq!(editor.history.undo_label(), Some("AI: spawn"));
@@ -62,14 +73,26 @@ fn a_component_set_by_name_path_is_undone_back_to_what_it_was() {
     let mut host = Host {
         world: World::new(),
     };
-    apply(&mut editor, &mut host.world, &spawn("Player", None)).expect("spawns");
-    apply(&mut editor, &mut host.world, &spawn("Arm", Some("Player"))).expect("spawns");
+    apply(
+        &mut editor,
+        &mut host.world,
+        &mut prefabs(),
+        &spawn("Player", None),
+    )
+    .expect("spawns");
+    apply(
+        &mut editor,
+        &mut host.world,
+        &mut prefabs(),
+        &spawn("Arm", Some("Player")),
+    )
+    .expect("spawns");
     let set = Command::ComponentSet {
         entity: "Player/Arm".into(),
         component: "PointLight2D".into(),
         ron: "(radius: 3.0)".into(),
     };
-    apply(&mut editor, &mut host.world, &set).expect("sets");
+    apply(&mut editor, &mut host.world, &mut prefabs(), &set).expect("sets");
     assert_eq!(host.world.query::<voltra_scene::PointLight2D>().count(), 1);
     assert!(undo(&mut editor, &mut host));
     assert_eq!(
@@ -96,10 +119,11 @@ fn a_refused_edit_records_nothing() {
         parent: None,
         components: BTreeMap::from([("Transform".to_owned(), "(oops)".to_owned())]),
     };
-    assert!(apply(&mut editor, &mut host.world, &bad).is_err());
+    assert!(apply(&mut editor, &mut host.world, &mut prefabs(), &bad).is_err());
     assert!(apply(
         &mut editor,
         &mut host.world,
+        &mut prefabs(),
         &Command::Delete {
             entity: "Nobody".into()
         }
@@ -117,7 +141,13 @@ fn unsaved_changes_are_kept_unless_the_caller_drops_them_and_undo_cleans_them() 
     };
     assert!(crate::bridge::keep_unsaved(&editor, false).is_ok(), "clean");
 
-    apply(&mut editor, &mut host.world, &spawn("Box", None)).expect("spawned");
+    apply(
+        &mut editor,
+        &mut host.world,
+        &mut prefabs(),
+        &spawn("Box", None),
+    )
+    .expect("spawned");
     assert!(editor.document.is_dirty(&editor.history));
     let refused = crate::bridge::keep_unsaved(&editor, false).expect_err("dirty");
     assert!(refused.contains("discard_changes"), "{refused}");

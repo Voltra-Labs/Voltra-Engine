@@ -27,11 +27,12 @@
 //! later edit to the file reaches it. A record nothing matched is taken as
 //! deleted from the instance, not spawned into it.
 //!
-//! **Not yet: nested instances.** A prefab holding an instance of another
-//! holds that instance's entities in full; they are parts of the outer
-//! prefab, synced with it, and an edit to the inner file reaches them only
-//! once the outer prefab is saved again. An instance root under another is
-//! left to its outer one.
+//! **Nested instances follow through their outer prefab.** An instance of a
+//! prefab that holds another is synced with the outer file *as the store
+//! reads it* — the inner instance brought in step with the inner file
+//! first, the outer file's overrides on it kept (`resolve.rs`) — so an edit
+//! to the inner file reaches it without the outer one being saved again.
+//! An instance root under another is left to its outer one.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -179,9 +180,10 @@ pub fn sync(
         .copied()
         .filter(|r| wanted(r) && !parts.contains_key(&r.id))
         .collect();
+    let mut ids = fresh_ids(world, root, !missing.is_empty());
     for record in missing {
         let entity = world.spawn();
-        world.insert(entity, SceneId::new());
+        world.insert(entity, ids(record.id));
         let components: BTreeMap<String, Box<RawValue>> = record
             .components
             .iter()
@@ -241,6 +243,32 @@ pub fn sync(
     }
     report.touched.retain(|&entity| world.is_alive(entity));
     Ok(report)
+}
+
+/// The id an entity spawned for `record` in the instance at `root` gets:
+/// derived from the two ([`SceneId::derived`]), so a prefab read by the
+/// store and the same file opened in prefab mode add an entity under one
+/// id — but fresh where the world already holds that id (a part moved out
+/// of its instance and spawned back). `needed` is whether any will be
+/// asked for, so a sync that adds nothing does not gather the world's ids.
+fn fresh_ids(world: &World, root: Entity, needed: bool) -> impl FnMut(SceneId) -> SceneId {
+    let within = world.get::<SceneId>(root).copied();
+    let mut taken: HashSet<SceneId> = if needed && within.is_some() {
+        world.query::<SceneId>().map(|(_, id)| *id).collect()
+    } else {
+        HashSet::new()
+    };
+    move |record| {
+        let id = match within {
+            Some(within) => SceneId::derived(within, record),
+            None => SceneId::new(),
+        };
+        if taken.insert(id) {
+            id
+        } else {
+            SceneId::new()
+        }
+    }
 }
 
 #[cfg(test)]

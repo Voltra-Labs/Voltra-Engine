@@ -280,7 +280,11 @@ impl App {
             materials: self.materials.as_mut(),
             sorting_layers: &self.sorting_layers,
             clips,
-            prefabs: super::spawning::prefab_store(&mut self.prefabs, &self.asset_root),
+            prefabs: super::spawning::prefab_store(
+                &mut self.prefabs,
+                &self.asset_root,
+                &self.registry,
+            ),
             animation_clips: super::animation::clip_store(
                 &mut self.animation_clips,
                 &self.asset_root,

@@ -200,7 +200,7 @@ impl App {
             // Nearest first, as many as the pool can usefully take.
             starts.sort_by(|a, b| a.0.total_cmp(&b.0));
             let limit = (jobs.threads() * LOADS_PER_THREAD).max(LOADS_PER_THREAD);
-            let root = prefab_store(&mut self.prefabs, &self.asset_root)
+            let root = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
                 .root()
                 .to_path_buf();
             let skip = self.is_replication_client();
@@ -304,7 +304,7 @@ impl App {
         let Some(path) = next else {
             return;
         };
-        let root = prefab_store(&mut self.prefabs, &self.asset_root)
+        let root = prefab_store(&mut self.prefabs, &self.asset_root, &self.registry)
             .root()
             .to_path_buf();
         match WorldRegions::read(&root, &path) {

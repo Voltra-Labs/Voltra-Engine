@@ -1,4 +1,5 @@
-//! Prefab mode over the bridge: into a prefab, and back to the scene.
+//! Prefab mode over the bridge: into a prefab, back to the scene, and a
+//! variant of one.
 
 use serde_json::{json, Value};
 use voltra_assets::AssetPath;
@@ -9,7 +10,7 @@ use voltra_scene::SceneId;
 use crate::editor::Editor;
 use crate::prefab_mode;
 
-/// Applies `prefab_open` or `prefab_close`.
+/// Applies `prefab_open`, `prefab_close` or `prefab_variant`.
 pub(super) fn apply(
     editor: &mut Editor,
     frame: &mut UiFrame<'_>,
@@ -50,6 +51,11 @@ pub(super) fn apply(
                 "prefab_mode": editor.prefab_mode.is_active(),
                 "entities": frame.world.query::<SceneId>().count(),
             }))
+        }
+        Command::PrefabVariant { path } => {
+            let base = AssetPath::new(path).map_err(|e| e.to_string())?;
+            let variant = crate::prefab::create_variant(editor, frame, &base)?;
+            Ok(json!({ "variant": variant.as_str(), "base": base.as_str() }))
         }
         _ => Err("not a prefab mode command".into()),
     }
