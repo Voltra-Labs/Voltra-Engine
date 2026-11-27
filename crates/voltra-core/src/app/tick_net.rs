@@ -8,13 +8,14 @@
 
 use std::time::Duration;
 
-use serde::Serialize;
 use voltra_net::{
-    Address, ChannelId, ConnectionStats, DisconnectReason, Endpoint, HostOptions, Message,
-    NetConfig, NetEvent, PeerId, SendError, SessionError, Transport,
+    Address, ConnectionStats, DisconnectReason, Endpoint, HostOptions, NetConfig, PeerId,
+    SessionError, Transport,
 };
 
 use super::App;
+
+mod messages;
 
 /// The game's network session: none, a server, or a client.
 ///
@@ -80,8 +81,8 @@ impl Net {
 
     /// Joins the server at `server` — `udp://host:port` or `ws://host:port`
     /// natively, a `ws://` or `wss://` URL in a browser. A
-    /// [`NetEvent::Connected`] says when it let us in, a
-    /// [`NetEvent::Disconnected`] that it would not.
+    /// [`NetEvent::Connected`](voltra_net::NetEvent::Connected) says when it let us in, a
+    /// [`NetEvent::Disconnected`](voltra_net::NetEvent::Disconnected) that it would not.
     pub fn join(&mut self, server: &str, config: NetConfig) -> Result<(), SessionError> {
         let config = self.session_config(config);
         self.start(voltra_net::join(server, config)?);
@@ -159,62 +160,6 @@ impl Net {
     /// Whether this game hosts and plays — a listen server.
     pub fn is_listen_server(&self) -> bool {
         self.endpoint.as_ref().is_some_and(Endpoint::host_plays)
-    }
-
-    /// Queues `bytes` for `peer` on `channel`, sent at the end of the frame.
-    pub fn send(
-        &mut self,
-        peer: PeerId,
-        channel: ChannelId,
-        bytes: &[u8],
-    ) -> Result<(), SendError> {
-        match self.endpoint.as_mut() {
-            Some(endpoint) => endpoint.send(peer, channel, bytes),
-            None => Err(SendError::NotConnected(peer)),
-        }
-    }
-
-    /// Queues `value` (serde, as `postcard`) for `peer` on `channel`.
-    pub fn send_message<T: Serialize + ?Sized>(
-        &mut self,
-        peer: PeerId,
-        channel: ChannelId,
-        value: &T,
-    ) -> Result<(), SendError> {
-        match self.endpoint.as_mut() {
-            Some(endpoint) => endpoint.send_message(peer, channel, value),
-            None => Err(SendError::NotConnected(peer)),
-        }
-    }
-
-    /// Queues `bytes` for every connected peer; answers those it could not
-    /// be queued for, and why.
-    pub fn broadcast(&mut self, channel: ChannelId, bytes: &[u8]) -> Vec<(PeerId, SendError)> {
-        match self.endpoint.as_mut() {
-            Some(endpoint) => endpoint.broadcast(channel, bytes),
-            None => Vec::new(),
-        }
-    }
-
-    /// The messages this frame's receive brought, whole and in each
-    /// channel's order. Decode one with [`Message::decode`].
-    pub fn received(&self) -> &[Message] {
-        self.endpoint.as_ref().map_or(&[], Endpoint::messages)
-    }
-
-    /// Takes this frame's messages, so each is handled exactly once however
-    /// many hooks look.
-    pub fn take_received(&mut self) -> Vec<Message> {
-        self.endpoint
-            .as_mut()
-            .map(Endpoint::take_messages)
-            .unwrap_or_default()
-    }
-
-    /// What happened this frame: peers joining and leaving, kicks,
-    /// timeouts, a connect that failed.
-    pub fn events(&self) -> &[NetEvent] {
-        self.endpoint.as_ref().map_or(&[], Endpoint::events)
     }
 
     /// Ends the connection to `peer`.
