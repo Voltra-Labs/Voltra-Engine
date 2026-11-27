@@ -1,24 +1,24 @@
 // Dodge's arena: the player, the rockfall's settings and the timer text.
 (
-    version: 1,
+    version: 2,
     entities: [
         (
             id: "019fe700-0000-7000-8000-000000000001",
             components: {
+                "Camera2D": (size:5.0,priority:0,active:true),
                 "Name": "Camera",
-                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
-                "Camera": (size:5.0,priority:0,active:true),
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
             id: "019fe700-0000-7000-8000-000000000002",
             components: {
+                "Collider2D": Circle(radius:0.5),
                 "Name": "Player",
-                "Transform": (translation:(0.0,-3.5),rotation:0.0,scale:(0.6,0.6)),
-                "Sprite": (color:(0.35,0.75,1.0,1.0),sort_order:2),
-                "Collider": Circle(radius:0.5),
-                "RigidBody": (body_type:Kinematic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:0.0,gravity_scale:0.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:true,can_sleep:false,bullet:false),
                 "Player": (speed:6.0,arena:(8.0,4.5)),
+                "RigidBody2D": (body_type:Kinematic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:0.0,gravity_scale:0.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:true,can_sleep:false,bullet:false),
+                "Sprite2D": (color:(0.35,0.75,1.0,1.0),sort_order:2,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,-3.5),rotation:0.0,scale:(0.6,0.6)),
             },
         ),
         (
@@ -32,9 +32,9 @@
             id: "019fe700-0000-7000-8000-000000000004",
             components: {
                 "Name": "Timer",
-                "Transform": (translation:(0.0,4.3),rotation:0.0,scale:(1.0,1.0)),
-                "Text": (content:"0.0 s",size:0.5,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:3),
                 "Run": (seconds:0.0,over:false),
+                "Text": (content:"0.0 s",font:None,size:0.5,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:3),
+                "Transform2D": (translation:(0.0,4.3),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
     ],

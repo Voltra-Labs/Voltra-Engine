@@ -5,39 +5,151 @@
     length: 1.0,
     looping: true,
     tracks: [
-        (target: "thigh_l", property: Rotation, keys: [
-            (time: 0.0, value: Float(-1.1207963267948966), ease: EaseInOut),
-            (time: 0.5, value: Float(-2.0207963267948967), ease: EaseInOut),
-            (time: 1.0, value: Float(-1.1207963267948966), ease: EaseInOut),
-        ]),
-        (target: "thigh_r", property: Rotation, keys: [
-            (time: 0.0, value: Float(-2.0207963267948967), ease: EaseInOut),
-            (time: 0.5, value: Float(-1.1207963267948966), ease: EaseInOut),
-            (time: 1.0, value: Float(-2.0207963267948967), ease: EaseInOut),
-        ]),
-        (target: "shin_l", property: Rotation, keys: [
-            (time: 0.0, value: Float(0.0), ease: EaseInOut),
-            (time: 0.25, value: Float(0.7), ease: EaseInOut),
-            (time: 0.5, value: Float(0.0), ease: EaseInOut),
-            (time: 1.0, value: Float(0.0), ease: EaseInOut),
-        ]),
-        (target: "shin_r", property: Rotation, keys: [
-            (time: 0.0, value: Float(0.0), ease: EaseInOut),
-            (time: 0.5, value: Float(0.0), ease: EaseInOut),
-            (time: 0.75, value: Float(0.7), ease: EaseInOut),
-            (time: 1.0, value: Float(0.0), ease: EaseInOut),
-        ]),
-        (target: "hip", property: Rotation, keys: [
-            (time: 0.0, value: Float(1.5707963267948966), ease: EaseInOut),
-            (time: 0.25, value: Float(1.5207963267948965), ease: EaseInOut),
-            (time: 0.5, value: Float(1.5707963267948966), ease: EaseInOut),
-            (time: 0.75, value: Float(1.5207963267948965), ease: EaseInOut),
-            (time: 1.0, value: Float(1.5707963267948966), ease: EaseInOut),
-        ]),
-        (target: "hand_goal", property: Translation, keys: [
-            (time: 0.0, value: Vec2((0.35,0.15)), ease: EaseInOut),
-            (time: 0.5, value: Vec2((-0.25,0.1)), ease: EaseInOut),
-            (time: 1.0, value: Vec2((0.35,0.15)), ease: EaseInOut),
-        ]),
+        (
+            target: "thigh_l",
+            property: Rotation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(-1.1207963),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.5,
+                    value: Float(-2.0207963),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.0,
+                    value: Float(-1.1207963),
+                    ease: EaseInOut,
+                ),
+            ],
+        ),
+        (
+            target: "thigh_r",
+            property: Rotation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(-2.0207963),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.5,
+                    value: Float(-1.1207963),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.0,
+                    value: Float(-2.0207963),
+                    ease: EaseInOut,
+                ),
+            ],
+        ),
+        (
+            target: "shin_l",
+            property: Rotation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(0.0),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.25,
+                    value: Float(0.7),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.5,
+                    value: Float(0.0),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.0,
+                    value: Float(0.0),
+                    ease: EaseInOut,
+                ),
+            ],
+        ),
+        (
+            target: "shin_r",
+            property: Rotation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(0.0),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.5,
+                    value: Float(0.0),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.75,
+                    value: Float(0.7),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.0,
+                    value: Float(0.0),
+                    ease: EaseInOut,
+                ),
+            ],
+        ),
+        (
+            target: "hip",
+            property: Rotation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(1.5707964),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.25,
+                    value: Float(1.5207963),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.5,
+                    value: Float(1.5707964),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.75,
+                    value: Float(1.5207963),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.0,
+                    value: Float(1.5707964),
+                    ease: EaseInOut,
+                ),
+            ],
+        ),
+        (
+            target: "hand_goal",
+            property: Translation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Vec2((0.35, 0.15)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.5,
+                    value: Vec2((-0.25, 0.1)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.0,
+                    value: Vec2((0.35, 0.15)),
+                    ease: EaseInOut,
+                ),
+            ],
+        ),
     ],
 )

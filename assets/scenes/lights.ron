@@ -1,67 +1,67 @@
 (
-    version: 1,
+    version: 2,
     entities: [
         (
             id: "01a20053-89cf-7bd2-9ee1-5a67b54f23ad",
             components: {
-                "Camera": (size:4.0,priority:0,active:true,ambient:Some((0.06,0.07,0.12))),
+                "Camera2D": (size:4.0,priority:0,active:true,ambient:Some((0.06,0.07,0.12))),
                 "Name": "Camera",
-                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
             id: "01a20053-89cf-7bd2-9ee1-5a7007f35964",
             components: {
                 "Name": "Wall",
-                "Sprite": (color:(0.85,0.84,0.8,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(16.0,9.0)),
+                "Sprite2D": (color:(0.85,0.84,0.8,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(16.0,9.0)),
             },
         ),
         (
             id: "01a20053-89cf-7bd2-9ee1-5a854e80ddfa",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Floor",
-                "Sprite": (color:(0.35,0.32,0.3,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(0.0,-3.5),rotation:0.0,scale:(16.0,1.0)),
+                "Sprite2D": (color:(0.35,0.32,0.3,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,-3.5),rotation:0.0,scale:(16.0,1.0)),
             },
         ),
         (
             id: "01a20053-89cf-7bd2-9ee1-5a9c882e344c",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Pillar left",
                 "ShadowCaster2D": (shape:Collider,self_shadow:false),
-                "Sprite": (color:(0.55,0.5,0.45,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(-2.0,-1.75),rotation:0.0,scale:(0.6,2.5)),
+                "Sprite2D": (color:(0.55,0.5,0.45,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(-2.0,-1.75),rotation:0.0,scale:(0.6,2.5)),
             },
         ),
         (
             id: "01a20053-89cf-7bd2-9ee1-5aa65ad7ad03",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Pillar right",
                 "ShadowCaster2D": (shape:Collider,self_shadow:false),
-                "Sprite": (color:(0.55,0.5,0.45,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(1.0,-1.75),rotation:0.0,scale:(0.6,2.5)),
+                "Sprite2D": (color:(0.55,0.5,0.45,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(1.0,-1.75),rotation:0.0,scale:(0.6,2.5)),
             },
         ),
         (
             id: "01a20053-89cf-7bd2-9ee1-5ab79f0f3f7f",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Crate",
                 "ShadowCaster2D": (shape:Collider,self_shadow:true),
-                "Sprite": (color:(0.6,0.42,0.25,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(3.5,-2.4),rotation:0.35,scale:(1.0,1.0)),
+                "Sprite2D": (color:(0.6,0.42,0.25,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(3.5,-2.4),rotation:0.35,scale:(1.0,1.0)),
             },
         ),
         (
             id: "01a20053-89cf-7bd2-9ee1-5acb57cac97e",
             components: {
                 "Name": "Plaque",
-                "Sprite": (color:(0.75,0.72,0.68,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None,normal_map:Some(Path("sprites/studs_normal.png"))),
-                "Transform": (translation:(-3.0,-1.5),rotation:0.0,scale:(1.2,1.2)),
+                "Sprite2D": (color:(0.75,0.72,0.68,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None,normal_map:Some(Path("sprites/studs_normal.png"))),
+                "Transform2D": (translation:(-3.0,-1.5),rotation:0.0,scale:(1.2,1.2)),
             },
         ),
         (
@@ -69,8 +69,8 @@
             components: {
                 "Name": "Wire",
                 "ShadowCaster2D": (shape:Polygon(points:[(-0.5,0.0),(0.5,0.0)],closed:false),self_shadow:false),
-                "Sprite": (color:(0.2,0.2,0.22,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(-0.5,2.4),rotation:0.0,scale:(3.0,0.08)),
+                "Sprite2D": (color:(0.2,0.2,0.22,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(-0.5,2.4),rotation:0.0,scale:(3.0,0.08)),
             },
         ),
         (
@@ -78,7 +78,7 @@
             components: {
                 "Name": "Warm lamp",
                 "PointLight2D": (color:(1.0,0.8,0.55),intensity:1.6,radius:10.0,falloff:1.5,shadows:Some((strength:1.0,softness:0.02)),height:Some(3.0)),
-                "Transform": (translation:(-4.5,1.0),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(-4.5,1.0),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
@@ -86,7 +86,7 @@
             components: {
                 "Name": "Cool spot",
                 "PointLight2D": (color:(0.5,0.7,1.0),intensity:1.4,radius:9.0,falloff:1.5,shadows:Some((strength:0.85,softness:0.08)),cone:Some((angle:1.2217305,softness:0.3)),height:Some(3.5)),
-                "Transform": (translation:(4.5,3.0),rotation:-2.3036115,scale:(1.0,1.0)),
+                "Transform2D": (translation:(4.5,3.0),rotation:-2.3036115,scale:(1.0,1.0)),
             },
         ),
         (
@@ -94,7 +94,7 @@
             components: {
                 "Name": "Ember",
                 "PointLight2D": (color:(1.0,0.3,0.15),intensity:1.5,radius:1.5,falloff:2.0),
-                "Transform": (translation:(-0.5,-2.6),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(-0.5,-2.6),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
     ],

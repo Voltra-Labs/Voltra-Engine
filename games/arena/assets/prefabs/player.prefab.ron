@@ -3,19 +3,19 @@
 // a zap hits, remembered tick by tick on the server (LagCompensated) so a
 // zap is tested where its shooter saw it. No body: nothing pushes it.
 (
-    version: 1,
+    version: 2,
     entities: [
         (
             id: "01a2c000-0000-7000-8000-000000000001",
             components: {
-                "Name": "Player",
-                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(0.8,0.8)),
-                "Sprite": (color:(0.35,0.75,1.0,1.0),sort_order:2,texture:Some(Path("sprites/checker.png"))),
-                "Player": (speed:5.0,bounds:(8.0,4.0)),
-                "Score": (0),
-                "Replicated": (priority:4.0),
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "LagCompensated": (),
+                "Name": "Player",
+                "Player": (speed:5.0,bounds:(8.0,4.0)),
+                "Replicated": (priority:4.0),
+                "Score": (0),
+                "Sprite2D": (color:(0.35,0.75,1.0,1.0),sort_order:2,texture:Some(Path("sprites/checker.png")),atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(0.8,0.8)),
             },
         ),
     ],

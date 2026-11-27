@@ -2,11 +2,26 @@
 // layer over whatever the ground or air states play. Keyed as a change —
 // the first frame is the reference — so it starts and ends on no change.
 (
+    looping: false,
     tracks: [
-        (property: Scale, keys: [
-            (time: 0.0, value: Vec2((0.0, 0.0)), ease: EaseOut),
-            (time: 0.07, value: Vec2((0.1, -0.14)), ease: EaseInOut),
-            (time: 0.28, value: Vec2((0.0, 0.0))),
-        ]),
+        (
+            property: Scale2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Vec2((0.0, 0.0)),
+                    ease: EaseOut,
+                ),
+                (
+                    time: 0.07,
+                    value: Vec2((0.1, -0.14)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.28,
+                    value: Vec2((0.0, 0.0)),
+                ),
+            ],
+        ),
     ],
 )

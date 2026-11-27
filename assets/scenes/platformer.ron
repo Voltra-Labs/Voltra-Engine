@@ -1,12 +1,12 @@
 (
-    version: 1,
+    version: 2,
     entities: [
         (
             id: "01a209f1-ecd7-7812-b93b-959285264bbe",
             components: {
                 "Name": "Ground",
                 "Tilemap": (tile_size:(0.5,0.5),color:(1.0,1.0,1.0,1.0),sort_order:-1,collision:true,texture:Some(Path("sprites/ground.png")),atlas:Some(Path("sprites/ground.atlas.ron")),chunks:[(at:(0,0),cells:[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),(at:(1,0),cells:[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),(at:(2,0),cells:[2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])]),
-                "Transform": (translation:(-12.0,-3.5),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(-12.0,-3.5),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
@@ -14,7 +14,7 @@
             components: {
                 "Name": "Ledge",
                 "Tilemap": (tile_size:(0.5,0.5),color:(1.0,1.0,1.0,1.0),sort_order:-1,collision:true,texture:Some(Path("sprites/ground.png")),atlas:Some(Path("sprites/ground.atlas.ron")),chunks:[(at:(0,0),cells:[2,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])]),
-                "Transform": (translation:(4.0,-1.9),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(4.0,-1.9),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
@@ -22,37 +22,37 @@
             components: {
                 "Name": "Hill and ladder",
                 "Tilemap": (tile_size:(0.5,0.5),color:(1.0,1.0,1.0,1.0),sort_order:-1,collision:true,texture:Some(Path("sprites/ramps.png")),atlas:Some(Path("sprites/ramps.atlas.ron")),tile_data:{0:(shape:Slope(left:0.0,right:0.5)),1:(shape:Slope(left:0.5,right:1.0)),3:(shape:Empty,custom:{"ladder":true})},chunks:[(at:(0,0),cells:[1,2,3,3,3,3,3,3,2147483650,2147483649,0,0,0,0,0,0,0,0,1,2,3,3,2147483650,2147483649,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]),(at:(2,0),cells:[0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0])]),
-                "Transform": (translation:(-11.5,-2.5),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(-11.5,-2.5),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
             id: "01a209f1-ecd7-7812-b93b-95b888bf0a0f",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Crate 1",
-                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:2.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false,can_sleep:true,bullet:false),
-                "Sprite": (color:(0.85,0.55,0.3,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(-3.0,0.0),rotation:0.0,scale:(0.6,0.6)),
+                "RigidBody2D": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:2.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false,can_sleep:true,bullet:false),
+                "Sprite2D": (color:(0.85,0.55,0.3,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(-3.0,0.0),rotation:0.0,scale:(0.6,0.6)),
             },
         ),
         (
             id: "01a209f1-ecd7-7812-b93b-95c2e383d432",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Crate 2",
-                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:2.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false,can_sleep:true,bullet:false),
-                "Sprite": (color:(0.85,0.55,0.3,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(-2.2,0.0),rotation:0.0,scale:(0.6,0.6)),
+                "RigidBody2D": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:2.0,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false,can_sleep:true,bullet:false),
+                "Sprite2D": (color:(0.85,0.55,0.3,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(-2.2,0.0),rotation:0.0,scale:(0.6,0.6)),
             },
         ),
         (
             id: "01a209f1-ecd7-7812-b93b-95c9a1d0c4a7",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Heavy crate",
-                "RigidBody": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:0.5,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false,can_sleep:true,bullet:false),
-                "Sprite": (color:(0.55,0.35,0.2,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(-5.0,-1.9),rotation:0.0,scale:(0.9,0.9)),
+                "RigidBody2D": (body_type:Dynamic,velocity:(0.0,0.0),angular_velocity:0.0,inverse_mass:0.5,gravity_scale:1.0,linear_damping:0.0,angular_damping:0.0,lock_rotation:false,can_sleep:true,bullet:false),
+                "Sprite2D": (color:(0.55,0.35,0.2,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(-5.0,-1.9),rotation:0.0,scale:(0.9,0.9)),
             },
         ),
         (
@@ -60,14 +60,14 @@
             components: {
                 "AudioSource": (clip:Some(Path("audio/coin.wav")),volume:1.0,pitch:1.0,looping:false,play_on_spawn:false,range:0.0,bus:"sfx"),
                 "Coin": (value:1),
-                "Collider": Circle(radius:0.5),
+                "Collider2D": Circle(radius:0.5),
                 "Name": "coin",
                 "PrefabInstance": (source:Path("prefabs/coin.ron")),
                 "PrefabPart": (record:"01a1f5b1-726a-7791-a142-4a5ac7826038"),
                 "Sensor": (),
-                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/coin.png")),atlas:Some(Path("sprites/coin.atlas.ron")),frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/coin.png")),atlas:Some(Path("sprites/coin.atlas.ron")),frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "SpriteAnimation": (frames:[0,1,2,3],fps:8.0,looping:true,playing:true),
-                "Transform": (translation:(2.0,-1.6),rotation:0.0,scale:(0.4,0.4)),
+                "Transform2D": (translation:(2.0,-1.6),rotation:0.0,scale:(0.4,0.4)),
             },
         ),
         (
@@ -75,14 +75,14 @@
             components: {
                 "AudioSource": (clip:Some(Path("audio/coin.wav")),volume:1.0,pitch:1.0,looping:false,play_on_spawn:false,range:0.0,bus:"sfx"),
                 "Coin": (value:1),
-                "Collider": Circle(radius:0.5),
+                "Collider2D": Circle(radius:0.5),
                 "Name": "coin",
                 "PrefabInstance": (source:Path("prefabs/coin.ron")),
                 "PrefabPart": (record:"01a1f5b1-726a-7791-a142-4a5ac7826038"),
                 "Sensor": (),
-                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/coin.png")),atlas:Some(Path("sprites/coin.atlas.ron")),frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/coin.png")),atlas:Some(Path("sprites/coin.atlas.ron")),frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "SpriteAnimation": (frames:[0,1,2,3],fps:8.0,looping:true,playing:true),
-                "Transform": (translation:(6.0,-1.6),rotation:0.0,scale:(0.4,0.4)),
+                "Transform2D": (translation:(6.0,-1.6),rotation:0.0,scale:(0.4,0.4)),
             },
         ),
         (
@@ -90,14 +90,14 @@
             components: {
                 "AudioSource": (clip:Some(Path("audio/coin.wav")),volume:1.0,pitch:1.0,looping:false,play_on_spawn:false,range:0.0,bus:"sfx"),
                 "Coin": (value:1),
-                "Collider": Circle(radius:0.5),
+                "Collider2D": Circle(radius:0.5),
                 "Name": "coin",
                 "PrefabInstance": (source:Path("prefabs/coin.ron")),
                 "PrefabPart": (record:"01a1f5b1-726a-7791-a142-4a5ac7826038"),
                 "Sensor": (),
-                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/coin.png")),atlas:Some(Path("sprites/coin.atlas.ron")),frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(1.0,1.0,1.0,1.0),sort_order:5,texture:Some(Path("sprites/coin.png")),atlas:Some(Path("sprites/coin.atlas.ron")),frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "SpriteAnimation": (frames:[0,1,2,3],fps:8.0,looping:true,playing:true),
-                "Transform": (translation:(8.0,-1.6),rotation:0.0,scale:(0.4,0.4)),
+                "Transform2D": (translation:(8.0,-1.6),rotation:0.0,scale:(0.4,0.4)),
             },
         ),
         (
@@ -105,7 +105,7 @@
             components: {
                 "Name": "Hills",
                 "Parallax": (factor:(0.3,1.0),repeat:Some((30.0,0.0))),
-                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
@@ -113,8 +113,8 @@
             components: {
                 "Name": "Hill 1",
                 "Parent": "01a209f1-ecd7-7812-b93b-9605d00d37da",
-                "Sprite": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(-10.0,-1.5),rotation:0.0,scale:(4.5,3.0)),
+                "Sprite2D": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(-10.0,-1.5),rotation:0.0,scale:(4.5,3.0)),
             },
         ),
         (
@@ -122,8 +122,8 @@
             components: {
                 "Name": "Hill 2",
                 "Parent": "01a209f1-ecd7-7812-b93b-9605d00d37da",
-                "Sprite": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(-5.0,-0.75),rotation:0.0,scale:(4.5,4.5)),
+                "Sprite2D": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(-5.0,-0.75),rotation:0.0,scale:(4.5,4.5)),
             },
         ),
         (
@@ -131,8 +131,8 @@
             components: {
                 "Name": "Hill 3",
                 "Parent": "01a209f1-ecd7-7812-b93b-9605d00d37da",
-                "Sprite": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(0.0,-1.75),rotation:0.0,scale:(4.5,2.5)),
+                "Sprite2D": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,-1.75),rotation:0.0,scale:(4.5,2.5)),
             },
         ),
         (
@@ -140,8 +140,8 @@
             components: {
                 "Name": "Hill 4",
                 "Parent": "01a209f1-ecd7-7812-b93b-9605d00d37da",
-                "Sprite": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(5.0,-0.5),rotation:0.0,scale:(4.5,5.0)),
+                "Sprite2D": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(5.0,-0.5),rotation:0.0,scale:(4.5,5.0)),
             },
         ),
         (
@@ -149,8 +149,8 @@
             components: {
                 "Name": "Hill 5",
                 "Parent": "01a209f1-ecd7-7812-b93b-9605d00d37da",
-                "Sprite": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(10.0,-1.25),rotation:0.0,scale:(4.5,3.5)),
+                "Sprite2D": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(10.0,-1.25),rotation:0.0,scale:(4.5,3.5)),
             },
         ),
         (
@@ -158,8 +158,8 @@
             components: {
                 "Name": "Hill 6",
                 "Parent": "01a209f1-ecd7-7812-b93b-9605d00d37da",
-                "Sprite": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(15.0,-1.0),rotation:0.0,scale:(4.5,4.0)),
+                "Sprite2D": (color:(0.16,0.2,0.3,1.0),sort_order:-10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(15.0,-1.0),rotation:0.0,scale:(4.5,4.0)),
             },
         ),
         (
@@ -167,29 +167,29 @@
             components: {
                 "Name": "Sign",
                 "Text": (content:"Jump!\nSpace",font:None,size:0.45,pixels_per_em:48,color:(1.0,0.92,0.6,1.0),align:Center,sort_order:5),
-                "Transform": (translation:(6.0,0.4),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(6.0,0.4),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
             id: "01a209f1-ecd7-7812-b93b-96864dacb0d3",
             components: {
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Goal": (next:"scenes/platformer-2.ron"),
                 "Name": "Goal",
                 "Sensor": (),
-                "Sprite": (color:(0.4,1.0,0.5,1.0),sort_order:4,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(7.5,-0.4),rotation:0.0,scale:(0.3,1.2)),
+                "Sprite2D": (color:(0.4,1.0,0.5,1.0),sort_order:4,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(7.5,-0.4),rotation:0.0,scale:(0.3,1.2)),
             },
         ),
         (
             id: "01a209f1-ecd7-7812-b93b-969970abf61c",
             components: {
                 "CharacterBody2D": (up:(0.0,1.0),floor_max_angle:0.7853982,skin:0.01,snap:0.1,step_height:0.05,stop_on_slope:true,max_slides:4,push_force:20.0,constant_speed_on_slopes:true,carry_rotation:false),
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Walker",
                 "Persistent": (),
-                "Sprite": (color:(0.35,0.75,1.0,1.0),sort_order:10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "Transform": (translation:(0.0,0.0),rotation:0.0,scale:(0.7,1.2)),
+                "Sprite2D": (color:(0.35,0.75,1.0,1.0),sort_order:10,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(0.7,1.2)),
                 "Walker": (),
             },
         ),
@@ -197,10 +197,10 @@
             id: "01a209f1-ecd7-7812-b93b-96ac3854a52d",
             components: {
                 "AudioListener": (active:true),
-                "Camera": (size:4.0,priority:0,active:true),
+                "Camera2D": (size:4.0,priority:0,active:true),
                 "Name": "Camera",
                 "Persistent": (),
-                "Transform": (translation:(0.0,-0.5),rotation:0.0,scale:(1.0,1.0)),
+                "Transform2D": (translation:(0.0,-0.5),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
         (
@@ -208,7 +208,7 @@
             components: {
                 "Name": "HUD",
                 "Persistent": (),
-                "Sprite": (color:(0.08,0.09,0.12,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(0.08,0.09,0.12,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(16.0,16.0),offset_max:(196.0,60.0)),
             },
         ),
@@ -228,7 +228,7 @@
                 "Name": "Save button",
                 "Persistent": (),
                 "SaveButton": (),
-                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
                 "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(16.0,68.0),offset_max:(126.0,102.0)),
             },
@@ -243,30 +243,10 @@
             },
         ),
         (
-            id: "01a20a00-0000-7000-8000-00000000f001",
-            components: {
-                "FullscreenButton": (),
-                "Name": "Fullscreen button",
-                "Persistent": (),
-                "Sprite": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
-                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
-                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(134.0,68.0),offset_max:(264.0,102.0)),
-            },
-        ),
-        (
-            id: "01a20a00-0000-7000-8000-00000000f002",
-            components: {
-                "Name": "Fullscreen label",
-                "Parent": "01a20a00-0000-7000-8000-00000000f001",
-                "Text": (content:"Fullscreen",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:0),
-                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
-            },
-        ),
-        (
             id: "01a20a00-0000-7000-8000-00000000c001",
             components: {
                 "Name": "Touch stick",
-                "Sprite": (color:(1.0,1.0,1.0,0.12),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(1.0,1.0,1.0,0.12),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "UiRect": (anchor_min:(0.0,1.0),anchor_max:(0.0,1.0),offset_min:(24.0,-164.0),offset_max:(164.0,-24.0)),
             },
         ),
@@ -283,7 +263,7 @@
             id: "01a20a00-0000-7000-8000-00000000c003",
             components: {
                 "Name": "Touch jump",
-                "Sprite": (color:(1.0,1.0,1.0,0.12),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(1.0,1.0,1.0,0.12),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "UiRect": (anchor_min:(1.0,1.0),anchor_max:(1.0,1.0),offset_min:(-124.0,-124.0),offset_max:(-24.0,-24.0)),
             },
         ),
@@ -294,6 +274,26 @@
                 "Parent": "01a20a00-0000-7000-8000-00000000c003",
                 "Text": (content:"jump",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,0.5),align:Center,sort_order:0),
                 "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,38.0),offset_max:(-6.0,-6.0)),
+            },
+        ),
+        (
+            id: "01a20a00-0000-7000-8000-00000000f001",
+            components: {
+                "FullscreenButton": (),
+                "Name": "Fullscreen button",
+                "Persistent": (),
+                "Sprite2D": (color:(1.0,1.0,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "UiButton": (normal:(0.2,0.22,0.28,1.0),hovered:(0.3,0.34,0.44,1.0),pressed:(0.14,0.15,0.2,1.0),disabled_color:(0.2,0.2,0.2,0.5),disabled:false),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(134.0,68.0),offset_max:(264.0,102.0)),
+            },
+        ),
+        (
+            id: "01a20a00-0000-7000-8000-00000000f002",
+            components: {
+                "Name": "Fullscreen label",
+                "Parent": "01a20a00-0000-7000-8000-00000000f001",
+                "Text": (content:"Fullscreen",font:None,size:18.0,pixels_per_em:48,color:(1.0,1.0,1.0,1.0),align:Center,sort_order:0),
+                "UiRect": (anchor_min:(0.0,0.0),anchor_max:(1.0,1.0),offset_min:(6.0,6.0),offset_max:(-6.0,-6.0)),
             },
         ),
     ],

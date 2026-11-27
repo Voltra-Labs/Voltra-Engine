@@ -1,39 +1,39 @@
 (
-    version: 1,
+    version: 2,
     entities: [
         (
             id: "019fe400-0000-7000-8000-000000000001",
             components: {
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Ground",
-                "Transform": (translation:(0.0,-3.0),rotation:0.0,scale:(24.0,1.0)),
-                "Sprite": (color:(0.32,0.28,0.4,1.0),sort_order:-1,texture:None),
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Sprite2D": (color:(0.32,0.28,0.4,1.0),sort_order:-1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(0.0,-3.0),rotation:0.0,scale:(24.0,1.0)),
             },
         ),
         (
             id: "019fe400-0000-7000-8000-000000000002",
             components: {
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Step",
-                "Transform": (translation:(4.0,-1.5),rotation:0.0,scale:(3.0,0.5)),
-                "Sprite": (color:(0.45,0.38,0.55,1.0),sort_order:-1,texture:None),
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Sprite2D": (color:(0.45,0.38,0.55,1.0),sort_order:-1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(4.0,-1.5),rotation:0.0,scale:(3.0,0.5)),
             },
         ),
         (
             id: "019fe400-0000-7000-8000-000000000003",
             components: {
+                "Collider2D": Box(half_extents:(0.5,0.5)),
                 "Name": "Ledge",
-                "Transform": (translation:(8.0,0.0),rotation:0.0,scale:(3.0,0.5)),
-                "Sprite": (color:(0.45,0.38,0.55,1.0),sort_order:-1,texture:None),
-                "Collider": Box(half_extents:(0.5,0.5)),
+                "Sprite2D": (color:(0.45,0.38,0.55,1.0),sort_order:-1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(8.0,0.0),rotation:0.0,scale:(3.0,0.5)),
             },
         ),
         (
             id: "019fe400-0000-7000-8000-000000000004",
             components: {
                 "Name": "Sign",
-                "Transform": (translation:(0.0,0.5),rotation:0.0,scale:(1.0,1.0)),
-                "Text": (content:"Level 2",size:0.6,pixels_per_em:48,color:(0.8,0.75,1.0,1.0),align:Center,sort_order:5),
+                "Text": (content:"Level 2",font:None,size:0.6,pixels_per_em:48,color:(0.8,0.75,1.0,1.0),align:Center,sort_order:5),
+                "Transform2D": (translation:(0.0,0.5),rotation:0.0,scale:(1.0,1.0)),
             },
         ),
     ],

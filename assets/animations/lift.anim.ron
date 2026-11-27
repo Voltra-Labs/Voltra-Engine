@@ -3,12 +3,32 @@
 (
     looping: true,
     tracks: [
-        (property: Translation, keys: [
-            (time: 0.0, value: Vec2((15.5, 0.1)), ease: EaseInOut),
-            (time: 2.5, value: Vec2((17.5, 2.4))),
-            (time: 3.5, value: Vec2((17.5, 2.4)), ease: EaseInOut),
-            (time: 6.0, value: Vec2((15.5, 0.1))),
-            (time: 7.0, value: Vec2((15.5, 0.1))),
-        ]),
+        (
+            property: Translation2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Vec2((15.5, 0.1)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 2.5,
+                    value: Vec2((17.5, 2.4)),
+                ),
+                (
+                    time: 3.5,
+                    value: Vec2((17.5, 2.4)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 6.0,
+                    value: Vec2((15.5, 0.1)),
+                ),
+                (
+                    time: 7.0,
+                    value: Vec2((15.5, 0.1)),
+                ),
+            ],
+        ),
     ],
 )

@@ -2,11 +2,33 @@
 (
     looping: true,
     tracks: [
-        (property: Scale, keys: [
-            (time: 0.0, value: Vec2((0.44, 0.56)), ease: EaseInOut),
-            (time: 0.15, value: Vec2((0.38, 0.63)), ease: EaseInOut),
-            (time: 0.3, value: Vec2((0.44, 0.56))),
-        ]),
-        (property: SpriteColor, keys: [(time: 0.0, value: Color((1.0, 0.65, 0.25, 1.0)))]),
+        (
+            property: Scale2D,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Vec2((0.44, 0.56)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.15,
+                    value: Vec2((0.38, 0.63)),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.3,
+                    value: Vec2((0.44, 0.56)),
+                ),
+            ],
+        ),
+        (
+            property: SpriteColor,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Color((1.0, 0.65, 0.25, 1.0)),
+                ),
+            ],
+        ),
     ],
 )

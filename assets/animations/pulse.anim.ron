@@ -4,15 +4,43 @@
 (
     looping: true,
     tracks: [
-        (property: LightIntensity, keys: [
-            (time: 0.0, value: Float(0.6), ease: EaseInOut),
-            (time: 0.75, value: Float(1.4), ease: EaseInOut),
-            (time: 1.5, value: Float(0.6)),
-        ]),
-        (property: LightRadius, keys: [
-            (time: 0.0, value: Float(3.0), ease: EaseInOut),
-            (time: 0.75, value: Float(3.6), ease: EaseInOut),
-            (time: 1.5, value: Float(3.0)),
-        ]),
+        (
+            property: PointLight2DIntensity,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(0.6),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.75,
+                    value: Float(1.4),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.5,
+                    value: Float(0.6),
+                ),
+            ],
+        ),
+        (
+            property: PointLight2DRadius,
+            keys: [
+                (
+                    time: 0.0,
+                    value: Float(3.0),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 0.75,
+                    value: Float(3.6),
+                    ease: EaseInOut,
+                ),
+                (
+                    time: 1.5,
+                    value: Float(3.0),
+                ),
+            ],
+        ),
     ],
 )
