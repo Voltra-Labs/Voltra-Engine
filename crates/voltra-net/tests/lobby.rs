@@ -429,3 +429,36 @@ fn a_lobby_message_that_is_not_one_gets_the_sender_kicked() {
     });
     assert!(sim.clients[honest].lobby.is_in());
 }
+
+#[test]
+fn a_match_started_and_finished_between_two_snapshots_is_both_events() {
+    let mut sim = Sim::new(rules(2, 1), false);
+    let ada = sim.join("Ada");
+    sim.until("Ada in", |s| s.clients[ada].lobby.is_in());
+    sim.clients[ada].lobby.set_ready(true).expect("in");
+    sim.until("Ada ready", |s| {
+        s.server.lobby.lobby().all_ready() && s.agreed()
+    });
+
+    // The server's game starts the match and ends it in the same frame:
+    // the one snapshot sent shows a lobby waiting, as before, one match on.
+    sim.server.lobby.start().expect("the server may start it");
+    sim.server.lobby.finish().expect("the server's");
+    sim.until("the client caught up", |s| {
+        s.clients[ada].lobby.lobby().matches() == 1
+    });
+
+    for end in [&sim.server, &sim.clients[ada]] {
+        let phases: Vec<&LobbyEvent> = end
+            .seen
+            .iter()
+            .filter(|e| matches!(e, LobbyEvent::Started | LobbyEvent::Finished))
+            .collect();
+        assert_eq!(
+            phases,
+            [&LobbyEvent::Started, &LobbyEvent::Finished],
+            "{:?}",
+            end.seen
+        );
+    }
+}

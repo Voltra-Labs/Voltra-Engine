@@ -10,6 +10,22 @@ use super::state::{Lobby, LobbyEntry, LobbyPhase};
 use super::MAX_NAME_CHARS;
 use crate::PeerId;
 
+/// The bytes a snapshot takes at most beside its entries: the message's
+/// tag, the slots, the minimum, the host, the phase, the matches and the
+/// entries' count, each varint at its longest (with room to spare).
+pub(crate) const SNAPSHOT_FIXED: usize = 32;
+
+/// The bytes one entry takes at most beside its name's: its peer (a
+/// `u32` varint, 5), the name's length (2 for any name a lobby takes) and
+/// the ready flag.
+pub(crate) const ENTRY_FIXED: usize = 8;
+
+/// The largest snapshot of a lobby of `players` slots whose names are at
+/// most `chars` characters, each at most four bytes of UTF-8.
+pub(crate) fn largest_snapshot(players: usize, chars: usize) -> usize {
+    SNAPSHOT_FIXED + players * (ENTRY_FIXED + 4 * chars)
+}
+
 /// A client asking.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum ToServer {
@@ -48,6 +64,7 @@ pub(crate) struct Snapshot {
     min_players: u16,
     host: Option<u32>,
     phase: LobbyPhase,
+    matches: u32,
     entries: Vec<WireEntry>,
 }
 
@@ -58,6 +75,7 @@ impl Snapshot {
             min_players: lobby.min_players().min(MAX_LOBBY_PLAYERS) as u16,
             host: lobby.host().map(|peer| peer.0),
             phase: lobby.phase(),
+            matches: lobby.matches(),
             entries: lobby
                 .entries()
                 .iter()
@@ -100,6 +118,7 @@ impl Snapshot {
             host,
             entries,
             self.phase,
+            self.matches,
         ))
     }
 }
@@ -146,6 +165,44 @@ mod tests {
         shouting.entries[0].name = "\u{1b}[2J".into();
         let shown = shouting.into_lobby().expect("a fine lobby");
         assert_eq!(shown.entries()[0].name, "[2J");
+    }
+
+    #[test]
+    fn a_lobby_at_every_cap_fits_its_bound_and_the_session_carries_it() {
+        use crate::{LobbyConfig, NetConfig, MAX_LOBBY_PLAYERS, MAX_NAME_CHARS};
+        let config = LobbyConfig {
+            max_players: MAX_LOBBY_PLAYERS,
+            min_players: 1,
+            max_name_chars: MAX_NAME_CHARS,
+            ..LobbyConfig::default()
+        }
+        .validated();
+        let mut lobby = Lobby::new(&config);
+        // Four-byte characters, each name unique and as long as allowed;
+        // peers with the longest varints.
+        for n in 0..config.max_players {
+            let name: String = std::iter::repeat_n('😀', config.max_name_chars - 3)
+                .chain(format!("{n:03}").chars())
+                .collect();
+            let peer = PeerId(u32::MAX - n as u32);
+            let given = lobby.join(peer, &name, &config).expect("room");
+            assert_eq!(given, name, "the name kept whole");
+            lobby.set_ready(peer, true).expect("in");
+        }
+        lobby.start(Some(PeerId(u32::MAX))).expect("startable");
+        let bytes = encode(&ToClient::State(Snapshot::of(&lobby))).expect("encodes");
+        let bound = largest_snapshot(config.max_players, config.max_name_chars);
+        assert!(bytes.len() <= bound, "{} > {bound}", bytes.len());
+        assert!(bound <= crate::lobby::config::MAX_LOBBY_SNAPSHOT);
+
+        let session = config.net_config(NetConfig {
+            max_message_size: 1024,
+            ..NetConfig::default()
+        });
+        assert!(
+            session.max_message_size >= bound,
+            "a game's smaller message limit is raised to the lobby's"
+        );
     }
 
     #[test]

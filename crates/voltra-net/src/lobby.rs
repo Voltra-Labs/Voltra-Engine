@@ -31,12 +31,14 @@ mod session;
 mod state;
 mod wire;
 
-pub use config::{LateJoin, LobbyConfig, MAX_LOBBY_PLAYERS, MAX_NAME_CHARS, MIN_JOIN_TIMEOUT};
+pub use config::{
+    LateJoin, LobbyConfig, MAX_LOBBY_PLAYERS, MAX_LOBBY_SNAPSHOT, MAX_NAME_CHARS, MIN_JOIN_TIMEOUT,
+};
 pub use error::LobbyError;
 pub use event::LobbyEvent;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) use name::visible_text;
-pub use name::{sanitize_name, unique_name};
+pub use name::{sanitize_name, unique_name, MAX_MARKS_PER_BASE};
 pub use refusal::LobbyRefusal;
 pub use session::LobbySession;
 pub use state::{Lobby, LobbyEntry, LobbyPhase};

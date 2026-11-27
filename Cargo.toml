@@ -101,6 +101,13 @@ unicode-script = "0.5.9"
 unicode-bidi = "0.3.18"
 # Line break opportunities (UAX #14), so CJK wraps between characters.
 unicode-linebreak = "0.1.5"
+# A lobby's player names (`voltra-net/src/lobby/name.rs`): NFC before a name
+# is cut, NFKC to compare two; the general category, to strip every format
+# character (Cf); full case folding, so "STRASSE" and "straße" are one name.
+# Leaf crates of tables; what is stripped and compared is ours.
+unicode-normalization = "0.1.26"
+unicode-general-category = "1.1.0"
+caseless = "0.2.2"
 # Opens a game's dynamic library so the editor can run its code. A leaf
 # crate over dlopen/LoadLibrary; what is loaded, and when it is trusted, is
 # ours (`voltra-core/src/game/library.rs`).

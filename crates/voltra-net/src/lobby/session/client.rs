@@ -32,7 +32,6 @@ impl Client {
         messages: Vec<Message>,
         net_events: &[NetEvent],
     ) {
-        let before = lobby.clone();
         for event in net_events {
             match event {
                 NetEvent::Connected(_) => {
@@ -51,9 +50,19 @@ impl Client {
             }
         }
         for message in messages {
+            // What came with the goodbye is of a lobby already closed.
+            if !self.connected {
+                break;
+            }
             match message.decode::<ToClient>() {
+                // Each snapshot's changes in turn: a match started and
+                // finished between two frames is both a Started and a
+                // Finished, in order.
                 Ok(ToClient::State(snapshot)) => match snapshot.into_lobby() {
-                    Some(sent) => *lobby = sent,
+                    Some(sent) => {
+                        changes(lobby, &sent, events);
+                        *lobby = sent;
+                    }
                     None => log::warn!("the server sent a lobby that cannot be; ignored"),
                 },
                 Ok(ToClient::Refused(refusal)) => {
@@ -67,11 +76,8 @@ impl Client {
                 }
             }
         }
-        // A close resets the copy; the entries leaving it are not
-        // worth an event each — `Closed` says it all.
-        if self.connected {
-            changes(&before, lobby, events);
-        }
+        // A close resets the copy; the entries leaving it are not worth an
+        // event each — `Closed` says it all.
     }
 
     /// What it asked, to the server.

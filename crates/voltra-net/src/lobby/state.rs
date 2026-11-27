@@ -46,6 +46,8 @@ pub struct Lobby {
     host: Option<PeerId>,
     entries: Vec<LobbyEntry>,
     phase: LobbyPhase,
+    /// Matches started, wrapping.
+    matches: u32,
 }
 
 impl Lobby {
@@ -58,6 +60,7 @@ impl Lobby {
             host: None,
             entries: Vec::new(),
             phase: LobbyPhase::Waiting,
+            matches: 0,
         }
     }
 
@@ -68,6 +71,7 @@ impl Lobby {
         host: Option<PeerId>,
         entries: Vec<LobbyEntry>,
         phase: LobbyPhase,
+        matches: u32,
     ) -> Self {
         Self {
             max_players,
@@ -75,6 +79,7 @@ impl Lobby {
             host,
             entries,
             phase,
+            matches,
         }
     }
 
@@ -101,6 +106,13 @@ impl Lobby {
     /// Before the match, or in it.
     pub fn phase(&self) -> LobbyPhase {
         self.phase
+    }
+
+    /// How many matches this lobby has started (wrapping): a client tells
+    /// by it that a match started and ended between two lobbies it was
+    /// sent.
+    pub fn matches(&self) -> u32 {
+        self.matches
     }
 
     /// The slots.
@@ -171,7 +183,7 @@ impl Lobby {
         raw_name: &str,
         config: &LobbyConfig,
     ) -> Result<String, LobbyRefusal> {
-        let max_chars = config.max_name_chars.clamp(1, super::MAX_NAME_CHARS);
+        let max_chars = super::config::name_cap(self.max_players, config.max_name_chars);
         let wanted = sanitize_name(raw_name, max_chars);
         let name = unique_name(&wanted, max_chars, |name| {
             self.entries
@@ -244,6 +256,7 @@ impl Lobby {
             None => self.ready_to_start()?,
         }
         self.phase = LobbyPhase::Playing;
+        self.matches = self.matches.wrapping_add(1);
         Ok(())
     }
 

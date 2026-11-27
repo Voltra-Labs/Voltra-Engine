@@ -2,15 +2,23 @@
 
 use std::time::Duration;
 
+use super::wire::{largest_snapshot, ENTRY_FIXED, SNAPSHOT_FIXED};
 use crate::{ChannelId, ChannelKind, NetConfig, DEFAULT_CHANNELS};
 
-/// The most entries a lobby holds, whatever its config says: a snapshot
-/// of the lobby stays a few kilobytes.
+/// The most entries a lobby holds, whatever its config says.
 pub const MAX_LOBBY_PLAYERS: usize = 255;
 
 /// The longest name a lobby takes, in characters, whatever its config
-/// says.
+/// says — and fewer in a lobby so large its snapshot would pass
+/// [`MAX_LOBBY_SNAPSHOT`].
 pub const MAX_NAME_CHARS: usize = 64;
+
+/// The largest the lobby's snapshot may be, in bytes, its slots full and
+/// every name at its longest in four-byte characters: under the default
+/// [`NetConfig::max_message_size`] (64 KiB). A config whose slots and
+/// names would pass it has its names shortened; a session whose
+/// message limit is smaller has it raised ([`LobbyConfig::net_config`]).
+pub const MAX_LOBBY_SNAPSHOT: usize = 60 * 1024;
 
 /// The shortest [`LobbyConfig::join_timeout`]: a client's hello needs a
 /// round trip to arrive.
@@ -50,7 +58,10 @@ pub struct LobbyConfig {
     /// The fewest players a match starts with.
     pub min_players: usize,
     /// The longest name, in characters; longer ones are cut. At most
-    /// [`MAX_NAME_CHARS`].
+    /// [`MAX_NAME_CHARS`], fewer where [`max_players`](Self::max_players)
+    /// is so high its snapshot would pass [`MAX_LOBBY_SNAPSHOT`]; at least
+    /// the digits of `max_players`, so a full lobby's names can all be
+    /// told apart by number.
     pub max_name_chars: usize,
     /// Whether a peer joining mid-match plays or is refused.
     pub late_join: LateJoin,
@@ -91,9 +102,14 @@ impl LobbyConfig {
     /// so a client without the lobby is refused at the door.
     ///
     /// A game channel already at [`channel`](Self::channel) of another kind
-    /// is overwritten, with a warning.
+    /// is overwritten, with a warning; a
+    /// [`max_message_size`](NetConfig::max_message_size) too small for
+    /// the lobby's largest snapshot is raised to it.
     pub fn net_config(&self, mut base: NetConfig) -> NetConfig {
         base.lobby_version = crate::LOBBY_WIRE_VERSION;
+        let rules = self.clone().validated();
+        let largest = largest_snapshot(rules.max_players, rules.max_name_chars);
+        base.max_message_size = base.max_message_size.max(largest);
         let index = usize::from(self.channel.0);
         if base.channels.len() <= index {
             base.channels
@@ -120,10 +136,19 @@ impl LobbyConfig {
     pub(crate) fn validated(mut self) -> Self {
         self.max_players = self.max_players.clamp(1, MAX_LOBBY_PLAYERS);
         self.min_players = self.min_players.clamp(1, self.max_players);
-        self.max_name_chars = self.max_name_chars.clamp(1, MAX_NAME_CHARS);
+        self.max_name_chars = name_cap(self.max_players, self.max_name_chars);
         self.join_timeout = self.join_timeout.max(MIN_JOIN_TIMEOUT);
         self
     }
+}
+
+/// The longest name a lobby of `players` slots (already in range) takes
+/// when asked for `chars`: see [`LobbyConfig::max_name_chars`].
+pub(crate) fn name_cap(players: usize, chars: usize) -> usize {
+    let fits =
+        ((MAX_LOBBY_SNAPSHOT - SNAPSHOT_FIXED) / players.max(1)).saturating_sub(ENTRY_FIXED) / 4;
+    let digits = players.max(1).to_string().len();
+    chars.clamp(1, MAX_NAME_CHARS).min(fits).max(digits)
 }
 
 #[cfg(test)]
@@ -177,7 +202,26 @@ mod tests {
         .validated();
         assert_eq!(config.max_players, MAX_LOBBY_PLAYERS);
         assert_eq!(config.min_players, 1);
-        assert_eq!(config.max_name_chars, 1);
+        assert_eq!(config.max_name_chars, 3, "room for \"255\"");
+
+        // The most slots and the longest names: the names give way.
+        let crowded = LobbyConfig {
+            max_players: MAX_LOBBY_PLAYERS,
+            max_name_chars: MAX_NAME_CHARS,
+            ..LobbyConfig::default()
+        }
+        .validated();
+        assert!(crowded.max_name_chars < MAX_NAME_CHARS);
+        assert!(
+            largest_snapshot(crowded.max_players, crowded.max_name_chars) <= MAX_LOBBY_SNAPSHOT
+        );
+        let roomy = LobbyConfig {
+            max_players: 8,
+            max_name_chars: MAX_NAME_CHARS,
+            ..LobbyConfig::default()
+        }
+        .validated();
+        assert_eq!(roomy.max_name_chars, MAX_NAME_CHARS);
         assert_eq!(
             LobbyConfig {
                 join_timeout: Duration::ZERO,
