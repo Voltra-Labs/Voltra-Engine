@@ -238,3 +238,68 @@ fn a_host_is_found_on_the_lan_and_one_of_another_build_is_listed_but_refused() {
         .collect();
     assert_eq!(names, ["Host", "Same"]);
 }
+
+#[test]
+fn with_a_lobby_the_match_is_replicated_to_its_players_only() {
+    use voltra_core::net::{Endpoint, PeerId};
+    use voltra_core::replication::ReplicationConfig;
+
+    let network = MemoryNetwork::new();
+    let transport = network.endpoint();
+    let address = transport.address();
+    let rules = LobbyConfig {
+        min_players: 1,
+        join_timeout: Duration::from_secs(2),
+        ..lobby("Server")
+    };
+    let mut server = Headless::new(
+        App::default()
+            .with_lobby(rules.clone())
+            .with_replication(ReplicationConfig::default()),
+    );
+    server.net_mut().host_on(transport, NetConfig::default());
+    let session = server.net().endpoint().expect("hosting").config().clone();
+
+    let (app, _) = eager(lobby("Player"));
+    let mut player = Headless::new(app.with_replication(ReplicationConfig::default()));
+    player
+        .net_mut()
+        .join_on(network.endpoint(), address, NetConfig::default());
+    // Connected, the right session, and never a word to the lobby.
+    let mut silent = Endpoint::client(network.endpoint(), address, session);
+
+    let mut now = Duration::ZERO;
+    let mut frame = |server: &mut Headless, player: &mut Headless, silent: &mut Endpoint| {
+        now += Duration::from_secs_f32(FRAME);
+        server.step(1, FRAME);
+        player.step(1, FRAME);
+        silent.receive(now);
+        silent.flush(now);
+    };
+    for _ in 0..60 {
+        frame(&mut server, &mut player, &mut silent);
+    }
+    let me = player.net().lobby().and_then(|l| l.local_player());
+    let me: PeerId = me.expect("the player is in");
+    assert!(silent.local_id().is_some(), "the silent peer is connected");
+    let replicated: Vec<PeerId> = server
+        .net()
+        .replication()
+        .and_then(|r| r.server())
+        .expect("replicating")
+        .clients()
+        .collect();
+    assert_eq!(
+        replicated,
+        [me],
+        "only the lobby's player is sent the world"
+    );
+
+    // Past the join deadline the silent peer is cut off; the player stays.
+    for _ in 0..150 {
+        frame(&mut server, &mut player, &mut silent);
+    }
+    assert_eq!(silent.local_id(), None, "cut off at the join deadline");
+    assert_eq!(server.net().endpoint().map(Endpoint::peer_count), Some(1));
+    assert!(player.net().lobby().is_some_and(|l| l.is_in()));
+}

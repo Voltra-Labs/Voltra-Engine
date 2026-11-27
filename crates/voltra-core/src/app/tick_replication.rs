@@ -174,7 +174,18 @@ impl App {
             return;
         };
         match replication {
-            Replication::Server(server) => server.receive(endpoint),
+            Replication::Server(server) => {
+                server.receive(endpoint);
+                // With a lobby, the match goes to its players only: not to
+                // a peer that has not joined, nor one refused and waiting
+                // out its grace.
+                match &self.net.lobby {
+                    Some(lobby) => {
+                        server.set_audience(lobby.lobby().entries().iter().map(|entry| entry.peer));
+                    }
+                    None => server.clear_audience(),
+                }
+            }
             Replication::Client(client) => {
                 let prefabs = super::spawning::prefab_store(
                     &mut self.prefabs,

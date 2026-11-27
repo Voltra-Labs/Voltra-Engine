@@ -47,7 +47,7 @@ pub struct Net {
     /// The lobby's settings, when the game turned it on.
     lobby_config: Option<voltra_net::LobbyConfig>,
     /// The session's lobby, made at its first receive.
-    lobby: Option<voltra_net::LobbySession>,
+    pub(super) lobby: Option<voltra_net::LobbySession>,
     /// The session could not carry the lobby, and it was said once.
     lobby_refused: bool,
     /// A hosting session's answers to LAN probes.
