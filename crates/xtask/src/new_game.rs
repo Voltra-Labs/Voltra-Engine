@@ -11,11 +11,12 @@
 use std::path::{Path, PathBuf};
 
 /// The template's text files, and where each goes in the new crate.
-const TEMPLATE: [(&str, &str); 7] = [
+const TEMPLATE: [(&str, &str); 8] = [
     ("Cargo.toml", include_str!("../template/Cargo.toml.tpl")),
     ("src/lib.rs", include_str!("../template/lib.rs.tpl")),
     ("src/main.rs", include_str!("../template/main.rs.tpl")),
     ("tests/plugin.rs", include_str!("../template/plugin.rs.tpl")),
+    ("tests/lobby.rs", include_str!("../template/lobby.rs.tpl")),
     ("build.ron", include_str!("../template/build.ron.tpl")),
     ("README.md", include_str!("../template/README.md.tpl")),
     (
@@ -26,9 +27,10 @@ const TEMPLATE: [(&str, &str); 7] = [
 
 /// The engine's own assets a game starts with: the input map, sorting
 /// layers and audio buses the loop reads by convention, the default font and
-/// its licence, a texture for the player, and the options screen
-/// (`voltra_core::options`) to open from a menu.
-const COPIED: [&str; 7] = [
+/// its licence, a texture for the player, and the options and lobby
+/// screens (`voltra_core::options`, `voltra_core::lobby`) to open from a
+/// menu.
+const COPIED: [&str; 8] = [
     "default.input.ron",
     "default.layers.ron",
     "default.buses.ron",
@@ -36,6 +38,7 @@ const COPIED: [&str; 7] = [
     "fonts/UFL.txt",
     "sprites/checker.png",
     "prefabs/options.prefab.ron",
+    "prefabs/lobby.prefab.ron",
 ];
 
 /// What a new game is called, three ways.
