@@ -6,8 +6,10 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
+mod discovery_flags;
 mod lobby_flags;
 
+pub use discovery_flags::DiscoveryFlags;
 pub use lobby_flags::LobbyFlags;
 
 use crate::{ServerOptions, DEFAULT_TICK_RATE};
@@ -32,6 +34,9 @@ Options:
       --max-clients N    Clients at once (default 64)
       --protocol N       The game's protocol number clients must match (default 0)
       --discovery PORT|off  UDP port to answer LAN probes on (default 7779)
+      --discovery-public Answer LAN probes from any address, not only private,
+                         link-local and loopback ones (a broadcast never crosses
+                         a router: only a stranger probes from elsewhere)
       --name NAME        What LAN searches list the server as (default \"Voltra server\")
       --game ID          The game id LAN probes are matched against
       --lobby            Hold a lobby before the match (a game's server may already)
@@ -67,6 +72,21 @@ pub struct Args {
     /// game's server sets in [`ServerOptions::lobby`] (or the engine's
     /// default one) once the game has had its say.
     pub lobby: LobbyFlags,
+    /// The discovery flags the command line gave, laid over
+    /// [`HostOptions::discovery`] the same way.
+    pub discovery: DiscoveryFlags,
+}
+
+impl Args {
+    /// Lays the command line's lobby and discovery flags over what the
+    /// game's server set in [`options`](Self::options): call it once the
+    /// game has had its say (`cli::main` does).
+    pub fn apply_flags(&mut self) {
+        let lobby = self.lobby.clone();
+        lobby.apply(&mut self.options);
+        let discovery = self.discovery.clone();
+        discovery.apply(&mut self.options);
+    }
 }
 
 /// Everything a command line can get wrong.
@@ -117,6 +137,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, ArgError>
         seconds: None,
         port_file: None,
         lobby: LobbyFlags::default(),
+        discovery: DiscoveryFlags::default(),
     };
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
@@ -145,29 +166,12 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Parsed, ArgError>
                 parsed.seconds = Some(Duration::from_secs(seconds));
             }
             "--port-file" => parsed.port_file = Some(value("--port-file")?.into()),
-            "--discovery" => match port("--discovery", value("--discovery")?)? {
-                Some(at) => {
-                    parsed
-                        .options
-                        .host
-                        .discovery
-                        .get_or_insert_with(Advertise::default)
-                        .port = at;
-                }
-                None => parsed.options.host.discovery = None,
-            },
-            "--name" => {
-                let name = value("--name")?;
-                if let Some(advertise) = parsed.options.host.discovery.as_mut() {
-                    advertise.name = name;
-                }
+            "--discovery" => {
+                parsed.discovery.port = Some(port("--discovery", value("--discovery")?)?);
             }
-            "--game" => {
-                let game = value("--game")?;
-                if let Some(advertise) = parsed.options.host.discovery.as_mut() {
-                    advertise.game = game;
-                }
-            }
+            "--discovery-public" => parsed.discovery.public = true,
+            "--name" => parsed.discovery.name = Some(value("--name")?),
+            "--game" => parsed.discovery.game = Some(value("--game")?),
             "--lobby" => parsed.lobby.on = true,
             "--min-players" => {
                 parsed.lobby.on = true;

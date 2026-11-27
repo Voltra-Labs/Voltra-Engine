@@ -17,12 +17,11 @@ fn main() -> std::process::ExitCode {
         // A lobby before the match: the first bot or player in starts it
         // (`--min-players`, `--max-players` change its rules).
         args.options.lobby.get_or_insert_with(lobby_config);
-        // Found on the LAN as an arena (`--discovery off` hides it).
+        // Found on the LAN as an arena: its defaults, which `--name`,
+        // `--game` and `--discovery off` override.
         if let Some(advertise) = args.options.host.discovery.as_mut() {
             advertise.game = GAME_ID.to_owned();
-            if advertise.name == voltra_core::net::Advertise::default().name {
-                advertise.name = "Arena server".to_owned();
-            }
+            advertise.name = "Arena server".to_owned();
         }
         App::new(WindowConfig {
             title: "Arena server".into(),

@@ -35,8 +35,8 @@ pub fn main(name: &str, make: impl FnOnce(&mut Args) -> App) -> ExitCode {
         }
     };
     let app = make(&mut args);
-    let flags = args.lobby.clone();
-    flags.apply(&mut args.options);
+    // What the command line says wins over the game's defaults.
+    args.apply_flags();
     match run(app, *args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
