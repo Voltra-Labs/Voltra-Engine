@@ -1,8 +1,9 @@
 //! The rules, run where the match is decided: on the server, or alone.
 //!
 //! A player per peer as it joins, gone as it leaves; each player moved by
-//! its own input for the step; the coin taken by whoever reaches it, the
-//! round won at the target, and started again after a pause.
+//! its own input for the step; a zap that lands, and the coin taken by
+//! whoever reaches it, worth a point each; the round won at the target,
+//! and started again after a pause.
 
 use voltra_assets::AssetPath;
 use voltra_core::net::{NetEvent, PeerId};
@@ -12,6 +13,7 @@ use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{hierarchy, Transform};
 
+use crate::zap::{self, Cooldowns};
 use crate::{walk, Coin, Pilot, Player, Round, Score, Steer, PLAYER_PREFAB};
 
 /// How close a player must come to take the coin.
@@ -89,24 +91,26 @@ pub(crate) fn follow_peers(tick: &mut Tick<'_>) {
 
 /// One fixed step of the rules. `pilot` steers this run's own player, the
 /// host's.
-pub(crate) fn step(tick: &mut Tick<'_>, pilot: Pilot, dice: &mut Dice) {
+pub(crate) fn step(tick: &mut Tick<'_>, pilot: Pilot, dice: &mut Dice, cooldowns: &mut Cooldowns) {
     let players: Vec<(Entity, PeerId)> = tick
         .world
         .query::<NetOwner>()
         .filter(|(entity, _)| tick.world.get::<Player>(*entity).is_some())
         .map(|(entity, owner)| (entity, owner.0))
         .collect();
-    for &(entity, peer) in &players {
-        let steer: Option<Steer> = if peer == PeerId::SERVER {
-            Some(pilot.steer(tick.input, tick.world, entity))
-        } else {
-            // None in time: the client predicted no step either.
-            tick.net.input(peer)
-        };
-        if let Some(steer) = steer {
-            walk(tick.world, entity, &steer, tick.delta);
-        }
-    }
+    let steers: Vec<(Entity, PeerId, Steer)> = players
+        .iter()
+        .filter_map(|&(entity, peer)| {
+            let steer: Option<Steer> = if peer == PeerId::SERVER {
+                Some(pilot.steer(tick.input, tick.world, entity))
+            } else {
+                // None in time: the client predicted no step either.
+                tick.net.input(peer)
+            };
+            Some((entity, peer, steer?))
+        })
+        .collect();
+    cooldowns.tick(tick.delta);
 
     let Some((round_entity, mut round)) = tick
         .world
@@ -114,8 +118,24 @@ pub(crate) fn step(tick: &mut Tick<'_>, pilot: Pilot, dice: &mut Dice) {
         .map(|(entity, round)| (entity, *round))
         .next()
     else {
+        move_all(tick, &steers);
         return;
     };
+    // Zaps from where each shooter stood when it fired — before this
+    // step's walk, as its client aimed — into the world as it saw it.
+    let mut scorers: Vec<(Entity, PeerId)> = Vec::new();
+    if round.winner.is_none() {
+        for &(entity, peer, steer) in &steers {
+            let landed = steer
+                .zap_direction()
+                .and_then(|direction| zap::fire(tick, entity, peer, direction, cooldowns));
+            if landed.is_some() {
+                scorers.push((entity, peer));
+            }
+        }
+    }
+    move_all(tick, &steers);
+
     if round.winner.is_some() {
         round.left -= tick.delta;
         if round.left <= 0.0 {
@@ -132,8 +152,7 @@ pub(crate) fn step(tick: &mut Tick<'_>, pilot: Pilot, dice: &mut Dice) {
                 .is_some_and(|t| t.translation.distance(at) < REACH)
         });
         if let Some((entity, peer)) = taker {
-            let score = tick.world.get::<Score>(entity).map_or(0, |s| s.0) + 1;
-            tick.world.insert(entity, Score(score));
+            scorers.push((entity, peer));
             let bounds = tick
                 .world
                 .get::<Player>(entity)
@@ -144,12 +163,26 @@ pub(crate) fn step(tick: &mut Tick<'_>, pilot: Pilot, dice: &mut Dice) {
                     (dice.unit() * 2.0 - 1.0) * bounds.y * 0.9,
                 );
             }
-            if score >= round.target {
-                round.winner = Some(peer.0);
-                round.left = round.pause;
-                log::info!("arena: {peer} wins round {}", round.finished + 1);
-            }
+        }
+    }
+    for (entity, peer) in scorers {
+        if round.winner.is_some() {
+            break;
+        }
+        let score = tick.world.get::<Score>(entity).map_or(0, |s| s.0) + 1;
+        tick.world.insert(entity, Score(score));
+        if score >= round.target {
+            round.winner = Some(peer.0);
+            round.left = round.pause;
+            log::info!("arena: {peer} wins round {}", round.finished + 1);
         }
     }
     tick.world.insert(round_entity, round);
+}
+
+/// Each player one step by its own input.
+fn move_all(tick: &mut Tick<'_>, steers: &[(Entity, PeerId, Steer)]) {
+    for (entity, _, steer) in steers {
+        walk(tick.world, *entity, steer, tick.delta);
+    }
 }

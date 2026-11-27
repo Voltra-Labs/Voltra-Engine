@@ -1,7 +1,8 @@
 # Arena
 
-Two to four players race for a coin, first to five — Voltra's networked
-sample, made with `cargo xtask new-game arena` and grown. See
+Two to four players race for a coin and zap each other (Space, aimed at
+the nearest player; a zap that lands is worth a coin), first to five —
+Voltra's networked sample, made with `cargo xtask new-game arena` and grown. See
 `docs/guide/08-networking.md` for how it is put together.
 
 ```sh
@@ -17,5 +18,7 @@ cargo xtask dist --web --manifest games/arena/build.ron     # for a browser: ind
 
 The rules are `src/authority.rs` (run on the server, or alone); a client
 predicts its own player with `src/movement.rs`'s `walk` and is sent the
-rest. In the editor, `Window ▸ Network` plays it with clients over a
+rest. A zap (`src/zap.rs`) is tested where its shooter saw its target:
+the server rewinds the players' colliders to that moment (lag
+compensation). In the editor, `Window ▸ Network` plays it with clients over a
 network made as bad as you like.

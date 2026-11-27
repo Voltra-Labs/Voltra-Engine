@@ -8,6 +8,8 @@
         "jump": (bindings: [Key(Space), Key(KeyW), Key(ArrowUp), Pad(South), Touch(BottomRight, Hold)]),
         "move_left": (bindings: [Key(KeyA), Key(ArrowLeft), Pad(DPadLeft), PadAxis(LeftStickX, Negative), Touch(BottomLeft, Left)]),
         "move_right": (bindings: [Key(KeyD), Key(ArrowRight), Pad(DPadRight), PadAxis(LeftStickX, Positive), Touch(BottomLeft, Right)]),
+        // The arena's zap, at the nearest other player.
+        "zap": (bindings: [Key(Space), Pad(West), Touch(BottomRight, Hold)]),
         // Up and down, for a game seen from above.
         "move_up": (bindings: [Key(KeyW), Key(ArrowUp), Pad(DPadUp), PadAxis(LeftStickY, Positive)]),
         "move_down": (bindings: [Key(KeyS), Key(ArrowDown), Pad(DPadDown), PadAxis(LeftStickY, Negative)]),
