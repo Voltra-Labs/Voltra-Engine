@@ -47,13 +47,19 @@ inspector edits what they share:
 - A component only some have is listed, greyed, as `Collider (2 of 3)`,
   and not edited; **add to the rest** gives it to the others, and then
   it is. Adding a component none has adds it to all.
+- Picking a value from a dropdown, ticking a box, or typing a number into
+  a `—` field and pressing Enter sets it on all of them, even when it is
+  the value the last picked already had.
 - Typing a name names them all.
 - However many are selected, an edit — a whole drag — is one undo step.
+- While playing (or recording on the timeline), only the last picked is
+  edited.
 
 Ctrl+D duplicates the selection (Ctrl+C / Ctrl+V copy and paste it).
 Each copy is named apart from its new siblings, as in Unity: `Coin`
-becomes `Coin (1)`, then `Coin (2)`; duplicating `Coin (3)` gives
-`Coin (4)`. A copy pasted where nothing shares its name keeps it.
+becomes `Coin (1)`, then `Coin (2)` — the first number no sibling has,
+any number the original carried stripped first. A copy pasted where
+nothing shares its name keeps it.
 
 ## Play it without the editor
 

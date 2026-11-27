@@ -3738,20 +3738,30 @@ could put back a different one; **"touches" for the box** — see above.
   and a game's components are edited as their RON — and what that did is
   turned into an edit of the rest, through the registry rather than per
   panel. Before the sections draw, `MultiEdit::begin` takes the
-  primary's components as `SerialTree`s (`voltra_scene::format::
-  serial_tree`: the type's serializer calls recorded, names and all,
-  replayed into RON byte for byte); after, `finish` takes them again,
-  finds where they differ (`differences`: the deepest places where the
-  shapes still agree — one float of `half_extents`, or the collider itself
-  when a box became a circle) and writes **only those places** into each
-  other entity's own tree, loaded back through the registry. Unity's
-  `SerializedObject` over several targets, with property paths; Godot's
-  `MultiNodeEdit`, which sets the one property on every node. Chosen over
-  a per-field wrapper every panel would opt into because it needs nothing
-  of forty-odd sections and holds for a game's components unchanged — a
-  field edited inside a game component's text writes that field alone.
-  `ron::Value` was the obvious tree and does not work: reading RON into it
-  drops struct and variant names, so a written-back enum no longer reads.
+  primary's components as `SerialTree`s (`format::serial_tree`: the
+  type's serializer calls recorded, names and all, replayed into RON byte
+  for byte); after, `finish` takes them again, finds where they differ
+  (`differences`: the deepest places where the shapes still agree — one
+  float of `half_extents`, or the collider itself when a box became a
+  circle) and writes **only those places** into each other entity's own
+  tree, loaded back through the registry. Unity's `SerializedObject` over
+  several targets, with property paths; Godot's `MultiNodeEdit`, which
+  sets the one property on every node. Chosen over a per-field wrapper
+  every panel would opt into because it needs nothing of forty-odd
+  sections and holds for a game's components unchanged — a field edited
+  inside a game component's text writes that field alone. `ron::Value`
+  was the obvious tree and does not work: reading RON into it drops struct
+  and variant names, so a written-back enum no longer reads.
+  - **Fields by name, written or not.** `skip_serializing_if` makes a
+    struct's field list depend on its values — a sprite's sorting layer, a
+    joint's `b` and `break_force`, a tilemap's tile data are written only
+    off their defaults — so structs are walked over the union of both
+    sides' field names, and maps over both sides' keys. A field one side
+    leaves out is a place of its own, *absent* there (`Found::Absent`), and
+    writing it puts the field in or takes it out (`SerialTree::put`), so
+    the type's default comes back on reading. Comparing field lists as a
+    whole instead made one sprite on a non-default layer mix every field,
+    and setting a layer copy the primary's whole sprite over the rest.
   - A component every selected entity has is **shared** and editable;
     where its fields differ they are **mixed**. A component only some have
     is **partial**: its section is not drawn, and it is listed greyed,
@@ -3761,8 +3771,21 @@ could put back a different one; **"touches" for the box** — see above.
     it from all.
   - An entity whose value has no such place — a circle, for a box's half
     extent; a shorter list; another variant — is left alone for that
-    field. A field is compared as its file writes it: floats by their
+    field. **A list that grows or shrinks is one place**: adding a point,
+    a terrain or an animation writes the primary's whole list over the
+    rest's. A field is compared as its file writes it: floats by their
     bits, every NaN equal to every NaN, `-0.0` apart from `0.0`.
+  - **Choosing what the primary already has** moves nothing on it, so no
+    difference is found. A widget that commits a choice `touch`es its
+    place (`mixed::touch`, kept in egui's memory for the frame, handed to
+    `MultiEdit::touch`) and the place is written to all regardless —
+    Unity's behaviour. The shared number field touches on Enter, the
+    shared checkbox on a click, and every dropdown or selectable button
+    over a component field (`mixed::chosen`): sorting layer, collider
+    shape, joint kind, emitter shape, simulation and preset, flipbook
+    timing, text alignment, bus, follow target, stack and slider
+    directions and alignments, line joints, caps and texture, a tile's
+    shape.
   - **Mixed display**, two levels. Every section gets a line under its
     rule naming its mixed fields (`≠ Sprite: color, flip_x`, each path on
     hover), whatever its widgets. The shared widgets in
@@ -3774,60 +3797,86 @@ could put back a different one; **"touches" for the box** — see above.
   - **The name** is written to all by the name field itself, not by the
     trees: an entity without one has an empty one, so names never make a
     partial; differing names show an empty field reading `—`.
-  - **Actions done per entity**: a bone's "set rest" takes each bone's
-    own transform, "fit to sprite" fits each collider to its own sprite,
-    and ticking "casts shadows" shapes each caster by its own collider or
-    sprite; each then tells the edit not to copy the primary's result
-    (`done_for_each`).
+  - **Actions done per entity**: a button that works a value out from the
+    entity's own state is done to each selected entity on its own terms,
+    and then tells the edit not to copy the primary's result
+    (`done_for_each`) — a bone's "Set rest" and "Reset to rest", a
+    skeleton's "Reset pose", a skinned sprite's "Use the skeleton's
+    bones", "Generate mesh" and "Auto weights", a collider's "Fit to
+    sprite", a caster's "Use own polygon", and ticking "casts shadows".
+    The prefab bar's Revert, Revert instance and Apply act on the
+    primary's instance and record their own entry, so they are drawn
+    before the edit is begun, outside it.
   - **One undo step**: the history already watches the whole selection
     from the top of the frame, so what `finish` writes — before the
     history takes the after side — folds into the primary's entry, held
     open by the same claim. A drag over three sprites is one `Ctrl+Z`.
-  - While the timeline records, only the primary is edited (and keyed):
-    the rest is not written behind the recording's back.
+  - **Only while editing, and not while the timeline records.** Recording
+    keys the primary alone. While playing the world is the simulation's,
+    and a value loaded back from its tree replaces the whole component,
+    resetting what serde skips — live particles, an animator's state,
+    joint impulses, a player's time — so the inspector edits the primary
+    alone, as before. A primary gone by the end of the frame writes
+    nothing.
   - Parent, prefab part and instance links are never written across:
     structure is each entity's own.
 - **Numbered duplicates (stage 125, `clipboard::numbering`).** Duplicate
   and paste name each copied top apart from the siblings it lands among:
   kept when none has its name (a paste into another scene is still
   `Player`), else its base — a ` (n)` suffix stripped — with the first
-  number past its own that no sibling has: `Coin` → `Coin (1)`,
-  `Coin (3)` → `Coin (4)`, and `Coin` beside `Coin (1)` and `Coin (3)`
-  → `Coin (2)`. Unity's `GetUniqueNameForSibling`; Godot increments a
-  trailing number the same way, without the brackets. Siblings are the new parent's children,
-  or the scene's roots; tops of one paste are numbered in order, so two
-  copies side by side differ. What is under a top keeps its names (its
-  siblings are copies too); nameless stays nameless. A copied prefab
-  instance renamed so has its overrides refreshed in the same entry, so
-  its name is an override rather than a second, separate edit.
+  number from 1 that no sibling has: `Coin` → `Coin (1)`, `Coin` beside
+  `Coin (1)` and `Coin (3)` → `Coin (2)`, `Coin (4)` beside `Coin` to
+  `Coin (4)` → `Coin (5)`. Unity's `GetUniqueNameForSibling` (its
+  `ObjectNames.GetUniqueName`, "the next available increment"); Godot
+  increments a trailing number the same way, without the brackets.
+  Siblings are the new parent's children, or the scene's roots. Tops of
+  one paste are numbered in order, each apart from those before it, and
+  later ones not yet numbered are not in its way: two copies of `Coin`
+  pasted where nothing is called that are `Coin` and `Coin (1)`. What is
+  under a top keeps its names (its siblings are copies too); nameless
+  stays nameless. A copied prefab instance renamed so has its overrides
+  refreshed in the same entry, so its name is an override rather than a
+  second, separate edit.
 - **Not yet**: the rest of the sections' rows showing `—` themselves
-  (they carry the section's line); typing the primary's own value into a
-  mixed field writes nothing, since an edit is found by a difference
-  (Unity writes it to all); a section over a partial component editable
-  on the entities that have it; Unity's "Center" pivot.
+  (they carry the section's line); choosing the primary's own value in a
+  dropdown deep inside a value — a curve key's ease, an animator asset's
+  fields — writes nothing (no touch); writing a field into another
+  entity's live value rather than through its tree, which would let
+  multi-editing run while playing; a list edited element-wise across
+  lists of different lengths; a section over a partial component
+  editable on the entities that have it; Unity's "Center" pivot.
 
 Pinned by `clipboard::tests` (a parent and child selected together copied
 once with fresh ids, the copy's child under the copy's parent; a duplicated
 child under its old parent where it was; a paste into an empty world where
 the copy was taken; the text round trips, other text is not a clip, broken
-text is an error; a duplicate numbered past taken siblings, `Coin (3)` to
-`Coin (4)`, a child among its parent's children, a paste numbered only
-where its name is taken, nameless staying so), `clipboard::numbering`
-tests (the suffix split as Unity writes it, the next free number, copies
-side by side), `multi_edit::tests` (equal and differing fields, nested
-places, floats exact and NaN equal; partial components; one field written
-leaving three sprites' differing colours alone; a box's half extent left
-off a circle, a new shape written whole; added and removed on all; done
-for each; a game's component; three frames of a drag over three sprites
-one undo entry, undone back), `inspector::mixed` tests (mixed sections
-drawn twice write nothing), `serial_tree::tests` and the registry's tree
-tests (every built-in round trips through a tree), `gizmo::follow` tests (each tool's rule, a collapsed axis,
-which followers ride on a selected parent), `selection::tests` (primary order, toggle, Shift ranges both
-ways and without an order, the box replacing or extending, ids round
-trip), `pick::region` tests (wholly inside, origins, HUD never, a layer
-by its tiles, topmost last, outlines), `delete::tests` (one entry for the
-set and its children, undone back selected in order; nothing selected
-records nothing), and the undo and play tests, now over sets.
+text is an error; a duplicate taking the first number its siblings leave,
+`Coin (4)` to `Coin (5)`, a child among its parent's children, a paste
+numbered only where its name is taken, nameless staying so),
+`clipboard::numbering` tests (the suffix split as Unity writes it, the
+first free number, a number past `u64` or at its end, copies side by side,
+copies not yet numbered out of the way), `multi_edit::tests` (equal and
+differing fields, nested places, floats exact and NaN equal; partial
+components; one field written leaving three sprites' differing colours
+alone; a sorting layer set and unset on three sprites writing nothing
+else; one sprite on another layer mixing the layer alone; a joint's
+`break_force` set and unset without its anchors or bodies; a touched field
+written as the primary had it; a primary despawned writing nothing; a box's
+half extent left off a circle, a new shape written whole; added and removed
+on all; done for each; a game's component; three frames of a drag over
+three sprites one undo entry, undone back; a component added to all undone
+from all and redone on all), `inspector::mixed` tests (mixed sections drawn
+twice write nothing; touches taken once), `serial_tree::tests` (absent
+fields and keys as places of their own, put adding and removing them) and
+the registry's tree tests (every built-in round trips through a tree),
+`gizmo::follow` tests (each tool's rule, a collapsed axis, which followers
+ride on a selected parent), `selection::tests` (primary order, toggle,
+Shift ranges both ways and without an order, the box replacing or
+extending, ids round trip), `pick::region` tests (wholly inside, origins,
+HUD never, a layer by its tiles, topmost last, outlines), `delete::tests`
+(one entry for the set and its children, undone back selected in order;
+nothing selected records nothing), and the undo and play tests, now over
+sets.
 
 ### An instance follows its file, but for what it overrides
 
@@ -5331,10 +5380,12 @@ has a template.
 - **Fields by path (stage 125).** `save_tree` / `load_tree` answer any
   registered component as a `SerialTree` — its `Serialize` calls recorded
   with every name serde gives, replayed into RON byte for byte — which
-  `differences`, `at` and `set` address by a `TreePath` of `Field`,
+  `differences`, `find` and `put` address by a `TreePath` of `Field`,
   `Index`, `Variant`, `Inner` and `Key` steps (Unity's property path). A
   `Variant` step matches only its own variant, so a circle's `radius` is
-  never a capsule's. What the inspector edits a selection through.
+  never a capsule's. A field `skip_serializing_if` left out is *absent*,
+  not nowhere: `put` adds it, or takes it out to bring the default back.
+  What the inspector edits a selection through.
 
 Pinned by `format/registry/tests.rs` (every built-in but structure has a
 template that loads into an entity and saves back identical; `describe`
