@@ -16,7 +16,8 @@ use crate::path::AssetPath;
 
 impl Textures {
     /// Loads every path in `paths` not loaded yet, as [`Textures::load`]
-    /// would one by one, and returns how many it loaded.
+    /// would one by one, and returns how many it loaded. A render texture
+    /// is made, not read: it is left to [`Textures::load`].
     ///
     /// Reading and decoding a PNG — the inflate — is most of a texture's
     /// load and needs no device, so those run across `jobs`; the uploads
@@ -34,7 +35,7 @@ impl Textures {
         let mut seen = HashSet::new();
         let mut decoded: Vec<(AssetPath, Option<Result<DecodedImage, AssetError>>)> = paths
             .into_iter()
-            .filter(|path| !self.is_loaded(path) && seen.insert(path.clone()))
+            .filter(|path| self.needs_decode(path) && seen.insert(path.clone()))
             .map(|path| (path, None))
             .collect();
         let root = self.root_path().to_path_buf();
