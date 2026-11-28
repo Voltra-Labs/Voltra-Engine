@@ -123,6 +123,16 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   MSAA, is core in WebGL2. `materials3d.mjs` requires the native frame's
   colours to the byte's neighbourhood on WebGPU and WebGL2 — a normal map
   read as sRGB would tilt the whole floor off its colour.
+- **Custom surface materials compile for both** (stage 138): the
+  composed module goes through naga to WGSL for WebGPU and to GLSL for
+  WebGL2; group 1 binds 9 sampled textures (5 standard, 4 custom) and
+  three uniform blocks a fragment stage. WebGL2 refuses a uniform binding
+  whose type is not a multiple of 16 bytes
+  (`DownlevelFlags::BUFFER_BINDINGS_NOT_16_BYTE_ALIGNED`, checked when the
+  pipeline is made), so a custom surface's `struct Material` is aligned
+  to 16 — a material of one `vec2` failed there and only there.
+  `custom3d.mjs` requires the native frame's colours for a data texture
+  read unlit and a dissolve's rim on both.
 
 ## Checking a web build
 
@@ -135,6 +145,7 @@ node crates/voltra-player/web/test/play.mjs          # the platformer walks, tak
 node crates/voltra-player/web/test/shapes3d.mjs      # a 3D scene, and WebGL2's depth at 50 m
 node crates/voltra-player/web/test/mixed3d.mjs       # 3D through AgX, a 2D overlay and the HUD over it
 node crates/voltra-player/web/test/materials3d.mjs   # surface materials lit as natively, on both
+node crates/voltra-player/web/test/custom3d.mjs      # custom surface materials, on both
 ```
 
 Each builds through `cargo xtask dist --web` into `target/`, serves it and

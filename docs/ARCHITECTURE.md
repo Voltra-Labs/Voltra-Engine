@@ -164,8 +164,11 @@ surface materials, one directional light and the ambient ("Materials",
 the alpha and draw-order lines of "The 3D pass", the directional light,
 `Environment3D`'s ambient and the light units' stored value of "Lights,
 shadows and the environment"), see *A mesh draws through a standard
-surface material, lit by one sun and an ambient* under Decisions.
-Everything else below is still a plan. Each stage that lands writes
+surface material, lit by one sun and an ambient* under Decisions; stage
+138 — custom surface materials (the "Custom" and "Every pass runs the
+material" lines of "Materials"), see *A surface material may write its own
+`surface()`, composed around the engine's vertex stage and lighting* under
+Decisions. Everything else below is still a plan. Each stage that lands writes
 its detail as a Decisions entry of its own and edits this section to say what
 is built; until then, every sentence here about 3D is a plan. It replaces
 the direction recorded in "When 3D arrives: one world, two render paths",
@@ -499,8 +502,12 @@ plan below.
 **Built (stage 137)** for the standard block, the format's `domain`, the
 pipeline bank's alpha, sides and winding, and the main pass — see *A mesh
 draws through a standard surface material, lit by one sun and an
-ambient*. Custom surface shaders are 138's, the shadow and ID passes 140's
-and 146's.
+ambient*. **Built (stage 138)** for custom surfaces — the composer, the
+bank's shader revision and vertex layout, the four custom textures, and
+the depth-only cut-out entry the shadow and ID passes will bind — see *A
+surface material may write its own `surface()`, composed around the
+engine's vertex stage and lighting*. The shadow and ID passes themselves
+are 140's and 146's.
 
 **One `.material.ron` format with a `domain`**, as Godot has one shader
 language with `shader_type canvas_item` and `shader_type spatial`. `domain:
@@ -10918,7 +10925,7 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   the blended class alone) as one `u64` — and the runs read the rest off
   the candidates. What is left is the bigger candidate (the material, its
   class and sides) and a material lookup per instance.
-- **Not yet**: custom surface shaders (138); point and spot lights,
+- **Not yet**: point and spot lights,
   several directional lights, light layers (139); shadows (140); an HDR
   sky that lights — metals reflect only the ambient's constant sky, so they
   are dark (141); physical units and exposure (142); mipmaps, anisotropic
@@ -10929,6 +10936,179 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   numbers beyond the tint; material edits in an undo history of their
   own; a preview whose mesh and light can be chosen; order-independent
   transparency; the editor's 3D view (145).
+
+### A surface material may write its own `surface()`, composed around the engine's vertex stage and lighting (stage 138)
+
+"Materials", built for custom surfaces. It mirrors *A sprite material is a
+WGSL fragment function and its uniforms* (stage 83) as stage 137 mirrored
+its file: the game writes one function, the engine keeps the vertex stage,
+the passes and the lighting, the shader is checked when it loads, and a
+broken one is a material with an error, never a crash.
+
+- **The format** (`voltra-assets` `material.rs`, `material/custom.rs`): a
+  `domain: Surface` file may name `shader: "materials/x.wgsl"` (refused
+  until now), with `uniforms` by stage 83's rules (`f32`, `vec2`, `vec4`,
+  name order, ≤ 256 bytes, NaN read as 0 and said), **`textures: {"noise":
+  Data("textures/noise.png"), "decal": Color("…")}`** — at most four, by
+  WGSL name, colour decoded from sRGB, data read as stored (Godot's
+  `source_color` hint, the other way round: a picture says so, as in our
+  standard slots) — and **`lighting: Lit | Unlit`** (Lit not written).
+  Without a shader, the three are ignored and each said once a read (the
+  standard's own `unlit` is the knob there). `MaterialFile::
+  surface_texture_paths` lists the standard's images and its own, which
+  the scene loader's prefetch and the frame's resolve both read.
+- **The composition** (`render3d/surface/compose.rs`): `compose_surface`
+  writes the material's source **first** — WGSL resolves module scope in
+  any order, so naga reports an error at the `.wgsl`'s own line (`wgsl:3:24`
+  is line 3 of the file) — then `struct Material` at group 1 binding 7
+  (raised to a 16-byte alignment: WebGL2 refuses a uniform binding of 4 or
+  8 bytes, found by the web test), its textures at 8–11, the prelude
+  (`shaders/surface3d.wgsl`: the bindings, the vertex stage, `SurfaceInput`,
+  `Surface`, `standard_surface(in)`, `surface_uv(in)`, `light_surface`) and
+  the entry points. `SurfaceInput` hands the fragment's position, world
+  point, normal and tangent frame (turned to the side seen), the mesh's UV,
+  the tint, the way to the eye, `front_facing` and **`time`** (seconds,
+  wrapped at an hour — Godot's `TIME` and Bevy's `globals.time` wrap there
+  too — carried in `Frame3D`'s spare `ambient.w`, so the frame block stays
+  144 bytes; `Scene3D::time`, the loop's clock wrapped in `f64` first).
+  `Surface` returns base colour, alpha, metallic, roughness, a world
+  normal, emissive and occlusion — the standard's inputs, so a custom
+  surface is lit exactly as a standard one is. **The standard surface is
+  the same composition** of a `surface()` returning `standard_surface(in)`:
+  one shader path, so `headless_surface.rs`'s BRDF and normal-map pins
+  cover custom surfaces too, and the restructure moved no pixel of them.
+  `Unlit` composes `surface_color` as the base colour, the lighting dead
+  code. Godot's spatial shader (write `ALBEDO`, `render_mode unshaded`)
+  and Bevy's `ExtendedMaterial` (start from the standard, change a part)
+  are the shape; Unity's Shader Graph and an HLSL surface shader the
+  rejected one (as in stage 83: no graph, no vertex stage).
+- **The entry points** (`SURFACE_ENTRIES`): the main pass's `fs_opaque`,
+  `fs_mask`, `fs_mask_coverage`, `fs_blend`, and **`fs_cutout`** — no
+  colour, `surface()` run for its alpha and discarded under the cutoff:
+  the masked fragment stage of a depth-only pass, so a dissolving or
+  leafy material casts (140) and picks (146) as it is drawn. The spec
+  named three entry points (main, shadow, ID); the ID pass writes an id
+  per instance `Instance3D` does not carry yet, so its entry is 146's,
+  around the same `surface()`. Mask coverage writes its colour whole (the
+  fix to stage 137's review fix, *A mesh draws…*'s Alpha line), custom or
+  not.
+- **Checked before compiled** (`render3d/surface/shader.rs`):
+  `SurfaceShader::new` parses, refuses any resource bound but the
+  composer's — a material's own `@group`/`@binding` is a pipeline-layout
+  mismatch, which wgpu reports as a device error, not to the caller — and
+  validates with naga. **Its revision is its source's hash**: the same text
+  is one pipeline whichever material or preview composed it, a standard
+  surface written out as a custom one shares the standard's, and an edit
+  is a new one. The spec's key named the material's revision; the store's
+  counter would have made the editor's draft (composed outside the store)
+  collide with it, and a hash of what is compiled is what a pipeline
+  depends on.
+- **A broken material draws its standard block** — what its `surface()`
+  would have started from — its error on `Material::error`, logged once a
+  read ("its meshes draw its standard block") and shown in the inspector;
+  a missing `.wgsl` likewise, its path kept so writing the file reloads
+  it. A standard texture path that is no asset path still leaves no
+  surface (the default white, as in 137). Five textures, a bad name, a
+  uniform that will not lay out, a binding of its own: the same fallback,
+  each with its reason. `Material::surface` no longer hides a surface
+  behind an error.
+- **The GPU side**: group 1 grows to binding 11 for every material — the
+  custom block (a zeroed 256 bytes for a standard one) and four textures
+  (white when unnamed) — so one pipeline layout serves all; 5 standard + 4
+  custom = 9 sampled textures, 12 with 140's and 141's three, of WebGL2's
+  16 (asserted against `downlevel_webgl2_defaults`), and three uniform
+  blocks a fragment stage. `CustomShading` (the shader and its block) and
+  `SurfaceTextures::custom` (`CustomImage`: a texture and its
+  `TextureSpace`) make a `SurfaceMaterial3D` through
+  `Renderer::custom_surface_material`; `is_current` compares the shading
+  too. `SurfaceKey` gains `shader` (the revision) and `vertex`
+  (`SurfaceVertex::Plain`, skinned is 155's) — the spec's full key with
+  the pass. `SurfaceBank` keeps modules by revision and lets a custom
+  shader's module and pipelines go `KEEP_USES` (600) shots after their
+  last draw — a material edited a hundred times does not keep a hundred —
+  the standard's for its life.
+- **Hot reload**: `Materials::reload` already reloaded every material
+  naming a changed shader, but **the file watch dropped `.wgsl`** — no
+  texture, scene or project extension — so editing a stage-83 sprite
+  shader on disk never reloaded either; `watch::is_shader` adds it. The
+  frame remakes a GPU material whose shading changed (`is_current`), under
+  the same handle. `Headless::reload(path)` applies a change as the watch
+  does, for tests without its timing.
+- **Editor**: under the standard block, **custom surface**: the shader's
+  path (dropped or typed), `lighting`, a field per uniform (a colour past 1
+  — light, not paint — as four numbers, since the picker would clamp it;
+  any value written only when changed, as the picker's HSV round trip
+  drifted an HDR colour and rewrote the file just by being shown), a row
+  per texture (path, Color/Data), each removable, and rows to add a
+  uniform of a kind or a texture (four at most). **The live preview
+  recompiles on edit, not on frame** (`surface_doc/draft.rs`): the draft is
+  composed every frame — a string — and checked only when the composed
+  text changes; a uniform's value is the block's, so dragging it never
+  recompiles. The draft's shader text is read again when the store's
+  revision of the material changes (the `.wgsl` edited elsewhere). Its
+  error, else the store's for the file as saved, is shown above the
+  preview in monospace, naga's caret under the line. The asset browser's
+  tile of a custom material draws it too (its `SurfaceSource` carries the
+  shading).
+- **Tests**: `surface/custom_tests.rs` (composes valid from the standard
+  one, every entry point, `fs_cutout` with no output; Unlit composes the
+  base colour; the same source is the same revision, the standard is
+  composed once a process; a missing field says `nope`, a missing or
+  mistyped `surface()` refused; five textures and bad names refused, four
+  fit as 9 of 12 sampled textures; an own binding refused, one past the
+  named textures too; the block 16, 32, 16 bytes for a lone `vec2`, a lone
+  `f32`, none), `headless_surface_custom.rs` (the shipped world tint at 8
+  pixels within 1/255 of `mix(start, end, fract(x / period))`, the square
+  moved under the view and the colour unmoved; the shipped scroll moving a
+  4-texel strip one texel a second at 0–3 s and at 3601 s (wrapped); a
+  128 texel read as data 0.502 and as colour 0.216, times a uniform, ±1;
+  the shipped dissolve cutting texels 0 and 100 and keeping 140 and 255
+  against 0.45, at 1 and 4 samples; a custom surface returning the
+  standard drawing the standard pixel for pixel, lit; an edited shader's
+  pipelines let go after `KEEP_USES` shots, the standard's kept; the four
+  on spheres, the dissolved one with holes), voltra-assets'
+  `materials/custom_tests.rs` (the shipped dissolve composed, its block's
+  offsets 0 and 16, its texture after the standard's as data; a broken
+  shader the standard block with `nope` in its error; a binding of its own
+  the same; broken and mended under one handle by writing the `.wgsl`; a
+  missing `.wgsl` reloaded once written; five textures refused, standard
+  drawn; blocks without a shader warned; the writer reads back), the
+  watcher's `tests/watch.rs` (a rewritten `.wgsl` arrives),
+  `surface_doc/draft.rs` (a value does not recompile, a texture does; a
+  broken file read again at the store's next revision only),
+  `surface_doc.rs` (the custom fields written and drawn), and
+  `voltra-core/tests/custom3d.rs` (the shipped `scenes/custom3d.ron`: the
+  floor warm a quarter through a band and cool three quarters through,
+  the bands sphere the stripes' bytes as data through AgX ±2 and none of
+  the sRGB readings within 6, the dissolve's rim over 100 pixels; its
+  shader broken under the running session — drawn whole, grey, no rim,
+  said once with `nope` at `wgsl:3:` — and mended to red the next frame).
+  Web: `custom3d.mjs` on WebGPU and WebGL2 — the bands in the native
+  frame's colours within 6 (3 900 and 9 900 pixels on each), the rim 362
+  on each, no magenta; it found the 16-byte rule.
+- **What the engines do**: Godot's spatial shader writes `ALBEDO`,
+  `ROUGHNESS`, `NORMAL`… into the engine's lighting, `render_mode
+  unshaded` compiles it out, `TIME` wraps at an hour by default, a
+  `uniform sampler2D` is declared in the shader and its `source_color`
+  hint picks sRGB; Unity's surface shaders (built-in pipeline) filled a
+  `SurfaceOutputStandard`, URP's Shader Graph is a graph; Bevy's
+  `ExtendedMaterial` wraps `StandardMaterial` and edits its `PbrInput` in
+  WGSL. Ours is Godot's model with Bevy's start-from-the-standard and
+  stage 83's file: textures and uniforms are named in the file, not the
+  shader, so the inspector edits them and the shader cannot bind anything
+  the layout does not have.
+- **Not yet**: per-instance uniform overrides (a mesh's own values over
+  the file's, as a sprite's `SpriteMaterial` has); materials writing the
+  vertex stage (wind, displacement); a custom texture's own sampler or
+  mipmaps; a preview that animates (a preview of a time-driven surface is
+  drawn once, at time 0, and again when the material changes); line
+  numbers of a 2D sprite material's errors (its source still follows the
+  prelude); the editor's loop waking on a file change by itself — the
+  watch is drained when the loop next runs, so a change on disk shows
+  with the next event (pre-existing, 2D alike); stage 83's sprite
+  materials compose a uniform struct of its raw size, so a sprite
+  material of one `f32` or `vec2` would fail on WebGL2 (left as stage 83
+  shipped it: no shipped one does).
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
@@ -11697,6 +11877,9 @@ Verified against the crate source, not from memory:
 | Alpha to coverage | `MultisampleState::alpha_to_coverage_enabled` with `count > 1`; GLES (WebGL2 included) enables `SAMPLE_ALPHA_TO_COVERAGE` per pipeline (`gles/queue.rs`). The output alpha is still written: sharpen it (`(α − cutoff) / fwidth(α) + ½`), and compute `fwidth` before any branch (Tint's uniformity) |
 | `front_facing` | `@builtin(front_facing)` follows the pipeline's `front_face`: true for the faces a `Cw` pipeline treats as fronts, so one `select` serves both windings and no-cull pipelines |
 | `Queue::write_buffer` ordering | Writes land before the next `submit`'s commands and after every earlier submit's: two writes to one buffer before one submit leave only the second for every draw of that submit |
+| Uniform sizes on WebGL2 | Without `DownlevelFlags::BUFFER_BINDINGS_NOT_16_BYTE_ALIGNED` (GLES, WebGL2 included) a uniform binding's WGSL type must be a multiple of 16 bytes, checked at `create_render_pipeline`: a struct of one `f32` or `vec2` fails there and only there. `@align(16)` on the first member raises the struct's alignment, and so rounds its size, without moving a field; naga reports it as the struct type's `span` |
+| WGSL module scope | naga's WGSL front end resolves module-scope names in any order (`front/wgsl/index.rs`), so a composer may put a user's source first and its errors carry the user's own line numbers |
+| Checking bindings | `naga::GlobalVariable { name, space, binding: Option<ResourceBinding { group, binding }>, .. }`: a composed shader's bindings are checked against the pipeline layout's before `create_shader_module`, since a mismatch is a device error, not a returned one |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7

@@ -46,6 +46,17 @@ stages land, for the 0.5 entry.
   `.material.ron` written before still loads as the sprite material it
   was; code building a `MaterialFile` or `Material` field by field names
   the new fields (`MaterialFile::surface` makes a surface material).
+- **Custom surface materials** (stage 138): `MaterialFile` gains
+  `textures` and `lighting`, and a surface material may name a `shader`;
+  `SurfaceSource` and `SurfaceTexturePaths` gain `custom`;
+  `Material::build_surface` takes the shader's path and text;
+  `Material::surface` answers a broken custom surface's standard block
+  (its `error` still set). `SurfaceMaterial3D::new` and `is_current` take
+  the custom shading (`None` for a standard surface),
+  `SurfaceTextures` gains `custom`, `SurfaceKey` gains `shader` and
+  `vertex`, `Scene3D` gains `time` and `FrameUniform3D::new` takes it.
+  The file watch now reports `.wgsl` files, so editing a sprite or
+  surface material's shader on disk reloads it.
 
 ## [0.4.0] — 2026-11-27
 
