@@ -81,21 +81,32 @@ pub fn compose(fragment: &str, layout: &Layout) -> String {
     )
 }
 
-/// Whether `source` — a [`compose`]d shader — parses and validates, with
-/// what is wrong and where when it does not. Checked before the pipeline is
+/// Whether `source` — a [`compose`]d shader — parses, validates, declares
+/// no `override` (the engine sets no pipeline constants) and writes as
+/// WebGL2's GLSL ES 300, with what is wrong and where when it does not.
+/// What passes can still be refused by a GPU's own compiler (Tint holds
+/// WGSL's fragment uniformity rule, naga 30 does not): [`MaterialBank`](super::MaterialBank)
+/// catches that in an error scope. Checked before the pipeline is
 /// made, because `wgpu` reports a broken shader to an error scope rather
 /// than to its caller, and a broken material must fall back, not take the
 /// device down.
 pub fn validate(source: &str) -> Result<(), String> {
     use wgpu::naga;
     let module = naga::front::wgsl::parse_str(source).map_err(|e| e.emit_to_string(source))?;
-    naga::valid::Validator::new(
+    if !module.overrides.is_empty() {
+        return Err(
+            "a material declares an `override`: the engine sets no pipeline constants — make \
+             it a uniform"
+                .to_owned(),
+        );
+    }
+    let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
     .map_err(|e| e.emit_to_string(source))?;
-    Ok(())
+    crate::shader_check::webgl2(&module, &info)
 }
 
 #[cfg(test)]
@@ -166,5 +177,22 @@ mod tests {
             assert_eq!(span as usize, layout.size(), "{uniforms:?}");
             assert_eq!(span % 16, 0);
         }
+    }
+
+    #[test]
+    fn an_override_or_what_webgl2_cannot_run_is_refused() {
+        let over = compose(
+            "override k: f32;\nfn fragment(in: Fragment) -> vec4<f32> { return sprite_color(in) * k; }",
+            &layout(),
+        );
+        assert!(validate(&over)
+            .expect_err("an override")
+            .contains("override"));
+        let levels = compose(
+            "fn fragment(in: Fragment) -> vec4<f32> { return sprite_color(in) * f32(textureNumLevels(albedo)); }",
+            &layout(),
+        );
+        let error = validate(&levels).expect_err("not on WebGL2");
+        assert!(error.contains("WebGL2"), "{error}");
     }
 }

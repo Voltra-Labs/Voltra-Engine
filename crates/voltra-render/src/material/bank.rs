@@ -1,10 +1,11 @@
 //! The pipelines a frame's materials draw with, and its uniform blocks.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::pipeline::{create_material_pipeline, uniform_layout};
 use super::uniform_buffer::MaterialUniforms;
 use super::uniforms::BLOCK_SIZE;
+use crate::gpu_check::GpuCheck;
 use crate::pass::MaterialDraw;
 
 /// One material use a frame draws: the material's compiled-from revision,
@@ -27,6 +28,15 @@ pub struct MaterialRequest<'a> {
 /// once, not once a frame — and every block is uploaded into one buffer.
 /// Pipelines no frame has drawn with for a while are let go, so a material
 /// edited a hundred times does not keep a hundred.
+///
+/// **A pipeline is drawn with only once the GPU has taken it.** Each is
+/// made in a validation error scope ([`GpuCheck`]): until the scope answers
+/// — at once on wgpu-core, a promise later on WebGPU — and for good if it
+/// answers with an error, the material's sprites draw plainly, its broken
+/// fallback since stage 83, and the refusal is said once with the GPU's
+/// own message. naga's check at load misses what only Tint refuses (WGSL's
+/// fragment uniformity rule); without the scope, such a shader made every
+/// sprite pass using it invalid and the WebGPU frame lost its sprites.
 pub struct MaterialBank {
     layout: wgpu::BindGroupLayout,
     uniforms: MaterialUniforms,
@@ -35,11 +45,14 @@ pub struct MaterialBank {
     /// offset, or `None` if it was not drawable.
     prepared: Vec<Option<((u64, wgpu::TextureFormat), u32)>>,
     frame: u64,
+    /// Revisions the GPU refused, said once each.
+    refused: HashSet<u64>,
 }
 
 struct Cached {
     pipeline: crate::pipeline::SpritePipeline,
     last_used: u64,
+    check: GpuCheck,
 }
 
 /// Frames a pipeline is kept without being drawn with.
@@ -56,6 +69,7 @@ impl MaterialBank {
             pipelines: HashMap::new(),
             prepared: Vec::new(),
             frame: 0,
+            refused: HashSet::new(),
         }
     }
 
@@ -84,15 +98,22 @@ impl MaterialBank {
             let key = (request.revision, format);
             let frame = self.frame;
             let [camera, texture] = layouts;
-            let cached = self.pipelines.entry(key).or_insert_with(|| Cached {
-                pipeline: create_material_pipeline(
-                    device,
-                    format,
-                    "material",
-                    request.source,
-                    [camera, texture, &self.layout],
-                ),
-                last_used: frame,
+            let uniforms = &self.layout;
+            let cached = self.pipelines.entry(key).or_insert_with(|| {
+                let (pipeline, check) = GpuCheck::scoped(device, || {
+                    create_material_pipeline(
+                        device,
+                        format,
+                        "material",
+                        request.source,
+                        [camera, texture, uniforms],
+                    )
+                });
+                Cached {
+                    pipeline,
+                    last_used: frame,
+                    check,
+                }
             });
             cached.last_used = frame;
             self.prepared.push(Some((key, offset)));
@@ -100,13 +121,28 @@ impl MaterialBank {
         let now = self.frame;
         self.pipelines
             .retain(|_, cached| now - cached.last_used <= KEEP_FRAMES);
+        let pipelines = &self.pipelines;
+        self.refused
+            .retain(|refused| pipelines.keys().any(|(revision, _)| revision == refused));
+        for ((revision, _), cached) in &mut self.pipelines {
+            if let Some(why) = cached.check.poll() {
+                if self.refused.insert(*revision) {
+                    log::warn!(
+                        "the GPU refused a sprite material's shader (revision {revision}); its \
+                         sprites draw plainly:\n{why}\n(on WebGPU, often a texture sampled or a \
+                         derivative taken after a branch: sample first, then `select`)"
+                    );
+                }
+            }
+        }
     }
 
     /// What request `index` of the last [`prepare`](Self::prepare) draws
-    /// with, or `None` to draw it plainly.
+    /// with, or `None` to draw it plainly — as well while the GPU has not
+    /// yet taken its pipeline, and once it has refused it.
     pub fn draw(&self, index: u32) -> Option<MaterialDraw<'_>> {
         let (key, offset) = (*self.prepared.get(index as usize)?)?;
-        let cached = self.pipelines.get(&key)?;
+        let cached = self.pipelines.get(&key).filter(|c| c.check.passed())?;
         Some(MaterialDraw {
             pipeline: &cached.pipeline,
             uniforms: self.uniforms.bind_group(),
@@ -123,4 +159,13 @@ impl MaterialBank {
     pub fn is_empty(&self) -> bool {
         self.pipelines.is_empty()
     }
+
+    /// Whether the GPU refused the material of `revision`: its sprites draw
+    /// plainly.
+    pub fn is_refused(&self, revision: u64) -> bool {
+        self.refused.contains(&revision)
+    }
 }
+
+#[cfg(test)]
+mod tests;
