@@ -1,0 +1,7 @@
+// A sprite shader WebGPU refuses (materials/branchy_sprite.wgsl): blue
+// where it runs, the plain sprite where it does not. scenes/refusals.ron;
+// what crates/voltra-player/web/test/refusals.mjs checks on both backends.
+(
+    version: 1,
+    shader: "materials/branchy_sprite.wgsl",
+)

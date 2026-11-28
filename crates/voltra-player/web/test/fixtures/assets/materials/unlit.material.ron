@@ -1,0 +1,9 @@
+// A white unlit surface: each mesh drawn in its own colour, no light —
+// the plain sphere scenes/refusals.ron draws beside the branchy one.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        unlit: true,
+    ),
+)

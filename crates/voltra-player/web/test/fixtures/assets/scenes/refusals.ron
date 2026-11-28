@@ -1,0 +1,60 @@
+// What a GPU refuses, and what is drawn instead: a web-test fixture, not a
+// sample. A 3D camera over a sphere whose shader samples inside a branch
+// (WebGPU's Tint refuses it; its standard block's red is drawn) beside a
+// plain green sphere, and a 2D camera over them with a bar whose sprite
+// shader does the same (drawn plainly, orange) beside a plain cyan one.
+// What crates/voltra-player/web/test/refusals.mjs and
+// crates/voltra-core/tests/refusals.rs draw.
+(
+    version: 2,
+    entities: [
+        (
+            id: "019fe300-0138-7000-8000-000000000101",
+            components: {
+                "Camera3D": (projection:Perspective(fov_y_degrees:50.0,near:0.1),priority:0,active:true),
+                "Name": "Camera 3D",
+                "Transform3D": (translation:(0.0,0.0,5.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000102",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere",material:Some(Path("materials/branchy.material.ron"))),
+                "Name": "Branchy sphere",
+                "Transform3D": (translation:(-1.2,0.6,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.2,1.2,1.2)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000103",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere",color:(0.1,0.8,0.2,1.0),material:Some(Path("materials/unlit.material.ron"))),
+                "Name": "Plain sphere",
+                "Transform3D": (translation:(1.2,0.6,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.2,1.2,1.2)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000104",
+            components: {
+                "Camera2D": (size:1.5,priority:1,active:true),
+                "Name": "Camera 2D",
+                "Transform2D": (translation:(0.0,0.0),rotation:0.0,scale:(1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000105",
+            components: {
+                "Name": "Branchy bar",
+                "Sprite2D": (color:(1.0,0.5,0.1,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None,material:Some((path:Path("materials/branchy_sprite.material.ron")))),
+                "Transform2D": (translation:(-1.0,-0.9),rotation:0.0,scale:(1.0,0.35)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000106",
+            components: {
+                "Name": "Plain bar",
+                "Sprite2D": (color:(0.1,0.9,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Transform2D": (translation:(1.0,-0.9),rotation:0.0,scale:(1.0,0.35)),
+            },
+        ),
+    ],
+)

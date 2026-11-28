@@ -95,6 +95,8 @@ jobs:
         run: node crates/voltra-player/web/test/materials3d.mjs
       - name: Custom surface materials on both backends
         run: node crates/voltra-player/web/test/custom3d.mjs
+      - name: Shaders WebGPU refuses draw their fallbacks
+        run: node crates/voltra-player/web/test/refusals.mjs
       - name: The platformer walked by a finger on its on-screen stick
         run: node crates/voltra-player/web/test/touch.mjs
       - name: A rebound key kept in localStorage across a reload

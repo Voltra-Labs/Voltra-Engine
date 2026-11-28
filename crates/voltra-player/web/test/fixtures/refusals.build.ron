@@ -1,0 +1,10 @@
+// What a GPU refuses, and what is drawn instead: fixtures/assets/scenes/
+// refusals.ron. A web-test fixture, built only by
+// crates/voltra-player/web/test/refusals.mjs — not a sample.
+(
+    version: 1,
+    name: "Voltra Refusals",
+    scene: "scenes/refusals.ron",
+    window: (width: 960, height: 540),
+    assets: "assets",
+)

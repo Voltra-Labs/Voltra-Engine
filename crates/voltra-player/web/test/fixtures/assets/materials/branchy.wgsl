@@ -1,8 +1,9 @@
 // Breaks WGSL's uniformity rule on purpose: a texture sampled inside a
 // branch on a per-pixel value. naga (native) and WebGL2 run it; WebGPU's
 // Tint refuses the whole module, and the engine then draws this material's
-// standard block instead of a black frame. scenes/custom3d.ron shows both;
-// what not to write — sample first, then `select` (docs/guide/11-3d.md).
+// standard block instead of a black frame. A web-test fixture
+// (scenes/refusals.ron), not a sample: what not to write — sample first,
+// then `select` (docs/guide/11-3d.md).
 fn surface(in: SurfaceInput) -> Surface {
     var s = standard_surface(in);
     if in.uv.x > 0.0 {

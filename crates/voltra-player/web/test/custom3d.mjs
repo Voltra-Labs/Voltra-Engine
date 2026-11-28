@@ -8,9 +8,7 @@
 // custom uniform block and textures. The colours below are what the native
 // headless frame draws (crates/voltra-core/tests/custom3d.rs's scene): the
 // bands are the stripes' bytes read as data through AgX — read as sRGB on
-// WebGL2's upload path they would be other colours entirely. The branchy
-// sphere's shader breaks WGSL's uniformity rule, which naga lifts and Tint
-// holds: on WebGPU it must show its standard block, not a black frame.
+// WebGL2's upload path they would be other colours entirely.
 //
 //   node crates/voltra-player/web/test/custom3d.mjs [--skip-build] [--out DIR]
 //
@@ -30,11 +28,6 @@ const colours = {
   bandBlue: [145, 169, 198],
   // The dissolve's glowing rim, where its noise is just above the cut.
   rim: [236, 204, 164],
-  // The branchy sphere, whose shader samples a texture inside a branch:
-  // its own yellow where it runs (native, WebGL2), its standard block's
-  // flat red where the GPU refuses it (WebGPU's Tint) — never black.
-  branchyOwn: [202, 194, 119],
-  branchyStandard: [204, 100, 91],
   // A texture that would not load.
   magenta: [255, 0, 255],
 };
@@ -43,24 +36,17 @@ try {
     site,
     url: server.url,
     name: "custom3d",
-    check: async (page, backend) => {
-      // WebGPU refuses the branchy shader and draws its standard block;
-      // WebGL2's GLSL has no such rule and runs it, as native does.
-      const refused = backend.name === "WebGPU";
-      const branchy = refused ? "branchyStandard" : "branchyOwn";
-      const other = refused ? "branchyOwn" : "branchyStandard";
+    check: async (page) => {
       const { ok, found } = await waitFor(
         page,
         colours,
         (f) => f.bandRed.count > 2_000 && f.bandBlue.count > 2_000 && f.rim.count > 30
-          && f[branchy].count > 2_000 && f[other].count < 50
           // Where the scene puts them: the bands sphere right of the
-          // middle, the dissolve left, the branchy one in the middle.
-          && f.bandBlue.x > 640 && f.bandRed.x > 640 && f.rim.x < 320
-          && Math.abs(f[branchy].x - 480) < 40,
+          // middle, the dissolve left.
+          && f.bandBlue.x > 640 && f.bandRed.x > 640 && f.rim.x < 320,
       );
       console.log(`on screen: ${JSON.stringify(found)}`);
-      if (!ok) return `the bands, the dissolve or the branchy sphere (${branchy}) did not draw as expected`;
+      if (!ok) return "the bands or the dissolve did not draw as natively";
       if (found.magenta.count > 0) return `${found.magenta.count} pixels of a missing texture`;
       return null;
     },

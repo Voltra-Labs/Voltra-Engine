@@ -33,13 +33,5 @@
                 "Transform2D": (translation:(2.0,0.0),rotation:0.0,scale:(1.6,1.6)),
             },
         ),
-        (
-            id: "019fe400-0000-7000-8000-000000000005",
-            components: {
-                "Name": "Branchy bar",
-                "Sprite2D": (color:(1.0,0.5,0.1,1.0),sort_order:1,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None,material:Some((path:Path("materials/branchy_sprite.material.ron")))),
-                "Transform2D": (translation:(0.0,-1.15),rotation:0.0,scale:(1.0,0.35)),
-            },
-        ),
     ],
 )
