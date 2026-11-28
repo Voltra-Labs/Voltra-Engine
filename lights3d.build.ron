@@ -1,0 +1,9 @@
+// Lights and the environment: scenes/lights3d.ron. What
+// crates/voltra-player/web/test/lights3d.mjs builds for the web.
+(
+    version: 1,
+    name: "Voltra Lights 3D",
+    scene: "scenes/lights3d.ron",
+    window: (width: 960, height: 540),
+    assets: "assets",
+)
