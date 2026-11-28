@@ -1,0 +1,5 @@
+# Scene, prefab, clip and other RON assets are compared byte for byte with
+# what the engine writes (`cargo xtask migrate --check`, the format tests),
+# and the engine writes LF: keep them LF on every checkout, Windows too.
+*.ron text eol=lf
+*.ron.tpl text eol=lf

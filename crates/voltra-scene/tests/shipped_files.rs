@@ -219,6 +219,15 @@ fn every_shipped_clip_reads_every_track() {
             .map(|t| t.keys.len())
             .sum();
         assert_eq!(kept, keys, "{}", path.display());
+        // Under the current names, as the clip store writes it — compared
+        // as LF: a checkout may have made it CRLF, which is the same file.
+        let written = voltra_scene::ron_store::to_text(&clip).expect("writes");
+        let lf = text.replace("\r\n", "\n");
+        assert!(
+            lf.ends_with(&written),
+            "{}: run `cargo xtask migrate`",
+            path.display()
+        );
         checked += 1;
     }
     assert!(checked >= 9, "found the shipped clips ({checked})");

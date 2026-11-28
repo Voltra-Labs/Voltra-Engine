@@ -49,8 +49,10 @@ Tasks:
         Rewrite every scene, prefab and clip under each FOLDER (default:
         the asset root of each build.ron in the workspace) as the engine
         reads and writes it: the current format, renamed components under
-        their new names. With --check, write nothing, list what is out of
-        date and fail if anything is
+        their new names, as an editor save writes them (leading comments
+        kept, any other dropped). With --check, write nothing, list what is
+        out of date — an older version, or a file not as a save writes it —
+        and fail if anything is
   guide
         Run the user guide's checked commands (docs/guide), in order, as
         someone following it from a clean checkout would

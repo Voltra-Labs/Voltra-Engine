@@ -47,10 +47,12 @@ fn a_migration_writes_the_version_two_twin_byte_for_byte() {
     for file in outdated {
         let relative = file.path.strip_prefix(&folder).expect("under the copy");
         let twin = std::fs::read_to_string(Path::new(FIXTURES).join("v2").join(relative))
-            .expect("every v1 fixture has a v2 twin");
+            .expect("every v1 fixture has a v2 twin")
+            .replace("\r\n", "\n");
+        let text = file.text.replace("\r\n", "\n");
         // The header says which version it is; the rest is the engine's.
         assert_eq!(
-            body(&file.text),
+            body(&text),
             body(&twin),
             "{} is not its twin",
             relative.display()
@@ -107,4 +109,54 @@ fn a_header_is_the_leading_comments_only() {
     assert_eq!(header("// a\n// b\n\n(\n// c\n)"), "// a\n// b\n\n");
     assert_eq!(header("(version: 2)"), "");
     assert_eq!(header("\n\n(version: 2)"), "");
+}
+
+/// Every file under `dir` rewritten with `ending` between lines.
+fn with_endings(dir: &Path, ending: &str) {
+    for entry in std::fs::read_dir(dir).expect("a folder").flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            with_endings(&path, ending);
+        } else {
+            let text = std::fs::read_to_string(&path).expect("reads");
+            let lf = text.replace("\r\n", "\n");
+            std::fs::write(&path, lf.replace('\n', ending)).expect("written");
+        }
+    }
+}
+
+#[test]
+fn a_crlf_checkout_is_neither_out_of_date_nor_mixed_by_a_migration() {
+    let registry = ComponentRegistry::with_defaults();
+    // Current files, as Git for Windows' `core.autocrlf` checks them out.
+    let current = copy_of("v2", "crlf-current");
+    with_endings(&current, "\r\n");
+    let (seen, outdated) = survey(&current, &registry).expect("reads");
+    assert_eq!((seen, outdated.len()), (4, 0), "{outdated:#?}");
+
+    // Old files in CRLF are migrated in CRLF, every line of them.
+    let old = copy_of("v1", "crlf-old");
+    with_endings(&old, "\r\n");
+    let (_, outdated) = survey(&old, &registry).expect("reads");
+    assert_eq!(outdated.len(), 4);
+    for file in &outdated {
+        let lone = file.text.matches('\n').count() - file.text.matches("\r\n").count();
+        assert_eq!(lone, 0, "{} has a bare LF", file.path.display());
+        std::fs::write(&file.path, &file.text).expect("written");
+    }
+    let (_, outdated) = survey(&old, &registry).expect("reads");
+    assert!(outdated.is_empty(), "{outdated:#?}");
+
+    // A file of both is rewritten in one: here, mostly CRLF.
+    let mixed = copy_of("v2", "crlf-mixed");
+    let scene = mixed.join("scene.ron");
+    let text = std::fs::read_to_string(&scene)
+        .expect("reads")
+        .replace("\r\n", "\n");
+    let text = text.replace('\n', "\r\n").replacen("\r\n", "\n", 1);
+    std::fs::write(&scene, text).expect("written");
+    let (_, outdated) = survey(&mixed, &registry).expect("reads");
+    assert_eq!(outdated.len(), 1, "{outdated:#?}");
+    let fixed = &outdated[0].text;
+    assert_eq!(fixed.matches('\n').count(), fixed.matches("\r\n").count());
 }

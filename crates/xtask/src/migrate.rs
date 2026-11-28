@@ -4,7 +4,13 @@
 //! format version, with every renamed component under its new name.
 //!
 //! `--check` writes nothing: it lists what a migration would change and
-//! fails if anything would, which CI runs over the shipped assets.
+//! fails if anything would, which CI runs over the shipped assets. "Out of
+//! date" is any difference from that save, so a version 2 file written by
+//! hand — fields left to their defaults, keys out of order — is listed too,
+//! not only an older version.
+//!
+//! A rewrite keeps no comment but the leading block: one inside the
+//! entities is dropped, as an editor save drops it.
 //!
 //! Two differences from an editor save, both kept on purpose: a file's
 //! leading comment block is kept (a save would drop it; the shipped samples
@@ -85,7 +91,9 @@ pub fn run(args: impl Iterator<Item = String>, workspace: &Path) -> Result<(), S
             return Ok(());
         }
         return Err(format!(
-            "{} of {seen} files are out of date; `cargo xtask migrate` rewrites them",
+            "{} of {seen} files are out of date — an older version, or not as an editor \
+             save writes them; `cargo xtask migrate` rewrites them (keeping each file's \
+             leading comments, dropping any other)",
             outdated.len()
         ));
     }
@@ -169,16 +177,54 @@ pub fn survey(
         };
         seen += 1;
         let migrated = migrated.map_err(|e| format!("{}: {e}", path.display()))?;
-        let migrated = format!("{}{migrated}", header(&text));
-        if migrated != text {
+        // Compared as LF, the engine's writer's ending; written back in the
+        // file's own, all through — a checkout that turned the file to CRLF
+        // is not out of date for it, and a mixed file comes out one way.
+        let ending = Ending::of(&text);
+        let lf = text.replace("\r\n", "\n");
+        let migrated = format!("{}{migrated}", header(&lf));
+        if migrated != lf || matches!(ending, Ending::Mixed(_)) {
             outdated.push(Outdated {
                 path,
                 kind,
-                text: migrated,
+                text: ending.apply(&migrated),
             });
         }
     }
     Ok((seen, outdated))
+}
+
+/// A file's line endings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ending {
+    /// `\n` only, as the engine writes.
+    Lf,
+    /// `\r\n` only: a checkout that converted it (Git for Windows'
+    /// `core.autocrlf`).
+    Crlf,
+    /// Both: written back in the one most lines had — CRLF when `true`.
+    Mixed(bool),
+}
+
+impl Ending {
+    fn of(text: &str) -> Self {
+        let crlf = text.matches("\r\n").count();
+        let lf = text.matches('\n').count() - crlf;
+        match (crlf, lf) {
+            (0, _) => Self::Lf,
+            (_, 0) => Self::Crlf,
+            _ => Self::Mixed(crlf > lf),
+        }
+    }
+
+    /// LF `text` in this ending; a mixed file takes the one most of its
+    /// lines had, so a rewrite is consistent.
+    fn apply(self, text: &str) -> String {
+        match self {
+            Self::Lf | Self::Mixed(false) => text.to_owned(),
+            Self::Crlf | Self::Mixed(true) => text.replace('\n', "\r\n"),
+        }
+    }
 }
 
 /// Every `.ron` under `dir`, leaving out build output and hidden folders.

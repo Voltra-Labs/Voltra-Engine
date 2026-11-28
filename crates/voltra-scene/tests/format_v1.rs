@@ -34,6 +34,12 @@ fn loaded(version: &str, path: &str) -> World {
     world
 }
 
+/// A fixture's text with LF endings, whatever the checkout did to it: the
+/// engine writes LF, and a CRLF checkout is the same file.
+fn read_lf(path: impl AsRef<Path>) -> std::io::Result<String> {
+    std::fs::read_to_string(path).map(|text| text.replace("\r\n", "\n"))
+}
+
 fn saved(world: &World) -> SceneFile {
     to_scene_file(world, &ComponentRegistry::with_defaults()).expect("saves")
 }
@@ -102,7 +108,7 @@ fn overrides_name_the_renamed_components() {
 fn a_save_of_a_version_one_file_is_its_twin_byte_for_byte() {
     for path in SCENES {
         let text = to_text(&saved(&loaded("v1", path))).expect("writes");
-        let twin = std::fs::read_to_string(fixtures("v2").join(path)).expect("the twin");
+        let twin = read_lf(fixtures("v2").join(path)).expect("the twin");
         assert_eq!(body(&text), body(&twin), "{path}");
     }
 }
@@ -165,22 +171,20 @@ fn the_staged_loader_migrates_as_the_store_does() {
 #[test]
 fn an_old_clip_reads_as_its_twin() {
     let read = |version: &str| -> AnimationClip {
-        let text = std::fs::read_to_string(fixtures(version).join("animations/thing.anim.ron"))
-            .expect("the clip");
+        let text = read_lf(fixtures(version).join("animations/thing.anim.ron")).expect("the clip");
         ron::from_str(&text).expect("reads")
     };
     let old = read("v1");
     assert_eq!(old, read("v2"));
     assert_eq!(old.tracks.len(), 7, "no track lost");
     let text = voltra_scene::ron_store::to_text(&old).expect("writes");
-    let twin = std::fs::read_to_string(fixtures("v2").join("animations/thing.anim.ron"))
-        .expect("the twin");
+    let twin = read_lf(fixtures("v2").join("animations/thing.anim.ron")).expect("the twin");
     assert_eq!(body(&text), body(&twin));
 }
 
 #[test]
 fn a_newer_version_is_refused() {
-    let text = std::fs::read_to_string(fixtures("v2").join("scene.ron")).expect("the twin");
+    let text = read_lf(fixtures("v2").join("scene.ron")).expect("the twin");
     let v3 = text.replacen("version: 2", "version: 3", 1);
     assert!(matches!(
         format::parse(&v3),
