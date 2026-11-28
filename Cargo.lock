@@ -4179,6 +4179,7 @@ dependencies = [
  "voltra-assets",
  "voltra-audio",
  "voltra-ecs",
+ "voltra-jobs",
  "voltra-render",
  "voltra-testkit",
 ]

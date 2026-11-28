@@ -57,6 +57,12 @@ impl ComponentRegistry {
             .register::<Camera2D>(Camera2D::NAME)
             .with_template();
         registry
+            .register::<crate::Camera3D>(crate::Camera3D::NAME)
+            .with_template();
+        registry
+            .register::<crate::MeshInstance3D>(crate::MeshInstance3D::NAME)
+            .with_template();
+        registry
             .register_with_refs::<crate::CameraFollow2D>(crate::CameraFollow2D::NAME)
             .with_template();
         registry

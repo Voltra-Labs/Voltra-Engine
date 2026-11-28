@@ -10,6 +10,8 @@ repository.workspace = true
 voltra-assets.workspace = true
 voltra-audio.workspace = true
 voltra-ecs.workspace = true
+# Culling a long 3D draw list across threads (`draw3d/cull.rs`).
+voltra-jobs.workspace = true
 voltra-render.workspace = true
 log.workspace = true
 serde.workspace = true
