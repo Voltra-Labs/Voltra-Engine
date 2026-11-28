@@ -8,6 +8,7 @@ mod document;
 mod drag;
 mod edit_keys;
 mod editor;
+mod euler_hint;
 mod game;
 mod gizmo;
 mod grab;

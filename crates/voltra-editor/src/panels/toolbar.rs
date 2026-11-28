@@ -88,6 +88,7 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // tools or the transport.
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 views(editor, ui, frame);
+                not_shown_3d(ui, frame);
             });
         });
         // A second row in prefab mode: where the author is, and the way
@@ -150,6 +151,24 @@ fn views(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             editor.view.set_mode(mode, frame.camera);
         }
     }
+}
+
+/// Says so when the scene holds 3D entities: the 2D view neither draws nor
+/// picks them, and a scene that looks empty should not be taken for one.
+fn not_shown_3d(ui: &mut Ui, frame: &UiFrame<'_>) {
+    let count = frame
+        .world
+        .components::<voltra_scene::Transform3D>()
+        .map_or(0, |set| set.len());
+    if count == 0 {
+        return;
+    }
+    let noun = if count == 1 { "entity" } else { "entities" };
+    ui.label(egui::RichText::new(format!("{count} 3D {noun} not shown")).weak())
+        .on_hover_text(
+            "the scene view is 2D: it draws and picks 2D entities only. Edit 3D ones \
+             in the hierarchy and the inspector; a 3D view is to come",
+        );
 }
 
 /// One square transport button.

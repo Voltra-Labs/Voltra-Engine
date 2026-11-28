@@ -27,6 +27,7 @@ use crate::search::hierarchy::{filter, label, HierarchyFilter};
 use crate::search::Query;
 use crate::selection::Click;
 
+mod create;
 mod reparent;
 
 use reparent::{apply, Reparent};
@@ -56,7 +57,10 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
     egui::Panel::left("hierarchy")
         .default_size(200.0)
         .show(ui, |ui| {
-            ui.heading("Hierarchy");
+            ui.horizontal(|ui| {
+                ui.heading("Hierarchy");
+                create::show(editor, ui, frame);
+            });
             ui.add(
                 egui::TextEdit::singleline(&mut editor.hierarchy_search)
                     .hint_text("search: name, t:Sprite…")

@@ -111,6 +111,8 @@ pub struct Editor {
     pub(crate) particle_preview: crate::particle_preview::ParticlePreview,
     /// The skinned sprite whose weights the viewport is painting, if any.
     pub(crate) weight_paint: crate::weight_paint::WeightPaint,
+    /// The Euler angles the inspector shows each 3D rotation as.
+    pub(crate) euler_hints: crate::euler_hint::EulerHints,
 }
 
 impl Editor {

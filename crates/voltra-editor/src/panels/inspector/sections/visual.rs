@@ -1,4 +1,5 @@
-//! The sections of what an entity is and draws: its prefab, transform, UI
+//! The sections of what an entity is and draws: its prefab, transform (2D
+//! or 3D), UI
 //! box and controls, sprite, tilemap, text, particles and shapes.
 
 use voltra_core::egui::Ui;
@@ -6,14 +7,14 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::Vec2;
 use voltra_scene::{
-    hierarchy, ui, ParticleEmitter, Sprite2D, Text, Tilemap, Transform2D, UiButton, UiLayout,
-    UiRect, UiStack,
+    hierarchy, ui, ParticleEmitter, Sprite2D, Text, Tilemap, Transform2D, Transform3D, UiButton,
+    UiLayout, UiRect, UiStack,
 };
 
 use super::super::mixed::{self, Fields};
 use super::super::{
-    animation, particles, shapes2d, sprite, sprite_material, text, tilemap, transform, ui_button,
-    ui_controls, ui_rect, ui_slice, ui_stack,
+    animation, particles, shapes2d, sprite, sprite_material, text, tilemap, transform, transform3d,
+    ui_button, ui_controls, ui_rect, ui_slice, ui_stack,
 };
 use super::gate;
 use crate::editor::Editor;
@@ -37,6 +38,22 @@ pub(in crate::panels::inspector) fn show(
         mixed::marker(ui, multi, &[Transform2D::NAME]);
         let fields = Fields::of(multi, Transform2D::NAME);
         claim = claim.or(transform::show(ui, transform, fields));
+    }
+    editor.euler_hints.forget_dead(frame.world);
+    if let Some(transform) = gate(
+        frame.world.get_mut::<Transform3D>(entity),
+        multi,
+        Transform3D::NAME,
+    ) {
+        mixed::marker(ui, multi, &[Transform3D::NAME]);
+        let fields = Fields::of(multi, Transform3D::NAME);
+        claim = claim.or(transform3d::show(
+            ui,
+            entity,
+            transform,
+            &mut editor.euler_hints,
+            fields,
+        ));
     }
     let parent_rect = ui_parent_rect(ui, frame, entity);
     let stacked = hierarchy::parent_of(frame.world, entity)

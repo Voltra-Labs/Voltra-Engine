@@ -8,7 +8,7 @@
 
 use voltra_core::egui::{RichText, Ui};
 use voltra_ecs::{Entity, World};
-use voltra_scene::ComponentRegistry;
+use voltra_scene::{hierarchy, ComponentRegistry};
 
 use crate::multi_edit::MultiEdit;
 
@@ -43,7 +43,9 @@ pub(super) fn show(
 }
 
 /// Puts `name`'s template on each of `entities` without one; the entities
-/// it did.
+/// it did. A transform is refused, and said so, where it would be a second
+/// one or cross dimensions with a parent or child
+/// ([`hierarchy::can_take_transform`]).
 pub(super) fn add_where_missing(
     world: &mut World,
     registry: &ComponentRegistry,
@@ -58,9 +60,22 @@ pub(super) fn add_where_missing(
         }
         None => return Vec::new(),
     };
+    // A transform is not given to one that carries the other dimension's,
+    // or that sits in a chain of the other dimension: an entity is 2D or 3D.
+    let dimension = hierarchy::Dimension::of_transform_name(name);
     let lacking: Vec<Entity> = entities
         .into_iter()
         .filter(|&e| registry.has(world, e, name) == Some(false))
+        .filter(|&e| match dimension {
+            Some(dimension) => match hierarchy::can_take_transform(world, e, dimension) {
+                Ok(()) => true,
+                Err(refused) => {
+                    log::warn!("{name} not added to {e:?}: {refused}");
+                    false
+                }
+            },
+            None => true,
+        })
         .collect();
     lacking
         .into_iter()
@@ -80,7 +95,7 @@ pub(super) fn add_where_missing(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use voltra_scene::{Collider2D, Sprite2D};
+    use voltra_scene::{Collider2D, Sprite2D, Transform2D, Transform3D};
 
     #[test]
     fn a_component_is_added_only_where_it_is_missing() {
@@ -100,5 +115,20 @@ mod tests {
             world.get::<Collider2D>(without),
             Some(&Collider2D::default())
         );
+    }
+
+    #[test]
+    fn a_second_transform_is_not_added() {
+        let registry = ComponentRegistry::with_defaults();
+        let mut world = World::new();
+        let flat = world.spawn();
+        let deep = world.spawn();
+        world.insert(flat, Transform2D::default());
+        world.insert(deep, Transform3D::default());
+
+        let added = add_where_missing(&mut world, &registry, [flat, deep], Transform3D::NAME);
+
+        assert!(added.is_empty(), "the 2D one refused, the 3D one has it");
+        assert!(world.get::<Transform3D>(flat).is_none());
     }
 }

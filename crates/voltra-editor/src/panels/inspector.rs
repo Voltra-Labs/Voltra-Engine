@@ -39,6 +39,7 @@ mod sprite_material;
 mod text;
 mod tilemap;
 mod transform;
+mod transform3d;
 mod ui_button;
 mod ui_controls;
 mod ui_dropdown;
