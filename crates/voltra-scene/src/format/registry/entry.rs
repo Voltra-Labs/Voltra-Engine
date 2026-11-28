@@ -77,6 +77,8 @@ pub(super) struct Entry {
     ///
     /// [`ComponentRegistry::replicate`]: super::ComponentRegistry::replicate
     pub(super) type_id: std::any::TypeId,
+    /// The type's Rust path, for a message naming it.
+    pub(super) type_name: &'static str,
     /// For a type the server sends its clients; `None` for every other.
     pub(super) replicate: Option<super::replicate::ReplicateFns>,
 }

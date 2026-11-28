@@ -275,3 +275,28 @@ fn a_tree_is_none_for_an_unregistered_name_or_a_missing_component() {
         Some(Err(_))
     ));
 }
+
+#[test]
+fn a_second_type_under_a_taken_name_is_refused() {
+    // A game's own component, named as the engine's sprite is.
+    #[derive(serde::Serialize, serde::Deserialize, Default)]
+    struct Sprite2D {
+        sides: u32,
+    }
+    let mut registry = ComponentRegistry::with_defaults();
+    let before = registry.names().count();
+    registry.register::<Sprite2D>("Sprite2D").with_template();
+    assert_eq!(registry.refused(), ["Sprite2D"]);
+    assert_eq!(registry.names().count(), before, "nothing added");
+    // The engine's keeps the name: its template is still a sprite's.
+    let template = registry
+        .template("Sprite2D")
+        .expect("registered")
+        .expect("writes");
+    assert!(
+        template.get_ron().contains("color"),
+        "{}",
+        template.get_ron()
+    );
+    assert!(ComponentRegistry::with_defaults().refused().is_empty());
+}

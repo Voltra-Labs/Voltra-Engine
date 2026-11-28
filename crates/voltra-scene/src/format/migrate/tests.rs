@@ -150,3 +150,32 @@ fn the_version_written_is_reported() {
     let (file, written) = parse_versioned(&v1(&[])).expect("reads");
     assert_eq!((file.version, written), (VERSION, 1));
 }
+
+#[test]
+fn a_game_s_component_under_a_new_engine_name_is_refused() {
+    // A 0.4 game registered its own `Sprite2D`: read on, it would become
+    // the engine's sprite. The author renames it first.
+    let text = v1(&[("Sprite2D", "(sides: 3)")]);
+    match parse(&text) {
+        Err(SceneError::Component { name, source }) => {
+            assert_eq!(name, "Sprite2D");
+            assert!(
+                source.to_string().contains("rename your component"),
+                "{source}"
+            );
+        }
+        other => panic!("a game's Sprite2D read: {other:?}"),
+    }
+    // And an override naming it.
+    let text = v1(&[(
+        "PrefabPart",
+        "(record: \"019fe300-0000-7000-8000-0000000000aa\", overridden: [\"Sprite2D\"])",
+    )]);
+    match parse(&text) {
+        Err(SceneError::Component { name, source }) => {
+            assert_eq!(name, "Sprite2D");
+            assert!(source.to_string().contains("overrides"), "{source}");
+        }
+        other => panic!("an override of a game's Sprite2D read: {other:?}"),
+    }
+}

@@ -35,6 +35,11 @@ use crate::scene_id::SceneId;
 #[derive(Clone)]
 pub struct ComponentRegistry {
     entries: Vec<Entry>,
+    /// Names registered a second time, refused: the first type keeps each.
+    refused: Vec<&'static str>,
+    /// Where a refused registration's builder calls land, kept out of
+    /// `entries` so nothing reads them.
+    discarded: Option<Box<Entry>>,
     /// Which registration this is: new for every registry and every change
     /// to one, kept by a clone — so a holder of a copy can tell it is stale.
     stamp: u64,
@@ -52,6 +57,8 @@ impl ComponentRegistry {
     pub fn new() -> Self {
         Self {
             entries: Vec::new(),
+            refused: Vec::new(),
+            discarded: None,
             stamp: next_stamp(),
         }
     }
@@ -67,12 +74,18 @@ impl ComponentRegistry {
     ///
     /// The name is chosen rather than derived from the Rust path, so renaming a
     /// type in code does not silently invalidate every scene on disk.
+    ///
+    /// A name already registered is **refused**: the first type keeps it,
+    /// this one is not registered, the refusal is logged as an error naming
+    /// both types, and [`refused`](Self::refused) lists it. Two types under
+    /// one name would make every file holding it read as whichever came
+    /// first — a game's `Sprite2D` shadowing the engine's, or the reverse.
     pub fn register<T>(&mut self, name: &'static str) -> Registration<'_, T>
     where
         T: Serialize + DeserializeOwned + 'static,
     {
         self.stamp = next_stamp();
-        self.entries.push(Entry {
+        let entry = Entry {
             name,
             save: |world, entity| {
                 let component = world.get::<T>(entity)?;
@@ -95,8 +108,20 @@ impl ComponentRegistry {
             refs: None,
             template: None,
             type_id: std::any::TypeId::of::<T>(),
+            type_name: std::any::type_name::<T>(),
             replicate: None,
-        });
+        };
+        if let Some(first) = self.entries.iter().find(|e| e.name == name) {
+            log::error!(
+                "component name `{name}` is registered already (by {}); {} is not \
+                 registered: give one of them another name",
+                first.type_name,
+                std::any::type_name::<T>()
+            );
+            self.refused.push(name);
+            return Registration::new(self.discarded.insert(Box::new(entry)));
+        }
+        self.entries.push(entry);
         Registration::new(
             self.entries
                 .last_mut()
@@ -146,6 +171,12 @@ impl ComponentRegistry {
             },
             other => other,
         })
+    }
+
+    /// The names a [`register`](Self::register) call was refused, because
+    /// another type had it first; empty when every name is one type's.
+    pub fn refused(&self) -> &[&'static str] {
+        &self.refused
     }
 
     /// The registered component names, in registration order.

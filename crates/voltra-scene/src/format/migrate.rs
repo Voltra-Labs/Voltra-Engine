@@ -10,7 +10,6 @@
 //! overridden set, which is also where a variant's overrides live.
 
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 
 use ron::value::RawValue;
 
@@ -68,7 +67,7 @@ pub fn upgrade(mut file: SceneFile) -> Result<SceneFile, SceneError> {
         let renames = renames_from(file.version)
             .expect("RENAMES has a row for every version from OLDEST to VERSION");
         for record in &mut file.entities {
-            rename_record(record, renames)?;
+            rename_record(record, renames, file.version)?;
         }
         file.version += 1;
     }
@@ -85,65 +84,82 @@ pub fn current(file: &SceneFile) -> Result<Cow<'_, SceneFile>, SceneError> {
     }
 }
 
-/// Renames one record's components, and the names its values hold.
 /// One version step's renames.
 type Renames = &'static [(&'static str, &'static str)];
 
-fn rename_record(record: &mut EntityRecord, renames: Renames) -> Result<(), SceneError> {
+/// The refusal of a name an older file holds that the step gives to an
+/// engine component: no component of that version was called it, so it is
+/// a game's own, and reading it on would make it the engine's — or drop
+/// one of the two.
+fn taken(record: &EntityRecord, name: &str, version: u32, held: &str) -> SceneError {
+    SceneError::Component {
+        name: name.to_owned(),
+        source: ron::Error::Message(format!(
+            "entity {} {held} `{name}`, which version {version} did not name but version {} \
+             gives the engine's component; rename your component and its files first",
+            record.id.0,
+            version + 1
+        )),
+    }
+}
+
+/// Renames one record's components, and the names its values hold, from
+/// `version` to the next.
+fn rename_record(
+    record: &mut EntityRecord,
+    renames: Renames,
+    version: u32,
+) -> Result<(), SceneError> {
     let renamed = |name: &str| -> Option<&'static str> {
         renames
             .iter()
             .find(|(old, _)| *old == name)
             .map(|(_, new)| *new)
     };
+    let is_target = |name: &str| renames.iter().any(|(_, new)| *new == name);
+    for name in record.components.keys() {
+        if is_target(name) {
+            return Err(taken(record, name, version, "holds"));
+        }
+    }
+    let part = match record.components.get(PrefabPart::NAME) {
+        Some(value) => Some(read_part(value)?),
+        None => None,
+    };
+    if let Some(name) = part
+        .iter()
+        .flat_map(|part| part.overridden.iter())
+        .find(|name| is_target(name))
+    {
+        return Err(taken(record, name, version, "overrides"));
+    }
+
     let old = std::mem::take(&mut record.components);
-    let mut components = BTreeMap::new();
-    for (name, value) in old {
-        let name = renamed(&name).map_or(name, str::to_owned);
-        // An old file naming both a component and what it is renamed to —
-        // a game's own component that took the name first — cannot be
-        // read without dropping one of them.
-        if components.contains_key(&name) {
-            return Err(SceneError::Component {
-                source: ron::Error::Message(format!(
-                    "entity {} holds `{name}` under two names; rename one by hand",
-                    record.id.0
-                )),
-                name,
-            });
-        }
-        components.insert(name, value);
-    }
-    if let Some(value) = components.get_mut(PrefabPart::NAME) {
-        if let Some(new) = rename_overridden(value, &renamed)? {
-            *value = new;
+    record.components = old
+        .into_iter()
+        .map(|(name, value)| (renamed(&name).map_or(name, str::to_owned), value))
+        .collect();
+    if let Some(mut part) = part {
+        // Left exactly as written when it names nothing that moved.
+        if part.overridden.iter().any(|name| renamed(name).is_some()) {
+            part.overridden = part
+                .overridden
+                .into_iter()
+                .map(|name| renamed(&name).map_or(name, str::to_owned))
+                .collect();
+            let value = RawValue::from_rust(&part).map_err(SceneError::Serialize)?;
+            record.components.insert(PrefabPart::NAME.to_owned(), value);
         }
     }
-    record.components = components;
     Ok(())
 }
 
-/// A part's overridden set renamed, or `None` when it names nothing that
-/// moved (and stays exactly as written).
-fn rename_overridden(
-    value: &RawValue,
-    renamed: &dyn Fn(&str) -> Option<&'static str>,
-) -> Result<Option<Box<RawValue>>, SceneError> {
-    let mut part: PrefabPart = value.into_rust().map_err(|source| SceneError::Component {
+/// A stored prefab part, or the error naming it.
+fn read_part(value: &RawValue) -> Result<PrefabPart, SceneError> {
+    value.into_rust().map_err(|source| SceneError::Component {
         name: PrefabPart::NAME.to_owned(),
         source: source.into(),
-    })?;
-    if !part.overridden.iter().any(|name| renamed(name).is_some()) {
-        return Ok(None);
-    }
-    part.overridden = part
-        .overridden
-        .into_iter()
-        .map(|name| renamed(&name).map_or(name, str::to_owned))
-        .collect();
-    RawValue::from_rust(&part)
-        .map(Some)
-        .map_err(SceneError::Serialize)
+    })
 }
 
 /// `text` read as a scene file of any version this build reads, and brought
