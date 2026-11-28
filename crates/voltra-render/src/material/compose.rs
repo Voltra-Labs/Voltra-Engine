@@ -65,8 +65,10 @@ fn sprite_color(in: Fragment) -> vec4<f32> {
 
 /// The whole WGSL for a material whose fragment source is `fragment` and
 /// whose uniforms are laid out as `layout`: the prelude, `struct Material`
-/// bound at group 2, the material's source, and the entry point calling its
-/// `fragment`.
+/// bound at group 2 (aligned to 16 bytes, so its size is a multiple of 16:
+/// WebGL2 refuses a uniform binding that is not, and a material of one
+/// `f32` would be 4), the material's source, and the entry point calling
+/// its `fragment`.
 ///
 /// The material's source sees `albedo`, `albedo_sampler`, `camera`,
 /// `material` (its uniforms), `Fragment` and `sprite_color(in)`, and must
@@ -75,7 +77,7 @@ pub fn compose(fragment: &str, layout: &Layout) -> String {
     format!(
         "{}\n{PRELUDE}\n// The material's uniforms.\n{}\n@group(2) @binding(0)\nvar<uniform> material: Material;\n\n// The material's own.\n{fragment}\n\n@fragment\nfn fs_main(in: Fragment) -> @location(0) vec4<f32> {{\n    return {FRAGMENT_ENTRY}(in);\n}}\n",
         crate::shader::QUAD,
-        layout.wgsl_struct()
+        layout.wgsl_struct_aligned()
     )
 }
 
@@ -135,5 +137,34 @@ mod tests {
         assert!(error.contains("nope"), "{error}");
         let missing = compose("fn other() {}", &layout());
         assert!(validate(&missing).is_err(), "no fragment function");
+    }
+
+    #[test]
+    fn the_uniform_block_is_a_multiple_of_16_bytes_for_webgl2() {
+        use wgpu::naga;
+        for uniforms in [
+            vec![("flash".to_owned(), Uniform::Float(0.0))],
+            vec![("offset".to_owned(), Uniform::Vec2((0.0, 0.0)))],
+            vec![],
+        ] {
+            let uniforms: BTreeMap<String, Uniform> = uniforms.into_iter().collect();
+            let layout = Layout::new(&uniforms).expect("fits");
+            let source = compose(
+                "fn fragment(in: Fragment) -> vec4<f32> { return sprite_color(in); }",
+                &layout,
+            );
+            validate(&source).expect("valid");
+            let module = naga::front::wgsl::parse_str(&source).expect("parses");
+            let (_, material) = module
+                .global_variables
+                .iter()
+                .find(|(_, g)| g.name.as_deref() == Some("material"))
+                .expect("declared");
+            let naga::TypeInner::Struct { span, .. } = module.types[material.ty].inner else {
+                panic!("a struct");
+            };
+            assert_eq!(span as usize, layout.size(), "{uniforms:?}");
+            assert_eq!(span % 16, 0);
+        }
     }
 }
