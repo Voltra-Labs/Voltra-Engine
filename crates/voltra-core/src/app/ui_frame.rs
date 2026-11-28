@@ -9,17 +9,18 @@ use std::collections::HashMap;
 
 use voltra_assets::{Atlases, Clips, Fonts, Handle, Textures};
 use voltra_audio::Audio;
-use voltra_ecs::{Entity, World};
+use voltra_ecs::World;
 use voltra_physics::Contact;
 use voltra_render::{wgpu, LineBatch, Texture, View2D};
-use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::Prefabs;
 
 use super::simulation::Simulation;
 use super::window_requests::WindowRequests;
 use crate::ui::TextureId;
 
+mod assets;
 mod resolve;
+mod simulation;
 mod window;
 
 pub(super) use resolve::{resolve_world_atlases, resolve_world_clips, resolve_world_textures};
@@ -215,53 +216,6 @@ impl<'a> UiFrame<'a> {
         self.gpu_particles
     }
 
-    /// Whether each frame runs the physics steps it owes.
-    pub fn simulating(&self) -> bool {
-        self.simulation.is_running()
-    }
-
-    /// Turns per-frame stepping on or off, from the next frame onwards.
-    ///
-    /// One frame of latency by construction: `App::update` runs before this
-    /// callback, so a switch thrown here first applies on the next frame. At
-    /// 60 Hz nobody can see it, and the alternative — the UI reaching back into
-    /// the frame that already ran — is worse.
-    pub fn set_simulating(&mut self, simulating: bool) {
-        self.simulation.set_running(simulating);
-    }
-
-    /// Runs `game` from the next turn on, in place of whatever ran before,
-    /// which is dropped here; `None` runs none. The game starts afresh: its
-    /// [`start`](crate::Game::start) comes before its first turn.
-    ///
-    /// Registers nothing: a game loaded at run time has its components named
-    /// in [`UiFrame::registry`] before any scene holding them is read, which
-    /// is earlier than the play that runs it.
-    pub fn set_game(&mut self, game: Option<Box<dyn crate::Game>>) {
-        *self.game = game.map(crate::game::Running::new);
-    }
-
-    /// Whether a game is running its turns.
-    pub fn has_game(&self) -> bool {
-        self.game.is_some()
-    }
-
-    /// Runs `count` fixed steps on the next frame regardless of the switch.
-    ///
-    /// Additive, so two requests in one frame run two steps.
-    pub fn request_steps(&mut self, count: u32) {
-        self.simulation.request_steps(count);
-    }
-
-    /// Forgets the accumulated impulses and the clock's banked time, before
-    /// the next frame steps anything.
-    ///
-    /// For a world that is no longer the same world: an editor's Stop, which
-    /// despawns and respawns every entity the scene holds.
-    pub fn reset_physics(&mut self) {
-        self.simulation.request_reset();
-    }
-
     /// Asks the next frame to draw the viewport through the scene's 3D
     /// camera — the editor's game view of a 3D scene — and answers whether
     /// it can: an active [`Camera3D`](voltra_scene::Camera3D) and no active
@@ -282,93 +236,5 @@ impl<'a> UiFrame<'a> {
     /// price, and it is not visible.
     pub fn request_viewport_size(&mut self, width: u32, height: u32) {
         *self.requested_size = (width.max(1), height.max(1));
-    }
-
-    /// Re-resolves every runtime asset handle in the world from its path:
-    /// textures, atlases and clips.
-    ///
-    /// For after a world-replacing edit — Open and undo are the callers.
-    /// Handles from whatever was in the world before mean nothing once the
-    /// entities they pointed at are gone, so this reloads every component
-    /// unconditionally rather than trying to detect which ones changed. Not
-    /// for per-frame use: a path whose handle is already correct still pays
-    /// for a store's cache lookup.
-    ///
-    /// Named for the whole job rather than the first part of it. It has
-    /// resolved atlases since sheets existed and clips since sound did, and a
-    /// name that still said `sprite_textures` would be the one place a caller
-    /// could reasonably believe a scene had loaded when a third of it had not.
-    pub fn resolve_scene_assets(&mut self) {
-        resolve_world_textures(self.world, self.textures, self.device, self.queue);
-        resolve_world_atlases(self.world, self.atlases);
-        voltra_scene::text::resolve_fonts(self.world, self.fonts);
-        resolve_world_clips(self.world, self.clips);
-    }
-
-    /// [`UiFrame::resolve_scene_assets`] for just `entities`.
-    ///
-    /// What a panel that spawned a handful of entities wants: a prefab
-    /// dropped into a large level must not pay for re-resolving the level.
-    /// A despawned entity is skipped.
-    pub fn resolve_assets_of(&mut self, entities: &[Entity]) {
-        for &entity in entities {
-            if !self.world.is_alive(entity) {
-                continue;
-            }
-            super::spawning::resolve_entity(
-                self.world,
-                entity,
-                Some((self.textures, self.device, self.queue)),
-                Some(self.atlases),
-                Some(self.fonts),
-                Some(self.clips),
-            );
-        }
-    }
-
-    /// The stores a sprite's geometry resolves against, as the batch has them.
-    ///
-    /// A panel picking an entity has to ask the same question the draw asked,
-    /// or a click lands somewhere other than the pixels it appears to.
-    /// What a caster shaped by its sprite needs to find its outline, when
-    /// silhouettes are loaded.
-    pub fn sprite_shapes(&self) -> Option<voltra_scene::shadow_caster::SpriteShapes<'_>> {
-        self.silhouettes
-            .as_deref()
-            .map(|silhouettes| voltra_scene::shadow_caster::SpriteShapes {
-                sheets: self.sheets(),
-                silhouettes,
-            })
-    }
-
-    /// `entity`'s sprite outline in its own space, traced now if it has not
-    /// been: what a collider is fitted to. Empty without silhouettes, a
-    /// textured sprite or any opaque texel.
-    pub fn sprite_silhouette(
-        &mut self,
-        entity: voltra_ecs::Entity,
-    ) -> Vec<Vec<voltra_render::glam::Vec2>> {
-        let Some(silhouettes) = self.silhouettes.as_deref_mut() else {
-            return Vec::new();
-        };
-        let sheets = Sheets::new(self.atlases, self.textures)
-            .with_fonts(self.fonts)
-            .seen_from(self.camera.position)
-            .with_layers(self.sorting_layers);
-        voltra_scene::shadow_caster::sprite_silhouette(
-            self.world,
-            entity,
-            voltra_assets::silhouette::ALPHA_THRESHOLD,
-            sheets,
-            silhouettes,
-        )
-    }
-
-    /// The sprite sheets the world is drawn with: atlases, textures and fonts, seen from the camera.
-    pub fn sheets(&self) -> Sheets<'_> {
-        Sheets::new(self.atlases, self.textures)
-            .with_fonts(self.fonts)
-            .seen_from(self.camera.position)
-            .with_layers(self.sorting_layers)
     }
 }
