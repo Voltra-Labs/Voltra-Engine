@@ -236,3 +236,28 @@ fn a_custom_surface_written_by_the_editor_reads_back_the_same() {
         1
     );
 }
+
+#[test]
+fn a_texture_named_with_no_image_yet_is_a_white_slot_not_an_error() {
+    // What the inspector's Add makes: the name, no path.
+    let root = scratch_root();
+    write(
+        &root,
+        "materials/new.wgsl",
+        "fn surface(in: SurfaceInput) -> Surface {\n    var s = standard_surface(in);\n    s.base_color = textureSample(mask, surface_sampler, in.uv).rgb;\n    return s;\n}\n",
+    );
+    write(
+        &root,
+        "materials/new.material.ron",
+        r#"(version: 1, domain: Surface, shader: "materials/new.wgsl", textures: {"mask": Data("")})"#,
+    );
+    let mut materials = Materials::new(&root);
+    let handle = materials.load(&path("materials/new.material.ron"));
+    let material = materials.get(handle).expect("loaded");
+    assert_eq!(material.error, None);
+    let surface = material.surface().expect("a surface");
+    assert!(surface.custom.is_some(), "its own shading");
+    assert_eq!(surface.textures.custom.len(), 1, "the slot kept, in order");
+    assert_eq!(surface.textures.custom[0].path, None);
+    assert_eq!(surface.textures.iter().count(), 0, "nothing to load");
+}

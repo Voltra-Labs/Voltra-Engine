@@ -104,7 +104,7 @@ pub(in crate::app) fn images<'a>(
     };
     let mut custom = [None; CUSTOM_TEXTURES];
     for (slot, texture) in custom.iter_mut().zip(&paths.custom) {
-        let path = Some(texture.path.clone());
+        let path = texture.path.clone();
         let image = match texture.space {
             voltra_render::render3d::TextureSpace::Color => colour(&path),
             voltra_render::render3d::TextureSpace::Data => data(&path),

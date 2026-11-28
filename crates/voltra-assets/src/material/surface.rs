@@ -245,7 +245,7 @@ impl SurfaceTexturePaths {
         ]
         .into_iter()
         .flatten()
-        .chain(self.custom.iter().map(|t| &t.path))
+        .chain(self.custom.iter().filter_map(|t| t.path.as_ref()))
     }
 }
 

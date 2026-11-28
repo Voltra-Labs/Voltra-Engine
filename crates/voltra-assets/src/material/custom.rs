@@ -61,8 +61,9 @@ impl CustomTextureFile {
 pub struct CustomTexturePath {
     /// What the shader calls it.
     pub name: String,
-    /// The image, from the asset root.
-    pub path: AssetPath,
+    /// The image, from the asset root; `None` for a slot named with no
+    /// image yet (white, as a standard slot left empty).
+    pub path: Option<AssetPath>,
     /// Colour or data.
     pub space: TextureSpace,
 }
@@ -97,15 +98,23 @@ impl CustomSurfaceSource {
 }
 
 /// The textures `textures` names, checked as asset paths, in name order —
-/// the order the shader binds them.
+/// the order the shader binds them. One with no path yet is a slot with no
+/// image: it reads white, and the shading still compiles.
 pub fn custom_texture_paths(
     textures: &BTreeMap<String, CustomTextureFile>,
 ) -> Result<Vec<CustomTexturePath>, String> {
     textures
         .iter()
         .map(|(name, file)| {
-            let path = AssetPath::new(file.path())
-                .map_err(|e| format!("texture {name:?} {:?}: {e}", file.path()))?;
+            let raw = file.path().trim();
+            let path = if raw.is_empty() {
+                None
+            } else {
+                Some(
+                    AssetPath::new(raw)
+                        .map_err(|e| format!("texture {name:?} {:?}: {e}", file.path()))?,
+                )
+            };
             Ok(CustomTexturePath {
                 name: name.clone(),
                 path,
