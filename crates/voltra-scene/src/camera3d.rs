@@ -3,9 +3,6 @@
 
 mod projection;
 
-use std::collections::HashSet;
-use std::sync::{Mutex, OnceLock};
-
 use voltra_ecs::{Entity, World};
 use voltra_render::render3d::View3D;
 
@@ -97,13 +94,11 @@ pub fn active(world: &World) -> Option<Entity> {
 
 /// The view `entity`'s camera describes at `aspect`, or `None` if it
 /// carries no [`Camera3D`]. A projection with a [`problem`](Projection3D::problem)
-/// is drawn with that field made drawable, and warned about once per
-/// entity and problem.
+/// is drawn with that field made drawable; saying so is the caller's, which
+/// knows its session (the frame warns once per camera and problem, the
+/// inspector shows it).
 pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<View3D> {
     let camera = world.get::<Camera3D>(entity)?;
-    if let Some(problem) = camera.projection.problem() {
-        warn_once(entity, problem);
-    }
     let placement = crate::hierarchy::world_matrix_3d(world, entity);
     Some(camera.projection.view(placement, aspect))
 }
@@ -111,17 +106,6 @@ pub fn view(world: &World, entity: Entity, aspect: f32) -> Option<View3D> {
 /// [`active`], then [`view`]: `None` when no 3D camera is active.
 pub fn active_view(world: &World, aspect: f32) -> Option<View3D> {
     view(world, active(world)?, aspect)
-}
-
-fn warn_once(entity: Entity, problem: &'static str) {
-    static SEEN: OnceLock<Mutex<HashSet<(Entity, &'static str)>>> = OnceLock::new();
-    let seen = SEEN.get_or_init(|| Mutex::new(HashSet::new()));
-    let first = seen
-        .lock()
-        .map_or(true, |mut seen| seen.insert((entity, problem)));
-    if first {
-        log::warn!("the Camera3D on {entity:?} cannot draw as set: {problem}");
-    }
 }
 
 #[cfg(test)]

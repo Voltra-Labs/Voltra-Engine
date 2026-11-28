@@ -94,7 +94,10 @@ impl Meshes {
                 missing: false,
             },
             MeshPath::File(file) => {
-                if self.warned.insert(file.clone()) {
+                // Looked up before inserting: asked every frame, a clone of
+                // the path each time would be an allocation per instance.
+                if !self.warned.contains(file) {
+                    self.warned.insert(file.clone());
                     log::warn!(
                         "mesh {} cannot load: no mesh file format is read yet (glTF is planned); \
                          drawing a magenta cube",

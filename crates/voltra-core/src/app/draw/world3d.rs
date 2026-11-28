@@ -5,6 +5,8 @@
 //! both draws its 2D camera as before and says once that it cannot draw
 //! the two together yet — one frame of both worlds is stage 136.
 
+use std::collections::HashSet;
+
 use voltra_assets::Meshes;
 use voltra_ecs::{Entity, World};
 use voltra_jobs::JobPool;
@@ -26,6 +28,9 @@ pub(in crate::app) struct World3D {
     jobs: Option<JobPool>,
     /// Whether the scene was told it holds a 2D and a 3D camera.
     mixed_warned: bool,
+    /// The cameras whose projection problem was said, and which: once per
+    /// camera and problem this session.
+    projection_warned: HashSet<(Entity, &'static str)>,
     /// Whether the editor's game view asked, during the last layout, to
     /// show the scene's 3D camera.
     pub game_view: bool,
@@ -70,6 +75,16 @@ impl World3D {
         let Some(view) = camera3d::view(world, camera, aspect) else {
             return;
         };
+        if let Some(problem) = world
+            .get::<Camera3D>(camera)
+            .and_then(|c| c.projection.problem())
+        {
+            if self.projection_warned.insert((camera, problem)) {
+                log::warn!(
+                    "the Camera3D on {camera:?} cannot draw as set: {problem}; drawn corrected"
+                );
+            }
+        }
         let meshes = self.meshes.get_or_insert_with(Meshes::new);
         meshes.upload(renderer.context().device());
         let long = world
@@ -85,6 +100,8 @@ impl World3D {
             None
         };
         self.list.rebuild(world, &view, meshes, jobs);
+        // One per mesh and winding, not per instance: made each frame, as
+        // it borrows this frame's meshes.
         let draws: Vec<MeshDraw3D<'_>> = self
             .list
             .draws
@@ -94,6 +111,7 @@ impl World3D {
                 Some(MeshDraw3D {
                     mesh,
                     instances: draw.instances.clone(),
+                    mirrored: draw.mirrored,
                 })
             })
             .collect();

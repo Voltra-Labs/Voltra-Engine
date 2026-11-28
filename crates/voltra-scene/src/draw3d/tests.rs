@@ -84,9 +84,9 @@ fn instances_of_a_mesh_are_one_draw_front_to_back() {
 fn zero_scale_despawned_and_broken_instances_are_not_drawn() {
     let mut world = World::new();
     let mut meshes = Meshes::new();
-    let flat = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -5.0));
+    let point = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -5.0));
     world.insert(
-        flat,
+        point,
         Transform3D::from_translation(Vec3::new(0.0, 0.0, -5.0)).with_scale(Vec3::ZERO),
     );
     let gone = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -4.0));
@@ -97,7 +97,7 @@ fn zero_scale_despawned_and_broken_instances_are_not_drawn() {
     assert_eq!(
         drawn(&list),
         2,
-        "the flat one is culled, the broken one left out"
+        "the collapsed one is culled, the broken one left out"
     );
     assert!(list.warned.contains(&broken), "and warned about");
     world.despawn(gone);
@@ -105,7 +105,7 @@ fn zero_scale_despawned_and_broken_instances_are_not_drawn() {
     assert_eq!(drawn(&list), 1);
     assert_eq!(list.instances[0].model[2][3], -6.0);
     world.despawn(kept);
-    world.despawn(flat);
+    world.despawn(point);
     world.despawn(broken);
     list.rebuild(&world, &view(None), &mut meshes, None);
     assert!(list.is_empty() && list.instances.is_empty());
@@ -163,4 +163,57 @@ fn a_long_list_culls_the_same_across_jobs() {
     assert_eq!(serial.instances, parallel.instances);
     assert_eq!(serial.draws, parallel.draws);
     assert_eq!(serial.draws.len(), BuiltinMesh::ALL.len());
+}
+
+#[test]
+fn a_flattened_or_tiny_mesh_is_drawn_and_a_line_is_not() {
+    let mut world = World::new();
+    let mut meshes = Meshes::new();
+    for (scale, at) in [
+        (Vec3::new(10.0, 0.0, 10.0), -5.0),
+        (Vec3::new(1.0, 0.0, 1.0), -6.0),
+        (Vec3::splat(1.0e-4), -7.0),
+        (Vec3::new(1.0, 0.0, 0.0), -8.0),
+    ] {
+        let e = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, at));
+        world.insert(
+            e,
+            Transform3D::from_translation(Vec3::new(0.0, 0.0, at)).with_scale(scale),
+        );
+    }
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    assert_eq!(drawn(&list), 3, "the line covers nothing");
+    assert!(list.warned.is_empty(), "and none is worth a warning");
+    let huge = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -9.0));
+    world.insert(
+        huge,
+        Transform3D::from_translation(Vec3::new(0.0, 0.0, -9.0)).with_scale(Vec3::splat(1.0e20)),
+    );
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    assert_eq!(drawn(&list), 3);
+    assert!(
+        list.warned.contains(&huge),
+        "an overflowing one is said once"
+    );
+}
+
+#[test]
+fn mirrored_instances_of_a_mesh_are_a_draw_of_their_own() {
+    let mut world = World::new();
+    let mut meshes = Meshes::new();
+    for (x, flip) in [(-2.0, 1.0), (0.0, -1.0), (2.0, 1.0)] {
+        let e = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(x, 0.0, -5.0));
+        world.insert(
+            e,
+            Transform3D::from_translation(Vec3::new(x, 0.0, -5.0))
+                .with_scale(Vec3::new(flip, 1.0, 1.0)),
+        );
+    }
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    assert_eq!(list.draws.len(), 2);
+    let mirrored: Vec<_> = list.draws.iter().filter(|d| d.mirrored).collect();
+    assert_eq!(mirrored.len(), 1);
+    assert_eq!(mirrored[0].instances.len(), 1);
+    let x = list.instances[mirrored[0].instances.start as usize].model[0][3];
+    assert_eq!(x, 0.0, "the flipped one");
 }

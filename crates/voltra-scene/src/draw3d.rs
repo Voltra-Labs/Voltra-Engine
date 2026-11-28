@@ -26,13 +26,18 @@ use crate::mesh_instance3d::MeshInstance3D;
 /// From how many instances culling is split across a [`JobPool`].
 pub const PARALLEL_FROM: usize = 4096;
 
-/// One instanced draw: `mesh`, once for each of the list's `instances`.
+/// One instanced draw: `mesh`, once for each of the list's `instances` —
+/// all mirrored or none.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Draw3D {
     /// The mesh drawn.
     pub mesh: Handle<Mesh3D>,
     /// Which of [`DrawList3D::instances`] draw it.
     pub instances: Range<u32>,
+    /// Whether they mirror space
+    /// ([`Instance3D::mirrored`](voltra_render::render3d::Instance3D::mirrored)):
+    /// drawn with clockwise fronts.
+    pub mirrored: bool,
 }
 
 /// What a 3D view draws this frame. Kept from frame to frame and rebuilt
@@ -46,7 +51,9 @@ pub struct DrawList3D {
     /// What this frame's rebuild looked at; kept for its storage.
     candidates: Vec<cull::Candidate>,
     /// The seen candidates' sort keys; kept for its storage.
-    keys: Vec<(u32, u32, f32, u32, u32)>,
+    keys: Vec<group::Key>,
+    /// The runs of one mesh the keys sort into; kept for its storage.
+    runs: Vec<group::Run>,
     /// How many mesh instances the last rebuild culled.
     culled: usize,
     /// Entities already warned about, so a broken one is said once.
@@ -83,6 +90,7 @@ impl DrawList3D {
         }
         cull::gather(world, meshes, &mut self.candidates, &mut self.warned);
         cull::cull(&mut self.candidates, view, jobs);
+        cull::report(&self.candidates, &mut self.warned);
         self.culled = self
             .candidates
             .iter()
@@ -91,6 +99,7 @@ impl DrawList3D {
         group::group(
             &self.candidates,
             &mut self.keys,
+            &mut self.runs,
             &mut self.instances,
             &mut self.draws,
         );
