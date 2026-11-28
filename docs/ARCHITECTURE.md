@@ -11011,7 +11011,9 @@ broken one is a material with an error, never a crash.
   surface (the default white, as in 137). Five textures, a bad name, a
   uniform that will not lay out, a binding of its own: the same fallback,
   each with its reason. `Material::surface` no longer hides a surface
-  behind an error.
+  behind an error. A texture named with no image yet (the inspector's
+  Add) is a slot that reads white, not an error: `CustomTexturePath::path`
+  is an `Option`, so the slots keep their order.
 - **The GPU side**: group 1 grows to binding 11 for every material — the
   custom block (a zeroed 256 bytes for a standard one) and four textures
   (white when unnamed) — so one pipeline layout serves all; 5 standard + 4
@@ -11023,10 +11025,65 @@ broken one is a material with an error, never a crash.
   `Renderer::custom_surface_material`; `is_current` compares the shading
   too. `SurfaceKey` gains `shader` (the revision) and `vertex`
   (`SurfaceVertex::Plain`, skinned is 155's) — the spec's full key with
-  the pass. `SurfaceBank` keeps modules by revision and lets a custom
-  shader's module and pipelines go `KEEP_USES` (600) shots after their
-  last draw — a material edited a hundred times does not keep a hundred —
-  the standard's for its life.
+  the pass. **`SurfaceBank` keeps a custom shader while a material holds
+  it**: a `Weak` to its `Arc<SurfaceShader>`, its module and pipelines let
+  go once that no longer upgrades — an edited material's old shader, a
+  closed preview's draft — and never because it was not drawn for a while
+  (the first fix counted 600 shots, so a culled or absent material's
+  pipelines were rebuilt, a hitch, when it came back). The standard's are
+  kept for the bank's life.
+- **What naga passes, a GPU may still refuse — never a black frame.**
+  naga 30 lifts WGSL's fragment uniformity rule
+  (`DISABLE_UNIFORMITY_REQ_FOR_FRAGMENT_STAGE`, `valid/analyzer.rs`),
+  Chromium's Tint holds it: a `textureSample` or `dpdx` inside an `if`, or
+  `standard_surface(in)` called there, passes the load-time check, then
+  Tint refuses the module, and every command buffer drawing with a
+  pipeline built from it is invalid — the reviewer's branchy `scroll.wgsl`
+  blacked out the whole WebGPU frame. So `SurfaceBank` makes a custom
+  shader's module and each of its pipelines **inside a validation error
+  scope** (`surface/check.rs`, `GpuCheck`), and draws them only once the
+  scope has answered with nothing; until then — at once on wgpu-core, a
+  promise later on WebGPU — and for good if it answers with an error, the
+  draws use the standard pipeline of the same alpha, sides and winding,
+  so the material shows its standard block, and the refusal is logged once
+  with the GPU's own message (Tint's, with its caret) and a hint (sample
+  first, then `select`). **On WebGPU the scope is the browser's own**
+  (`webgpu_errors.rs`, through `Device::as_webgpu`): wgpu 30's WebGPU
+  backend panics converting the `GPUValidationError` a scope hands back
+  ("Unexpected error", `Error::from_js`), found by the web test.
+  **Uncaptured errors log instead of panicking**, engine-wide
+  (`context/errors.rs`): wgpu's default handler panics on any; ours logs
+  each distinct message once and counts them
+  (`GpuContext::uncaptured_errors`), through the browser's
+  `onuncapturederror` on WebGPU for the same reason. A lost device is not
+  one of these: its own callback still says so as an error. Two cases
+  are refused at load instead, natively, because they would fail at
+  pipeline creation on every backend or on WebGL2 alone: an `override`
+  (the engine sets no pipeline constants; one left unset panics in
+  `create_render_pipeline`), and anything naga cannot write as WebGL2's
+  GLSL ES 300 — `textureNumLevels`, `pack4x8unorm` — checked per entry
+  point by `naga::back::glsl` (a direct `naga` dependency of
+  voltra-render, for its `glsl-out`), only when the composed text changes.
+- **Colour buttons write only on change**, everywhere in the editor
+  (`panels/colour_edit.rs`): egui's `color_edit_button_*` round-trips the
+  colour through HSV each frame it is drawn and writes the result back —
+  about nine colours in ten an ulp off — so a field handed to it directly
+  changed while merely shown: selecting a mesh rewrote its
+  `.material.ron` and reloaded it (the standard block's colours, stage
+  137's), a sprite material's colour uniform (stage 83's) and every
+  component colour drifted under a still inspector. `rgba` / `rgb` take a
+  copy and assign it on `changed()`; all 25 call sites go through them.
+- **Materials are trusted content**, as in Godot and Unity: a
+  `surface()` that loops forever is a lost device, and a huge source costs
+  naga's parse, validation and GLSL writing on the main thread when it
+  loads. Nothing here sandboxes a shader; the checks are for mistakes, not
+  malice.
+- **Draw order groups by shader** within an alpha class, sides and
+  winding (`draw3d/group.rs`): the order key holds 16 bits of the shader's
+  revision (0 for the standard) between the pipeline bits and the
+  material's slot, so the materials of one custom shader sit together and
+  the pass switches pipelines once per shader, not per material. A clash
+  of two shaders' bits only interleaves them.
 - **Hot reload**: `Materials::reload` already reloaded every material
   naming a changed shader, but **the file watch dropped `.wgsl`** — no
   texture, scene or project extension — so editing a stage-83 sprite
@@ -11037,8 +11094,7 @@ broken one is a material with an error, never a crash.
 - **Editor**: under the standard block, **custom surface**: the shader's
   path (dropped or typed), `lighting`, a field per uniform (a colour past 1
   — light, not paint — as four numbers, since the picker would clamp it;
-  any value written only when changed, as the picker's HSV round trip
-  drifted an HDR colour and rewrote the file just by being shown), a row
+  any value written only when changed), a row
   per texture (path, Color/Data), each removable, and rows to add a
   uniform of a kind or a texture (four at most). **The live preview
   recompiles on edit, not on frame** (`surface_doc/draft.rs`): the draft is
@@ -11057,7 +11113,7 @@ broken one is a material with an error, never a crash.
   mistyped `surface()` refused; five textures and bad names refused, four
   fit as 9 of 12 sampled textures; an own binding refused, one past the
   named textures too; the block 16, 32, 16 bytes for a lone `vec2`, a lone
-  `f32`, none), `headless_surface_custom.rs` (the shipped world tint at 8
+  `f32`, none), `headless_surface_custom.rs` and `_bank.rs` (the shipped world tint at 8
   pixels within 1/255 of `mix(start, end, fract(x / period))`, the square
   moved under the view and the colour unmoved; the shipped scroll moving a
   4-texel strip one texel a second at 0–3 s and at 3601 s (wrapped); a
@@ -11065,7 +11121,7 @@ broken one is a material with an error, never a crash.
   the shipped dissolve cutting texels 0 and 100 and keeping 140 and 255
   against 0.45, at 1 and 4 samples; a custom surface returning the
   standard drawing the standard pixel for pixel, lit; an edited shader's
-  pipelines let go after `KEEP_USES` shots, the standard's kept; the four
+  pipelines let go once no material holds it, the standard's kept; the four
   on spheres, the dissolved one with holes), voltra-assets'
   `materials/custom_tests.rs` (the shipped dissolve composed, its block's
   offsets 0 and 16, its texture after the standard's as data; a broken
@@ -11086,6 +11142,35 @@ broken one is a material with an error, never a crash.
   Web: `custom3d.mjs` on WebGPU and WebGL2 — the bands in the native
   frame's colours within 6 (3 900 and 9 900 pixels on each), the rim 362
   on each, no magenta; it found the 16-byte rule.
+- **The review's fixes are pinned by** `surface/bank_tests.rs` (a shader
+  binding what the layout lacks, made unchecked, caught in its scope:
+  marked broken, its draws on the standard's pipeline, 0 uncaptured
+  errors, not made again, its mark gone with its last holder),
+  `headless_surface_custom_bank.rs` (a held shader kept through 1000
+  shots undrawn, let go the shot after its last `Arc` drops),
+  `custom_tests.rs` (an `override` refused; `textureNumLevels` and
+  `pack4x8unorm` refused as WebGL2 cannot run them, the standard writing
+  as GLSL ES 300; a texture named `standard`, `frame`, `surface_uv`,
+  `Surface`, `fs_mask` or `material` refused by name, one clashing with
+  the source's own function reported at `wgsl:1:`; the uniformity opt-out
+  taken as the source's first line), `material/compose.rs` (a sprite
+  material's block 16 bytes for a lone `f32` or `vec2`),
+  `panels/colour_edit.rs` (64 colours shown three frames each through
+  `rgba` and `rgb` bit for bit, while the plain button changed more than
+  10 of them), `draw3d/material_tests.rs` (two materials of one custom
+  shader drawn together after the standard's, though a standard one's
+  slot lies between theirs), voltra-assets' `custom_tests.rs` (a texture
+  named with no image a white slot, the shading compiled),
+  `voltra-core/tests/custom3d.rs` (the branchy sphere its own yellow
+  natively, AgX ±2) and `custom3d.mjs` — on WebGPU the branchy sphere is
+  its standard block's red (6 724 pixels, none yellow) and every other
+  material draws, the refusal logged once with Tint's message; on WebGL2
+  it is yellow (6 733), as natively.
+- **Bench** (`draw3d`, release, this container) after the shader group
+  joined the order key: `cull-group/10k` 1.23 ms, `cull-group-jobs/10k`
+  1.12 ms against stage 137's 1.47 and 1.34 — `voltra-bench compare`: no
+  regression (the container's noise is of this size; the key is still 24
+  bytes, the candidate 2 bytes longer).
 - **What the engines do**: Godot's spatial shader writes `ALBEDO`,
   `ROUGHNESS`, `NORMAL`… into the engine's lighting, `render_mode
   unshaded` compiles it out, `TIME` wraps at an hour by default, a
@@ -11103,12 +11188,16 @@ broken one is a material with an error, never a crash.
   mipmaps; a preview that animates (a preview of a time-driven surface is
   drawn once, at time 0, and again when the material changes); line
   numbers of a 2D sprite material's errors (its source still follows the
-  prelude); the editor's loop waking on a file change by itself — the
+  prelude); a 2D sprite material Tint refuses — its pipelines are not
+  made in a scope yet, so on WebGPU it invalidates the frame's sprite
+  pass, as before (stage 83's `MaterialBank` would take the same
+  `GpuCheck`); the editor's loop waking on a file change by itself — the
   watch is drained when the loop next runs, so a change on disk shows
-  with the next event (pre-existing, 2D alike); stage 83's sprite
-  materials compose a uniform struct of its raw size, so a sprite
-  material of one `f32` or `vec2` would fail on WebGL2 (left as stage 83
-  shipped it: no shipped one does).
+  with the next event (pre-existing, 2D alike). **Fixed in review**: stage
+  83's sprite materials composed their uniform struct at its raw size, so
+  one `f32` or `vec2` failed on WebGL2 with `UnalignedShader` (a panic);
+  `material::compose` now declares it with `wgsl_struct_aligned`, pinned
+  by `compose.rs`.
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
@@ -11880,6 +11969,12 @@ Verified against the crate source, not from memory:
 | Uniform sizes on WebGL2 | Without `DownlevelFlags::BUFFER_BINDINGS_NOT_16_BYTE_ALIGNED` (GLES, WebGL2 included) a uniform binding's WGSL type must be a multiple of 16 bytes, checked at `create_render_pipeline`: a struct of one `f32` or `vec2` fails there and only there. `@align(16)` on the first member raises the struct's alignment, and so rounds its size, without moving a field; naga reports it as the struct type's `span` |
 | WGSL module scope | naga's WGSL front end resolves module-scope names in any order (`front/wgsl/index.rs`), so a composer may put a user's source first and its errors carry the user's own line numbers |
 | Checking bindings | `naga::GlobalVariable { name, space, binding: Option<ResourceBinding { group, binding }>, .. }`: a composed shader's bindings are checked against the pipeline layout's before `create_shader_module`, since a mismatch is a device error, not a returned one |
+| Fragment uniformity | naga 30's validator skips WGSL's uniformity rule in the fragment stage (`DISABLE_UNIFORMITY_REQ_FOR_FRAGMENT_STAGE`, `valid/analyzer.rs`), so a native check cannot see what Tint refuses; `diagnostic(off, derivative_uniformity);` as a module's first line opts out on both |
+| Error scopes | `device.push_error_scope(ErrorFilter::Validation)` answers an `ErrorScopeGuard`; `guard.pop()` a future of `Option<Error>`, ready at once on wgpu-core (`ready(..)`, `backend/wgpu_core.rs`), a JS promise on WebGPU — poll it with `Waker::noop()` each frame rather than block. Scopes are thread-local and popped in reverse order (a mismatch panics) |
+| WebGPU errors | wgpu 30's WebGPU backend converts a browser error with `dyn_ref::<GpuValidationError>()`, which fails for Chrome's `GPUValidationError`s, and panics ("Unexpected error", `backend/webgpu.rs`, `Error::from_js`) — from a popped scope and from `on_uncaptured_error` alike. Read them through `Device::as_webgpu()` (the `GPUDevice`) with `js_sys::Reflect`: `pushErrorScope`, `popErrorScope`, `onuncapturederror`, each error's `message` |
+| Uncaptured errors | Without `Device::on_uncaptured_error(Arc<dyn Fn(Error) + Send + Sync>)` an uncaptured error panics (`default_error_handler`); a lost device is not one — `set_device_lost_callback` hears it |
+| Unset overrides | A WGSL `override` without a default and without a value in `PipelineCompilationOptions::constants` fails `create_render_pipeline` (a panic through the default handler); `naga::Module::overrides` lists them |
+| GLSL ES 300 | `naga::back::glsl::Writer::new(out, &module, &info, &Options { version: Version::Embedded { version: 300, is_webgl: true }, writer_flags, binding_map, .. }, &PipelineOptions { shader_stage, entry_point, multiview: None }, BoundsCheckPolicies::default())` then `write()` — what wgpu's GL backend runs (`wgpu-hal/src/gles/device.rs`); it refuses `textureNumLevels` (`Features(TEXTURE_LEVELS)`) and `pack4x8unorm`. `glsl-out` is a naga feature wgpu turns on only with its GL backend |
 
 When touching wgpu, read the vendored source under
 `~/.cargo/registry/src/index.crates.io-*/wgpu-30.0.0/src/api/` or query Context7

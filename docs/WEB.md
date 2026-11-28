@@ -131,8 +131,20 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   (`DownlevelFlags::BUFFER_BINDINGS_NOT_16_BYTE_ALIGNED`, checked when the
   pipeline is made), so a custom surface's `struct Material` is aligned
   to 16 — a material of one `vec2` failed there and only there.
-  `custom3d.mjs` requires the native frame's colours for a data texture
-  read unlit and a dissolve's rim on both.
+  A sprite material's struct is aligned the same way since. What naga
+  cannot write as GLSL ES 300 (`textureNumLevels`, `pack4x8unorm`) is
+  refused when the material loads, on every platform.
+- **WebGPU holds WGSL's uniformity rule; naga does not.** A texture
+  sampled inside a branch on a per-pixel value validates natively and
+  runs on WebGL2, but Tint refuses the module. A custom surface's module
+  and pipelines are made in an error scope — the `GPUDevice`'s own, since
+  wgpu 30 panics converting a WebGPU error — and drawn only once it has
+  answered; refused, the material draws its standard block and the
+  console says why, once. Uncaptured GPU errors are logged, not a panic,
+  through `onuncapturederror` on WebGPU.
+- `custom3d.mjs` requires the native frame's colours for a data texture
+  read unlit and a dissolve's rim on both, and a deliberately branchy
+  material's standard block on WebGPU (its own colour on WebGL2).
 
 ## Checking a web build
 

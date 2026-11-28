@@ -57,6 +57,14 @@ stages land, for the 0.5 entry.
   `vertex`, `Scene3D` gains `time` and `FrameUniform3D::new` takes it.
   The file watch now reports `.wgsl` files, so editing a sprite or
   surface material's shader on disk reloads it.
+- **GPU errors no scope catches are logged, not a panic** (stage 138
+  review): `GpuContext::uncaptured_errors` counts them. A custom surface
+  shader the GPU refuses draws its material's standard block.
+  `SurfaceBank::prepare` takes the shader's `Arc`, and the bank keeps a
+  custom shader while a material holds it. `CustomTexturePath::path` is
+  an `Option` (a texture named with no image yet). A sprite material's
+  uniform struct is declared 16-byte aligned, so one of a single `f32` or
+  `vec2` runs on WebGL2.
 
 ## [0.4.0] — 2026-11-27
 
