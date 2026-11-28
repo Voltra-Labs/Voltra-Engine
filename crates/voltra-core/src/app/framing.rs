@@ -33,7 +33,8 @@ impl SceneFraming {
     /// in the log is more use than an empty one.
     pub(super) fn apply(&mut self, world: &World, camera: &mut View2D) {
         let Some(view) = voltra_scene::camera::active_view(world, camera.aspect) else {
-            if !self.warned {
+            // A 3D camera draws the frame itself (`draw/world3d.rs`).
+            if !self.warned && voltra_scene::camera3d::active(world).is_none() {
                 log::warn!("no active camera in the scene: drawing through the default view");
                 self.warned = true;
             }

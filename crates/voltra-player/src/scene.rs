@@ -29,13 +29,18 @@ pub fn load(path: &Path) -> Result<World, SceneError> {
 /// "my game looks wrong" into "my camera is not enabled".
 pub fn describe(world: &World, path: &Path) {
     let entities = world.query::<voltra_scene::SceneId>().count();
-    match camera::active(world) {
-        Some(entity) => log::info!(
+    match (camera::active(world), voltra_scene::camera3d::active(world)) {
+        (Some(entity), _) => log::info!(
             "loaded {} ({entities} entities), rendering through camera {}",
             path.display(),
             entity.index()
         ),
-        None => log::info!(
+        (None, Some(entity)) => log::info!(
+            "loaded {} ({entities} entities), rendering through 3D camera {}",
+            path.display(),
+            entity.index()
+        ),
+        (None, None) => log::info!(
             "loaded {} ({entities} entities), with no active camera",
             path.display()
         ),
