@@ -1,0 +1,13 @@
+// A shader WebGPU refuses (materials/branchy.wgsl): yellow where it runs,
+// its standard block — flat red — where it does not. scenes/custom3d.ron;
+// what crates/voltra-player/web/test/custom3d.mjs checks on both backends.
+(
+    version: 1,
+    domain: Surface,
+    shader: "materials/branchy.wgsl",
+    lighting: Unlit,
+    standard: (
+        base_color: (0.8, 0.08, 0.06, 1.0),
+        unlit: true,
+    ),
+)

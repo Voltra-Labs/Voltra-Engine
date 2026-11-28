@@ -1,7 +1,8 @@
 //! Custom surface materials through the engine's own frame, headless: the
 //! shipped `scenes/custom3d.ron` — a floor tinted by world position, a
 //! sphere dissolving into noise with a glowing cut, stripes sliding across
-//! another, a data texture's bytes shown unlit — and the dissolve's shader
+//! another, a data texture's bytes shown unlit, a shader only WebGPU
+//! refuses drawn as itself — and the dissolve's shader
 //! broken and mended under a running session, as the editor's file watch
 //! reloads it. Each skips without a GPU adapter.
 //!
@@ -19,7 +20,7 @@ const WIDTH: u32 = 480;
 const HEIGHT: u32 = 270;
 
 /// What the sample draws from, copied so a test may edit it.
-const FILES: [&str; 10] = [
+const FILES: [&str; 12] = [
     "scenes/custom3d.ron",
     "materials/world_tint.material.ron",
     "materials/world_tint.wgsl",
@@ -28,6 +29,8 @@ const FILES: [&str; 10] = [
     "materials/scroll.material.ron",
     "materials/scroll.wgsl",
     "materials/bands.material.ron",
+    "materials/branchy.material.ron",
+    "materials/branchy.wgsl",
     "textures/noise.png",
     "textures/stripes.png",
 ];
@@ -163,6 +166,15 @@ fn the_custom_sample_draws_each_material_as_its_shader_says() {
         "bands {bands:?}, the data through AgX {as_data:?}"
     );
     assert!(!as_colour.iter().any(|want| near(bands, *want, 6)));
+    // The branchy shader breaks WebGPU's uniformity rule, which naga lifts:
+    // natively it runs — its own yellow, unlit, through AgX — where WebGPU
+    // draws its standard block's red (custom3d.mjs).
+    let branchy = at(&shot, pixel_of(world, centre_of(world, "Branchy")));
+    let yellow = encode(agx.apply([0.9, 0.75, 0.1]));
+    assert!(
+        near(branchy, yellow, 2),
+        "branchy {branchy:?}, its own {yellow:?}"
+    );
     // The dissolve glows along its cut; the scroll is its stripes.
     let dissolve = pixel_of(world, centre_of(world, "Dissolve"));
     assert!(

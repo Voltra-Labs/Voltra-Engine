@@ -1,7 +1,8 @@
 // Custom surface materials under one directional light: a floor tinted by
 // world position, a sphere dissolving into a noise texture with a glowing
-// cut, one with stripes sliding across it, and one showing a data texture's
-// bytes unlit. What crates/voltra-core/tests/custom3d.rs and
+// cut, one with stripes sliding across it, one showing a data texture's
+// bytes unlit, and a small one whose shader WebGPU refuses (yellow where it
+// runs, its standard block's red where it does not). What crates/voltra-core/tests/custom3d.rs and
 // crates/voltra-player/web/test/custom3d.mjs draw.
 (
     version: 2,
@@ -59,6 +60,14 @@
                 "MeshInstance3D": (mesh:"builtin:sphere",material:Some(Path("materials/bands.material.ron"))),
                 "Name": "Bands",
                 "Transform3D": (translation:(2.4,0.8,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.5,1.5,1.5)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000008",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere",material:Some(Path("materials/branchy.material.ron"))),
+                "Name": "Branchy",
+                "Transform3D": (translation:(0.0,0.4,2.4),rotation:(0.0,0.0,0.0,1.0),scale:(0.6,0.6,0.6)),
             },
         ),
     ],
