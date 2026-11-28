@@ -259,24 +259,10 @@ fn is_scene_file(text: &str) -> bool {
     ron::from_str::<Probe>(text).is_ok()
 }
 
-/// The comment lines (and blank lines among them) a file opens with: kept
-/// over a rewrite, which would otherwise drop them.
+/// The comment block `text` starts with: [`voltra_assets::leading_comments`],
+/// which the editor's material writer keeps the same way.
 fn header(text: &str) -> &str {
-    let mut end = 0;
-    for line in text.split_inclusive('\n') {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with("//") {
-            end += line.len();
-        } else {
-            break;
-        }
-    }
-    // Leading blank lines alone are not a header.
-    if text[..end].trim().is_empty() {
-        ""
-    } else {
-        &text[..end]
-    }
+    voltra_assets::leading_comments(text)
 }
 
 /// `text`, a scene file of any version, as an editor save of it writes it:

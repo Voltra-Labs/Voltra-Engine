@@ -97,6 +97,72 @@ impl StandardFile {
         *self == Self::default()
     }
 
+    /// The block with every number that is not finite — RON reads `NaN`
+    /// and `inf` — replaced by its default, and the names of the fields
+    /// replaced. A NaN never equals itself, so left in it would make every
+    /// cache comparing materials see a new one each frame.
+    pub fn finite(&self) -> (Self, Vec<&'static str>) {
+        let d = Self::default();
+        let mut out = self.clone();
+        let mut replaced = Vec::new();
+        let mut fix = |name: &'static str, values: &mut [f32], defaults: &[f32]| {
+            if values.iter().any(|v| !v.is_finite()) {
+                values.copy_from_slice(defaults);
+                replaced.push(name);
+            }
+        };
+        fix("base_color", &mut out.base_color, &d.base_color);
+        fix(
+            "metallic",
+            std::slice::from_mut(&mut out.metallic),
+            &[d.metallic],
+        );
+        fix(
+            "roughness",
+            std::slice::from_mut(&mut out.roughness),
+            &[d.roughness],
+        );
+        fix(
+            "normal_scale",
+            std::slice::from_mut(&mut out.normal_scale),
+            &[d.normal_scale],
+        );
+        fix(
+            "occlusion_strength",
+            std::slice::from_mut(&mut out.occlusion_strength),
+            &[d.occlusion_strength],
+        );
+        fix("emissive", &mut out.emissive, &d.emissive);
+        fix(
+            "emissive_strength",
+            std::slice::from_mut(&mut out.emissive_strength),
+            &[d.emissive_strength],
+        );
+        if let AlphaMode::Mask(cutoff) = &mut out.alpha {
+            fix(
+                "alpha",
+                std::slice::from_mut(cutoff),
+                &[AlphaMode::DEFAULT_CUTOFF],
+            );
+        }
+        fix(
+            "uv_transform.offset",
+            &mut out.uv_transform.offset,
+            &[0.0, 0.0],
+        );
+        fix(
+            "uv_transform.scale",
+            &mut out.uv_transform.scale,
+            &[1.0, 1.0],
+        );
+        fix(
+            "uv_transform.rotation",
+            std::slice::from_mut(&mut out.uv_transform.rotation),
+            &[0.0],
+        );
+        (out, replaced)
+    }
+
     /// The numbers, without the images.
     pub fn surface(&self) -> StandardSurface {
         StandardSurface {

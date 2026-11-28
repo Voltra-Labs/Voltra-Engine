@@ -41,6 +41,22 @@ impl Uniform {
         }
     }
 
+    /// Whether every number in it is finite.
+    pub fn is_finite(&self) -> bool {
+        self.floats().iter().all(|f| f.is_finite())
+    }
+
+    /// The same kind with every number that is not finite made 0, as a
+    /// uniform block writes it.
+    pub fn finite(&self) -> Self {
+        let f = |v: f32| if v.is_finite() { v } else { 0.0 };
+        match *self {
+            Self::Float(a) => Self::Float(f(a)),
+            Self::Vec2((a, b)) => Self::Vec2((f(a), f(b))),
+            Self::Color((a, b, c, d)) => Self::Color((f(a), f(b), f(c), f(d))),
+        }
+    }
+
     /// Whether `other` is of the same type.
     pub fn same_kind(&self, other: &Self) -> bool {
         std::mem::discriminant(self) == std::mem::discriminant(other)

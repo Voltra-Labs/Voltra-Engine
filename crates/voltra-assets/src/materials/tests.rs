@@ -178,3 +178,69 @@ fn a_surface_material_written_by_the_editor_reads_back_the_same() {
     let back: MaterialFile = ron::from_str(&text).expect("read back");
     assert_eq!(back, file);
 }
+
+#[test]
+fn numbers_that_are_not_finite_read_as_defaults_and_say_so() {
+    let root = scratch_root();
+    write(
+        &root,
+        "materials/nan.material.ron",
+        "(version: 1, domain: Surface, standard: (roughness: NaN, \
+         base_color: (1.0, inf, 1.0, 1.0), alpha: Mask(-inf)))",
+    );
+    write(&root, "materials/flash.wgsl", FLASH);
+    write(
+        &root,
+        "materials/flash.material.ron",
+        r#"(version: 1, shader: "materials/flash.wgsl", uniforms: {"amount": Float(NaN), "tint": Color((1.0, 1.0, 1.0, 1.0))})"#,
+    );
+    let mut materials = Materials::new(&root);
+    let surface = materials.load(&path("materials/nan.material.ron"));
+    let surface = materials.get(surface).expect("loaded");
+    let standard = surface.surface().expect("still drawn").standard;
+    let default = crate::StandardFile::default();
+    assert_eq!(standard.roughness, default.roughness);
+    assert_eq!(standard.base_color, default.base_color);
+    assert_eq!(
+        standard.alpha,
+        voltra_render::render3d::AlphaMode::Mask(
+            voltra_render::render3d::AlphaMode::DEFAULT_CUTOFF
+        )
+    );
+    // A NaN never equals itself; a sanitised material equals its next read.
+    assert_eq!(surface.surface(), surface.clone().surface());
+    assert_eq!(surface.warnings.len(), 3, "{:?}", surface.warnings);
+    let sprite = materials.load(&path("materials/flash.material.ron"));
+    let sprite = materials.get(sprite).expect("loaded");
+    assert!(sprite.is_usable());
+    assert_eq!(
+        sprite.defaults.get("amount"),
+        Some(&voltra_render::material::Uniform::Float(0.0))
+    );
+    assert_eq!(sprite.warnings.len(), 1, "{:?}", sprite.warnings);
+}
+
+#[test]
+fn a_block_the_domain_does_not_read_is_warned_about() {
+    let root = scratch_root();
+    write(&root, "materials/flash.wgsl", FLASH);
+    write(
+        &root,
+        "materials/both.material.ron",
+        r#"(version: 1, shader: "materials/flash.wgsl", uniforms: {"amount": Float(0.0), "tint": Color((1.0, 1.0, 1.0, 1.0))}, standard: (metallic: 1.0))"#,
+    );
+    write(
+        &root,
+        "materials/surface.material.ron",
+        r#"(version: 1, domain: Surface, uniforms: {"amount": Float(0.0)})"#,
+    );
+    let mut materials = Materials::new(&root);
+    for (name, says) in [("both", "standard"), ("surface", "uniforms")] {
+        let handle = materials.load(&path(&format!("materials/{name}.material.ron")));
+        let warnings = &materials.get(handle).expect("loaded").warnings;
+        assert!(
+            warnings.iter().any(|w| w.contains(says)),
+            "{name}: {warnings:?}"
+        );
+    }
+}

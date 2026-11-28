@@ -135,6 +135,10 @@ pub struct Material {
     pub revision: u64,
     /// Why the material cannot be drawn with, or `None` when it can.
     pub error: Option<String>,
+    /// What the file says that is ignored or replaced — a number that is
+    /// not finite, a block the domain does not read — said once each time
+    /// the file is read.
+    pub warnings: Vec<String>,
 }
 
 impl Default for Material {
@@ -149,6 +153,7 @@ impl Default for Material {
             defaults: BTreeMap::new(),
             revision: 0,
             error: Some("no material".to_owned()),
+            warnings: Vec::new(),
         }
     }
 }
@@ -162,6 +167,19 @@ impl Material {
             defaults: file.uniforms.clone(),
             ..Self::default()
         };
+        for (name, value) in &mut material.defaults {
+            if !value.is_finite() {
+                *value = value.finite();
+                material.warnings.push(format!(
+                    "uniform {name:?} is not a finite number; 0 instead"
+                ));
+            }
+        }
+        if !file.standard.is_default() {
+            material.warnings.push(
+                "a sprite material's `standard` block is ignored (it is a surface's)".to_owned(),
+            );
+        }
         if file.version > MATERIAL_VERSION {
             material.error = Some(format!(
                 "version {} is newer than {MATERIAL_VERSION}",
@@ -211,7 +229,19 @@ impl Material {
             ));
             return material;
         }
-        match file.standard.resolve() {
+        if !file.uniforms.is_empty() {
+            material.warnings.push(
+                "a surface material's `uniforms` are ignored (they are a sprite shader's)"
+                    .to_owned(),
+            );
+        }
+        let (standard, replaced) = file.standard.finite();
+        for field in replaced {
+            material.warnings.push(format!(
+                "standard.{field} is not a finite number; its default instead"
+            ));
+        }
+        match standard.resolve() {
             Ok(surface) => {
                 material.surface = Some(surface);
                 material.error = None;

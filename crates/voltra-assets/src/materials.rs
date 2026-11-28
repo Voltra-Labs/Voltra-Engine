@@ -89,6 +89,9 @@ impl Materials {
             },
         };
         material.revision = self.revision;
+        for warning in &material.warnings {
+            log::warn!("material {}: {warning}", path.as_str());
+        }
         if let Some(error) = &material.error {
             let drawn = match material.domain {
                 MaterialDomain::Sprite => "its sprites draw plainly",
@@ -103,15 +106,7 @@ impl Materials {
     }
 
     fn read_file(&self, path: &AssetPath) -> Result<MaterialFile, AssetError> {
-        let full = self.root.join(path.as_str());
-        let text = crate::fs::read_to_string(&full).map_err(|source| AssetError::Read {
-            path: full.clone(),
-            source,
-        })?;
-        ron::from_str(&text).map_err(|source| AssetError::Parse {
-            path: full,
-            source: Box::new(source),
-        })
+        read_material_file(&self.root, path)
     }
 
     /// A sprite material's shader: its path and its text.
@@ -149,6 +144,21 @@ impl Materials {
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }
+}
+
+/// The material file at `path` under `root`, read and parsed but not
+/// checked: what a scene's loader reads on a worker to find the images a
+/// surface names before its meshes spawn.
+pub fn read_material_file(root: &Path, path: &AssetPath) -> Result<MaterialFile, AssetError> {
+    let full = root.join(path.as_str());
+    let text = crate::fs::read_to_string(&full).map_err(|source| AssetError::Read {
+        path: full.clone(),
+        source,
+    })?;
+    ron::from_str(&text).map_err(|source| AssetError::Parse {
+        path: full,
+        source: Box::new(source),
+    })
 }
 
 #[cfg(test)]

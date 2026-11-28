@@ -11,6 +11,7 @@ pub mod atlas;
 pub mod atlases;
 pub mod browse;
 pub mod clips;
+pub mod comments;
 pub mod error;
 pub mod fonts;
 pub mod fs;
@@ -33,13 +34,14 @@ pub use atlas::{Atlas, AtlasError, AtlasFile, Frame, FrameEntry, FrameMeta, Grid
 pub use atlases::Atlases;
 pub use browse::{Entry, EntryKind};
 pub use clips::{ClipSettings, Clips, CLIP_SETTINGS_VERSION};
+pub use comments::leading_comments;
 pub use error::AssetError;
 pub use fonts::{Font, Fonts, DEFAULT_FONT};
 pub use handle::Handle;
 pub use material::{
     Material, MaterialDomain, MaterialFile, StandardFile, SurfaceSource, SurfaceTexturePaths,
 };
-pub use materials::Materials;
+pub use materials::{read_material_file, Materials};
 pub use meshes::{BuiltinMesh, MeshPath, Meshes, ResolvedMesh};
 pub use path::AssetPath;
 pub use root::{default_root, ROOT_ENV};
