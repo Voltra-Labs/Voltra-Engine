@@ -10675,7 +10675,14 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   (the numbers and the texture paths, checked as asset paths); a surface
   material naming a `shader` is refused until custom surfaces (138) rather
   than drawn as something it does not say. `MaterialFile::to_ron` is the
-  editor's writer.
+  editor's writer. **A number that is not finite** — RON reads `NaN` and
+  `inf` — reads as its default (`StandardFile::finite`; a sprite
+  material's uniform default as 0, as its block already wrote it), and a
+  block the domain does not read (`uniforms` in a surface file, `standard`
+  in a sprite's) is ignored: each said once a read
+  (`Material::warnings`). A NaN never equals itself, so left in it made
+  every cache comparing materials — the GPU material, the preview, the
+  inspector's draft against the file — see a new one each frame.
 - **Render** (`render3d/surface/`): `StandardSurface` (the numbers; its
   `DEFAULT` white, metallic 0, roughness 0.5 — Bevy's; Godot's roughness is
   1, Unity's smoothness 0.5 — and `UNLIT`), `SurfaceUniform` (96 bytes,
@@ -10703,11 +10710,22 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   (glTF's, Filament's reflectance 0.5), perceptual roughness squared and
   floored at 0.045 (Filament's, under which a highlight is narrower than a
   half float holds), `n·v = |n·v| + 10⁻⁵`. The ambient is a uniform sky of
-  that radiance: diffuse `albedo · L` (its irradiance π·L over Lambert's
-  π), specular `L · (f0·A + B)` with A and B from Karis's analytic fit of
-  the split sum's table — a constant environment's exact specular, near
-  enough, until an HDR sky (141) gives the real one; occlusion darkens the
+  that radiance: specular `E · L` with `E = f0·A + B`, A and B from Karis's
+  analytic fit of the split sum's table — a constant environment's exact
+  specular, near enough — and diffuse `albedo · (1 − E) · L` (its
+  irradiance π·L over Lambert's π, less what the specular took, Filament's
+  energy split), so a white rough dielectric under a white sky reflects 1
+  to 10⁻². **Stage 141 inherits the `(1 − E)`**: its prefiltered cube and
+  BRDF table replace L and the fit, not the split. Occlusion darkens the
   ambient only, as in Filament. Emissive adds; unlit is the base colour.
+  **The sum is capped at `MAX_LIGHT` = 4096 a channel** (`brdf::MAX_LIGHT`
+  on the CPU): a mirror-smooth highlight near grazing reaches some 10⁵ at
+  energy 1 and emissive is unbounded, and past 65504 an `Rgba16Float`
+  texel is infinite — bloom's threshold (inf / inf) and Reinhard's and
+  ACES's ratios then turned it to NaN, which spread over the glow. 4096 is
+  low enough that bloom's levels, summed, stay finite; bloom's taps are
+  clamped to it too, and the curves' input to 65504 (`Tonemap::MAX_INPUT`),
+  so an infinite texel from anywhere upstream cannot make a NaN.
   The view direction is the eye's in perspective and the view's own in
   orthographic (the uniform's `eye.w`). **Every texture is sampled before
   any choice**, `select` for the rest: Tint's uniformity rule, which cost
@@ -10735,7 +10753,8 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   it is **alpha to coverage** (`fs_mask_coverage`), alpha sharpened to a
   pixel-wide ramp about the cutoff (`(α − cutoff) / fwidth(α) + ½`, Ben
   Golus's) so the samples step across the edge instead of half the pixel
-  turning to mush. Blend writes premultiplied colour through
+  turning to mush; the coverage is written as alpha too, so the colour is
+  premultiplied by it — an overlay's masked edge has no bright fringe. Blend writes premultiplied colour through
   `PREMULTIPLIED_ALPHA_BLENDING`, the 3D target's and the composite's
   convention, depth-tested and not written.
 - **Draw order** (`draw3d/group.rs`): a 24-byte key — the order, one
@@ -10754,7 +10773,8 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   not written), shining down its entity's −Z. One lights a view: the one on
   the lowest entity index — a list is 139's — the rest warned about once,
   as is a light with a negative or non-finite colour or energy (skipped for
-  the next). **`energy` is the light units' stored value**: illuminance
+  the next, and not counted among the lights "more" than the one used).
+  **`energy` is the light units' stored value**: illuminance
   over K, so `color · energy` is what the shader multiplies by, Simple
   units' fixed EV100 15 exposure maps K to 1, and Physical units (142) show
   the same number as lux. **`Environment3D { ambient }`** (linear RGB, the
@@ -10790,15 +10810,32 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   (`color_edit_button_rgba_unmultiplied` and `_rgb` take linear colour and
   show sRGB). **The file is shared**, as Unity's material inspector and
   Godot's `StandardMaterial3D` resource are: an edit is written when it
-  settles (no drag, no popup, nothing typed), the material reloaded so
-  every mesh draws it that frame, and it is not in the scene's history. The
+  settles (no drag, no popup, nothing typed) — or, mid-drag, when the
+  inspector switches to another material's file (`SurfaceDoc::switch_to`:
+  the switch ends the edit), or on any frame once nothing is busy, a mesh
+  selected or not — the material reloaded so every mesh draws it that
+  frame, and it is not in the scene's history. The file's leading comments
+  are kept (`voltra_assets::leading_comments`, which `cargo xtask migrate`
+  now calls too); a write that fails is shown under the fields and not
+  retried until the draft changes. The
   **live preview** is `UiFrame::surface_preview(key, size, source)`:
   `SurfacePreviews` draws each preview asked for after the layout — again
   only when its numbers, images or the 3D format changed — a metre sphere
   under a key light into a target egui samples through its raw view, an id
-  from the next frame (the viewport's one-frame rule). The asset browser's
-  tile for a surface material is the same preview, small. Create ▸ 3D ▸
+  from the next frame (the viewport's one-frame rule); one not asked for
+  in 120 draws (`KEEP_DRAWS`) is let go, its target and its egui id
+  (`EguiLayer::free_view`) with it. The asset browser's tile for a surface
+  material is the same preview, small — which loads each material file a
+  tile is drawn for into the session's `Materials`, as a texture tile
+  uploads its texture: the browser's cost is what is on screen, cached for
+  the session, and a broken material is warned about once when its tile
+  first shows, as it would be when a mesh first named it. Create ▸ 3D ▸
   Directional Light and ▸ Environment; inspector sections for both.
+- **Streamed loads prefetch surface images**:
+  `format::surface_texture_paths` reads each mesh's material file on the
+  loader's worker (`voltra_assets::read_material_file`) and lists its
+  images with the sprites' (`texture_paths`), so they are decoded before
+  the meshes naming them spawn.
 - **What the engines do**: Godot's `StandardMaterial3D` is a resource the
   inspector edits in place, shared by every mesh using it, with shading
   mode `Unshaded`, transparency `Alpha` / `Alpha Scissor` / `Alpha Hash`
@@ -10814,8 +10851,9 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   (the block's fields, NaN refused), `surface/brdf.rs` (GGX covers the
   surface once, ∫D(n·h)dω = 1 to 2·10⁻³ at four roughnesses; Fresnel f0
   head on and 1 grazing; G within 0..1; a white rough dielectric lit head
-  on is 1/π + 0.04/4π; a metal's mirror highlight over 20× its off-angle
-  value), `surface.rs` (the shader validates with naga; 5 textures, 1
+  on is 1/π + 0.04/4π, under a white sky 1 to 10⁻²; a metal's mirror highlight over 20× its off-angle
+  value; a mirror highlight near grazing capped at 4096, every curve finite
+  for inf and NaN), `surface.rs` (the shader validates with naga; 5 textures, 1
   sampler, blocks of 96 and 144 bytes, 5 of 15 inter-stage locations,
   against `downlevel_webgl2_defaults`), `lighting.rs` (toward the light,
   colour × energy, NaN ambient refused, orthographic marked),
@@ -10825,8 +10863,14 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   and 4 samples; a quarter-opaque blue over red reads 225, 0, 137 ±1; a
   double-sided plane's back lit as its front; a mirrored wall lit as the
   unmirrored; the metallic × roughness sphere grid, each smooth sphere's
-  peak above the rough one's), voltra-assets' `materials/tests.rs` (the 0.4
-  file loads as `Sprite`; a surface block loads, defaults filled; a bad
+  peak above the rough one's), `headless_surface_overflow.rs` (a
+  mirror-smooth sphere's rim lit from behind and a sphere of emissive
+  10³⁰, bloom on, exposed to 10⁻⁴, through every curve: 0 saturated
+  pixels — 794 before the cap and the hardening — the glow drawn),
+  voltra-assets' `materials/tests.rs` (the 0.4 file loads as `Sprite`; NaN
+  and inf read as defaults, a sprite uniform's as 0, each warned; a
+  `standard` block in a sprite file and `uniforms` in a surface file
+  warned; a surface block loads, defaults filled; a bad
   texture path and a shader refused with why; the editor's writer reads
   back equal, writing nothing a surface does not use), `draw3d/
   material_tests.rs` (three blended instances drawn 9, 6, 4.5, 3 m back to
@@ -10834,9 +10878,12 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   grouped by material, masks after; a sprite material on a mesh warned once,
   one not loaded quietly the default), `lighting3d.rs`, the component
   round trips, `surface_doc.rs` (an edit written only once settled, the
-  material reloaded), `draw/world3d/previews.rs` (drawn once, transparent
-  corner, gold lit toward the light by 60 levels, drawn again when rougher,
-  not when unchanged), `voltra-core/tests/materials3d.rs` (the shipped
+  material reloaded; a switch mid-edit writes the draft and keeps the
+  file's comments; NaN reads as the default and writes nothing; a failed
+  write kept, not retried until the draft changes),
+  `draw/world3d/previews.rs` (drawn once, transparent corner, gold lit
+  toward the light by 60 levels, drawn again when rougher, not when
+  unchanged, let go with its id after 120 draws unasked), `voltra-core/tests/materials3d.rs` (the shipped
   scene: the unlit sphere AgX of its colour ±2, every lit sphere 30 levels
   brighter toward the light, the gold's peak 100 over the iron's, the box
   through the glass, the grate's bars and holes; two blended quads in
