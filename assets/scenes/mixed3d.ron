@@ -67,7 +67,7 @@
             id: "019fe300-0136-7000-8000-000000000008",
             components: {
                 "Name": "HUD panel",
-                "Sprite2D": (color:(1.0,0.0,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
+                "Sprite2D": (color:(0.2,0.9,1.0,1.0),sort_order:0,texture:None,atlas:None,frame:0,region:None,flip_x:false,flip_y:false,pixels_per_unit:None),
                 "UiRect": (anchor_min:(0.0,0.0),anchor_max:(0.0,0.0),offset_min:(16.0,16.0),offset_max:(196.0,60.0)),
             },
         ),

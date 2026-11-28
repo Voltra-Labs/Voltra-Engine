@@ -87,6 +87,12 @@ const CAPSULE: [f32; 3] = [0.15, 0.3, 0.95];
 const CYLINDER: [f32; 3] = [0.95, 0.8, 0.1];
 const WALL_BEHIND: [f32; 3] = [0.0, 0.9, 0.9];
 const WALL_FRONT: [f32; 3] = [0.9, 0.9, 0.9];
+/// What the tests lay over the 3D world: not magenta, which is what a
+/// missing asset draws, so a fallback never passes for content.
+const PURPLE: [f32; 3] = [0.6, 0.2, 0.9];
+const PURPLE_RGBA: [f32; 4] = [0.6, 0.2, 0.9, 1.0];
+/// `scenes/mixed3d.ron`'s HUD panel.
+const HUD_PANEL: [f32; 3] = [0.2, 0.9, 1.0];
 
 #[test]
 fn the_shapes_draw_through_the_3d_camera_where_they_are() {
@@ -173,15 +179,12 @@ fn the_hud_draws_over_the_3d_world() {
         panel,
         UiRect::pinned(Vec2::ZERO, Vec2::ZERO, Vec2::new(60.0, 30.0)),
     );
-    world.insert(panel, Sprite2D::new([1.0, 0.0, 1.0, 1.0]));
+    world.insert(panel, Sprite2D::new(PURPLE_RGBA));
     let Some(shot) = shoot(&mut session, "shapes3d-hud") else {
         return;
     };
-    let magenta = count(&shot, [1.0, 0.0, 1.0]);
-    assert!(
-        (magenta as i32 - 60 * 30).abs() <= 60,
-        "{magenta} HUD pixels"
-    );
+    let panel = count(&shot, PURPLE);
+    assert!((panel as i32 - 60 * 30).abs() <= 60, "{panel} HUD pixels");
 }
 
 #[test]
@@ -195,13 +198,13 @@ fn with_a_2d_camera_too_2d_draws_over_the_3d_world() {
     let block = world.spawn();
     world.insert(block, SceneId::new());
     world.insert(block, Transform2D::default().with_scale(Vec2::splat(0.5)));
-    world.insert(block, Sprite2D::new([1.0, 0.0, 1.0, 1.0]));
+    world.insert(block, Sprite2D::new(PURPLE_RGBA));
     let Some(shot) = shoot(&mut session, "shapes3d-with-2d") else {
         return;
     };
     // The 2D block, half a unit of a camera two units tall on 270 pixels
     // (67 square), over the 3D world, which shows everywhere else.
-    let block = count(&shot, [1.0, 0.0, 1.0]);
+    let block = count(&shot, PURPLE);
     assert!(
         (block as i32 - 67 * 67).abs() <= 300,
         "{block} block pixels"
@@ -254,6 +257,11 @@ fn the_mixed_sample_draws_3d_through_agx_2d_over_it_and_the_hud_over_both() {
     let badge = shot.pixel(bx, by).expect("on screen");
     assert!(badge[2] > badge[0] && badge[2] > 120, "{badge:?}");
     // The HUD panel, 180 × 44 at the top left, over everything.
-    let hud = count(&shot, [1.0, 0.0, 1.0]);
+    assert_eq!(
+        count(&shot, [1.0, 0.0, 1.0]),
+        0,
+        "no missing asset's magenta"
+    );
+    let hud = count(&shot, HUD_PANEL);
     assert!((hud as i32 - 180 * 44).abs() <= 100, "{hud} HUD pixels");
 }

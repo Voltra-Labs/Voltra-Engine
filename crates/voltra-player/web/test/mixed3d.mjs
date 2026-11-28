@@ -22,7 +22,8 @@ const colours = {
   sphere: [114, 198, 138],
   // The scene's linear colours, encoded: 2D is never tone mapped.
   banner: encode([1.0, 0.6, 0.1]),
-  hud: encode([1.0, 0.0, 1.0]),
+  // Not magenta, which a missing asset draws.
+  hud: encode([0.2, 0.9, 1.0]),
   // Skipping the curve, the cube would be this.
   rawCube: encode([0.9, 0.15, 0.1]),
 };
