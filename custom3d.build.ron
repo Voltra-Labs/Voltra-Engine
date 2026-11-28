@@ -1,0 +1,9 @@
+// Custom surface materials: scenes/custom3d.ron. What
+// crates/voltra-player/web/test/custom3d.mjs builds for the web.
+(
+    version: 1,
+    name: "Voltra Custom Materials 3D",
+    scene: "scenes/custom3d.ron",
+    window: (width: 960, height: 540),
+    assets: "assets",
+)
