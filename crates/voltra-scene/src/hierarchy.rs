@@ -7,7 +7,8 @@
 //! *composed* matrix rather than the component.
 //!
 //! Split by how the parts fail. [`parent`] is the component and its file form,
-//! [`link`] is the rules about which links may exist, [`resolve`] is turning a
+//! [`link`] is the rules about which links may exist, [`walk`] is following
+//! them up and down the tree, [`resolve`] is turning a
 //! stored identity back into a live entity, and [`world_transform`] is the
 //! arithmetic of composing one. Nothing here touches the GPU or egui, so all of
 //! it is unit-tested.
@@ -24,11 +25,13 @@
 pub mod link;
 pub mod parent;
 pub mod resolve;
+pub mod walk;
 pub mod world_transform;
 
-pub use link::{
-    ancestors, can_parent, children_of, clear_parent, depth, descendants, despawn_recursive,
-    is_ancestor, parent_of, roots, set_parent, HierarchyError, MAX_DEPTH,
+pub use link::{can_parent, clear_parent, set_parent, HierarchyError};
+pub use walk::{
+    ancestors, children_of, depth, descendants, despawn_recursive, is_ancestor, parent_of, roots,
+    MAX_DEPTH,
 };
 
 /// The 0.4 name, where 0.4 had it; see [`crate::renamed`].
