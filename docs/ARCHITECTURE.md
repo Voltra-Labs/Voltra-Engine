@@ -149,7 +149,11 @@ the paired names ("Naming") and format version 2 ("The migration"), see
 under Decisions; stage 133 — `Transform3D` ("Conventions of the 3D world"),
 the hierarchy in both dimensions and `Placement` (the prefab part of
 "Animation, prefabs and replication over both transforms"), see
-*`Transform3D` and the hierarchy in two dimensions* under Decisions.
+*`Transform3D` and the hierarchy in two dimensions* under Decisions;
+stage 134 — 3D values in keyframes, interpolation, prediction and
+interest (the rest of that part but the wire form), see *A 3D transform
+is keyed, drawn between snapshots and placed for interest* under
+Decisions.
 Everything else below is still a plan. Each stage that lands writes
 its detail as a Decisions entry of its own and edits this section to say what
 is built; until then, every sentence here about 3D is a plan. It replaces
@@ -764,14 +768,18 @@ retrofitted:
   at its root), `variant`, and the replication client's prefab spawn.
   Missing one would let a moved 3D instance root record an override, and
   Apply write a world placement into the prefab.
-- **Keyframes**: `Value` gains `Vec3` and `Quat`; `Property` gains
-  `Translation3D`, `Rotation3D`, `Scale3D`. A rotation mixes the short way
+- **Keyframes** (**built, stage 134**): `Value` gains `Vec3` and `Quat`;
+  `Property` gains `Translation3D`, `Rotation3D`, `Scale3D`. A rotation
+  mixes the short way
   (`slerp`, the 2D angle rule in its 3D form) in crossfades, blend trees
   and layers; additive layers compose rotations by multiplication.
-- **Interpolation**: `Interpolate for Transform3D` (lerp, slerp, lerp) —
-  the trait stage 115 made for exactly this.
-- **Interest (134)**: the server's `Place` takes either transform. A 2D
-  entity is placed at its (x, y); a 3D entity in the same grid at its
+- **Interpolation** (**built, stage 134**): `Interpolate for Transform3D`
+  (lerp, slerp, lerp) — the trait stage 115 made for exactly this.
+  Prediction's error metric is `Placement::distance`, over either
+  transform.
+- **Interest** (**built, stage 134**): the server's `Place` takes either
+  transform. A 2D entity is placed at its (x, y); a 3D entity in the same
+  grid at its
   **(x, z)** — the ground plane, Unreal's 2D spatialisation for 3D worlds —
   with the final relevance test a 3D distance, so a tall level costs
   nothing extra and a flying entity is still out of range. A game's
@@ -9971,11 +9979,161 @@ file". This is what was built.
 - **Not yet**: a 3D view, its camera, picking and gizmos (145–147); the
   bridge's `drag` command is 2D only (it refuses an entity with no
   `Transform2D`); `Transform3D` is not replicated, interpolated, animated
-  or interest-managed (134, 156); physics parenting for 3D (148); dropping a
+  or interest-managed (134, 156) — all but the wire form are built in 134;
+  physics parenting for 3D (148); dropping a
   3D prefab on the 2D view spawns it as authored, warned, rather than at
   the cursor; the Euler hint is per editor session, not saved; Apply does
   not offer to bring other instances across when a root changes dimension
   (they are reported, not converted).
+
+### A 3D transform is keyed, drawn between snapshots and placed for interest (stage 134)
+
+The systems both dimensions use, made to carry `Transform3D` — the rest of
+"Animation, prefabs and replication over both transforms" but its wire
+form (156). It mirrors the 2D entries "Property animation is clips of eased
+keys", "A remote entity is drawn a measured staleness behind", "The owned
+entity is predicted…" and "Each client is sent what is near what it
+watches". This is what was built.
+
+- **Keyframes.** `Value::{Vec3, Quat}` and `ValueKind::{Vec3, Quat}`;
+  `Property::{Translation3D, Rotation3D, Scale3D}` after the 2D three (in
+  `ALL`, so the Timeline's "add track" and record mode see them). A key's
+  rotation is the quaternion a `Transform3D` stores, `Quat((x, y, z, w))`;
+  a clip's load runs every key through `Value::usable` — a quaternion off
+  unit length beyond glam's `is_normalized` tolerance is normalised (a
+  hand-typed `(0, 0.7, 0, 0.7)`), one of zero length dropped with the
+  non-finite keys, one within the tolerance kept to the bit — and
+  `Property::write` refuses a zero rotation and normalises a long one.
+  **Between two keys a rotation turns the short way** (slerp): a
+  quaternion cannot say "a whole turn" the way the 2D angle's unwrapped
+  number can, so a spin is keyed every quarter turn or so — glTF's
+  `LINEAR` rotation rule, which stage 154's importer maps onto. **In a
+  mix** (`Mixing::Quaternion`): two inputs are exactly `slerp` by the
+  second's share; more are folded in from the first, each slerped in by
+  its share of the weight met so far (equal thirds of 0°, 30°, 60° end at
+  30° — pinned) — order-dependent but continuous. Unreal's blend spaces
+  accumulate the same way but by summing hemisphere-aligned quaternions
+  and normalising (an nlerp); slerping keeps two inputs exact at every
+  weight, and a true weighted average (Markley's eigenvector) buys nothing
+  a blend tree of nearby poses shows. One input
+  alone is its value to the bit, so a fade's last frame writes the new
+  clip exactly. **Additive** composes rather than adds: the change is
+  `value · reference⁻¹` (the turn from the clip's first frame), applied on
+  the left by the layer's weight, `slerp(1, change, w) · under` — Unreal's
+  local-space additive; weight 0 is the identity times `under`, exactly
+  `under`, which is why composite does not renormalise (unit times unit is
+  unit to rounding, and `Property::write` repairs anything beyond). What a
+  game turns under a layer goes under it the same way
+  (`underneath::moved`: `now · written⁻¹ · under`), so the stage-121
+  no-creep rule holds for rotations. `Vec3` is linear everywhere, as
+  `Vec2` is. The Timeline's key row edits a `Vec3` as three numbers and a
+  quaternion as YXZ Euler degrees, read from the key each frame; record
+  mode keys a rotation that turned more than 2 × 10⁻⁵ rad (the sine of
+  half the turn between them, so `q` and `−q` are no move).
+- **Interpolation.** `Interpolate for Vec3`, `for Quat` (glam's `slerp`,
+  which takes the short way by negating the far end, made exact at the
+  ends: `t ≤ 0` or equal ends is `self`, `t ≥ 1` is `to` — glam's own is a
+  hair off at both, and an entity at rest was drawn turning by an ulp) and
+  `for Transform3D` (lerp, slerp, lerp). The value keys use the same
+  `Quat` impl, so a clip and a snapshot turn alike. `Transform3D` is
+  registered `replicated_interpolated` by default beside `Transform2D`,
+  plain postcard (40 bytes) until its wire form; the stage-133 repair runs
+  on every decoded value too, so a NaN from the network is a reset, not a
+  vanished entity. **`REPLICATION_WIRE_VERSION` 5**: every schema now
+  lists it, and a stage-133 peer would connect and leave 3D entities where
+  they spawned.
+- **Prediction.** `PredictionStats::last_error`/`max_error` are
+  `Placement::of(world, entity).distance(…)` before and after a correction
+  — the translation's distance in the entity's own dimension, `None`
+  across dimensions or with no transform. `Placement` is where "either
+  transform of an entity" already lives (stage 133), so the metric did not
+  need a third enum. Reconciliation itself never named a transform.
+- **Interest.** `InterestPoint::{D2(Vec2), D3(Vec3)}`, `From` either
+  vector: `set_interest_points(peer, points)` takes any iterator of
+  either (so the 0.4 `vec![Vec2]` call compiles unchanged), and
+  `interest_points` answers them. The server's `Place` holds an
+  `InterestPoint`: a `Transform2D`'s world translation, else a
+  `Transform3D`'s (an entity carrying both — warned at load — by its 2D
+  one), so a 3D entity is no longer "positionless, relevant to everyone".
+  An owned 3D entity's point is a 3D point. **One grid, a layer of cells
+  per dimension** (`interest/grid.rs`): a 2D entity on its (x, y), a 3D one
+  on its ground-plane **(x, z)** with its height kept beside, and the
+  check the squared plane distance plus the squared height difference —
+  exactly the 2D distance in 2D, where both heights are 0 — so a tall
+  level costs no more cells and a flier overhead is out of range by the
+  3D distance. Unreal's `GridSpatialization2D` for its 3D worlds; Godot
+  and Unity Netcode leave the shape to a visibility callback. A point
+  reads only its own dimension's layer: a 2D point never sees a 3D entity
+  (and pays nothing for the 3D ones in its cells), which a shared cell map
+  with a dimension check per entry would have cost every 2D query.
+  Rejected: a 3D grid of cubes (a height axis of cells for levels that are
+  mostly flat, and a 3×3×3 query instead of 3×3), and placing a 3D entity
+  at (x, y) like a 2D one (a level along Z would be one column of cells).
+- **Editor**: the Network window's map draws 2D entities and so only the
+  2D interest points; the counters (`relevant`, `net relevant`) count 3D
+  entities with the rest.
+- **Measured** (release, `voltra-bench`, the median of 21 samples, best of
+  three runs a side against a fresh build of `662bc66`):
+
+  | benchmark | base (`662bc66`) | head |
+  | --- | --- | --- |
+  | `keyframes/blend/3x24` | 1.56 µs | 1.47 µs |
+  | `keyframes/blend/3x24-3d` (new) | — | 2.15 µs |
+  | `keyframes/advance/100-playing` | 165 µs | 163 µs |
+  | `keyframes/advance/100-playing-3d` (new) | — | 194 µs |
+  | `keyframes/advance/100-crossfading` | 326 µs | 332 µs |
+  | `keyframes/advance/100-crossfading-3d` (new) | — | 413 µs |
+  | `keyframes/advance/100-layered` | 961 µs | 944 µs |
+  | `interest/grid/1k-entities-8-clients` | 19.4 µs | 19.4 µs |
+  | `interest/grid-3d/1k-entities-8-clients` (new) | — | 20.5 µs |
+  | `interest/grid/1k-entities-64-clients` | 57.6 µs | 60.2 µs |
+  | `interest/server-frame/1k-entities-8-clients` | 649 µs | 706 µs |
+
+  Every 2D suite within its threshold (`voltra-bench compare`: no
+  regressions). `Value` holding a `Quat` grew from 24 to 32 bytes (glam's
+  `Quat` is 16-byte aligned on SIMD targets), which the 2D paths do not
+  show. The 3D crowd costs a fifth more than the 2D one to play and a
+  quarter more to fade — a slerp and a quaternion product where 2D adds
+  numbers. The 3D grid costs what the 2D one does plus the height
+  difference. The server frame's +8.8 % (within its 15 %, and near the
+  7.5 % A/A spread stage 130 measured for its twin) is the second
+  replicated component a 2D entity is now asked for each snapshot — a
+  sparse-set miss per entity.
+
+- **Tests**: `interpolate.rs` (170° to −170° through 180°, a quarter is
+  5° to 10⁻³°, the ends bit for bit, `−q` no turn, equal ends exact);
+  `value.rs` (a key segment the short way, a near-unit key normalised to
+  10⁻⁶ and its unit twin kept, zero and NaN dropped); `blend/tests.rs`
+  (a 0.75/0.25 mix 5° from the first to 10⁻³°, through `−q`; three
+  thirds at 30° to 10⁻⁴ rad); `underneath.rs` (a 5° turn under a layer
+  carried: 15° to 10⁻⁵); `property/tests.rs` (every property reads back
+  what it wrote, a long rotation written unit and a zero one refused);
+  `keyframes/tests/three_d.rs` (a clip turning the short way and ending
+  bit for bit, a typed key played unit, a crossfade a quarter and half way
+  and ending on the new clip's bits, an additive turn of 40° at half over
+  30° at 50° with no creep over fifty frames and weight 0 the base to the
+  bit); `placement.rs` (5 m in 2D, 7 m in 3D, `None` across);
+  `replicate/tests.rs` (`Transform3D` replicated, 40 bytes, bit-for-bit
+  round trip, half way slerped); `interest/grid/tests.rs` (8 m across in,
+  12 m along Z out, 10.8 m up out then kept inside 11 m, a point 30 m up
+  sees only the one overhead; a 2D point sees no 3D entity and a 3D point
+  no 2D one, wide ones included); `voltra-core/tests/interpolation3d.rs`,
+  `interest3d.rs` and `prediction3d.rs` (a 3D mover with a snapshot every
+  third tick drawn moving every frame between 0.5 and 1.12 server steps,
+  on its path to 10⁻⁴ m and turned with
+  its position to 10⁻⁴ rad, at rest equal to the server's; entering at
+  5 m, leaving at 12 m along Z, back at 9.5 m, leaving by height at
+  12.4 m and back at 9.5 m; a 2D point sending the 2D entity and not a 3D
+  one at the same (x, y), a 3D point the reverse; a predicted 3D player
+  corrected with no error in the steady state and a 2 m push measured as
+  2 m to 10⁻³).
+- **Not yet**: `Transform3D`'s wire form — smallest-three rotations,
+  uniform scale as one float (156); authoring 3D clips in the Timeline
+  with an Euler hint, a rotation curve and a 3D gizmo's record (154; the
+  key row has no hint, so a typed 180° may read back as its equivalent);
+  3D light and mesh properties (154); a turn of more than half a turn in
+  one key segment (key it in steps); the Network window's map of 3D
+  entities and points; lag compensation in 3D (156).
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
@@ -10892,5 +11050,6 @@ Both differ from most training data and from every tutorial written against
 | Reversed, finite | No named variant: swap the planes — `directx::perspective(fov, aspect, far, near)`, `directx::orthographic(l, r, b, t, far, near)`; glam asserts only that both are positive (`glam_assert`) |
 | View matrices | `glam::camera::rh::view::look_to_mat4(eye, dir, up)` and `look_to_quat`; the `lh` module mirrors them |
 | Quaternions (stage 133) | `Quat::look_to_rh`/`look_at_rh` are `#[deprecated]` since 0.33.1 (for the view-space `camera::rh::view::look_to_quat`, the inverse of an entity's rotation); an entity facing −Z at a target is `Quat::from_mat3(&Mat3::from_cols(right, up, −forward))`. `Quat::is_normalized` is `Vec4::is_normalized`: `|len² − 1| ≤ 2e-4` (its doc says 1e-6). `EulerRot::YXZ` is intrinsic: `from_euler(YXZ, y, x, z)` = `Ry · Rx · Rz`, and `to_euler(YXZ)` answers `(y, x, z)` |
+| Slerp and angles (stage 134) | `Quat::slerp` takes the short way by negating `end` when `dot < 0` (so `slerp(a, b, 1)` can be `−b`), falls back to a normalised lerp above `dot > 1 − ε`, and is not bit-exact at `s = 0` or `1`; `slerp_long` keeps the direction. `Quat::lerp` aligns the hemisphere too. `angle_between` is `2·acos(|dot|)`, about 10⁻³ rad off near zero in `f32` — tests measure `2·asin(|(a·b⁻¹).xyz|)`. `Quat` is `#[repr(transparent)]` over `__m128` on SSE2: 16-byte aligned, so an enum holding one is too (`keyframes::Value` is 32 bytes) |
 | Affine decomposition | `Affine3A::to_scale_rotation_translation` only `glam_assert`s a non-zero determinant: with the assert off, a zero scale gives a NaN rotation, so a caller checks `matrix3.determinant()` first; the x scale takes the determinant's sign |
 | Parry | `parry3d` 0.31 needs `glamx ^0.3`, which needs `glam ^0.33.7`. The workspace's `glam = "0.33.3"` is a caret requirement, so the lock resolves the newest 0.33 by itself; writing `0.33.7` documents the floor. glam 0.34 exists: the workspace moves when parry does. Leave parry's `enhanced-determinism` off (it enables glam `scalar-math` everywhere) |

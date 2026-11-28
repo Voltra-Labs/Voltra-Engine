@@ -469,6 +469,7 @@ a row is added below as each stage lands.
 | 131 | Version 0.4: guide chapters for 119–129, the changelog | done |
 | 132 | Paired names (`Transform2D`, `Camera2D`, …), scene format version 2, `cargo xtask migrate` | done |
 | 133 | `Transform3D`, the hierarchy in both dimensions, `Placement` for prefab roots | done |
+| 134 | 3D values in keyframes, interpolation and prediction; interest over (x, z) with a 3D distance, `InterestPoint` | done |
 
 ## Contributing
 

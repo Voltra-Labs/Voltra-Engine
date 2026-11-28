@@ -93,9 +93,17 @@ hierarchy is. Your own player is always sent to you.
 Some things every player must see wherever they are — the score, the
 objective. Tick **always relevant** on their `Replicated` component in the
 inspector (`always_relevant: true` in the file), or give one entity a
-radius of its own (`relevance_radius`). An entity with no `Transform2D`, like
-a match's state, is sent to everyone. The Network window shows how many
+radius of its own (`relevance_radius`). An entity with no transform at all,
+like a match's state, is sent to everyone. The Network window shows how many
 entities each client is sent and draws its radius on its map.
+
+In 3D it works the same, in metres. A 3D entity is placed on the ground by
+its x and z, and what decides is its full distance in space, so a bird
+high over a player's head is out of range even when it is right above
+them. A point sees only its own dimension: pass a `Vec3` for a 3D camera
+and a `Vec2` for a 2D one (`set_interest_points(peer, [camera.translation])`
+takes either, or both), and a 3D player you own watches from where it
+stands. A 2D point never sends a 3D entity, however close its x and y.
 
 ## Your own player: prediction
 

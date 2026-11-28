@@ -29,6 +29,12 @@ stages land, for the 0.5 entry.
 - **Replication wire version 4**: the schema sends the new names, so a 0.4
   peer is refused at the handshake instead of connecting and matching no
   transform.
+- **Replication wire version 5** (stage 134): `Transform3D` replicates,
+  interpolated, by default, so a peer of the version before is refused
+  rather than leaving every 3D entity where it spawned.
+  `set_interest_points` takes `Vec2`s, `Vec3`s or `InterestPoint`s, and
+  `interest_points` answers `InterestPoint`s; `InterestGrid::relevant`
+  takes `InterestPoint`s.
 - **A component name registered twice is refused**: the first type keeps
   it, the second is not registered, an error is logged, and
   `ComponentRegistry::refused` lists it.
