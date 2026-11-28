@@ -44,10 +44,11 @@ impl AnimationClip {
     }
 
     /// The clip as a sampler can trust it: every track's keys sorted by
-    /// time, the keys that could not be sampled — a time or a value
-    /// that is not finite, a rotation of zero length, a value of another
+    /// time, the keys that could not be sampled — a time or a value that
+    /// is not finite, a rotation with no usable length, a value of another
     /// kind than the property's — dropped, with a warning naming `source`,
-    /// and a rotation off unit length made unit ([`Value::usable`](super::value::Value::usable)).
+    /// and a rotation off unit length made unit
+    /// ([`Value::usable`](super::value::Value::usable)).
     ///
     /// Dropped rather than refusing the file: an author mid-edit with one
     /// bad key should still see the rest move.

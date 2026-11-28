@@ -73,7 +73,9 @@ impl Value {
     }
 
     /// The value as a sampler can trust it, or `None` for one it cannot:
-    /// a number that is not finite, or a rotation of zero length. A
+    /// a number that is not finite, or a rotation whose squared length is
+    /// not a normal `f32` — zero, subnormal, or past `f32::MAX` (a
+    /// component near 10²⁰ is finite but normalises to zero). A
     /// rotation off unit length by more than glam's `is_normalized`
     /// tolerance is normalised; one within it keeps its bits, so a clip this
     /// build wrote reads back exactly.
@@ -82,7 +84,7 @@ impl Value {
             return None;
         }
         match self {
-            Self::Quat(q) if q.length_squared() == 0.0 => None,
+            Self::Quat(q) if !q.length_squared().is_normal() => None,
             Self::Quat(q) if !q.is_normalized() => Some(Self::Quat(q.normalize())),
             value => Some(value),
         }
@@ -122,13 +124,7 @@ impl Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The angle between two rotations in radians, well conditioned near zero
-    /// (glam's `angle_between` is an `acos` of a dot product, and off by 10⁻³
-    /// there in `f32`).
-    fn apart(a: voltra_render::glam::Quat, b: voltra_render::glam::Quat) -> f32 {
-        2.0 * (a * b.conjugate()).xyz().length().min(1.0).asin()
-    }
+    use voltra_testkit::rotation_apart;
 
     #[test]
     fn whole_numbers_count_through_the_ones_between() {
@@ -160,7 +156,7 @@ mod tests {
         let Value::Quat(half) = Value::Quat(a).lerp(Value::Quat(b), 0.5) else {
             panic!("a rotation");
         };
-        let through = apart(half, Quat::from_rotation_z(180f32.to_radians()));
+        let through = rotation_apart(half, Quat::from_rotation_z(180f32.to_radians()));
         assert!(through < 1e-4, "through 180°: {through} rad off");
         assert_eq!(Value::Quat(a).lerp(Value::Quat(b), 0.0), Value::Quat(a));
         assert_eq!(Value::Quat(a).lerp(Value::Quat(b), 1.0), Value::Quat(b));
@@ -194,5 +190,13 @@ mod tests {
             Value::Vec3(Vec3::new(1.0, f32::INFINITY, 0.0)).usable(),
             None
         );
+        // Finite, but squared past f32 or below its normals: no length to
+        // divide by.
+        for (huge, tiny) in [(1.0e20, 1.0e-30), (3.0e19, 1.0e-20)] {
+            let long = Quat::from_xyzw(0.0, huge, 0.0, huge);
+            assert_eq!(Value::Quat(long).usable(), None, "{huge}");
+            let short = Quat::from_xyzw(tiny, 0.0, 0.0, 0.0);
+            assert_eq!(Value::Quat(short).usable(), None, "{tiny}");
+        }
     }
 }

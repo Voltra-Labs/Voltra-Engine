@@ -2,13 +2,7 @@
 
 use super::*;
 use voltra_render::glam::Vec2;
-
-/// The angle between two rotations in radians, well conditioned near zero
-/// (glam's `angle_between` is an `acos` of a dot product, and off by 10⁻³
-/// there in `f32`).
-fn apart(a: voltra_render::glam::Quat, b: voltra_render::glam::Quat) -> f32 {
-    2.0 * (a * b.conjugate()).xyz().length().min(1.0).asin()
-}
+use voltra_testkit::rotation_apart;
 
 fn pose(entries: &[(&'static str, Property, Value)]) -> Pose<'static> {
     let mut pose = Pose::new();
@@ -200,9 +194,9 @@ fn a_3d_rotation_mixes_by_slerp_the_short_way_and_a_position_linearly() {
     let Some(Value::Quat(q)) = mixed.get("", Property::Rotation3D) else {
         panic!("a rotation");
     };
-    let from_a = apart(q, a).to_degrees();
+    let from_a = rotation_apart(q, a).to_degrees();
     assert!((from_a - 5.0).abs() < 1e-3, "a quarter of 20°: {from_a}°");
-    assert!((apart(q, b).to_degrees() - 15.0).abs() < 1e-3);
+    assert!((rotation_apart(q, b).to_degrees() - 15.0).abs() < 1e-3);
     assert_eq!(
         mixed.get("", Property::Translation3D),
         Some(Value::Vec3(Vec3::new(0.5, 1.0, 1.5)))
@@ -224,7 +218,7 @@ fn a_3d_rotation_mixes_by_slerp_the_short_way_and_a_position_linearly() {
     let Some(Value::Quat(q)) = three.get("", Property::Rotation3D) else {
         panic!("a rotation");
     };
-    let off = apart(q, Quat::from_rotation_x(30f32.to_radians()));
+    let off = rotation_apart(q, Quat::from_rotation_x(30f32.to_radians()));
     assert!(off < 1e-4, "{off} rad from 30°");
     assert!((q.length() - 1.0).abs() < 1e-5);
 }

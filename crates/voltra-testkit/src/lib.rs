@@ -1,4 +1,5 @@
-//! Headless GPU scaffolding shared by every crate's integration tests.
+//! Headless GPU scaffolding shared by every crate's integration tests, and
+//! the few measurements several crates' tests make the same way.
 //!
 //! A dev-dependency, never shipped: `publish = false`, and no member crate
 //! depends on it outside `[dev-dependencies]`. It exists because each
@@ -15,8 +16,10 @@ use std::path::Path;
 
 use voltra_render::wgpu;
 
+mod rotation;
 mod scratch;
 
+pub use rotation::rotation_apart;
 pub use scratch::{scratch_root, Scratch, KEEP_SCRATCH_VAR};
 
 /// One pixel read back from a texture, as 8-bit channels.

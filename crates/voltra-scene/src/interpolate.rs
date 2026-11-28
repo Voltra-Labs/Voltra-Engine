@@ -86,13 +86,7 @@ impl Interpolate for Transform2D {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The angle between two rotations in radians, well conditioned near zero
-    /// (glam's `angle_between` is an `acos` of a dot product, and off by 10⁻³
-    /// there in `f32`).
-    fn apart(a: voltra_render::glam::Quat, b: voltra_render::glam::Quat) -> f32 {
-        2.0 * (a * b.conjugate()).xyz().length().min(1.0).asin()
-    }
+    use voltra_testkit::rotation_apart;
 
     #[test]
     fn a_rotation_takes_the_short_way() {
@@ -131,19 +125,19 @@ mod tests {
             .with_rotation(Quat::from_rotation_y(-170f32.to_radians()))
             .with_scale(Vec3::splat(3.0));
         let half = a.interpolate(&b, 0.5);
-        let angle = apart(half.rotation, Quat::from_rotation_y(180f32.to_radians()));
+        let angle = rotation_apart(half.rotation, Quat::from_rotation_y(180f32.to_radians()));
         assert!(angle < 1e-4, "through 180°, {angle} rad off");
         assert_eq!(half.translation, Vec3::new(1.0, 2.0, -3.0));
         assert_eq!(half.scale, Vec3::splat(2.0));
         let quarter = a.interpolate(&b, 0.25);
-        let turned = apart(quarter.rotation, a.rotation).to_degrees();
+        let turned = rotation_apart(quarter.rotation, a.rotation).to_degrees();
         assert!((turned - 5.0).abs() < 1e-3, "a quarter of 20°: {turned}°");
         assert_eq!(a.interpolate(&b, 0.0), a);
         assert_eq!(a.interpolate(&b, 1.0).rotation, b.rotation, "bit for bit");
         assert_eq!(a.interpolate(&b, 1.0).translation, b.translation);
         // `-q` is `q`: the short way to it is no turn at all.
         let flipped = a.rotation.interpolate(&-a.rotation, 0.5);
-        assert!(apart(flipped, a.rotation) < 1e-5);
+        assert!(rotation_apart(flipped, a.rotation) < 1e-5);
     }
 
     #[test]

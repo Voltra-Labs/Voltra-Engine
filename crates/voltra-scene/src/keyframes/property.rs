@@ -171,7 +171,8 @@ impl Property {
     /// Clamped where the field has a floor — a light's intensity and radius
     /// at zero, a frame at zero — since a key typed into a file is not
     /// checked by an inspector's range. A 3D rotation is written unit length
-    /// ([`Value::usable`]); one of zero length is refused, `false`.
+    /// ([`Value::usable`]); one with no usable length (zero, or so long
+    /// its square overflows) is refused, `false`.
     pub fn write(self, world: &mut World, entity: Entity, value: Value) -> bool {
         let written = match (self, value) {
             (Self::Translation2D, Value::Vec2(v)) => world

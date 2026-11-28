@@ -13,6 +13,7 @@ use voltra_core::{App, Headless};
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Quat, Vec3};
 use voltra_scene::{Replicated, SceneId, Transform3D};
+use voltra_testkit::rotation_apart;
 
 const FRAME: f32 = 1.0 / 60.0;
 
@@ -32,11 +33,6 @@ fn link(
         },
         seed,
     )
-}
-
-/// The angle between two rotations, well conditioned near zero.
-fn apart(a: Quat, b: Quat) -> f32 {
-    2.0 * (a * b.conjugate()).xyz().length().min(1.0).asin()
 }
 
 /// The client's copy of `id`.
@@ -143,7 +139,7 @@ fn a_3d_remote_entity_is_drawn_between_snapshots() {
             t.translation
         );
         assert!(
-            apart(t.rotation, expected) < 1e-4,
+            rotation_apart(t.rotation, expected) < 1e-4,
             "turned with its position"
         );
         assert!((t.rotation.length() - 1.0).abs() < 1e-5);

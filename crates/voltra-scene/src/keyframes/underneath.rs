@@ -182,9 +182,16 @@ impl<'c> Resolver<'c> {
 /// itself up without end, and an override below one would damp the game's
 /// motion. A game that sets the value outright each frame converges, the
 /// same way, on showing exactly what it sets. A discrete value (a frame)
-/// has no difference: what was written is taken. A 3D rotation's change is
-/// the turn from what was written to what is there, `now · written⁻¹`,
-/// put under on the left as an additive layer applies one.
+/// has no difference: what was written is taken.
+///
+/// A 3D rotation is carried as `under · written⁻¹ · now`. The layers put
+/// their turn `d` on the left (`written = d · under`, as an additive layer
+/// applies one), so what is under them now is `d⁻¹ · now`, and `d⁻¹` is
+/// `under · written⁻¹`: exactly what the game made of the value, however it
+/// turned it — on its own axes (`now = written · g`, a yaw) or its
+/// parent's. Carrying `now · written⁻¹` on the left instead, as numbers
+/// are carried, would turn a local yaw under a tilted layer about the
+/// wrong axis (53° off after ninety 1° steps under a 40° tilt).
 fn moved(property: Property, last: &Covered, now: Value) -> Value {
     if property.mixing() == Mixing::Discrete {
         return now;
@@ -197,7 +204,7 @@ fn moved(property: Property, last: &Covered, now: Value) -> Value {
         }
         (Value::Vec3(u), Value::Vec3(n), Value::Vec3(w)) => Value::Vec3(u + (n - w)),
         (Value::Quat(u), Value::Quat(n), Value::Quat(w)) => {
-            Value::Quat((n * w.conjugate() * u).normalize())
+            Value::Quat((u * w.conjugate() * n).normalize())
         }
         _ => now,
     }
@@ -221,13 +228,7 @@ fn hand_back(world: &mut World, find: &mut Resolver<'_>, acc: &Pose<'_>, gone: C
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The angle between two rotations in radians, well conditioned near zero
-    /// (glam's `angle_between` is an `acos` of a dot product, and off by 10⁻³
-    /// there in `f32`).
-    fn apart(a: voltra_render::glam::Quat, b: voltra_render::glam::Quat) -> f32 {
-        2.0 * (a * b.conjugate()).xyz().length().min(1.0).asin()
-    }
+    use voltra_testkit::rotation_apart;
 
     fn covered(under: Value, written: Value, property: Property) -> Covered {
         Covered {
@@ -269,13 +270,14 @@ mod tests {
     fn a_3d_rotation_carries_the_turn_made_under() {
         use voltra_render::glam::Quat;
         // Under at 10° about Y, a layer wrote 40°; a game turned it on by
-        // 5° to 45°: under is 15°.
+        // 5° to 45°: under is 15°. (About one axis the side does not
+        // matter; `keyframes/tests/three_d.rs` pins the side it does.)
         let y = |deg: f32| Value::Quat(Quat::from_rotation_y(deg.to_radians()));
         let last = covered(y(10.0), y(40.0), Property::Rotation3D);
         let Value::Quat(under) = moved(Property::Rotation3D, &last, y(45.0)) else {
             panic!("a rotation");
         };
-        let off = apart(under, Quat::from_rotation_y(15f32.to_radians()));
+        let off = rotation_apart(under, Quat::from_rotation_y(15f32.to_radians()));
         assert!(off < 1e-5, "{off} rad from 15°");
     }
 }
