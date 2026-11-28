@@ -239,5 +239,8 @@ fn a_flattened_instance_is_a_flat_draw_of_its_own() {
     let windings: Vec<Winding> = list.draws.iter().map(|d| d.winding).collect();
     assert_eq!(windings.len(), 2);
     assert!(windings.contains(&Winding::Flat), "{windings:?}");
-    assert!(windings.contains(&Winding::CounterClockwise), "{windings:?}");
+    assert!(
+        windings.contains(&Winding::CounterClockwise),
+        "{windings:?}"
+    );
 }
