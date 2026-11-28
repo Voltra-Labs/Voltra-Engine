@@ -6,9 +6,10 @@ use glam::{Affine3A, Mat3};
 /// Per-instance data of an instanced 3D draw: 112 bytes, seven attributes.
 ///
 /// The model matrix as an affine `3×vec4` (rows: the 3×3 part and the
-/// translation in `w`), its normal matrix — the inverse transpose, which
-/// keeps normals at right angles to a surface under non-uniform scale — as
-/// another `3×vec4`, and a linear RGBA tint.
+/// translation in `w`), its normal matrix — the cofactor matrix, which
+/// keeps normals at right angles to a surface under non-uniform scale and
+/// is defined for a flattened model too — as another `3×vec4`, and a
+/// linear RGBA tint.
 ///
 /// **The WebGL2 attribute budget** (16 attributes, a 255-byte stride per
 /// buffer) is laid out now for everything 0.5 adds: [`Vertex3D`]'s 4, these
