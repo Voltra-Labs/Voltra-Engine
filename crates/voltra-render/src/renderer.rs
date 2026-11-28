@@ -23,6 +23,7 @@ mod gpu_timing;
 mod layer;
 mod light_layers;
 mod normals;
+mod post_chain;
 mod world3d;
 
 pub use composite::Placed;
