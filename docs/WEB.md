@@ -1,8 +1,8 @@
 # Publishing a game on the web
 
 A Voltra game runs in a browser tab: on WebGPU where the browser has it and
-WebGL2 where it does not, with its sprites, lights, physics, sound, keyboard
-and gamepads. The editor stays native. How it works is in
+WebGL2 where it does not, with its sprites, 3D meshes, lights, physics,
+sound, keyboard and gamepads. The editor stays native. How it works is in
 [ARCHITECTURE.md](ARCHITECTURE.md), the sections starting at "The engine
 builds for the web".
 
@@ -88,6 +88,17 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   screen greys Host and Find on LAN there, and `tick.net.discover` answers
   `DiscoveryError::Unsupported`; the lobby itself works as natively, over
   the WebSocket (docs/guide/08-networking.md).
+- **3D depth is less precise on WebGL2.** The 3D pass uses reversed Z in a
+  32-bit float depth buffer, which natively tells two surfaces 1 cm apart
+  at 500 m. On WebGL2 (a browser without WebGPU) the GL backend remaps
+  depth to GL's `[-1, 1]` range with no way to turn that off, which costs
+  reversed Z its even spread of precision: the error grows with the square
+  of the distance over the near plane, about 3 mm at 50 m with the default
+  0.1 m `near`, centimetres at 500 m. Drawing is still correct — the
+  nearer surface wins — only surfaces closer than that flicker against
+  each other. A scene with far, close-together surfaces raises its
+  `Camera3D`'s `near` (precision scales with it). WebGPU keeps the native
+  precision. Pinned in the browser at 1 cm and 50 m by `shapes3d.mjs`.
 
 ## Checking a web build
 
@@ -97,6 +108,7 @@ Playwright with a Chromium):
 ```sh
 node crates/voltra-player/web/test/first-frame.mjs   # the sandbox draws, on WebGPU and WebGL2
 node crates/voltra-player/web/test/play.mjs          # the platformer walks, takes a coin, sounds
+node crates/voltra-player/web/test/shapes3d.mjs      # a 3D scene, and WebGL2's depth at 50 m
 ```
 
 Each builds through `cargo xtask dist --web` into `target/`, serves it and

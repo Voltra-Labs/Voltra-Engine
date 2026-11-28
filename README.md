@@ -470,6 +470,7 @@ a row is added below as each stage lands.
 | 132 | Paired names (`Transform2D`, `Camera2D`, …), scene format version 2, `cargo xtask migrate` | done |
 | 133 | `Transform3D`, the hierarchy in both dimensions, `Placement` for prefab roots | done |
 | 134 | 3D values in keyframes, interpolation and prediction; interest over (x, z) with a 3D distance, `InterestPoint` | done |
+| 135 | The 3D depth pass: reversed Z, `Camera3D`, `MeshInstance3D`, built-in meshes, frustum culling, instanced unlit drawing | done |
 
 ## Contributing
 

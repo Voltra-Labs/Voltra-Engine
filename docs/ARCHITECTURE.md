@@ -153,7 +153,10 @@ the hierarchy in both dimensions and `Placement` (the prefab part of
 stage 134 — 3D values in keyframes, interpolation, prediction and
 interest (the rest of that part but the wire form), see *A 3D transform
 is keyed, drawn between snapshots and placed for interest* under
-Decisions.
+Decisions; stage 135 — the depth pass, `Camera3D`, meshes, culling and
+unlit instanced drawing (the first part of "The 3D pass" and the camera
+lines of "Conventions of the 3D world"), see *A 3D camera draws meshes
+through a reversed-Z depth pass* under Decisions.
 Everything else below is still a plan. Each stage that lands writes
 its detail as a Decisions entry of its own and edits this section to say what
 is built; until then, every sentence here about 3D is a plan. It replaces
@@ -210,7 +213,8 @@ new-game --3d` sets, like every other default it changes.
 ### Conventions of the 3D world
 
 **Built (stage 133)** for the transform: `Transform3D`, its Euler view and
-the inspector's hint. The camera and projection lines are stage 135's.
+the inspector's hint; **(stage 135)** for the camera and the projection:
+`Camera3D` looks down −Z through `View3D`, reversed as written below.
 
 - **Y up, right-handed, forward is −Z, one unit is a metre.** glTF's
   convention, and Godot's and Bevy's; a glTF file needs no axis conversion.
@@ -429,6 +433,12 @@ HUD (UiRect …) once, over everything
   preview and play mode draw the full composite.
 
 ### The 3D pass
+
+**Built (stage 135)**: the depth target, the precision split, instancing
+with the layout pinned, CPU culling and the built-in meshes, drawn unlit
+by a lone 3D camera — see *A 3D camera draws meshes through a reversed-Z
+depth pass*. Materials, alpha, the light list, MSAA and the frame shared
+with 2D are still the plan below.
 
 - **Depth**: `Depth32Float`, **reversed-Z** (`CompareFunction::GreaterEqual`,
   cleared to 0), an infinite far plane by default (`far: None`), Bevy's
@@ -10166,6 +10176,186 @@ watches". This is what was built.
   one key segment (key it in steps); the Network window's map of 3D
   entities and points; lag compensation in 3D (156).
 
+### A 3D camera draws meshes through a reversed-Z depth pass, instanced and culled on the CPU (stage 135)
+
+The part of "The 3D pass" that draws anything: a camera, meshes, a depth
+buffer, unlit. It mirrors the 2D entries *Sprites are drawn as instanced
+quads* (one instanced draw per run, its layout measured) and *The batch
+draws what the camera sees* (culling on the CPU, before the GPU is
+asked).
+
+- **`voltra-render/src/render3d/`**, nothing of the 2D pass touched:
+  `View3D` (view and projection; `perspective` — infinite through
+  `perspective_infinite_reverse`, finite by handing glam's `perspective`
+  the planes swapped — and `orthographic`, reversed the same way; never a
+  non-finite matrix: a near plane that is not positive becomes the 0.1 m
+  default, a far plane not past it is dropped or moved, the field of view
+  kept inside (0°, 180°), the placement's scale ignored); `Frustum`
+  (Gribb–Hartmann from the view-projection, written for `0 ≤ z ≤ w`
+  reversed: `w − z` is the near plane, `z` the far one, which an infinite
+  projection leaves degenerate and so out — five planes); `Aabb3` (a mesh's
+  local box, carried through a model matrix by Arvo's method); `Vertex3D`
+  (position, normal, UV, tangent: 48 bytes); `Instance3D`; `MeshData3D`
+  (checked — whole triangles, indices in range, finite positions — before
+  `Mesh3D` uploads it); a `Depth32Float` `DepthTarget` cleared to 0 and
+  compared `GreaterEqual`, remade at the colour target's size on every
+  record; `UnlitPipeline3D` (flat tint, back faces culled, depth written);
+  `Pass3D`, which owns the pipeline, the view uniform, the instance buffer
+  (grown to the next power of two, never shrunk) and the depth target.
+  `Renderer::render_3d` draws a `Scene3D` to the window and
+  `render_3d_into` into a target, the HUD over both; the pass is made with
+  the first 3D frame, so a 2D game never builds it.
+- **The instance layout is pinned against WebGL2 now**: the model matrix
+  as three rows of an affine `3×vec4`, its normal matrix (inverse
+  transpose) as another `3×vec4`, a linear tint — 7 attributes, 112
+  bytes. With `Vertex3D`'s 4 that is 11; the light list's one `Uint32x2`
+  (139) and the skin's two (155) make 14 of WebGL2's 16, every stride
+  under 255 bytes. `instance.rs`'s test asserts the counts, the strides
+  and unique locations against `Limits::downlevel_webgl2_defaults()`. A
+  collapsed model (zero scale on an axis) or a non-finite one has no
+  `Instance3D` (`Instance3D::new` answers `None`): it covers no pixel and
+  its normal matrix does not exist.
+- **A run is bound at its offset, not drawn with a first instance.** The
+  pass sets the instance buffer at `start × 112` and draws instances from
+  0, which is the same on every backend: WebGL2 has no base instance
+  (wgpu-hal emulates it by rebinding) and no `base_vertex`
+  (`DownlevelFlags::BASE_VERTEX` needs GLES 3.2), so each mesh draws from
+  its own buffers with `base_vertex` 0.
+- **Reversed Z, and what WebGL2 keeps of it.** Natively and on WebGPU a
+  float depth with reversed Z resolves two planes 1 cm apart at 500 m
+  (`headless_3d.rs`, tilted 50° so the depth varies across every pixel; the
+  same test fails at 3 µm, so it can fail). On WebGL2 wgpu-hal always
+  writes `gl_Position.z = 2z − w` and there is no clip control, so the
+  value lands near −1 for anything far and loses the even spread: about
+  ULP(1)·d²/near, 3 mm at 50 m. `scenes/shapes3d.ron` holds two walls
+  1 cm apart at 50 m (leaning back 30°), and `web/test/shapes3d.mjs`
+  requires that the one behind shows in no pixel on WebGPU and WebGL2;
+  `scene3d.rs` checks the same natively. `docs/WEB.md` says to raise
+  `near` for far scenes on WebGL2.
+- **`Camera3D { projection, priority, active, clear }`** looking down its
+  entity's −Z, placed by `world_matrix_3d` (an entity with no
+  `Transform3D` sits in its parent's frame, as a `Camera2D` with no
+  transform sits at the origin), scale ignored. `Projection3D::
+  Perspective { fov_y_degrees, near, far: Option }` — 60° (Unity's; Godot
+  75°, Bevy 45°), 0.1 m, no far plane (Bevy's) — or `Orthographic { size,
+  near, far }`, `size` half the height as `Camera2D::size` and Unity's
+  `orthographicSize` are. `Projection3D::problem` names what cannot be
+  drawn as written; `camera3d::view` warns once per entity and problem,
+  the inspector shows the sentence, and `View3D` draws it corrected.
+  `clear: Background | Color(rgba)` — `Background` is the renderer's
+  colour; 136 makes it transparent for an overlay and `Color` opaque.
+  `camera3d::active` is `camera::active`'s rule: highest priority, ties to
+  the lowest index.
+- **`MeshInstance3D { mesh: MeshPath, color }`** (white not written).
+  **`mesh` is a `MeshPath`, not an `AssetPath`** as the spec wrote:
+  `AssetPath` refuses every `:` (a Windows volume, an NTFS stream) as part
+  of being the asset root's security boundary, so `builtin:cube` cannot be
+  one. A `MeshPath` is one string either way — `"builtin:cube"`, or a
+  path that goes through `AssetPath::new` and its checks. A misspelt
+  built-in name refuses the file with the list of names, as a misspelt
+  enum variant does; a file that will not load — every file, until glTF
+  (143) — draws a magenta cube warned once (`Meshes::resolve`,
+  `MISSING_TINT`).
+- **`Meshes`** (`voltra-assets`) holds the five built-ins, generated on
+  the CPU when the store is made and uploaded by `Meshes::upload` with the
+  first 3D frame; culling reads bounds without a device. They are a metre
+  across so a scale is a size (Bevy's `Cuboid`, `Sphere`, `Cylinder` and
+  `Plane3d` sizes, Unity's cube and sphere): the cube, the sphere (32 × 16)
+  and the cylinder (32 sides, capped) fill the unit box, the plane is a
+  1 m square facing +Y; the capsule is 2 m tall and 1 m wide — Unity's,
+  Godot's and Bevy's default all agree on a person. Normals point out, UV
+  (0, 0) is the image's top-left, tangents run along increasing U with
+  `w = 1` and the bitangent `cross(n, t)` up the image (glTF's), worked
+  out analytically — the sphere, capsule and cylinder side as one surface
+  of revolution with no degenerate pole triangles. Their tests check
+  winding against the normals, tangents against each triangle's UV
+  derivatives, and the enclosed volume (1 for the cube, within 3 % of the
+  sphere's and the capsule's).
+- **`draw3d::DrawList3D`** (`voltra-scene`, the twin of `batch/`): every
+  `MeshInstance3D` gathered with its composed matrix
+  (`WorldTransforms3D`), its world box tested against the frustum —
+  across a `JobPool` from 4096 instances (`PARALLEL_FROM`), on the frame
+  thread below — sorted by mesh, then front to back by the box centre's
+  view depth, then entity index (so the list does not depend on spawn
+  order), one `Draw3D` per mesh, the draws ordered by their nearest
+  instance: opaque front to back so the depth test rejects early.
+  Rebuilt in place each frame. The mesh is resolved from its `MeshPath`
+  per instance per frame, a hash of a short string, rather than cached as
+  a handle on the component: a handle cached beside a path is stale the
+  moment an edit changes the path without re-resolving, and the bench
+  below says the hash is affordable. A non-finite transform is left out
+  and warned once per entity.
+- **A lone 3D camera draws through the direct path**: an active
+  `Camera3D` and no active `Camera2D` (`World3D::lone_camera`,
+  `voltra-core/src/app/draw/world3d.rs`) — the player's window, a headless
+  screenshot, and the editor's Game view, which asks for it through
+  `UiFrame::show_game_camera_3d` (honoured the next frame, as
+  `request_viewport_size` is). With both cameras active the 2D one draws,
+  warned once: composing the two is 136, and keeping 2D's path exactly as
+  it was is what keeps every 2D test and game unchanged. The Scene view
+  stays 2D.
+- **Editor**: inspector sections for both components (the projection's
+  kind and fields, priority, active, clear; a built-in mesh from a
+  dropdown or a file by path, the colour), and Create ▸ 3D ▸ Camera (5 m
+  back, 2 m up, looking at the origin) and every built-in mesh, standing
+  on the ground. Both components are registered, so the bridge and the
+  MCP server set them with no code of their own.
+- **What the engines do**: Godot's `Camera3D` (75°, 0.05 m, far 4000 m)
+  and `MeshInstance3D` with `BoxMesh`/`SphereMesh`/`CapsuleMesh`/… as
+  resources; Unity's `Camera` (60°, 0.3 m, 1000 m) and a `MeshFilter` and
+  `MeshRenderer` pair; Bevy's `Camera3d` with a reversed infinite
+  perspective and `Mesh3d`. We take Godot's component shape (one component
+  naming a mesh), Bevy's projection and near plane, and Unity's field of
+  view. A mesh named by a string rather than a resource sub-object keeps
+  the scene file text and the asset funnel the only way in, as every
+  other asset is.
+- **Bench** (`draw3d`, stage 135; release, this container):
+
+  | Benchmark | Median |
+  | --- | --- |
+  | `draw3d/cull-group/10k` | 1.12 ms |
+  | `draw3d/cull-group-jobs/10k` | 1.05 ms |
+
+  10 000 instances over the five built-in meshes (the spec asked for 20;
+  only five meshes exist until mesh files, and the group count barely
+  moves the cost, which is per instance), about half outside the view.
+  First measured at 2.17 ms: the sort moved whole candidates (some 256
+  bytes each) and each built-in was found through a hashed map. Sorting
+  24-byte keys and an array of built-in handles halved it. Split by phase
+  (best of 40, optimised test build): composing the world's matrices
+  0.30 ms, gathering 0.24, culling 0.35, sorting and grouping 0.36 — so
+  culling across the pool saves little at 10 000, and the pool is there
+  for the cull growing with lists and, later, per-instance light lists.
+  The 2D suites are untouched: no 2D path changed.
+- **Tests**: `render3d` unit tests (near at depth 1 and far at 0 for the
+  three projections to 10⁻⁶; a box past each of the six planes culled and
+  one straddling each kept; an orthographic frustum's walls to 0.1 m;
+  broken numbers make a finite matrix; the WebGL2 budget 11 + 3 = 14 ≤ 16,
+  strides 48 and 112 ≤ 255; a stretched normal stays perpendicular to
+  10⁻⁵; a mesh's four ways of being undrawable); `headless_3d.rs` (two
+  cubes in either order, as two draws or one instanced, the same picture,
+  the nearer at the overlap; 1 cm at 500 m, 0 pixels of the far plane;
+  the depth target at 64², 96 × 48 and 17 × 130 with the colour; a 1 m cube
+  256 ± 16 pixels at 3 m and 60 m orthographic, none past the far plane;
+  an empty scene clears, a bad range is skipped); `draw3d/tests.rs`
+  (behind the camera and past a 100 m far plane culled; grouping front to
+  back and the same list from another spawn order; zero-scale, despawned
+  and NaN instances; a missing mesh magenta; a child placed through its
+  parent; the 5 184-instance list identical across three workers); the
+  built-in mesh tests above; `voltra-core/tests/scene3d.rs` (the shapes
+  scene: each mesh at least 800 pixels and its colour where its projected
+  centre lands; the walls at 50 m, 0 pixels behind; the same picture with
+  the entities respawned in reverse; a 60 × 30 HUD panel over the 3D
+  world to ±60 pixels; a `Camera2D` beside the `Camera3D` drawing the 2D
+  world). Web: `shapes3d.mjs` on WebGPU and WebGL2.
+- **Not yet**: one frame of 3D and 2D cameras, several 3D cameras, a
+  `Camera3D` viewport or render texture, HDR, MSAA and the tonemap (136);
+  materials, double-sided faces and lighting (137–139) — a mesh's back
+  faces are culled, so a camera inside a mesh sees nothing of it and the
+  plane has no underside; mesh files (143); a 3D view in the editor, its
+  picking and gizmos (145–147); the Network window's map of 3D entities;
+  a twenty-mesh bench once there are twenty meshes.
+
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
 Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
@@ -10919,6 +11109,7 @@ Verified against the crate source, not from memory:
 | Instanced draws on GL | `draw(vertices, first..end)` with a non-zero first instance works on WebGL2, which has no base instance: `wgpu-hal`'s GLES backend rebinds each instance-stepped buffer at `offset + first_instance * stride` (`gles/command.rs`, `prepare_draw`). `@builtin(vertex_index)` is GLSL ES 3.0's `gl_VertexID` |
 | Depth-stencil state | `DepthStencilState { format, depth_write_enabled: Option<bool>, depth_compare: Option<CompareFunction>, stencil, bias }` — both depth fields are `Option` in 30 (`Some` required for a depth format) (`wgpu-types/src/render.rs`) |
 | Depth attachment | `RenderPassDepthStencilAttachment { view, depth_ops: Option<Operations<f32>>, stencil_ops: Option<Operations<u32>> }` (`wgpu/src/api/render_pass.rs`) |
+| Instancing on WebGL2 | No `base_vertex` (`DownlevelFlags::BASE_VERTEX` needs GLES 3.2, `wgpu-hal/src/gles/adapter.rs`) and no base instance (emulated by rebinding, `gles/command.rs` `prepare_draw`, for `draw` and `draw_indexed` alike). The 3D pass draws each mesh from its own buffers with `base_vertex` 0 and binds the instance buffer at the run's offset (`set_vertex_buffer(1, buffer.slice(start * stride..))`), instances from 0 |
 | GL depth range | The GLES backend (WebGL2 included) always sets naga's `WriterFlags::ADJUST_COORDINATE_SPACE` (`wgpu-hal/src/gles/device.rs`), so every vertex shader ends with `gl_Position.z = z * 2.0 - w` (`naga/src/back/glsl/writer.rs`) and there is no clip control: depth values reach GL's `[-1, 1]` remapped, and reversed-Z keeps its correctness but loses its precision gain |
 | Depth formats | `Depth32Float` and `Depth24Plus` are core; `Depth32FloatStencil8` needs `Features::DEPTH32FLOAT_STENCIL8`. `PrimitiveState::unclipped_depth` needs `Features::DEPTH_CLIP_CONTROL` (not on WebGL2) |
 | Shadow sampling | `SamplerDescriptor::compare: Option<CompareFunction>` makes a comparison sampler; `DepthBiasState { constant: i32, slope_scale: f32, clamp: f32 }` |
