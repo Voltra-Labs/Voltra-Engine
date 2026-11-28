@@ -87,6 +87,8 @@ jobs:
         run: node crates/voltra-player/web/test/play.mjs
       - name: Sprite materials on both backends
         run: node crates/voltra-player/web/test/materials.mjs
+      - name: A 3D scene and WebGL2's depth precision on both backends
+        run: node crates/voltra-player/web/test/shapes3d.mjs
       - name: The platformer walked by a finger on its on-screen stick
         run: node crates/voltra-player/web/test/touch.mjs
       - name: A rebound key kept in localStorage across a reload
