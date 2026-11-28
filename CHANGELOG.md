@@ -40,6 +40,12 @@ stages land, for the 0.5 entry.
 - **A component name registered twice is refused**: the first type keeps
   it, the second is not registered, an error is logged, and
   `ComponentRegistry::refused` lists it.
+- **A material file has a domain** (stage 137): `MaterialFile` gains
+  `domain` (`Sprite`, the default, or `Surface`) and `standard`, and its
+  `shader` may be empty; `Material` gains `domain` and `surface`. Every
+  `.material.ron` written before still loads as the sprite material it
+  was; code building a `MaterialFile` or `Material` field by field names
+  the new fields (`MaterialFile::surface` makes a surface material).
 
 ## [0.4.0] — 2026-11-27
 

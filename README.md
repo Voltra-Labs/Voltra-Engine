@@ -472,6 +472,7 @@ a row is added below as each stage lands.
 | 134 | 3D values in keyframes, interpolation and prediction; interest over (x, z) with a 3D distance, `InterestPoint` | done |
 | 135 | The 3D depth pass: reversed Z, `Camera3D`, `MeshInstance3D`, built-in meshes, frustum culling, instanced unlit drawing | done |
 | 136 | One frame, both worlds: 2D and 3D cameras by priority, overlays, HDR with MSAA and tone curves (AgX), 3D into render textures | done |
+| 137 | Standard surface materials: glTF metallic-roughness lit by Filament's BRDF, alpha mask and blend, unlit; one `DirectionalLight3D`, `Environment3D` ambient; the inspector's live preview | done |
 
 ## Contributing
 

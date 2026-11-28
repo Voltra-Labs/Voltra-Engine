@@ -21,7 +21,8 @@ each chapter stands alone after that.
    bones, skinned sprites.
 10. [Big worlds](10-big-worlds.md) — regions streamed around the player, loading screens.
 11. [3D](11-3d.md) — begun in 0.5: the 3D world's coordinates, `Transform3D`,
-    parenting in two dimensions.
+    parenting in two dimensions, cameras and meshes, one frame of both
+    worlds, surface materials and light.
 
 Three sample games sit beside the engine in `games/`: `platformer`
 (a walker, coins, crates to push, a goal), `breakout` (physics and
