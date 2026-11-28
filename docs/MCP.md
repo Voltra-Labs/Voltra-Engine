@@ -64,6 +64,12 @@ a scene written by 0.4 (`Transform`, `Sprite`, …) is read through the
 engine's loader, so `scene_read` answers it in the new names, and the next
 edit saves it as version 2.
 
+**An entity is 2D or 3D** (0.5): `component_set` (and `editor_component_set`,
+`entity_spawn`) refuses a `Transform3D` on an entity that carries a
+`Transform2D` or the reverse, and a transform that would put the entity in a
+chain of the other dimension; `entity_reparent` refuses a 3D entity under a
+2D one and the reverse. Each refusal says why, and the file is untouched.
+
 **Every edit is saved at once, or not at all**: a failed edit leaves the file
 byte-identical.
 

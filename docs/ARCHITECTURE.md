@@ -146,7 +146,11 @@ one frame, which is not visible; the alternative is two egui passes per frame.
 stage, from `docs/superpowers/specs/0.5-3d.md`. **Built so far**: stage 132 —
 the paired names ("Naming") and format version 2 ("The migration"), see
 *2D types are named for their dimension, and scene files are version 2*
-under Decisions. Everything else below is still a plan. Each stage that lands writes
+under Decisions; stage 133 — `Transform3D` ("Conventions of the 3D world"),
+the hierarchy in both dimensions and `Placement` (the prefab part of
+"Animation, prefabs and replication over both transforms"), see
+*`Transform3D` and the hierarchy in two dimensions* under Decisions.
+Everything else below is still a plan. Each stage that lands writes
 its detail as a Decisions entry of its own and edits this section to say what
 is built; until then, every sentence here about 3D is a plan. It replaces
 the direction recorded in "When 3D arrives: one world, two render paths",
@@ -200,6 +204,9 @@ new-game --3d` sets, like every other default it changes.
 | **Filament / glTF 2.0** | Metallic-roughness PBR: GGX, height-correlated Smith, Schlick Fresnel, Lambert diffuse; photometric lights with an EV100 camera exposure; the glTF material is exactly these inputs | The standard material: what a glTF file says is what we draw; the photometric model behind both light-unit views |
 
 ### Conventions of the 3D world
+
+**Built (stage 133)** for the transform: `Transform3D`, its Euler view and
+the inspector's hint. The camera and projection lines are stage 135's.
 
 - **Y up, right-handed, forward is −Z, one unit is a metre.** glTF's
   convention, and Godot's and Bevy's; a glTF file needs no axis conversion.
@@ -749,7 +756,7 @@ play mode, on Esc, so a playing game can never trap the editor's cursor.
 Generic from the stages `Transform3D` appears in (133–134), not
 retrofitted:
 
-- **Prefabs**: an instance's placement is its root's transform, whichever
+- **Prefabs** (**built, stage 133**): an instance's placement is its root's transform, whichever
   it is: `Placement`, `From` both transforms. Every place that today names
   the root `Transform` takes it — `prefab::spawn`, `sync`, `compare`
   (a root's transform is never an override), `apply` (the file's own root
@@ -9819,6 +9826,124 @@ what was built and where it differs.
   only the new names in tool arguments (a v1 file is read in new names);
   `migrate` cannot normalise a game's components without linking the game.
 
+### `Transform3D` and the hierarchy in two dimensions; a prefab's placement is either transform (stage 133)
+
+The first 3D component, and every place the 2D transform was the only one
+named. The shape is "Conventions of the 3D world" and the prefab part of
+"Animation, prefabs and replication over both transforms"; it mirrors the
+2D entries "A transform is local, and the composed one is computed per
+frame", "The hierarchy is a link on the child" and "An instance follows its
+file". This is what was built.
+
+- **`Transform3D { translation: Vec3, rotation: Quat, scale: Vec3 }`**
+  (`voltra_scene::transform3d`): default identity with scale one;
+  `matrix() -> Affine3A` (scale, rotate, translate, as 2D); `from_matrix`,
+  lossy for shear as 2D's is — the rotation comes back normalised, and a
+  matrix collapsed flat (a zero scale) comes back unrotated with its axes'
+  lengths as the scale instead of NaN (glam's `to_scale_rotation_translation`
+  divides by the scale); `looking_at(target, up)` (forward −Z at the target;
+  left as it is when the target is where it stands, any perpendicular taken
+  as up when `up` is along the view); `forward()`/`right()`/`up()`;
+  `from_euler_degrees`/`euler_degrees`, `(x, y, z)` in Godot's YXZ order
+  (`Ry · Rx · Rz`, glam's intrinsic `EulerRot::YXZ`). **Read from a file
+  through a repair** (`transform3d/file.rs`, `#[serde(from)]` a mirror
+  whose fields default): a quaternion outside glam's `is_normalized`
+  tolerance (2 × 10⁻⁴ on the length squared) is normalised, a zero or
+  non-finite one is the identity, a non-finite translation or scale is
+  reset — warned once per run. Within the tolerance the quaternion is kept
+  to the bit, so a file this build wrote reads back exactly. Registered
+  with a template; **not replicated** yet (interpolation and interest are
+  134, the wire form 156).
+- **One composition, two dimensions** (`hierarchy/compose.rs`). A crate-
+  private trait `Local` (`Transform2D` → `Mat3`, `Transform3D` →
+  `Affine3A`: the identity, the local matrix, `from_matrix`, determinant,
+  inverse) and, generic over it, the walk up a chain (`parent_matrix`,
+  `world_matrix`, `set_world`) and the memoised pass (`Composed<M>`, the
+  dense by-index store the 2D pass had, moved here whole). The
+  public names are thin and per dimension: `WorldTransforms2D` (with its
+  parallax displacement) and **`WorldTransforms3D`**; `world_matrix_2d`
+  and **`world_matrix_3d`**, `parent_matrix_3d`, `world_transform_3d`,
+  `set_world_transform_3d`. A chain composes only its own dimension's
+  transforms: an ancestor with none, or with the other one, adds no frame.
+  The 2D pass is the same code it was, monomorphised for `Mat3` (the
+  `batch/sprites/*` suites compose it; not re-measured here). Rejected: a second copy of the
+  pass for 3D (the spec's rule — a system both dimensions use is generic
+  over both), and a `GlobalTransform` component (the 2D decision's reasons
+  stand).
+- **`Parent` stays shared; a chain keeps to one dimension**
+  (`hierarchy/dimension.rs`, Godot's `Node2D`/`Node3D` trees, kept by rule
+  rather than by type). `Dimension::{D2, D3}` is which transform an entity
+  carries. `set_parent` refuses `HierarchyError::MixedDimensions` when the
+  nearest transform at or above the parent and the nearest at or below the
+  child, on every branch, are of different dimensions — an entity with no
+  transform passes the rule through, so a bare group under a 2D root takes
+  2D children and refuses 3D ones. `can_take_transform` answers the same
+  for *adding* a transform, and `HierarchyError::SecondTransform` for one
+  that would be the entity's second: `edit::set_component` (the bridge and
+  the MCP server) and the inspector's "add to the rest" ask it. A file that
+  breaks either rule is **warned about on load and left alone**
+  (`dimension::problems`, from `resolve_parents`, free for a world with no
+  `Transform3D`): each dimension composes the entity by its own transform,
+  as if the other's link were not there. Physics parenting is unchanged
+  until stage 148 (`takes_part_in_physics` still names the 2D components).
+- **`Placement`** (`prefab/placement.rs`): `AsAuthored | D2(Transform2D) |
+  D3(Transform3D)`, `From` either transform and a reference to one, so
+  `prefab::spawn(…, &Transform2D::from_translation(at))` and
+  `Tick::spawn`/`App::spawn` read as before and a 3D caller passes a
+  `&Transform3D`. Every place that named the root `Transform2D` names it
+  through `Placement`: `spawn` places a root by its transform of the
+  placement's dimension (a root of the other dimension stays where its
+  file put it, warned unless the placement is the identity; a placement
+  that only moves adds, and one that turns without scaling composes the
+  quaternions, so authored values keep their bits); `sync` and `compare`
+  never track a root's transform of either dimension (`Placement::NAMES`),
+  so a moved 3D root records no override; `apply` keeps the file's root
+  transform per dimension the root carries, the root's own at the origin
+  where the file has none — and **no longer drops the root's record** when
+  neither had a 2D transform (a `continue` in the 0.4 code; a 3D or bare
+  root would have vanished from its file); `fragment` zeroes the root's
+  translation in either dimension; `variant` and the replication client
+  spawn `AsAuthored`, as does `Tick::duplicate`. Unity's prefab root
+  placement and Godot's instanced-scene root, for both dimensions at once.
+- **Editor**: the inspector's `Transform3D` section — position and scale
+  as three numbers each (mixed `—` per axis), rotation as Euler degrees
+  through `EulerHints` (`euler_hint.rs`): per entity the angles last shown
+  and the quaternion they were for, so a typed 180° stays 180° while the
+  rotation is the one it made, and a rotation changed elsewhere (undo, a
+  script) is read from the quaternion again — Unity's
+  `m_LocalEulerAnglesHint`, in the editor and not the file. The hierarchy's
+  **Create ▸ 3D ▸ Empty** makes a named `Transform3D` at the origin, one
+  undo entry. No 3D view yet: the 2D view draws and picks 2D entities only,
+  and the toolbar says how many 3D ones the scene holds that it does not
+  show.
+- **Tests**: `transform3d/tests.rs` (order, axes, YXZ against composed
+  quaternions, matrix round trip to 10⁻⁵, collapsed and sheared matrices,
+  `looking_at` incl. straight down, a value written and read back byte for
+  byte); `transform3d/file.rs` (unit kept to the bit, 0.7s normalised to
+  10⁻⁶, zero/NaN/∞ repaired, defaults); `world_transform_3d.rs` (a chain
+  rotates the offset then translates: (10, 5, −1) to 10⁻⁵, a group passes
+  through, world round trip through a turned parent to 10⁻⁴, a collapsed
+  parent refused); `world_transforms_3d.rs` (the pass equals the walk to
+  10⁻⁶ over a six-deep turned chain and a fork, a cycle terminates, a 2D
+  ancestor adds no frame); `dimension/tests.rs` (mixed links refused both
+  ways and through a group, a mixed file and a both-transforms entity
+  found and kept, second transforms refused); `prefab/tests/three_d.rs`
+  (a 3D placement places the root and turns it, a 2D placement leaves a
+  3D root, a moved 3D root records no override and a sync leaves it, Apply
+  keeps the file's root transform and writes the child's edit, a fragment
+  zeroed at its root, a variant spawning as its base and following its
+  edits); `tests/transform3d_scene.rs` (a 3D scene saves to its fixture
+  and reads back byte for byte); `edit` refusing a second transform and
+  2D under 3D; `euler_hint.rs` (180° round trip, a stale hint re-read, 450°
+  kept); the replication client's 3D prefab spawned as authored; a tick
+  spawning a 3D prefab where it is told.
+- **Not yet**: a 3D view, its camera, picking and gizmos (145–147); the
+  bridge's `drag` command is 2D only (it refuses an entity with no
+  `Transform2D`); `Transform3D` is not replicated, interpolated, animated
+  or interest-managed (134, 156); physics parenting for 3D (148); dropping a
+  3D prefab on the 2D view spawns it as authored, warned, rather than at
+  the cursor; the Euler hint is per editor session, not saved.
+
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
 Stage 99. A `ParticleEmitter` gained, all `#[serde(default)]` and unwritten
@@ -10733,4 +10858,6 @@ Both differ from most training data and from every tutorial written against
 | Reversed-Z perspective | `directx::perspective_infinite_reverse(vertical_fov, aspect_ratio, near)`: depth 1 at `near`, 0 at infinity — pair with `CompareFunction::GreaterEqual` and a depth clear of 0 |
 | Reversed, finite | No named variant: swap the planes — `directx::perspective(fov, aspect, far, near)`, `directx::orthographic(l, r, b, t, far, near)`; glam asserts only that both are positive (`glam_assert`) |
 | View matrices | `glam::camera::rh::view::look_to_mat4(eye, dir, up)` and `look_to_quat`; the `lh` module mirrors them |
+| Quaternions (stage 133) | `Quat::look_to_rh`/`look_at_rh` are `#[deprecated]` since 0.33.1 (for the view-space `camera::rh::view::look_to_quat`, the inverse of an entity's rotation); an entity facing −Z at a target is `Quat::from_mat3(&Mat3::from_cols(right, up, −forward))`. `Quat::is_normalized` is `Vec4::is_normalized`: `|len² − 1| ≤ 2e-4` (its doc says 1e-6). `EulerRot::YXZ` is intrinsic: `from_euler(YXZ, y, x, z)` = `Ry · Rx · Rz`, and `to_euler(YXZ)` answers `(y, x, z)` |
+| Affine decomposition | `Affine3A::to_scale_rotation_translation` only `glam_assert`s a non-zero determinant: with the assert off, a zero scale gives a NaN rotation, so a caller checks `matrix3.determinant()` first; the x scale takes the determinant's sign |
 | Parry | `parry3d` 0.31 needs `glamx ^0.3`, which needs `glam ^0.33.7`. The workspace's `glam = "0.33.3"` is a caret requirement, so the lock resolves the newest 0.33 by itself; writing `0.33.7` documents the floor. glam 0.34 exists: the workspace moves when parry does. Leave parry's `enhanced-determinism` off (it enables glam `scalar-math` everywhere) |

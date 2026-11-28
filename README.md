@@ -468,6 +468,7 @@ a row is added below as each stage lands.
 | 130 | Dogfood pass: the 0.4 stages played together | done |
 | 131 | Version 0.4: guide chapters for 119–129, the changelog | done |
 | 132 | Paired names (`Transform2D`, `Camera2D`, …), scene format version 2, `cargo xtask migrate` | done |
+| 133 | `Transform3D`, the hierarchy in both dimensions, `Placement` for prefab roots | done |
 
 ## Contributing
 
