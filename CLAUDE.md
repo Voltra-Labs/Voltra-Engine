@@ -33,8 +33,8 @@ Rules:
   sorts by depth and has none. (`Mat4`/`Vec3` in `View2D` exist because WGSL
   wants a 4×4 uniform, not as a third dimension.)
 - **Do not bend 2D for 3D or 3D for 2D.** A system both use is generic over
-  both — a trait or a two-variant enum — never a 2D type widened until it can
-  hold the 3D one.
+  both — a trait or a two-variant enum — never a 2D type widened until it
+  can hold the 3D one.
 - **No speculative scaffolding.** A type, field or crate appears in the stage
   whose code uses it: no depth attachment "ready for later", no unused axis,
   no empty crate from the plan.
@@ -186,8 +186,9 @@ own HEAD only — no rebase, reset --hard, force-push, or plumbing
 (`hash-object`, `commit-tree`, …). Verify claims with `git log`, not the report.
 
 Brief subagents with paths, acceptance check, and hard rules: 2D and 3D
-parallel (never 3D with z = 0, no scaffolding), `winit` only in core, `wgpu` only in render, workspace versions, no
-`unwrap()` outside tests, one concept per file.
+parallel (never 3D with z = 0, no scaffolding), `winit` only in core,
+`wgpu` only in render, workspace versions, no `unwrap()` outside tests,
+one concept per file.
 
 ## Plugins and skills
 

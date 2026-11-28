@@ -9704,11 +9704,14 @@ what was built and where it differs.
   template's do too), and the registry, the prefab compare/apply/fragment/
   adopt code, `format/texture_paths.rs`, the inspector, the MCP server and
   the replication client's stash name components through it.
-  `tests/registered_names.rs` scans every crate's and game's sources (test
-  modules aside) for a quoted registered name outside its const; the few
+  `tests/registered_names.rs` scans every crate's and game's `src/`,
+  `examples/`, `benches/` and the template (test modules aside) for a
+  registered name quoted — or quoted inside a string, `\"Sprite2D\"` —
+  outside its const, a game's own `NAME`s held to that game's code; the few
   that are not the component — a new text's content, the editor's default
   entity names, the lobby's "Name" field — are listed in the test with why.
-  The migration table is the one other place, on purpose: it is history.
+  The migration table (`RENAMES`, and only it) is the one other place,
+  on purpose: it is history.
 - **The renames** (ARCHITECTURE "Naming", the table): `Transform2D`,
   `Camera2D`, `Sprite2D`, `RigidBody2D`, `Collider2D`, `WorldTransforms2D`,
   `world_matrix_2d`/`world_transform_2d`/`set_world_transform_2d`/
@@ -9721,7 +9724,12 @@ what was built and where it differs.
   theirs), in commits of their own. The 0.4 names are `#[deprecated]`
   aliases for 0.5 only — types in `voltra_scene::renamed`, re-exported at
   the crate root, the hierarchy functions as thin wrappers — and
-  `voltra_render::{Vertex, Mesh}`; `Camera2D` in `voltra-render` has none.
+  `voltra_render::{Vertex, Mesh}`, each also on the module path 0.4 code
+  wrote (`voltra_scene::transform::Transform`, `sprite::Sprite`,
+  `camera::Camera`, `body::RigidBody`, `collider::Collider`,
+  `hierarchy::WorldTransforms`, `hierarchy::world_transform::*`,
+  `voltra_render::mesh::{Mesh, Vertex}`; pinned by `tests/renamed.rs`), all
+  noting their removal in 0.6; `Camera2D` in `voltra-render` has none.
   Enum variants named after a component (`CasterShape::Sprite`) and the
   editor's default entity names ("Sprite", "Camera") are not component
   names and did not change.
@@ -9731,10 +9739,23 @@ what was built and where it differs.
   component name is a value; a variant's overrides are parts too, and a
   clip's track `target` is an entity path, not a component — then bumps
   the version, step by step. A version outside `OLDEST..=VERSION` is
-  `UnsupportedVersion` (0 included: no release wrote it). An old file that
-  holds both a component and its new name (a game's own component that
-  took the name first) is refused, naming the entity, rather than one
-  dropped. A part whose overrides name nothing renamed keeps its text.
+  `UnsupportedVersion` (0 included: no release wrote it). An old file
+  holding a key or an override that equals a step's *target* — no engine
+  component of that version had the name, so it is a game's own that took
+  it first — is refused, naming the entity and saying to rename the
+  component, rather than read as the engine's or one of two dropped. A
+  part whose overrides name nothing renamed keeps its text.
+- **A name registered twice is refused.** `ComponentRegistry::register`
+  keeps the first type under a name; a second is not registered, is
+  logged as an error naming both Rust types, and is listed by
+  `ComponentRegistry::refused` (the call still returns a builder, writing
+  into a discarded entry, so a game's chain of `with_template()` compiles
+  either way). Before, both were kept and every lookup found the first.
+- **Replication wire version 4.** `Control::Schema` sends registered
+  names; with `Transform` now `Transform2D` a 0.4 peer would connect and
+  match none of a 0.5 server's transforms, so the version is bumped and the
+  handshake refuses it (`REPLICATION_WIRE_VERSION`'s doc: a change of
+  registered names is a wire change).
   `format::parse` (read + upgrade) is the only way the tree turns text into
   a `SceneFile`: `load`, the prefab store, `StagedScene::read`, the MCP
   server's `scene_read` and asset check, and the editor's clipboard (a
@@ -9756,6 +9777,15 @@ what was built and where it differs.
   (the shipped samples explain themselves there, and a rewrite must not
   delete that), and a component the engine does not register — a game's —
   is written back as the file had it, since xtask does not link the game.
+  "Out of date" is any difference from that save — an older version, or a
+  version 2 file not in the editor's canonical form (hand-trimmed fields,
+  keys out of order); a rewrite keeps the leading comments and drops any
+  other. Line endings: compared as LF (the writer's), written back in the
+  file's own — a CRLF checkout (Git for Windows' `core.autocrlf`) is not
+  out of date, and a mixed file comes out in the ending most of its lines
+  had; `.gitattributes` keeps `*.ron` and `*.ron.tpl` LF on every
+  checkout. The new-game template's scene is in canonical form, and a game
+  just made passes `--check` (`new_game.rs` tests).
   `--check` prints each out-of-date file and fails; CI runs it. Ran over
   `assets/` and `games/` in a commit of its own: every scene, prefab and
   clip is version 2 / new names, comments kept.

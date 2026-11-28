@@ -105,6 +105,10 @@ cargo xtask migrate my/assets    # or a folder
 cargo xtask migrate --check      # list what is out of date, change nothing
 ```
 
+A file is rewritten as an editor save writes it: its leading comments are
+kept, any comment inside it is dropped, and `--check` lists a version 2
+file written by hand that a save would write differently, too.
+
 Clip properties follow (`Translation2D`, `Rotation2D`, `Scale2D`,
 `PointLight2DColor`/`Intensity`/`Radius`); the old names still read.
 

@@ -5,6 +5,34 @@ All notable changes, newest first. The format follows
 [Semantic Versioning](https://semver.org/) — before 1.0, a minor version may
 break the API.
 
+## [Unreleased]
+
+0.5 adds 3D beside 2D (`docs/superpowers/specs/0.5-3d.md`). Notes kept as
+stages land, for the 0.5 entry.
+
+### Breaking
+- **Paired names** (stage 132): `Transform`, the scene's `Camera`,
+  `Sprite`, `RigidBody`, `Collider` and `WorldTransforms` are
+  `Transform2D`, `Camera2D`, `Sprite2D`, `RigidBody2D`, `Collider2D` and
+  `WorldTransforms2D`; the hierarchy's `world_matrix`, `world_transform`,
+  `set_world_transform` and `parent_matrix` end in `_2d`; in
+  `voltra-render`, `Camera2D` is `View2D`, `Vertex` `Vertex2D`, `Mesh`
+  `Mesh2D`. The old names compile for 0.5 with a deprecation warning
+  (`View2D`'s excepted) and go in 0.6. Clip properties
+  `Translation2D`/`Rotation2D`/`Scale2D` and
+  `PointLight2DColor`/`Intensity`/`Radius` read their old names too.
+- **Scene format version 2**: components under their new names. A
+  version 1 scene, prefab or clip still loads, renamed as it is read
+  (overrides included); `cargo xtask migrate [--check]` rewrites a project.
+  A 0.4 file holding a game's own component under a name 0.5 gives the
+  engine (`Sprite2D`, …) is refused with a message to rename it.
+- **Replication wire version 4**: the schema sends the new names, so a 0.4
+  peer is refused at the handshake instead of connecting and matching no
+  transform.
+- **A component name registered twice is refused**: the first type keeps
+  it, the second is not registered, an error is logged, and
+  `ComponentRegistry::refused` lists it.
+
 ## [0.4.0] — 2026-11-27
 
 0.4 closes, stage by stage (119–131), the gaps `docs/ARCHITECTURE.md`
