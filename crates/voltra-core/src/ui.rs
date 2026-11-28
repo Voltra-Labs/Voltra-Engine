@@ -105,6 +105,12 @@ impl EguiLayer {
         self.backend.update_view(device, id, view, filter);
     }
 
+    /// Forgets an id [`register_view`](Self::register_view) gave: its view
+    /// is no longer drawn by egui and may be let go.
+    pub fn free_view(&mut self, id: TextureId) {
+        self.backend.free_view(id);
+    }
+
     /// The egui context.
     pub fn context(&self) -> &Context {
         &self.ctx

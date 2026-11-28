@@ -17,7 +17,8 @@ pub struct Gathered3D {
     pub lighting: Lighting3D,
     /// The directional light used, if any.
     pub light: Option<Entity>,
-    /// Directional lights beyond the one used (stage 139 lights them all).
+    /// Directional lights that could light beyond the one used (stage 139
+    /// lights them all); a broken one is not counted.
     pub unused_lights: usize,
     /// The environment used, if any: the camera's own, else the world's.
     pub environment: Option<Entity>,
@@ -38,27 +39,27 @@ pub fn gather(world: &World, camera: Entity) -> Gathered3D {
         .map(|(e, light)| (e, *light))
         .collect();
     lights.sort_by_key(|(e, _)| e.index());
-    let mut used = None;
-    for (entity, light) in &lights {
-        if light.problem().is_some() {
-            continue;
-        }
-        let direction = crate::hierarchy::world_matrix_3d(world, *entity)
-            .transform_vector3(Vec3::NEG_Z)
-            .normalize_or_zero();
-        if direction == Vec3::ZERO {
-            continue;
-        }
-        used = Some((
-            *entity,
-            DirectionalLight {
-                direction,
-                color: light.color,
-                energy: light.energy,
-            },
-        ));
-        break;
-    }
+    // Every light that can light, in index order: the first lights, the
+    // rest are "more". A broken one is neither — it is warned about for
+    // what it is.
+    let usable: Vec<(Entity, DirectionalLight)> = lights
+        .iter()
+        .filter(|(_, light)| light.problem().is_none())
+        .filter_map(|(entity, light)| {
+            let direction = crate::hierarchy::world_matrix_3d(world, *entity)
+                .transform_vector3(Vec3::NEG_Z)
+                .normalize_or_zero();
+            (direction != Vec3::ZERO).then_some((
+                *entity,
+                DirectionalLight {
+                    direction,
+                    color: light.color,
+                    energy: light.energy,
+                },
+            ))
+        })
+        .collect();
+    let used = usable.first().copied();
     let own = world.get::<Environment3D>(camera).map(|env| (camera, *env));
     let mut shared: Vec<(Entity, Environment3D)> = world
         .query::<Environment3D>()
@@ -74,7 +75,7 @@ pub fn gather(world: &World, camera: Entity) -> Gathered3D {
             ambient,
         },
         light: used.map(|(e, _)| e),
-        unused_lights: lights.len().saturating_sub(usize::from(used.is_some())),
+        unused_lights: usable.len().saturating_sub(1),
         environment: environment.map(|(e, _)| e),
         unused_environments: if own.is_some() {
             0
@@ -142,7 +143,9 @@ mod tests {
                 ..DirectionalLight3D::default()
             },
         );
-        assert_eq!(gather(&world, camera).light, Some(second));
+        let skipped = gather(&world, camera);
+        assert_eq!(skipped.light, Some(second));
+        assert_eq!(skipped.unused_lights, 0, "a broken light is no \"more\"");
         // Despawned: none left over.
         world.despawn(second);
         world.despawn(sun);

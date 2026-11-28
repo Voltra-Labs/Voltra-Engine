@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use voltra_assets::AssetPath;
 use voltra_ecs::Entity;
 use voltra_jobs::{JobPool, Task};
-use voltra_scene::format::{texture_paths, EntityRecord};
+use voltra_scene::format::{surface_texture_paths, texture_paths, EntityRecord};
 use voltra_scene::prefab::StagedScene;
 use voltra_scene::{ComponentRegistry, Replicated, SceneError, SceneId};
 
@@ -135,7 +135,14 @@ impl SceneBuild {
                 staged.keep_ids();
             }
             staged.check(&registry)?;
-            let textures = texture_paths(staged.records());
+            let mut textures = texture_paths(staged.records());
+            // A surface material's images too, read from its file here on
+            // the worker: decoding them is as costly as a sprite's.
+            for image in surface_texture_paths(staged.records(), &root) {
+                if !textures.contains(&image) {
+                    textures.push(image);
+                }
+            }
             Ok(Parsed {
                 staged,
                 textures,

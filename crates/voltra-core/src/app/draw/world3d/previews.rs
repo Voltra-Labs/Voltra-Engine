@@ -24,6 +24,11 @@ use crate::ui::TextureId;
 /// The largest preview drawn, in pixels a side.
 pub const MAX_PREVIEW: u32 = 512;
 
+/// Draws a preview is kept for without being asked for: a thumbnail
+/// scrolled away, a material no longer selected. Then its target and its
+/// egui id are let go.
+pub const KEEP_DRAWS: u64 = 120;
+
 /// One preview a panel asked for this frame.
 #[derive(Debug, Clone, PartialEq)]
 struct Request {
@@ -39,6 +44,8 @@ struct Shown {
     /// What it last drew, and through which texture views: a texture
     /// reloaded under its path has new ones.
     drawn: Option<(SurfaceSource, Vec<wgpu::TextureView>, wgpu::TextureFormat)>,
+    /// The last [`SurfacePreviews::draw`] it was asked for before.
+    asked: u64,
 }
 
 /// The previews asked for and those drawn.
@@ -46,6 +53,8 @@ struct Shown {
 pub(in crate::app) struct SurfacePreviews {
     requests: Vec<Request>,
     shown: HashMap<(String, u32), Shown>,
+    /// Counts the calls to [`draw`](Self::draw).
+    draws: u64,
 }
 
 impl std::fmt::Debug for SurfacePreviews {
@@ -62,7 +71,11 @@ impl SurfacePreviews {
     /// frame; the id to show it by, from the second frame it is asked.
     pub fn ask(&mut self, key: &str, size: u32, source: &SurfaceSource) -> Option<TextureId> {
         let size = size.clamp(1, MAX_PREVIEW);
-        let id = self.shown.get(&(key.to_owned(), size)).map(|s| s.id);
+        let draws = self.draws;
+        let id = self.shown.get_mut(&(key.to_owned(), size)).map(|s| {
+            s.asked = draws;
+            s.id
+        });
         if !self.requests.iter().any(|r| r.key == key && r.size == size) {
             self.requests.push(Request {
                 key: key.to_owned(),
@@ -75,15 +88,26 @@ impl SurfacePreviews {
 
     /// Draws every preview asked for since the last call whose input
     /// changed, loading the images it names, and gives each new one the id
-    /// `register` makes for its target (egui's, in the editor). Answers how
-    /// many it drew.
+    /// `register` makes for its target (egui's, in the editor). A preview
+    /// not asked for in [`KEEP_DRAWS`] calls is let go, its id handed to
+    /// `free`. Answers how many it drew.
     pub fn draw(
         &mut self,
         renderer: &mut Renderer,
         textures: &mut Textures,
         meshes: &mut Meshes,
         register: &mut dyn FnMut(&RenderTarget) -> TextureId,
+        free: &mut dyn FnMut(TextureId),
     ) -> usize {
+        let now = self.draws;
+        self.draws += 1;
+        self.shown.retain(|_, shown| {
+            let kept = shown.asked + KEEP_DRAWS >= now;
+            if !kept {
+                free(shown.id);
+            }
+            kept
+        });
         if self.requests.is_empty() {
             return 0;
         }
@@ -113,6 +137,7 @@ impl SurfacePreviews {
                         target,
                         id,
                         drawn: None,
+                        asked: now,
                     }
                 });
             let images = images(textures, &request.source.textures);
@@ -216,20 +241,34 @@ mod tests {
             ids += 1;
             TextureId::User(ids)
         };
+        let freed = std::cell::RefCell::new(Vec::new());
+        let mut free = |id: TextureId| freed.borrow_mut().push(id);
         let size = 96;
         assert_eq!(
             previews.ask("gold", size, &gold()),
             None,
             "no id the first frame"
         );
-        let drawn = previews.draw(&mut renderer, &mut textures, &mut meshes, &mut register);
+        let drawn = previews.draw(
+            &mut renderer,
+            &mut textures,
+            &mut meshes,
+            &mut register,
+            &mut free,
+        );
         assert_eq!(drawn, 1);
         assert_eq!(
             previews.ask("gold", size, &gold()),
             Some(TextureId::User(1))
         );
         assert_eq!(
-            previews.draw(&mut renderer, &mut textures, &mut meshes, &mut register),
+            previews.draw(
+                &mut renderer,
+                &mut textures,
+                &mut meshes,
+                &mut register,
+                &mut free
+            ),
             0,
             "unchanged: not drawn again"
         );
@@ -272,8 +311,38 @@ mod tests {
         };
         previews.ask("gold", size, &rough);
         assert_eq!(
-            previews.draw(&mut renderer, &mut textures, &mut meshes, &mut register),
+            previews.draw(
+                &mut renderer,
+                &mut textures,
+                &mut meshes,
+                &mut register,
+                &mut free
+            ),
             1
         );
+        // No longer asked for: kept a while, then let go with its id.
+        for _ in 0..KEEP_DRAWS {
+            previews.draw(
+                &mut renderer,
+                &mut textures,
+                &mut meshes,
+                &mut register,
+                &mut free,
+            );
+        }
+        assert!(
+            previews.target("gold", size).is_some(),
+            "kept {KEEP_DRAWS} draws"
+        );
+        assert!(freed.borrow().is_empty());
+        previews.draw(
+            &mut renderer,
+            &mut textures,
+            &mut meshes,
+            &mut register,
+            &mut free,
+        );
+        assert!(previews.target("gold", size).is_none(), "let go");
+        assert_eq!(*freed.borrow(), [TextureId::User(1)]);
     }
 }

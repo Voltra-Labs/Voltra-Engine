@@ -77,10 +77,19 @@ impl World3D {
     ) {
         let meshes = self.meshes.get_or_insert_with(Meshes::new);
         let device = renderer.context().device().clone();
-        self.previews
-            .draw(renderer, textures, meshes, &mut |target: &RenderTarget| {
+        let mut freed = Vec::new();
+        self.previews.draw(
+            renderer,
+            textures,
+            meshes,
+            &mut |target: &RenderTarget| {
                 egui.register_view(&device, target.raw_view(), voltra_render::Filter::Linear)
-            });
+            },
+            &mut |id| freed.push(id),
+        );
+        for id in freed {
+            egui.free_view(id);
+        }
     }
 
     /// Loads every mesh's surface material and the images it names: see

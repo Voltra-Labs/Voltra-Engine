@@ -8,11 +8,12 @@
 //! decoded where it is resolved, on the frame, as before.
 
 use std::collections::HashSet;
+use std::path::Path;
 
-use voltra_assets::AssetPath;
+use voltra_assets::{AssetPath, MaterialDomain};
 
 use super::save::EntityRecord;
-use crate::{ParticleEmitter, PointLight2D, Sprite2D, Tilemap};
+use crate::{MeshInstance3D, ParticleEmitter, PointLight2D, Sprite2D, Tilemap};
 
 /// Every texture `records` name, each once, in the order first named.
 /// A component that will not read names nothing here; spawning it is what
@@ -59,6 +60,50 @@ pub fn texture_paths<'a>(records: impl IntoIterator<Item = &'a EntityRecord>) ->
     paths
 }
 
+/// Every image the surface materials of `records`' meshes name, each
+/// once: each material file read from `root` (once), its `standard`
+/// block's texture paths listed, colour and data alike. A material that
+/// will not read, or is a sprite's, names nothing here; the frame says why
+/// when it draws the mesh.
+pub fn surface_texture_paths<'a>(
+    records: impl IntoIterator<Item = &'a EntityRecord>,
+    root: &Path,
+) -> Vec<AssetPath> {
+    let mut materials = HashSet::new();
+    let mut seen = HashSet::new();
+    let mut paths = Vec::new();
+    for record in records {
+        let Some(value) = record.components.get(MeshInstance3D::NAME) else {
+            continue;
+        };
+        let Some(material) = value
+            .into_rust::<MeshInstance3D>()
+            .ok()
+            .and_then(|mesh| mesh.material)
+        else {
+            continue;
+        };
+        if !materials.insert(material.clone()) {
+            continue;
+        }
+        let Ok(file) = voltra_assets::read_material_file(root, &material) else {
+            continue;
+        };
+        if file.domain != MaterialDomain::Surface {
+            continue;
+        }
+        let Ok(textures) = file.standard.textures() else {
+            continue;
+        };
+        for image in textures.iter() {
+            if seen.insert(image.clone()) {
+                paths.push(image.clone());
+            }
+        }
+    }
+    paths
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -91,5 +136,40 @@ mod tests {
         found.sort_by(|a, b| a.as_str().cmp(b.as_str()));
 
         assert_eq!(found, vec![path("a.png"), path("b.png")]);
+    }
+
+    #[test]
+    fn a_mesh_s_surface_material_names_its_images_once() {
+        let root = voltra_testkit::scratch_root();
+        std::fs::create_dir_all(root.join("m")).expect("a folder");
+        std::fs::write(
+            root.join("m/brick.material.ron"),
+            r#"(version: 1, domain: Surface, standard: (
+                base_color_texture: "t/brick.png", normal_texture: "t/brick_n.png"))"#,
+        )
+        .expect("written");
+        let mut world = World::new();
+        for _ in 0..2 {
+            let entity = world.spawn();
+            world.insert(entity, SceneId::new());
+            world.insert(
+                entity,
+                MeshInstance3D::new(voltra_assets::BuiltinMesh::Cube)
+                    .with_material(path("m/brick.material.ron")),
+            );
+        }
+        let missing = world.spawn();
+        world.insert(missing, SceneId::new());
+        world.insert(
+            missing,
+            MeshInstance3D::new(voltra_assets::BuiltinMesh::Cube)
+                .with_material(path("m/none.material.ron")),
+        );
+        let registry = ComponentRegistry::with_defaults();
+        let file = to_scene_file(&world, &registry).expect("saved");
+        assert_eq!(
+            surface_texture_paths(&file.entities, &root),
+            [path("t/brick.png"), path("t/brick_n.png")]
+        );
     }
 }

@@ -21,4 +21,4 @@ pub use registry::{
 };
 pub use save::{save, to_scene_file, to_text, write, EntityRecord, SceneFile, VERSION};
 pub use serial_tree::{SerialTree, Step, TreePath};
-pub use texture_paths::texture_paths;
+pub use texture_paths::{surface_texture_paths, texture_paths};
