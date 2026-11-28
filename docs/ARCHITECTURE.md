@@ -11057,9 +11057,17 @@ broken one is a material with an error, never a crash.
   ("Unexpected error", `Error::from_js`), found by the web test.
   **Uncaptured errors log instead of panicking**, engine-wide
   (`context/errors.rs`): wgpu's default handler panics on any; ours logs
-  each distinct message once and counts them
-  (`GpuContext::uncaptured_errors`), through the browser's
-  `onuncapturederror` on WebGPU for the same reason. A lost device is not
+  each distinct message once — digits folded, so the same error on
+  another object is one, and at most 64 (`MAX_SAID`), counted past it —
+  and counts them all (`GpuContext::uncaptured_errors`), through the
+  browser's `onuncapturederror` on WebGPU for the same reason. **On a
+  headless device in a debug build it then panics** (the re-review: with
+  only a log, an invalid buffer made by an engine bug passed every
+  headless test): a headless device is a test's or a tool's, and a game's
+  own shaders never reach the handler, their banks catching them in
+  scopes. Pinned by `context/errors.rs` (a stray mapped buffer of 3 bytes
+  panics headless, said and counted first; 192 messages of one shape said
+  once, 192 distinct ones capped at 64, all 384 counted). A lost device is not
   one of these: its own callback still says so as an error. Two cases
   are refused at load instead, natively, because they would fail at
   pipeline creation on every backend or on WebGL2 alone: an `override`
@@ -11079,10 +11087,7 @@ broken one is a material with an error, never a crash.
   tests.rs` (a shader binding what the layout lacks: refused, drawn
   plainly, the other material drawn through its own, 0 uncaptured
   errors, not made again), `compose.rs` (an `override` and
-  `textureNumLevels` refused), `voltra-core/tests/materials.rs` (the
-  shipped branchy bar its own blue natively) and `materials.mjs` — on
-  WebGPU the bar is its plain orange tint (11 340 pixels, none blue) and
-  both coins draw as ever; on WebGL2 it is blue.
+  `textureNumLevels` refused), and the refusal fixture below.
 - **Colour buttons write only on change**, everywhere in the editor
   (`panels/colour_edit.rs`): egui's `color_edit_button_*` round-trips the
   colour through HSV each frame it is drawn and writes the result back —
@@ -11180,11 +11185,17 @@ broken one is a material with an error, never a crash.
   shader drawn together after the standard's, though a standard one's
   slot lies between theirs), voltra-assets' `custom_tests.rs` (a texture
   named with no image a white slot, the shading compiled),
-  `voltra-core/tests/custom3d.rs` (the branchy sphere its own yellow
-  natively, AgX ±2) and `custom3d.mjs` — on WebGPU the branchy sphere is
-  its standard block's red (6 724 pixels, none yellow) and every other
-  material draws, the refusal logged once with Tint's message; on WebGL2
-  it is yellow (6 733), as natively.
+  and **the refusal fixture** — not a sample: the deliberately broken
+  materials live under `crates/voltra-player/web/test/fixtures/` with
+  their own `refusals.build.ron`, which only `refusals.mjs` builds, so the
+  guide's samples stay clean. A sphere and a sprite bar whose shaders
+  sample inside a branch, beside a plain sphere and bar:
+  `voltra-core/tests/refusals.rs` draws both branchy ones as written
+  natively (yellow, blue); `refusals.mjs` requires on WebGPU the
+  sphere's standard block (red, 15 650 pixels, none yellow) and the bar
+  plain (orange, 11 340, none blue) with the plain ones drawn (15 657 and
+  11 340), each refusal logged once with Tint's message — and on WebGL2
+  both as written.
 - **Bench** (`draw3d`, release, this container) after the shader group
   joined the order key: `cull-group/10k` 1.23 ms, `cull-group-jobs/10k`
   1.12 ms against stage 137's 1.47 and 1.34 — `voltra-bench compare`: no

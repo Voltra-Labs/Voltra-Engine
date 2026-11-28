@@ -70,6 +70,10 @@ stages land, for the 0.5 entry.
   WebGPU's compiler refuses no longer invalidates the sprite pass.
   `material::validate` also refuses an `override` and what WebGL2 cannot
   run. `MaterialBank::is_refused` says which.
+- **A headless device in a debug build panics on an uncaptured GPU
+  error** after logging it (stage 138 re-review), so an engine bug fails
+  its test; windowed and release, it is logged and counted. Distinct
+  messages said are capped at 64.
 
 ## [0.4.0] — 2026-11-27
 

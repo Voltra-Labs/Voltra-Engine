@@ -143,10 +143,12 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   console says why, once. Uncaptured GPU errors are logged, not a panic,
   through `onuncapturederror` on WebGPU.
   Sprite materials take the same scope: refused, their sprites draw
-  plainly; `materials.mjs` pins it with a deliberately branchy bar.
+  plainly. `refusals.mjs` pins both on a web-test fixture
+  (`web/test/fixtures/`, not a sample): a branchy sphere and bar drawn as
+  their fallbacks on WebGPU, as written on WebGL2, the plain ones beside
+  them drawn on both.
 - `custom3d.mjs` requires the native frame's colours for a data texture
-  read unlit and a dissolve's rim on both, and a deliberately branchy
-  material's standard block on WebGPU (its own colour on WebGL2).
+  read unlit and a dissolve's rim on both.
 
 ## Checking a web build
 
@@ -160,6 +162,7 @@ node crates/voltra-player/web/test/shapes3d.mjs      # a 3D scene, and WebGL2's 
 node crates/voltra-player/web/test/mixed3d.mjs       # 3D through AgX, a 2D overlay and the HUD over it
 node crates/voltra-player/web/test/materials3d.mjs   # surface materials lit as natively, on both
 node crates/voltra-player/web/test/custom3d.mjs      # custom surface materials, on both
+node crates/voltra-player/web/test/refusals.mjs      # shaders WebGPU refuses draw their fallbacks
 ```
 
 Each builds through `cargo xtask dist --web` into `target/`, serves it and
