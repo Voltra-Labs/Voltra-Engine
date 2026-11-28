@@ -25,6 +25,7 @@ pub mod pipeline;
 pub mod post;
 pub mod quad;
 pub mod readback;
+pub mod render3d;
 pub mod renderer;
 pub mod scene_draw;
 pub mod shader;

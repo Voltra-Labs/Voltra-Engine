@@ -23,6 +23,7 @@ mod gpu_timing;
 mod layer;
 mod light_layers;
 mod normals;
+mod world3d;
 
 pub use composite::Placed;
 pub use layer::Layer;
@@ -71,6 +72,9 @@ pub struct Renderer {
     /// Where the world is drawn before the post pass on the window path,
     /// sized to the surface; made on the first frame.
     frame_target: Option<RenderTarget>,
+    /// The 3D pass, made with the first 3D frame: a 2D game never builds
+    /// it.
+    pass3d: Option<crate::render3d::Pass3D>,
     /// The size the line shader widens against, rewritten every frame.
     viewport_binding: ViewportBinding,
     /// The world camera, rewritten into its uniform every frame.
@@ -192,6 +196,7 @@ impl Renderer {
             particles,
             skin,
             frame_target: None,
+            pass3d: None,
             viewport_binding,
             camera,
             lighting: Lighting::default(),

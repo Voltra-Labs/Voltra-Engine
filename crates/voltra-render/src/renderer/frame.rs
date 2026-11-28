@@ -177,7 +177,7 @@ impl Renderer {
     }
 
     /// The screen-space layer, over the scene, in the target's pixels.
-    fn record_ui(
+    pub(super) fn record_ui(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         view: &wgpu::TextureView,
