@@ -1,55 +1,15 @@
 //! Textures, samplers and their bind group.
 
-use std::error::Error;
-use std::fmt;
-
 mod decode;
+mod error;
+mod layout;
+mod upload;
 
 pub use decode::{decode_png, DecodedImage};
-
-/// Why a texture could not be created.
-#[derive(Debug)]
-pub enum TextureError {
-    /// The bytes were not a PNG, or were a corrupt one.
-    Decode(image::ImageError),
-    /// The pixel data does not match the stated dimensions.
-    SizeMismatch {
-        /// The number of bytes expected.
-        expected: usize,
-        /// The number of bytes given.
-        actual: usize,
-        /// The stated width, in pixels.
-        width: u32,
-        /// The stated height, in pixels.
-        height: u32,
-    },
-}
-
-impl fmt::Display for TextureError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Decode(e) => write!(f, "failed to decode image: {e}"),
-            Self::SizeMismatch {
-                expected,
-                actual,
-                width,
-                height,
-            } => write!(
-                f,
-                "pixel data is {actual} bytes but {width}x{height} RGBA needs {expected}"
-            ),
-        }
-    }
-}
-
-impl Error for TextureError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Decode(e) => Some(e),
-            Self::SizeMismatch { .. } => None,
-        }
-    }
-}
+pub use error::TextureError;
+pub use layout::bind_group_layout;
+pub use upload::reinterprets_srgb;
+use upload::upload;
 
 /// How a texture is filtered when it does not map 1:1 to pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -314,89 +274,6 @@ impl Texture {
             ],
         })
     }
-}
-
-/// Layout for group 1: a sampled texture at binding 0, its sampler at 1.
-///
-/// Free-standing rather than a method so the pipeline can be built before any
-/// texture exists.
-pub fn bind_group_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
-    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("texture-bind-group-layout"),
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Texture {
-                    sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled: false,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                // Filtering, matching `filterable: true` above. A mismatch
-                // between the two is a validation error, not a visual bug.
-                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                count: None,
-            },
-        ],
-    })
-}
-
-/// Whether `device` can view an sRGB texture as its plain counterpart
-/// (`DownlevelFlags::VIEW_FORMATS`). wgpu 30's GL backend — WebGL2 among it
-/// — never can; every other backend always can. Read off the backend
-/// because a `Device` does not report its downlevel flags.
-pub fn reinterprets_srgb(device: &wgpu::Device) -> bool {
-    device.adapter_info().backend != wgpu::Backend::Gl
-}
-
-/// Makes a sampled 2D texture of `format` holding `rgba`; with `view_raw`,
-/// one that can also be viewed as `format` without its sRGB suffix.
-fn upload(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    label: &str,
-    format: wgpu::TextureFormat,
-    view_raw: bool,
-    rgba: &[u8],
-    size: wgpu::Extent3d,
-) -> wgpu::Texture {
-    let raw = [format.remove_srgb_suffix()];
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label: Some(label),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-        // Reinterpreting these pixels as plain `Rgba8Unorm` has to be
-        // declared up front; a view format missing from this list is
-        // rejected when the view is created, not when it is sampled.
-        view_formats: if view_raw { &raw } else { &[] },
-    });
-    // `write_texture` has no 256-byte row alignment requirement, unlike
-    // `copy_buffer_to_texture`.
-    queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        rgba,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(4 * size.width),
-            rows_per_image: Some(size.height),
-        },
-        size,
-    );
-    texture
 }
 
 #[cfg(test)]
