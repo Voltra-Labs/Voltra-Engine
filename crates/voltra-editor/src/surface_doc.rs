@@ -15,11 +15,19 @@
 //! that is not finite reads as its default, so a NaN cannot make the draft
 //! differ from the file on every frame.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use voltra_assets::{
-    leading_comments, AssetPath, MaterialDomain, MaterialFile, Materials, StandardFile,
+    leading_comments, AssetPath, CustomTextureFile, MaterialDomain, MaterialFile, Materials,
+    StandardFile,
 };
+use voltra_render::material::Uniform;
+use voltra_render::render3d::SurfaceLighting;
+
+mod draft;
+
+pub use draft::{DraftShader, Drawn};
 
 /// An open surface material.
 #[derive(Debug, Clone, PartialEq)]
@@ -38,6 +46,8 @@ pub struct SurfaceDoc {
     /// or written: a different one, with nothing unsaved, means the file
     /// changed on disk and is read again.
     pub seen: Option<u64>,
+    /// The draft's own shader, composed and checked for the preview.
+    pub draft: DraftShader,
 }
 
 impl SurfaceDoc {
@@ -49,6 +59,9 @@ impl SurfaceDoc {
         let mut file: MaterialFile =
             ron::from_str(&text).map_err(|e| format!("{}: {e}", full.display()))?;
         file.standard = file.standard.finite().0;
+        for value in file.uniforms.values_mut() {
+            *value = value.finite();
+        }
         Ok(Self {
             path: path.clone(),
             saved: file.clone(),
@@ -56,6 +69,7 @@ impl SurfaceDoc {
             header: leading_comments(&text).to_owned(),
             failed: None,
             seen: None,
+            draft: DraftShader::default(),
         })
     }
 
@@ -84,14 +98,36 @@ impl SurfaceDoc {
         self.file.domain
     }
 
-    /// The standard block, as edited.
-    pub fn standard(&self) -> &StandardFile {
-        &self.file.standard
-    }
-
     /// The standard block, to edit.
     pub fn standard_mut(&mut self) -> &mut StandardFile {
         &mut self.file.standard
+    }
+
+    /// The shader file, as edited: empty for the standard block alone.
+    pub fn shader_mut(&mut self) -> &mut String {
+        &mut self.file.shader
+    }
+
+    /// Whether a custom surface is lit, to edit.
+    pub fn lighting_mut(&mut self) -> &mut SurfaceLighting {
+        &mut self.file.lighting
+    }
+
+    /// A custom surface's uniforms, to edit.
+    pub fn uniforms_mut(&mut self) -> &mut BTreeMap<String, Uniform> {
+        &mut self.file.uniforms
+    }
+
+    /// A custom surface's own textures, to edit.
+    pub fn textures_mut(&mut self) -> &mut BTreeMap<String, CustomTextureFile> {
+        &mut self.file.textures
+    }
+
+    /// What the draft draws for the preview, its shader read under `root`
+    /// again when the store's `revision` of the material changes: see
+    /// [`DraftShader::draw`].
+    pub fn drawn(&mut self, root: &Path, revision: Option<u64>) -> Drawn {
+        self.draft.draw(root, &self.file, revision)
     }
 
     /// Whether it differs from the file.
@@ -152,8 +188,10 @@ impl SurfaceDoc {
     /// Reads the file again over the draft: it changed on disk.
     pub fn reread(&mut self, root: &Path) -> Result<(), String> {
         let seen = self.seen;
+        let draft = std::mem::take(&mut self.draft);
         *self = Self::open(root, &self.path)?;
         self.seen = seen;
+        self.draft = draft;
         Ok(())
     }
 }
@@ -194,11 +232,46 @@ mod tests {
             .and_then(|m| m.surface())
             .expect("a surface");
         assert_eq!(reloaded.standard.roughness, 0.9, "every mesh draws it now");
-        let again = SurfaceDoc::open(&root, &path).expect("read back");
-        assert_eq!(again.standard().roughness, 0.9);
+        let mut again = SurfaceDoc::open(&root, &path).expect("read back");
+        assert_eq!(again.standard_mut().roughness, 0.9);
         assert!(
             !doc.settle(&root, Some(&mut materials), false),
             "nothing new"
         );
+    }
+
+    #[test]
+    fn a_custom_surface_s_fields_are_written_and_drawn_by_every_mesh() {
+        let root = scratch_root();
+        let path = AssetPath::new("materials/own.material.ron").expect("a path");
+        let mut doc = SurfaceDoc::create(&root, &path).expect("created");
+        std::fs::write(
+            root.join("materials/own.wgsl"),
+            "fn surface(in: SurfaceInput) -> Surface {\n    var s = standard_surface(in);\n    s.roughness = material.rough;\n    return s;\n}\n",
+        )
+        .expect("written");
+        let mut materials = Materials::new(root.path());
+        let handle = materials.load(&path);
+        *doc.shader_mut() = "materials/own.wgsl".to_owned();
+        doc.uniforms_mut()
+            .insert("rough".to_owned(), Uniform::Float(0.75));
+        *doc.lighting_mut() = SurfaceLighting::Unlit;
+        let drawn = doc.drawn(&root, None);
+        assert_eq!(drawn.error, None, "the draft compiles for the preview");
+        assert!(doc.settle(&root, Some(&mut materials), false));
+        let material = materials.get(handle).expect("loaded");
+        assert_eq!(material.error, None);
+        let custom = material
+            .surface()
+            .and_then(|s| s.custom.as_ref())
+            .expect("its own shading");
+        assert_eq!(custom.uniforms.get("rough"), Some(&Uniform::Float(0.75)));
+        assert_eq!(custom.lighting, SurfaceLighting::Unlit);
+        // A name the shader does not have: the preview says why, the
+        // standard block drawn.
+        doc.uniforms_mut().clear();
+        let drawn = doc.drawn(&root, None);
+        assert!(drawn.error.is_some_and(|e| e.contains("rough")));
+        assert!(drawn.source.expect("its standard block").custom.is_none());
     }
 }

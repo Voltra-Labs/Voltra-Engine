@@ -1,5 +1,6 @@
-//! The surface material a mesh draws through, its file edited in place,
-//! with a live preview on a lit sphere.
+//! The surface material a mesh draws through, its file edited in place —
+//! the standard block, and a custom surface's shader, uniforms and
+//! textures — with a live preview on a lit sphere.
 //!
 //! The file is shared by every mesh naming it, so its edits are not the
 //! scene's: see [`SurfaceDoc`] for when they are written.
@@ -10,6 +11,7 @@ use voltra_core::UiFrame;
 
 use crate::surface_doc::SurfaceDoc;
 
+mod custom;
 mod fields;
 
 /// Points a side the preview is drawn at.
@@ -65,18 +67,26 @@ pub(super) fn show(
         );
         return;
     }
-    // What the file holds now that cannot be drawn — a texture path that is
-    // no asset path — said as the draw list says it.
-    let error = frame
-        .materials
-        .as_deref()
-        .and_then(|m| m.by_path_handle(path).and_then(|h| m.get(h)))
-        .and_then(|m| m.error.clone());
+    // What the draft draws, its own shader composed and checked when it
+    // changes. Why it cannot be drawn as written — a shader that will not
+    // compile (drawn as its standard block), a texture path that is no
+    // asset path — said as the draw list says it: the draft's own reason,
+    // or the store's for the file as saved.
+    let drawn = doc.drawn(&root, revision);
+    let error = drawn.error.clone().or_else(|| {
+        frame
+            .materials
+            .as_deref()
+            .and_then(|m| m.by_path_handle(path).and_then(|h| m.get(h)))
+            .and_then(|m| m.error.clone())
+            .filter(|_| !doc.is_unsaved())
+    });
     if let Some(error) = error {
         ui.label(
             RichText::new(error)
                 .color(ui.visuals().error_fg_color)
-                .small(),
+                .small()
+                .monospace(),
         );
     }
     ui.label(
@@ -84,7 +94,7 @@ pub(super) fn show(
             .weak()
             .small(),
     );
-    match doc.standard().resolve() {
+    match drawn.source {
         Ok(source) => {
             let pixels = (PREVIEW * ui.ctx().pixels_per_point()).round() as u32;
             let key = format!("inspector/{}", path.as_str());
@@ -109,6 +119,7 @@ pub(super) fn show(
         }
     }
     fields::show(ui, doc.standard_mut());
+    custom::show(ui, doc);
     // Written once the pointer is let go, no popup is open and nothing is
     // being typed: one write per gesture, not one a frame of a drag.
     let ctx = ui.ctx().clone();
