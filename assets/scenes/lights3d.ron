@@ -1,0 +1,1018 @@
+// Lights and the environment: a corner of a room lit by red, green and
+// blue point lights, a spot light's cone on the floor, two suns, a sphere
+// among ten small lights (it is lit by the eight that matter most), and
+// pillars fading into the fog toward a gradient sky. What
+// crates/voltra-core/tests/lights3d.rs and
+// crates/voltra-player/web/test/lights3d.mjs draw.
+(
+    version: 2,
+    entities: [
+        (
+            id: "019fe300-0139-7000-8000-000000000001",
+            components: {
+                "Camera3D": (projection:Perspective(fov_y_degrees:55.0,near:0.1),priority:0,active:true),
+                "Name": "Camera",
+                "Transform3D": (translation:(0,2.2,8),rotation:(-0.074376,-0.000000,-0.000000,0.997230),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000002",
+            components: {
+                "Environment3D": (ambient:(0.02,0.02,0.03),background:Gradient(top:(0.04,0.1,0.32),horizon:(0.6,0.45,0.38),bottom:(0.08,0.07,0.06)),fog:Some((color:(0.5,0.45,0.42),density:0.02,height:2.0,height_falloff:0.1,sky_tint:1.0))),
+                "Name": "Environment",
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000003",
+            components: {
+                "DirectionalLight3D": (color:(1.0,0.8,0.6),energy:0.2),
+                "Name": "Sun Warm",
+                "Transform3D": (translation:(0,6,0),rotation:(-0.403058,0.272532,0.127084,0.864361),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000004",
+            components: {
+                "DirectionalLight3D": (color:(0.4,0.55,1.0),energy:0.12),
+                "Name": "Sun Cool",
+                "Transform3D": (translation:(0,6,0),rotation:(-0.246324,-0.547030,-0.172478,0.781239),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000005",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-0",
+                "Transform3D": (translation:(-9,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000006",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-1",
+                "Transform3D": (translation:(-9,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000007",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-2",
+                "Transform3D": (translation:(-9,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000008",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-3",
+                "Transform3D": (translation:(-9,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000009",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-4",
+                "Transform3D": (translation:(-9,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000010",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-5",
+                "Transform3D": (translation:(-9,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000011",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-6",
+                "Transform3D": (translation:(-9,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000012",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-7",
+                "Transform3D": (translation:(-9,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000013",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-8",
+                "Transform3D": (translation:(-9,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000014",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 0-9",
+                "Transform3D": (translation:(-9,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000015",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-0",
+                "Transform3D": (translation:(-7,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000016",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-1",
+                "Transform3D": (translation:(-7,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000017",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-2",
+                "Transform3D": (translation:(-7,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000018",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-3",
+                "Transform3D": (translation:(-7,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000019",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-4",
+                "Transform3D": (translation:(-7,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000020",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-5",
+                "Transform3D": (translation:(-7,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000021",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-6",
+                "Transform3D": (translation:(-7,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000022",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-7",
+                "Transform3D": (translation:(-7,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000023",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-8",
+                "Transform3D": (translation:(-7,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000024",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 1-9",
+                "Transform3D": (translation:(-7,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000025",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-0",
+                "Transform3D": (translation:(-5,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000026",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-1",
+                "Transform3D": (translation:(-5,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000027",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-2",
+                "Transform3D": (translation:(-5,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000028",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-3",
+                "Transform3D": (translation:(-5,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000029",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-4",
+                "Transform3D": (translation:(-5,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000030",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-5",
+                "Transform3D": (translation:(-5,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000031",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-6",
+                "Transform3D": (translation:(-5,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000032",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-7",
+                "Transform3D": (translation:(-5,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000033",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-8",
+                "Transform3D": (translation:(-5,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000034",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 2-9",
+                "Transform3D": (translation:(-5,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000035",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-0",
+                "Transform3D": (translation:(-3,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000036",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-1",
+                "Transform3D": (translation:(-3,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000037",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-2",
+                "Transform3D": (translation:(-3,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000038",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-3",
+                "Transform3D": (translation:(-3,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000039",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-4",
+                "Transform3D": (translation:(-3,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000040",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-5",
+                "Transform3D": (translation:(-3,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000041",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-6",
+                "Transform3D": (translation:(-3,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000042",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-7",
+                "Transform3D": (translation:(-3,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000043",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-8",
+                "Transform3D": (translation:(-3,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000044",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 3-9",
+                "Transform3D": (translation:(-3,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000045",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-0",
+                "Transform3D": (translation:(-1,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000046",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-1",
+                "Transform3D": (translation:(-1,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000047",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-2",
+                "Transform3D": (translation:(-1,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000048",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-3",
+                "Transform3D": (translation:(-1,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000049",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-4",
+                "Transform3D": (translation:(-1,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000050",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-5",
+                "Transform3D": (translation:(-1,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000051",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-6",
+                "Transform3D": (translation:(-1,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000052",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-7",
+                "Transform3D": (translation:(-1,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000053",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-8",
+                "Transform3D": (translation:(-1,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000054",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 4-9",
+                "Transform3D": (translation:(-1,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000055",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-0",
+                "Transform3D": (translation:(1,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000056",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-1",
+                "Transform3D": (translation:(1,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000057",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-2",
+                "Transform3D": (translation:(1,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000058",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-3",
+                "Transform3D": (translation:(1,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000059",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-4",
+                "Transform3D": (translation:(1,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000060",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-5",
+                "Transform3D": (translation:(1,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000061",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-6",
+                "Transform3D": (translation:(1,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000062",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-7",
+                "Transform3D": (translation:(1,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000063",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-8",
+                "Transform3D": (translation:(1,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000064",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 5-9",
+                "Transform3D": (translation:(1,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000065",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-0",
+                "Transform3D": (translation:(3,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000066",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-1",
+                "Transform3D": (translation:(3,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000067",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-2",
+                "Transform3D": (translation:(3,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000068",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-3",
+                "Transform3D": (translation:(3,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000069",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-4",
+                "Transform3D": (translation:(3,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000070",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-5",
+                "Transform3D": (translation:(3,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000071",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-6",
+                "Transform3D": (translation:(3,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000072",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-7",
+                "Transform3D": (translation:(3,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000073",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-8",
+                "Transform3D": (translation:(3,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000074",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 6-9",
+                "Transform3D": (translation:(3,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000075",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-0",
+                "Transform3D": (translation:(5,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000076",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-1",
+                "Transform3D": (translation:(5,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000077",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-2",
+                "Transform3D": (translation:(5,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000078",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-3",
+                "Transform3D": (translation:(5,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000079",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-4",
+                "Transform3D": (translation:(5,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000080",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-5",
+                "Transform3D": (translation:(5,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000081",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-6",
+                "Transform3D": (translation:(5,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000082",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-7",
+                "Transform3D": (translation:(5,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000083",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-8",
+                "Transform3D": (translation:(5,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000084",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 7-9",
+                "Transform3D": (translation:(5,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000085",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-0",
+                "Transform3D": (translation:(7,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000086",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-1",
+                "Transform3D": (translation:(7,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000087",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-2",
+                "Transform3D": (translation:(7,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000088",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-3",
+                "Transform3D": (translation:(7,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000089",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-4",
+                "Transform3D": (translation:(7,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000090",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-5",
+                "Transform3D": (translation:(7,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000091",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-6",
+                "Transform3D": (translation:(7,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000092",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-7",
+                "Transform3D": (translation:(7,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000093",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-8",
+                "Transform3D": (translation:(7,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000094",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 8-9",
+                "Transform3D": (translation:(7,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000095",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-0",
+                "Transform3D": (translation:(9,0,-11),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000096",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-1",
+                "Transform3D": (translation:(9,0,-9),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000097",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-2",
+                "Transform3D": (translation:(9,0,-7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000098",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-3",
+                "Transform3D": (translation:(9,0,-5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000099",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-4",
+                "Transform3D": (translation:(9,0,-3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000100",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-5",
+                "Transform3D": (translation:(9,0,-1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000101",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-6",
+                "Transform3D": (translation:(9,0,1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000102",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-7",
+                "Transform3D": (translation:(9,0,3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000103",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-8",
+                "Transform3D": (translation:(9,0,5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000104",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Floor 9-9",
+                "Transform3D": (translation:(9,0,7),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(2,1,2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000105",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane"),
+                "Name": "Far Floor",
+                "Transform3D": (translation:(0,-0.02,-100),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(400,1,400)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000106",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cube"),
+                "Name": "Back Wall",
+                "Transform3D": (translation:(-3.5,1.5,-2.1),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(5,3,0.2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000107",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cube"),
+                "Name": "Side Wall",
+                "Transform3D": (translation:(-6.1,1.5,0),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(0.2,3,4.4)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000108",
+            components: {
+                "Name": "Red Lamp",
+                "PointLight3D": (color:(1,0.1,0.05),energy:1.2,range:3.0),
+                "Transform3D": (translation:(-5,1.2,-1.3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000109",
+            components: {
+                "Name": "Green Lamp",
+                "PointLight3D": (color:(0.1,1,0.15),energy:1.2,range:3.0),
+                "Transform3D": (translation:(-3.5,1.2,-1.3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000110",
+            components: {
+                "Name": "Blue Lamp",
+                "PointLight3D": (color:(0.1,0.25,1),energy:1.2,range:3.0),
+                "Transform3D": (translation:(-2,1.2,-1.3),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000111",
+            components: {
+                "Name": "Spot",
+                "SpotLight3D": (color:(1.0,0.9,0.75),energy:20.0,range:8.0,inner_angle:15.0,outer_angle:25.0),
+                "Transform3D": (translation:(3,4,0.5),rotation:(-0.707107,-0.000000,-0.000000,0.707107),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000112",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere"),
+                "Name": "Crowded",
+                "Transform3D": (translation:(0.3,0.6,2.5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1.2,1.2,1.2)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000113",
+            components: {
+                "Name": "Cluster 0",
+                "PointLight3D": (color:(1,0.247577,0.25487),energy:0.04,range:2.0),
+                "Transform3D": (translation:(1.4,0.6,2.5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000114",
+            components: {
+                "Name": "Cluster 1",
+                "PointLight3D": (color:(0.904508,0.042095,0.557835),energy:0.08,range:2.0),
+                "Transform3D": (translation:(1.18992,0.837764,3.14656),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000115",
+            components: {
+                "Name": "Cluster 2",
+                "PointLight3D": (color:(0.654508,0.011517,0.838709),energy:0.12,range:2.0),
+                "Transform3D": (translation:(0.639919,0.746946,3.54616),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000116",
+            components: {
+                "Name": "Cluster 3",
+                "PointLight3D": (color:(0.345492,0.167523,0.990208),energy:0.16,range:2.0),
+                "Transform3D": (translation:(-0.039919,0.453054,3.54616),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000117",
+            components: {
+                "Name": "Cluster 4",
+                "PointLight3D": (color:(0.095492,0.450524,0.954464),energy:0.2,range:2.0),
+                "Transform3D": (translation:(-0.589919,0.362236,3.14656),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000118",
+            components: {
+                "Name": "Cluster 5",
+                "PointLight3D": (color:(0,0.752423,0.74513),energy:0.24,range:2.0),
+                "Transform3D": (translation:(-0.8,0.6,2.5),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000119",
+            components: {
+                "Name": "Cluster 6",
+                "PointLight3D": (color:(0.095492,0.957905,0.442165),energy:0.28,range:2.0),
+                "Transform3D": (translation:(-0.589919,0.837764,1.85344),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000120",
+            components: {
+                "Name": "Cluster 7",
+                "PointLight3D": (color:(0.345492,0.988483,0.161291),energy:0.32,range:2.0),
+                "Transform3D": (translation:(-0.039919,0.746946,1.45384),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000121",
+            components: {
+                "Name": "Cluster 8",
+                "PointLight3D": (color:(0.654508,0.832477,0.009792),energy:0.36,range:2.0),
+                "Transform3D": (translation:(0.639919,0.453054,1.45384),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000122",
+            components: {
+                "Name": "Cluster 9",
+                "PointLight3D": (color:(0.904508,0.549476,0.045536),energy:0.4,range:2.0),
+                "Transform3D": (translation:(1.18992,0.362236,1.85344),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(1,1,1)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000123",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cube"),
+                "Name": "Pillar 0",
+                "Transform3D": (translation:(4.32,2,-8),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(0.8,4,0.8)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000124",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cube"),
+                "Name": "Pillar 1",
+                "Transform3D": (translation:(5,2,-25),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(0.8,4,0.8)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000125",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cube"),
+                "Name": "Pillar 2",
+                "Transform3D": (translation:(6.4,2,-60),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(0.8,4,0.8)),
+            },
+        ),
+        (
+            id: "019fe300-0139-7000-8000-000000000126",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cube"),
+                "Name": "Pillar 3",
+                "Transform3D": (translation:(10.4,2,-160),rotation:(0.000000,0.000000,0.000000,1.000000),scale:(0.8,4,0.8)),
+            },
+        ),
+    ],
+)

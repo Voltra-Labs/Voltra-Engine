@@ -69,3 +69,40 @@ impl World3D {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use voltra_render::glam::Affine3A;
+    use voltra_scene::{DirectionalLight3D, SceneId};
+
+    use super::*;
+
+    #[test]
+    fn what_is_dropped_over_a_cap_is_said_once_with_its_count() {
+        let mut world = World::new();
+        let camera = world.spawn();
+        world.insert(camera, SceneId::new());
+        for _ in 0..6 {
+            let sun = world.spawn();
+            world.insert(sun, SceneId::new());
+            world.insert(sun, DirectionalLight3D::default());
+        }
+        let view = View3D::perspective(Affine3A::IDENTITY, 1.0, 1.0, 0.1, None);
+        let mut frame = World3D::default();
+        let first = frame.lighting(&world, camera, &view);
+        assert_eq!(first.dropped_directional, 2);
+        assert!(frame.light_warned.contains(&(camera, "directional")));
+        let said = frame.light_warned.len();
+        frame.lighting(&world, camera, &view);
+        assert_eq!(frame.light_warned.len(), said, "said once");
+        let crowded = Crowded3D {
+            instances: 3,
+            most: 11,
+        };
+        frame.warn_crowded(crowded);
+        assert!(frame.crowded_warned);
+        frame.warn_crowded(crowded);
+        frame.warn_crowded(Crowded3D::default());
+        assert!(frame.crowded_warned);
+    }
+}
