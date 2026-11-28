@@ -19,8 +19,8 @@ use crate::error::AssetError;
 use crate::material::is_material;
 use crate::path::AssetPath;
 use crate::watch::{
-    is_animation, is_animator, is_bus_layout, is_clip, is_font, is_input_map, is_scene,
-    is_sorting_layers, is_texture,
+    is_animation, is_animator, is_bus_layout, is_clip, is_font, is_input_map, is_render_settings,
+    is_scene, is_sorting_layers, is_texture,
 };
 
 /// What one row of a listing is.
@@ -54,6 +54,9 @@ pub enum EntryKind {
     /// A file [`is_bus_layout`](crate::watch::is_bus_layout) accepts: the
     /// project's audio buses and their effects. Listed, not placed.
     BusLayout,
+    /// A file [`is_render_settings`](crate::watch::is_render_settings)
+    /// accepts: the project's render settings. Listed, not placed.
+    RenderSettings,
     /// A file [`is_animation`](crate::watch::is_animation) accepts: keyed
     /// property tracks an `AnimationPlayer` plays — dragged onto its field,
     /// not into the scene.
@@ -173,6 +176,8 @@ pub fn list(root: &Path, dir: Option<&AssetPath>) -> Result<Vec<Entry>, AssetErr
             EntryKind::SortingLayers
         } else if is_bus_layout(&name) {
             EntryKind::BusLayout
+        } else if is_render_settings(&name) {
+            EntryKind::RenderSettings
         } else if is_animation(&name) {
             EntryKind::Animation
         } else if is_animator(&name) {
@@ -304,6 +309,7 @@ mod atlas_tests {
         std::fs::write(root.join("hero.animator.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("theme.clip.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("default.buses.ron"), "").expect("the fixture writes");
+        std::fs::write(root.join("default.render.ron"), "").expect("the fixture writes");
         std::fs::write(root.join("flash.material.ron"), "").expect("the fixture writes");
 
         let entries = list(&root, None).expect("the root lists");
@@ -326,6 +332,7 @@ mod atlas_tests {
             "a clip's settings"
         );
         assert_eq!(kind("default.buses.ron"), Some(EntryKind::BusLayout));
+        assert_eq!(kind("default.render.ron"), Some(EntryKind::RenderSettings));
         assert_eq!(kind("flash.material.ron"), Some(EntryKind::Material));
         assert_eq!(
             kind("demo.ron"),

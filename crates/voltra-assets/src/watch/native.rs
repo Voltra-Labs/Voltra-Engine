@@ -9,8 +9,8 @@ use notify_debouncer_full::notify::{RecommendedWatcher, RecursiveMode};
 use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 
 use super::{
-    is_animation, is_animator, is_bus_layout, is_clip, is_font, is_input_map, is_scene,
-    is_sorting_layers, is_texture,
+    is_animation, is_animator, is_bus_layout, is_clip, is_font, is_input_map, is_render_settings,
+    is_scene, is_sorting_layers, is_texture,
 };
 use crate::atlas::is_atlas;
 use crate::error::AssetError;
@@ -173,6 +173,7 @@ impl AssetWatcher {
             && !is_input_map(name)
             && !is_sorting_layers(name)
             && !is_bus_layout(name)
+            && !is_render_settings(name)
             && !is_animation(name)
             && !is_animator(name)
         {

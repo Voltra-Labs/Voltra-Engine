@@ -85,6 +85,12 @@ pub fn is_bus_layout(name: &str) -> bool {
     name.to_ascii_lowercase().ends_with(".buses.ron")
 }
 
+/// Whether a file name is a project's render settings: `*.render.ron`
+/// (`default.render.ron`, its MSAA and later its shadow and light units).
+pub fn is_render_settings(name: &str) -> bool {
+    name.to_ascii_lowercase().ends_with(".render.ron")
+}
+
 /// Whether a file name is a property-animation clip: `*.anim.ron`.
 pub fn is_animation(name: &str) -> bool {
     name.to_ascii_lowercase().ends_with(".anim.ron")
@@ -108,6 +114,7 @@ pub fn is_scene(name: &str) -> bool {
         && !is_input_map(name)
         && !is_sorting_layers(name)
         && !is_bus_layout(name)
+        && !is_render_settings(name)
         && !is_animation(name)
         && !is_animator(name)
 }
