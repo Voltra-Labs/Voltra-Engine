@@ -1,4 +1,5 @@
-//! A 3D mesh: which one, its colour and its surface material.
+//! A 3D mesh: which one, its colour, its surface material and the light
+//! layers it is lit on.
 
 use std::path::Path;
 
@@ -90,6 +91,13 @@ pub(super) fn show(
             }
             ui.end_row();
         });
+    claim = claim.or(super::light_layers::show(
+        ui,
+        "mesh_instance3d_light_layers",
+        "light layers",
+        "lit only by 3D lights on one of these",
+        &mut instance.light_layers,
+    ));
     if instance.material.is_none() && ui.small_button("New surface material").clicked() {
         match create(root) {
             Ok(path) => {

@@ -66,6 +66,12 @@ impl ComponentRegistry {
             .register::<crate::DirectionalLight3D>(crate::DirectionalLight3D::NAME)
             .with_template();
         registry
+            .register::<crate::PointLight3D>(crate::PointLight3D::NAME)
+            .with_template();
+        registry
+            .register::<crate::SpotLight3D>(crate::SpotLight3D::NAME)
+            .with_template();
+        registry
             .register::<crate::Environment3D>(crate::Environment3D::NAME)
             .with_template();
         registry

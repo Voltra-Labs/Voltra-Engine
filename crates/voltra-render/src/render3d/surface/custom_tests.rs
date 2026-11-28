@@ -37,7 +37,9 @@ fn module(source: &str) -> naga::Module {
 fn a_custom_surface_composes_valid_from_the_standard_one() {
     let shader = checked(TINTED, &["mask"], SurfaceLighting::Lit).expect("valid");
     assert!(shader.source().contains("var mask: texture_2d<f32>"));
-    assert!(shader.source().contains("return light_surface(s, in);"));
+    assert!(shader
+        .source()
+        .contains("return min(apply_fog(light_surface(s, in), in.world), vec3<f32>(MAX_LIGHT));"));
     let module = module(shader.source());
     for entry in SURFACE_ENTRIES {
         assert!(
@@ -53,7 +55,9 @@ fn a_custom_surface_composes_valid_from_the_standard_one() {
         .expect("emitted");
     assert!(cutout.function.result.is_none());
     let unlit = checked(TINTED, &["mask"], SurfaceLighting::Unlit).expect("valid");
-    assert!(unlit.source().contains("return unlit_surface(s);"));
+    assert!(unlit
+        .source()
+        .contains("return min(apply_fog(unlit_surface(s), in.world), vec3<f32>(MAX_LIGHT));"));
     assert_ne!(unlit.revision(), shader.revision(), "another shader");
 }
 

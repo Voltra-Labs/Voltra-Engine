@@ -85,10 +85,11 @@ mod tests {
             .filter(|(_, g)| matches!(module.types[g.ty].inner, naga::TypeInner::Sampler { .. }))
             .count() as u32;
         assert!(samplers <= limits.max_samplers_per_shader_stage);
-        // The blocks, far under a 16 KiB uniform block.
+        // The blocks, under a 16 KiB uniform block.
         for size in [
             size_of::<SurfaceUniform>(),
             size_of::<crate::render3d::FrameUniform3D>(),
+            size_of::<crate::render3d::LightsUniform3D>(),
         ] {
             assert!(
                 size as u64 <= limits.max_uniform_buffer_binding_size,
@@ -96,8 +97,8 @@ mod tests {
             );
             assert_eq!(size % 16, 0);
         }
-        // What the vertex stage hands the fragment stage: five locations
-        // of WebGL2's 15.
+        // What the vertex stage hands the fragment stage: six locations
+        // of WebGL2's 15 — stage 139's light list the sixth.
         let vertex = module
             .entry_points
             .iter()
@@ -111,7 +112,7 @@ mod tests {
             .iter()
             .filter(|m| matches!(m.binding, Some(naga::Binding::Location { .. })))
             .count() as u32;
-        assert_eq!(locations, 5);
+        assert_eq!(locations, 6);
         assert!(locations <= limits.max_inter_stage_shader_variables);
         for entry in SURFACE_ENTRIES {
             assert!(

@@ -9,9 +9,13 @@
 //! lets the depth test reject hidden fragments early; then the blended,
 //! back to front by view depth, since what blends over must come after what
 //! it covers. Over [`JobPool`] when the list is long ([`PARALLEL_FROM`]).
+//!
+//! **Lights**: [`DrawList3D::light`] then gives each instance the lights
+//! that matter most to it ([`lighting3d::pick`](crate::lighting3d::pick)).
 
 mod cull;
 mod group;
+mod lights;
 #[cfg(test)]
 mod material_tests;
 #[cfg(test)]
@@ -23,9 +27,11 @@ use std::ops::Range;
 use voltra_assets::{Handle, Material, Materials, Meshes};
 use voltra_ecs::{Entity, World};
 use voltra_jobs::JobPool;
-use voltra_render::render3d::{Instance3D, Mesh3D, View3D, Winding};
+use voltra_render::render3d::{Aabb3, Instance3D, Mesh3D, View3D, Winding};
 
 use crate::mesh_instance3d::MeshInstance3D;
+
+pub use lights::{Crowded3D, LIGHT_PARALLEL_FROM};
 
 /// From how many instances culling is split across a [`JobPool`].
 pub const PARALLEL_FROM: usize = 4096;
@@ -54,6 +60,9 @@ pub struct DrawList3D {
     pub instances: Vec<Instance3D>,
     /// The draws over them, in order.
     pub draws: Vec<Draw3D>,
+    /// Each instance's world box and light layers, beside it: what its
+    /// lights are chosen by.
+    reach: Vec<(Aabb3, u32)>,
     /// What this frame's rebuild looked at; kept for its storage.
     candidates: Vec<cull::Candidate>,
     /// The seen candidates' sort keys; kept for its storage.
@@ -94,6 +103,7 @@ impl DrawList3D {
         jobs: Option<&JobPool>,
     ) {
         self.instances.clear();
+        self.reach.clear();
         self.draws.clear();
         self.culled = 0;
         if world.components::<MeshInstance3D>().is_none() {
@@ -120,6 +130,7 @@ impl DrawList3D {
             &mut self.keys,
             &mut self.runs,
             &mut self.instances,
+            &mut self.reach,
             &mut self.draws,
         );
     }

@@ -1,7 +1,7 @@
 //! A surface material's whole shader: the engine's prelude — bindings,
-//! vertex stage, `SurfaceInput`, `Surface`, `standard_surface` and the
-//! lighting — the material's uniforms and textures, its own `surface()`,
-//! and each pass's fragment stage around it.
+//! vertex stage, `SurfaceInput`, `Surface`, `standard_surface`, the
+//! lighting and the fog — the material's uniforms and textures, its own
+//! `surface()`, and each pass's fragment stage around it.
 //!
 //! The 3D twin of [`material::compose`](crate::material::compose): a sprite
 //! material writes `fn fragment`, a surface material `fn surface(in:
@@ -124,7 +124,8 @@ pub const SURFACE_ENTRIES: [&str; 5] = [
 ///
 /// The source sees everything in the prelude — `frame`, `standard`,
 /// `surface_sampler`, `SurfaceInput`, `Surface`, `standard_surface(in)`,
-/// `surface_uv(in)`, `light_surface(s, in)` — plus `material` (its
+/// `surface_uv(in)`, `light_surface(s, in)`, `apply_fog(color, world)`,
+/// `sky_color(direction)` — plus `material` (its
 /// uniforms) and its textures, and must define `fn surface(in:
 /// SurfaceInput) -> Surface`. Its text comes first, so naga reports an
 /// error in it at the material file's own line numbers. `Err` when there
@@ -165,7 +166,7 @@ pub fn compose_surface(
     // The material's own first: WGSL resolves module-scope names in any
     // order, and so an error in it is reported at its own line numbers.
     Ok(format!(
-        "{source}\n\n// The engine's: the material's uniforms and textures.\n{block}@group(1) @binding({CUSTOM_BLOCK_BINDING})\nvar<uniform> material: Material;\n{declared}\n{prelude}\n// What `surface()` returns becomes: lit, or as it is.\nfn surface_color(s: Surface, in: SurfaceInput) -> vec3<f32> {{\n    return {color};\n}}\n{ENTRIES}",
+        "{source}\n\n// The engine's: the material's uniforms and textures.\n{block}@group(1) @binding({CUSTOM_BLOCK_BINDING})\nvar<uniform> material: Material;\n{declared}\n{prelude}\n// What `surface()` returns becomes: lit, or as it is, then fogged — the\n// cap after the fog, so a fog colour past it cannot overflow either.\nfn surface_color(s: Surface, in: SurfaceInput) -> vec3<f32> {{\n    return min(apply_fog({color}, in.world), vec3<f32>(MAX_LIGHT));\n}}\n{ENTRIES}",
         prelude = crate::shader::SURFACE_3D,
         block = layout.wgsl_struct_aligned(),
     ))

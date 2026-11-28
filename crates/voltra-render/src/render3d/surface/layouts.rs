@@ -25,7 +25,8 @@ pub const CUSTOM_TEXTURE_BINDING: u32 = CUSTOM_BLOCK_BINDING + 1;
 /// Cheap to clone: every field is reference-counted.
 #[derive(Debug, Clone)]
 pub struct SurfaceLayouts {
-    /// Group 0: the frame's view and light.
+    /// Group 0: the frame's view, ambient, fog and sky (binding 0) and its
+    /// light array (binding 1).
     pub frame: wgpu::BindGroupLayout,
     /// Group 1: a material's numbers, the sampler and its five textures,
     /// then a custom surface's uniform block and its four textures — bound
@@ -42,18 +43,24 @@ impl SurfaceLayouts {
     /// The layouts on `device`, and the white texture uploaded through
     /// `queue`.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
+        let uniform = |binding, visibility| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        };
         let frame = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("surface-frame-layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
+            entries: &[
+                // The view, the ambient, the fog and the sky.
+                uniform(0, wgpu::ShaderStages::VERTEX_FRAGMENT),
+                // The light array, read where a surface is lit.
+                uniform(1, wgpu::ShaderStages::FRAGMENT),
+            ],
         });
         let texture = |binding| wgpu::BindGroupLayoutEntry {
             binding,

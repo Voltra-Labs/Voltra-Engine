@@ -197,14 +197,14 @@ fn preview_view() -> View3D {
 /// A key light from the upper left in front, and a dim ambient so the
 /// shadowed side reads.
 fn preview_lighting() -> Lighting3D {
-    Lighting3D {
-        directional: Some(DirectionalLight {
+    Lighting3D::sun(
+        DirectionalLight {
             direction: Vec3::new(0.6, -0.7, -0.8).normalize(),
             color: [1.0; 3],
             energy: 2.5,
-        }),
-        ambient: [0.25; 3],
-    }
+        },
+        [0.25; 3],
+    )
 }
 
 #[cfg(test)]

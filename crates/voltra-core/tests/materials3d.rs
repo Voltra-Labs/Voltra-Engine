@@ -188,7 +188,7 @@ fn quads(root: &std::path::Path, reverse: bool) -> App {
             ..Camera3D::default()
         },
     );
-    world.insert(camera, Environment3D { ambient: [0.0; 3] });
+    world.insert(camera, Environment3D::with_ambient([0.0; 3]));
     let facing = Quat::from_rotation_x(std::f32::consts::FRAC_PI_2);
     let mut spawned = vec![
         // The near quad, blue, a quarter opaque; the far, green, half.

@@ -34,7 +34,13 @@ pub(super) struct Candidate {
     pub shader: u16,
     pub model: Affine3A,
     pub tint: [f32; 4],
+    /// The light layers it is lit on.
+    pub light_layers: u32,
+    /// The mesh's local box.
     pub bounds: Aabb3,
+    /// Filled by [`cull`]: that box in the world, what its lights are
+    /// chosen by.
+    pub world_bounds: Aabb3,
     /// Filled by [`cull`]: `None` when it is not drawn.
     pub instance: Option<Instance3D>,
     /// Filled by [`cull`]: why a seen candidate has no instance.
@@ -91,7 +97,9 @@ pub(super) fn gather(
             } else {
                 instance.color
             },
+            light_layers: instance.light_layers,
             bounds,
+            world_bounds: bounds,
             instance: None,
             refused: None,
             winding: Winding::of(&model),
@@ -163,6 +171,7 @@ pub(super) fn cull(candidates: &mut [Candidate], view: &View3D, jobs: Option<&Jo
             (None, None)
         };
         candidate.depth = view.depth(world.center());
+        candidate.world_bounds = world;
     };
     match jobs {
         Some(jobs) if candidates.len() >= PARALLEL_FROM => {

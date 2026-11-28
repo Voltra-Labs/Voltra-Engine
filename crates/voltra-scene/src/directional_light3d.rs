@@ -2,11 +2,14 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::light::{all_light_layers, is_all_light_layers};
+use crate::light3d::{is_one, is_white, one, white};
+
 /// Lights the 3D world along its entity's −Z, every ray parallel:
 /// Godot's `DirectionalLight3D`, Unity's directional `Light`.
 ///
-/// One lights a view for now — with several, the one on the lowest entity
-/// index, the rest warned about once (stage 139 lights them all).
+/// Up to four light a view, in entity order; past four the dimmest are
+/// left out, said once with the count.
 ///
 /// `energy` is the light units' stored value (ARCHITECTURE "Light units"):
 /// the illuminance in lux over K = 1.2 · 2¹⁵, so 1.0 — the default — is a
@@ -21,22 +24,14 @@ pub struct DirectionalLight3D {
     /// written.
     #[serde(default = "one", skip_serializing_if = "is_one")]
     pub energy: f32,
-}
-
-fn white() -> [f32; 3] {
-    [1.0; 3]
-}
-
-fn is_white(color: &[f32; 3]) -> bool {
-    *color == white()
-}
-
-fn one() -> f32 {
-    1.0
-}
-
-fn is_one(energy: &f32) -> bool {
-    *energy == 1.0
+    /// The light layers it lights: a mesh is lit by it only if its
+    /// `light_layers` share a bit with these. Every bit — the default, and
+    /// not written — lights everything.
+    #[serde(
+        default = "all_light_layers",
+        skip_serializing_if = "is_all_light_layers"
+    )]
+    pub layers: u32,
 }
 
 impl Default for DirectionalLight3D {
@@ -44,6 +39,7 @@ impl Default for DirectionalLight3D {
         Self {
             color: white(),
             energy: one(),
+            layers: all_light_layers(),
         }
     }
 }
@@ -55,13 +51,7 @@ impl DirectionalLight3D {
     /// What a value the light cannot draw with makes of it, if anything:
     /// shown by the inspector, warned about once by the frame.
     pub fn problem(&self) -> Option<&'static str> {
-        if !self.color.iter().all(|c| c.is_finite() && *c >= 0.0) {
-            Some("its colour is negative or not a number; it lights nothing")
-        } else if !self.energy.is_finite() || self.energy < 0.0 {
-            Some("its energy is negative or not a number; it lights nothing")
-        } else {
-            None
-        }
+        crate::light3d::problem(&self.color, self.energy)
     }
 }
 
@@ -76,6 +66,7 @@ mod tests {
         let warm = DirectionalLight3D {
             color: [1.0, 0.9, 0.7],
             energy: 2.5,
+            layers: 0b11,
         };
         let text = ron::to_string(&warm).expect("written");
         assert_eq!(

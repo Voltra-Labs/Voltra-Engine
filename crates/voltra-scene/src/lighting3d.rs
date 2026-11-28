@@ -1,65 +1,75 @@
-//! What lights a 3D camera's view: the world's directional light and the
-//! environment's ambient, gathered for the render side.
+//! What lights a 3D camera's view: the world's directional, point and spot
+//! lights and the environment, gathered for the render side — and, per
+//! instance, which of them matter most to it ([`pick`]).
+//!
+//! **Forward with a light list per object** (ARCHITECTURE "Lights, shadows
+//! and the environment"): the view's lights are gathered once — the
+//! directional ones (up to four), the point and spot lights whose reach
+//! the view's frustum touches (up to 128) — and each drawn instance is
+//! given the eight point and spot lights estimated to light it most.
+//! Over a cap, the least important are dropped and the frame says so once
+//! with the count: never silently.
+
+mod lights;
+mod pick;
+#[cfg(test)]
+mod tests;
+
+pub use pick::{pick, LightReach3D, Picked3D};
 
 use voltra_ecs::{Entity, World};
-use voltra_render::glam::Vec3;
-use voltra_render::render3d::{DirectionalLight, Lighting3D};
+use voltra_render::render3d::{Lighting3D, View3D};
 
-use crate::directional_light3d::DirectionalLight3D;
-use crate::environment3d::Environment3D;
+use crate::environment3d::{Background3D, Environment3D};
 use crate::Camera3D;
 
-/// A camera's light, and what was left out of it — for the frame to warn
-/// about once.
+/// A camera's light, what was left out of it, and what choosing each
+/// instance's lights reads.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Gathered3D {
-    /// What the view is lit by.
+    /// What the view is lit by: the directional lights, the point and spot
+    /// lights (indexed by each instance's list), the ambient, the sky and
+    /// the fog.
     pub lighting: Lighting3D,
-    /// The directional light used, if any.
-    pub light: Option<Entity>,
-    /// Directional lights that could light beyond the one used (stage 139
-    /// lights them all); a broken one is not counted.
-    pub unused_lights: usize,
+    /// The entity of each of `lighting.directional`, in order.
+    pub directional: Vec<Entity>,
+    /// The layers of each of `lighting.directional`, in order.
+    pub directional_layers: Vec<u32>,
+    /// What [`pick`] weighs each of `lighting.punctual` by, in order.
+    pub punctual: Vec<LightReach3D>,
+    /// Directional lights left out past [`MAX_DIRECTIONAL`](voltra_render::render3d::MAX_DIRECTIONAL),
+    /// the dimmest.
+    pub dropped_directional: usize,
+    /// Point and spot lights in view left out past
+    /// [`MAX_PUNCTUAL`](voltra_render::render3d::MAX_PUNCTUAL), the least
+    /// important to the view.
+    pub dropped_punctual: usize,
+    /// Lights with a number they cannot light by, and why: each warned
+    /// about once.
+    pub broken: Vec<(Entity, &'static str)>,
     /// The environment used, if any: the camera's own, else the world's.
     pub environment: Option<Entity>,
     /// World environments beyond the one used.
     pub unused_environments: usize,
+    /// The environment's background: what the frame clears to or draws
+    /// behind.
+    pub background: Background3D,
 }
 
-/// The light `camera` sees `world` by: the directional light on the lowest
-/// entity index, shining down its entity's −Z, and the ambient of the
-/// camera's own [`Environment3D`] — else the world's, an `Environment3D`
-/// on an entity with no camera, the lowest index — else the default's.
+/// The light `camera` sees `world` by through `view`: every directional
+/// light shining down its entity's −Z (up to four: past that the
+/// brightest, in entity order); every point and spot light whose reach the
+/// view touches, at its entity's position, a spot shining down its −Z
+/// (up to 128: past that the most important to the eye, in entity order);
+/// and the camera's own [`Environment3D`] — else the world's, an
+/// `Environment3D` on an entity with no camera, the lowest index — else
+/// the default's: its ambient times its energy, its gradient sky, its fog.
 ///
-/// A light whose colour or energy cannot be drawn, or whose entity's
-/// transform has no direction, is skipped for the next.
-pub fn gather(world: &World, camera: Entity) -> Gathered3D {
-    let mut lights: Vec<(Entity, DirectionalLight3D)> = world
-        .query::<DirectionalLight3D>()
-        .map(|(e, light)| (e, *light))
-        .collect();
-    lights.sort_by_key(|(e, _)| e.index());
-    // Every light that can light, in index order: the first lights, the
-    // rest are "more". A broken one is neither — it is warned about for
-    // what it is.
-    let usable: Vec<(Entity, DirectionalLight)> = lights
-        .iter()
-        .filter(|(_, light)| light.problem().is_none())
-        .filter_map(|(entity, light)| {
-            let direction = crate::hierarchy::world_matrix_3d(world, *entity)
-                .transform_vector3(Vec3::NEG_Z)
-                .normalize_or_zero();
-            (direction != Vec3::ZERO).then_some((
-                *entity,
-                DirectionalLight {
-                    direction,
-                    color: light.color,
-                    energy: light.energy,
-                },
-            ))
-        })
-        .collect();
-    let used = usable.first().copied();
+/// A light whose numbers cannot be drawn, or whose entity's transform has
+/// no direction, is left out (and listed in `broken`); one that gives no
+/// light — energy 0, range 0, black — quietly.
+pub fn gather(world: &World, camera: Entity, view: &View3D) -> Gathered3D {
+    let lights = lights::gather(world, view);
     let own = world.get::<Environment3D>(camera).map(|env| (camera, *env));
     let mut shared: Vec<(Entity, Environment3D)> = world
         .query::<Environment3D>()
@@ -68,118 +78,27 @@ pub fn gather(world: &World, camera: Entity) -> Gathered3D {
         .collect();
     shared.sort_by_key(|(e, _)| e.index());
     let environment = own.or_else(|| shared.first().copied());
-    let ambient = environment.map_or_else(|| Environment3D::default().ambient, |(_, e)| e.ambient);
+    let env = environment.map_or_else(Environment3D::default, |(_, e)| e);
     Gathered3D {
         lighting: Lighting3D {
-            directional: used.map(|(_, light)| light),
-            ambient,
+            directional: lights.directional,
+            punctual: lights.punctual,
+            ambient: env.ambient_light(),
+            sky: env.background.sky(),
+            fog: env.fog.map(|fog| fog.fog()),
         },
-        light: used.map(|(e, _)| e),
-        unused_lights: usable.len().saturating_sub(1),
+        directional: lights.directional_entities,
+        directional_layers: lights.directional_layers,
+        punctual: lights.reach,
+        dropped_directional: lights.dropped_directional,
+        dropped_punctual: lights.dropped_punctual,
+        broken: lights.broken,
         environment: environment.map(|(e, _)| e),
         unused_environments: if own.is_some() {
             0
         } else {
             shared.len().saturating_sub(1)
         },
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use voltra_render::glam::Quat;
-
-    use super::*;
-    use crate::{SceneId, Transform3D};
-
-    fn spawn(world: &mut World) -> Entity {
-        let e = world.spawn();
-        world.insert(e, SceneId::new());
-        e
-    }
-
-    #[test]
-    fn the_first_light_shines_down_its_entity_minus_z() {
-        let mut world = World::new();
-        let camera = spawn(&mut world);
-        world.insert(camera, Camera3D::default());
-        let none = gather(&world, camera);
-        assert_eq!(none.lighting.directional, None);
-        assert_eq!(
-            none.lighting.ambient,
-            [Environment3D::DEFAULT_AMBIENT; 3],
-            "no environment: the default's"
-        );
-        let sun = spawn(&mut world);
-        world.insert(
-            sun,
-            Transform3D::default()
-                .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)),
-        );
-        world.insert(
-            sun,
-            DirectionalLight3D {
-                color: [1.0, 0.5, 0.25],
-                energy: 3.0,
-            },
-        );
-        let second = spawn(&mut world);
-        world.insert(second, DirectionalLight3D::default());
-        let lit = gather(&world, camera);
-        let light = lit.lighting.directional.expect("a light");
-        // Turned −90° about X, −Z points down.
-        assert!(
-            light.direction.abs_diff_eq(Vec3::NEG_Y, 1e-6),
-            "{}",
-            light.direction
-        );
-        assert_eq!((light.color, light.energy), ([1.0, 0.5, 0.25], 3.0));
-        assert_eq!((lit.light, lit.unused_lights), (Some(sun), 1));
-        // A broken one is skipped for the next.
-        world.insert(
-            sun,
-            DirectionalLight3D {
-                energy: f32::NAN,
-                ..DirectionalLight3D::default()
-            },
-        );
-        let skipped = gather(&world, camera);
-        assert_eq!(skipped.light, Some(second));
-        assert_eq!(skipped.unused_lights, 0, "a broken light is no \"more\"");
-        // Despawned: none left over.
-        world.despawn(second);
-        world.despawn(sun);
-        assert_eq!(gather(&world, camera).lighting.directional, None);
-    }
-
-    #[test]
-    fn a_camera_s_own_environment_wins_over_the_world_s() {
-        let mut world = World::new();
-        let camera = spawn(&mut world);
-        world.insert(camera, Camera3D::default());
-        let other = spawn(&mut world);
-        world.insert(other, Camera3D::default());
-        world.insert(other, Environment3D { ambient: [9.0; 3] });
-        let a = spawn(&mut world);
-        world.insert(a, Environment3D { ambient: [0.3; 3] });
-        let b = spawn(&mut world);
-        world.insert(b, Environment3D { ambient: [0.6; 3] });
-        let shared = gather(&world, camera);
-        assert_eq!(
-            shared.lighting.ambient, [0.3; 3],
-            "the world's, lowest index"
-        );
-        assert_eq!(
-            (shared.environment, shared.unused_environments),
-            (Some(a), 1),
-            "another camera's is not the world's"
-        );
-        world.insert(camera, Environment3D { ambient: [0.0; 3] });
-        let own = gather(&world, camera);
-        assert_eq!(own.lighting.ambient, [0.0; 3]);
-        assert_eq!(
-            (own.environment, own.unused_environments),
-            (Some(camera), 0)
-        );
+        background: env.background,
     }
 }

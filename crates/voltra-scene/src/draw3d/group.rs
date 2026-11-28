@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use voltra_render::render3d::{AlphaClass, Instance3D};
+use voltra_render::render3d::{Aabb3, AlphaClass, Instance3D};
 
 use super::cull::Candidate;
 use super::Draw3D;
@@ -70,13 +70,16 @@ fn order(a: &Key, b: &Key) -> Ordering {
 /// per pipeline, material and mesh, the draws of one pipeline and material
 /// ordered by their nearest instance so the depth test rejects early; then
 /// the blended, back to front, a draw per run of one pipeline, material and
-/// mesh — what blends over must be drawn after what it blends over. `keys`
-/// and `runs` are scratch, kept for their storage.
+/// mesh — what blends over must be drawn after what it blends over. Each
+/// instance's world box and light layers go into `reach`, beside it, for
+/// its lights to be chosen by. `keys` and `runs` are scratch, kept for
+/// their storage.
 pub(super) fn group(
     candidates: &[Candidate],
     keys: &mut Vec<Key>,
     runs: &mut Vec<Run>,
     instances: &mut Vec<Instance3D>,
+    reach: &mut Vec<(Aabb3, u32)>,
     draws: &mut Vec<Draw3D>,
 ) {
     keys.clear();
@@ -136,11 +139,13 @@ pub(super) fn group(
     });
     for &(_, start, end) in runs.iter() {
         let first = instances.len() as u32;
-        instances.extend(
-            keys[start..end]
-                .iter()
-                .filter_map(|k| candidates[k.4 as usize].instance),
-        );
+        for key in &keys[start..end] {
+            let candidate = &candidates[key.4 as usize];
+            if let Some(instance) = candidate.instance {
+                instances.push(instance);
+                reach.push((candidate.world_bounds, candidate.light_layers));
+            }
+        }
         let head = &candidates[keys[start].4 as usize];
         draws.push(Draw3D {
             mesh: head.mesh,

@@ -7,7 +7,9 @@
 //! target, every instance of a mesh in one instanced draw, culled on the
 //! CPU against the view's [`Frustum`] by the scene side's draw list, each
 //! through its [`SurfaceMaterial3D`] — glTF's metallic-roughness inputs lit
-//! by Filament's BRDF under one directional light and an ambient.
+//! by Filament's BRDF under the frame's directional lights, the point and
+//! spot lights of each instance's list and an ambient, fogged, a sky drawn
+//! behind ([`Lighting3D`]).
 
 mod bounds;
 mod depth;
@@ -19,6 +21,7 @@ mod mesh;
 mod mesh_data;
 mod pass;
 mod scene;
+mod sky;
 pub mod surface;
 mod targets;
 mod tonemap;
@@ -31,7 +34,11 @@ pub use depth::{DepthTarget, DEPTH_CLEAR, DEPTH_COMPARE, DEPTH_FORMAT};
 pub use frustum::Frustum;
 pub use hdr::{Hdr3D, HdrDegraded};
 pub use instance::{Instance3D, InstanceRefused};
-pub use lighting::{DirectionalLight, FrameUniform3D, Lighting3D};
+pub use lighting::{
+    distance_attenuation, DirectionalLight, Fog, FrameUniform3D, LightList3D, Lighting3D,
+    LightsUniform3D, PunctualLight, SkyGradient, SpotCone, LIGHTS_PER_INSTANCE, MAX_DIRECTIONAL,
+    MAX_PUNCTUAL, MIN_DISTANCE_SQUARED,
+};
 pub use mesh::Mesh3D;
 pub use mesh_data::{MeshData3D, MeshDataError};
 pub use pass::Pass3D;

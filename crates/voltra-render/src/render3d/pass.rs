@@ -4,18 +4,22 @@
 use super::depth::DEPTH_CLEAR;
 use super::hdr::Hdr3D;
 use super::instance::Instance3D;
-use super::lighting::FrameUniform3D;
+use super::lighting::{FrameUniform3D, LightsUniform3D};
 use super::scene::Scene3D;
-use super::surface::{SurfaceBank, SurfaceKey, SurfaceLayouts, SurfacePass, SurfaceVertex};
+use super::sky::SkyPipeline;
+use super::surface::{
+    AlphaClass, SurfaceBank, SurfaceKey, SurfaceLayouts, SurfacePass, SurfaceVertex,
+};
 use super::targets::Targets3D;
 use super::MeshDraw3D;
 
 /// Records a [`Scene3D`]: clears colour and depth, uploads the view, the
-/// light and the instances, then one instanced draw per [`MeshDraw3D`],
-/// each through its material's pipeline variant.
+/// lights and the instances, then one instanced draw per [`MeshDraw3D`],
+/// each through its material's pipeline variant — the sky, when there is
+/// one, after the opaque and masked and before the blended.
 ///
-/// Owns what persists between frames — the surface pipelines, the frame's
-/// uniform and the instance buffer (grown, never shrunk); the targets are
+/// Owns what persists between frames — the surface pipelines, the sky's,
+/// the frame's uniforms and the instance buffer (grown, never shrunk); the targets are
 /// the shot's, the materials the caller's. Every call writes its buffers
 /// before its own submit, so one pass serves one shot per submit
 /// (`Queue::write_buffer` lands at the next submit, for every draw of it).
@@ -23,7 +27,12 @@ use super::MeshDraw3D;
 pub struct Pass3D {
     bank: SurfaceBank,
     frame_buffer: wgpu::Buffer,
+    lights_buffer: wgpu::Buffer,
     frame_group: wgpu::BindGroup,
+    /// The frame's group 0 layout, which the sky is built against.
+    frame_layout: wgpu::BindGroupLayout,
+    /// Made the first time a scene has a sky.
+    sky: Option<SkyPipeline>,
     instances: Option<wgpu::Buffer>,
 }
 
@@ -38,18 +47,33 @@ impl Pass3D {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        let lights_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("lights-3d"),
+            size: size_of::<LightsUniform3D>() as wgpu::BufferAddress,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let frame_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("frame-3d"),
             layout: &layouts.frame,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: frame_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: frame_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: lights_buffer.as_entire_binding(),
+                },
+            ],
         });
         Self {
             bank,
             frame_buffer,
+            lights_buffer,
             frame_group,
+            frame_layout: layouts.frame.clone(),
+            sky: None,
             instances: None,
         }
     }
@@ -91,15 +115,31 @@ impl Pass3D {
             );
             return;
         }
+        let clear = [scene.clear.r, scene.clear.g, scene.clear.b, scene.clear.a].map(|c| c as f32);
         queue.write_buffer(
             &self.frame_buffer,
             0,
             bytemuck::bytes_of(&FrameUniform3D::new(
                 &scene.view,
                 &scene.lighting,
+                clear,
                 scene.time,
             )),
         );
+        queue.write_buffer(
+            &self.lights_buffer,
+            0,
+            bytemuck::bytes_of(&LightsUniform3D::new(&scene.lighting)),
+        );
+        if scene.lighting.sky.is_some() && self.sky.is_none() {
+            let hdr = self.hdr();
+            self.sky = Some(SkyPipeline::new(
+                device,
+                &self.frame_layout,
+                hdr.format,
+                hdr.samples,
+            ));
+        }
         let instances = upload_instances(device, queue, &mut self.instances, scene.instances);
         self.bank.begin();
         for draw in scene.draws {
@@ -135,15 +175,33 @@ impl Pass3D {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        pass.set_bind_group(0, &self.frame_group, &[]);
+        let sky = scene.lighting.sky.and(self.sky.as_ref());
+        // The sky goes in before the first blended draw: the draws are in
+        // order, the blended last.
+        let blended_from = scene
+            .draws
+            .iter()
+            .position(|draw| draw.material.alpha() == AlphaClass::Blend)
+            .unwrap_or(scene.draws.len());
         let Some(instances) = instances else {
+            if let Some(sky) = sky {
+                sky.draw(&mut pass);
+            }
             return;
         };
-        pass.set_bind_group(0, &self.frame_group, &[]);
         let mut bound_pipeline = None;
         let mut bound_material: Option<&super::SurfaceMaterial3D> = None;
         let stride = size_of::<Instance3D>() as wgpu::BufferAddress;
         let count = scene.instances.len() as u32;
-        for draw in scene.draws {
+        for (at, draw) in scene.draws.iter().enumerate() {
+            if at == blended_from {
+                if let Some(sky) = sky {
+                    sky.draw(&mut pass);
+                    bound_pipeline = None;
+                    bound_material = None;
+                }
+            }
             let range = &draw.instances;
             if range.start >= range.end {
                 continue;
@@ -175,6 +233,11 @@ impl Pass3D {
             );
             pass.set_index_buffer(draw.mesh.indices().slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..draw.mesh.index_count(), 0, 0..range.end - range.start);
+        }
+        if blended_from == scene.draws.len() {
+            if let Some(sky) = sky {
+                sky.draw(&mut pass);
+            }
         }
     }
 }

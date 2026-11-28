@@ -11,7 +11,8 @@ use voltra_core::UiFrame;
 use voltra_ecs::Entity;
 use voltra_render::glam::{Quat, Vec3};
 use voltra_scene::{
-    Camera3D, DirectionalLight3D, Environment3D, MeshInstance3D, Name, SceneId, Transform3D,
+    Camera3D, DirectionalLight3D, Environment3D, MeshInstance3D, Name, PointLight3D, SceneId,
+    SpotLight3D, Transform3D,
 };
 
 use crate::editor::Editor;
@@ -48,9 +49,27 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
                 });
                 ui.close();
             }
+            let point = ui
+                .button("Point Light")
+                .on_hover_text("a PointLight3D 2 m up, its reach 5 m");
+            if point.clicked() {
+                spawn::record(editor, frame, "Create point light", |frame| {
+                    point_light_3d(frame.world)
+                });
+                ui.close();
+            }
+            let spot = ui
+                .button("Spot Light")
+                .on_hover_text("a SpotLight3D 3 m up, shining straight down");
+            if spot.clicked() {
+                spawn::record(editor, frame, "Create spot light", |frame| {
+                    spot_light_3d(frame.world)
+                });
+                ui.close();
+            }
             let environment = ui
                 .button("Environment")
-                .on_hover_text("the world's Environment3D: its ambient light");
+                .on_hover_text("the world's Environment3D: its ambient, background and fog");
             if environment.clicked() {
                 spawn::record(editor, frame, "Create environment", |frame| {
                     environment_3d(frame.world)
@@ -95,6 +114,24 @@ fn light_3d(world: &mut voltra_ecs::World) -> Entity {
     );
     let entity = named_3d(world, DirectionalLight3D::NAME, at);
     world.insert(entity, DirectionalLight3D::default());
+    entity
+}
+
+/// A point light over the origin, at head height.
+fn point_light_3d(world: &mut voltra_ecs::World) -> Entity {
+    let at = Transform3D::from_translation(Vec3::new(0.0, 2.0, 0.0));
+    let entity = named_3d(world, PointLight3D::NAME, at);
+    world.insert(entity, PointLight3D::default());
+    entity
+}
+
+/// A spot light over the origin shining straight down: its −Z turned to
+/// −Y.
+fn spot_light_3d(world: &mut voltra_ecs::World) -> Entity {
+    let at = Transform3D::from_translation(Vec3::new(0.0, 3.0, 0.0))
+        .with_rotation(Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2));
+    let entity = named_3d(world, SpotLight3D::NAME, at);
+    world.insert(entity, SpotLight3D::default());
     entity
 }
 
@@ -168,9 +205,10 @@ mod tests {
         let light = light_3d(&mut world);
         environment_3d(&mut world);
         let camera = camera_3d(&mut world);
-        let gathered = voltra_scene::lighting3d::gather(&world, camera);
-        let sun = gathered.lighting.directional.expect("lit");
-        assert_eq!(gathered.light, Some(light));
+        let view = voltra_scene::camera3d::view(&world, camera, 1.0).expect("a camera");
+        let gathered = voltra_scene::lighting3d::gather(&world, camera, &view);
+        let sun = gathered.lighting.directional[0];
+        assert_eq!(gathered.directional, [light]);
         // Down, and away from a camera on +Z: what it sees is lit.
         assert!(
             sun.direction.y < -0.7 && sun.direction.z < 0.0,
@@ -181,6 +219,38 @@ mod tests {
             gathered.lighting.ambient,
             [Environment3D::DEFAULT_AMBIENT; 3]
         );
+    }
+
+    #[test]
+    fn created_point_and_spot_lights_reach_what_a_created_camera_sees() {
+        let mut world = World::new();
+        let point = point_light_3d(&mut world);
+        let spot = spot_light_3d(&mut world);
+        let camera = camera_3d(&mut world);
+        let view = voltra_scene::camera3d::view(&world, camera, 1.0).expect("a camera");
+        let gathered = voltra_scene::lighting3d::gather(&world, camera, &view);
+        let reached: Vec<u32> = gathered.punctual.iter().map(|r| r.entity).collect();
+        assert_eq!(reached, [point.index(), spot.index()]);
+        let cone = gathered.lighting.punctual[1].spot.expect("a spot");
+        assert!(
+            cone.direction.abs_diff_eq(Vec3::NEG_Y, 1e-6),
+            "{}",
+            cone.direction
+        );
+        // A mesh made at the origin is lit by both.
+        let mesh = mesh_3d(&mut world, BuiltinMesh::Cube);
+        let bounds = voltra_render::render3d::Aabb3::new(Vec3::splat(-0.5), Vec3::splat(0.5));
+        let layers = world
+            .get::<MeshInstance3D>(mesh)
+            .expect("a mesh")
+            .light_layers;
+        let picked = voltra_scene::lighting3d::pick(
+            &gathered.punctual,
+            &gathered.directional_layers,
+            &bounds,
+            layers,
+        );
+        assert_eq!(picked.reached, 2);
     }
 
     #[test]

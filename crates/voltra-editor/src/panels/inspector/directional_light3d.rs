@@ -1,17 +1,18 @@
-//! The 3D sun: its colour and energy.
+//! The 3D sun: its colour, energy and layers.
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_scene::DirectionalLight3D;
 
 use super::active;
 
-/// The light's colour (linear, picked in sRGB) and its energy, in the
-/// light units' stored value; what it cannot draw with, under them.
+/// The light's colour (linear, picked in sRGB), its energy, in the light
+/// units' stored value, and its layers; what it cannot draw with, under
+/// them.
 pub(super) fn show(ui: &mut Ui, light: &mut DirectionalLight3D) -> Option<&'static str> {
     ui.label(RichText::new(DirectionalLight3D::NAME).strong())
         .on_hover_text(
-            "lights the 3D world along the entity's −Z, every ray parallel; one lights a view",
-        );
+        "lights the 3D world along the entity's −Z, every ray parallel; up to four light a view",
+    );
     let mut claim = None;
     egui::Grid::new("directional_light3d")
         .num_columns(2)
@@ -38,6 +39,13 @@ pub(super) fn show(ui: &mut Ui, light: &mut DirectionalLight3D) -> Option<&'stat
             ));
             ui.end_row();
         });
+    claim = claim.or(super::light_layers::show(
+        ui,
+        "directional_light3d_layers",
+        "lights these layers",
+        "lights only meshes on one of these",
+        &mut light.layers,
+    ));
     if let Some(problem) = light.problem() {
         ui.label(
             RichText::new(problem)

@@ -22,11 +22,26 @@ pub const FLAT_COLOR: &str = concat!(
 );
 
 /// Standard surfaces, instanced and lit: glTF's metallic-roughness inputs
-/// through Filament's BRDF. See [`SurfaceBank`](crate::render3d::SurfaceBank).
+/// through Filament's BRDF, under the frame's lights, fogged. See
+/// [`SurfaceBank`](crate::render3d::SurfaceBank).
 pub const SURFACE_3D: &str = concat!(
+    include_str!("shaders/frame3d.wgsl"),
+    "\n",
     include_str!("shaders/surface3d.wgsl"),
     "\n",
-    include_str!("shaders/surface3d_light.wgsl")
+    include_str!("shaders/surface3d_light.wgsl"),
+    "\n",
+    include_str!("shaders/environment3d.wgsl")
+);
+
+/// The 3D sky: a gradient by elevation drawn behind everything at the far
+/// plane. See `render3d::sky`.
+pub const SKY_3D: &str = concat!(
+    include_str!("shaders/frame3d.wgsl"),
+    "\n",
+    include_str!("shaders/environment3d.wgsl"),
+    "\n",
+    include_str!("shaders/sky3d.wgsl")
 );
 
 /// Source of the shader that draws egui's tessellated triangles.

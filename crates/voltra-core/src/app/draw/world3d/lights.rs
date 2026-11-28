@@ -2,31 +2,36 @@
 //! about what is left out of it.
 
 use voltra_ecs::{Entity, World};
-use voltra_scene::{lighting3d, DirectionalLight3D};
+use voltra_render::render3d::{View3D, LIGHTS_PER_INSTANCE, MAX_DIRECTIONAL, MAX_PUNCTUAL};
+use voltra_scene::draw3d::Crowded3D;
+use voltra_scene::lighting3d::{self, Gathered3D};
 
 use super::World3D;
 
 impl World3D {
-    /// What lights `camera`'s view of `world`, saying once what is left
-    /// out: a light that cannot light, lights and environments past the one
-    /// used.
-    fn lighting(&mut self, world: &World, camera: Entity) -> voltra_render::render3d::Lighting3D {
-        let gathered = lighting3d::gather(world, camera);
-        for (entity, light) in world.query::<DirectionalLight3D>() {
-            if let Some(problem) = light.problem() {
-                if self.light_warned.insert((entity, problem)) {
-                    log::warn!("the DirectionalLight3D on {entity:?}: {problem}");
-                }
+    /// What lights `camera`'s view of `world` through `view`, saying once
+    /// what is left out: a light or an environment that cannot draw,
+    /// lights past the caps, environments past the one used.
+    pub(super) fn lighting(&mut self, world: &World, camera: Entity, view: &View3D) -> Gathered3D {
+        let gathered = lighting3d::gather(world, camera, view);
+        for &(entity, problem) in &gathered.broken {
+            if self.light_warned.insert((entity, problem)) {
+                log::warn!("the 3D light on {entity:?}: {problem}");
             }
         }
-        if let Some(used) = gathered.light {
-            if gathered.unused_lights > 0 && self.light_warned.insert((used, "lights")) {
-                log::warn!(
-                    "{} more DirectionalLight3D in the world: only the one on {used:?} lights \
-                     for now (one directional light a view)",
-                    gathered.unused_lights
-                );
-            }
+        if gathered.dropped_directional > 0 && self.light_warned.insert((camera, "directional")) {
+            log::warn!(
+                "{} DirectionalLight3D more than the {MAX_DIRECTIONAL} a view is lit by: the \
+                 dimmest are left out of the view of the camera on {camera:?}",
+                gathered.dropped_directional
+            );
+        }
+        if gathered.dropped_punctual > 0 && self.light_warned.insert((camera, "punctual")) {
+            log::warn!(
+                "{} point and spot lights in view more than the {MAX_PUNCTUAL} a view holds: \
+                 those mattering least to the camera on {camera:?} are left out",
+                gathered.dropped_punctual
+            );
         }
         if let Some(used) = gathered.environment {
             if gathered.unused_environments > 0 && self.light_warned.insert((used, "environments"))
@@ -37,7 +42,30 @@ impl World3D {
                     gathered.unused_environments
                 );
             }
+            let problem = world
+                .get::<voltra_scene::Environment3D>(used)
+                .and_then(|env| env.problem());
+            if let Some(problem) = problem {
+                if self.light_warned.insert((used, problem)) {
+                    log::warn!("the Environment3D on {used:?}: {problem}");
+                }
+            }
         }
-        gathered.lighting
+        gathered
+    }
+
+    /// Says once a session, with the count, that some meshes are reached
+    /// by more point and spot lights than one is lit by.
+    pub(super) fn warn_crowded(&mut self, crowded: Crowded3D) {
+        if crowded.instances > 0 && !self.crowded_warned {
+            self.crowded_warned = true;
+            log::warn!(
+                "{} meshes are reached by more than {LIGHTS_PER_INSTANCE} point and spot lights \
+                 (up to {}): each is lit by the {LIGHTS_PER_INSTANCE} that matter most to it, the \
+                 rest dropped",
+                crowded.instances,
+                crowded.most
+            );
+        }
     }
 }

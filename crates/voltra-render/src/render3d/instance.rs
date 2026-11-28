@@ -1,23 +1,27 @@
-//! One drawn copy of a mesh, as the GPU reads it: its placement and tint.
+//! One drawn copy of a mesh, as the GPU reads it: its placement, tint and
+//! the lights that reach it.
 
 use bytemuck::{Pod, Zeroable};
 use glam::{Affine3A, Mat3};
 
+use super::lighting::LightList3D;
 use super::winding::Winding;
 
-/// Per-instance data of an instanced 3D draw: 112 bytes, seven attributes.
+/// Per-instance data of an instanced 3D draw: 124 bytes, eight attributes.
 ///
 /// The model matrix as an affine `3×vec4` (rows: the 3×3 part and the
 /// translation in `w`), its normal matrix — the cofactor matrix, which
 /// keeps normals at right angles to a surface under non-uniform scale and
-/// is defined for a flattened model too — as another `3×vec4`, and a
-/// linear RGBA tint.
+/// is defined for a flattened model too — as another `3×vec4`, a linear
+/// RGBA tint, and its [`LightList3D`] as one `Uint32x3`: eight `u8`
+/// point and spot light indices in two words, the directional lights'
+/// bits in the third.
 ///
 /// **The WebGL2 attribute budget** (16 attributes, a 255-byte stride per
-/// buffer) is laid out now for everything 0.5 adds: [`Vertex3D`]'s 4, these
-/// 7, the light list's one `Uint32x2` (stage 139) and skinning's two (155)
-/// — 14 of 16. Pinned by a test, so a field added here that breaks the
-/// floor fails at once rather than on a browser.
+/// buffer) is laid out for everything 0.5 adds: [`Vertex3D`]'s 4, these
+/// 8 and skinning's two (155) — 14 of 16. Pinned by a test, so a field
+/// added here that breaks the floor fails at once rather than on a
+/// browser.
 ///
 /// [`Vertex3D`]: super::Vertex3D
 #[repr(C)]
@@ -31,11 +35,13 @@ pub struct Instance3D {
     pub normal: [[f32; 4]; 3],
     /// Multiplies what is drawn; linear, alpha last.
     pub tint: [f32; 4],
+    /// [`LightList3D::packed`]: which of the frame's lights reach it.
+    pub lights: [u32; 3],
 }
 
 impl Instance3D {
-    /// The shader locations, 4 to 10: after [`Vertex3D`](super::Vertex3D)'s.
-    pub const ATTRIBUTES: [wgpu::VertexAttribute; 7] = wgpu::vertex_attr_array![
+    /// The shader locations, 4 to 11: after [`Vertex3D`](super::Vertex3D)'s.
+    pub const ATTRIBUTES: [wgpu::VertexAttribute; 8] = wgpu::vertex_attr_array![
         4 => Float32x4,
         5 => Float32x4,
         6 => Float32x4,
@@ -43,6 +49,7 @@ impl Instance3D {
         8 => Float32x4,
         9 => Float32x4,
         10 => Float32x4,
+        11 => Uint32x3,
     ];
 
     /// The instance buffer's layout: buffer slot 1, stepped per instance.
@@ -54,7 +61,9 @@ impl Instance3D {
         }
     }
 
-    /// The instance of a mesh placed by `model` and tinted `tint`.
+    /// The instance of a mesh placed by `model` and tinted `tint`, lit by
+    /// every directional light and no point or spot light
+    /// ([`LightList3D::default`]) until [`set_lights`](Self::set_lights).
     ///
     /// Refused only when nothing can be drawn from it: a model that is not
     /// finite, or whose normal matrix overflows ([`InstanceRefused::NotFinite`]),
@@ -101,7 +110,13 @@ impl Instance3D {
             model: rows(linear, [t.x, t.y, t.z]),
             normal: rows(normal, [sign, 0.0, 0.0]),
             tint,
+            lights: LightList3D::default().packed(),
         })
+    }
+
+    /// Lights it by `lights`: which of the frame's lights reach it.
+    pub fn set_lights(&mut self, lights: &LightList3D) {
+        self.lights = lights.packed();
     }
 
     /// Which way `model` turns a mesh's triangles on screen, and so which
@@ -131,9 +146,9 @@ mod tests {
     /// What WebGL2 guarantees (`Limits::downlevel_webgl2_defaults`).
     const WEBGL2_ATTRIBUTES: usize = 16;
     const WEBGL2_STRIDE: u64 = 255;
-    /// Attributes later stages add to the same draws: the light list's one
-    /// `Uint32x2` (139) and the skin's joints and weights (155).
-    const LATER: usize = 1 + 2;
+    /// Attributes later stages add to the same draws: the skin's joints
+    /// and weights (155).
+    const LATER: usize = 2;
 
     #[test]
     fn the_webgl2_attribute_budget_holds() {
@@ -144,7 +159,7 @@ mod tests {
             WEBGL2_STRIDE
         );
         let now = Vertex3D::ATTRIBUTES.len() + Instance3D::ATTRIBUTES.len();
-        assert_eq!(now, 11);
+        assert_eq!(now, 12);
         assert_eq!(now + LATER, 14, "the budget ARCHITECTURE records");
         assert!(now + LATER <= WEBGL2_ATTRIBUTES);
         for layout in [Vertex3D::layout(), Instance3D::layout()] {
@@ -155,7 +170,12 @@ mod tests {
             );
         }
         assert_eq!(Vertex3D::layout().array_stride, 48);
-        assert_eq!(Instance3D::layout().array_stride, 112);
+        assert_eq!(Instance3D::layout().array_stride, 124);
+        assert_eq!(
+            Instance3D::ATTRIBUTES[7].format,
+            wgpu::VertexFormat::Uint32x3,
+            "the light list"
+        );
         // Locations are unique across the two buffers, as one draw binds both.
         let mut locations: Vec<u32> = Vertex3D::ATTRIBUTES
             .iter()

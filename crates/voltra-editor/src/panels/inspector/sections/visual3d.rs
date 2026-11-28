@@ -1,12 +1,16 @@
 //! The sections of what an entity draws or lights in the 3D world: its
-//! mesh and the mesh's material file, a directional light, an environment.
+//! mesh and the mesh's material file, a directional, point or spot light,
+//! an environment.
 
 use voltra_core::egui::{self, Ui};
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
-use voltra_scene::{DirectionalLight3D, Environment3D, MeshInstance3D};
+use voltra_scene::{DirectionalLight3D, Environment3D, MeshInstance3D, PointLight3D, SpotLight3D};
 
-use super::super::{directional_light3d, environment3d, mesh_instance3d, mixed, surface_material};
+use super::super::{
+    directional_light3d, environment3d, mesh_instance3d, mixed, point_light3d, spot_light3d,
+    surface_material,
+};
 use super::gate;
 use crate::editor::Editor;
 use crate::multi_edit::MultiEdit;
@@ -51,6 +55,24 @@ pub(super) fn show(
         ui.separator();
         mixed::marker(ui, multi, &[DirectionalLight3D::NAME]);
         claim = claim.or(directional_light3d::show(ui, light));
+    }
+    if let Some(light) = gate(
+        frame.world.get_mut::<PointLight3D>(entity),
+        multi,
+        PointLight3D::NAME,
+    ) {
+        ui.separator();
+        mixed::marker(ui, multi, &[PointLight3D::NAME]);
+        claim = claim.or(point_light3d::show(ui, light));
+    }
+    if let Some(light) = gate(
+        frame.world.get_mut::<SpotLight3D>(entity),
+        multi,
+        SpotLight3D::NAME,
+    ) {
+        ui.separator();
+        mixed::marker(ui, multi, &[SpotLight3D::NAME]);
+        claim = claim.or(spot_light3d::show(ui, light));
     }
     if let Some(environment) = gate(
         frame.world.get_mut::<Environment3D>(entity),

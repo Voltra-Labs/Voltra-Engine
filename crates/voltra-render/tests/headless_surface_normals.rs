@@ -55,20 +55,20 @@ fn a_normal_map_tilts_the_shading_and_is_read_as_data() {
                 ..SurfaceTextures::NONE
             },
         );
-        let grazing = Lighting3D {
-            directional: Some(DirectionalLight {
+        let grazing = Lighting3D::sun(
+            DirectionalLight {
                 direction: (-from - Vec3::Z * 0.3).normalize(),
                 color: [1.0; 3],
                 energy: 1.5,
-            }),
-            ambient: [0.05; 3],
-        };
+            },
+            [0.05; 3],
+        );
         let mut draw = |material: &SurfaceMaterial3D| {
             picture(
                 &mut gpu,
                 (SIZE, SIZE),
                 looking_down_minus_z(FOV, None),
-                grazing,
+                grazing.clone(),
                 &[Draw {
                     mesh: &square,
                     material,

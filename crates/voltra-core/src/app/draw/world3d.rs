@@ -1,7 +1,8 @@
 //! A 3D camera's shot: the world's meshes culled and grouped into the
 //! depth pass, each through its surface material and lit by the world's
-//! light, through the camera's curve and grade, into the window or a
-//! picture — the HUD over it when it is the frame's only screen shot.
+//! lights that matter most to it, the sky behind, the fog between, through
+//! the camera's curve and grade, into the window or a picture — the HUD
+//! over it when it is the frame's only screen shot.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -47,8 +48,10 @@ pub(in crate::app) struct World3D {
     /// The frame's surface materials on the GPU.
     surfaces: Surfaces,
     /// What has been said about the lights, once each: a light that cannot
-    /// light, lights and environments past the one used.
+    /// light, lights past the caps, environments past the one used.
     light_warned: HashSet<(Entity, &'static str)>,
+    /// Whether meshes reached by more lights than one is lit by were said.
+    crowded_warned: bool,
     /// Materials drawn on spheres for the editor.
     pub previews: SurfacePreviews,
     /// Render textures named as a surface's image, said once each.
@@ -179,12 +182,14 @@ impl World3D {
                 );
             }
         }
-        let lighting = self.lighting(world, camera);
+        let gathered = self.lighting(world, camera, &view);
         let meshes = self.meshes.get_or_insert_with(Meshes::new);
         meshes.upload(renderer.context().device());
-        let long = world
+        let count = world
             .components::<MeshInstance3D>()
-            .is_some_and(|all| all.len() >= PARALLEL_FROM);
+            .map_or(0, |all| all.len());
+        let long = count >= PARALLEL_FROM
+            || count * gathered.punctual.len() >= voltra_scene::draw3d::LIGHT_PARALLEL_FROM;
         let jobs = if long {
             Some(
                 &*self
@@ -196,6 +201,9 @@ impl World3D {
         };
         self.list
             .rebuild(world, &view, meshes, sources.materials, jobs);
+        let crowded = self.list.light(&gathered, jobs);
+        self.warn_crowded(crowded);
+        let meshes = self.meshes.get_or_insert_with(Meshes::new);
         self.surfaces.prepare(
             renderer,
             sources.materials,
@@ -217,16 +225,20 @@ impl World3D {
                 })
             })
             .collect();
+        let (clear, sky) = clear(
+            shot.camera.clear,
+            picture == Picture3D::Overlay,
+            &gathered.background,
+            renderer.clear_color,
+        );
+        let mut lighting = gathered.lighting;
+        lighting.sky = sky;
         let scene = Scene3D {
             lighting,
             view,
             instances: &self.list.instances,
             draws: &draws,
-            clear: clear(
-                shot.camera.clear,
-                picture == Picture3D::Overlay,
-                renderer.clear_color,
-            ),
+            clear,
             time: sources.time,
         };
         let look = shot.camera.look();

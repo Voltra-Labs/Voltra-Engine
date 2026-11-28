@@ -8,8 +8,9 @@ use voltra_assets::{AssetPath, MeshPath};
 /// Every instance of one mesh and one material in view is one instanced
 /// draw. Drawn through its `material` — a `.material.ron` of `domain:
 /// Surface` — or, with none, the default white standard (a dielectric of
-/// roughness 0.5), lit by the world's `DirectionalLight3D` and
-/// `Environment3D`. A mesh that will not load draws a magenta cube and is
+/// roughness 0.5), lit by the world's `DirectionalLight3D`s and
+/// `Environment3D`, the eight point and spot lights that matter most to
+/// it, on its `light_layers`. A mesh that will not load draws a magenta cube and is
 /// warned about once; a material that will not, the default, its error
 /// logged once. With no `Transform3D` it sits in its parent's frame — the
 /// world origin at the root.
@@ -26,6 +27,16 @@ pub struct MeshInstance3D {
     /// the default and not written, is the default white standard.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub material: Option<AssetPath>,
+    /// The light layers it is lit on, as a
+    /// [`Sprite2D`](crate::Sprite2D)'s `light_layers`: a light lights it
+    /// only if its `layers` share a bit with these. The first layer — the
+    /// default, and not written — is lit by every light that has not been
+    /// told otherwise.
+    #[serde(
+        default = "crate::light::default_light_layers",
+        skip_serializing_if = "crate::light::is_default_light_layers"
+    )]
+    pub light_layers: u32,
 }
 
 fn white() -> [f32; 4] {
@@ -52,6 +63,7 @@ impl MeshInstance3D {
             mesh: mesh.into(),
             color: white(),
             material: None,
+            light_layers: crate::light::default_light_layers(),
         }
     }
 

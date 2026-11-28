@@ -1,10 +1,40 @@
-//! What lights a 3D frame: one directional light and the ambient, and the
-//! uniform the surface shader reads them through with the view.
+//! What lights a 3D frame: directional lights, point and spot lights, the
+//! ambient, the sky behind and the fog between — and the uniforms the
+//! surface and sky shaders read them through.
+//!
+//! **Forward, with a light list per instance** (ARCHITECTURE "Lights,
+//! shadows and the environment"): the frame's lights go into one uniform
+//! array ([`LightsUniform3D`]: up to [`MAX_DIRECTIONAL`] directional and
+//! [`MAX_PUNCTUAL`] point and spot lights), and each instance carries the
+//! indices of the [`LIGHTS_PER_INSTANCE`] point and spot lights that matter
+//! most to it ([`LightList3D`]), chosen on the CPU by the scene side —
+//! Godot's Mobile and Compatibility renderers' model, since WebGL2 has no
+//! storage buffers for a clustered grid.
 
-use bytemuck::{Pod, Zeroable};
+mod environment;
+mod falloff;
+mod frame_uniform;
+mod lights_uniform;
+mod list;
+
+pub use environment::{Fog, SkyGradient};
+pub use falloff::{distance_attenuation, SpotCone, MIN_DISTANCE_SQUARED};
+pub use frame_uniform::FrameUniform3D;
+pub use lights_uniform::LightsUniform3D;
+pub use list::LightList3D;
+
 use glam::Vec3;
 
-use super::view::View3D;
+/// The most directional lights a view is lit by.
+pub const MAX_DIRECTIONAL: usize = 4;
+
+/// The most point and spot lights a view holds: the uniform array's
+/// length, which an instance's list indexes.
+pub const MAX_PUNCTUAL: usize = 128;
+
+/// The most point and spot lights one instance is lit by: eight `u8`
+/// indices, two `u32`s of its instance attribute.
+pub const LIGHTS_PER_INSTANCE: usize = 8;
 
 /// A light from infinitely far away, all its rays parallel: the sun.
 ///
@@ -23,134 +53,87 @@ pub struct DirectionalLight {
     pub energy: f32,
 }
 
+/// A light at a point, shining every way — or, with a [`SpotCone`], in a
+/// cone — fading by the inverse square of the distance to nothing at
+/// `range` ([`distance_attenuation`]).
+///
+/// `energy` is the light units' stored value: the luminous intensity in
+/// candela over K, so `color × energy / d²` is the illuminance it gives at
+/// `d` metres in the units a [`DirectionalLight`]'s energy is in.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PunctualLight {
+    /// Where it is, in the world.
+    pub position: Vec3,
+    /// Linear RGB.
+    pub color: [f32; 3],
+    /// The light units' stored value.
+    pub energy: f32,
+    /// Metres from it to where it gives nothing.
+    pub range: f32,
+    /// A spot light's cone; `None` for a point light.
+    pub spot: Option<SpotCone>,
+}
+
+impl PunctualLight {
+    /// The light it gives a point `to_light` away from it (the vector from
+    /// the lit point to the light), per unit colour: the distance window
+    /// and, for a spot light, the cone. `surface3d_light.wgsl`'s
+    /// `punctual_attenuation`.
+    pub fn attenuation(&self, to_light: Vec3) -> f32 {
+        let distance = distance_attenuation(to_light.length_squared(), self.range);
+        let cone = self
+            .spot
+            .map_or(1.0, |spot| spot.attenuation(-to_light.normalize_or_zero()));
+        distance * cone
+    }
+
+    /// Whether a number of it cannot be drawn with: not finite, negative.
+    /// Such a light is left out of the uniform (it lights nothing).
+    pub fn is_broken(&self) -> bool {
+        !(self.position.is_finite()
+            && self.color.iter().all(|c| c.is_finite() && *c >= 0.0)
+            && self.energy.is_finite()
+            && self.energy >= 0.0
+            && self.range.is_finite()
+            && self.range >= 0.0)
+    }
+}
+
 /// A 3D frame's light: what [`Scene3D`](super::Scene3D) is lit by.
-#[derive(Debug, Clone, Copy, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Lighting3D {
-    /// The one directional light, if there is one (stage 139 makes it a
-    /// list).
-    pub directional: Option<DirectionalLight>,
+    /// The directional lights, the first [`MAX_DIRECTIONAL`] used; an
+    /// instance's [`LightList3D`] says which reach it.
+    pub directional: Vec<DirectionalLight>,
+    /// The point and spot lights an instance's [`LightList3D`] indexes,
+    /// the first [`MAX_PUNCTUAL`] used.
+    pub punctual: Vec<PunctualLight>,
     /// A uniform sky's light, linear RGB in the light units' energy: the
     /// diffuse it gives a white surface.
     pub ambient: [f32; 3],
+    /// The sky drawn where nothing else is; `None` leaves the clear colour
+    /// there.
+    pub sky: Option<SkyGradient>,
+    /// The fog between the eye and what it sees; `None` for clear air.
+    pub fog: Option<Fog>,
 }
 
 impl Lighting3D {
     /// No light at all: an unlit surface still draws as it is.
     pub const DARK: Self = Self {
-        directional: None,
+        directional: Vec::new(),
+        punctual: Vec::new(),
         ambient: [0.0; 3],
+        sky: None,
+        fog: None,
     };
-}
 
-/// Group 0 of the surface pipelines, as `surface3d.wgsl`'s `Frame3D` reads
-/// it: the view, the light and the time. 144 bytes.
-#[repr(C)]
-#[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
-pub struct FrameUniform3D {
-    view_proj: [[f32; 4]; 4],
-    eye: [f32; 4],
-    forward: [f32; 4],
-    light_direction: [f32; 4],
-    light_color: [f32; 4],
-    ambient: [f32; 4],
-}
-
-impl FrameUniform3D {
-    /// Where the time a surface reads wraps, in seconds: an hour, as
-    /// Godot's `TIME` and Bevy's `globals.time` wrap. Under it an `f32`
-    /// keeps a quarter of a millisecond.
-    pub const TIME_WRAP: f32 = 3600.0;
-
-    /// The uniform for `view` lit by `lighting` at `time` seconds (wrapped
-    /// at [`TIME_WRAP`](Self::TIME_WRAP); not finite, 0). A light with no
-    /// finite direction, or a non-finite colour or energy, lights nothing:
-    /// the scene side warns about it.
-    pub fn new(view: &View3D, lighting: &Lighting3D, time: f32) -> Self {
-        let finite3 = |c: [f32; 3]| c.map(|c| if c.is_finite() { c.max(0.0) } else { 0.0 });
-        let light = lighting.directional.and_then(|light| {
-            let toward = -light.direction.normalize_or_zero();
-            let color = finite3(light.color);
-            let energy = if light.energy.is_finite() {
-                light.energy.max(0.0)
-            } else {
-                0.0
-            };
-            (toward != Vec3::ZERO).then_some((toward, color.map(|c| c * energy)))
-        });
-        let (toward, color, on) = match light {
-            Some((toward, color)) => (toward, color, 1.0),
-            None => (Vec3::ZERO, [0.0; 3], 0.0),
-        };
-        let ambient = finite3(lighting.ambient);
-        let perspective = if view.is_orthographic() { 0.0 } else { 1.0 };
+    /// One sun and an ambient: what stage 137 lit a frame with.
+    pub fn sun(light: DirectionalLight, ambient: [f32; 3]) -> Self {
         Self {
-            view_proj: view.view_projection().to_cols_array_2d(),
-            eye: view.eye.extend(perspective).to_array(),
-            forward: view.forward.extend(0.0).to_array(),
-            light_direction: toward.extend(on).to_array(),
-            light_color: [color[0], color[1], color[2], 0.0],
-            ambient: [
-                ambient[0],
-                ambient[1],
-                ambient[2],
-                if time.is_finite() {
-                    time.rem_euclid(Self::TIME_WRAP)
-                } else {
-                    0.0
-                },
-            ],
+            directional: vec![light],
+            ambient,
+            ..Self::DARK
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use glam::Affine3A;
-
-    use super::*;
-
-    #[test]
-    fn the_uniform_points_toward_the_light_and_scales_its_colour() {
-        let view = View3D::perspective(Affine3A::IDENTITY, 1.0, 1.0, 0.1, None);
-        let lit = FrameUniform3D::new(
-            &view,
-            &Lighting3D {
-                directional: Some(DirectionalLight {
-                    direction: Vec3::new(0.0, -2.0, 0.0),
-                    color: [1.0, 0.5, 0.25],
-                    energy: 2.0,
-                }),
-                ambient: [0.1, f32::NAN, -1.0],
-            },
-            3601.5,
-        );
-        assert_eq!(lit.light_direction, [0.0, 1.0, 0.0, 1.0]);
-        assert_eq!(lit.light_color, [2.0, 1.0, 0.5, 0.0]);
-        assert_eq!(
-            lit.ambient,
-            [0.1, 0.0, 0.0, 1.5],
-            "the time wrapped at an hour"
-        );
-        assert_eq!(lit.eye[3], 1.0, "a perspective view");
-        let broken = FrameUniform3D::new(
-            &view,
-            &Lighting3D {
-                directional: Some(DirectionalLight {
-                    direction: Vec3::ZERO,
-                    color: [1.0; 3],
-                    energy: 1.0,
-                }),
-                ambient: [0.0; 3],
-            },
-            f32::NAN,
-        );
-        assert_eq!(broken.light_direction[3], 0.0, "no direction, no light");
-        assert_eq!(broken.ambient[3], 0.0, "no time, 0");
-        let ortho = View3D::orthographic(Affine3A::IDENTITY, 1.0, 1.0, 0.1, 10.0);
-        assert_eq!(
-            FrameUniform3D::new(&ortho, &Lighting3D::DARK, 0.0).eye[3],
-            0.0
-        );
-        assert_eq!(size_of::<FrameUniform3D>(), 144);
     }
 }

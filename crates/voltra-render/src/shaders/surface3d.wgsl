@@ -1,7 +1,8 @@
 // The surface prelude, instanced: the bindings, the vertex stage, what a
 // material's `surface()` is handed and returns, and the standard surface —
-// glTF 2.0's metallic-roughness inputs. Its lighting is
-// surface3d_light.wgsl, which follows it (`shader::SURFACE_3D`).
+// glTF 2.0's metallic-roughness inputs. It follows frame3d.wgsl; its
+// lighting is surface3d_light.wgsl and its fog environment3d.wgsl, which
+// follow it (`shader::SURFACE_3D`).
 // `render3d::surface::compose` puts the material's own source before them
 // and the fragment entry points after.
 //
@@ -9,33 +10,9 @@
 // refuses `textureSample` (and `fwidth`) after a branch on a non-uniform
 // value, and then the whole module with it. Choices are `select`s.
 
-const PI: f32 = 3.14159265358979;
 // Filament's floor on perceptual roughness: below it a highlight is
 // narrower than a half float holds.
 const MIN_ROUGHNESS: f32 = 0.045;
-// The most light a surface sends back, per channel. A mirror-smooth
-// highlight near grazing reaches some 10⁵ at energy 1, and emissive is
-// unbounded; past 65504 an Rgba16Float texel is infinite, and bloom and the
-// curves turn that to NaN. Low enough that bloom's levels, summed, stay
-// finite too. `brdf::MAX_LIGHT` on the CPU.
-const MAX_LIGHT: f32 = 4096.0;
-
-struct Frame3D {
-    view_proj: mat4x4<f32>,
-    // xyz: the eye; w: 1 for a perspective view, 0 for an orthographic one.
-    eye: vec4<f32>,
-    // xyz: the way the view looks, unit length.
-    forward: vec4<f32>,
-    // xyz: toward the light, unit length; w: 1 with a light, 0 without.
-    light_direction: vec4<f32>,
-    // rgb: the light's colour times its energy.
-    light_color: vec4<f32>,
-    // rgb: the ambient, a uniform sky's light; w: the time in seconds,
-    // wrapped at an hour.
-    ambient: vec4<f32>,
-};
-
-@group(0) @binding(0) var<uniform> frame: Frame3D;
 
 struct StandardBlock {
     base_color: vec4<f32>,
@@ -80,6 +57,10 @@ struct InstanceIn {
     @location(8) normal_y: vec4<f32>,
     @location(9) normal_z: vec4<f32>,
     @location(10) tint: vec4<f32>,
+    // The lights that reach it (`LightList3D::packed`): eight point and
+    // spot light indices, a byte each, in x and y; the directional lights'
+    // bits in z.
+    @location(11) lights: vec3<u32>,
 };
 
 struct VertexOut {
@@ -92,6 +73,9 @@ struct VertexOut {
     @location(2) tangent: vec4<f32>,
     @location(3) uv: vec2<f32>,
     @location(4) tint: vec4<f32>,
+    // The instance's light list, the same at every vertex: `either` is
+    // what WebGL2's GLSL can say.
+    @location(5) @interpolate(flat, either) lights: vec3<u32>,
 };
 
 @vertex
@@ -119,6 +103,7 @@ fn vs_main(vertex: VertexIn, instance: InstanceIn) -> VertexOut {
     );
     out.uv = vertex.uv;
     out.tint = instance.tint;
+    out.lights = instance.lights;
     return out;
 }
 
@@ -152,6 +137,8 @@ struct SurfaceInput {
     front_facing: bool,
     // Seconds since the game started, wrapped at an hour.
     time: f32,
+    // Which of the frame's lights reach it: `light_surface` reads it.
+    light_list: vec3<u32>,
 };
 
 // What a material's `surface()` returns: the standard's inputs, lit by
@@ -198,6 +185,7 @@ fn surface_input(in: VertexOut, front: bool) -> SurfaceInput {
     out.view = v;
     out.front_facing = front;
     out.time = frame.ambient.w;
+    out.light_list = in.lights;
     return out;
 }
 
@@ -237,7 +225,6 @@ fn standard_surface(in: SurfaceInput) -> Surface {
     out.occlusion = 1.0 + standard.factors.w * (occlusion_texel - 1.0);
     return out;
 }
-
 
 // The mask's cutoff, from the standard block's alpha mode.
 fn surface_cutoff() -> f32 {

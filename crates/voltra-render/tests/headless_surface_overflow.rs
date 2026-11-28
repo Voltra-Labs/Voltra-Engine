@@ -89,16 +89,16 @@ fn a_mirror_rim_lit_from_behind_stays_finite_through_bloom_and_every_curve() {
                 b: 0.2,
                 a: 1.0,
             },
-            lighting: Lighting3D {
-                directional: Some(DirectionalLight {
+            lighting: Lighting3D::sun(
+                DirectionalLight {
                     // From behind the sphere toward the eye, a little down:
                     // its rim reflects it into the eye near grazing.
                     direction: Vec3::new(0.0, -0.08, 1.0).normalize(),
                     color: [1.0; 3],
                     energy: 4.0,
-                }),
-                ambient: [0.2; 3],
-            },
+                },
+                [0.2; 3],
+            ),
             time: 0.0,
         };
         gpu.renderer

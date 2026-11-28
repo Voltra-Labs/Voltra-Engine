@@ -109,10 +109,10 @@ impl PartialEq for SurfaceShader {
 }
 
 /// Every resource `module` binds is one the composer declared, once: the
-/// frame (group 0), the standard block, its sampler and five textures, the
-/// material's block and `textures` of its own (group 1).
+/// frame and its lights (group 0), the standard block, its sampler and five
+/// textures, the material's block and `textures` of its own (group 1).
 fn check_bindings(module: &naga::Module, textures: usize) -> Result<(), String> {
-    let mut allowed: Vec<(u32, u32)> = vec![(0, 0)];
+    let mut allowed: Vec<(u32, u32)> = vec![(0, 0), (0, 1)];
     allowed.extend((0..2 + SURFACE_TEXTURES).map(|b| (1, b)));
     allowed.push((1, CUSTOM_BLOCK_BINDING));
     allowed.extend((0..textures as u32).map(|i| (1, CUSTOM_TEXTURE_BINDING + i)));

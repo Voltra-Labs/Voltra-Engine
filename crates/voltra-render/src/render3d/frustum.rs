@@ -56,6 +56,19 @@ impl Frustum {
         })
     }
 
+    /// Whether any of the ball of `radius` about `center` may be inside —
+    /// what a point or spot light reaches. Conservative as
+    /// [`intersects`](Self::intersects) is; a ball that is not finite
+    /// answers `false`.
+    pub fn intersects_sphere(&self, center: Vec3, radius: f32) -> bool {
+        if !(center.is_finite() && radius.is_finite()) {
+            return false;
+        }
+        self.planes()
+            .iter()
+            .all(|plane| plane.truncate().dot(center) + plane.w >= -radius)
+    }
+
     /// Whether `point` is inside.
     pub fn contains(&self, point: Vec3) -> bool {
         self.planes()
@@ -135,6 +148,30 @@ mod tests {
         assert!(!frustum.contains(Vec3::new(0.0, 5.1, -1.0)));
         assert!(!frustum.contains(Vec3::new(0.0, 0.0, -50.1)));
         assert!(!frustum.contains(Vec3::new(0.0, 0.0, 0.0)), "before near");
+    }
+
+    #[test]
+    fn a_ball_is_seen_while_any_of_it_is_inside() {
+        let frustum = perspective(Some(100.0));
+        // 90°: the left plane at 10 m in front passes x = −10; its normal
+        // leans 45°, so a ball at x = −13 must reach 3/√2 ≈ 2.12 m.
+        let at = Vec3::new(-13.0, 0.0, -10.0);
+        assert!(!frustum.intersects_sphere(at, 2.0));
+        assert!(frustum.intersects_sphere(at, 2.2));
+        assert!(
+            frustum.intersects_sphere(Vec3::new(0.0, 0.0, 1.0), 1.5),
+            "around the eye"
+        );
+        assert!(
+            !frustum.intersects_sphere(Vec3::new(0.0, 0.0, 5.0), 1.0),
+            "behind"
+        );
+        assert!(
+            !frustum.intersects_sphere(Vec3::new(0.0, 0.0, -103.0), 2.0),
+            "past far"
+        );
+        assert!(!frustum.intersects_sphere(Vec3::splat(f32::NAN), 1.0));
+        assert!(!frustum.intersects_sphere(Vec3::ZERO, f32::INFINITY));
     }
 
     #[test]

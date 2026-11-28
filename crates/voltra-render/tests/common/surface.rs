@@ -37,15 +37,15 @@ pub fn decode(byte: u8) -> f32 {
 }
 
 pub fn light() -> Lighting3D {
-    Lighting3D {
-        directional: Some(DirectionalLight {
+    Lighting3D::sun(
+        DirectionalLight {
             // Down, left and away from the eye: lit from the upper right.
             direction: Vec3::new(-0.5, -0.3, -1.0).normalize(),
             color: [1.0, 0.95, 0.9],
             energy: 1.0,
-        }),
-        ambient: [0.05, 0.06, 0.08],
-    }
+        },
+        [0.05, 0.06, 0.08],
+    )
 }
 
 pub fn save(name: &str, width: u32, height: u32, pixels: &[[u8; 4]]) {
@@ -161,7 +161,7 @@ pub fn expected_under(
     x: u32,
     y: u32,
 ) -> [u8; 3] {
-    let sun = lighting.directional.expect("a light");
+    let sun = lighting.directional.first().expect("a light");
     let point = brdf::Point {
         base: Vec3::new(
             surface.base_color[0],

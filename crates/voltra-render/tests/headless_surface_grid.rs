@@ -62,14 +62,14 @@ fn a_sphere_grid_sweeps_metallic_and_roughness() {
         View3D::DEFAULT_NEAR,
         None,
     );
-    let lighting = Lighting3D {
-        directional: Some(DirectionalLight {
+    let lighting = Lighting3D::sun(
+        DirectionalLight {
             direction: Vec3::new(-0.4, -0.5, -1.0).normalize(),
             color: [1.0; 3],
             energy: 2.0,
-        }),
-        ambient: [0.15; 3],
-    };
+        },
+        [0.15; 3],
+    );
     let pixels = picture(&mut gpu, (width, height), view, lighting, &draws);
     gpu.renderer.set_msaa(1);
     save("surface-sphere-grid", width, height, &pixels);
