@@ -14,11 +14,12 @@ use voltra_render::{wgpu, Layer, RenderTarget, Renderer};
 use voltra_scene::camera::{FrameShots, Shot3D};
 use voltra_scene::camera3d;
 use voltra_scene::draw3d::PARALLEL_FROM;
-use voltra_scene::{lighting3d, DirectionalLight3D, DrawList3D, MeshInstance3D};
+use voltra_scene::{DrawList3D, MeshInstance3D};
 
 use super::render_settings::{self, RenderSettings, DEFAULT_RENDER_SETTINGS};
 
 mod clear;
+mod lights;
 mod previews;
 mod surfaces;
 
@@ -259,40 +260,4 @@ pub(in crate::app) struct Sources3D<'a> {
 pub(in crate::app) fn shader_seconds(elapsed: f64) -> f32 {
     let wrap = f64::from(voltra_render::render3d::FrameUniform3D::TIME_WRAP);
     elapsed.rem_euclid(wrap) as f32
-}
-
-impl World3D {
-    /// What lights `camera`'s view of `world`, saying once what is left
-    /// out: a light that cannot light, lights and environments past the one
-    /// used.
-    fn lighting(&mut self, world: &World, camera: Entity) -> voltra_render::render3d::Lighting3D {
-        let gathered = lighting3d::gather(world, camera);
-        for (entity, light) in world.query::<DirectionalLight3D>() {
-            if let Some(problem) = light.problem() {
-                if self.light_warned.insert((entity, problem)) {
-                    log::warn!("the DirectionalLight3D on {entity:?}: {problem}");
-                }
-            }
-        }
-        if let Some(used) = gathered.light {
-            if gathered.unused_lights > 0 && self.light_warned.insert((used, "lights")) {
-                log::warn!(
-                    "{} more DirectionalLight3D in the world: only the one on {used:?} lights \
-                     for now (one directional light a view)",
-                    gathered.unused_lights
-                );
-            }
-        }
-        if let Some(used) = gathered.environment {
-            if gathered.unused_environments > 0 && self.light_warned.insert((used, "environments"))
-            {
-                log::warn!(
-                    "{} more world Environment3D: the one on {used:?} is used, the lowest entity \
-                     index",
-                    gathered.unused_environments
-                );
-            }
-        }
-        gathered.lighting
-    }
 }
