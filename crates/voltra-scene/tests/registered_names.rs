@@ -12,6 +12,16 @@ use voltra_scene::ComponentRegistry;
 /// Quoted names that are not the component: an entity's default name, a
 /// text's default content, a label. `(file, the text on the line)`.
 const NOT_THE_COMPONENT: &[(&str, &str)] = &[
+    // Rust type names a new game may not take, the template's among them.
+    (
+        "crates/xtask/src/new_game.rs",
+        r#""Game" | "Tick" | "Player" | "App""#,
+    ),
+    // The template's test finds the player by its entity name.
+    (
+        "crates/xtask/template/plugin.rs.tpl",
+        r#"name.as_str() == "Player""#,
+    ),
     // A new text's placeholder content.
     ("crates/voltra-scene/src/text.rs", r#"content: "Text""#),
     // A field label in the atlas editor.
@@ -67,26 +77,84 @@ fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// The names `files`' own `NAME` consts give: a game's components, which
+/// only that game's code (or the template's) may be held to — a "Player"
+/// elsewhere is a lobby row, not the game's component.
+fn own_names(files: &[PathBuf]) -> Vec<String> {
+    let mut names = Vec::new();
+    for file in files {
+        let text = std::fs::read_to_string(file).expect("a source file reads");
+        for line in text.lines() {
+            let quoted = line
+                .trim()
+                .strip_prefix("pub const NAME: &'static str = \"")
+                .and_then(|rest| rest.strip_suffix("\";"));
+            if let Some(name) = quoted {
+                names.push(name.to_owned());
+            }
+        }
+    }
+    names
+}
+
+/// The lines of the migration table: history, each name as its version
+/// spelled it.
+fn in_renames_table(lines: &[&str], number: usize) -> bool {
+    let Some(start) = lines
+        .iter()
+        .position(|l| l.starts_with("pub const RENAMES"))
+    else {
+        return false;
+    };
+    let end = lines[start..]
+        .iter()
+        .position(|l| l.starts_with(")];"))
+        .map_or(lines.len(), |at| start + at);
+    (start..=end).contains(&number)
+}
+
 #[test]
 fn no_code_spells_a_registered_name() {
     let root = workspace();
-    let names: Vec<&str> = ComponentRegistry::with_defaults().names().collect();
-    assert!(names.len() > 40, "the registry lists its names");
+    let engine: Vec<String> = ComponentRegistry::with_defaults()
+        .names()
+        .map(str::to_owned)
+        .collect();
+    assert!(engine.len() > 40, "the registry lists its names");
 
-    let mut files = Vec::new();
+    // Each member's sources, with the names they are held to: the
+    // engine's everywhere, and a game's (or the template's) own in it.
+    let mut members: Vec<(Vec<PathBuf>, Vec<String>)> = Vec::new();
     for top in ["crates", "games"] {
-        let Ok(members) = std::fs::read_dir(root.join(top)) else {
+        let Ok(dirs) = std::fs::read_dir(root.join(top)) else {
             continue;
         };
-        for member in members.flatten() {
-            sources(&member.path().join("src"), &mut files);
-            sources(&member.path().join("template"), &mut files);
+        for member in dirs.flatten() {
+            let mut files = Vec::new();
+            for dir in ["src", "template", "examples", "benches"] {
+                sources(&member.path().join(dir), &mut files);
+            }
+            let mut names = engine.clone();
+            if top == "games" || member.file_name() == "xtask" {
+                let own = own_names(&files);
+                assert!(
+                    top != "games" || !own.is_empty(),
+                    "{:?} registers no NAME of its own",
+                    member.path()
+                );
+                names.extend(own);
+            }
+            members.push((files, names));
         }
     }
-    assert!(files.len() > 500, "found the sources ({})", files.len());
+    let count: usize = members.iter().map(|(files, _)| files.len()).sum();
+    assert!(count > 500, "found the sources ({count})");
 
     let mut found = Vec::new();
-    for file in &files {
+    for (file, names) in members
+        .iter()
+        .flat_map(|(files, names)| files.iter().map(move |file| (file, names)))
+    {
         let text = std::fs::read_to_string(file).expect("a source file reads");
         let relative = file
             .strip_prefix(&root)
@@ -121,9 +189,10 @@ fn no_code_spells_a_registered_name() {
             if code.starts_with("//") || code.contains("const NAME: &'static str") {
                 continue;
             }
-            // The migration table spells each name as its version did.
-            if relative == "crates/voltra-scene/src/format/migrate.rs" {
-                break;
+            if relative == "crates/voltra-scene/src/format/migrate.rs"
+                && in_renames_table(&lines, number)
+            {
+                continue;
             }
             let allowed = NOT_THE_COMPONENT
                 .iter()
@@ -131,8 +200,11 @@ fn no_code_spells_a_registered_name() {
             if allowed {
                 continue;
             }
-            for name in &names {
-                if line.contains(&format!("\"{name}\"")) {
+            for name in names {
+                // Quoted, or quoted inside a string (`"{\"Sprite2D\": …}"`).
+                if line.contains(&format!("\"{name}\""))
+                    || line.contains(&format!("\\\"{name}\\\""))
+                {
                     found.push(format!("{relative}:{}: \"{name}\"", number + 1));
                 }
             }
