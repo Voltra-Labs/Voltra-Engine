@@ -10,7 +10,7 @@
 pub mod builtin;
 pub mod mesh_path;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 use voltra_render::render3d::{Aabb3, Mesh3D, MeshData3D};
 use voltra_render::wgpu;
@@ -50,7 +50,8 @@ struct Entry {
 #[derive(Debug)]
 pub struct Meshes {
     store: Assets<Entry>,
-    builtins: HashMap<BuiltinMesh, Handle<Entry>>,
+    /// Each built-in mesh's handle, in [`BuiltinMesh::ALL`]'s order.
+    builtins: [Handle<Entry>; BuiltinMesh::ALL.len()],
     /// Paths already warned about, so a missing mesh is said once.
     warned: HashSet<AssetPath>,
 }
@@ -65,21 +66,18 @@ impl Meshes {
     /// A store holding every built-in mesh, on the CPU.
     pub fn new() -> Self {
         let mut store = Assets::new();
-        let builtins = BuiltinMesh::ALL
-            .into_iter()
-            .map(|mesh| {
-                let data = mesh.generate();
-                let bounds = data.bounds().expect("a built-in mesh has vertices");
-                let label = format!("{BUILTIN_PREFIX}{}", mesh.name());
-                let entry = Entry {
-                    data,
-                    bounds,
-                    gpu: None,
-                    label,
-                };
-                (mesh, store.insert(entry))
-            })
-            .collect();
+        let builtins = BuiltinMesh::ALL.map(|mesh| {
+            let data = mesh.generate();
+            let bounds = data.bounds().expect("a built-in mesh has vertices");
+            let label = format!("{BUILTIN_PREFIX}{}", mesh.name());
+            let entry = Entry {
+                data,
+                bounds,
+                gpu: None,
+                label,
+            };
+            store.insert(entry)
+        });
         Self {
             store,
             builtins,
@@ -113,12 +111,7 @@ impl Meshes {
 
     /// The handle of a built-in mesh.
     pub fn builtin(&self, mesh: BuiltinMesh) -> Handle<Mesh3D> {
-        let handle = self
-            .builtins
-            .get(&mesh)
-            .copied()
-            .expect("every built-in mesh is made with the store");
-        typed(handle)
+        typed(self.builtins[mesh as usize])
     }
 
     /// The box around `handle`'s mesh in its own space, if it is current.
@@ -133,8 +126,7 @@ impl Meshes {
 
     /// Uploads every mesh not on the GPU yet. Cheap when all are.
     pub fn upload(&mut self, device: &wgpu::Device) {
-        let handles: Vec<Handle<Entry>> = self.builtins.values().copied().collect();
-        for handle in handles {
+        for handle in self.builtins {
             let Some(entry) = self.store.get_mut(handle) else {
                 continue;
             };

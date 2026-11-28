@@ -45,6 +45,8 @@ pub struct DrawList3D {
     pub draws: Vec<Draw3D>,
     /// What this frame's rebuild looked at; kept for its storage.
     candidates: Vec<cull::Candidate>,
+    /// The seen candidates' sort keys; kept for its storage.
+    keys: Vec<(u32, u32, f32, u32, u32)>,
     /// How many mesh instances the last rebuild culled.
     culled: usize,
     /// Entities already warned about, so a broken one is said once.
@@ -86,7 +88,12 @@ impl DrawList3D {
             .iter()
             .filter(|c| c.instance.is_none())
             .count();
-        group::group(&mut self.candidates, &mut self.instances, &mut self.draws);
+        group::group(
+            &self.candidates,
+            &mut self.keys,
+            &mut self.instances,
+            &mut self.draws,
+        );
     }
 
     /// How many mesh instances the last rebuild left out: outside the

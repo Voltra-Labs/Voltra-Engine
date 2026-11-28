@@ -42,6 +42,10 @@ fn every_builtin_is_drawable_and_sized_as_documented() {
         assert_eq!(BuiltinMesh::from_name(builtin.name()), Some(builtin));
     }
     assert_eq!(BuiltinMesh::from_name("torus"), None);
+    // `Meshes` indexes its handles by discriminant.
+    for (i, mesh) in BuiltinMesh::ALL.into_iter().enumerate() {
+        assert_eq!(mesh as usize, i);
+    }
 }
 
 #[test]
