@@ -146,6 +146,7 @@ impl FrameDraw<'_> {
                     world: draw.world,
                     textures: draw.textures,
                     materials: draw.materials,
+                    time: super::world3d::shader_seconds(draw.elapsed),
                 },
                 &shot,
                 output,

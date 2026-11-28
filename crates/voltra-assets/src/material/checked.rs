@@ -4,7 +4,9 @@
 use std::collections::BTreeMap;
 
 use voltra_render::material::{compose, validate, Layout, Uniform};
+use voltra_render::render3d::SurfaceLighting;
 
+use super::custom::{build_custom, custom_texture_paths};
 use super::{MaterialDomain, MaterialFile, SurfaceSource, MATERIAL_VERSION};
 use crate::path::AssetPath;
 
@@ -64,18 +66,17 @@ impl Material {
             defaults: file.uniforms.clone(),
             ..Self::default()
         };
-        for (name, value) in &mut material.defaults {
-            if !value.is_finite() {
-                *value = value.finite();
-                material.warnings.push(format!(
-                    "uniform {name:?} is not a finite number; 0 instead"
-                ));
+        material.defaults = finite_uniforms(&file.uniforms, &mut material.warnings);
+        for (set, what) in [
+            (!file.standard.is_default(), "`standard` block is"),
+            (!file.textures.is_empty(), "`textures` are"),
+            (file.lighting != SurfaceLighting::Lit, "`lighting` is"),
+        ] {
+            if set {
+                material
+                    .warnings
+                    .push(format!("a sprite material's {what} ignored (a surface's)"));
             }
-        }
-        if !file.standard.is_default() {
-            material.warnings.push(
-                "a sprite material's `standard` block is ignored (it is a surface's)".to_owned(),
-            );
         }
         if file.version > MATERIAL_VERSION {
             material.error = Some(format!(
@@ -104,9 +105,19 @@ impl Material {
     }
 
     /// The surface material `file` describes, checked: its texture paths
-    /// are asset paths, and it names no shader (a custom surface shader is
-    /// stage 138's).
-    pub fn build_surface(file: &MaterialFile) -> Self {
+    /// are asset paths, and — when it names a shader, `shader` being that
+    /// file's path and its text or why it would not read — its `surface()`
+    /// composes and validates with its uniforms and textures.
+    ///
+    /// **A custom surface that will not compile draws its standard block**
+    /// — what its `surface()` would have started from — with the error
+    /// kept, as a broken sprite material's sprites draw plainly. A standard
+    /// texture path that is no asset path leaves no surface at all (the
+    /// default white standard).
+    pub fn build_surface(
+        file: &MaterialFile,
+        shader: Option<(AssetPath, Result<String, String>)>,
+    ) -> Self {
         let mut material = Self {
             domain: MaterialDomain::Surface,
             ..Self::default()
@@ -118,19 +129,22 @@ impl Material {
             ));
             return material;
         }
-        if !file.shader.trim().is_empty() {
-            material.error = Some(format!(
-                "a surface material's shader ({:?}) is not read yet: surface materials are \
-                 the standard block alone",
-                file.shader
-            ));
-            return material;
-        }
-        if !file.uniforms.is_empty() {
-            material.warnings.push(
-                "a surface material's `uniforms` are ignored (they are a sprite shader's)"
-                    .to_owned(),
-            );
+        let custom = !file.shader.trim().is_empty();
+        if !custom {
+            for (set, what) in [
+                (!file.uniforms.is_empty(), "`uniforms` are"),
+                (!file.textures.is_empty(), "`textures` are"),
+                (
+                    file.lighting != SurfaceLighting::Lit,
+                    "`lighting` is (`standard.unlit` turns the light off)",
+                ),
+            ] {
+                if set {
+                    material.warnings.push(format!(
+                        "a surface material's {what} ignored without a `shader`"
+                    ));
+                }
+            }
         }
         let (standard, replaced) = file.standard.finite();
         for field in replaced {
@@ -138,13 +152,35 @@ impl Material {
                 "standard.{field} is not a finite number; its default instead"
             ));
         }
-        match standard.resolve() {
-            Ok(surface) => {
-                material.surface = Some(surface);
-                material.error = None;
+        let mut surface = match standard.resolve() {
+            Ok(surface) => surface,
+            Err(e) => {
+                material.error = Some(e);
+                return material;
             }
-            Err(e) => material.error = Some(e),
+        };
+        material.error = None;
+        if custom {
+            let uniforms = finite_uniforms(&file.uniforms, &mut material.warnings);
+            let built = match shader {
+                Some((path, text)) => {
+                    material.shader = Some(path);
+                    text.and_then(|fragment| {
+                        build_custom(&fragment, &uniforms, &file.textures, file.lighting)
+                    })
+                }
+                None => Err(format!("the shader {:?} is no asset path", file.shader)),
+            }
+            .and_then(|built| Ok((built, custom_texture_paths(&file.textures)?)));
+            match built {
+                Ok((built, textures)) => {
+                    surface.textures.custom = textures;
+                    surface.custom = Some(built);
+                }
+                Err(e) => material.error = Some(e),
+            }
         }
+        material.surface = Some(surface);
         material
     }
 
@@ -154,8 +190,28 @@ impl Material {
         self.error.is_none() && self.layout.is_some()
     }
 
-    /// Its surface, when it is a surface material that can be drawn with.
+    /// Its surface, when it is a surface material that can be drawn with:
+    /// as written, or — a custom surface that would not compile, its
+    /// [`error`](Self::error) set — as its standard block.
     pub fn surface(&self) -> Option<&SurfaceSource> {
-        self.surface.as_ref().filter(|_| self.error.is_none())
+        self.surface.as_ref()
     }
+}
+
+/// `uniforms` with every number that is not finite made 0, each said in
+/// `warnings`.
+fn finite_uniforms(
+    uniforms: &BTreeMap<String, Uniform>,
+    warnings: &mut Vec<String>,
+) -> BTreeMap<String, Uniform> {
+    let mut out = uniforms.clone();
+    for (name, value) in &mut out {
+        if !value.is_finite() {
+            *value = value.finite();
+            warnings.push(format!(
+                "uniform {name:?} is not a finite number; 0 instead"
+            ));
+        }
+    }
+    out
 }

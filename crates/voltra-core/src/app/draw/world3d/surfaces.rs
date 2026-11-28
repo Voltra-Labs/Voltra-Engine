@@ -1,11 +1,14 @@
 //! The frame's surface materials on the GPU: one per material handle the
 //! draw list names, and the default white standard, each remade when its
-//! material or one of its textures changes.
+//! material — its numbers, its shader, its uniforms — or one of its
+//! textures changes.
 
 use std::collections::HashMap;
 
-use voltra_assets::{Handle, Material, Materials, SurfaceTexturePaths, Textures};
-use voltra_render::render3d::{StandardSurface, SurfaceMaterial3D, SurfaceTextures};
+use voltra_assets::{Handle, Material, Materials, SurfaceSource, SurfaceTexturePaths, Textures};
+use voltra_render::render3d::{
+    CustomImage, StandardSurface, SurfaceMaterial3D, SurfaceTextures, CUSTOM_TEXTURES,
+};
 use voltra_render::Renderer;
 use voltra_scene::Draw3D;
 
@@ -44,12 +47,12 @@ impl Surfaces {
             };
             let images = images(textures, &source.textures);
             let layouts = renderer.surface_layouts().clone();
-            let current = self
-                .by_material
-                .get(&handle)
-                .is_some_and(|gpu| gpu.is_current(&layouts, &source.standard, &images));
+            let custom = source.custom.as_ref().map(|c| c.shading());
+            let current = self.by_material.get(&handle).is_some_and(|gpu| {
+                gpu.is_current(&layouts, &source.standard, &images, custom.as_ref())
+            });
             if !current {
-                let gpu = renderer.surface_material(&source.standard, &images);
+                let gpu = gpu_material(renderer, source, &images);
                 self.by_material.insert(handle, gpu);
             }
         }
@@ -65,8 +68,19 @@ impl Surfaces {
     }
 }
 
+/// `source` with `images`, made for `renderer`: through its own shader
+/// and uniforms when it is a custom surface, the standard's otherwise.
+pub(in crate::app) fn gpu_material(
+    renderer: &mut Renderer,
+    source: &SurfaceSource,
+    images: &SurfaceTextures<'_>,
+) -> SurfaceMaterial3D {
+    let custom = source.custom.as_ref().map(|c| c.shading());
+    renderer.custom_surface_material(&source.standard, images, custom.as_ref())
+}
+
 /// The images `paths` names, as loaded in `textures`: a slot whose image
-/// is not loaded yet is empty, and so is one naming a render texture (a
+/// is not loaded yet is empty (white), and so is one naming a render texture (a
 /// 3D surface showing a camera's picture is not drawn yet; the frame's
 /// resolve warns once). A data slot (metallic-roughness, normal,
 /// occlusion) whose file would not load is empty too — the checker's
@@ -88,11 +102,24 @@ pub(in crate::app) fn images<'a>(
         }
         textures.try_get(handle)
     };
+    let mut custom = [None; CUSTOM_TEXTURES];
+    for (slot, texture) in custom.iter_mut().zip(&paths.custom) {
+        let path = Some(texture.path.clone());
+        let image = match texture.space {
+            voltra_render::render3d::TextureSpace::Color => colour(&path),
+            voltra_render::render3d::TextureSpace::Data => data(&path),
+        };
+        *slot = image.map(|texture_image| CustomImage {
+            texture: texture_image,
+            space: texture.space,
+        });
+    }
     SurfaceTextures {
         base_color: colour(&paths.base_color),
         metallic_roughness: data(&paths.metallic_roughness),
         normal: data(&paths.normal),
         occlusion: data(&paths.occlusion),
         emissive: colour(&paths.emissive),
+        custom,
     }
 }

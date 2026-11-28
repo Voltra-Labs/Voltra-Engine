@@ -192,6 +192,7 @@ fn a_mirrored_wall_is_lit_as_the_unmirrored_one() {
         draws: &draws,
         clear: wgpu::Color::BLACK,
         lighting: light(),
+        time: 0.0,
     };
     gpu.renderer
         .render_3d_into(&target, &scene, &Look3D::NEUTRAL, Layer::EMPTY);

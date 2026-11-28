@@ -2,12 +2,21 @@
 //! renderer: the two group layouts, the sampler and the white texture an
 //! empty slot binds.
 
+use super::compose::CUSTOM_TEXTURES;
 use crate::texture::Texture;
 
 /// How many textures a standard surface samples: base colour,
 /// metallic-roughness, normal, occlusion, emissive. Of WebGL2's 16 a
 /// fragment stage may sample, the plan keeps 12 (ARCHITECTURE "Materials").
 pub const SURFACE_TEXTURES: u32 = 5;
+
+/// Where a custom surface's uniform block is bound in group 1, after the
+/// standard block, its sampler and its five textures.
+pub const CUSTOM_BLOCK_BINDING: u32 = 2 + SURFACE_TEXTURES;
+
+/// Where a custom surface's first texture is bound in group 1; the rest
+/// follow, [`CUSTOM_TEXTURES`] in all.
+pub const CUSTOM_TEXTURE_BINDING: u32 = CUSTOM_BLOCK_BINDING + 1;
 
 /// The group layouts the surface pipelines are built with and the
 /// materials bound against, the sampler every surface texture is read
@@ -18,7 +27,9 @@ pub const SURFACE_TEXTURES: u32 = 5;
 pub struct SurfaceLayouts {
     /// Group 0: the frame's view and light.
     pub frame: wgpu::BindGroupLayout,
-    /// Group 1: a material's numbers, the sampler and its five textures.
+    /// Group 1: a material's numbers, the sampler and its five textures,
+    /// then a custom surface's uniform block and its four textures — bound
+    /// by every material, a standard one's empty (a zeroed block, white).
     pub material: wgpu::BindGroupLayout,
     /// Linear, repeating: a UV transform may tile.
     pub sampler: wgpu::Sampler,
@@ -73,6 +84,17 @@ impl SurfaceLayouts {
             },
         ];
         entries.extend((0..SURFACE_TEXTURES).map(|i| texture(2 + i)));
+        entries.push(wgpu::BindGroupLayoutEntry {
+            binding: CUSTOM_BLOCK_BINDING,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        });
+        entries.extend((0..CUSTOM_TEXTURES as u32).map(|i| texture(CUSTOM_TEXTURE_BINDING + i)));
         let material = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("surface-material-layout"),
             entries: &entries,

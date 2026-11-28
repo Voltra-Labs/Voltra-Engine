@@ -132,6 +132,7 @@ impl Gpu {
             draws,
             clear: CLEAR,
             lighting: Lighting3D::DARK,
+            time: 0.0,
         };
         self.renderer
             .render_3d_into(&target, &scene, &Look3D::NEUTRAL, Layer::EMPTY);

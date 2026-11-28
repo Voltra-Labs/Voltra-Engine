@@ -131,7 +131,7 @@ fn a_surface_material_loads_its_standard_block() {
 }
 
 #[test]
-fn a_surface_material_with_a_bad_texture_path_or_a_shader_says_why() {
+fn a_surface_material_with_a_bad_texture_path_or_a_missing_shader_says_why() {
     let root = scratch_root();
     write(
         &root,
@@ -144,13 +144,19 @@ fn a_surface_material_with_a_bad_texture_path_or_a_shader_says_why() {
         r#"(version: 1, domain: Surface, shader: "materials/x.wgsl")"#,
     );
     let mut materials = Materials::new(&root);
-    for (name, says) in [("bad", "base_color_texture"), ("shaded", "shader")] {
-        let handle = materials.load(&path(&format!("materials/{name}.material.ron")));
-        let material = materials.get(handle).expect("a handle still");
-        assert!(material.surface().is_none());
-        let error = material.error.as_deref().unwrap_or_default();
-        assert!(error.contains(says), "{name}: {error}");
-    }
+    let handle = materials.load(&path("materials/bad.material.ron"));
+    let material = materials.get(handle).expect("a handle still");
+    assert!(material.surface().is_none());
+    let error = material.error.as_deref().unwrap_or_default();
+    assert!(error.contains("base_color_texture"), "{error}");
+    // A shader that will not read (stage 138 reads them): drawn as its
+    // standard block, the error kept.
+    let handle = materials.load(&path("materials/shaded.material.ron"));
+    let material = materials.get(handle).expect("a handle still");
+    let error = material.error.as_deref().unwrap_or_default();
+    assert!(error.contains("x.wgsl"), "{error}");
+    let surface = material.surface().expect("the standard block");
+    assert!(surface.custom.is_none());
 }
 
 #[test]

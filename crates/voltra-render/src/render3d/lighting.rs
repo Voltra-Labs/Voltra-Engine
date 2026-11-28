@@ -43,7 +43,7 @@ impl Lighting3D {
 }
 
 /// Group 0 of the surface pipelines, as `surface3d.wgsl`'s `Frame3D` reads
-/// it: the view and the light. 144 bytes.
+/// it: the view, the light and the time. 144 bytes.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct FrameUniform3D {
@@ -56,10 +56,16 @@ pub struct FrameUniform3D {
 }
 
 impl FrameUniform3D {
-    /// The uniform for `view` lit by `lighting`. A light with no finite
-    /// direction, or a non-finite colour or energy, lights nothing: the
-    /// scene side warns about it.
-    pub fn new(view: &View3D, lighting: &Lighting3D) -> Self {
+    /// Where the time a surface reads wraps, in seconds: an hour, as
+    /// Godot's `TIME` and Bevy's `globals.time` wrap. Under it an `f32`
+    /// keeps a quarter of a millisecond.
+    pub const TIME_WRAP: f32 = 3600.0;
+
+    /// The uniform for `view` lit by `lighting` at `time` seconds (wrapped
+    /// at [`TIME_WRAP`](Self::TIME_WRAP); not finite, 0). A light with no
+    /// finite direction, or a non-finite colour or energy, lights nothing:
+    /// the scene side warns about it.
+    pub fn new(view: &View3D, lighting: &Lighting3D, time: f32) -> Self {
         let finite3 = |c: [f32; 3]| c.map(|c| if c.is_finite() { c.max(0.0) } else { 0.0 });
         let light = lighting.directional.and_then(|light| {
             let toward = -light.direction.normalize_or_zero();
@@ -83,7 +89,16 @@ impl FrameUniform3D {
             forward: view.forward.extend(0.0).to_array(),
             light_direction: toward.extend(on).to_array(),
             light_color: [color[0], color[1], color[2], 0.0],
-            ambient: [ambient[0], ambient[1], ambient[2], 0.0],
+            ambient: [
+                ambient[0],
+                ambient[1],
+                ambient[2],
+                if time.is_finite() {
+                    time.rem_euclid(Self::TIME_WRAP)
+                } else {
+                    0.0
+                },
+            ],
         }
     }
 }
@@ -107,10 +122,15 @@ mod tests {
                 }),
                 ambient: [0.1, f32::NAN, -1.0],
             },
+            3601.5,
         );
         assert_eq!(lit.light_direction, [0.0, 1.0, 0.0, 1.0]);
         assert_eq!(lit.light_color, [2.0, 1.0, 0.5, 0.0]);
-        assert_eq!(lit.ambient, [0.1, 0.0, 0.0, 0.0]);
+        assert_eq!(
+            lit.ambient,
+            [0.1, 0.0, 0.0, 1.5],
+            "the time wrapped at an hour"
+        );
         assert_eq!(lit.eye[3], 1.0, "a perspective view");
         let broken = FrameUniform3D::new(
             &view,
@@ -122,10 +142,15 @@ mod tests {
                 }),
                 ambient: [0.0; 3],
             },
+            f32::NAN,
         );
         assert_eq!(broken.light_direction[3], 0.0, "no direction, no light");
+        assert_eq!(broken.ambient[3], 0.0, "no time, 0");
         let ortho = View3D::orthographic(Affine3A::IDENTITY, 1.0, 1.0, 0.1, 10.0);
-        assert_eq!(FrameUniform3D::new(&ortho, &Lighting3D::DARK).eye[3], 0.0);
+        assert_eq!(
+            FrameUniform3D::new(&ortho, &Lighting3D::DARK, 0.0).eye[3],
+            0.0
+        );
         assert_eq!(size_of::<FrameUniform3D>(), 144);
     }
 }

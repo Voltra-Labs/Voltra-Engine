@@ -1,22 +1,33 @@
-//! Standard surface materials: glTF 2.0's metallic-roughness inputs, lit
-//! by Filament's BRDF — the 3D twin of the sprite material
-//! ([`material`](crate::material)), drawn by [`Pass3D`](super::Pass3D).
+//! Surface materials: glTF 2.0's metallic-roughness inputs, lit by
+//! Filament's BRDF, or a material's own WGSL `surface()` starting from
+//! them — the 3D twin of the sprite material ([`material`](crate::material)),
+//! drawn by [`Pass3D`](super::Pass3D).
 //!
-//! The numbers ([`StandardSurface`]) and the images
-//! ([`SurfaceTextures`]) become a [`SurfaceMaterial3D`]; a
-//! [`SurfaceBank`] holds the pipeline variants by [`SurfaceKey`]; `brdf`
-//! is the shader's lighting on the CPU.
+//! The numbers ([`StandardSurface`]), the images ([`SurfaceTextures`]) and,
+//! for a custom surface, its [`CustomShading`] become a
+//! [`SurfaceMaterial3D`]; [`compose_surface`] writes a custom shader and
+//! [`SurfaceShader`] checks it; a [`SurfaceBank`] holds the pipeline
+//! variants by [`SurfaceKey`]; `brdf` is the shader's lighting on the CPU.
 
 mod bank;
 pub mod brdf;
+mod compose;
+mod custom;
 mod layouts;
 mod material;
+mod shader;
 mod standard;
 mod uniform;
 
-pub use bank::{AlphaClass, SurfaceBank, SurfaceKey, SurfacePass};
-pub use layouts::{SurfaceLayouts, SURFACE_TEXTURES};
-pub use material::{SurfaceMaterial3D, SurfaceTextures};
+pub use bank::{AlphaClass, SurfaceBank, SurfaceKey, SurfacePass, SurfaceVertex, KEEP_USES};
+pub use compose::{
+    compose_surface, standard_source, SurfaceLighting, CUSTOM_TEXTURES, SURFACE_ENTRIES,
+    SURFACE_ENTRY,
+};
+pub use custom::{CustomImage, CustomShading, TextureSpace};
+pub use layouts::{SurfaceLayouts, CUSTOM_BLOCK_BINDING, CUSTOM_TEXTURE_BINDING, SURFACE_TEXTURES};
+pub use material::{SurfaceMaterial3D, SurfaceTextures, SURFACE_VIEWS};
+pub use shader::SurfaceShader;
 pub use standard::{AlphaMode, StandardSurface, UvTransform};
 pub use uniform::SurfaceUniform;
 
@@ -34,7 +45,7 @@ mod tests {
     const PLANNED_TEXTURES: u32 = 12;
 
     fn module() -> naga::Module {
-        let source = crate::shader::SURFACE_3D;
+        let source = &standard_source();
         let module = naga::front::wgsl::parse_str(source)
             .unwrap_or_else(|e| panic!("{}", e.emit_to_string(source)));
         naga::valid::Validator::new(
@@ -59,8 +70,12 @@ mod tests {
             .iter()
             .filter(|(_, g)| matches!(module.types[g.ty].inner, naga::TypeInner::Image { .. }))
             .count() as u32;
-        assert_eq!(textures, SURFACE_TEXTURES);
-        assert!(textures + 4 + 3 <= PLANNED_TEXTURES, "room for 138 to 141");
+        // Every slot the layout binds — five standard, four custom — and
+        // room for 140's shadow array and 141's cube and table.
+        let bound = SURFACE_TEXTURES + CUSTOM_TEXTURES as u32;
+        assert_eq!(textures, SURFACE_TEXTURES, "the standard samples its five");
+        assert_eq!(bound, 9);
+        assert!(bound + 3 <= PLANNED_TEXTURES, "room for 140 and 141");
         let samplers = module
             .global_variables
             .iter()
@@ -95,7 +110,7 @@ mod tests {
             .count() as u32;
         assert_eq!(locations, 5);
         assert!(locations <= limits.max_inter_stage_shader_variables);
-        for entry in ["fs_opaque", "fs_mask", "fs_mask_coverage", "fs_blend"] {
+        for entry in SURFACE_ENTRIES {
             assert!(
                 module.entry_points.iter().any(|e| e.name == entry),
                 "{entry}"
@@ -103,3 +118,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod custom_tests;

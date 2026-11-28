@@ -1,0 +1,21 @@
+// A sphere half dissolved by a noise texture, its cut glowing orange.
+// scenes/custom3d.ron; the user guide's custom-material example.
+(
+    version: 1,
+    domain: Surface,
+    shader: "materials/dissolve.wgsl",
+    uniforms: {
+        "amount": Float(0.45),
+        "edge": Float(0.06),
+        "edge_color": Color((4.0, 1.2, 0.2, 1.0)),
+    },
+    textures: {
+        "noise": Data("textures/noise.png"),
+    },
+    standard: (
+        base_color: (0.6, 0.62, 0.66, 1.0),
+        roughness: 0.45,
+        alpha: Mask(0.5),
+        double_sided: true,
+    ),
+)

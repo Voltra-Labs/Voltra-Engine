@@ -1,0 +1,15 @@
+// The standard surface tinted by world position: bands two metres wide
+// from warm to cool. scenes/custom3d.ron's floor.
+(
+    version: 1,
+    domain: Surface,
+    shader: "materials/world_tint.wgsl",
+    uniforms: {
+        "start_color": Color((1.0, 0.55, 0.3, 1.0)),
+        "period": Float(2.0),
+        "end_color": Color((0.3, 0.6, 1.0, 1.0)),
+    },
+    standard: (
+        roughness: 0.8,
+    ),
+)

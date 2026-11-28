@@ -37,8 +37,9 @@ pub use mesh_data::{MeshData3D, MeshDataError};
 pub use pass::Pass3D;
 pub use scene::{Look3D, MeshDraw3D, Scene3D};
 pub use surface::{
-    AlphaClass, AlphaMode, StandardSurface, SurfaceBank, SurfaceKey, SurfaceLayouts,
-    SurfaceMaterial3D, SurfacePass, SurfaceTextures, UvTransform,
+    compose_surface, AlphaClass, AlphaMode, CustomImage, CustomShading, StandardSurface,
+    SurfaceBank, SurfaceKey, SurfaceLayouts, SurfaceLighting, SurfaceMaterial3D, SurfacePass,
+    SurfaceShader, SurfaceTextures, SurfaceVertex, TextureSpace, UvTransform, CUSTOM_TEXTURES,
 };
 pub use targets::Targets3D;
 pub use tonemap::Tonemap;

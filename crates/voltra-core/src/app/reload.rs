@@ -18,7 +18,13 @@ impl App {
         if changed.is_empty() {
             return;
         }
+        self.reload_assets(changed);
+    }
 
+    /// Reloads each of `changed` in whichever store holds it, as a change
+    /// the watcher saw: what [`Headless::reload`](crate::Headless::reload)
+    /// drives without a watcher.
+    pub(super) fn reload_assets(&mut self, changed: Vec<voltra_assets::AssetPath>) {
         // Sounds first, and on their own: a clip needs no device, so a run
         // whose renderer is not up yet still hears the edit.
         let mut images = Vec::with_capacity(changed.len());

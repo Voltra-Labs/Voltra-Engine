@@ -1,0 +1,65 @@
+// Custom surface materials under one directional light: a floor tinted by
+// world position, a sphere dissolving into a noise texture with a glowing
+// cut, one with stripes sliding across it, and one showing a data texture's
+// bytes unlit. What crates/voltra-core/tests/custom3d.rs and
+// crates/voltra-player/web/test/custom3d.mjs draw.
+(
+    version: 2,
+    entities: [
+        (
+            id: "019fe300-0138-7000-8000-000000000001",
+            components: {
+                "Camera3D": (projection:Perspective(fov_y_degrees:50.0,near:0.1),priority:0,active:true),
+                "Name": "Camera",
+                "Transform3D": (translation:(0.0,1.6,6.0),rotation:(-0.082481,0.0,0.0,0.996593),scale:(1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000002",
+            components: {
+                "DirectionalLight3D": (color:(1.0,0.96,0.9),energy:2.0),
+                "Name": "Sun",
+                "Transform3D": (translation:(0.0,5.0,0.0),rotation:(-0.403058,0.272532,0.127084,0.864361),scale:(1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000003",
+            components: {
+                "Environment3D": (ambient:(0.12,0.14,0.18)),
+                "Name": "Environment",
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000004",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane",material:Some(Path("materials/world_tint.material.ron"))),
+                "Name": "Floor",
+                "Transform3D": (translation:(0.0,0.0,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(12.0,1.0,12.0)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000005",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere",material:Some(Path("materials/dissolve.material.ron"))),
+                "Name": "Dissolve",
+                "Transform3D": (translation:(-2.4,0.8,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.5,1.5,1.5)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000006",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere",material:Some(Path("materials/scroll.material.ron"))),
+                "Name": "Scroll",
+                "Transform3D": (translation:(0.0,0.8,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.5,1.5,1.5)),
+            },
+        ),
+        (
+            id: "019fe300-0138-7000-8000-000000000007",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere",material:Some(Path("materials/bands.material.ron"))),
+                "Name": "Bands",
+                "Transform3D": (translation:(2.4,0.8,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.5,1.5,1.5)),
+            },
+        ),
+    ],
+)

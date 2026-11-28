@@ -226,6 +226,7 @@ impl World3D {
                 picture == Picture3D::Overlay,
                 renderer.clear_color,
             ),
+            time: sources.time,
         };
         let look = shot.camera.look();
         match (output, picture) {
@@ -246,6 +247,18 @@ pub(in crate::app) struct Sources3D<'a> {
     pub textures: &'a Textures,
     /// The surface materials; `None` before the asset root is known.
     pub materials: Option<&'a Materials>,
+    /// What a surface's `in.time` reads: [`shader_seconds`] of the loop's
+    /// clock.
+    pub time: f32,
+}
+
+/// The loop's clock as a surface shader reads it: wrapped at an hour
+/// ([`FrameUniform3D::TIME_WRAP`](voltra_render::render3d::FrameUniform3D::TIME_WRAP))
+/// in `f64` first, so the `f32` keeps a quarter of a millisecond however
+/// long the game has been open.
+pub(in crate::app) fn shader_seconds(elapsed: f64) -> f32 {
+    let wrap = f64::from(voltra_render::render3d::FrameUniform3D::TIME_WRAP);
+    elapsed.rem_euclid(wrap) as f32
 }
 
 impl World3D {

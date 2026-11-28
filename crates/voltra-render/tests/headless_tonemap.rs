@@ -65,6 +65,7 @@ fn columns(gpu: &mut Gpu, tints: &[[f32; 4]], height: u32, look: &Look3D) -> Vec
         draws: &draws,
         clear: CLEAR,
         lighting: Lighting3D::DARK,
+        time: 0.0,
     };
     gpu.renderer
         .render_3d_into(&target, &scene, look, Layer::EMPTY);

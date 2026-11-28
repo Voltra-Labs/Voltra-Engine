@@ -115,6 +115,20 @@ impl Layout {
         out
     }
 
+    /// [`wgsl_struct`](Self::wgsl_struct) with its first member aligned
+    /// to 16, so the struct's size is a multiple of 16 — [`size`](Self::size)
+    /// exactly. WebGL2 refuses a uniform binding whose type is not
+    /// (`DownlevelFlags::BUFFER_BINDINGS_NOT_16_BYTE_ALIGNED`): a lone
+    /// `f32` or `vec2` would be 4 or 8 bytes. What a surface material's
+    /// block is declared as.
+    pub fn wgsl_struct_aligned(&self) -> String {
+        self.wgsl_struct().replacen(
+            "struct Material {\n    ",
+            "struct Material {\n    @align(16) ",
+            1,
+        )
+    }
+
     /// Bytes of the block itself, before rounding to a [`BLOCK_SIZE`].
     pub fn size(&self) -> usize {
         self.size
@@ -139,7 +153,9 @@ impl Layout {
     }
 }
 
-fn is_identifier(name: &str) -> bool {
+/// Whether `name` is an identifier WGSL takes, and not one it reserves for
+/// itself (a leading `__`).
+pub(crate) fn is_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     chars
         .next()

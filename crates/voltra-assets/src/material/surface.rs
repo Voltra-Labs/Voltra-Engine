@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 use voltra_render::render3d::{AlphaMode, StandardSurface, UvTransform};
 
+use super::custom::{CustomSurfaceSource, CustomTexturePath};
 use crate::path::AssetPath;
 
 /// The `standard: (...)` block of a `domain: Surface` material — glTF
@@ -200,6 +201,7 @@ impl StandardFile {
             normal: path("normal_texture", &self.normal_texture)?,
             occlusion: path("occlusion_texture", &self.occlusion_texture)?,
             emissive: path("emissive_texture", &self.emissive_texture)?,
+            custom: Vec::new(),
         })
     }
 
@@ -208,11 +210,13 @@ impl StandardFile {
         Ok(SurfaceSource {
             standard: self.surface(),
             textures: self.textures()?,
+            custom: None,
         })
     }
 }
 
-/// The images a surface names, by slot, each from the asset root.
+/// The images a surface names, by slot, each from the asset root: the
+/// standard five and a custom surface's own.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SurfaceTexturePaths {
     /// Colour.
@@ -225,10 +229,12 @@ pub struct SurfaceTexturePaths {
     pub occlusion: Option<AssetPath>,
     /// Colour.
     pub emissive: Option<AssetPath>,
+    /// A custom surface's own, in the order its shader binds them.
+    pub custom: Vec<CustomTexturePath>,
 }
 
 impl SurfaceTexturePaths {
-    /// Every path named, in slot order.
+    /// Every path named, in slot order, the custom ones last.
     pub fn iter(&self) -> impl Iterator<Item = &AssetPath> {
         [
             &self.base_color,
@@ -239,18 +245,23 @@ impl SurfaceTexturePaths {
         ]
         .into_iter()
         .flatten()
+        .chain(self.custom.iter().map(|t| &t.path))
     }
 }
 
-/// A surface material read and checked: its numbers and the images it
-/// names — what the draw turns into a GPU material once the images are
-/// loaded.
+/// A surface material read and checked: its numbers, the images it names
+/// and its own shading — what the draw turns into a GPU material once the
+/// images are loaded.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SurfaceSource {
     /// The numbers.
     pub standard: StandardSurface,
     /// The images, by slot.
     pub textures: SurfaceTexturePaths,
+    /// A custom surface's shader and uniforms; `None` for the standard
+    /// one, and for a custom one that would not compile (drawn as its
+    /// standard block, its error on the [`Material`](crate::Material)).
+    pub custom: Option<CustomSurfaceSource>,
 }
 
 impl Default for SurfaceSource {
@@ -259,6 +270,7 @@ impl Default for SurfaceSource {
         Self {
             standard: StandardSurface::DEFAULT,
             textures: SurfaceTexturePaths::default(),
+            custom: None,
         }
     }
 }

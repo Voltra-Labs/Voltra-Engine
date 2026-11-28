@@ -108,6 +108,7 @@ fn the_depth_target_follows_the_colour_target_size() {
                 draws: &draws,
                 clear: CLEAR,
                 lighting: Lighting3D::DARK,
+                time: 0.0,
             };
             let mut encoder = gpu
                 .device

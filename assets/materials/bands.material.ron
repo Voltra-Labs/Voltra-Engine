@@ -1,0 +1,15 @@
+// The scroll shader standing still, unlit, its stripes read as data — their
+// bytes as linear numbers, not as sRGB colours — so the bands show exactly
+// what the texture holds. scenes/custom3d.ron; what the web test pins.
+(
+    version: 1,
+    domain: Surface,
+    shader: "materials/scroll.wgsl",
+    uniforms: {
+        "speed": Vec2((0.0, 0.0)),
+    },
+    textures: {
+        "pattern": Data("textures/stripes.png"),
+    },
+    lighting: Unlit,
+)

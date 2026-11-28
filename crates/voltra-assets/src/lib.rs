@@ -39,7 +39,9 @@ pub use error::AssetError;
 pub use fonts::{Font, Fonts, DEFAULT_FONT};
 pub use handle::Handle;
 pub use material::{
-    Material, MaterialDomain, MaterialFile, StandardFile, SurfaceSource, SurfaceTexturePaths,
+    build_custom, check_custom, compose_custom, custom_texture_paths, CustomSurfaceSource,
+    CustomTextureFile, CustomTexturePath, Material, MaterialDomain, MaterialFile, StandardFile,
+    SurfaceSource, SurfaceTexturePaths,
 };
 pub use materials::{read_material_file, Materials};
 pub use meshes::{BuiltinMesh, MeshPath, Meshes, ResolvedMesh};

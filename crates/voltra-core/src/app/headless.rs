@@ -353,6 +353,7 @@ impl Headless {
     }
 }
 
+mod reload;
 mod screenshot;
 mod window;
 

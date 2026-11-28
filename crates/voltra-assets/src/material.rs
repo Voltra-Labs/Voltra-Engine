@@ -1,15 +1,22 @@
 //! A material, as one `.material.ron` file names it: a sprite's WGSL
-//! fragment function and its uniforms, or a 3D surface's standard block.
+//! fragment function and its uniforms, or a 3D surface's standard block
+//! and, optionally, its own WGSL `surface()` with uniforms and textures.
 
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use voltra_render::material::Uniform;
+use voltra_render::render3d::SurfaceLighting;
 
 mod checked;
+mod custom;
 mod surface;
 
 pub use checked::Material;
+pub use custom::{
+    build_custom, check_custom, compose_custom, custom_texture_paths, CustomSurfaceSource,
+    CustomTextureFile, CustomTexturePath,
+};
 pub use surface::{StandardFile, SurfaceSource, SurfaceTexturePaths};
 
 /// The suffix that marks a RON file as a material: `flash.material.ron`.
@@ -64,7 +71,22 @@ pub enum MaterialDomain {
 /// )
 /// ```
 ///
-/// See [`StandardFile`] for the block.
+/// See [`StandardFile`] for the block. A custom surface adds a shader
+/// defining `fn surface(in: SurfaceInput) -> Surface`, its uniforms as a
+/// sprite material's, up to four named textures, and whether it is lit:
+///
+/// ```ron
+/// (
+///     version: 1,
+///     domain: Surface,
+///     shader: "materials/dissolve.wgsl",
+///     uniforms: {"amount": Float(0.45)},
+///     textures: {"noise": Data("textures/noise.png")},
+///     standard: (alpha: Mask(0.5)),
+/// )
+/// ```
+///
+/// See [`voltra_render::render3d::compose_surface`] for what it sees.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MaterialFile {
     /// The file format version.
@@ -72,14 +94,21 @@ pub struct MaterialFile {
     /// What it draws on; `Sprite` when left out.
     #[serde(default, skip_serializing_if = "is_sprite")]
     pub domain: MaterialDomain,
-    /// A sprite material's fragment shader, from the asset root. A plain
-    /// string, as a person writes it; checked as a path when the file is
-    /// read. Empty in a surface material.
+    /// The WGSL file, from the asset root: a sprite material's fragment
+    /// function, or a surface material's `surface()` (empty: the standard
+    /// block alone). A plain string, as a person writes it; checked as a
+    /// path when the file is read.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub shader: String,
     /// Default values by uniform name; a sprite's own values override them.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub uniforms: BTreeMap<String, Uniform>,
+    /// A custom surface's own textures by WGSL name, at most four.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub textures: BTreeMap<String, CustomTextureFile>,
+    /// Whether a custom surface is lit; `Lit` when left out.
+    #[serde(default, skip_serializing_if = "is_lit")]
+    pub lighting: SurfaceLighting,
     /// A surface material's inputs.
     #[serde(default, skip_serializing_if = "StandardFile::is_default")]
     pub standard: StandardFile,
@@ -87,6 +116,10 @@ pub struct MaterialFile {
 
 fn is_sprite(domain: &MaterialDomain) -> bool {
     *domain == MaterialDomain::Sprite
+}
+
+fn is_lit(lighting: &SurfaceLighting) -> bool {
+    *lighting == SurfaceLighting::Lit
 }
 
 impl MaterialFile {
@@ -97,8 +130,19 @@ impl MaterialFile {
             domain: MaterialDomain::Surface,
             shader: String::new(),
             uniforms: BTreeMap::new(),
+            textures: BTreeMap::new(),
+            lighting: SurfaceLighting::Lit,
             standard,
         }
+    }
+
+    /// Every image a surface material names — its standard block's and its
+    /// own textures' — checked as asset paths; the first that is not one
+    /// says why.
+    pub fn surface_texture_paths(&self) -> Result<SurfaceTexturePaths, String> {
+        let mut paths = self.standard.textures()?;
+        paths.custom = custom_texture_paths(&self.textures)?;
+        Ok(paths)
     }
 
     /// The file's text, as the editor writes it: pretty, one field a line.

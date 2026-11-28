@@ -99,6 +99,7 @@ fn a_mirror_rim_lit_from_behind_stays_finite_through_bloom_and_every_curve() {
                 }),
                 ambient: [0.2; 3],
             },
+            time: 0.0,
         };
         gpu.renderer
             .render_3d_into(&target, &scene, &look, Layer::EMPTY);

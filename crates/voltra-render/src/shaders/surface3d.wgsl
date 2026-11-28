@@ -1,7 +1,10 @@
-// The standard surface, instanced: glTF 2.0's metallic-roughness inputs
-// lit by Filament's BRDF — GGX, height-correlated Smith, Schlick, Lambert
-// diffuse — under one directional light and a uniform ambient.
-// `render3d::surface::brdf` is the CPU twin, number for number.
+// The surface prelude, instanced: the bindings, the vertex stage, what a
+// material's `surface()` is handed and returns, the standard surface —
+// glTF 2.0's metallic-roughness inputs — and Filament's lighting (GGX,
+// height-correlated Smith, Schlick, Lambert diffuse) under one directional
+// light and a uniform ambient. `render3d::surface::brdf` is the CPU twin,
+// number for number. `render3d::surface::compose` puts the material's own
+// source and the fragment entry points after it.
 //
 // Every texture is sampled before any choice is made: Chromium's Tint
 // refuses `textureSample` (and `fwidth`) after a branch on a non-uniform
@@ -28,13 +31,14 @@ struct Frame3D {
     light_direction: vec4<f32>,
     // rgb: the light's colour times its energy.
     light_color: vec4<f32>,
-    // rgb: the ambient, a uniform sky's light.
+    // rgb: the ambient, a uniform sky's light; w: the time in seconds,
+    // wrapped at an hour.
     ambient: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> frame: Frame3D;
 
-struct Surface3D {
+struct StandardBlock {
     base_color: vec4<f32>,
     // rgb: the emissive colour times its strength.
     emissive: vec4<f32>,
@@ -47,7 +51,7 @@ struct Surface3D {
     uv_y: vec4<f32>,
 };
 
-@group(1) @binding(0) var<uniform> surface: Surface3D;
+@group(1) @binding(0) var<uniform> standard: StandardBlock;
 @group(1) @binding(1) var surface_sampler: sampler;
 // Colour, through the sRGB view: linear when sampled.
 @group(1) @binding(2) var base_color_texture: texture_2d<f32>;
@@ -157,49 +161,128 @@ fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
     return f0 * ab.x + ab.y;
 }
 
-struct Shaded {
-    color: vec3<f32>,
-    alpha: f32,
+// What a material's `surface()` is handed, for one fragment.
+struct SurfaceInput {
+    // The fragment's place in the target, in pixels, and its depth.
+    position: vec4<f32>,
+    // Where it is in the world.
+    world: vec3<f32>,
+    // The surface's normal, unit length, turned toward the side seen: a
+    // back face's is the front's turned round.
+    normal: vec3<f32>,
+    // The tangent frame, turned with the normal; zero where the mesh has
+    // no tangents.
+    tangent: vec3<f32>,
+    bitangent: vec3<f32>,
+    // The mesh's texture coordinate, before the standard block's UV
+    // transform (`surface_uv(in)` is after).
+    uv: vec2<f32>,
+    // The mesh instance's colour.
+    tint: vec4<f32>,
+    // Toward the eye, unit length.
+    view: vec3<f32>,
+    // Whether the front face is seen.
+    front_facing: bool,
+    // Seconds since the game started, wrapped at an hour.
+    time: f32,
 };
 
-fn shade(in: VertexOut, front: bool) -> Shaded {
-    let uv = vec2<f32>(
-        dot(surface.uv_x.xy, in.uv) + surface.uv_x.z,
-        dot(surface.uv_y.xy, in.uv) + surface.uv_y.z,
+// What a material's `surface()` returns: the standard's inputs, lit by
+// the engine (or not, `lighting: Unlit`).
+struct Surface {
+    // Linear RGB.
+    base_color: vec3<f32>,
+    // A mask's or a blend's alpha; ignored when opaque.
+    alpha: f32,
+    metallic: f32,
+    // Perceptual roughness.
+    roughness: f32,
+    // In the world, unit length, facing the side seen.
+    normal: vec3<f32>,
+    // Linear RGB light given off.
+    emissive: vec3<f32>,
+    // How much ambient reaches the point.
+    occlusion: f32,
+};
+
+fn surface_input(in: VertexOut, front: bool) -> SurfaceInput {
+    // The way back to the eye: from the eye in perspective, against the
+    // view's direction in an orthographic one.
+    let to_eye = unit_or(frame.eye.xyz - in.world, -frame.forward.xyz);
+    let v = select(-frame.forward.xyz, to_eye, frame.eye.w > 0.5);
+    // The geometric normal; a flattened model's side faces have none, and
+    // face the eye.
+    let geometric = unit_or(in.normal, v);
+    // The tangent made perpendicular to the normal (Gram-Schmidt), the
+    // bitangent cross(n, t) turned by the handedness.
+    let tangent = unit_or(in.tangent.xyz - geometric * dot(geometric, in.tangent.xyz), vec3<f32>(0.0));
+    let bitangent = cross(geometric, tangent) * select(-1.0, 1.0, in.tangent.w >= 0.0);
+    // A back face — double-sided, or a flat model's — is lit as the front
+    // turned round: the whole frame turns (Filament's).
+    let side = select(-1.0, 1.0, front);
+    var out: SurfaceInput;
+    out.position = in.clip;
+    out.world = in.world;
+    out.normal = geometric * side;
+    out.tangent = tangent * side;
+    out.bitangent = bitangent * side;
+    out.uv = in.uv;
+    out.tint = in.tint;
+    out.view = v;
+    out.front_facing = front;
+    out.time = frame.ambient.w;
+    return out;
+}
+
+// `in`'s texture coordinate through the standard block's UV transform:
+// where the standard textures are read.
+fn surface_uv(in: SurfaceInput) -> vec2<f32> {
+    return vec2<f32>(
+        dot(standard.uv_x.xy, in.uv) + standard.uv_x.z,
+        dot(standard.uv_y.xy, in.uv) + standard.uv_y.z,
     );
+}
+
+// The material file's `standard` block, evaluated: what a material with no
+// shader draws, and where a custom one may start.
+fn standard_surface(in: SurfaceInput) -> Surface {
+    let uv = surface_uv(in);
     let base_texel = textureSample(base_color_texture, surface_sampler, uv);
     let metallic_roughness = textureSample(metallic_roughness_texture, surface_sampler, uv);
     let normal_texel = textureSample(normal_texture, surface_sampler, uv).xyz;
     let occlusion_texel = textureSample(occlusion_texture, surface_sampler, uv).r;
     let emissive_texel = textureSample(emissive_texture, surface_sampler, uv).rgb;
 
-    let base = surface.base_color * base_texel * in.tint;
-    let metallic = clamp(surface.factors.x * metallic_roughness.b, 0.0, 1.0);
-    let roughness = clamp(surface.factors.y * metallic_roughness.g, MIN_ROUGHNESS, 1.0);
-    let occlusion = 1.0 + surface.factors.w * (occlusion_texel - 1.0);
-    let emissive = surface.emissive.rgb * emissive_texel;
+    let base = standard.base_color * base_texel * in.tint;
+    // Normal mapping through the tangent frame, already turned to the side
+    // seen.
+    let bent = vec3<f32>((normal_texel.xy * 2.0 - 1.0) * standard.factors.z, normal_texel.z * 2.0 - 1.0);
+    let mapped = unit_or(in.tangent * bent.x + in.bitangent * bent.y + in.normal * bent.z, in.normal);
+    let has_map = standard.flags.z > 0.5 && dot(in.tangent, in.tangent) > 0.5;
 
-    // The way back to the eye: from the eye in perspective, against the
-    // view's direction in an orthographic one.
-    let to_eye = unit_or(frame.eye.xyz - in.world, -frame.forward.xyz);
-    let v = select(-frame.forward.xyz, to_eye, frame.eye.w > 0.5);
+    var out: Surface;
+    out.base_color = base.rgb;
+    out.alpha = base.a;
+    out.metallic = standard.factors.x * metallic_roughness.b;
+    out.roughness = standard.factors.y * metallic_roughness.g;
+    out.normal = select(in.normal, mapped, has_map);
+    out.emissive = standard.emissive.rgb * emissive_texel;
+    out.occlusion = 1.0 + standard.factors.w * (occlusion_texel - 1.0);
+    return out;
+}
 
-    // The geometric normal; a flattened model's side faces have none, and
-    // face the eye.
-    let geometric = unit_or(in.normal, v);
-    // Normal mapping through the tangent: Gram-Schmidt against the normal,
-    // the bitangent cross(n, t) turned by the handedness.
-    let tangent = unit_or(in.tangent.xyz - geometric * dot(geometric, in.tangent.xyz), vec3<f32>(0.0));
-    let bitangent = cross(geometric, tangent) * select(-1.0, 1.0, in.tangent.w >= 0.0);
-    let bent = vec3<f32>((normal_texel.xy * 2.0 - 1.0) * surface.factors.z, normal_texel.z * 2.0 - 1.0);
-    let mapped = unit_or(tangent * bent.x + bitangent * bent.y + geometric * bent.z, geometric);
-    let has_map = surface.flags.z > 0.5 && dot(tangent, tangent) > 0.5;
-    // A back face — double-sided, or a flat model's — is lit as the front
-    // turned round (Filament turns the whole tangent frame).
-    let n = select(-1.0, 1.0, front) * select(geometric, mapped, has_map);
+// `s` lit by the frame's light and ambient, as the standard block's
+// `unlit` says: Filament's BRDF, capped at MAX_LIGHT.
+fn light_surface(s: Surface, in: SurfaceInput) -> vec3<f32> {
+    let base = s.base_color;
+    let metallic = clamp(s.metallic, 0.0, 1.0);
+    let roughness = clamp(s.roughness, MIN_ROUGHNESS, 1.0);
+    let occlusion = clamp(s.occlusion, 0.0, 1.0);
+    let n = unit_or(s.normal, in.normal);
+    let v = in.view;
 
-    let diffuse_color = base.rgb * (1.0 - metallic);
-    let f0 = mix(vec3<f32>(0.04), base.rgb, metallic);
+    let diffuse_color = base * (1.0 - metallic);
+    let f0 = mix(vec3<f32>(0.04), base, metallic);
     let n_dot_v = min(abs(dot(n, v)) + 1.0e-5, 1.0);
     let a = roughness * roughness;
 
@@ -221,50 +304,16 @@ fn shade(in: VertexOut, front: bool) -> Shaded {
     let ambient = (diffuse_color * (vec3<f32>(1.0) - reflected) + reflected) * frame.ambient.rgb
         * occlusion;
 
-    let lit = min(direct + ambient + emissive, vec3<f32>(MAX_LIGHT));
-    var out: Shaded;
-    out.color = select(lit, min(base.rgb, vec3<f32>(MAX_LIGHT)), surface.flags.y > 0.5);
-    out.alpha = base.a;
-    return out;
+    let lit = min(direct + ambient + max(s.emissive, vec3<f32>(0.0)), vec3<f32>(MAX_LIGHT));
+    return select(lit, unlit_surface(s), standard.flags.y > 0.5);
 }
 
-// Opaque: alpha 1 whatever the base's, so a 3D overlay is see-through only
-// where nothing was drawn.
-@fragment
-fn fs_opaque(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
-    let shaded = shade(in, front);
-    return vec4<f32>(shaded.color, 1.0);
+// `s` drawn as it is: its base colour, no light.
+fn unlit_surface(s: Surface) -> vec3<f32> {
+    return clamp(s.base_color, vec3<f32>(0.0), vec3<f32>(MAX_LIGHT));
 }
 
-// Cut out under the cutoff, opaque elsewhere: one sample a pixel.
-@fragment
-fn fs_mask(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
-    let shaded = shade(in, front);
-    if shaded.alpha < surface.flags.x {
-        discard;
-    }
-    return vec4<f32>(shaded.color, 1.0);
-}
-
-// Cut out by alpha to coverage under MSAA: alpha sharpened to a pixel-wide
-// ramp about the cutoff (Ben Golus's), which the samples cover in steps.
-// The colour is written whole: the samples covered already weigh it by the
-// coverage when they resolve, so premultiplying it too would darken every
-// edge to coverage². The alpha output is the coverage (alpha to coverage
-// reads it); the pipeline keeps the larger of it and what is there (`Max`),
-// so over an opaque clear a covered sample stays opaque.
-@fragment
-fn fs_mask_coverage(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
-    let shaded = shade(in, front);
-    let ramp = max(fwidth(shaded.alpha), 1.0e-4);
-    let coverage = clamp((shaded.alpha - surface.flags.x) / ramp + 0.5, 0.0, 1.0);
-    return vec4<f32>(shaded.color, coverage);
-}
-
-// Blended: premultiplied, as the 3D target and the composite are.
-@fragment
-fn fs_blend(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
-    let shaded = shade(in, front);
-    let alpha = clamp(shaded.alpha, 0.0, 1.0);
-    return vec4<f32>(shaded.color * alpha, alpha);
+// The mask's cutoff, from the standard block's alpha mode.
+fn surface_cutoff() -> f32 {
+    return standard.flags.x;
 }

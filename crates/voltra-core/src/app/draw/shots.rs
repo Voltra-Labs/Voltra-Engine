@@ -97,6 +97,7 @@ impl ShotDraw<'_> {
                                 world: self.world,
                                 textures: self.textures,
                                 materials: self.materials,
+                                time: super::world3d::shader_seconds(self.elapsed),
                             },
                             &shot,
                             Some(picture),

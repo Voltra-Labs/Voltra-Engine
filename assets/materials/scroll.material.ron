@@ -1,0 +1,16 @@
+// Stripes sliding across a sphere, a quarter of the texture a second.
+// scenes/custom3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    shader: "materials/scroll.wgsl",
+    uniforms: {
+        "speed": Vec2((0.25, 0.0)),
+    },
+    textures: {
+        "pattern": Color("textures/stripes.png"),
+    },
+    standard: (
+        roughness: 0.4,
+    ),
+)

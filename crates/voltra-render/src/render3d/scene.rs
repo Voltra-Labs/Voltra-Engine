@@ -41,6 +41,10 @@ pub struct Scene3D<'a> {
     pub clear: wgpu::Color,
     /// What lights the surfaces.
     pub lighting: Lighting3D,
+    /// Seconds since the game started, what a surface's `in.time` reads:
+    /// wrapped at an hour ([`FrameUniform3D::TIME_WRAP`](super::FrameUniform3D::TIME_WRAP)),
+    /// so an `f32` keeps a tenth of a millisecond.
+    pub time: f32,
 }
 
 /// How a 3D shot's light becomes its picture: the grade, bloom and

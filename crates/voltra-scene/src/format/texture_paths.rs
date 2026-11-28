@@ -92,7 +92,7 @@ pub fn surface_texture_paths<'a>(
         if file.domain != MaterialDomain::Surface {
             continue;
         }
-        let Ok(textures) = file.standard.textures() else {
+        let Ok(textures) = file.surface_texture_paths() else {
             continue;
         };
         for image in textures.iter() {

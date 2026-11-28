@@ -73,10 +73,23 @@ pub struct Draw<'a> {
 /// sample a pixel unless `gpu` was set otherwise.
 pub fn picture(
     gpu: &mut Gpu,
+    size: (u32, u32),
+    view: View3D,
+    lighting: Lighting3D,
+    draws: &[Draw<'_>],
+) -> Vec<[u8; 4]> {
+    picture_at(gpu, size, view, lighting, draws, 0.0, &Look3D::NEUTRAL)
+}
+
+/// [`picture`] at `time` seconds, through `look`.
+pub fn picture_at(
+    gpu: &mut Gpu,
     (width, height): (u32, u32),
     view: View3D,
     lighting: Lighting3D,
     draws: &[Draw<'_>],
+    time: f32,
+    look: &Look3D,
 ) -> Vec<[u8; 4]> {
     let mut instances = Vec::new();
     let mut ranges = Vec::new();
@@ -110,9 +123,10 @@ pub fn picture(
         draws: &draws,
         clear: CLEAR,
         lighting,
+        time,
     };
     gpu.renderer
-        .render_3d_into(&target, &scene, &Look3D::NEUTRAL, Layer::EMPTY);
+        .render_3d_into(&target, &scene, look, Layer::EMPTY);
     read_rgba8(&gpu.device, &gpu.queue, target.texture(), width, height)
         .as_chunks::<4>()
         .0

@@ -9,7 +9,7 @@ use super::{Layer, Renderer};
 use crate::lights::Lighting;
 use crate::post::{Grade, PictureAlpha};
 use crate::render3d::{
-    Hdr3D, HdrDegraded, Look3D, Pass3D, Scene3D, StandardSurface, SurfaceLayouts,
+    CustomShading, Hdr3D, HdrDegraded, Look3D, Pass3D, Scene3D, StandardSurface, SurfaceLayouts,
     SurfaceMaterial3D, SurfaceTextures, Targets3D,
 };
 use crate::target::RenderTarget;
@@ -151,8 +151,19 @@ impl Renderer {
         surface: &StandardSurface,
         textures: &SurfaceTextures<'_>,
     ) -> SurfaceMaterial3D {
+        self.custom_surface_material(surface, textures, None)
+    }
+
+    /// [`surface_material`](Self::surface_material) drawn through a custom
+    /// surface's shader and uniforms, or the standard shader for `None`.
+    pub fn custom_surface_material(
+        &mut self,
+        surface: &StandardSurface,
+        textures: &SurfaceTextures<'_>,
+        custom: Option<&CustomShading>,
+    ) -> SurfaceMaterial3D {
         let device = self.ctx.device().clone();
-        SurfaceMaterial3D::new(&device, self.surface_layouts(), surface, textures)
+        SurfaceMaterial3D::new(&device, self.surface_layouts(), surface, textures, custom)
     }
 
     /// Draws `scene` to the window as `look` says, then `ui` over it in the

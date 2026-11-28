@@ -6,7 +6,7 @@ use super::hdr::Hdr3D;
 use super::instance::Instance3D;
 use super::lighting::FrameUniform3D;
 use super::scene::Scene3D;
-use super::surface::{SurfaceBank, SurfaceKey, SurfaceLayouts, SurfacePass};
+use super::surface::{SurfaceBank, SurfaceKey, SurfaceLayouts, SurfacePass, SurfaceVertex};
 use super::targets::Targets3D;
 use super::MeshDraw3D;
 
@@ -62,9 +62,14 @@ impl Pass3D {
         }
     }
 
-    /// How many pipeline variants it has made so far.
+    /// How many pipeline variants it holds.
     pub fn pipelines(&self) -> usize {
         self.bank.len()
+    }
+
+    /// How many surface shaders it holds modules of.
+    pub fn shaders(&self) -> usize {
+        self.bank.shaders()
     }
 
     /// Records `scene` into `targets`, made for [`hdr`](Self::hdr): colour
@@ -89,11 +94,16 @@ impl Pass3D {
         queue.write_buffer(
             &self.frame_buffer,
             0,
-            bytemuck::bytes_of(&FrameUniform3D::new(&scene.view, &scene.lighting)),
+            bytemuck::bytes_of(&FrameUniform3D::new(
+                &scene.view,
+                &scene.lighting,
+                scene.time,
+            )),
         );
         let instances = upload_instances(device, queue, &mut self.instances, scene.instances);
+        self.bank.begin();
         for draw in scene.draws {
-            self.bank.prepare(device, key(draw));
+            self.bank.prepare(device, key(draw), draw.material.shader());
         }
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -172,6 +182,8 @@ impl Pass3D {
 /// The pipeline variant `draw` is drawn with.
 fn key(draw: &MeshDraw3D<'_>) -> SurfaceKey {
     SurfaceKey {
+        shader: draw.material.shader().revision(),
+        vertex: SurfaceVertex::Plain,
         alpha: draw.material.alpha(),
         double_sided: draw.material.double_sided(),
         winding: draw.winding,

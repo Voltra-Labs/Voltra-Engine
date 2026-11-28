@@ -75,7 +75,12 @@ impl Materials {
     fn read(&mut self, path: &AssetPath) -> Material {
         self.revision += 1;
         let mut material = match self.read_file(path) {
-            Ok(file) if file.domain == MaterialDomain::Surface => Material::build_surface(&file),
+            Ok(file) if file.domain == MaterialDomain::Surface => {
+                let shader = (!file.shader.trim().is_empty())
+                    .then(|| self.read_surface_shader(&file))
+                    .flatten();
+                Material::build_surface(&file, shader)
+            }
             Ok(file) => match self.read_shader(&file) {
                 Ok((shader, fragment)) => Material::build(&file, shader, &fragment),
                 Err(e) => Material {
@@ -93,9 +98,10 @@ impl Materials {
             log::warn!("material {}: {warning}", path.as_str());
         }
         if let Some(error) = &material.error {
-            let drawn = match material.domain {
-                MaterialDomain::Sprite => "its sprites draw plainly",
-                MaterialDomain::Surface => "its meshes draw as the default white standard",
+            let drawn = match (material.domain, material.surface.is_some()) {
+                (MaterialDomain::Sprite, _) => "its sprites draw plainly",
+                (MaterialDomain::Surface, true) => "its meshes draw its standard block",
+                (MaterialDomain::Surface, false) => "its meshes draw as the default white standard",
             };
             log::warn!(
                 "material {} cannot be drawn with; {drawn}:\n{error}",
@@ -118,6 +124,20 @@ impl Materials {
             source,
         })?;
         Ok((shader_path, fragment))
+    }
+
+    /// A surface material's shader: its path — kept even when the file
+    /// will not read, so writing it reloads the material — and its text or
+    /// why not. `None` when the name is no asset path.
+    fn read_surface_shader(
+        &self,
+        file: &MaterialFile,
+    ) -> Option<(AssetPath, Result<String, String>)> {
+        let path = AssetPath::new(&file.shader).ok()?;
+        let full = self.root.join(path.as_str());
+        let text = crate::fs::read_to_string(&full)
+            .map_err(|source| AssetError::Read { path: full, source }.to_string());
+        Some((path, text))
     }
 
     /// The material `handle` addresses, if it is current.
@@ -161,5 +181,7 @@ pub fn read_material_file(root: &Path, path: &AssetPath) -> Result<MaterialFile,
     })
 }
 
+#[cfg(test)]
+mod custom_tests;
 #[cfg(test)]
 mod tests;

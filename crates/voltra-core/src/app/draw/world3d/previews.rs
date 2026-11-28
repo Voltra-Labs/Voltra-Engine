@@ -18,7 +18,7 @@ use voltra_render::render3d::{
 };
 use voltra_render::{wgpu, Filter, Layer, RenderTarget, Renderer};
 
-use super::surfaces::images;
+use super::surfaces::{gpu_material, images};
 use crate::ui::TextureId;
 
 /// The largest preview drawn, in pixels a side.
@@ -147,7 +147,7 @@ impl SurfacePreviews {
             if shown.drawn.as_ref() == Some(&wanted) {
                 continue;
             }
-            let material = renderer.surface_material(&request.source.standard, &images);
+            let material = gpu_material(renderer, &request.source, &images);
             let Some(sphere) = meshes.gpu(meshes.builtin(BuiltinMesh::Sphere)) else {
                 continue;
             };
@@ -167,6 +167,7 @@ impl SurfacePreviews {
                 draws: &draws,
                 clear: wgpu::Color::TRANSPARENT,
                 lighting: preview_lighting(),
+                time: 0.0,
             };
             renderer.render_3d_into(&shown.target, &scene, &Look3D::default(), Layer::EMPTY);
             shown.drawn = Some(wanted);
