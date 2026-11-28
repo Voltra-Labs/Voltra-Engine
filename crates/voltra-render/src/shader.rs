@@ -23,7 +23,11 @@ pub const FLAT_COLOR: &str = concat!(
 
 /// Standard surfaces, instanced and lit: glTF's metallic-roughness inputs
 /// through Filament's BRDF. See [`SurfaceBank`](crate::render3d::SurfaceBank).
-pub const SURFACE_3D: &str = include_str!("shaders/surface3d.wgsl");
+pub const SURFACE_3D: &str = concat!(
+    include_str!("shaders/surface3d.wgsl"),
+    "\n",
+    include_str!("shaders/surface3d_light.wgsl")
+);
 
 /// Source of the shader that draws egui's tessellated triangles.
 pub const EGUI: &str = include_str!("shaders/egui.wgsl");

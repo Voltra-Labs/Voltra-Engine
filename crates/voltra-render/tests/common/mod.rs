@@ -3,6 +3,7 @@
 
 #![allow(dead_code)]
 
+pub mod custom;
 pub mod surface;
 
 use voltra_render::glam::{Affine3A, Quat, Vec3};

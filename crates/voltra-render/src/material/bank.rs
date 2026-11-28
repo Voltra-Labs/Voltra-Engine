@@ -3,7 +3,8 @@
 use std::collections::HashMap;
 
 use super::pipeline::{create_material_pipeline, uniform_layout};
-use super::uniforms::{MaterialUniforms, BLOCK_SIZE};
+use super::uniform_buffer::MaterialUniforms;
+use super::uniforms::BLOCK_SIZE;
 use crate::pass::MaterialDraw;
 
 /// One material use a frame draws: the material's compiled-from revision,

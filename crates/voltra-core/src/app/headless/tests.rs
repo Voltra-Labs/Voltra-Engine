@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use voltra_scene::format::entity_with_id;
 use voltra_scene::{BodyType, RigidBody2D, SceneId, Transform2D};
 
 use super::*;

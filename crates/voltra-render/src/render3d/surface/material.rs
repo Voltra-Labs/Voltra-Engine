@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
-use super::bank::AlphaClass;
 use super::compose::CUSTOM_TEXTURES;
 use super::custom::{CustomImage, CustomShading};
+use super::key::AlphaClass;
 use super::layouts::{SurfaceLayouts, CUSTOM_BLOCK_BINDING, CUSTOM_TEXTURE_BINDING};
 use super::shader::SurfaceShader;
 use super::standard::StandardSurface;

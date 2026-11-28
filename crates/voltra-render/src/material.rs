@@ -10,10 +10,12 @@
 mod bank;
 mod compose;
 mod pipeline;
+mod uniform_buffer;
 mod uniforms;
 
 pub use bank::{MaterialBank, MaterialRequest};
 pub use compose::{compose, validate, FRAGMENT_ENTRY};
 pub use pipeline::{create_material_pipeline, uniform_layout};
+pub use uniform_buffer::MaterialUniforms;
 pub(crate) use uniforms::is_identifier;
-pub use uniforms::{Layout, MaterialUniforms, Uniform, BLOCK_SIZE};
+pub use uniforms::{Layout, Uniform, BLOCK_SIZE};

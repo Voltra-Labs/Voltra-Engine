@@ -13,18 +13,21 @@ mod bank;
 pub mod brdf;
 mod compose;
 mod custom;
+mod key;
 mod layouts;
 mod material;
+mod pipeline;
 mod shader;
 mod standard;
 mod uniform;
 
-pub use bank::{AlphaClass, SurfaceBank, SurfaceKey, SurfacePass, SurfaceVertex, KEEP_USES};
+pub use bank::{SurfaceBank, KEEP_USES};
 pub use compose::{
     compose_surface, standard_source, SurfaceLighting, CUSTOM_TEXTURES, SURFACE_ENTRIES,
     SURFACE_ENTRY,
 };
 pub use custom::{CustomImage, CustomShading, TextureSpace};
+pub use key::{AlphaClass, SurfaceKey, SurfacePass, SurfaceVertex};
 pub use layouts::{SurfaceLayouts, CUSTOM_BLOCK_BINDING, CUSTOM_TEXTURE_BINDING, SURFACE_TEXTURES};
 pub use material::{SurfaceMaterial3D, SurfaceTextures, SURFACE_VIEWS};
 pub use shader::SurfaceShader;
