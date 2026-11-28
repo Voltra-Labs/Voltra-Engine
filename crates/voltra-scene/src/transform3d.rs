@@ -8,7 +8,7 @@
 
 mod file;
 
-use voltra_render::glam::{Affine3A, EulerRot, Mat3, Quat, Vec3};
+use voltra_render::glam::{Affine3A, DMat3, EulerRot, Mat3, Quat, Vec3};
 
 /// A 3D position, rotation and scale, local to the entity's parent.
 ///
@@ -79,13 +79,30 @@ impl Transform3D {
     /// 180° of pitch and of roll, near enough). The editor keeps what was
     /// typed beside it for that reason.
     ///
-    /// Near gimbal lock (a pitch near ±90°) yaw and roll are the difference
-    /// of nearly equal terms, and what the `f32` quaternion holds bounds
-    /// them: within 0.01° to ±89.9° of pitch, a few hundredths at ±89.99°.
-    /// Read in `f64`, which costs nothing here and comes about a fifth
-    /// closer than `f32`; the inspector shows the typed angles anyway.
+    /// **Gimbal lock is handled, not left to the arithmetic.** At a pitch of
+    /// ±90° yaw and roll turn about one axis and only their combination is a
+    /// rotation; read from an `f32` quaternion, the cosine of the pitch is
+    /// noise of about 10⁻³, and splitting the combination by `atan2` of
+    /// noise gives any yaw and roll at all — up to 180° wrong composed back
+    /// with no lock test, and 5.6° at a pitch of 89.9999° with glam's `f32`
+    /// test, whose threshold sits below that noise. So the reading is in
+    /// `f64` with a lock band of its own: where `1 − |sin pitch|` is under
+    /// [`EULER_LOCK`](Self::EULER_LOCK) (within about 0.08° of ±90°) the pitch
+    /// reads ±90°, the roll 0 and the whole turn is folded into the yaw.
+    /// Measured worst cases over yaw and roll in 10° steps, composed back:
+    /// 1.3 × 10⁻⁵° at the lock, 0.085° at the band's edge (the pitch it
+    /// rounds to 90°), 0.018° just outside it, 0.012° at 89.9°.
     pub fn euler_degrees(&self) -> Vec3 {
         let q = self.rotation.as_dquat();
+        let m = DMat3::from_quat(q);
+        // Ry · Rx · Rz has −sin pitch in row 1 of column 2.
+        let sin_pitch = -m.z_axis.y;
+        if 1.0 - sin_pitch.abs() < Self::EULER_LOCK {
+            let pitch = std::f64::consts::FRAC_PI_2.copysign(sin_pitch);
+            // With the roll 0, column 0 is (cos yaw, 0, −sin yaw).
+            let yaw = (-m.x_axis.z).atan2(m.x_axis.x);
+            return Vec3::new(pitch.to_degrees() as f32, yaw.to_degrees() as f32, 0.0);
+        }
         let (y, x, z) = q.to_euler(EulerRot::YXZ);
         Vec3::new(
             x.to_degrees() as f32,
@@ -93,6 +110,13 @@ impl Transform3D {
             z.to_degrees() as f32,
         )
     }
+
+    /// How near `|sin pitch|` may come to 1 before [`euler_degrees`]
+    /// reads the rotation as locked: 10⁻⁶, a cosine of 1.4 × 10⁻³ — just
+    /// above the noise an `f32` quaternion leaves in it at ±90°.
+    ///
+    /// [`euler_degrees`]: Self::euler_degrees
+    pub const EULER_LOCK: f64 = 1e-6;
 
     /// Sets the rotation.
     pub fn with_rotation(mut self, rotation: Quat) -> Self {

@@ -143,7 +143,8 @@ pub(super) fn sync_with(
             // the instance would mix the two.
             log::warn!(
                 "{root:?} is an instance of {}, whose root is now of the other dimension; \
-                 the instance is left as it is: replace it, or Apply it",
+                 the instance is left as it is: replace it (an Apply from it would convert \
+                 the prefab back, and its other instances with it)",
                 prefab
                     .source()
                     .map_or("an unsaved prefab", |path| path.as_str())

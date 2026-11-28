@@ -166,3 +166,49 @@ fn euler_angles_near_gimbal_lock_read_back_to_a_hundredth_of_a_degree() {
         );
     }
 }
+
+/// The angle between two rotations, in radians, worked out in `f64`.
+fn apart(a: Quat, b: Quat) -> f64 {
+    let diff = a.as_dquat().inverse() * b.as_dquat();
+    let sin_half = voltra_render::glam::DVec3::new(diff.x, diff.y, diff.z).length();
+    2.0 * sin_half.min(1.0).asin()
+}
+
+#[test]
+fn at_gimbal_lock_the_reading_composes_back_to_the_rotation() {
+    for pitch in [90.0, -90.0] {
+        for yaw in [0.0, 30.0, 170.0] {
+            for roll in [0.0, 45.0, -120.0] {
+                let typed = Vec3::new(pitch, yaw, roll);
+                let rotation = Transform3D::from_euler_degrees(typed).rotation;
+                let read = Transform3D::default()
+                    .with_rotation(rotation)
+                    .euler_degrees();
+                let back = Transform3D::from_euler_degrees(read).rotation;
+                let off = apart(rotation, back);
+                assert!(off < 1e-4, "{typed:?} read {read:?}, {off} rad off");
+            }
+        }
+    }
+}
+
+#[test]
+fn inside_and_just_outside_the_lock_band_the_reading_stays_close() {
+    // The band rounds a pitch within about 0.08° of ±90° to ±90° (the f32
+    // noise moves its edge a little): its edge is the worst case, measured
+    // 0.085° at 89.915°.
+    for pitch in [89.9999, 89.999, 89.95, 89.919, 89.915, 89.9, -89.95] {
+        for step in 0..36 {
+            let typed = Vec3::new(pitch, step as f32 * 10.0 - 175.0, 55.0 - step as f32 * 7.0);
+            let rotation = Transform3D::from_euler_degrees(typed).rotation;
+            let read = Transform3D::default()
+                .with_rotation(rotation)
+                .euler_degrees();
+            let off = apart(rotation, Transform3D::from_euler_degrees(read).rotation);
+            assert!(
+                off.to_degrees() < 0.09,
+                "{typed:?} read {read:?}, {off} rad off"
+            );
+        }
+    }
+}
