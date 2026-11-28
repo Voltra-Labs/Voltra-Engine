@@ -18,6 +18,8 @@ use crate::app::Tick;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod builder;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod built;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod library;
 pub mod plugin;
 pub mod stamp;

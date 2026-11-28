@@ -1,39 +1,25 @@
 //! The game loaded as the editor loads it — from its library, checked by
 //! its stamp — and its first scene played headless with a key held.
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use arena::FIRST_SCENE;
 use voltra_assets::AssetPath;
-use voltra_core::game::library::{library_file, GameLibrary};
+use voltra_core::game::built::open_built;
+use voltra_core::game::library::GameLibrary;
 use voltra_core::{App, Headless};
 use voltra_scene::{Name, Transform2D};
 
-/// The library cargo built for this run: beside the binary after a
-/// `cargo build`, beside the `rlib` the test links after a `cargo test`.
-fn built_library() -> PathBuf {
-    let binary = PathBuf::from(env!("CARGO_BIN_EXE_arena"));
-    let profile = binary.parent().expect("the binary is in a folder");
-    let file = library_file("arena");
-    let mut found = vec![profile.join(&file), profile.join("deps").join(&file)];
-    if let Ok(units) = std::fs::read_dir(profile.join("build").join("arena")) {
-        found.extend(
-            units
-                .flatten()
-                .map(|unit| unit.path().join("out").join(&file)),
-        );
-    }
-    found
-        .into_iter()
-        .filter_map(|path| Some((std::fs::metadata(&path).ok()?.modified().ok()?, path)))
-        .max_by_key(|(modified, _)| *modified)
-        .map(|(_, path)| path)
-        .unwrap_or_else(|| panic!("cargo built {file} under {}", profile.display()))
+/// The library cargo built for this run, opened as the editor opens it:
+/// of the copies cargo has left (one per feature set it built the game
+/// with), the newest this build's stamp accepts.
+fn built_library() -> GameLibrary {
+    open_built(Path::new(env!("CARGO_BIN_EXE_arena")), "arena").unwrap_or_else(|e| panic!("{e}"))
 }
 
 #[test]
 fn the_editor_can_load_and_play_the_game() {
-    let library = GameLibrary::open(&built_library()).expect("a library this build can run");
+    let library = built_library();
     let app = App::default().with_game(library.new_game());
     let scene = AssetPath::new(FIRST_SCENE).expect("a path");
     let mut session = Headless::open(app, &scene).expect("the first scene loads");
