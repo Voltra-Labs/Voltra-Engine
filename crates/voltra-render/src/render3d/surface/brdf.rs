@@ -12,6 +12,12 @@ use glam::Vec3;
 /// Filament's floor on perceptual roughness.
 pub const MIN_ROUGHNESS: f32 = 0.045;
 
+/// The most light a surface sends back, per channel (`surface3d.wgsl`'s
+/// `MAX_LIGHT`): under a half float's 65504 with room for bloom's levels
+/// summed. A mirror-smooth highlight near grazing reaches some 10⁵ at
+/// energy 1.
+pub const MAX_LIGHT: f32 = 4096.0;
+
 /// What reflects: the surface's numbers at one point, after textures.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Point {
@@ -101,9 +107,11 @@ pub fn shade(point: &Point, light: &Light) -> Vec3 {
         * v_smith_ggx_correlated(n_dot_v, n_dot_l, a)
         * f_schlick(f0, l_dot_h);
     let direct = (diffuse_color * std::f32::consts::FRAC_1_PI + specular) * light.color * n_dot_l;
+    // Specular E = f0·A + B, the diffuse taking what it leaves (Filament's).
+    let reflected = env_brdf(f0, roughness, n_dot_v);
     let ambient =
-        (diffuse_color + env_brdf(f0, roughness, n_dot_v)) * light.ambient * point.occlusion;
-    direct + ambient + point.emissive
+        (diffuse_color * (Vec3::ONE - reflected) + reflected) * light.ambient * point.occlusion;
+    (direct + ambient + point.emissive).min(Vec3::splat(MAX_LIGHT))
 }
 
 #[cfg(test)]
@@ -177,8 +185,8 @@ mod tests {
         // 1/π diffuse, plus D·V·F at a = 1: (1/π)·(1/4)·0.04.
         let expected = 1.0 / PI + 0.04 / (4.0 * PI);
         assert!((out.x - expected).abs() < 1e-5, "{out}");
-        // A uniform white sky reflects what it is lit with, near enough:
-        // diffuse 1 plus the split sum's small specular.
+        // A uniform white sky reflects what it is lit with: the specular
+        // takes E and the diffuse the rest, (1 − E), so white sums to 1.
         let sky = shade(
             &point,
             &Light {
@@ -187,7 +195,42 @@ mod tests {
                 ..light
             },
         );
-        assert!((1.0..1.1).contains(&sky.x), "{sky}");
+        assert!((sky.x - 1.0).abs() < 0.01, "{sky}");
+    }
+
+    #[test]
+    fn a_mirror_highlight_near_grazing_stays_finite_under_the_cap() {
+        let mirror = Point {
+            base: Vec3::ONE,
+            metallic: 1.0,
+            roughness: 0.0,
+            occlusion: 1.0,
+            emissive: Vec3::ZERO,
+        };
+        // Lit from just past the rim, seen at the mirror angle.
+        let l = Vec3::new(0.0, 0.999, 0.02).normalize();
+        let v = Vec3::new(0.0, -0.999, 0.02).normalize();
+        let lit = Light {
+            n: Vec3::Z,
+            v,
+            l,
+            color: Vec3::ONE,
+            ambient: Vec3::ZERO,
+        };
+        let out = shade(&mirror, &lit);
+        assert_eq!(out.max_element(), MAX_LIGHT, "capped: {out}");
+        let glowing = shade(
+            &Point {
+                emissive: Vec3::splat(1.0e30),
+                ..mirror
+            },
+            &lit,
+        );
+        assert!(glowing.is_finite() && glowing.max_element() <= MAX_LIGHT);
+        for curve in crate::render3d::Tonemap::ALL {
+            let toned = curve.apply([f32::INFINITY, f32::NAN, 1.0e30]);
+            assert!(toned.iter().all(|c| c.is_finite()), "{curve:?}: {toned:?}");
+        }
     }
 
     #[test]

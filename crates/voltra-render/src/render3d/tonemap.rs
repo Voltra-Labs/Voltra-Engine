@@ -29,6 +29,11 @@ const AGX_MIN_EV: f32 = -12.47393;
 const AGX_MAX_EV: f32 = 4.026069;
 
 impl Tonemap {
+    /// The most light a curve is handed (`tonemap.wgsl`'s
+    /// `MAX_TONE_INPUT`): Reinhard's and ACES's ratios are NaN for infinite
+    /// light, and every curve is at its top long before.
+    pub const MAX_INPUT: f32 = 65504.0;
+
     /// Every curve, in the order the shader numbers them.
     pub const ALL: [Self; 4] = [Self::None, Self::Reinhard, Self::Aces, Self::AgX];
 
@@ -49,9 +54,11 @@ impl Tonemap {
 
     /// The curve on the CPU: what `tonemap.wgsl` computes for linear
     /// `rgb`, number for number — a reference for tests and for tools that
-    /// preview a colour without a GPU. Negative light counts as none.
+    /// preview a colour without a GPU. Negative light counts as none, light
+    /// past [`MAX_INPUT`](Self::MAX_INPUT) as that, and NaN as none.
     pub fn apply(self, rgb: [f32; 3]) -> [f32; 3] {
-        let c = Vec3::from(rgb).max(Vec3::ZERO);
+        let c = Vec3::from(rgb.map(|c| if c.is_nan() { 0.0 } else { c }))
+            .clamp(Vec3::ZERO, Vec3::splat(Self::MAX_INPUT));
         let out = match self {
             Self::None => c,
             Self::Reinhard => c / (Vec3::ONE + c),

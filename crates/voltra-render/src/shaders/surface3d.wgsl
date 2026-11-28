@@ -11,6 +11,12 @@ const PI: f32 = 3.14159265358979;
 // Filament's floor on perceptual roughness: below it a highlight is
 // narrower than a half float holds.
 const MIN_ROUGHNESS: f32 = 0.045;
+// The most light a surface sends back, per channel. A mirror-smooth
+// highlight near grazing reaches some 10⁵ at energy 1, and emissive is
+// unbounded; past 65504 an Rgba16Float texel is infinite, and bloom and the
+// curves turn that to NaN. Low enough that bloom's levels, summed, stay
+// finite too. `brdf::MAX_LIGHT` on the CPU.
+const MAX_LIGHT: f32 = 4096.0;
 
 struct Frame3D {
     view_proj: mat4x4<f32>,
@@ -208,13 +214,16 @@ fn shade(in: VertexOut, front: bool) -> Shaded {
     let direct = (diffuse_color * (1.0 / PI) + specular) * frame.light_color.rgb * n_dot_l
         * frame.light_direction.w;
 
-    // The ambient: a uniform sky, diffuse (its irradiance π·L times
-    // albedo / π) and specular (the split sum), occluded.
-    let ambient = (diffuse_color + env_brdf(f0, roughness, n_dot_v)) * frame.ambient.rgb * occlusion;
+    // The ambient: a uniform sky, specular (the split sum's E = f0·A + B)
+    // and diffuse (its irradiance π·L times albedo / π) taking what the
+    // specular leaves, (1 − E) — Filament's — occluded.
+    let reflected = env_brdf(f0, roughness, n_dot_v);
+    let ambient = (diffuse_color * (vec3<f32>(1.0) - reflected) + reflected) * frame.ambient.rgb
+        * occlusion;
 
-    let lit = direct + ambient + emissive;
+    let lit = min(direct + ambient + emissive, vec3<f32>(MAX_LIGHT));
     var out: Shaded;
-    out.color = select(lit, base.rgb, surface.flags.y > 0.5);
+    out.color = select(lit, min(base.rgb, vec3<f32>(MAX_LIGHT)), surface.flags.y > 0.5);
     out.alpha = base.a;
     return out;
 }
@@ -239,12 +248,14 @@ fn fs_mask(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) ve
 
 // Cut out by alpha to coverage under MSAA: alpha sharpened to a pixel-wide
 // ramp about the cutoff (Ben Golus's), which the samples cover in steps.
+// The alpha is written too, so the colour is premultiplied by it, as the
+// 3D target is: an overlay's masked edge has no bright fringe.
 @fragment
 fn fs_mask_coverage(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
     let shaded = shade(in, front);
     let ramp = max(fwidth(shaded.alpha), 1.0e-4);
     let coverage = clamp((shaded.alpha - surface.flags.x) / ramp + 0.5, 0.0, 1.0);
-    return vec4<f32>(shaded.color, coverage);
+    return vec4<f32>(shaded.color * coverage, coverage);
 }
 
 // Blended: premultiplied, as the 3D target and the composite are.

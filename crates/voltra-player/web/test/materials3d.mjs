@@ -22,12 +22,12 @@ const site = build({ out, manifest: "materials3d.build.ron", skipBuild });
 const server = await serve(site);
 const colours = {
   // The floor where its normal map is flat, (128, 128, 255) read as data.
-  floor: [153, 155, 159],
+  floor: [153, 155, 158],
   // The unlit sphere: its linear (0.2, 0.9, 0.4) through AgX.
   unlit: [140, 200, 166],
   // The glass pane over the background, and over the red box.
-  glassOverSky: [127, 135, 143],
-  glassOverBox: [191, 144, 142],
+  glassOverSky: [127, 135, 142],
+  glassOverBox: [191, 143, 141],
   // A texture that would not load.
   magenta: [255, 0, 255],
 };

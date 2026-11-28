@@ -39,8 +39,14 @@ fn vs_main(@builtin(vertex_index) index: u32) -> VertexOutput {
     return out;
 }
 
+// The most light a tap carries: an infinite texel (a half float
+// overflowed upstream) would make the threshold's ratio inf / inf, NaN, and
+// spread it over the whole glow. Clamped to a finite value instead; the
+// levels, summed, stay under a half float's 65504.
+const MAX_TAP: f32 = 4096.0;
+
 fn tap(uv: vec2<f32>) -> vec3<f32> {
-    return textureSample(source, source_sampler, uv).rgb;
+    return clamp(textureSample(source, source_sampler, uv).rgb, vec3<f32>(0.0), vec3<f32>(MAX_TAP));
 }
 
 // The 13-tap downsample: a centre box, four corner boxes and the

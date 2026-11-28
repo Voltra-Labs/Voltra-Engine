@@ -64,8 +64,13 @@ fn aces(colour: vec3<f32>) -> vec3<f32> {
     return clamp(output * (a / b), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// The most light a curve is handed: Reinhard's c / (1 + c) and ACES's
+// ratio are NaN for infinite light, so it is clamped to a finite value
+// first (every curve is at its top long before).
+const MAX_TONE_INPUT: f32 = 65504.0;
+
 fn tone(colour: vec3<f32>, curve: f32) -> vec3<f32> {
-    let c = max(colour, vec3<f32>(0.0));
+    let c = clamp(colour, vec3<f32>(0.0), vec3<f32>(MAX_TONE_INPUT));
     if curve < 0.5 {
         return c;
     }
