@@ -98,9 +98,33 @@ pub(crate) fn apply(editor: &mut Editor, frame: &mut UiFrame<'_>, root: Entity) 
         .flat_map(|&r| ids_under(frame.world, r))
         .collect();
     recorded(editor, frame, "Apply to prefab", ids, |e, f| {
-        prefab::apply(f.world, &e.registry, f.prefabs, root).map_err(|error| error.to_string())
+        let report = prefab::apply(f.world, &e.registry, f.prefabs, root)
+            .map_err(|error| error.to_string())?;
+        if !report.other_dimension.is_empty() {
+            log::warn!(
+                "Apply to prefab: {} now has a root of the other dimension; {} instance(s) \
+                 left as they were, to replace: {}",
+                source.as_str(),
+                report.other_dimension.len(),
+                names(f.world, &report.other_dimension)
+            );
+        }
+        Ok(report)
     });
     editor.assets.refresh();
+}
+
+/// `entities` by name, or by handle where they have none, for a message.
+fn names(world: &World, entities: &[Entity]) -> String {
+    entities
+        .iter()
+        .map(|&e| {
+            world
+                .get::<voltra_scene::Name>(e)
+                .map_or_else(|| format!("{e:?}"), |n| n.as_str().to_owned())
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Runs `act` as the entry `label` over `ids`, resolving the assets of what

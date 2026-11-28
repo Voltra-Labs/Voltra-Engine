@@ -40,12 +40,17 @@ pub(super) fn show(
 
             // Written whole: the angles are a view of one quaternion, so an
             // edit to any of them writes the rotation to the whole selection.
+            // Each angle is the shared mixed number on the whole rotation:
+            // `—` when the selection's rotations differ, and a number typed
+            // into it and left is written to all even when it is the
+            // primary's own (the touch `mixed::drag` makes on that path).
             mixed::label(ui, "rotation", mixed.field("rotation"));
             let mut degrees = hints.degrees(entity, transform.rotation);
             let mut changed = false;
             ui.horizontal(|ui| {
                 for value in degrees.as_mut().iter_mut() {
-                    let response = ui.add(DragValue::new(value).speed(0.5).suffix("°"));
+                    let drag = DragValue::new(value).speed(0.5).suffix("°");
+                    let response = mixed::drag(ui, drag, mixed, vec![Step::Field("rotation")]);
                     changed |= response.changed();
                     claim = claim.or(active(&response, "Rotate"));
                 }
