@@ -174,3 +174,51 @@ fn the_names_name_the_dimensions() {
     );
     assert_eq!(Dimension::of_transform_name("Sprite2D"), None);
 }
+
+#[test]
+fn the_children_of_a_both_transforms_entity_are_not_flagged_too() {
+    let mut world = World::new();
+    let both = flat(&mut world);
+    world.insert(both, Transform3D::default());
+    let (a, b) = (deep(&mut world), flat(&mut world));
+    link(&mut world, a, both);
+    link(&mut world, b, both);
+    resolve_parents(&mut world);
+
+    assert_eq!(problems(&world), vec![Problem::BothTransforms(both)]);
+}
+
+#[test]
+fn a_problem_is_warned_about_once_however_often_links_resolve() {
+    // An undo resolves the world once per record it puts back.
+    let mut world = World::new();
+    let two = flat(&mut world);
+    let three = deep(&mut world);
+    link(&mut world, three, two);
+    resolve_parents(&mut world);
+
+    assert_eq!(warn_new_problems(&world), 0, "said on the first resolve");
+    for _ in 0..5 {
+        resolve_parents(&mut world);
+    }
+    assert_eq!(warn_new_problems(&world), 0);
+    // A second broken link is new, and said.
+    let other = deep(&mut world);
+    link(&mut world, other, two);
+    resolve_parents_quietly(&mut world);
+    assert_eq!(warn_new_problems(&world), 1);
+}
+
+/// Resolves the links without the warning pass, so a test can ask it.
+fn resolve_parents_quietly(world: &mut World) {
+    let links: Vec<(Entity, SceneId)> = world.query::<Parent>().map(|(e, l)| (e, l.id)).collect();
+    for (entity, id) in links {
+        let target = world
+            .query::<SceneId>()
+            .find(|(_, held)| **held == id)
+            .map(|(e, _)| e);
+        if let Some(link) = world.get_mut::<Parent>(entity) {
+            link.entity = target;
+        }
+    }
+}

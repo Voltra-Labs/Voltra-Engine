@@ -16,11 +16,13 @@
 //! made without asking, as for a parented physics body.
 
 use std::collections::HashSet;
+use std::sync::Mutex;
 
 use voltra_ecs::{Entity, World};
 
 use super::link::HierarchyError;
 use super::walk::{ancestors, children_of, parent_of};
+use crate::scene_id::SceneId;
 use crate::transform::Transform2D;
 use crate::transform3d::Transform3D;
 
@@ -90,7 +92,14 @@ pub enum Problem {
     },
 }
 
-/// Every [`Problem`] in `world`, each entity once, in index order.
+/// Every [`Problem`] in `world`, in index order: an entity is named once,
+/// as the child of at most one problem.
+///
+/// An entity with both transforms is that problem and no other; a child
+/// under one is not flagged as well — its parent's problem is the one to
+/// fix, and every child of a broken entity reported again would bury it.
+/// So a [`Problem::MixedLink`] is a child of exactly one dimension under a
+/// nearest transform of exactly the other.
 ///
 /// Free for a world with no [`Transform3D`] in it — every 2D game — which
 /// cannot break the rule: one storage lookup and out.
@@ -98,20 +107,20 @@ pub fn problems(world: &World) -> Vec<Problem> {
     let Some(three) = world.components::<Transform3D>() else {
         return Vec::new();
     };
-    let mut found = Vec::new();
     let two = world.components::<Transform2D>();
-    for (entity, _) in three.iter() {
-        if two.is_some_and(|two| two.get(entity).is_some()) {
-            found.push(Problem::BothTransforms(entity));
-        }
-    }
     let placed = three
         .iter()
         .map(|(entity, _)| entity)
         .chain(two.into_iter().flat_map(|two| two.iter().map(|(e, _)| e)));
+    let mut found = Vec::new();
     let mut seen = HashSet::new();
     for child in placed {
         if !seen.insert(child) {
+            continue;
+        }
+        let ours = Dimension::of(world, child);
+        if ours.len() > 1 {
+            found.push(Problem::BothTransforms(child));
             continue;
         }
         let Some(parent) = parent_of(world, child) else {
@@ -120,7 +129,7 @@ pub fn problems(world: &World) -> Vec<Problem> {
         let Some((above, theirs)) = nearest_above(world, parent) else {
             continue;
         };
-        if spans_both(&Dimension::of(world, child), &theirs) {
+        if theirs.len() == 1 && theirs != ours {
             found.push(Problem::MixedLink { child, above });
         }
     }
@@ -129,6 +138,54 @@ pub fn problems(world: &World) -> Vec<Problem> {
     });
     found
 }
+
+/// Logs each of `world`'s [`problems`] the first time this run meets it.
+///
+/// Called by [`super::resolve_parents`], which runs after every load, every
+/// record an undo puts back and every reparent: warning on each call would
+/// say one broken link once per record of every undo. Remembered by the
+/// entities' [`SceneId`]s, which an undo keeps, so the same link in the same
+/// scene is said once; a transient entity has no id and is said once for
+/// all of them.
+/// Answers how many it warned about.
+pub(super) fn warn_new_problems(world: &World) -> usize {
+    static WARNED: Mutex<Option<HashSet<WarnedAbout>>> = Mutex::new(None);
+    let found = problems(world);
+    if found.is_empty() {
+        return 0;
+    }
+    let id = |entity: Entity| world.get::<SceneId>(entity).copied();
+    let Ok(mut warned) = WARNED.lock() else {
+        return 0;
+    };
+    let mut said = 0;
+    let warned = warned.get_or_insert_with(HashSet::new);
+    for problem in found {
+        let key = match problem {
+            Problem::BothTransforms(entity) => (id(entity), None),
+            Problem::MixedLink { child, above } => (id(child), Some(id(above))),
+        };
+        if !warned.insert(key) {
+            continue;
+        }
+        said += 1;
+        match problem {
+            Problem::BothTransforms(entity) => log::warn!(
+                "{entity:?} carries both Transform2D and Transform3D; each dimension draws it \
+                 by its own, and the editor will not add either again"
+            ),
+            Problem::MixedLink { child, above } => log::warn!(
+                "{child:?} is parented under {above:?} of the other dimension; it is composed \
+                 as if that link were not there"
+            ),
+        }
+    }
+    said
+}
+
+/// What a warning was given about: the entity's id, and for a link the
+/// id of the entity above it.
+type WarnedAbout = (Option<SceneId>, Option<Option<SceneId>>);
 
 /// Whether linking `child` under `parent` would compose one dimension
 /// under the other: the nearest transform at or above `parent`, against
