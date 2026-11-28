@@ -9,6 +9,7 @@
 mod behaviour;
 mod physics;
 mod visual;
+mod visual3d;
 
 use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
