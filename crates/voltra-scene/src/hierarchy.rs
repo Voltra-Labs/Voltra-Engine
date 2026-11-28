@@ -9,8 +9,9 @@
 //! Split by how the parts fail. [`parent`] is the component and its file form,
 //! [`link`] is the rules about which links may exist, [`walk`] is following
 //! them up and down the tree, [`resolve`] is turning a
-//! stored identity back into a live entity, and [`world_transform`] is the
-//! arithmetic of composing one. Nothing here touches the GPU or egui, so all of
+//! stored identity back into a live entity, [`world_transform`] is the
+//! arithmetic of composing one, and [`world_transforms`] composes them all in
+//! one pass. Nothing here touches the GPU or egui, so all of
 //! it is unit-tested.
 //!
 //! **The hierarchy is a transform relationship, not a container.** Despawning a
@@ -27,6 +28,7 @@ pub mod parent;
 pub mod resolve;
 pub mod walk;
 pub mod world_transform;
+pub mod world_transforms;
 
 pub use link::{can_parent, clear_parent, set_parent, HierarchyError};
 pub use walk::{
@@ -44,5 +46,5 @@ pub use crate::renamed::{parent_matrix, set_world_transform, world_matrix, world
 pub use resolve::resolve_parents;
 pub use world_transform::{
     is_root, parent_matrix_2d, set_world_transform_2d, world_matrix_2d, world_transform_2d,
-    WorldTransforms2D,
 };
+pub use world_transforms::WorldTransforms2D;

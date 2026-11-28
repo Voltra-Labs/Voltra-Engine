@@ -11,9 +11,11 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
-use super::link::{ancestors, parent_of};
-use super::parent::Parent;
+use super::walk::{ancestors, parent_of};
 use crate::transform::Transform2D;
+
+/// The memoised pass, on the path 0.4 had it.
+pub use super::world_transforms::WorldTransforms2D;
 
 /// The 0.4 names, where 0.4 had them; see [`crate::renamed`].
 #[allow(deprecated)]
@@ -80,170 +82,11 @@ pub fn set_world_transform_2d(world: &mut World, entity: Entity, target: &Transf
     }
 }
 
-/// Every entity's world matrix, composed in one pass.
-///
-/// Built per frame by the sprite batch and by picking, which both walk the whole
-/// world and would otherwise recompute a shared ancestor's matrix once per
-/// descendant. Each entity is composed exactly once: the walk up stops at the
-/// first ancestor already in the map.
-///
-/// Entities are keyed by handle, so a stale [`Entity`] from a previous frame
-/// simply misses — [`matrix`](Self::matrix) answers identity for anything it
-/// does not hold, which is the same answer a root with no transform gets.
-#[derive(Debug, Default, Clone)]
-pub struct WorldTransforms2D {
-    /// Indexed by [`Entity::index`]: the entity it was composed for (so a
-    /// recycled index with a new generation misses) and its matrix. Dense,
-    /// because the ECS hands out indices densely; a lookup is an index and
-    /// a compare, not a hash.
-    matrices: Vec<Option<(Entity, Mat3)>>,
-    len: usize,
-}
-
-impl WorldTransforms2D {
-    /// Composes every entity with a [`Transform2D`] in one pass.
-    ///
-    /// Each chain is walked up only until it meets an ancestor already
-    /// composed, so every matrix is multiplied once however deep the tree.
-    /// Locals and parents are read straight from the world's sparse sets —
-    /// an index each — rather than copied into maps first, which was most
-    /// of what this cost with thousands of entities.
-    ///
-    /// A [`Parent`] naming a despawned entity, or one in a cycle, makes its
-    /// child a root: drawn where its own transform says, and warned about.
-    pub fn from_world(world: &World) -> Self {
-        let mut this = Self::default();
-        this.compose(world);
-        this
-    }
-
-    /// [`seen_from`](Self::seen_from) into this one, keeping its storage: a
-    /// draw composing every frame reuses last frame's rather than
-    /// allocating (and faulting in) megabytes for a large world afresh.
-    pub fn recompose_seen_from(&mut self, world: &World, camera: voltra_render::glam::Vec2) {
-        self.compose(world);
-        crate::parallax::apply(self, world, camera);
-    }
-
-    /// Empties this and composes `world` into it.
-    fn compose(&mut self, world: &World) {
-        self.matrices.clear();
-        self.len = 0;
-        let this = self;
-        let mut chain: Vec<Entity> = Vec::new();
-        // Each set found once, not once per entity asked.
-        let parents = world.components::<Parent>();
-        let Some(transforms) = world.components::<Transform2D>() else {
-            return;
-        };
-        for (entity, transform) in transforms.iter() {
-            if this.get(entity).is_some() {
-                continue;
-            }
-
-            chain.clear();
-            let mut cursor = entity;
-            let mut above = Mat3::IDENTITY;
-            loop {
-                chain.push(cursor);
-                let Some(parent) = parents
-                    .and_then(|parents| parents.get(cursor))
-                    .and_then(|link| link.entity)
-                    .filter(|parent| world.is_alive(*parent))
-                else {
-                    break;
-                };
-                if let Some(known) = this.get(parent) {
-                    above = known;
-                    break;
-                }
-                if chain.contains(&parent) {
-                    log::warn!("{parent:?} is in a parent cycle; composing it as a root");
-                    break;
-                }
-                cursor = parent;
-            }
-
-            for link in chain.iter().rev().copied() {
-                // The query's own transform for the entity itself, rather
-                // than asking the world for it again.
-                above *= if link == entity {
-                    transform.matrix()
-                } else {
-                    // A grouping node without a transform adds no frame.
-                    transforms
-                        .get(link)
-                        .map_or(Mat3::IDENTITY, Transform2D::matrix)
-                };
-                this.insert(link, above);
-            }
-        }
-    }
-
-    fn insert(&mut self, entity: Entity, matrix: Mat3) {
-        let index = entity.index() as usize;
-        if index >= self.matrices.len() {
-            self.matrices.resize(index + 1, None);
-        }
-        if self.matrices[index].is_none() {
-            self.len += 1;
-        }
-        self.matrices[index] = Some((entity, matrix));
-    }
-
-    /// [`from_world`](Self::from_world), with every [`Parallax`] layer
-    /// displaced for a camera at `camera` — what the draw and the pick see.
-    ///
-    /// [`Parallax`]: crate::Parallax
-    pub fn seen_from(world: &World, camera: voltra_render::glam::Vec2) -> Self {
-        let mut transforms = Self::from_world(world);
-        crate::parallax::apply(&mut transforms, world, camera);
-        transforms
-    }
-
-    /// Every entity composed.
-    pub(crate) fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
-        self.matrices.iter().flatten().map(|(entity, _)| *entity)
-    }
-
-    /// Moves `entity`'s composed matrix by `offset` in world space.
-    pub(crate) fn translate(&mut self, entity: Entity, offset: voltra_render::glam::Vec2) {
-        if let Some(Some((owner, matrix))) = self.matrices.get_mut(entity.index() as usize) {
-            if *owner == entity {
-                *matrix = Mat3::from_translation(offset) * *matrix;
-            }
-        }
-    }
-
-    /// `entity`'s world matrix, or [`Mat3::IDENTITY`] if it has none.
-    pub fn matrix(&self, entity: Entity) -> Mat3 {
-        self.get(entity).unwrap_or(Mat3::IDENTITY)
-    }
-
-    /// `entity`'s world matrix, or `None` if it was not composed.
-    pub fn get(&self, entity: Entity) -> Option<Mat3> {
-        match self.matrices.get(entity.index() as usize) {
-            Some(Some((owner, matrix))) if *owner == entity => Some(*matrix),
-            _ => None,
-        }
-    }
-
-    /// How many entities have a composed matrix.
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    /// Whether no entity has a composed matrix.
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
 /// `entity`'s own transform as a matrix, or the identity if it has none.
 ///
 /// An entity with children but no transform of its own is a grouping node, and
 /// the identity is exactly what "adds no frame of its own" means.
-fn local_matrix(world: &World, entity: Entity) -> Mat3 {
+pub(super) fn local_matrix(world: &World, entity: Entity) -> Mat3 {
     world
         .get::<Transform2D>(entity)
         .map(Transform2D::matrix)
@@ -334,67 +177,6 @@ mod tests {
         set_parent(&mut world, child, parent).expect("a plain reparent");
 
         assert!((position(&world, child) - Vec2::new(111.0, 0.0)).length() < 1e-5);
-    }
-
-    #[test]
-    fn the_cache_agrees_with_the_walk() {
-        let mut world = World::new();
-        let parent = spawn(
-            &mut world,
-            Transform2D::from_translation(Vec2::new(4.0, -1.0))
-                .with_rotation(0.7)
-                .with_scale(Vec2::new(2.0, 2.0)),
-        );
-        let child = spawn(&mut world, at(1.0, 3.0));
-        let grandchild = spawn(&mut world, at(0.0, 1.0));
-        set_parent(&mut world, child, parent).expect("a plain reparent");
-        set_parent(&mut world, grandchild, child).expect("a plain reparent");
-
-        let cache = WorldTransforms2D::from_world(&world);
-
-        for entity in [parent, child, grandchild] {
-            let walked = world_matrix_2d(&world, entity);
-            let cached = cache.matrix(entity);
-            assert!(
-                (walked - cached).abs().to_cols_array().iter().sum::<f32>() < 1e-4,
-                "{entity:?}: walk {walked:?} vs cache {cached:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_cache_holds_every_transform_and_nothing_else() {
-        let mut world = World::new();
-        spawn(&mut world, at(1.0, 0.0));
-        spawn(&mut world, at(2.0, 0.0));
-        let bare = world.spawn();
-        world.insert(bare, SceneId::new());
-
-        let cache = WorldTransforms2D::from_world(&world);
-
-        assert_eq!(cache.len(), 2);
-        assert_eq!(cache.get(bare), None);
-        assert_eq!(
-            cache.matrix(bare),
-            Mat3::IDENTITY,
-            "an entity with no transform adds no frame"
-        );
-    }
-
-    #[test]
-    fn the_cache_survives_a_cycle_in_the_data() {
-        // Only a hand-edited file makes this; the editor still has to open it.
-        let mut world = World::new();
-        let a = spawn(&mut world, at(1.0, 0.0));
-        let b = spawn(&mut world, at(0.0, 1.0));
-        let a_id = *world.get::<SceneId>(a).expect("spawned with one");
-        let b_id = *world.get::<SceneId>(b).expect("spawned with one");
-        world.insert(a, Parent::resolved(b_id, b));
-        world.insert(b, Parent::resolved(a_id, a));
-
-        let cache = WorldTransforms2D::from_world(&world);
-
-        assert_eq!(cache.len(), 2, "both are composed, neither hangs");
     }
 
     #[test]
