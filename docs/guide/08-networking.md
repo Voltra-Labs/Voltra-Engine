@@ -102,8 +102,10 @@ its x and z, and what decides is its full distance in space, so a bird
 high over a player's head is out of range even when it is right above
 them. A point sees only its own dimension: pass a `Vec3` for a 3D camera
 and a `Vec2` for a 2D one (`set_interest_points(peer, [camera.translation])`
-takes either, or both), and a 3D player you own watches from where it
-stands. A 2D point never sends a 3D entity, however close its x and y.
+takes either; for both at once, make each an `InterestPoint` with
+`.into()`), and a 3D player you own watches from where it stands. A 2D
+point never sends a 3D entity, however close its x and y. To stop
+watching the points you set, call `tick.net.clear_interest_points(peer)`.
 
 ## Your own player: prediction
 

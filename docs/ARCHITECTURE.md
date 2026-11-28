@@ -9234,8 +9234,9 @@ replication message.
   so a game's interest applies to a dedicated or listen server it
   starts).
 
-Pinned by `voltra-core/tests/interest.rs`: entering at the radius and
-leaving past it under 20 % loss, back again where the server has it, and
+Pinned by `voltra-core/tests/interest/` (split by concern in stage 134):
+entering at the radius and leaving past it under 20 % loss, back again
+where the server has it, and
 let go of once despawned while away; what a late joiner swept let go
 of at a scene change; a child the server moved off its culled parent
 left in the world; the edge held for four seconds with
@@ -10001,9 +10002,11 @@ watches". This is what was built.
   rotation is the quaternion a `Transform3D` stores, `Quat((x, y, z, w))`;
   a clip's load runs every key through `Value::usable` — a quaternion off
   unit length beyond glam's `is_normalized` tolerance is normalised (a
-  hand-typed `(0, 0.7, 0, 0.7)`), one of zero length dropped with the
-  non-finite keys, one within the tolerance kept to the bit — and
-  `Property::write` refuses a zero rotation and normalises a long one.
+  hand-typed `(0, 0.7, 0, 0.7)`), one whose squared length is not a
+  normal `f32` (zero, or a component near 10²⁰ — finite, but squared past
+  `f32`) dropped with the non-finite keys, one within the tolerance kept
+  to the bit — and `Property::write` refuses such a rotation and
+  normalises a long one.
   **Between two keys a rotation turns the short way** (slerp): a
   quaternion cannot say "a whole turn" the way the 2D angle's unwrapped
   number can, so a spin is keyed every quarter turn or so — glTF's
@@ -10023,8 +10026,16 @@ watches". This is what was built.
   local-space additive; weight 0 is the identity times `under`, exactly
   `under`, which is why composite does not renormalise (unit times unit is
   unit to rounding, and `Property::write` repairs anything beyond). What a
-  game turns under a layer goes under it the same way
-  (`underneath::moved`: `now · written⁻¹ · under`), so the stage-121
+  game turns under a layer goes under it as `under · written⁻¹ · now`
+  (`underneath::moved`): the layers' turn `d` is on the left (`written =
+  d · under`), so what is under them is `d⁻¹ · now` whatever the game did
+  — a yaw on the entity's own axes (`now = written · g`) stays a yaw under
+  a tilting layer, and with the layer holding, a value set outright is
+  shown exactly the next frame (an override below one settles on it as 2D
+  does, by halves at 0.5). The first version carried `now · written⁻¹` on
+  the left, as numbers are carried, and turned a local yaw about the
+  layer's axis: 53° off after ninety 1° steps under a 40° additive tilt,
+  29° under an override at 0.5 (pinned now to 10⁻⁴ rad). The stage-121
   no-creep rule holds for rotations. `Vec3` is linear everywhere, as
   `Vec2` is. The Timeline's key row edits a `Vec3` as three numbers and a
   quaternion as YXZ Euler degrees, read from the key each frame; record
@@ -10050,8 +10061,10 @@ watches". This is what was built.
   need a third enum. Reconciliation itself never named a transform.
 - **Interest.** `InterestPoint::{D2(Vec2), D3(Vec3)}`, `From` either
   vector: `set_interest_points(peer, points)` takes any iterator of
-  either (so the 0.4 `vec![Vec2]` call compiles unchanged), and
-  `interest_points` answers them. The server's `Place` holds an
+  either (so a 0.4 call with a non-empty `vec![Vec2]` compiles unchanged;
+  an empty `vec![]` names no type, and `clear_interest_points(peer)` is the
+  way to drop a peer's points), at most `MAX_INTEREST_POINTS` taken from
+  it, and `interest_points` answers them. The server's `Place` holds an
   `InterestPoint`: a `Transform2D`'s world translation, else a
   `Transform3D`'s (an entity carrying both — warned at load — by its 2D
   one), so a 3D entity is no longer "positionless, relevant to everyone".
@@ -10087,7 +10100,7 @@ watches". This is what was built.
   | `interest/grid/1k-entities-8-clients` | 19.4 µs | 19.4 µs |
   | `interest/grid-3d/1k-entities-8-clients` (new) | — | 20.5 µs |
   | `interest/grid/1k-entities-64-clients` | 57.6 µs | 60.2 µs |
-  | `interest/server-frame/1k-entities-8-clients` | 649 µs | 706 µs |
+  | `interest/server-frame/1k-entities-8-clients` | 704 µs | 737 µs (see below) |
 
   Every 2D suite within its threshold (`voltra-bench compare`: no
   regressions). `Value` holding a `Quat` grew from 24 to 32 bytes (glam's
@@ -10095,15 +10108,26 @@ watches". This is what was built.
   show. The 3D crowd costs a fifth more than the 2D one to play and a
   quarter more to fade — a slerp and a quaternion product where 2D adds
   numbers. The 3D grid costs what the 2D one does plus the height
-  difference. The server frame's +8.8 % (within its 15 %, and near the
-  7.5 % A/A spread stage 130 measured for its twin) is the second
-  replicated component a 2D entity is now asked for each snapshot — a
-  sparse-set miss per entity.
+  difference. **The server frame**, measured again after review, best of
+  ten interleaved runs a side over four builds (base `662bc66`; the stage
+  as first committed, `70f1788`; the stage as it stands; and that with
+  `Transform3D` not replicated): 704 µs, 769 µs (+9.2 %), 737 µs
+  (+4.6 %), 724 µs (+2.8 %). So of the first +9.2 %, about 4.4 points
+  were a `world.get::<Transform3D>` miss per entity per snapshot, which
+  `ComponentRegistry::any_replicated` now skips for a type no entity
+  has (a storage's length, once a snapshot); 1.8 points are what a
+  second replicated type still costs with none present (a second
+  component slot per entity to fill and every view to compare); and 2.8
+  points are the rest of the stage — places as `InterestPoint`s and the
+  grid's layers and heights, of which the grid alone measures +0.6–1.3 %.
+  All within the suite's 15 %; the A/A spread stage 130 measured for its
+  twin is 7.5 %, so the last two splits are near the noise.
 
 - **Tests**: `interpolate.rs` (170° to −170° through 180°, a quarter is
   5° to 10⁻³°, the ends bit for bit, `−q` no turn, equal ends exact);
   `value.rs` (a key segment the short way, a near-unit key normalised to
-  10⁻⁶ and its unit twin kept, zero and NaN dropped); `blend/tests.rs`
+  10⁻⁶ and its unit twin kept, zero, NaN, 10²⁰ and 10⁻³⁰ components
+  dropped); `blend/tests.rs`
   (a 0.75/0.25 mix 5° from the first to 10⁻³°, through `−q`; three
   thirds at 30° to 10⁻⁴ rad); `underneath.rs` (a 5° turn under a layer
   carried: 15° to 10⁻⁵); `property/tests.rs` (every property reads back
@@ -10112,19 +10136,26 @@ watches". This is what was built.
   bit for bit, a typed key played unit, a crossfade a quarter and half way
   and ending on the new clip's bits, an additive turn of 40° at half over
   30° at 50° with no creep over fifty frames and weight 0 the base to the
-  bit); `placement.rs` (5 m in 2D, 7 m in 3D, `None` across);
+  bit; a game's 1° local yaw ninety times under a 40° additive tilt ending
+  at tilt · yaw 90° to 10⁻⁴ rad, a rotation set outright under that layer
+  shown the next frame to 10⁻⁵, and under an override at 0.5 settled on
+  to 10⁻⁴ over forty frames); `placement.rs` (5 m in 2D, 7 m in 3D,
+  `None` across);
   `replicate/tests.rs` (`Transform3D` replicated, 40 bytes, bit-for-bit
-  round trip, half way slerped); `interest/grid/tests.rs` (8 m across in,
+  round trip, half way slerped; `any_replicated` false for a type no
+  entity has); `interest/grid/tests.rs` (8 m across in,
   12 m along Z out, 10.8 m up out then kept inside 11 m, a point 30 m up
   sees only the one overhead; a 2D point sees no 3D entity and a 3D point
   no 2D one, wide ones included); `voltra-core/tests/interpolation3d.rs`,
   `interest3d.rs` and `prediction3d.rs` (a 3D mover with a snapshot every
   third tick drawn moving every frame between 0.5 and 1.12 server steps,
-  on its path to 10⁻⁴ m and turned with
-  its position to 10⁻⁴ rad, at rest equal to the server's; entering at
+  on its path to 10⁻⁴ m and turned with its position to 10⁻⁴ rad, at rest
+  equal to the server's; entering at
   5 m, leaving at 12 m along Z, back at 9.5 m, leaving by height at
   12.4 m and back at 9.5 m; a 2D point sending the 2D entity and not a 3D
-  one at the same (x, y), a 3D point the reverse; a predicted 3D player
+  one at the same (x, y), a 3D point the reverse, and
+  `clear_interest_points` leaving nothing placed sent; a predicted 3D
+  player
   corrected with no error in the steady state and a 2 m push measured as
   2 m to 10⁻³).
 - **Not yet**: `Transform3D`'s wire form — smallest-three rotations,

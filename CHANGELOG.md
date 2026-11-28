@@ -32,7 +32,9 @@ stages land, for the 0.5 entry.
 - **Replication wire version 5** (stage 134): `Transform3D` replicates,
   interpolated, by default, so a peer of the version before is refused
   rather than leaving every 3D entity where it spawned.
-  `set_interest_points` takes `Vec2`s, `Vec3`s or `InterestPoint`s, and
+  `set_interest_points` takes any iterator of `Vec2`s, `Vec3`s or
+  `InterestPoint`s — a non-empty `vec![Vec2]` compiles as before, but an
+  empty `vec![]` no longer infers a type: call `clear_interest_points`.
   `interest_points` answers `InterestPoint`s; `InterestGrid::relevant`
   takes `InterestPoint`s.
 - **A component name registered twice is refused**: the first type keeps
