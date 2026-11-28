@@ -36,7 +36,8 @@ fn a_mirrored_square_and_cube_draw_their_fronts_and_test_depth() {
         let mirror = Vec3::new(flip, 1.0, 1.0);
         let instances = [
             // A red wall behind both, a green square left, a blue cube right
-            // with a yellow square in front of its middle.
+            // with a yellow square inside it: a cube drawing its back faces
+            // (its inside) would show the square through its front.
             scaled(
                 Vec3::new(0.0, 0.0, -8.0),
                 Quat::IDENTITY,
@@ -45,12 +46,7 @@ fn a_mirrored_square_and_cube_draw_their_fronts_and_test_depth() {
             ),
             scaled(left, Quat::IDENTITY, mirror, GREEN),
             scaled(right, turned, mirror * 0.8, BLUE),
-            scaled(
-                right + Vec3::new(0.0, 0.0, 0.9),
-                Quat::IDENTITY,
-                Vec3::splat(0.3),
-                YELLOW,
-            ),
+            scaled(right, Quat::IDENTITY, Vec3::splat(0.3), YELLOW),
         ];
         let mirrored = if flip < 0.0 {
             Winding::Clockwise
@@ -84,10 +80,8 @@ fn a_mirrored_square_and_cube_draw_their_fronts_and_test_depth() {
         let blue = pixels.iter().filter(|&&p| is_blue(p)).count();
         let yellow = pixels.iter().filter(|&&p| is_yellow(p)).count();
         let red = pixels.iter().filter(|&&p| is_red(p)).count();
-        assert!(
-            green > 100 && blue > 100 && yellow > 4,
-            "{flip}: {green} {blue} {yellow}"
-        );
+        assert!(green > 100 && blue > 100, "{flip}: {green} {blue}");
+        assert_eq!(yellow, 0, "{flip}: the square inside the cube shows");
         // The wall behind is hidden where they stand: depth holds.
         assert_eq!(green + blue + yellow + red, 64 * 64, "{flip}");
         counts.push((green, blue, yellow));
@@ -100,7 +94,7 @@ fn a_mirrored_square_and_cube_draw_their_fronts_and_test_depth() {
         (plain.1 as i32 - flipped.1 as i32).abs() <= 16,
         "{plain:?} {flipped:?}"
     );
-    assert_eq!(plain.2, flipped.2, "the yellow square over the cube");
+    assert_eq!(plain.2, flipped.2, "the yellow square inside the cube");
 }
 
 #[test]
