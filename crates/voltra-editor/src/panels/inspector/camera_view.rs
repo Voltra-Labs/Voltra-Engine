@@ -1,46 +1,36 @@
-//! Where a camera draws: its viewport, pixel-perfect snapping, whether it
-//! turns with its parent, and a render texture in place of the screen.
+//! Where a camera draws, 2D or 3D: its viewport, a render texture in
+//! place of the screen, and for a 2D one pixel-perfect snapping and
+//! whether it turns with its parent.
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_ecs::{Entity, World};
-use voltra_scene::{Camera2D, CameraTarget, Viewport};
+use voltra_scene::{Camera2D, Camera3D, CameraTarget, Viewport};
 
 use super::active;
 use super::path_field::{self, PathEdit};
 
 pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'static str> {
     let mut claim = None;
-    if let Some(camera) = world.get_mut::<Camera2D>(entity) {
+    let viewport = match world.get_mut::<Camera2D>(entity) {
+        Some(camera) => Some(&mut camera.viewport),
+        None => world
+            .get_mut::<Camera3D>(entity)
+            .map(|camera| &mut camera.viewport),
+    };
+    if let Some(viewport) = viewport {
         ui.label(RichText::new("Draws into").strong())
-            .on_hover_text("the part of the screen, or a render texture, this camera draws");
+            .on_hover_text(
+                "the part of the screen, or a render texture, this camera draws; cameras draw \
+             in priority order, 3D before 2D at a tie, a later one over an earlier",
+            );
         egui::Grid::new("camera_view")
             .num_columns(2)
+            .show(ui, |ui| claim = viewport_rows(ui, viewport));
+    }
+    if let Some(camera) = world.get_mut::<Camera2D>(entity) {
+        egui::Grid::new("camera_view_2d")
+            .num_columns(2)
             .show(ui, |ui| {
-                ui.label("viewport").on_hover_text(
-                    "x, y, width, height as fractions of the screen, from its top-left",
-                );
-                ui.horizontal(|ui| {
-                    let v = &mut camera.viewport;
-                    for value in [&mut v.x, &mut v.y, &mut v.width, &mut v.height] {
-                        let drag = DragValue::new(value).speed(0.005).range(0.0..=1.0);
-                        claim = claim.or(active(&ui.add(drag), "Set camera viewport"));
-                    }
-                });
-                ui.end_row();
-                ui.label("");
-                ui.horizontal(|ui| {
-                    for (label, preset) in [
-                        ("full", Viewport::FULL),
-                        ("left", Viewport::LEFT),
-                        ("right", Viewport::RIGHT),
-                    ] {
-                        if ui.small_button(label).clicked() {
-                            camera.viewport = preset;
-                            claim = Some("Set camera viewport");
-                        }
-                    }
-                });
-                ui.end_row();
                 ui.label("pixel perfect").on_hover_text(
                     "snap the view to whole pixels: pair with nearest filtering; off while the view is turned",
                 );
@@ -76,5 +66,35 @@ pub(super) fn show(ui: &mut Ui, world: &mut World, entity: Entity) -> Option<&'s
         }
         None => {}
     }
+    claim
+}
+
+/// The viewport's four fractions and the presets, as grid rows.
+fn viewport_rows(ui: &mut Ui, viewport: &mut Viewport) -> Option<&'static str> {
+    let mut claim = None;
+    ui.label("viewport")
+        .on_hover_text("x, y, width, height as fractions of the screen, from its top-left");
+    ui.horizontal(|ui| {
+        let v = &mut *viewport;
+        for value in [&mut v.x, &mut v.y, &mut v.width, &mut v.height] {
+            let drag = DragValue::new(value).speed(0.005).range(0.0..=1.0);
+            claim = claim.or(active(&ui.add(drag), "Set camera viewport"));
+        }
+    });
+    ui.end_row();
+    ui.label("");
+    ui.horizontal(|ui| {
+        for (label, preset) in [
+            ("full", Viewport::FULL),
+            ("left", Viewport::LEFT),
+            ("right", Viewport::RIGHT),
+        ] {
+            if ui.small_button(label).clicked() {
+                *viewport = preset;
+                claim = Some("Set camera viewport");
+            }
+        }
+    });
+    ui.end_row();
     claim
 }

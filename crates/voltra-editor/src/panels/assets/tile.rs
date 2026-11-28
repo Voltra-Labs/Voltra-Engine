@@ -71,6 +71,7 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
         EntryKind::InputMap => settings_tile(ui, rect, "INPUT"),
         EntryKind::SortingLayers => settings_tile(ui, rect, "LAYERS"),
         EntryKind::BusLayout => settings_tile(ui, rect, "BUSES"),
+        EntryKind::RenderSettings => settings_tile(ui, rect, "RENDER"),
         // Dragged onto an animation player's clip field.
         EntryKind::Animation => badge_tile(
             ui,

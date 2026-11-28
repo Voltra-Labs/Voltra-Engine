@@ -51,10 +51,11 @@ pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             // target, because none of those exist in a running game. Everything
             // below this is the editor looking at the scene instead.
             if editor.view.is_game() {
-                // A lone 3D camera draws the game view through the depth
-                // pass, from the next frame; otherwise the 2D camera frames it.
-                let through_3d = frame.show_game_camera_3d();
-                if !through_3d && !editor.view.show_game_camera(frame.world, frame.camera) {
+                // With a 3D camera the game view is the game's whole frame,
+                // both dimensions composited, from the next frame; otherwise
+                // the 2D camera frames it.
+                let whole = frame.show_game_frame();
+                if !whole && !editor.view.show_game_camera(frame.world, frame.camera) {
                     no_camera(ui, &scene);
                 }
                 return;

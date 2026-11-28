@@ -35,6 +35,7 @@ impl KindTerm {
             "input" => EntryKind::InputMap,
             "layers" | "sorting" => EntryKind::SortingLayers,
             "buses" | "bus" => EntryKind::BusLayout,
+            "render" => EntryKind::RenderSettings,
             "animation" | "anim" => EntryKind::Animation,
             "animator" => EntryKind::Animator,
             "material" => EntryKind::Material,

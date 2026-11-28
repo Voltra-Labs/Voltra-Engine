@@ -28,6 +28,7 @@ mod parallax;
 mod partial;
 mod particles;
 mod path_field;
+mod post_fields;
 mod prefab;
 mod replicated;
 mod sections;

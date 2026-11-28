@@ -1,21 +1,24 @@
-//! The 3D camera: how it projects, and which one wins.
+//! The 3D camera: how it projects, its place in the frame's order, and
+//! how its light becomes its picture.
 
 use voltra_core::egui::{self, Color32, DragValue, RichText, Ui};
+use voltra_render::render3d::Tonemap;
 use voltra_scene::{Camera3D, CameraClear, Projection3D};
 
-use super::active;
+use super::{active, post_fields};
 
 /// The kinds of projection, as the dropdown names them.
 const KINDS: [&str; 2] = ["Perspective", "Orthographic"];
 
-/// The camera's projection, priority, active flag and clear colour.
+/// The camera's projection, priority, active flag, clear colour, tone
+/// curve and grade.
 ///
 /// Switching the kind keeps the near plane and starts the other kind's
 /// own fields at their defaults. A projection that cannot be drawn as
 /// written says why under the fields, in the words the log uses.
 pub(super) fn show(ui: &mut Ui, camera: &mut Camera3D) -> Option<&'static str> {
     ui.label(RichText::new(Camera3D::NAME).strong())
-        .on_hover_text("looks down the entity's −Z; the highest active camera draws the frame");
+        .on_hover_text("looks down the entity's −Z; every active camera draws, by priority");
 
     let mut claim = None;
     let kind = match camera.projection {
@@ -80,8 +83,9 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera3D) -> Option<&'static str> {
             }
         }
 
-        ui.label("priority")
-            .on_hover_text("the highest active camera is the one the game renders through");
+        ui.label("priority").on_hover_text(
+            "cameras draw lowest first, a later one over an earlier; at a tie 3D draws before 2D",
+        );
         claim = claim.or(active(
             &ui.add(DragValue::new(&mut camera.priority)),
             "Set camera priority",
@@ -94,8 +98,10 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera3D) -> Option<&'static str> {
         }
         ui.end_row();
 
-        ui.label("clear")
-            .on_hover_text("what the picture starts as: the background, or a colour of its own");
+        ui.label("clear").on_hover_text(
+            "what the picture starts as: the background — transparent over a 2D camera that \
+             drew first — or a colour of its own, opaque",
+        );
         ui.horizontal(|ui| {
             let mut own = matches!(camera.clear, CameraClear::Color(_));
             if ui.checkbox(&mut own, "").changed() {
@@ -116,7 +122,24 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera3D) -> Option<&'static str> {
             }
         });
         ui.end_row();
+
+        ui.label("tone curve")
+            .on_hover_text("how light past 1 is brought into the screen's range; AgX by default");
+        egui::ComboBox::from_id_salt("camera3d_tonemap")
+            .selected_text(format!("{:?}", camera.tonemap))
+            .show_ui(ui, |ui| {
+                for curve in Tonemap::ALL {
+                    if ui
+                        .selectable_value(&mut camera.tonemap, curve, format!("{curve:?}"))
+                        .changed()
+                    {
+                        claim = claim.or(Some("Set tone curve"));
+                    }
+                }
+            });
+        ui.end_row();
     });
+    claim = claim.or(post_fields::show(ui, "camera3d_post", &mut camera.post));
     if let Some(problem) = camera.projection.problem() {
         ui.label(RichText::new(problem).color(Color32::from_rgb(230, 120, 80)));
     }

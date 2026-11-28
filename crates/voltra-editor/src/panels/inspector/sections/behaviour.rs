@@ -178,9 +178,14 @@ pub(in crate::panels::inspector) fn show(
         mixed::marker(ui, multi, &[voltra_scene::Camera3D::NAME]);
         claim = claim.or(camera3d::show(ui, camera));
     }
-    if frame.world.get::<Camera2D>(entity).is_some()
-        && multi.editable(&[Camera2D::NAME, voltra_scene::CameraTarget::NAME])
-    {
+    let camera = if frame.world.get::<Camera2D>(entity).is_some() {
+        Some(Camera2D::NAME)
+    } else if frame.world.get::<voltra_scene::Camera3D>(entity).is_some() {
+        Some(voltra_scene::Camera3D::NAME)
+    } else {
+        None
+    };
+    if camera.is_some_and(|name| multi.editable(&[name, voltra_scene::CameraTarget::NAME])) {
         mixed::marker(ui, multi, &[voltra_scene::CameraTarget::NAME]);
         claim = claim.or(camera_view::show(ui, frame.world, entity));
     }

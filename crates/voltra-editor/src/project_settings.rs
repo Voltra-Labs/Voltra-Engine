@@ -1,13 +1,13 @@
 //! The project's settings files: the input map, the sorting layers, the audio
-//! buses and the build manifest — read, checked and saved as the files they
-//! already are.
+//! buses, the render settings and the build manifest — read, checked and
+//! saved as the files they already are.
 
 use std::path::{Path, PathBuf};
 
 use voltra_core::input::ActionMap;
 use voltra_core::{
-    parse_bus_layout, parse_sorting_layers, DEFAULT_BUS_LAYOUT, DEFAULT_INPUT_MAP,
-    DEFAULT_SORTING_LAYERS,
+    parse_bus_layout, parse_render_settings, parse_sorting_layers, DEFAULT_BUS_LAYOUT,
+    DEFAULT_INPUT_MAP, DEFAULT_RENDER_SETTINGS, DEFAULT_SORTING_LAYERS,
 };
 
 /// One of the files the Project Settings window edits.
@@ -20,15 +20,18 @@ pub(crate) enum SettingsFile {
     /// `default.buses.ron`, under the asset root: each bus's volume and
     /// effects.
     Buses,
+    /// `default.render.ron`, under the asset root: 3D's MSAA.
+    Render,
     /// `build.ron`, beside the asset root.
     Build,
 }
 
 impl SettingsFile {
-    pub(crate) const ALL: [Self; 4] = [
+    pub(crate) const ALL: [Self; 5] = [
         Self::InputMap,
         Self::SortingLayers,
         Self::Buses,
+        Self::Render,
         Self::Build,
     ];
 
@@ -37,6 +40,7 @@ impl SettingsFile {
             Self::InputMap => "Input map",
             Self::SortingLayers => "Sorting layers",
             Self::Buses => "Audio buses",
+            Self::Render => "Render",
             Self::Build => "Build",
         }
     }
@@ -47,6 +51,7 @@ impl SettingsFile {
             "input" | "input_map" => Some(Self::InputMap),
             "layers" | "sorting_layers" => Some(Self::SortingLayers),
             "buses" | "audio" | "audio_buses" => Some(Self::Buses),
+            "render" | "rendering" => Some(Self::Render),
             "build" => Some(Self::Build),
             _ => None,
         }
@@ -58,6 +63,7 @@ impl SettingsFile {
             Self::InputMap => assets.join(DEFAULT_INPUT_MAP),
             Self::SortingLayers => assets.join(DEFAULT_SORTING_LAYERS),
             Self::Buses => assets.join(DEFAULT_BUS_LAYOUT),
+            Self::Render => assets.join(DEFAULT_RENDER_SETTINGS),
             Self::Build => assets
                 .parent()
                 .filter(|dir| !dir.as_os_str().is_empty())
@@ -74,6 +80,7 @@ impl SettingsFile {
                 .map_err(|e| e.to_string()),
             Self::SortingLayers => parse_sorting_layers(text).map(|_| ()),
             Self::Buses => parse_bus_layout(text).map(|_| ()),
+            Self::Render => parse_render_settings(text).map(|_| ()),
             Self::Build => voltra_player::Manifest::from_ron(text, path)
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
@@ -162,6 +169,20 @@ mod tests {
         assert!(error.contains("itself"), "{error}");
         assert_eq!(read(SettingsFile::Buses, &assets), Ok(text.to_owned()));
         assert_eq!(SettingsFile::named("buses"), Some(SettingsFile::Buses));
+    }
+
+    #[test]
+    fn render_settings_are_saved_and_an_msaa_no_device_draws_refused() {
+        let (_project, assets) = project();
+        let path = write(SettingsFile::Render, &assets, "(version: 1, msaa: 1)").expect("saves");
+        assert_eq!(path, assets.join(DEFAULT_RENDER_SETTINGS));
+        let error = write(SettingsFile::Render, &assets, "(version: 1, msaa: 3)").expect_err("3");
+        assert!(error.contains("msaa 3"), "{error}");
+        assert_eq!(
+            read(SettingsFile::Render, &assets),
+            Ok("(version: 1, msaa: 1)".to_owned())
+        );
+        assert_eq!(SettingsFile::named("render"), Some(SettingsFile::Render));
     }
 
     #[test]
