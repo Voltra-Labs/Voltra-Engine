@@ -16,7 +16,7 @@ pub(super) fn show(ui: &mut Ui, environment: &mut Environment3D) -> Option<&'sta
                 "a uniform sky's light: what lights a surface facing away from every light",
             );
             let popup = ui.auto_id_with("popup");
-            let response = ui.color_edit_button_rgb(&mut environment.ambient);
+            let response = crate::panels::colour_edit::rgb(ui, &mut environment.ambient);
             if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
                 claim = Some("Set ambient");
             }

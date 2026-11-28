@@ -17,7 +17,7 @@ pub(super) fn show(ui: &mut Ui, toggle: &mut UiToggle) -> Option<&'static str> {
         ui.label("on tint")
             .on_hover_text("multiplied into the button's colour while on");
         let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgba_unmultiplied(&mut toggle.on_tint);
+        let response = crate::panels::colour_edit::rgba(ui, &mut toggle.on_tint);
         if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
             claim = claim.or(Some("Edit toggle"));
         }

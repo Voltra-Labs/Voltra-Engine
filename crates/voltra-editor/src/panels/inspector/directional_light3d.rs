@@ -19,7 +19,7 @@ pub(super) fn show(ui: &mut Ui, light: &mut DirectionalLight3D) -> Option<&'stat
             ui.label("colour");
             // A popup, as every colour field is: see `sprite::show`.
             let popup = ui.auto_id_with("popup");
-            let response = ui.color_edit_button_rgb(&mut light.color);
+            let response = crate::panels::colour_edit::rgb(ui, &mut light.color);
             if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
                 claim = Some("Set light colour");
             }

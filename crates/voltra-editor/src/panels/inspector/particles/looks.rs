@@ -59,7 +59,7 @@ pub(super) fn show(
                 ui.label("colour start / end");
                 for colour in [&mut emitter.color_start, &mut emitter.color_end] {
                     let popup = ui.auto_id_with("popup");
-                    let response = ui.color_edit_button_rgba_unmultiplied(colour);
+                    let response = crate::panels::colour_edit::rgba(ui, colour);
                     if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
                         claim = claim.or(Some("Edit particles"));
                     }

@@ -41,7 +41,7 @@ pub(super) fn show(
         // See the sprite section: the popup's id has to be read before the
         // button, or a colour pick is one entry per frame.
         let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgba_unmultiplied(&mut map.color);
+        let response = crate::panels::colour_edit::rgba(ui, &mut map.color);
         if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
             claim = claim.or(Some("Set colour"));
         }

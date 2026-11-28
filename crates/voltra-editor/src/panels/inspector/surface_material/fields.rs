@@ -16,7 +16,7 @@ pub(super) fn show(ui: &mut Ui, standard: &mut StandardFile) {
         .show(ui, |ui| {
             heading(ui, "base");
             ui.label("colour");
-            ui.color_edit_button_rgba_unmultiplied(&mut standard.base_color);
+            crate::panels::colour_edit::rgba(ui, &mut standard.base_color);
             ui.end_row();
             texture(
                 ui,
@@ -63,7 +63,7 @@ pub(super) fn show(ui: &mut Ui, standard: &mut StandardFile) {
 
             heading(ui, "emissive");
             ui.label("colour");
-            ui.color_edit_button_rgb(&mut standard.emissive);
+            crate::panels::colour_edit::rgb(ui, &mut standard.emissive);
             ui.end_row();
             ui.label("strength")
                 .on_hover_text("in the light units' energy");

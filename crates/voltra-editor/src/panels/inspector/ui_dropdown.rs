@@ -47,7 +47,7 @@ pub(super) fn show(ui: &mut Ui, dropdown: &mut UiDropdown) -> Option<&'static st
             ] {
                 ui.label(label);
                 let popup = ui.auto_id_with(label);
-                let response = ui.color_edit_button_rgba_unmultiplied(color);
+                let response = crate::panels::colour_edit::rgba(ui, color);
                 if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
                     claim = claim.or(Some("Edit dropdown"));
                 }

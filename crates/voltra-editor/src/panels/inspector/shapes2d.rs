@@ -180,7 +180,7 @@ fn colour(ui: &mut Ui, color: &mut [f32; 4], label: &'static str) -> Option<&'st
     ui.horizontal(|ui| {
         ui.label("colour");
         let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgba_unmultiplied(color);
+        let response = crate::panels::colour_edit::rgba(ui, color);
         if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
             claim = Some(label);
         }

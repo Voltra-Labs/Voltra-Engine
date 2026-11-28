@@ -2,6 +2,7 @@
 
 pub mod assets;
 pub mod atlas_editor;
+pub(crate) mod colour_edit;
 pub mod console;
 pub mod hierarchy;
 pub mod inspector;

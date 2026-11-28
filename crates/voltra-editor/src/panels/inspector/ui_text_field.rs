@@ -41,7 +41,7 @@ pub(super) fn show(ui: &mut Ui, field: &mut UiTextField) -> Option<&'static str>
             ui.end_row();
             ui.label("selection");
             let popup = ui.auto_id_with("popup");
-            let response = ui.color_edit_button_rgba_unmultiplied(&mut field.selection_color);
+            let response = crate::panels::colour_edit::rgba(ui, &mut field.selection_color);
             if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
                 claim = claim.or(Some("Edit text field"));
             }

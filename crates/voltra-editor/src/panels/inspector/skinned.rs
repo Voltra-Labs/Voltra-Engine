@@ -92,7 +92,7 @@ pub(super) fn show(
             "Edit skinned sprite",
         ));
         let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgba_unmultiplied(&mut skinned.color);
+        let response = crate::panels::colour_edit::rgba(ui, &mut skinned.color);
         if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
             claim = claim.or(Some("Edit skinned sprite"));
         }

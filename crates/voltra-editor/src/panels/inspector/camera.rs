@@ -65,7 +65,7 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera2D) -> Option<&'static str> {
             if let Some(ambient) = &mut camera.ambient {
                 ui.label("ambient");
                 let popup = ui.auto_id_with("popup");
-                let response = ui.color_edit_button_rgb(ambient);
+                let response = crate::panels::colour_edit::rgb(ui, ambient);
                 if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
                     claim = claim.or(Some("Set lighting"));
                 }

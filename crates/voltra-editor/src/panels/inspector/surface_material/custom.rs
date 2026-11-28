@@ -102,7 +102,7 @@ fn uniform(ui: &mut Ui, value: &mut Uniform) {
         Uniform::Color((r, g, b, a)) => {
             let mut rgba = [*r, *g, *b, *a];
             if rgba.iter().all(|c| (0.0..=1.0).contains(c)) {
-                if ui.color_edit_button_rgba_unmultiplied(&mut rgba).changed() {
+                if crate::panels::colour_edit::rgba(ui, &mut rgba).changed() {
                     [*r, *g, *b, *a] = rgba;
                 }
             } else {

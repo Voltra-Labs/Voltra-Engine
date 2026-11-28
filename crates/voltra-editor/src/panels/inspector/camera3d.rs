@@ -115,7 +115,7 @@ pub(super) fn show(ui: &mut Ui, camera: &mut Camera3D) -> Option<&'static str> {
             if let CameraClear::Color(colour) = &mut camera.clear {
                 // A popup, as every colour field is: see `sprite::show`.
                 let popup = ui.auto_id_with("popup");
-                let response = ui.color_edit_button_rgba_unmultiplied(colour);
+                let response = crate::panels::colour_edit::rgba(ui, colour);
                 if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
                     claim = claim.or(Some("Set camera clear"));
                 }

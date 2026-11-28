@@ -32,7 +32,7 @@ pub(super) fn show(ui: &mut Ui, id: &str, post: &mut PostProcess) -> Option<&'st
         ui.label("tint");
         // A popup, as every colour field is: see `sprite::show`.
         let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgb(&mut post.tint);
+        let response = crate::panels::colour_edit::rgb(ui, &mut post.tint);
         if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
             claim = claim.or(Some("Set post-processing"));
         }

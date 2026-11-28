@@ -90,7 +90,7 @@ fn field(ui: &mut Ui, value: &mut Uniform) -> Option<&'static str> {
         Uniform::Color((r, g, b, a)) => {
             let mut rgba = [*r, *g, *b, *a];
             let popup = ui.auto_id_with("popup");
-            let response = ui.color_edit_button_rgba_unmultiplied(&mut rgba);
+            let response = crate::panels::colour_edit::rgba(ui, &mut rgba);
             [*r, *g, *b, *a] = rgba;
             (egui::Popup::is_id_open(ui.ctx(), popup) || response.changed()).then_some(LABEL)
         }

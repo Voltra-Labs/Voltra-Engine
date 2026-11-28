@@ -41,7 +41,7 @@ pub(super) fn show(
         // not advance the counter, so reading it here gives the same id the
         // widget will derive a line later.
         let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgba_unmultiplied(&mut sprite.color);
+        let response = crate::panels::colour_edit::rgba(ui, &mut sprite.color);
         if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
             claim = claim.or(Some("Set colour"));
         }

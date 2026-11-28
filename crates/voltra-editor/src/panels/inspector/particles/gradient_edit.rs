@@ -120,7 +120,7 @@ pub(super) fn show(ui: &mut Ui, salt: &str, gradient: &mut Gradient) -> Option<&
                 .add(DragValue::new(&mut key.t).speed(0.01).range(0.0..=1.0))
                 .changed();
             let popup = ui.auto_id_with("popup");
-            let response = ui.color_edit_button_rgba_unmultiplied(&mut key.color);
+            let response = crate::panels::colour_edit::rgba(ui, &mut key.color);
             // Open is an edit in progress, as a held drag is: one entry
             // however long the picker stays up.
             changed |= egui::Popup::is_id_open(ui.ctx(), popup) || response.changed();

@@ -136,7 +136,7 @@ pub(super) fn value_ui(ui: &mut Ui, property: Property, value: &mut Value) -> bo
             }
             changed
         }
-        Value::Color(c) => ui.color_edit_button_rgba_unmultiplied(c).changed(),
+        Value::Color(c) => crate::panels::colour_edit::rgba(ui, c).changed(),
         Value::Int(i) => ui
             .add(DragValue::new(i).range(0..=i64::from(u32::MAX)))
             .changed(),

@@ -68,7 +68,7 @@ pub(super) fn show(
         // A popup, as the sprite's colour is: see `sprite::show` for why the
         // id is read before the button.
         let popup = ui.auto_id_with("popup");
-        let response = ui.color_edit_button_rgba_unmultiplied(&mut text.color);
+        let response = crate::panels::colour_edit::rgba(ui, &mut text.color);
         if egui::Popup::is_id_open(ui.ctx(), popup) || response.changed() {
             claim = claim.or(Some("Set text colour"));
         }
