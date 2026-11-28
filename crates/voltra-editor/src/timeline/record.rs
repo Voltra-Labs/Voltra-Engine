@@ -160,6 +160,10 @@ fn changed(was: Value, now: Value) -> bool {
     match (was, now) {
         (Value::Float(a), Value::Float(b)) => !near(a, b),
         (Value::Vec2(a), Value::Vec2(b)) => !(near(a.x, b.x) && near(a.y, b.y)),
+        (Value::Vec3(a), Value::Vec3(b)) => !(near(a.x, b.x) && near(a.y, b.y) && near(a.z, b.z)),
+        // By the turn between them (the sine of half its angle), so q and
+        // -q are one rotation and a turn of 2e-5 rad is a move.
+        (Value::Quat(a), Value::Quat(b)) => (a * b.conjugate()).xyz().length() > 1e-5,
         (Value::Color(a), Value::Color(b)) => !a.iter().zip(b).all(|(a, b)| near(*a, b)),
         (a, b) => a != b,
     }

@@ -9,13 +9,14 @@
 
 use std::borrow::Cow;
 
-use voltra_render::glam::Vec2;
+use voltra_render::glam::{Quat, Vec2, Vec3};
 
 use super::blend::{mix, Mixing};
 use super::layer::LayerBlend;
 use super::pose::{Pose, Sample};
 use super::property::Property;
 use super::value::Value;
+use crate::Interpolate;
 
 /// `layer` over `below`, at `weight`, as `blend` says.
 ///
@@ -87,7 +88,10 @@ fn key<'s>(sample: &'s Sample<'_>) -> (&'s str, Property) {
 /// exactly `under` at `0` and exactly `value` at `1`, continuous between.
 /// **Additive** is `under + w * value`, `value` being a change (a delta from
 /// the layer's reference, see [`subtract`]); a discrete property overrides,
-/// since a frame has no sum. Values of two kinds answer `under`.
+/// since a frame has no sum. A 3D rotation adds by composing: the change
+/// turned by `w` of its way from no turn (`slerp` from the identity), then
+/// applied over `under` — `change^w · under`, Unreal's local-space additive.
+/// Values of two kinds answer `under`.
 pub fn over(
     property: Property,
     under: Value,
@@ -110,6 +114,12 @@ pub fn over(
         (Value::Color(a), Value::Color(d)) => {
             Value::Color(std::array::from_fn(|i| a[i] + d[i] * w))
         }
+        (Value::Vec3(a), Value::Vec3(d)) => Value::Vec3(a + d * w),
+        (Value::Quat(a), Value::Quat(d)) => {
+            // Unit times unit is unit to rounding; normalising would cost
+            // `w = 0` its exactness (no layer, to the bit).
+            Value::Quat(Quat::IDENTITY.interpolate(&d, w) * a)
+        }
         (Value::Int(_), Value::Int(_)) => replace(),
         _ => under,
     }
@@ -122,6 +132,8 @@ pub fn over(
 ///
 /// An angle is subtracted as numbers, not the short way: an additive clip
 /// keyed from `0` to `2π` adds a whole turn, as the clip itself would turn.
+/// A 3D rotation's change is the turn from the reference to it, `value ·
+/// reference⁻¹`, which [`over`] applies on the left.
 pub fn subtract(pose: &mut Pose<'_>, reference: &Pose<'_>) {
     let mut from = reference.samples().iter().peekable();
     for sample in pose.samples_mut() {
@@ -138,6 +150,8 @@ pub fn subtract(pose: &mut Pose<'_>, reference: &Pose<'_>) {
             (Value::Color(a), Value::Color(b)) => {
                 Value::Color(std::array::from_fn(|i| a[i] - b[i]))
             }
+            (Value::Vec3(a), Value::Vec3(b)) => Value::Vec3(a - b),
+            (Value::Quat(a), Value::Quat(b)) => Value::Quat(a * b.conjugate()),
             (value, _) => value,
         };
     }
@@ -178,6 +192,8 @@ fn zero(property: Property) -> Option<Value> {
         super::ValueKind::Float => Some(Value::Float(0.0)),
         super::ValueKind::Vec2 => Some(Value::Vec2(Vec2::ZERO)),
         super::ValueKind::Color => Some(Value::Color([0.0; 4])),
+        super::ValueKind::Vec3 => Some(Value::Vec3(Vec3::ZERO)),
+        super::ValueKind::Quat => Some(Value::Quat(Quat::IDENTITY)),
         super::ValueKind::Int => None,
     }
 }

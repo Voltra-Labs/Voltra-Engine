@@ -3,6 +3,13 @@
 use super::*;
 use voltra_render::glam::Vec2;
 
+/// The angle between two rotations in radians, well conditioned near zero
+/// (glam's `angle_between` is an `acos` of a dot product, and off by 10⁻³
+/// there in `f32`).
+fn apart(a: voltra_render::glam::Quat, b: voltra_render::glam::Quat) -> f32 {
+    2.0 * (a * b.conjugate()).xyz().length().min(1.0).asin()
+}
+
 fn pose(entries: &[(&'static str, Property, Value)]) -> Pose<'static> {
     let mut pose = Pose::new();
     for &(target, property, value) in entries {
@@ -168,4 +175,56 @@ fn many_inputs_weigh_in_and_bad_weights_count_as_none() {
     assert!(none.is_empty(), "weighing nothing is absent");
     assert!(blend(&[]).is_empty());
     assert_eq!(mix(Property::Rotation2D, &[(Value::Int(1), 1.0)]), None);
+}
+
+#[test]
+fn a_3d_rotation_mixes_by_slerp_the_short_way_and_a_position_linearly() {
+    use voltra_render::glam::{Quat, Vec3};
+    let a = Quat::from_rotation_y(170f32.to_radians());
+    // -q: the same rotation as -170° about Y, the other sign — the short
+    // way is still 20° through 180°.
+    let b = -Quat::from_rotation_y(-170f32.to_radians());
+    let out = pose(&[
+        ("", Property::Rotation3D, Value::Quat(a)),
+        ("", Property::Translation3D, Value::Vec3(Vec3::ZERO)),
+    ]);
+    let into = pose(&[
+        ("", Property::Rotation3D, Value::Quat(b)),
+        (
+            "",
+            Property::Translation3D,
+            Value::Vec3(Vec3::new(2.0, 4.0, 6.0)),
+        ),
+    ]);
+    let mixed = blend(&[(&out, 0.75), (&into, 0.25)]);
+    let Some(Value::Quat(q)) = mixed.get("", Property::Rotation3D) else {
+        panic!("a rotation");
+    };
+    let from_a = apart(q, a).to_degrees();
+    assert!((from_a - 5.0).abs() < 1e-3, "a quarter of 20°: {from_a}°");
+    assert!((apart(q, b).to_degrees() - 15.0).abs() < 1e-3);
+    assert_eq!(
+        mixed.get("", Property::Translation3D),
+        Some(Value::Vec3(Vec3::new(0.5, 1.0, 1.5)))
+    );
+    // One input alone is its own value to the bit.
+    let alone = blend(&[(&out, 0.3)]);
+    assert_eq!(alone.get("", Property::Rotation3D), Some(Value::Quat(a)));
+
+    // Three: equal thirds of 0°, 30° and 60° about X end at 30°.
+    let x = |deg: f32| {
+        pose(&[(
+            "",
+            Property::Rotation3D,
+            Value::Quat(Quat::from_rotation_x(deg.to_radians())),
+        )])
+    };
+    let (p0, p30, p60) = (x(0.0), x(30.0), x(60.0));
+    let three = blend(&[(&p0, 1.0), (&p30, 1.0), (&p60, 1.0)]);
+    let Some(Value::Quat(q)) = three.get("", Property::Rotation3D) else {
+        panic!("a rotation");
+    };
+    let off = apart(q, Quat::from_rotation_x(30f32.to_radians()));
+    assert!(off < 1e-4, "{off} rad from 30°");
+    assert!((q.length() - 1.0).abs() < 1e-5);
 }

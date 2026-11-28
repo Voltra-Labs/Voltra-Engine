@@ -4,9 +4,12 @@
 use std::borrow::Cow;
 use std::f32::consts::{PI, TAU};
 
+use voltra_render::glam::{Quat, Vec2, Vec3};
+
 use super::pose::{Pose, Sample};
 use super::property::Property;
 use super::value::Value;
+use crate::Interpolate;
 
 /// How a property's values mix.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,6 +20,9 @@ pub enum Mixing {
     /// An angle in radians, the short way round: `350°` and `10°` mix
     /// through `0°`, not through `180°`.
     Angle,
+    /// A 3D rotation, the short way round: `slerp`, and for more than two
+    /// inputs each one slerped in by its share of the weight so far.
+    Quaternion,
     /// No value between two: the heaviest input's — a frame, a switch.
     Discrete,
 }
@@ -113,7 +119,10 @@ pub fn blend_into<'a>(inputs: &[(&Pose<'a>, f32)], out: &mut Pose<'a>) {
 /// mixed the short way from the *first* part, a fixed side whatever the
 /// weights, so two angles half a turn apart sweep one way through the
 /// whole fade rather than flipping at half way; one part alone is its own
-/// value exactly.
+/// value exactly. A 3D rotation is likewise mixed from the first part:
+/// each further one slerped in by its share of the weight met so far —
+/// exactly `slerp` for two, and for more an order-dependent but continuous
+/// mix (Unity's and Unreal's blend trees accumulate the same way).
 pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
     let kind = property.kind();
     let fits = |&&(v, w): &&(Value, f32)| v.kind() == kind && w.is_finite() && w > 0.0;
@@ -138,6 +147,20 @@ pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
     let heaviest = heaviest.0;
     Some(match (property.mixing(), heaviest, first.0) {
         (Mixing::Discrete, ..) | (_, Value::Int(_), _) => heaviest,
+        (_, Value::Quat(_), _) => {
+            let (mut turned, mut met): (Option<Quat>, f32) = (None, 0.0);
+            for &(v, w) in valid() {
+                if let Value::Quat(q) = v {
+                    met += share(w);
+                    turned = Some(match turned {
+                        None => q,
+                        Some(t) if met > 0.0 => t.interpolate(&q, share(w) / met),
+                        Some(t) => t,
+                    });
+                }
+            }
+            Value::Quat(turned.unwrap_or(Quat::IDENTITY))
+        }
         (Mixing::Angle, Value::Float(top), Value::Float(from)) => {
             let turn: f32 = valid()
                 .map(|&(v, w)| match v {
@@ -161,7 +184,15 @@ pub fn mix(property: Property, parts: &[(Value, f32)]) -> Option<Value> {
             valid()
                 .map(|&(v, w)| match v {
                     Value::Vec2(a) => a * share(w),
-                    _ => voltra_render::glam::Vec2::ZERO,
+                    _ => Vec2::ZERO,
+                })
+                .sum(),
+        ),
+        (_, Value::Vec3(_), _) => Value::Vec3(
+            valid()
+                .map(|&(v, w)| match v {
+                    Value::Vec3(a) => a * share(w),
+                    _ => Vec3::ZERO,
                 })
                 .sum(),
         ),

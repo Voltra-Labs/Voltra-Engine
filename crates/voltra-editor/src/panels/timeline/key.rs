@@ -2,7 +2,7 @@
 
 use voltra_core::egui::{self, DragValue, RichText, Ui};
 use voltra_scene::keyframes::{Ease, Property, Track, Value};
-use voltra_scene::AnimationClip;
+use voltra_scene::{AnimationClip, Transform3D};
 
 use crate::timeline::Timeline;
 
@@ -82,7 +82,9 @@ pub(super) fn resort(track: &mut Track, index: usize, time: f32) -> usize {
 }
 
 /// A widget for one value, of its kind. Rotation is shown in degrees, as
-/// the transform's own row shows it.
+/// the transform's own row shows it — a 3D one as Euler angles in the
+/// inspector's YXZ order, read from the key each frame (no hint: the
+/// timeline's 3D authoring is stage 154's).
 pub(super) fn value_ui(ui: &mut Ui, property: Property, value: &mut Value) -> bool {
     match value {
         Value::Float(v) if property == Property::Rotation2D => {
@@ -104,6 +106,35 @@ pub(super) fn value_ui(ui: &mut Ui, property: Property, value: &mut Value) -> bo
                 .add(DragValue::new(&mut v.y).speed(0.01).prefix("y "))
                 .changed();
             x || y
+        }
+        Value::Vec3(v) => {
+            let mut changed = false;
+            for (axis, field) in ["x ", "y ", "z "]
+                .into_iter()
+                .zip([&mut v.x, &mut v.y, &mut v.z])
+            {
+                changed |= ui
+                    .add(DragValue::new(field).speed(0.01).prefix(axis))
+                    .changed();
+            }
+            changed
+        }
+        Value::Quat(q) => {
+            let mut degrees = Transform3D::default().with_rotation(*q).euler_degrees();
+            let mut changed = false;
+            for (axis, field) in
+                ["x ", "y ", "z "]
+                    .into_iter()
+                    .zip([&mut degrees.x, &mut degrees.y, &mut degrees.z])
+            {
+                changed |= ui
+                    .add(DragValue::new(field).speed(0.5).prefix(axis).suffix("°"))
+                    .changed();
+            }
+            if changed {
+                *q = Transform3D::from_euler_degrees(degrees).rotation;
+            }
+            changed
         }
         Value::Color(c) => ui.color_edit_button_rgba_unmultiplied(c).changed(),
         Value::Int(i) => ui

@@ -44,9 +44,10 @@ impl AnimationClip {
     }
 
     /// The clip as a sampler can trust it: every track's keys sorted by
-    /// time, and the keys that could not be sampled — a time or a value
-    /// that is not finite, a value of another kind than the property's —
-    /// dropped, with a warning naming `source`.
+    /// time, the keys that could not be sampled — a time or a value
+    /// that is not finite, a rotation of zero length, a value of another
+    /// kind than the property's — dropped, with a warning naming `source`,
+    /// and a rotation off unit length made unit ([`Value::usable`](super::value::Value::usable)).
     ///
     /// Dropped rather than refusing the file: an author mid-edit with one
     /// bad key should still see the rest move.
@@ -54,12 +55,16 @@ impl AnimationClip {
         for track in &mut self.tracks {
             let before = track.keys.len();
             let kind = track.property.kind();
-            track
-                .keys
-                .retain(|k| k.time.is_finite() && k.value.is_finite() && k.value.kind() == kind);
+            track.keys.retain_mut(|k| {
+                let usable = k.value.usable().filter(|v| v.kind() == kind);
+                if let Some(value) = usable {
+                    k.value = value;
+                }
+                k.time.is_finite() && usable.is_some()
+            });
             if track.keys.len() < before {
                 log::warn!(
-                    "{source}: dropped {} key(s) of {:?} on {:?} that were not a finite {kind:?}",
+                    "{source}: dropped {} key(s) of {:?} on {:?} that were not a usable {kind:?}",
                     before - track.keys.len(),
                     track.property,
                     track.target,

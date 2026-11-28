@@ -1,15 +1,17 @@
 //! Property animation: clips sampled, poses mixed, and players advanced —
-//! one clip, a crossfade, and several clips blended at once.
+//! one clip, a crossfade, and several clips blended at once; and the same
+//! crowd in 3D, its rotations slerped (stage 134).
 
 use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
-use voltra_render::glam::Vec2;
+use voltra_render::glam::{Quat, Vec2, Vec3};
 use voltra_scene::hierarchy::{resolve_parents, set_parent};
 use voltra_scene::keyframes::{
     self, Ease, Key, LayerBlend, PlayerLayer, Property, SyncedClips, Track, Value,
 };
 use voltra_scene::{
     AnimationClip, AnimationClips, AnimationPlayer, Name, SceneId, Sprite2D, Transform2D,
+    Transform3D,
 };
 
 use super::{Bench, Outcome};
@@ -36,12 +38,22 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/sample/{tracks}-tracks"),
             30.0,
             |config| {
-                let one = clip(0);
+                let one = clip(0, false);
                 measure(&config.steady(), 1, iter(|| one.sample(0.37))).into()
             },
         ),
         Bench::new(format!("keyframes/blend/3x{tracks}"), 30.0, |config| {
-            let clips: Vec<AnimationClip> = (0..CLIPS.len()).map(clip).collect();
+            let clips: Vec<AnimationClip> = (0..CLIPS.len()).map(|n| clip(n, false)).collect();
+            let poses: Vec<_> = clips.iter().map(|c| c.sample(0.37)).collect();
+            measure(
+                &config.steady(),
+                1,
+                iter(|| keyframes::blend(&[(&poses[0], 0.2), (&poses[1], 0.5), (&poses[2], 0.3)])),
+            )
+            .into()
+        }),
+        Bench::new(format!("keyframes/blend/3x{tracks}-3d"), 30.0, |config| {
+            let clips: Vec<AnimationClip> = (0..CLIPS.len()).map(|n| clip(n, true)).collect();
             let poses: Vec<_> = clips.iter().map(|c| c.sample(0.37)).collect();
             measure(
                 &config.steady(),
@@ -51,10 +63,46 @@ pub(super) fn benches() -> Vec<Bench> {
             .into()
         }),
         Bench::new(
+            format!("keyframes/advance/{PLAYERS}-playing-3d"),
+            30.0,
+            |config| {
+                let Some((_root, mut world, mut clips, _)) = crowd(true) else {
+                    return unwritable();
+                };
+                measure(
+                    config,
+                    1,
+                    iter(|| keyframes::advance(&mut world, &mut clips, FRAME)),
+                )
+                .into()
+            },
+        ),
+        Bench::new(
+            format!("keyframes/advance/{PLAYERS}-crossfading-3d"),
+            30.0,
+            |config| {
+                let Some((_root, mut world, mut clips, players)) = crowd(true) else {
+                    return unwritable();
+                };
+                keyframes::advance(&mut world, &mut clips, FRAME);
+                for &player in &players {
+                    if let Some(player) = world.get_mut::<AnimationPlayer>(player) {
+                        player.cross_fade(path(CLIPS[1]), 1e9);
+                    }
+                }
+                measure(
+                    config,
+                    1,
+                    iter(|| keyframes::advance(&mut world, &mut clips, FRAME)),
+                )
+                .into()
+            },
+        ),
+        Bench::new(
             format!("keyframes/advance/{PLAYERS}-playing"),
             30.0,
             |config| {
-                let Some((_root, mut world, mut clips, _)) = crowd() else {
+                let Some((_root, mut world, mut clips, _)) = crowd(false) else {
                     return unwritable();
                 };
                 measure(
@@ -69,7 +117,7 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/advance/{PLAYERS}-blending-{}", CLIPS.len()),
             30.0,
             |config| {
-                let Some((_root, mut world, mut clips, players)) = crowd() else {
+                let Some((_root, mut world, mut clips, players)) = crowd(false) else {
                     return unwritable();
                 };
                 for &player in &players {
@@ -92,7 +140,7 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/advance/{PLAYERS}-layered"),
             30.0,
             |config| {
-                let Some((_root, mut world, mut clips, players)) = crowd() else {
+                let Some((_root, mut world, mut clips, players)) = crowd(false) else {
                     return unwritable();
                 };
                 for &player in &players {
@@ -121,7 +169,7 @@ pub(super) fn benches() -> Vec<Bench> {
             format!("keyframes/advance/{PLAYERS}-crossfading"),
             30.0,
             |config| {
-                let Some((_root, mut world, mut clips, players)) = crowd() else {
+                let Some((_root, mut world, mut clips, players)) = crowd(false) else {
                     return unwritable();
                 };
                 keyframes::advance(&mut world, &mut clips, FRAME);
@@ -151,8 +199,9 @@ fn path(name: &str) -> AssetPath {
 }
 
 /// Clip `n` of the set: every target's translation, rotation and colour,
-/// keyed four times over a looping second, each clip its own values.
-fn clip(n: usize) -> AnimationClip {
+/// keyed four times over a looping second, each clip its own values — in
+/// 3D, its translation, rotation and scale.
+fn clip(n: usize, three_d: bool) -> AnimationClip {
     let step = n as f32 + 1.0;
     let mut tracks = Vec::new();
     for t in 0..TARGETS {
@@ -168,6 +217,23 @@ fn clip(n: usize) -> AnimationClip {
                 .collect();
             track
         };
+        if three_d {
+            tracks.push(keyed(Property::Translation3D, &|v| {
+                Value::Vec3(Vec3::new(v, 0.5 * v, -v))
+            }));
+            tracks.push(keyed(Property::Rotation3D, &|v| {
+                Value::Quat(Quat::from_euler(
+                    voltra_render::glam::EulerRot::YXZ,
+                    v * 0.1,
+                    v * 0.05,
+                    0.0,
+                ))
+            }));
+            tracks.push(keyed(Property::Scale3D, &|v| {
+                Value::Vec3(Vec3::splat(1.0 + v * 0.01))
+            }));
+            continue;
+        }
         tracks.push(keyed(Property::Translation2D, &|v| {
             Value::Vec2(Vec2::new(v, -v))
         }));
@@ -184,28 +250,37 @@ fn clip(n: usize) -> AnimationClip {
 }
 
 /// [`PLAYERS`] players, each with [`TARGETS`] named children carrying a
-/// transform and a sprite, playing the first clip; the store holds every
-/// clip of the set, written to a scratch root (removed when the answer's
-/// first element drops). Answers the players too.
-fn crowd() -> Option<(Scratch, World, AnimationClips, Vec<Entity>)> {
+/// transform and a sprite (a `Transform3D` alone in 3D), playing the first
+/// clip; the store holds every clip of the set, written to a scratch root
+/// (removed when the answer's first element drops). Answers the players
+/// too.
+fn crowd(three_d: bool) -> Option<(Scratch, World, AnimationClips, Vec<Entity>)> {
     let root = voltra_testkit::scratch_root();
     let clips = AnimationClips::new(&root);
     for (n, name) in CLIPS.iter().enumerate() {
-        clips.write(&path(name), &clip(n)).ok()?;
+        clips.write(&path(name), &clip(n, three_d)).ok()?;
     }
     let mut world = World::new();
     let mut players = Vec::with_capacity(PLAYERS);
     for _ in 0..PLAYERS {
         let player = world.spawn();
         world.insert(player, SceneId::new());
-        world.insert(player, Transform2D::default());
+        if three_d {
+            world.insert(player, Transform3D::default());
+        } else {
+            world.insert(player, Transform2D::default());
+        }
         world.insert(player, AnimationPlayer::new(path(CLIPS[0])));
         for t in 0..TARGETS {
             let part = world.spawn();
             world.insert(part, SceneId::new());
             world.insert(part, Name::new(format!("part{t}")));
-            world.insert(part, Transform2D::default());
-            world.insert(part, Sprite2D::default());
+            if three_d {
+                world.insert(part, Transform3D::default());
+            } else {
+                world.insert(part, Transform2D::default());
+                world.insert(part, Sprite2D::default());
+            }
             set_parent(&mut world, part, player).ok()?;
         }
         players.push(player);

@@ -5,7 +5,7 @@ use voltra_ecs::{Entity, World};
 
 use super::blend::Mixing;
 use super::value::{Value, ValueKind};
-use crate::{GlobalLight2D, PointLight2D, Sprite2D, Text, Tilemap, Transform2D};
+use crate::{GlobalLight2D, PointLight2D, Sprite2D, Text, Tilemap, Transform2D, Transform3D};
 
 /// One animatable field.
 ///
@@ -32,6 +32,14 @@ pub enum Property {
     /// `Transform2D::scale`.
     #[serde(alias = "Scale")]
     Scale2D,
+    /// `Transform3D::translation`, in the parent's space.
+    Translation3D,
+    /// `Transform3D::rotation`, a unit quaternion. Between two keys it turns
+    /// the short way round (less than half a turn per segment); in a mix,
+    /// by `slerp`; in an additive layer, by composing rotations.
+    Rotation3D,
+    /// `Transform3D::scale`.
+    Scale3D,
     /// `Sprite2D::color`.
     SpriteColor,
     /// `Sprite2D::frame`, an index into its atlas.
@@ -57,10 +65,13 @@ pub enum Property {
 
 impl Property {
     /// Every property, in the order an editor lists them.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 15] = [
         Self::Translation2D,
         Self::Rotation2D,
         Self::Scale2D,
+        Self::Translation3D,
+        Self::Rotation3D,
+        Self::Scale3D,
         Self::SpriteColor,
         Self::SpriteFrame,
         Self::TextColor,
@@ -86,11 +97,14 @@ impl Property {
             | Self::GlobalLightColor
             | Self::TilemapColor => ValueKind::Color,
             Self::SpriteFrame => ValueKind::Int,
+            Self::Translation3D | Self::Scale3D => ValueKind::Vec3,
+            Self::Rotation3D => ValueKind::Quat,
         }
     }
 
     /// How two clips' values of it mix in a blend: a rotation the short way
-    /// round, a frame by switching, everything else linearly.
+    /// round (a 2D angle as a number, a 3D one by `slerp`), a frame by
+    /// switching, everything else linearly.
     ///
     /// Not the same as how one clip moves between its own keys: a rotation
     /// keyed `0` then `2π` is a whole turn (see [`Rotation2D`](Self::Rotation2D)),
@@ -98,6 +112,7 @@ impl Property {
     pub fn mixing(self) -> Mixing {
         match (self, self.kind()) {
             (Self::Rotation2D, _) => Mixing::Angle,
+            (_, ValueKind::Quat) => Mixing::Quaternion,
             (_, ValueKind::Int) => Mixing::Discrete,
             _ => Mixing::Linear,
         }
@@ -109,6 +124,9 @@ impl Property {
             Self::Translation2D => "position",
             Self::Rotation2D => "rotation",
             Self::Scale2D => "scale",
+            Self::Translation3D => "3D position",
+            Self::Rotation3D => "3D rotation",
+            Self::Scale3D => "3D scale",
             Self::SpriteColor => "sprite colour",
             Self::SpriteFrame => "sprite frame",
             Self::TextColor => "text colour",
@@ -128,6 +146,9 @@ impl Property {
             Self::Translation2D => Value::Vec2(world.get::<Transform2D>(entity)?.translation),
             Self::Rotation2D => Value::Float(world.get::<Transform2D>(entity)?.rotation),
             Self::Scale2D => Value::Vec2(world.get::<Transform2D>(entity)?.scale),
+            Self::Translation3D => Value::Vec3(world.get::<Transform3D>(entity)?.translation),
+            Self::Rotation3D => Value::Quat(world.get::<Transform3D>(entity)?.rotation),
+            Self::Scale3D => Value::Vec3(world.get::<Transform3D>(entity)?.scale),
             Self::SpriteColor => Value::Color(world.get::<Sprite2D>(entity)?.color),
             Self::SpriteFrame => Value::Int(i64::from(world.get::<Sprite2D>(entity)?.frame)),
             Self::TextColor => Value::Color(world.get::<Text>(entity)?.color),
@@ -149,7 +170,8 @@ impl Property {
     ///
     /// Clamped where the field has a floor — a light's intensity and radius
     /// at zero, a frame at zero — since a key typed into a file is not
-    /// checked by an inspector's range.
+    /// checked by an inspector's range. A 3D rotation is written unit length
+    /// ([`Value::usable`]); one of zero length is refused, `false`.
     pub fn write(self, world: &mut World, entity: Entity, value: Value) -> bool {
         let written = match (self, value) {
             (Self::Translation2D, Value::Vec2(v)) => world
@@ -160,6 +182,18 @@ impl Property {
             }
             (Self::Scale2D, Value::Vec2(v)) => {
                 world.get_mut::<Transform2D>(entity).map(|t| t.scale = v)
+            }
+            (Self::Translation3D, Value::Vec3(v)) => world
+                .get_mut::<Transform3D>(entity)
+                .map(|t| t.translation = v),
+            (Self::Rotation3D, Value::Quat(q)) => match Value::Quat(q).usable() {
+                Some(Value::Quat(q)) => {
+                    world.get_mut::<Transform3D>(entity).map(|t| t.rotation = q)
+                }
+                _ => None,
+            },
+            (Self::Scale3D, Value::Vec3(v)) => {
+                world.get_mut::<Transform3D>(entity).map(|t| t.scale = v)
             }
             (Self::SpriteColor, Value::Color(c)) => {
                 world.get_mut::<Sprite2D>(entity).map(|s| s.color = c)
