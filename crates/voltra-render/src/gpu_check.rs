@@ -1,5 +1,6 @@
 //! A GPU object's validation, caught in an error scope rather than by the
-//! device's handler, and read without blocking.
+//! device's handler, and read without blocking: what the surface and
+//! sprite material banks build a game's shaders inside.
 //!
 //! naga's native check is not the browser's: naga 30 lifts WGSL's fragment
 //! uniformity rule (`DISABLE_UNIFORMITY_REQ_FOR_FRAGMENT_STAGE`), Tint does
@@ -21,7 +22,7 @@ type ScopeFuture = Pin<Box<dyn Future<Output = Option<String>> + Send>>;
 type ScopeFuture = Pin<Box<dyn Future<Output = Option<String>>>>;
 
 /// Where one object's validation stands.
-pub(super) enum GpuCheck {
+pub(crate) enum GpuCheck {
     /// The scope has not answered yet: not to be drawn with.
     Pending(ScopeFuture),
     /// Valid: drawn with.
@@ -46,7 +47,7 @@ impl GpuCheck {
     ///
     /// On WebGPU the scope is the browser's own (`webgpu_errors`): wgpu 30
     /// panics converting the error a WebGPU scope hands back.
-    pub(super) fn scoped<T>(device: &wgpu::Device, make: impl FnOnce() -> T) -> (T, Self) {
+    pub(crate) fn scoped<T>(device: &wgpu::Device, make: impl FnOnce() -> T) -> (T, Self) {
         #[cfg(target_arch = "wasm32")]
         if let Some(js) = device.as_webgpu() {
             crate::webgpu_errors::push_validation_scope(js.as_ref());
@@ -65,7 +66,7 @@ impl GpuCheck {
 
     /// Reads the scope's answer if it has come, without waiting. Answers
     /// the failure the first time it is seen.
-    pub(super) fn poll(&mut self) -> Option<&str> {
+    pub(crate) fn poll(&mut self) -> Option<&str> {
         let Self::Pending(future) = self else {
             return None;
         };
@@ -87,7 +88,7 @@ impl GpuCheck {
     }
 
     /// Whether it may be drawn with.
-    pub(super) fn passed(&self) -> bool {
+    pub(crate) fn passed(&self) -> bool {
         matches!(self, Self::Passed)
     }
 }

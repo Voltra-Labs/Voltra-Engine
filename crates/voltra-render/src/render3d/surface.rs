@@ -11,7 +11,6 @@
 
 mod bank;
 pub mod brdf;
-mod check;
 mod compose;
 mod custom;
 mod key;

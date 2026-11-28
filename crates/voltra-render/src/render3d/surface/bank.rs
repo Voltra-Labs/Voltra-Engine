@@ -4,11 +4,11 @@ use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Weak};
 
-use super::check::GpuCheck;
 use super::key::SurfaceKey;
 use super::layouts::SurfaceLayouts;
 use super::pipeline::build;
 use super::shader::SurfaceShader;
+use crate::gpu_check::GpuCheck;
 
 /// The surface pipelines into one colour format at one sample count, by
 /// [`SurfaceKey`]: made the first time a draw needs one.
