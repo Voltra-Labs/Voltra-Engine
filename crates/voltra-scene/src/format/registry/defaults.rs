@@ -25,12 +25,13 @@ impl ComponentRegistry {
             .register::<Transform2D>(Transform2D::NAME)
             .with_template()
             .replicated_interpolated();
-        // Not replicated yet: its interpolation and interest land with stage
-        // 134, its wire form with 156. A replicated 3D entity's transform
-        // stays where the client spawned it until then.
+        // The same for 3D: interpolated (translation and scale linearly, the
+        // rotation by slerp), and placed for interest at its ground-plane
+        // (x, z). Plain postcard, 40 bytes, until its own wire form (156).
         registry
             .register::<crate::Transform3D>(crate::Transform3D::NAME)
-            .with_template();
+            .with_template()
+            .replicated_interpolated();
         registry
             .register::<crate::Replicated>(crate::Replicated::NAME)
             .with_template();

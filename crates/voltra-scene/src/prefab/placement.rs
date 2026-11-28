@@ -71,6 +71,31 @@ impl Placement {
         Self::NAMES.contains(&name)
     }
 
+    /// What `entity` stands at, as a placement: its [`Transform2D`], else
+    /// its [`Transform3D`] (one carrying both, which a load warns about, by
+    /// its 2D one); [`AsAuthored`](Self::AsAuthored) with neither.
+    pub fn of(world: &World, entity: Entity) -> Self {
+        if let Some(at) = world.get::<Transform2D>(entity) {
+            Self::D2(*at)
+        } else if let Some(at) = world.get::<Transform3D>(entity) {
+            Self::D3(*at)
+        } else {
+            Self::AsAuthored
+        }
+    }
+
+    /// How far apart two placements' translations are, in their dimension
+    /// — what a prediction's correction moved its entity, either way it is
+    /// built. `None` across dimensions, or when either is
+    /// [`AsAuthored`](Self::AsAuthored): no distance has a meaning there.
+    pub fn distance(&self, other: &Self) -> Option<f32> {
+        match (self, other) {
+            (Self::D2(a), Self::D2(b)) => Some(a.translation.distance(b.translation)),
+            (Self::D3(a), Self::D3(b)) => Some(a.translation.distance(b.translation)),
+            _ => None,
+        }
+    }
+
     /// Whether placing by this moves nothing.
     pub fn is_identity(&self) -> bool {
         match self {
@@ -190,4 +215,33 @@ fn place_3d(at: &Transform3D, local: &Transform3D) -> Transform3D {
         };
     }
     Transform3D::from_matrix(at.matrix() * local.matrix())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_distance_is_measured_in_the_placements_own_dimension() {
+        let mut world = World::new();
+        let flat = world.spawn();
+        world.insert(flat, Transform2D::from_translation(Vec2::new(3.0, 4.0)));
+        let deep = world.spawn();
+        world.insert(
+            deep,
+            Transform3D::from_translation(Vec3::new(2.0, 3.0, 6.0)),
+        );
+        let bare = world.spawn();
+        let origin_2d = Placement::from(Transform2D::default());
+        let origin_3d = Placement::from(Transform3D::default());
+        assert_eq!(Placement::of(&world, flat).distance(&origin_2d), Some(5.0));
+        assert_eq!(Placement::of(&world, deep).distance(&origin_3d), Some(7.0));
+        assert_eq!(
+            Placement::of(&world, deep).distance(&origin_2d),
+            None,
+            "across"
+        );
+        assert_eq!(Placement::of(&world, bare), Placement::AsAuthored);
+        assert_eq!(Placement::AsAuthored.distance(&Placement::AsAuthored), None);
+    }
 }

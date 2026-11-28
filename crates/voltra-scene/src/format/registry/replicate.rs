@@ -143,7 +143,8 @@ where
 impl ComponentRegistry {
     /// Marks the registered type `T` as replicated: on an entity carrying
     /// [`Replicated`](crate::Replicated), the server sends its value to
-    /// every client when it changes. `Transform2D` is by default.
+    /// every client when it changes. `Transform2D` and `Transform3D` are by
+    /// default, both interpolated.
     ///
     /// Opt-in per type, as Unreal's `UPROPERTY(Replicated)` and Bevy
     /// replicon's `replicate::<C>()` are: most components (a sprite's
