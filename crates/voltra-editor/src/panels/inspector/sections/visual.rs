@@ -55,7 +55,7 @@ pub(in crate::panels::inspector) fn show(
             fields,
         ));
     }
-    claim = claim.or(super::visual3d::show(ui, frame, entity, multi));
+    claim = claim.or(super::visual3d::show(editor, ui, frame, entity, multi));
     let parent_rect = ui_parent_rect(ui, frame, entity);
     let stacked = hierarchy::parent_of(frame.world, entity)
         .is_some_and(|parent| frame.world.get::<UiStack>(parent).is_some());

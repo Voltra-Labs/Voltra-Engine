@@ -33,6 +33,7 @@ mod selection;
 mod shape_edit;
 mod snap;
 mod spawn;
+mod surface_doc;
 mod timeline;
 mod tool;
 mod undo;

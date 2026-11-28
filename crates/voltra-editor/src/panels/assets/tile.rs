@@ -7,6 +7,7 @@ use voltra_core::UiFrame;
 use crate::drag;
 use crate::editor::Editor;
 
+mod material;
 mod scene;
 
 /// Side of a tile's picture, in points.
@@ -89,14 +90,8 @@ pub(super) fn tile(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>, en
             ui.visuals().widgets.active.bg_fill,
         ),
         EntryKind::Scene => scene::tile(editor, ui, frame, entry, &response),
-        // Dragged onto a sprite's material field.
-        EntryKind::Material => badge_tile(
-            ui,
-            entry,
-            &response,
-            "MAT",
-            ui.visuals().widgets.hovered.bg_fill,
-        ),
+        // Dragged onto a sprite's or a mesh's material field.
+        EntryKind::Material => material::tile(ui, frame, entry, &response),
         // Listed, dimmed, and inert. Hiding it would read as a failed copy;
         // letting it be dragged would promise a loader that does not exist.
         EntryKind::Other => paint_block(ui, rect, ui.visuals().faint_bg_color),

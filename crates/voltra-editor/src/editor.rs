@@ -113,6 +113,8 @@ pub struct Editor {
     pub(crate) weight_paint: crate::weight_paint::WeightPaint,
     /// The Euler angles the inspector shows each 3D rotation as.
     pub(crate) euler_hints: crate::euler_hint::EulerHints,
+    /// The surface material file the inspector has open, if any.
+    pub(crate) surface_doc: Option<crate::surface_doc::SurfaceDoc>,
 }
 
 impl Editor {

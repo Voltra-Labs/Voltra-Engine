@@ -9,8 +9,10 @@ use voltra_assets::BuiltinMesh;
 use voltra_core::egui::Ui;
 use voltra_core::UiFrame;
 use voltra_ecs::Entity;
-use voltra_render::glam::Vec3;
-use voltra_scene::{Camera3D, MeshInstance3D, Name, SceneId, Transform3D};
+use voltra_render::glam::{Quat, Vec3};
+use voltra_scene::{
+    Camera3D, DirectionalLight3D, Environment3D, MeshInstance3D, Name, SceneId, Transform3D,
+};
 
 use crate::editor::Editor;
 use crate::spawn;
@@ -34,6 +36,24 @@ pub(super) fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
             if camera.clicked() {
                 spawn::record(editor, frame, "Create 3D camera", |frame| {
                     camera_3d(frame.world)
+                });
+                ui.close();
+            }
+            let light = ui
+                .button("Directional Light")
+                .on_hover_text("a DirectionalLight3D shining down from the upper right, ahead");
+            if light.clicked() {
+                spawn::record(editor, frame, "Create 3D light", |frame| {
+                    light_3d(frame.world)
+                });
+                ui.close();
+            }
+            let environment = ui
+                .button("Environment")
+                .on_hover_text("the world's Environment3D: its ambient light");
+            if environment.clicked() {
+                spawn::record(editor, frame, "Create environment", |frame| {
+                    environment_3d(frame.world)
                 });
                 ui.close();
             }
@@ -64,6 +84,25 @@ fn camera_3d(world: &mut voltra_ecs::World) -> Entity {
         Transform3D::from_translation(Vec3::new(0.0, 2.0, 5.0)).looking_at(Vec3::ZERO, Vec3::Y);
     let entity = named_3d(world, Camera3D::NAME, at);
     world.insert(entity, Camera3D::default());
+    entity
+}
+
+/// A sun 50° above the horizon, from over the right shoulder of a
+/// camera made here, 4 m up so it is found by the gizmo.
+fn light_3d(world: &mut voltra_ecs::World) -> Entity {
+    let at = Transform3D::from_translation(Vec3::new(0.0, 4.0, 0.0)).with_rotation(
+        Quat::from_rotation_y(35f32.to_radians()) * Quat::from_rotation_x(-50f32.to_radians()),
+    );
+    let entity = named_3d(world, DirectionalLight3D::NAME, at);
+    world.insert(entity, DirectionalLight3D::default());
+    entity
+}
+
+/// The world's environment, the default ambient; where it stands does not
+/// matter.
+fn environment_3d(world: &mut voltra_ecs::World) -> Entity {
+    let entity = named_3d(world, Environment3D::NAME, Transform3D::default());
+    world.insert(entity, Environment3D::default());
     entity
 }
 
@@ -120,6 +159,27 @@ mod tests {
         assert_eq!(
             hierarchy::set_parent(&mut world, flat, empty),
             Err(hierarchy::HierarchyError::MixedDimensions)
+        );
+    }
+
+    #[test]
+    fn a_created_light_shines_down_and_away_onto_what_a_created_camera_sees() {
+        let mut world = World::new();
+        let light = light_3d(&mut world);
+        environment_3d(&mut world);
+        let camera = camera_3d(&mut world);
+        let gathered = voltra_scene::lighting3d::gather(&world, camera);
+        let sun = gathered.lighting.directional.expect("lit");
+        assert_eq!(gathered.light, Some(light));
+        // Down, and away from a camera on +Z: what it sees is lit.
+        assert!(
+            sun.direction.y < -0.7 && sun.direction.z < 0.0,
+            "{}",
+            sun.direction
+        );
+        assert_eq!(
+            gathered.lighting.ambient,
+            [Environment3D::DEFAULT_AMBIENT; 3]
         );
     }
 

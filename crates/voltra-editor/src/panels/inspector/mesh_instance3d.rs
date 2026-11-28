@@ -1,14 +1,21 @@
-//! A 3D mesh: which one, and its colour.
+//! A 3D mesh: which one, its colour and its surface material.
 
-use voltra_assets::{BuiltinMesh, MeshPath};
+use std::path::Path;
+
+use voltra_assets::{AssetPath, BuiltinMesh, MeshPath};
 use voltra_core::egui::{self, RichText, Ui};
 use voltra_scene::MeshInstance3D;
 
 use super::path_field::{self, PathEdit};
 
-/// The mesh — a built-in one from the dropdown, or a file by path — and
-/// its colour.
-pub(super) fn show(ui: &mut Ui, instance: &mut MeshInstance3D) -> Option<&'static str> {
+/// The mesh — a built-in one from the dropdown, or a file by path — its
+/// colour, and its material: a `.material.ron` typed or dropped, or a new
+/// one written under `root` and named here.
+pub(super) fn show(
+    ui: &mut Ui,
+    instance: &mut MeshInstance3D,
+    root: &Path,
+) -> Option<&'static str> {
     ui.label(RichText::new(MeshInstance3D::NAME).strong())
         .on_hover_text("drawn at the entity's Transform3D; every copy of a mesh is one draw");
 
@@ -62,6 +69,54 @@ pub(super) fn show(ui: &mut Ui, instance: &mut MeshInstance3D) -> Option<&'stati
                 claim = claim.or(Some("Set colour"));
             }
             ui.end_row();
+
+            ui.label("material")
+                .on_hover_text("a surface .material.ron; none draws the default white standard");
+            let committed = instance
+                .material
+                .as_ref()
+                .map(|p| p.as_str().to_owned())
+                .unwrap_or_default();
+            match path_field::show(ui, "mesh_material", "materials/x.material.ron", &committed) {
+                Some(PathEdit::Set(path)) => {
+                    instance.material = Some(path);
+                    claim = Some("Set material");
+                }
+                Some(PathEdit::Cleared) if instance.material.is_some() => {
+                    instance.material = None;
+                    claim = Some("Clear material");
+                }
+                _ => {}
+            }
+            ui.end_row();
         });
+    if instance.material.is_none() && ui.small_button("New surface material").clicked() {
+        match create(root) {
+            Ok(path) => {
+                log::info!("wrote {}", path.as_str());
+                instance.material = Some(path);
+                claim = Some("Set material");
+            }
+            Err(e) => log::error!("a new surface material: {e}"),
+        }
+    }
     claim
+}
+
+/// Writes a default surface material at the first free
+/// `materials/surface[-N].material.ron` under `root`.
+fn create(root: &Path) -> Result<AssetPath, String> {
+    for n in 1..1000 {
+        let name = if n == 1 {
+            "materials/surface.material.ron".to_owned()
+        } else {
+            format!("materials/surface-{n}.material.ron")
+        };
+        let path = AssetPath::new(&name).map_err(|e| e.to_string())?;
+        if !root.join(path.as_str()).exists() {
+            crate::surface_doc::SurfaceDoc::create(root, &path)?;
+            return Ok(path);
+        }
+    }
+    Err("a thousand surface materials already; name one by hand".to_owned())
 }

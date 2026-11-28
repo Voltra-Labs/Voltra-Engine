@@ -1,0 +1,151 @@
+//! The surface material file the inspector has open: its `standard`
+//! block, edited in place and written back when an edit settles.
+//!
+//! **The file, not the entity.** A surface material is shared: every mesh
+//! naming it draws the edit, as Unity's material inspector and Godot's
+//! `StandardMaterial3D` resource do. So the edit is not the scene's — it is
+//! not in the scene's history, and it does not mark the scene unsaved —
+//! but written to the file when the pointer is let go and no popup is
+//! open, then the material reloaded so every mesh draws it that frame. The
+//! live preview draws the draft every frame, a drag included.
+
+use std::path::Path;
+
+use voltra_assets::{AssetPath, MaterialDomain, MaterialFile, Materials, StandardFile};
+
+/// An open surface material.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SurfaceDoc {
+    path: AssetPath,
+    /// As edited.
+    file: MaterialFile,
+    /// As last read or written.
+    saved: MaterialFile,
+    /// The store's revision of the material when the file was last read
+    /// or written: a different one, with nothing unsaved, means the file
+    /// changed on disk and is read again.
+    pub seen: Option<u64>,
+}
+
+impl SurfaceDoc {
+    /// Reads the material at `path` under `root`.
+    pub fn open(root: &Path, path: &AssetPath) -> Result<Self, String> {
+        let full = root.join(path.as_str());
+        let text =
+            std::fs::read_to_string(&full).map_err(|e| format!("{}: {e}", full.display()))?;
+        let file: MaterialFile =
+            ron::from_str(&text).map_err(|e| format!("{}: {e}", full.display()))?;
+        Ok(Self {
+            path: path.clone(),
+            saved: file.clone(),
+            file,
+            seen: None,
+        })
+    }
+
+    /// Writes a new surface material with the default standard block at
+    /// `path` under `root`, and opens it. Refuses to overwrite a file.
+    pub fn create(root: &Path, path: &AssetPath) -> Result<Self, String> {
+        let full = root.join(path.as_str());
+        if full.exists() {
+            return Err(format!("{} already exists", path.as_str()));
+        }
+        if let Some(folder) = full.parent() {
+            std::fs::create_dir_all(folder).map_err(|e| format!("{}: {e}", folder.display()))?;
+        }
+        let file = MaterialFile::surface(StandardFile::default());
+        write(&full, &file)?;
+        Self::open(root, path)
+    }
+
+    /// The file it edits.
+    pub fn path(&self) -> &AssetPath {
+        &self.path
+    }
+
+    /// What it draws on: a sprite material is shown, not edited, here.
+    pub fn domain(&self) -> MaterialDomain {
+        self.file.domain
+    }
+
+    /// The standard block, as edited.
+    pub fn standard(&self) -> &StandardFile {
+        &self.file.standard
+    }
+
+    /// The standard block, to edit.
+    pub fn standard_mut(&mut self) -> &mut StandardFile {
+        &mut self.file.standard
+    }
+
+    /// Whether it differs from the file.
+    pub fn is_unsaved(&self) -> bool {
+        self.file != self.saved
+    }
+
+    /// Writes the edit to the file unless `busy` (a drag, an open popup) or
+    /// nothing changed, then reloads it in `materials`. Answers whether it
+    /// wrote; an error is logged and kept for the next try.
+    pub fn settle(&mut self, root: &Path, materials: Option<&mut Materials>, busy: bool) -> bool {
+        if busy || !self.is_unsaved() {
+            return false;
+        }
+        let full = root.join(self.path.as_str());
+        if let Err(e) = write(&full, &self.file) {
+            log::error!("saving {}: {e}", self.path.as_str());
+            // Not retried every frame: the next edit tries again.
+            self.saved = self.file.clone();
+            return false;
+        }
+        self.saved = self.file.clone();
+        if let Some(materials) = materials {
+            materials.reload(&self.path);
+        }
+        true
+    }
+}
+
+fn write(full: &Path, file: &MaterialFile) -> Result<(), String> {
+    let text = file.to_ron().map_err(|e| e.to_string())?;
+    std::fs::write(full, text).map_err(|e| format!("{}: {e}", full.display()))
+}
+
+#[cfg(test)]
+mod tests {
+    use voltra_testkit::scratch_root;
+
+    use super::*;
+
+    #[test]
+    fn an_edit_is_written_once_settled_and_reloaded() {
+        let root = scratch_root();
+        let path = AssetPath::new("materials/new.material.ron").expect("a path");
+        let mut doc = SurfaceDoc::create(&root, &path).expect("created");
+        assert!(
+            SurfaceDoc::create(&root, &path).is_err(),
+            "never overwrites"
+        );
+        assert_eq!(doc.domain(), MaterialDomain::Surface);
+        let mut materials = Materials::new(root.path());
+        let handle = materials.load(&path);
+        doc.standard_mut().roughness = 0.9;
+        assert!(doc.is_unsaved());
+        assert!(
+            !doc.settle(&root, Some(&mut materials), true),
+            "not mid-drag"
+        );
+        assert!(doc.settle(&root, Some(&mut materials), false));
+        assert!(!doc.is_unsaved());
+        let reloaded = materials
+            .get(handle)
+            .and_then(|m| m.surface())
+            .expect("a surface");
+        assert_eq!(reloaded.standard.roughness, 0.9, "every mesh draws it now");
+        let again = SurfaceDoc::open(&root, &path).expect("read back");
+        assert_eq!(again.standard().roughness, 0.9);
+        assert!(
+            !doc.settle(&root, Some(&mut materials), false),
+            "nothing new"
+        );
+    }
+}
