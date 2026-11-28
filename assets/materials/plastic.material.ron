@@ -1,0 +1,9 @@
+// A smooth dielectric: blue plastic. scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color: (0.1, 0.25, 0.8, 1.0),
+        roughness: 0.2,
+    ),
+)

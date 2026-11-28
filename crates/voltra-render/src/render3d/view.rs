@@ -130,6 +130,13 @@ impl View3D {
         self.projection * self.view
     }
 
+    /// Whether it projects orthographically: every ray parallel, the eye
+    /// at no point. A perspective matrix leaves `w` for depth (its last
+    /// entry 0); an orthographic one keeps it 1.
+    pub fn is_orthographic(&self) -> bool {
+        self.projection.w_axis.w != 0.0
+    }
+
     /// The planes around what it sees.
     pub fn frustum(&self) -> Frustum {
         Frustum::from_view_projection(self.view_projection())

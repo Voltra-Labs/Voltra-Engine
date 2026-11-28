@@ -3,9 +3,12 @@
 
 #![allow(dead_code)]
 
+pub mod surface;
+
 use voltra_render::glam::{Affine3A, Quat, Vec3};
 use voltra_render::render3d::{
-    Instance3D, Look3D, Mesh3D, MeshData3D, MeshDraw3D, Scene3D, Vertex3D, View3D, Winding,
+    Instance3D, Lighting3D, Look3D, Mesh3D, MeshData3D, MeshDraw3D, Scene3D, StandardSurface,
+    SurfaceMaterial3D, SurfaceTextures, Vertex3D, View3D, Winding,
 };
 use voltra_render::{read_rgba8, wgpu, Filter, Layer, RenderTarget, Renderer};
 
@@ -101,10 +104,12 @@ impl Gpu {
         instances: &[Instance3D],
         draws: &[(u32, u32)],
     ) -> Vec<[u8; 4]> {
+        let unlit = unlit(&mut self.renderer);
         let draws: Vec<MeshDraw3D<'_>> = draws
             .iter()
             .map(|&(start, end)| MeshDraw3D {
                 mesh,
+                material: &unlit,
                 instances: start..end,
                 winding: Winding::CounterClockwise,
             })
@@ -126,6 +131,7 @@ impl Gpu {
             instances,
             draws,
             clear: CLEAR,
+            lighting: Lighting3D::DARK,
         };
         self.renderer
             .render_3d_into(&target, &scene, &Look3D::NEUTRAL, Layer::EMPTY);
@@ -134,6 +140,12 @@ impl Gpu {
             .0
             .to_vec()
     }
+}
+
+/// A white unlit material: each instance drawn in its tint, as the depth
+/// and tone-curve tests count colours.
+pub fn unlit(renderer: &mut Renderer) -> SurfaceMaterial3D {
+    renderer.surface_material(&StandardSurface::UNLIT, &SurfaceTextures::NONE)
 }
 
 pub fn is_red(p: [u8; 4]) -> bool {

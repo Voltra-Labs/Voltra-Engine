@@ -6,9 +6,23 @@ use super::super::App;
 impl App {
     /// Points every sprite and tile layer naming a material at it — a
     /// spawned one, a path edited — before a draw reads them.
+    /// Loads every 3D mesh's surface material and its images too.
     pub(in crate::app) fn resolve_materials(&mut self) {
         if let Some(materials) = self.materials.as_mut() {
             voltra_scene::sprite_material::resolve_world(&mut self.world, materials);
+        }
+        if let (Some(materials), Some(textures), Some(renderer)) = (
+            self.materials.as_mut(),
+            self.textures.as_mut(),
+            self.renderer.as_ref(),
+        ) {
+            self.world3d.resolve_surfaces(
+                &self.world,
+                materials,
+                textures,
+                renderer.context().device(),
+                renderer.context().queue(),
+            );
         }
     }
 

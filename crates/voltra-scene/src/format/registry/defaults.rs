@@ -63,6 +63,12 @@ impl ComponentRegistry {
             .register::<crate::MeshInstance3D>(crate::MeshInstance3D::NAME)
             .with_template();
         registry
+            .register::<crate::DirectionalLight3D>(crate::DirectionalLight3D::NAME)
+            .with_template();
+        registry
+            .register::<crate::Environment3D>(crate::Environment3D::NAME)
+            .with_template();
+        registry
             .register_with_refs::<crate::CameraFollow2D>(crate::CameraFollow2D::NAME)
             .with_template();
         registry

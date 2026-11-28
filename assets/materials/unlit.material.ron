@@ -1,0 +1,10 @@
+// A white unlit surface: each mesh drawn in its own colour, no light.
+// What scenes/shapes3d.ron and scenes/mixed3d.ron draw with, so their flat
+// colours read back as written (crates/voltra-core/tests/scene3d.rs).
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        unlit: true,
+    ),
+)

@@ -221,6 +221,13 @@ impl Texture {
         self.height
     }
 
+    /// The view a draw samples colour through: sRGB, so a texel reaches the
+    /// shader linear. A base-colour or emissive map is read this way; data
+    /// (a normal or metallic-roughness map) through [`raw_view`](Self::raw_view).
+    pub fn view(&self) -> &wgpu::TextureView {
+        &self.view
+    }
+
     /// The non-sRGB view of the same pixels.
     ///
     /// What egui must sample — an editor thumbnail goes through egui's shader,

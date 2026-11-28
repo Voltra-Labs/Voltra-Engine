@@ -159,7 +159,12 @@ lines of "Conventions of the 3D world"), see *A 3D camera draws meshes
 through a reversed-Z depth pass* under Decisions; stage 136 — one frame of
 both worlds, HDR, MSAA and the tone curves, 3D into render textures ("One
 frame, both worlds" and the MSAA line of "The 3D pass"), see *2D and 3D
-cameras draw one frame by priority* under Decisions.
+cameras draw one frame by priority* under Decisions; stage 137 — standard
+surface materials, one directional light and the ambient ("Materials",
+the alpha and draw-order lines of "The 3D pass", the directional light,
+`Environment3D`'s ambient and the light units' stored value of "Lights,
+shadows and the environment"), see *A mesh draws through a standard
+surface material, lit by one sun and an ambient* under Decisions.
 Everything else below is still a plan. Each stage that lands writes
 its detail as a Decisions entry of its own and edits this section to say what
 is built; until then, every sentence here about 3D is a plan. It replaces
@@ -448,8 +453,10 @@ HUD (UiRect …) once, over everything
 with the layout pinned, CPU culling and the built-in meshes, drawn unlit
 by a lone 3D camera — see *A 3D camera draws meshes through a reversed-Z
 depth pass*; **stage 136** the HDR target, MSAA and the frame shared with
-2D — see *2D and 3D cameras draw one frame by priority*. Materials,
-alpha and the light list are still the plan below.
+2D — see *2D and 3D cameras draw one frame by priority*; **stage 137**
+materials, alpha modes, the draw order and alpha to coverage — see *A mesh
+draws through a standard surface material*. The light list is still the
+plan below.
 
 - **Depth**: `Depth32Float`, **reversed-Z** (`CompareFunction::GreaterEqual`,
   cleared to 0), an infinite far plane by default (`far: None`), Bevy's
@@ -489,6 +496,12 @@ alpha and the light list are still the plan below.
 
 ### Materials
 
+**Built (stage 137)** for the standard block, the format's `domain`, the
+pipeline bank's alpha, sides and winding, and the main pass — see *A mesh
+draws through a standard surface material, lit by one sun and an
+ambient*. Custom surface shaders are 138's, the shadow and ID passes 140's
+and 146's.
+
 **One `.material.ron` format with a `domain`**, as Godot has one shader
 language with `shader_type canvas_item` and `shader_type spatial`. `domain:
 Sprite` is stage 83's material, and the default (every existing file
@@ -526,6 +539,11 @@ loads); `domain: Surface` is a 3D material.
   engine's; it can come later as its own stage).
 
 ### Lights, shadows and the environment
+
+**Built (stage 137)**: one `DirectionalLight3D` (`color`, `energy`) a
+view, `Environment3D`'s `ambient`, and `energy` stored as below — see *A
+mesh draws through a standard surface material, lit by one sun and an
+ambient*. The rest is the plan.
 
 - **`DirectionalLight3D`, `PointLight3D`, `SpotLight3D`**: colour,
   `energy`, range, a spot's inner and outer cone angles, layers.
@@ -10412,9 +10430,9 @@ asked).
   world). Web: `shapes3d.mjs` on WebGPU and WebGL2.
 - **Not yet**: ~~one frame of 3D and 2D cameras, several 3D cameras, a
   `Camera3D` viewport or render texture, HDR, MSAA and the tonemap~~
-  (built in 136); materials, double-sided faces and lighting (137–139) — a mesh's back
-  faces are culled, so a camera inside a mesh sees nothing of it and the
-  plane has no underside; mesh files (143); a 3D view in the editor, its
+  (built in 136); ~~materials, double-sided faces~~ (built in 137) and
+  lighting beyond one sun (139) — a single-sided mesh's back faces are
+  culled, so a camera inside it sees nothing of it; mesh files (143); a 3D view in the editor, its
   picking and gizmos (145–147); the Network window's map of 3D entities;
   a twenty-mesh bench once there are twenty meshes.
 
@@ -10627,9 +10645,232 @@ pass*, and replaces stage 135's lone-3D-camera rule.
   always an overlay); MSAA per camera and on the options screen; two
   cameras of different dimensions into one render texture (the later
   replaces the earlier); a glow over an overlay's transparent pixels; a 3D
-  surface showing a render texture (materials, 137); exposure modes (142);
-  alpha to coverage (137); the sRGB fallback is pinned by `Hdr3D::choose`'s
+  surface showing a render texture (137 leaves such a slot empty, warned
+  once: the frame order does not read surface images yet); exposure modes
+  (142); ~~alpha to coverage~~ (built in 137); the sRGB fallback is pinned by `Hdr3D::choose`'s
   unit test only — headless Chromium's SwiftShader has float targets.
+
+### A mesh draws through a standard surface material, lit by one sun and an ambient (stage 137)
+
+"Materials", built for the standard block, with the light a material
+needs to be seen. It mirrors *A sprite material is a WGSL fragment
+function and its uniforms* (stage 83): one file format, checked when it
+loads, a handle that never fails, a bank of pipelines by what varies.
+
+- **The format** (`voltra-assets` `material.rs`, `material/surface.rs`):
+  `MaterialFile` gains `domain: Sprite | Surface` (default `Sprite`, not
+  written) and `standard: StandardFile` (not written at its default);
+  `shader` and `uniforms` became optional (not written empty). A 0.4 file
+  — `domain` absent — loads as the sprite material it was, pinned by the
+  shipped `hit_flash.material.ron` read byte for byte. `StandardFile` is
+  glTF 2.0's metallic-roughness material field for field — base colour and
+  texture, metallic, roughness and their texture (G roughness, B
+  metallic), normal map and scale, occlusion and strength, emissive colour,
+  texture and strength (`KHR_materials_emissive_strength`), `alpha: Opaque
+  | Mask(cutoff) | Blend`, `double_sided`, `unlit` (`KHR_materials_unlit`),
+  `uv_transform` (`KHR_texture_transform`: scale, rotation, offset, its
+  rotation turning `u' = cos·u + sin·v` as Bevy and three.js read it) —
+  every field `#[serde(default)]`, a texture a path string, empty for
+  none. `Material` gains `domain` and `surface: Option<SurfaceSource>`
+  (the numbers and the texture paths, checked as asset paths); a surface
+  material naming a `shader` is refused until custom surfaces (138) rather
+  than drawn as something it does not say. `MaterialFile::to_ron` is the
+  editor's writer.
+- **Render** (`render3d/surface/`): `StandardSurface` (the numbers; its
+  `DEFAULT` white, metallic 0, roughness 0.5 — Bevy's; Godot's roughness is
+  1, Unity's smoothness 0.5 — and `UNLIT`), `SurfaceUniform` (96 bytes,
+  NaN refused field by field, the UV transform as a 2 × 3 affine),
+  `SurfaceLayouts` (group 0: the frame's view and light, `FrameUniform3D`,
+  144 bytes; group 1: the material's block, one linear repeating sampler,
+  five textures; a 1 × 1 white for an empty slot — white reads 1 through
+  either view), `SurfaceMaterial3D` (the uploaded block and the bind group;
+  `is_current` compares the numbers and the five views — wgpu 30 compares
+  a `TextureView` by identity, so a texture hot reloaded under its handle
+  is seen as new), `SurfaceBank` (the pipelines by `SurfaceKey { alpha:
+  Opaque | Mask | Blend, double_sided, winding, pass: Main }`, made on first
+  use, within a bank per target format and sample count — at most 18).
+  The spec's key named a revision and a vertex layout too: a standard
+  material's shader never changes, so the revision arrives with custom
+  shaders (138), the skinned layout with skinning (155). **`UnlitPipeline3D`
+  and `unlit3d.wgsl` are gone**: `unlit` is a flag in the block, so every
+  mesh draws through one shader and an unlit material gets masks, blending
+  and both faces for nothing. `Scene3D` gains `lighting`, `MeshDraw3D` its
+  `material`; `Renderer::surface_material` makes one.
+- **The shading** (`shaders/surface3d.wgsl`, `surface/brdf.rs` its CPU
+  twin, number for number): Filament's — GGX in its `|n × h|²` form,
+  height-correlated Smith visibility, Schlick Fresnel to white, Lambert
+  diffuse `base · (1 − metallic) / π`, `f0 = mix(0.04, base, metallic)`
+  (glTF's, Filament's reflectance 0.5), perceptual roughness squared and
+  floored at 0.045 (Filament's, under which a highlight is narrower than a
+  half float holds), `n·v = |n·v| + 10⁻⁵`. The ambient is a uniform sky of
+  that radiance: diffuse `albedo · L` (its irradiance π·L over Lambert's
+  π), specular `L · (f0·A + B)` with A and B from Karis's analytic fit of
+  the split sum's table — a constant environment's exact specular, near
+  enough, until an HDR sky (141) gives the real one; occlusion darkens the
+  ambient only, as in Filament. Emissive adds; unlit is the base colour.
+  The view direction is the eye's in perspective and the view's own in
+  orthographic (the uniform's `eye.w`). **Every texture is sampled before
+  any choice**, `select` for the rest: Tint's uniformity rule, which cost
+  stage 136 a whole module. Pinned: the GPU within 1/255 of `brdf::shade`
+  at 169 pixels each of a rough dielectric and a smooth metal (2 allowed).
+- **Normals and tangents.** The cofactor normal is normalised in the
+  fragment stage, as stage 135 left it to. The bitangent is
+  `cross(n, t) · w · sign(det M)` — Bevy's `sign_determinant_model_3x3m` —
+  the sign riding in the first normal row's unused `w` (−1 mirrored, 1
+  otherwise, flat included), so `Instance3D` keeps its 7 attributes; the
+  tangent is the model's 3 × 3 times the mesh's, made perpendicular to the
+  normal before the cross. **A back face is lit as the front turned
+  round** — the whole frame, as Filament turns its tangent frame —
+  `select(−1, 1, front_facing)` on the final normal: a double-sided
+  surface's inside, and every face of a flat model (stage 136's note: its
+  cofactor is unnegated, so it points to whichever side the flattening
+  left). The side faces of a flattened cube have no normal at all and face
+  the eye. Pinned: a normal map leaning along the tangent and one along the
+  bitangent, each under a light grazing from its side, within 2/255 of the
+  CPU with the map's bytes as data — and not within 2 of the CPU reading
+  them as sRGB; a mirrored wall lit as the unmirrored one; a double-sided
+  plane's back as its front.
+- **Alpha.** Opaque writes alpha 1 (an overlay is see-through only where
+  nothing drew). Mask discards under the cutoff at one sample; under MSAA
+  it is **alpha to coverage** (`fs_mask_coverage`), alpha sharpened to a
+  pixel-wide ramp about the cutoff (`(α − cutoff) / fwidth(α) + ½`, Ben
+  Golus's) so the samples step across the edge instead of half the pixel
+  turning to mush. Blend writes premultiplied colour through
+  `PREMULTIPLIED_ALPHA_BLENDING`, the 3D target's and the composite's
+  convention, depth-tested and not written.
+- **Draw order** (`draw3d/group.rs`): a 24-byte key — the order, one
+  `u64`: for the opaque and masked the pipeline packed `class << 3 | sides
+  << 2 | winding` above the material's slot, for the blended their class
+  alone — then the mesh's slot, the view depth, the entity index. Opaque and masked: one draw per pipeline, material and mesh, the
+  meshes of one pipeline and material by their nearest instance (stage
+  135's early depth rejection, kept within a material). Blended: after all
+  of them, **back to front by each instance's box centre**, consecutive
+  instances of one pipeline, material and mesh merged into a draw. Sorting
+  by centre is Unity's and Godot's; two transparent meshes that pass
+  through each other can still sort wrong, which only order-independent
+  transparency solves (not in 0.5).
+- **Light** (`voltra-scene` `directional_light3d.rs`, `environment3d.rs`,
+  `lighting3d.rs`): **`DirectionalLight3D { color, energy }`** (white and 1
+  not written), shining down its entity's −Z. One lights a view: the one on
+  the lowest entity index — a list is 139's — the rest warned about once,
+  as is a light with a negative or non-finite colour or energy (skipped for
+  the next). **`energy` is the light units' stored value**: illuminance
+  over K, so `color · energy` is what the shader multiplies by, Simple
+  units' fixed EV100 15 exposure maps K to 1, and Physical units (142) show
+  the same number as lux. **`Environment3D { ambient }`** (linear RGB, the
+  sky's luminance over K): on the camera's entity it is that camera's,
+  otherwise the world's — the lowest-index one on an entity with no camera,
+  the rest warned about once. **With none, the ambient is a dim 0.1 grey**,
+  so a first scene with no light is still seen: Godot's default
+  environment lights by its clear colour, Bevy's `AmbientLight` by a dim
+  white; an `Environment3D` of black makes the dark. Both components are
+  registered, so the bridge and the MCP server set them.
+- **`MeshInstance3D::material: Option<AssetPath>`** (not written when
+  `None`): none, a material not loaded yet, or one that cannot draw is
+  the default white standard, the last warned about once per entity (a
+  sprite material on a mesh, or the store's error). The color multiplies
+  the base colour. Two shipped scenes changed: `scenes/shapes3d.ron` and
+  `scenes/mixed3d.ron` name the new `materials/unlit.material.ron`, so
+  their flat colours stay what their tests and web tests pin, unlit; the
+  stage-136 test helpers do the same.
+- **The frame** (`voltra-core` `draw/world3d/`): before a frame,
+  `resolve_materials` loads every mesh's material and the images it names
+  (`mesh_instance3d::resolve_world`), so the draw list and the frame read
+  the stores unchanged; `Surfaces` keeps one GPU material per handle and
+  the default, remade when `is_current` says. A data slot whose image would
+  not load is left empty (the checker as normals would be nonsense), a
+  colour slot shows the checker; a render texture named as an image is
+  left empty and warned about once — the frame's producer-before-consumer
+  order does not read surface images yet, and a camera must never sample
+  the texture it draws into.
+- **Editor**: the mesh's inspector names its material (typed or dropped)
+  and **New surface material** writes one (`materials/surface[-N]`);
+  under it, **surface material** edits the file through `SurfaceDoc` —
+  fields per block, path fields texture images drop on, colour pickers
+  (`color_edit_button_rgba_unmultiplied` and `_rgb` take linear colour and
+  show sRGB). **The file is shared**, as Unity's material inspector and
+  Godot's `StandardMaterial3D` resource are: an edit is written when it
+  settles (no drag, no popup, nothing typed), the material reloaded so
+  every mesh draws it that frame, and it is not in the scene's history. The
+  **live preview** is `UiFrame::surface_preview(key, size, source)`:
+  `SurfacePreviews` draws each preview asked for after the layout — again
+  only when its numbers, images or the 3D format changed — a metre sphere
+  under a key light into a target egui samples through its raw view, an id
+  from the next frame (the viewport's one-frame rule). The asset browser's
+  tile for a surface material is the same preview, small. Create ▸ 3D ▸
+  Directional Light and ▸ Environment; inspector sections for both.
+- **What the engines do**: Godot's `StandardMaterial3D` is a resource the
+  inspector edits in place, shared by every mesh using it, with shading
+  mode `Unshaded`, transparency `Alpha` / `Alpha Scissor` / `Alpha Hash`
+  and a cull mode; Unity URP's Lit has Surface Type Opaque/Transparent,
+  Alpha Clipping and Render Face; Bevy's `StandardMaterial` is glTF's
+  inputs with `AlphaMode::{Opaque, Mask, Blend, …}`, `double_sided`,
+  `unlit` and `perceptual_roughness` 0.5; Filament defines the maths. We
+  take glTF's inputs as Bevy does (an imported model needs no translation),
+  Filament's BRDF, Bevy's defaults, and Godot's and Unity's shared,
+  edited-in-place material file.
+- **Tests**: `surface/standard.rs` (the UV transform as KHR's to 10⁻⁶,
+  broken numbers the identity; a cutoff kept in 0..1), `surface/uniform.rs`
+  (the block's fields, NaN refused), `surface/brdf.rs` (GGX covers the
+  surface once, ∫D(n·h)dω = 1 to 2·10⁻³ at four roughnesses; Fresnel f0
+  head on and 1 grazing; G within 0..1; a white rough dielectric lit head
+  on is 1/π + 0.04/4π; a metal's mirror highlight over 20× its off-angle
+  value), `surface.rs` (the shader validates with naga; 5 textures, 1
+  sampler, blocks of 96 and 144 bytes, 5 of 15 inter-stage locations,
+  against `downlevel_webgl2_defaults`), `lighting.rs` (toward the light,
+  colour × energy, NaN ambient refused, orthographic marked),
+  `headless_surface.rs` (a white unlit material reads 255 ±1; the BRDF
+  within 2/255 of the CPU at 169 pixels each — measured 1; both normal maps; a UV offset of a
+  quarter moves a 4-texel strip by one texel, wrapping; a mask cuts at 1
+  and 4 samples; a quarter-opaque blue over red reads 225, 0, 137 ±1; a
+  double-sided plane's back lit as its front; a mirrored wall lit as the
+  unmirrored; the metallic × roughness sphere grid, each smooth sphere's
+  peak above the rough one's), voltra-assets' `materials/tests.rs` (the 0.4
+  file loads as `Sprite`; a surface block loads, defaults filled; a bad
+  texture path and a shader refused with why; the editor's writer reads
+  back equal, writing nothing a surface does not use), `draw3d/
+  material_tests.rs` (three blended instances drawn 9, 6, 4.5, 3 m back to
+  front after the opaque, in either spawn order, three draws; opaque draws
+  grouped by material, masks after; a sprite material on a mesh warned once,
+  one not loaded quietly the default), `lighting3d.rs`, the component
+  round trips, `surface_doc.rs` (an edit written only once settled, the
+  material reloaded), `draw/world3d/previews.rs` (drawn once, transparent
+  corner, gold lit toward the light by 60 levels, drawn again when rougher,
+  not when unchanged), `voltra-core/tests/materials3d.rs` (the shipped
+  scene: the unlit sphere AgX of its colour ±2, every lit sphere 30 levels
+  brighter toward the light, the gold's peak 100 over the iron's, the box
+  through the glass, the grate's bars and holes; two blended quads in
+  either spawn order the same picture, the middle pixel within 2/255 of
+  blue over green over red and not of the reverse). Web:
+  `materials3d.mjs` on WebGPU and WebGL2 — the floor, the unlit sphere and
+  the glass in the native frame's colours within 6, no magenta.
+- **Bench** (`draw3d`, release, this container; no materials store, so
+  every instance the default):
+
+  | Benchmark | Stage 136 | Stage 137 |
+  | --- | --- | --- |
+  | `draw3d/cull-group/10k` | 1.32 ms | 1.47 ms |
+  | `draw3d/cull-group-jobs/10k` | 1.21 ms | 1.34 ms |
+
+  `voltra-bench compare`: +11 %, inside the 30 % limit. First measured at
+  +19 % and +29 % with a 32-byte key carrying both handles' generations
+  and a comparator that split the blended on every comparison; a handle's
+  slot alone tells two live meshes or materials apart within one frame, so
+  the key went back to 24 bytes — the order (pipeline above material, or
+  the blended class alone) as one `u64` — and the runs read the rest off
+  the candidates. What is left is the bigger candidate (the material, its
+  class and sides) and a material lookup per instance.
+- **Not yet**: custom surface shaders (138); point and spot lights,
+  several directional lights, light layers (139); shadows (140); an HDR
+  sky that lights — metals reflect only the ambient's constant sky, so they
+  are dark (141); physical units and exposure (142); mipmaps, anisotropic
+  filtering and a per-material sampler — surfaces always sample linearly
+  and repeat, whatever the project's texture filter; a second texture
+  coordinate set per slot (glTF's `texCoord`); a 3D surface showing a
+  render texture; vertex colours; per-instance overrides of a material's
+  numbers beyond the tint; material edits in an undo history of their
+  own; a preview whose mesh and light can be chosen; order-independent
+  transparency; the editor's 3D view (145).
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
@@ -11394,6 +11635,9 @@ Verified against the crate source, not from memory:
 | MSAA resolve | Draw into a texture of `sample_count: 4` (usage `RENDER_ATTACHMENT` alone will do), name a single-sampled one as the attachment's `resolve_target`, and `StoreOp::Discard` the samples; the depth attachment and the pipeline's `MultisampleState::count` must match the 4. `TextureFormatFeatureFlags::sample_count_supported(n)` and `MULTISAMPLE_RESOLVE` say whether a format can |
 | Premultiplied blending | `BlendState::PREMULTIPLIED_ALPHA_BLENDING` is `One, OneMinusSrcAlpha` for colour and alpha; `ALPHA_BLENDING`'s alpha component is the same `One, OneMinusSrcAlpha`, so sprites blended over a transparent target come out premultiplied |
 | WGSL uniformity on WebGPU | Chromium's Tint refuses `textureSample` (an implicit derivative) after a branch on a non-uniform value, an early `return` included, and the **whole module** is invalid — every entry point in it. naga accepts it, so native tests pass: sample first, then `select`. Found by `mixed3d.mjs` |
+| `TextureView` equality | `TextureView` (and the other resources) implement `PartialEq`/`Hash` by identity (`impl_eq_ord_hash_proxy!`, `api/texture_view.rs`): comparing the views a bind group was made from tells a texture reloaded under its handle from the one bound |
+| Alpha to coverage | `MultisampleState::alpha_to_coverage_enabled` with `count > 1`; GLES (WebGL2 included) enables `SAMPLE_ALPHA_TO_COVERAGE` per pipeline (`gles/queue.rs`). The output alpha is still written: sharpen it (`(α − cutoff) / fwidth(α) + ½`), and compute `fwidth` before any branch (Tint's uniformity) |
+| `front_facing` | `@builtin(front_facing)` follows the pipeline's `front_face`: true for the faces a `Cw` pipeline treats as fronts, so one `select` serves both windings and no-cull pipelines |
 | `Queue::write_buffer` ordering | Writes land before the next `submit`'s commands and after every earlier submit's: two writes to one buffer before one submit leave only the second for every draw of that submit |
 
 When touching wgpu, read the vendored source under
@@ -11439,6 +11683,7 @@ Same problem, same rule: read the source, not a tutorial.
 | Keyboard taken | `Context::egui_wants_keyboard_input()` is true while a text field has focus — the test for "nothing is being typed" |
 | Mixed values | `DragValue::custom_formatter(\|_, _\| "—".into())` shows text in place of the number; focused, the text is selected whole, so typing replaces it. `Checkbox::new(..).indeterminate(true)` draws the half-ticked state (the value still toggles on click) |
 | Conditional panel | A `Panel` drawn on some frames and not others shifts the automatic ids inside every root-level panel drawn after it, and egui logs `Widget rect … changed id between passes` on each frame it comes or goes. Put an occasional row inside a panel that is always drawn (prefab mode's row is in the toolbar's) |
+| Colour spaces | `color_edit_button_rgb(&mut [f32; 3])` and `color_edit_button_rgba_unmultiplied(&mut [f32; 4])` take **linear** colour and show it in sRGB; `color_edit_button_srgb` takes sRGB bytes (`ui.rs`). A material's linear colours go through the first two |
 | Ellipse | `egui::Shape::ellipse_stroke(center, radius: Vec2, stroke)` (epaint 0.35) draws an axis-aligned ellipse; the Network window's interest radius uses it, its map scaling each axis on its own |
 
 ### `cpal` 0.18 and `symphonia` 0.6 API notes

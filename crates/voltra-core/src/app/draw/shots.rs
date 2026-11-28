@@ -92,8 +92,12 @@ impl ShotDraw<'_> {
                     };
                     if let Some(picture) = picture {
                         world3d.draw(
-                            self.world,
                             self.renderer,
+                            super::world3d::Sources3D {
+                                world: self.world,
+                                textures: self.textures,
+                                materials: self.materials,
+                            },
                             &shot,
                             Some(picture),
                             if shot.target.is_some() {

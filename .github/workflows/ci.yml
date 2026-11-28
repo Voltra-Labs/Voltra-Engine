@@ -91,6 +91,8 @@ jobs:
         run: node crates/voltra-player/web/test/shapes3d.mjs
       - name: One frame of 3D and 2D, tone mapped, on both backends
         run: node crates/voltra-player/web/test/mixed3d.mjs
+      - name: Standard surface materials, lit, on both backends
+        run: node crates/voltra-player/web/test/materials3d.mjs
       - name: The platformer walked by a finger on its on-screen stick
         run: node crates/voltra-player/web/test/touch.mjs
       - name: A rebound key kept in localStorage across a reload

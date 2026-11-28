@@ -141,8 +141,12 @@ impl FrameDraw<'_> {
         let _render = voltra_profile::scope("render");
         match plan {
             Plan::Lone3D(shot) => world3d.draw(
-                draw.world,
                 draw.renderer,
+                super::world3d::Sources3D {
+                    world: draw.world,
+                    textures: draw.textures,
+                    materials: draw.materials,
+                },
                 &shot,
                 output,
                 Picture3D::Opaque,

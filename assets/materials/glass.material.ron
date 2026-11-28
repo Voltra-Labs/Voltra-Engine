@@ -1,0 +1,12 @@
+// A pale glass pane: blended over what is behind it, drawn after the
+// opaque, back to front. scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color: (0.7, 0.9, 1.0, 0.35),
+        roughness: 0.1,
+        alpha: Blend,
+        double_sided: true,
+    ),
+)

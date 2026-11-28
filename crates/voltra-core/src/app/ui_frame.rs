@@ -19,6 +19,7 @@ use super::window_requests::WindowRequests;
 use crate::ui::TextureId;
 
 mod assets;
+mod previews;
 mod resolve;
 mod simulation;
 mod window;
@@ -128,6 +129,9 @@ pub struct UiFrame<'a> {
     /// Whether the renderer can simulate GPU particles; see
     /// [`UiFrame::gpu_particles`].
     pub(super) gpu_particles: bool,
+    /// Surface materials asked for on a sphere; see
+    /// [`UiFrame::surface_preview`].
+    pub(super) previews: &'a mut super::draw::world3d::SurfacePreviews,
 }
 
 impl<'a> UiFrame<'a> {

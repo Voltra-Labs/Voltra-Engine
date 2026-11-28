@@ -3,18 +3,24 @@
 use std::ops::Range;
 
 use super::instance::Instance3D;
+use super::lighting::Lighting3D;
 use super::mesh::Mesh3D;
+use super::surface::SurfaceMaterial3D;
 use super::tonemap::Tonemap;
 use super::view::View3D;
 use super::winding::Winding;
 use crate::post::PostSettings;
 
-/// One instanced draw: `mesh`, once per instance in `instances` — a range
-/// of [`Scene3D::instances`], all of one [`Winding`].
+/// One instanced draw: `mesh` through `material`, once per instance in
+/// `instances` — a range of [`Scene3D::instances`], all of one
+/// [`Winding`].
 #[derive(Debug, Clone)]
 pub struct MeshDraw3D<'a> {
     /// The mesh drawn.
     pub mesh: &'a Mesh3D,
+    /// What its surface is: the pipeline variant, with `winding`, and
+    /// group 1.
+    pub material: &'a SurfaceMaterial3D,
     /// Which of the frame's instances draw it.
     pub instances: Range<u32>,
     /// Which way those instances' fronts wind ([`Winding::of`]): the
@@ -33,6 +39,8 @@ pub struct Scene3D<'a> {
     pub draws: &'a [MeshDraw3D<'a>],
     /// What the colour target is cleared to first, linear.
     pub clear: wgpu::Color,
+    /// What lights the surfaces.
+    pub lighting: Lighting3D,
 }
 
 /// How a 3D shot's light becomes its picture: the grade, bloom and

@@ -110,6 +110,19 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   what the backend reports rather than WebGPU's guarantees, and the
   engine asks the same (`TargetSupport`). Headless Chromium's SwiftShader
   has both: `mixed3d.mjs` draws the same picture on WebGPU and WebGL2.
+- **Surface materials light the same on both.** The standard surface
+  stays inside WebGL2's budgets, pinned by a test against
+  `Limits::downlevel_webgl2_defaults`: 5 sampled textures of 16 (the plan
+  keeps 12 for 0.5's materials, shadows and sky) through one sampler, two
+  uniform blocks of 144 and 96 bytes, 5 of 15 inter-stage variables, the
+  vertex attributes stage 135 pinned. A data texture (normal,
+  metallic-roughness, occlusion) is read through a linear view; WebGL2
+  cannot view an sRGB texture as linear, so there it is uploaded a second
+  time as `Rgba8Unorm` (twice that image's memory) rather than read as
+  colour. Alpha to coverage, which smooths a masked material's edge under
+  MSAA, is core in WebGL2. `materials3d.mjs` requires the native frame's
+  colours to the byte's neighbourhood on WebGPU and WebGL2 — a normal map
+  read as sRGB would tilt the whole floor off its colour.
 
 ## Checking a web build
 
@@ -121,6 +134,7 @@ node crates/voltra-player/web/test/first-frame.mjs   # the sandbox draws, on Web
 node crates/voltra-player/web/test/play.mjs          # the platformer walks, takes a coin, sounds
 node crates/voltra-player/web/test/shapes3d.mjs      # a 3D scene, and WebGL2's depth at 50 m
 node crates/voltra-player/web/test/mixed3d.mjs       # 3D through AgX, a 2D overlay and the HUD over it
+node crates/voltra-player/web/test/materials3d.mjs   # surface materials lit as natively, on both
 ```
 
 Each builds through `cargo xtask dist --web` into `target/`, serves it and

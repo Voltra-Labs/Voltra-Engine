@@ -21,8 +21,9 @@ pub const FLAT_COLOR: &str = concat!(
     include_str!("shaders/flat_color.wgsl")
 );
 
-/// Unlit, instanced 3D meshes. See [`Pass3D`](crate::render3d::Pass3D).
-pub const UNLIT_3D: &str = include_str!("shaders/unlit3d.wgsl");
+/// Standard surfaces, instanced and lit: glTF's metallic-roughness inputs
+/// through Filament's BRDF. See [`SurfaceBank`](crate::render3d::SurfaceBank).
+pub const SURFACE_3D: &str = include_str!("shaders/surface3d.wgsl");
 
 /// Source of the shader that draws egui's tessellated triangles.
 pub const EGUI: &str = include_str!("shaders/egui.wgsl");

@@ -1,0 +1,12 @@
+// A grey floor bent by a normal map (data: sampled raw, not as sRGB),
+// tiled six times by the UV transform. scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color: (0.5, 0.52, 0.55, 1.0),
+        roughness: 0.6,
+        normal_texture: "sprites/studs_normal.png",
+        uv_transform: (scale: (6.0, 6.0)),
+    ),
+)

@@ -18,7 +18,7 @@
         (
             id: "019fe300-0136-7000-8000-000000000002",
             components: {
-                "MeshInstance3D": (mesh:"builtin:plane",color:(0.35,0.37,0.4,1.0)),
+                "MeshInstance3D": (mesh:"builtin:plane",color:(0.35,0.37,0.4,1.0),material:Some(Path("materials/unlit.material.ron"))),
                 "Name": "Floor",
                 "Transform3D": (translation:(0.0,0.0,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(12.0,1.0,12.0)),
             },
@@ -26,7 +26,7 @@
         (
             id: "019fe300-0136-7000-8000-000000000003",
             components: {
-                "MeshInstance3D": (mesh:"builtin:cube",color:(0.9,0.15,0.1,1.0)),
+                "MeshInstance3D": (mesh:"builtin:cube",color:(0.9,0.15,0.1,1.0),material:Some(Path("materials/unlit.material.ron"))),
                 "Name": "Cube",
                 "Transform3D": (translation:(-1.6,0.5,0.0),rotation:(0.0,0.258819,0.0,0.965926),scale:(1.0,1.0,1.0)),
             },
@@ -34,7 +34,7 @@
         (
             id: "019fe300-0136-7000-8000-000000000004",
             components: {
-                "MeshInstance3D": (mesh:"builtin:sphere",color:(0.1,0.8,0.2,1.0)),
+                "MeshInstance3D": (mesh:"builtin:sphere",color:(0.1,0.8,0.2,1.0),material:Some(Path("materials/unlit.material.ron"))),
                 "Name": "Sphere",
                 "Transform3D": (translation:(1.4,0.6,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.2,1.2,1.2)),
             },

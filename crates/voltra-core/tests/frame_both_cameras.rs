@@ -100,6 +100,7 @@ fn two_full_screen_2d_cameras_draw_only_the_highest_beside_a_3d_one() {
 #[test]
 fn a_3d_camera_into_a_render_texture_shows_on_a_sprite_and_in_the_hud() {
     let root = scratch_root();
+    voltra_testkit::copy_workspace_asset(&root, "materials/unlit.material.ron");
     std::fs::write(
         root.join("map.rendertexture.ron"),
         "(version: 1, width: 64, height: 64, nearest: true)",
@@ -202,6 +203,7 @@ fn a_split_screen_draws_3d_on_the_left_and_2d_on_the_right() {
 #[test]
 fn a_half_transparent_3d_render_texture_blends_once_on_its_sprite() {
     let root = scratch_root();
+    voltra_testkit::copy_workspace_asset(&root, "materials/unlit.material.ron");
     std::fs::write(
         root.join("glass.rendertexture.ron"),
         "(version: 1, width: 32, height: 32)",

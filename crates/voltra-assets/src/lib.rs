@@ -36,7 +36,9 @@ pub use clips::{ClipSettings, Clips, CLIP_SETTINGS_VERSION};
 pub use error::AssetError;
 pub use fonts::{Font, Fonts, DEFAULT_FONT};
 pub use handle::Handle;
-pub use material::{Material, MaterialFile};
+pub use material::{
+    Material, MaterialDomain, MaterialFile, StandardFile, SurfaceSource, SurfaceTexturePaths,
+};
 pub use materials::Materials;
 pub use meshes::{BuiltinMesh, MeshPath, Meshes, ResolvedMesh};
 pub use path::AssetPath;

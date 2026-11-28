@@ -1,0 +1,9 @@
+// Standard surface materials: scenes/materials3d.ron. What
+// crates/voltra-player/web/test/materials3d.mjs builds for the web.
+(
+    version: 1,
+    name: "Voltra Materials 3D",
+    scene: "scenes/materials3d.ron",
+    window: (width: 960, height: 540),
+    assets: "assets",
+)

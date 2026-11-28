@@ -4,10 +4,10 @@ use bytemuck::{Pod, Zeroable};
 
 /// One vertex of a [`Mesh3D`](super::Mesh3D): 48 bytes, four attributes.
 ///
-/// Every field a surface will read lands now, so the layout is fixed once
-/// against WebGL2's budget (see [`Instance3D`](super::Instance3D)): the
-/// unlit pass reads `position` only; normals, UVs and tangents are 137's
-/// lit materials and normal maps. glTF's layout, and Bevy's.
+/// The layout is fixed against WebGL2's budget (see
+/// [`Instance3D`](super::Instance3D)): the surface shader reads all four —
+/// the normal to light by, the UV to sample, the tangent to bend the normal
+/// by a normal map. glTF's layout, and Bevy's.
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Pod, Zeroable)]
 pub struct Vertex3D {

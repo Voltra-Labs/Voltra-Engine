@@ -1,0 +1,9 @@
+// A rough dielectric: red clay. scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color: (0.8, 0.3, 0.2, 1.0),
+        roughness: 0.9,
+    ),
+)

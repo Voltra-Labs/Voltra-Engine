@@ -1,0 +1,13 @@
+// Metal bars with holes cut out by the texture's alpha, both faces drawn.
+// scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color_texture: "textures/grate.png",
+        metallic: 1.0,
+        roughness: 0.5,
+        alpha: Mask(0.5),
+        double_sided: true,
+    ),
+)

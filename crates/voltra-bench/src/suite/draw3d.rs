@@ -56,7 +56,7 @@ fn cull_and_group(config: &Config, jobs: Option<&JobPool>) -> super::Outcome {
     let stats = measure(
         config,
         1,
-        iter(|| list.rebuild(&world, &view, &mut meshes, jobs)),
+        iter(|| list.rebuild(&world, &view, &mut meshes, None, jobs)),
     );
     debug_assert!(!list.is_empty() && list.culled() > 0);
     stats.into()

@@ -8,7 +8,10 @@ use super::post_chain::{record_post, Chain};
 use super::{Layer, Renderer};
 use crate::lights::Lighting;
 use crate::post::{Grade, PictureAlpha};
-use crate::render3d::{Hdr3D, HdrDegraded, Look3D, Pass3D, Scene3D, Targets3D};
+use crate::render3d::{
+    Hdr3D, HdrDegraded, Look3D, Pass3D, Scene3D, StandardSurface, SurfaceLayouts,
+    SurfaceMaterial3D, SurfaceTextures, Targets3D,
+};
 use crate::target::RenderTarget;
 
 /// How many shots' targets are kept at most, by size: a split screen and a
@@ -22,6 +25,9 @@ const KEPT_TARGETS: usize = 4;
 #[derive(Debug)]
 pub(super) struct State3D {
     pass: Option<Pass3D>,
+    /// What surface pipelines and materials bind against; made with the
+    /// first material.
+    layouts: Option<SurfaceLayouts>,
     /// Targets by use, the most recent last, each with the frame it was
     /// last drawn in.
     targets: Vec<(Targets3D, u64)>,
@@ -37,6 +43,7 @@ impl Default for State3D {
     fn default() -> Self {
         Self {
             pass: None,
+            layouts: None,
             targets: Vec::new(),
             frame: 0,
             samples: Hdr3D::DEFAULT_SAMPLES,
@@ -126,6 +133,28 @@ impl Renderer {
         hdr
     }
 
+    /// What surface materials are bound against: made the first time it is
+    /// asked for, and the same for the renderer's life.
+    pub fn surface_layouts(&mut self) -> &SurfaceLayouts {
+        let (device, queue) = (self.ctx.device(), self.ctx.queue());
+        self.state3d
+            .layouts
+            .get_or_insert_with(|| SurfaceLayouts::new(device, queue))
+    }
+
+    /// `surface` with `textures`, made for this renderer's 3D pass: what a
+    /// [`MeshDraw3D`](crate::render3d::MeshDraw3D) names. Keep it while
+    /// it is drawn; [`SurfaceMaterial3D::is_current`] says when to make it
+    /// again.
+    pub fn surface_material(
+        &mut self,
+        surface: &StandardSurface,
+        textures: &SurfaceTextures<'_>,
+    ) -> SurfaceMaterial3D {
+        let device = self.ctx.device().clone();
+        SurfaceMaterial3D::new(&device, self.surface_layouts(), surface, textures)
+    }
+
     /// Draws `scene` to the window as `look` says, then `ui` over it in the
     /// window's pixels, and presents: a lone full-screen 3D camera.
     pub fn render_3d(&mut self, scene: &Scene3D<'_>, look: &Look3D, ui: Layer<'_>) {
@@ -195,7 +224,7 @@ impl Renderer {
         // Taken out while the targets are borrowed, put back after.
         let mut pass = match self.state3d.pass.take() {
             Some(pass) if pass.hdr() == hdr => pass,
-            _ => Pass3D::new(&device, hdr),
+            _ => Pass3D::new(&device, &self.surface_layouts().clone(), hdr),
         };
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("frame-3d-encoder"),

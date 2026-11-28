@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::AssetError;
 use crate::handle::Handle;
-use crate::material::{Material, MaterialFile};
+use crate::material::{Material, MaterialDomain, MaterialFile};
 use crate::path::AssetPath;
 use crate::store::Assets;
 
@@ -75,7 +75,14 @@ impl Materials {
     fn read(&mut self, path: &AssetPath) -> Material {
         self.revision += 1;
         let mut material = match self.read_file(path) {
-            Ok((file, shader, fragment)) => Material::build(&file, shader, &fragment),
+            Ok(file) if file.domain == MaterialDomain::Surface => Material::build_surface(&file),
+            Ok(file) => match self.read_shader(&file) {
+                Ok((shader, fragment)) => Material::build(&file, shader, &fragment),
+                Err(e) => Material {
+                    error: Some(e.to_string()),
+                    ..Material::default()
+                },
+            },
             Err(e) => Material {
                 error: Some(e.to_string()),
                 ..Material::default()
@@ -83,31 +90,39 @@ impl Materials {
         };
         material.revision = self.revision;
         if let Some(error) = &material.error {
+            let drawn = match material.domain {
+                MaterialDomain::Sprite => "its sprites draw plainly",
+                MaterialDomain::Surface => "its meshes draw as the default white standard",
+            };
             log::warn!(
-                "material {} cannot be drawn with; its sprites draw plainly:\n{error}",
+                "material {} cannot be drawn with; {drawn}:\n{error}",
                 path.as_str()
             );
         }
         material
     }
 
-    fn read_file(&self, path: &AssetPath) -> Result<(MaterialFile, AssetPath, String), AssetError> {
+    fn read_file(&self, path: &AssetPath) -> Result<MaterialFile, AssetError> {
         let full = self.root.join(path.as_str());
         let text = crate::fs::read_to_string(&full).map_err(|source| AssetError::Read {
             path: full.clone(),
             source,
         })?;
-        let file: MaterialFile = ron::from_str(&text).map_err(|source| AssetError::Parse {
-            path: full.clone(),
+        ron::from_str(&text).map_err(|source| AssetError::Parse {
+            path: full,
             source: Box::new(source),
-        })?;
+        })
+    }
+
+    /// A sprite material's shader: its path and its text.
+    fn read_shader(&self, file: &MaterialFile) -> Result<(AssetPath, String), AssetError> {
         let shader_path = AssetPath::new(&file.shader)?;
         let shader = self.root.join(shader_path.as_str());
         let fragment = crate::fs::read_to_string(&shader).map_err(|source| AssetError::Read {
             path: shader,
             source,
         })?;
-        Ok((file, shader_path, fragment))
+        Ok((shader_path, fragment))
     }
 
     /// The material `handle` addresses, if it is current.

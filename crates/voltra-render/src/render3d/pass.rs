@@ -4,50 +4,52 @@
 use super::depth::DEPTH_CLEAR;
 use super::hdr::Hdr3D;
 use super::instance::Instance3D;
-use super::pipeline::UnlitPipeline3D;
+use super::lighting::FrameUniform3D;
 use super::scene::Scene3D;
+use super::surface::{SurfaceBank, SurfaceKey, SurfaceLayouts, SurfacePass};
 use super::targets::Targets3D;
+use super::MeshDraw3D;
 
-/// Records a [`Scene3D`]: clears colour and depth, uploads the view and
-/// the instances, then one instanced draw per [`MeshDraw3D`].
+/// Records a [`Scene3D`]: clears colour and depth, uploads the view, the
+/// light and the instances, then one instanced draw per [`MeshDraw3D`],
+/// each through its material's pipeline variant.
 ///
-/// Owns what persists between frames — the pipeline, the view's uniform
-/// and the instance buffer (grown, never shrunk); the targets are the
-/// shot's. Every call writes its buffers before its own submit, so one
-/// pass serves one shot per submit (`Queue::write_buffer` lands at the next
-/// submit, for every draw of it).
-///
-/// [`MeshDraw3D`]: super::MeshDraw3D
+/// Owns what persists between frames — the surface pipelines, the frame's
+/// uniform and the instance buffer (grown, never shrunk); the targets are
+/// the shot's, the materials the caller's. Every call writes its buffers
+/// before its own submit, so one pass serves one shot per submit
+/// (`Queue::write_buffer` lands at the next submit, for every draw of it).
 #[derive(Debug)]
 pub struct Pass3D {
-    pipeline: UnlitPipeline3D,
-    view_buffer: wgpu::Buffer,
-    view_group: wgpu::BindGroup,
+    bank: SurfaceBank,
+    frame_buffer: wgpu::Buffer,
+    frame_group: wgpu::BindGroup,
     instances: Option<wgpu::Buffer>,
 }
 
 impl Pass3D {
-    /// A pass drawing into targets of `hdr`'s format and samples.
-    pub fn new(device: &wgpu::Device, hdr: Hdr3D) -> Self {
-        let pipeline = UnlitPipeline3D::new(device, hdr.format, hdr.samples);
-        let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("view-3d"),
-            size: size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress,
+    /// A pass drawing into targets of `hdr`'s format and samples, its
+    /// materials bound against `layouts`.
+    pub fn new(device: &wgpu::Device, layouts: &SurfaceLayouts, hdr: Hdr3D) -> Self {
+        let bank = SurfaceBank::new(device, layouts, hdr.format, hdr.samples);
+        let frame_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("frame-3d"),
+            size: size_of::<FrameUniform3D>() as wgpu::BufferAddress,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let view_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("view-3d"),
-            layout: pipeline.view_layout(),
+        let frame_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("frame-3d"),
+            layout: &layouts.frame,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: view_buffer.as_entire_binding(),
+                resource: frame_buffer.as_entire_binding(),
             }],
         });
         Self {
-            pipeline,
-            view_buffer,
-            view_group,
+            bank,
+            frame_buffer,
+            frame_group,
             instances: None,
         }
     }
@@ -55,9 +57,14 @@ impl Pass3D {
     /// The format and samples it draws.
     pub fn hdr(&self) -> Hdr3D {
         Hdr3D {
-            format: self.pipeline.format(),
-            samples: self.pipeline.samples(),
+            format: self.bank.format(),
+            samples: self.bank.samples(),
         }
+    }
+
+    /// How many pipeline variants it has made so far.
+    pub fn pipelines(&self) -> usize {
+        self.bank.len()
     }
 
     /// Records `scene` into `targets`, made for [`hdr`](Self::hdr): colour
@@ -80,11 +87,14 @@ impl Pass3D {
             return;
         }
         queue.write_buffer(
-            &self.view_buffer,
+            &self.frame_buffer,
             0,
-            bytemuck::cast_slice(&scene.view.view_projection().to_cols_array_2d()),
+            bytemuck::bytes_of(&FrameUniform3D::new(&scene.view, &scene.lighting)),
         );
         let instances = upload_instances(device, queue, &mut self.instances, scene.instances);
+        for draw in scene.draws {
+            self.bank.prepare(device, key(draw));
+        }
 
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("pass-3d"),
@@ -118,8 +128,9 @@ impl Pass3D {
         let Some(instances) = instances else {
             return;
         };
-        pass.set_bind_group(0, &self.view_group, &[]);
-        let mut bound = None;
+        pass.set_bind_group(0, &self.frame_group, &[]);
+        let mut bound_pipeline = None;
+        let mut bound_material: Option<&super::SurfaceMaterial3D> = None;
         let stride = size_of::<Instance3D>() as wgpu::BufferAddress;
         let count = scene.instances.len() as u32;
         for draw in scene.draws {
@@ -133,9 +144,17 @@ impl Pass3D {
                 );
                 continue;
             }
-            if bound != Some(draw.winding) {
-                pass.set_pipeline(self.pipeline.pipeline(draw.winding));
-                bound = Some(draw.winding);
+            let key = key(draw);
+            if bound_pipeline != Some(key) {
+                let Some(pipeline) = self.bank.pipeline(key) else {
+                    continue;
+                };
+                pass.set_pipeline(pipeline);
+                bound_pipeline = Some(key);
+            }
+            if !bound_material.is_some_and(|bound| std::ptr::eq(bound, draw.material)) {
+                pass.set_bind_group(1, draw.material.bind_group(), &[]);
+                bound_material = Some(draw.material);
             }
             pass.set_vertex_buffer(0, draw.mesh.vertices().slice(..));
             // Bound at the run's first instance rather than drawn with a
@@ -147,6 +166,16 @@ impl Pass3D {
             pass.set_index_buffer(draw.mesh.indices().slice(..), wgpu::IndexFormat::Uint32);
             pass.draw_indexed(0..draw.mesh.index_count(), 0, 0..range.end - range.start);
         }
+    }
+}
+
+/// The pipeline variant `draw` is drawn with.
+fn key(draw: &MeshDraw3D<'_>) -> SurfaceKey {
+    SurfaceKey {
+        alpha: draw.material.alpha(),
+        double_sided: draw.material.double_sided(),
+        winding: draw.winding,
+        pass: SurfacePass::Main,
     }
 }
 

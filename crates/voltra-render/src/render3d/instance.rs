@@ -25,7 +25,9 @@ use super::winding::Winding;
 pub struct Instance3D {
     /// The model matrix's rows: `x`, `y`, `z` and the translation in `w`.
     pub model: [[f32; 4]; 3],
-    /// The normal matrix's rows, `w` unused.
+    /// The normal matrix's rows. The first row's `w` is the sign the
+    /// bitangent is turned by — −1 mirrored, 1 otherwise — the rest's
+    /// unused.
     pub normal: [[f32; 4]; 3],
     /// Multiplies what is drawn; linear, alpha last.
     pub tint: [f32; 4],
@@ -65,7 +67,7 @@ impl Instance3D {
     /// The normal matrix is the cofactor matrix — the inverse transpose
     /// times the determinant, defined for a singular model too — signed so
     /// that a mirrored model's normals still point out. It is not unit
-    /// length: a shader that reads normals normalises after multiplying.
+    /// length: the surface shader normalises after multiplying.
     pub fn new(model: Affine3A, tint: [f32; 4]) -> Result<Self, InstanceRefused> {
         if !model.is_finite() {
             return Err(InstanceRefused::NotFinite);
@@ -79,10 +81,14 @@ impl Instance3D {
         if cofactor == Mat3::ZERO {
             return Err(InstanceRefused::Degenerate);
         }
-        let normal = if Self::winding(&model) == Winding::Clockwise {
-            -cofactor
+        // Mirrored: the cofactor turned round so normals point out, and the
+        // bitangent turned with it (Bevy's `sign_determinant_model_3x3m`).
+        // A flat model's determinant is noise: both faces are drawn, and
+        // the shader turns the normal to the side it is seen from.
+        let (normal, sign) = if Self::winding(&model) == Winding::Clockwise {
+            (-cofactor, -1.0)
         } else {
-            cofactor
+            (cofactor, 1.0)
         };
         let t = model.translation;
         let rows = |m: Mat3, w: [f32; 3]| {
@@ -93,7 +99,7 @@ impl Instance3D {
         };
         Ok(Self {
             model: rows(linear, [t.x, t.y, t.z]),
-            normal: rows(normal, [0.0; 3]),
+            normal: rows(normal, [sign, 0.0, 0.0]),
             tint,
         })
     }

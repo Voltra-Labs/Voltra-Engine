@@ -204,6 +204,7 @@ impl App {
             net: &mut self.net,
             gpu_particles,
             game_frame: &mut self.world3d.game_view,
+            previews: &mut self.world3d.previews,
         };
         {
             let _ui = voltra_profile::scope("ui");
@@ -212,6 +213,9 @@ impl App {
         if let Some(title) = self.window_requests.take_title() {
             window.set_title(&title);
         }
+        // The material previews the layout asked for, before egui samples
+        // them in the present below.
+        self.world3d.draw_previews(renderer, egui, textures);
 
         // After the UI, because the UI is what produced the segments, and
         // before `present_with`, because that is when egui samples the target.

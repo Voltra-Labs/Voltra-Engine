@@ -24,7 +24,7 @@ impl Winding {
 
     /// Which way `model` turns a mesh's triangles on screen, and so which
     /// pipeline draws it
-    /// ([`UnlitPipeline3D::pipeline`](super::UnlitPipeline3D::pipeline)),
+    /// ([`SurfaceKey::winding`](super::SurfaceKey::winding)),
     /// by the sign of the determinant, unless that is rounding noise.
     ///
     /// A negative determinant (an odd number of negative scales) mirrors

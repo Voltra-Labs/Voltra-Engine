@@ -53,24 +53,29 @@ fn a_mirrored_square_and_cube_draw_their_fronts_and_test_depth() {
         } else {
             Winding::CounterClockwise
         };
+        let unlit = unlit(&mut gpu.renderer);
         let draws = [
             MeshDraw3D {
                 mesh: &square,
+                material: &unlit,
                 instances: 0..1,
                 winding: Winding::CounterClockwise,
             },
             MeshDraw3D {
                 mesh: &square,
+                material: &unlit,
                 instances: 1..2,
                 winding: mirrored,
             },
             MeshDraw3D {
                 mesh: &cube,
+                material: &unlit,
                 instances: 2..3,
                 winding: mirrored,
             },
             MeshDraw3D {
                 mesh: &square,
+                material: &unlit,
                 instances: 3..4,
                 winding: Winding::CounterClockwise,
             },
@@ -125,8 +130,10 @@ fn a_model_flattened_along_a_turned_axis_draws_at_every_angle() {
             let winding = Instance3D::winding(&model);
             assert_eq!(winding, Winding::Flat, "{flatten} at {angle}");
             let instances = [Instance3D::new(model, RED).expect("a plane is drawn")];
+            let unlit = unlit(&mut gpu.renderer);
             let draws = [MeshDraw3D {
                 mesh: &square,
+                material: &unlit,
                 instances: 0..1,
                 winding,
             }];

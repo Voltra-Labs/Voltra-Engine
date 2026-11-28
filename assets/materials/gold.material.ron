@@ -1,0 +1,10 @@
+// A smooth metal: gold. scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color: (1.0, 0.77, 0.34, 1.0),
+        metallic: 1.0,
+        roughness: 0.25,
+    ),
+)

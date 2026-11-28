@@ -7,7 +7,7 @@ mod common;
 use common::*;
 use voltra_render::glam::{Affine3A, Quat, Vec3};
 use voltra_render::render3d::{
-    Look3D, Mesh3D, MeshDraw3D, Pass3D, Scene3D, Targets3D, View3D, Winding,
+    Lighting3D, Look3D, Mesh3D, MeshDraw3D, Pass3D, Scene3D, Targets3D, View3D, Winding,
 };
 use voltra_render::{read_rgba8, wgpu, Filter, Layer, RenderTarget};
 
@@ -79,15 +79,17 @@ fn the_depth_target_follows_the_colour_target_size() {
         1.0,
         RED,
     )];
+    let unlit = unlit(&mut gpu.renderer);
     let draws = [MeshDraw3D {
         mesh: &mesh,
+        material: &unlit,
         instances: 0..1,
         winding: Winding::CounterClockwise,
     }];
     for samples in [1, 4] {
         gpu.renderer.set_msaa(samples);
         let hdr = gpu.renderer.hdr_3d();
-        let mut pass = Pass3D::new(&gpu.device, hdr);
+        let mut pass = Pass3D::new(&gpu.device, &gpu.renderer.surface_layouts().clone(), hdr);
         let mut targets = Targets3D::new(&gpu.device, hdr, 64, 64);
         let format = gpu.renderer.context().format();
         for (width, height) in [(64, 64), (96, 48), (17, 130)] {
@@ -105,6 +107,7 @@ fn the_depth_target_follows_the_colour_target_size() {
                 instances: &instances,
                 draws: &draws,
                 clear: CLEAR,
+                lighting: Lighting3D::DARK,
             };
             let mut encoder = gpu
                 .device

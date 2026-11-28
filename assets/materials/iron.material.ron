@@ -1,0 +1,10 @@
+// A rough metal. scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color: (0.56, 0.57, 0.58, 1.0),
+        metallic: 1.0,
+        roughness: 0.7,
+    ),
+)

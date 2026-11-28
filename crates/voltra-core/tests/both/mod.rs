@@ -90,7 +90,12 @@ pub fn camera_3d(world: &mut World, camera: Camera3D) -> Entity {
     e
 }
 
-/// A 2 m cube at `at`, about 62 pixels tall from the camera above.
+/// The shipped white unlit material: a mesh in its own flat colour.
+pub fn unlit() -> voltra_assets::AssetPath {
+    voltra_assets::AssetPath::new("materials/unlit.material.ron").expect("a path")
+}
+
+/// A 2 m cube at `at`, about 62 pixels tall from the camera above, unlit.
 pub fn cube(world: &mut World, at: Vec3) -> Entity {
     let e = world.spawn();
     world.insert(e, SceneId::new());
@@ -102,7 +107,7 @@ pub fn cube(world: &mut World, at: Vec3) -> Entity {
         e,
         MeshInstance3D {
             color: [CUBE[0], CUBE[1], CUBE[2], 1.0],
-            ..MeshInstance3D::new(BuiltinMesh::Cube)
+            ..MeshInstance3D::new(BuiltinMesh::Cube).with_material(unlit())
         },
     );
     e

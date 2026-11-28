@@ -9,7 +9,9 @@ mod common;
 
 use common::*;
 use voltra_render::glam::{Affine3A, Quat, Vec3};
-use voltra_render::render3d::{Look3D, Mesh3D, MeshDraw3D, Scene3D, Tonemap, View3D, Winding};
+use voltra_render::render3d::{
+    Lighting3D, Look3D, Mesh3D, MeshDraw3D, Scene3D, Tonemap, View3D, Winding,
+};
 use voltra_render::{read_rgba8, Filter, Layer, RenderTarget};
 
 /// Linear to the 8-bit sRGB a picture stores.
@@ -48,8 +50,10 @@ fn columns(gpu: &mut Gpu, tints: &[[f32; 4]], height: u32, look: &Look3D) -> Vec
             )
         })
         .collect();
+    let unlit = unlit(&mut gpu.renderer);
     let draws = [MeshDraw3D {
         mesh: &square,
+        material: &unlit,
         instances: 0..instances.len() as u32,
         winding: Winding::CounterClockwise,
     }];
@@ -60,6 +64,7 @@ fn columns(gpu: &mut Gpu, tints: &[[f32; 4]], height: u32, look: &Look3D) -> Vec
         instances: &instances,
         draws: &draws,
         clear: CLEAR,
+        lighting: Lighting3D::DARK,
     };
     gpu.renderer
         .render_3d_into(&target, &scene, look, Layer::EMPTY);
@@ -164,8 +169,10 @@ fn msaa_smooths_an_edge_that_one_sample_leaves_hard() {
         1.4,
         RED,
     )];
+    let unlit = unlit(&mut gpu.renderer);
     let draws = [MeshDraw3D {
         mesh: &square,
+        material: &unlit,
         instances: 0..1,
         winding: Winding::CounterClockwise,
     }];

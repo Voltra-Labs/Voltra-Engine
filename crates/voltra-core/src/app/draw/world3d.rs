@@ -1,26 +1,31 @@
 //! A 3D camera's shot: the world's meshes culled and grouped into the
-//! depth pass, through the camera's curve and grade, into the window or a
+//! depth pass, each through its surface material and lit by the world's
+//! light, through the camera's curve and grade, into the window or a
 //! picture — the HUD over it when it is the frame's only screen shot.
 
 use std::collections::HashSet;
 use std::path::Path;
 
-use voltra_assets::Meshes;
+use voltra_assets::{Materials, Meshes, Textures};
 use voltra_ecs::{Entity, World};
 use voltra_jobs::JobPool;
 use voltra_render::render3d::{MeshDraw3D, Scene3D};
-use voltra_render::{Layer, RenderTarget, Renderer};
+use voltra_render::{wgpu, Layer, RenderTarget, Renderer};
 use voltra_scene::camera::{FrameShots, Shot3D};
 use voltra_scene::camera3d;
 use voltra_scene::draw3d::PARALLEL_FROM;
-use voltra_scene::{DrawList3D, MeshInstance3D};
+use voltra_scene::{lighting3d, DirectionalLight3D, DrawList3D, MeshInstance3D};
 
 use super::render_settings::{self, RenderSettings, DEFAULT_RENDER_SETTINGS};
 
 mod clear;
+mod previews;
+mod surfaces;
 
 use clear::clear;
 pub(in crate::app) use clear::Picture3D;
+pub(in crate::app) use previews::SurfacePreviews;
+use surfaces::Surfaces;
 
 /// What drawing the 3D world keeps from frame to frame.
 #[derive(Debug, Default)]
@@ -38,6 +43,15 @@ pub(in crate::app) struct World3D {
     projection_warned: HashSet<(Entity, &'static str)>,
     /// The texture cameras said to draw with a texture's last frame.
     cycle_warned: HashSet<Entity>,
+    /// The frame's surface materials on the GPU.
+    surfaces: Surfaces,
+    /// What has been said about the lights, once each: a light that cannot
+    /// light, lights and environments past the one used.
+    light_warned: HashSet<(Entity, &'static str)>,
+    /// Materials drawn on spheres for the editor.
+    pub previews: SurfacePreviews,
+    /// Render textures named as a surface's image, said once each.
+    image_warned: HashSet<voltra_assets::AssetPath>,
     /// Whether the editor's game view asked, during the last layout, to
     /// show the game's whole frame.
     pub game_view: bool,
@@ -51,6 +65,45 @@ impl World3D {
             .settings
             .get_or_insert_with(|| render_settings::read(root));
         renderer.set_msaa(settings.msaa);
+    }
+
+    /// Draws the material previews the layout asked for: see
+    /// [`SurfacePreviews::draw`].
+    pub fn draw_previews(
+        &mut self,
+        renderer: &mut Renderer,
+        egui: &mut crate::ui::EguiLayer,
+        textures: &mut Textures,
+    ) {
+        let meshes = self.meshes.get_or_insert_with(Meshes::new);
+        let device = renderer.context().device().clone();
+        self.previews
+            .draw(renderer, textures, meshes, &mut |target: &RenderTarget| {
+                egui.register_view(&device, target.raw_view(), voltra_render::Filter::Linear)
+            });
+    }
+
+    /// Loads every mesh's surface material and the images it names: see
+    /// [`voltra_scene::mesh_instance3d::resolve_world`].
+    pub fn resolve_surfaces(
+        &mut self,
+        world: &World,
+        materials: &mut Materials,
+        textures: &mut Textures,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) {
+        if world.components::<MeshInstance3D>().is_none() {
+            return;
+        }
+        voltra_scene::mesh_instance3d::resolve_world(
+            world,
+            materials,
+            textures,
+            device,
+            queue,
+            &mut self.image_warned,
+        );
     }
 
     /// Reads the settings again if `path` is their file and they were read
@@ -85,16 +138,18 @@ impl World3D {
     /// Draws `world` through `shot` into `output` — the window for `None`
     /// — and `ui` over it, as `picture` says: an overlay starts transparent
     /// where the camera's clear would have filled it, a render texture is
-    /// written in straight alpha.
+    /// written in straight alpha. `sources` are the world and the stores
+    /// its surfaces draw from, resolved before the frame.
     pub fn draw(
         &mut self,
-        world: &World,
         renderer: &mut Renderer,
+        sources: Sources3D<'_>,
         shot: &Shot3D,
         output: Option<&RenderTarget>,
         picture: Picture3D,
         ui: Layer<'_>,
     ) {
+        let world = sources.world;
         let (width, height) = match output {
             Some(target) => (target.width(), target.height()),
             None => {
@@ -114,6 +169,7 @@ impl World3D {
                 );
             }
         }
+        let lighting = self.lighting(world, camera);
         let meshes = self.meshes.get_or_insert_with(Meshes::new);
         meshes.upload(renderer.context().device());
         let long = world
@@ -128,23 +184,31 @@ impl World3D {
         } else {
             None
         };
-        self.list.rebuild(world, &view, meshes, jobs);
-        // One per mesh and winding, not per instance: made each shot, as
-        // it borrows this frame's meshes.
+        self.list
+            .rebuild(world, &view, meshes, sources.materials, jobs);
+        self.surfaces.prepare(
+            renderer,
+            sources.materials,
+            sources.textures,
+            &self.list.draws,
+        );
+        // One per mesh, material and winding, not per instance: made each
+        // shot, as it borrows this frame's meshes and materials.
         let draws: Vec<MeshDraw3D<'_>> = self
             .list
             .draws
             .iter()
             .filter_map(|draw| {
-                let mesh = meshes.gpu(draw.mesh)?;
                 Some(MeshDraw3D {
-                    mesh,
+                    mesh: meshes.gpu(draw.mesh)?,
+                    material: self.surfaces.get(draw.material)?,
                     instances: draw.instances.clone(),
                     winding: draw.winding,
                 })
             })
             .collect();
         let scene = Scene3D {
+            lighting,
             view,
             instances: &self.list.instances,
             draws: &draws,
@@ -160,5 +224,53 @@ impl World3D {
             (Some(target), _) => renderer.render_3d_into(target, &scene, &look, ui),
             (None, _) => renderer.render_3d(&scene, &look, ui),
         }
+    }
+}
+
+/// What a 3D shot draws from: the world, and the asset stores its
+/// surfaces read — both resolved before the frame.
+#[derive(Clone, Copy)]
+pub(in crate::app) struct Sources3D<'a> {
+    /// The world drawn.
+    pub world: &'a World,
+    /// The images surfaces sample.
+    pub textures: &'a Textures,
+    /// The surface materials; `None` before the asset root is known.
+    pub materials: Option<&'a Materials>,
+}
+
+impl World3D {
+    /// What lights `camera`'s view of `world`, saying once what is left
+    /// out: a light that cannot light, lights and environments past the one
+    /// used.
+    fn lighting(&mut self, world: &World, camera: Entity) -> voltra_render::render3d::Lighting3D {
+        let gathered = lighting3d::gather(world, camera);
+        for (entity, light) in world.query::<DirectionalLight3D>() {
+            if let Some(problem) = light.problem() {
+                if self.light_warned.insert((entity, problem)) {
+                    log::warn!("the DirectionalLight3D on {entity:?}: {problem}");
+                }
+            }
+        }
+        if let Some(used) = gathered.light {
+            if gathered.unused_lights > 0 && self.light_warned.insert((used, "lights")) {
+                log::warn!(
+                    "{} more DirectionalLight3D in the world: only the one on {used:?} lights \
+                     for now (one directional light a view)",
+                    gathered.unused_lights
+                );
+            }
+        }
+        if let Some(used) = gathered.environment {
+            if gathered.unused_environments > 0 && self.light_warned.insert((used, "environments"))
+            {
+                log::warn!(
+                    "{} more world Environment3D: the one on {used:?} is used, the lowest entity \
+                     index",
+                    gathered.unused_environments
+                );
+            }
+        }
+        gathered.lighting
     }
 }

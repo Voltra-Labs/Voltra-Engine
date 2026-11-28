@@ -1,0 +1,11 @@
+// An emissive surface: it gives off light of its own (in the light units'
+// energy), lit or not. scenes/materials3d.ron.
+(
+    version: 1,
+    domain: Surface,
+    standard: (
+        base_color: (0.1, 0.1, 0.1, 1.0),
+        emissive: (1.0, 0.45, 0.1),
+        emissive_strength: 2.0,
+    ),
+)

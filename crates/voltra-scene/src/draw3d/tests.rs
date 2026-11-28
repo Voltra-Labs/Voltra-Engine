@@ -39,10 +39,10 @@ fn a_mesh_behind_the_camera_and_one_past_the_far_plane_are_culled() {
     mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -5.0));
     mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, 5.0));
     mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -200.0));
-    let infinite = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let infinite = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     assert_eq!(drawn(&infinite), 2, "only the one behind is culled");
     assert_eq!(infinite.culled(), 1);
-    let finite = DrawList3D::from_world(&world, &view(Some(100.0)), &mut meshes, None);
+    let finite = DrawList3D::from_world(&world, &view(Some(100.0)), &mut meshes, None, None);
     assert_eq!(drawn(&finite), 1);
     assert_eq!(finite.culled(), 2);
 }
@@ -55,7 +55,7 @@ fn instances_of_a_mesh_are_one_draw_front_to_back() {
     mesh(&mut world, BuiltinMesh::Sphere, Vec3::new(1.0, 0.0, -2.0));
     let near = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -3.0));
     mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -6.0));
-    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     assert_eq!(list.draws.len(), 2, "cubes and the sphere");
     // The sphere is nearest, so its draw goes first.
     assert_eq!(list.draws[0].mesh, meshes.builtin(BuiltinMesh::Sphere));
@@ -74,7 +74,7 @@ fn instances_of_a_mesh_are_one_draw_front_to_back() {
         mesh(&mut other, m, Vec3::new(0.0, 0.0, at));
     }
     mesh(&mut other, BuiltinMesh::Sphere, Vec3::new(1.0, 0.0, -2.0));
-    let again = DrawList3D::from_world(&other, &view(None), &mut meshes, None);
+    let again = DrawList3D::from_world(&other, &view(None), &mut meshes, None, None);
     assert_eq!(again.instances, list.instances);
     assert_eq!(again.draws, list.draws);
     let _ = (far, near);
@@ -93,7 +93,7 @@ fn zero_scale_despawned_and_broken_instances_are_not_drawn() {
     let broken = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -3.0));
     world.insert(broken, Transform3D::from_translation(Vec3::splat(f32::NAN)));
     let kept = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -6.0));
-    let mut list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let mut list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     assert_eq!(
         drawn(&list),
         2,
@@ -101,13 +101,13 @@ fn zero_scale_despawned_and_broken_instances_are_not_drawn() {
     );
     assert!(list.warned.contains(&broken), "and warned about");
     world.despawn(gone);
-    list.rebuild(&world, &view(None), &mut meshes, None);
+    list.rebuild(&world, &view(None), &mut meshes, None, None);
     assert_eq!(drawn(&list), 1);
     assert_eq!(list.instances[0].model[2][3], -6.0);
     world.despawn(kept);
     world.despawn(point);
     world.despawn(broken);
-    list.rebuild(&world, &view(None), &mut meshes, None);
+    list.rebuild(&world, &view(None), &mut meshes, None, None);
     assert!(list.is_empty() && list.instances.is_empty());
 }
 
@@ -123,7 +123,7 @@ fn a_mesh_that_will_not_load_is_a_magenta_cube() {
         ))
         .with_color([0.0, 1.0, 0.0, 1.0]),
     );
-    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     assert_eq!(list.draws[0].mesh, meshes.builtin(BuiltinMesh::Cube));
     assert_eq!(list.instances[0].tint, voltra_assets::meshes::MISSING_TINT);
 }
@@ -140,7 +140,7 @@ fn a_child_mesh_is_placed_through_its_parent() {
     );
     let child = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 2.0, 0.0));
     crate::hierarchy::set_parent(&mut world, child, parent).expect("3D under 3D");
-    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     let m = list.instances[0].model;
     assert_eq!([m[0][3], m[1][3], m[2][3]], [0.0, 2.0, -10.0]);
 }
@@ -156,9 +156,10 @@ fn a_long_list_culls_the_same_across_jobs() {
         let builtin = BuiltinMesh::ALL[i % BuiltinMesh::ALL.len()];
         mesh(&mut world, builtin, Vec3::new(x * 2.0, 0.0, z * 2.0 - 1.0));
     }
-    let serial = DrawList3D::from_world(&world, &view(Some(80.0)), &mut meshes, None);
+    let serial = DrawList3D::from_world(&world, &view(Some(80.0)), &mut meshes, None, None);
     let jobs = JobPool::new(3);
-    let parallel = DrawList3D::from_world(&world, &view(Some(80.0)), &mut meshes, Some(&jobs));
+    let parallel =
+        DrawList3D::from_world(&world, &view(Some(80.0)), &mut meshes, None, Some(&jobs));
     assert!(serial.culled() > 0 && drawn(&serial) > 0);
     assert_eq!(serial.instances, parallel.instances);
     assert_eq!(serial.draws, parallel.draws);
@@ -181,7 +182,7 @@ fn a_flattened_or_tiny_mesh_is_drawn_and_a_line_is_not() {
             Transform3D::from_translation(Vec3::new(0.0, 0.0, at)).with_scale(scale),
         );
     }
-    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     assert_eq!(drawn(&list), 3, "the line covers nothing");
     assert!(list.warned.is_empty(), "and none is worth a warning");
     let huge = mesh(&mut world, BuiltinMesh::Cube, Vec3::new(0.0, 0.0, -9.0));
@@ -189,7 +190,7 @@ fn a_flattened_or_tiny_mesh_is_drawn_and_a_line_is_not() {
         huge,
         Transform3D::from_translation(Vec3::new(0.0, 0.0, -9.0)).with_scale(Vec3::splat(1.0e20)),
     );
-    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     assert_eq!(drawn(&list), 3);
     assert!(
         list.warned.contains(&huge),
@@ -209,7 +210,7 @@ fn mirrored_instances_of_a_mesh_are_a_draw_of_their_own() {
                 .with_scale(Vec3::new(flip, 1.0, 1.0)),
         );
     }
-    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     assert_eq!(list.draws.len(), 2);
     let mirrored: Vec<_> = list
         .draws
@@ -235,7 +236,7 @@ fn a_flattened_instance_is_a_flat_draw_of_its_own() {
             .with_scale(Vec3::new(1.0, 1.0, 0.0)),
     );
     mesh(&mut world, BuiltinMesh::Cube, Vec3::new(2.0, 0.0, -5.0));
-    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None, None);
     let windings: Vec<Winding> = list.draws.iter().map(|d| d.winding).collect();
     assert_eq!(windings.len(), 2);
     assert!(windings.contains(&Winding::Flat), "{windings:?}");
