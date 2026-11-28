@@ -10,11 +10,13 @@
 use voltra_ecs::{Entity, World};
 use voltra_render::View2D;
 
+mod frame;
 mod placement;
 mod shots;
 pub mod target;
 mod viewport;
 
+pub use frame::{frame_shots, shots_3d, AnyShot, FrameShot, FrameShots, Shot3D};
 pub use placement::{aspect, eye, normalised_turn, placement, UPRIGHT};
 pub use shots::{shots, Shot};
 pub use target::CameraTarget;
@@ -202,6 +204,8 @@ pub fn active_view(world: &World, aspect: f32) -> Option<View2D> {
     view(world, active(world)?, aspect)
 }
 
+#[cfg(test)]
+mod frame_tests;
 #[cfg(test)]
 mod placement_tests;
 #[cfg(test)]

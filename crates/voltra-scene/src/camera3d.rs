@@ -4,7 +4,9 @@
 mod projection;
 
 use voltra_ecs::{Entity, World};
-use voltra_render::render3d::View3D;
+use voltra_render::render3d::{Look3D, Tonemap, View3D};
+
+use crate::camera::Viewport;
 
 pub use projection::Projection3D;
 
@@ -20,17 +22,36 @@ pub struct Camera3D {
     /// How it projects: perspective by default.
     #[serde(default)]
     pub projection: Projection3D,
-    /// Which camera wins when more than one is active: higher takes the
-    /// frame, as [`Camera2D::priority`](crate::Camera2D::priority).
+    /// The order cameras draw a frame in, lowest first, a later one over
+    /// an earlier where they overlap — as
+    /// [`Camera2D::priority`](crate::Camera2D::priority), with the two
+    /// kinds in one order: at equal priority a 3D camera draws before a 2D
+    /// one, so by default the 3D world is the backdrop and 2D over it.
     #[serde(default)]
     pub priority: i32,
     /// Whether this camera is a candidate at all.
     #[serde(default = "yes")]
     pub active: bool,
     /// What the frame is cleared to before the world is drawn. Not written
-    /// at its default.
+    /// at its default. Over a 2D camera's picture that drew earlier the
+    /// background is transparent — the camera is an overlay — unless this
+    /// is a [`Color`](CameraClear::Color), which keeps it opaque.
     #[serde(default, skip_serializing_if = "CameraClear::is_background")]
     pub clear: CameraClear,
+    /// The part of the screen it draws into: all of it by default, not
+    /// written then — or a part, for split screen and a picture in a
+    /// picture, as [`Camera2D::viewport`](crate::Camera2D::viewport).
+    #[serde(default, skip_serializing_if = "Viewport::is_full")]
+    pub viewport: Viewport,
+    /// How its HDR light is brought into the screen's range, after
+    /// exposure and before the grade: AgX by default, not written then.
+    #[serde(default, skip_serializing_if = "Tonemap::is_default")]
+    pub tonemap: Tonemap,
+    /// Exposure, bloom and the grade, as a 2D camera's
+    /// [`post`](crate::Camera2D::post). Neutral, and not written, unless
+    /// set.
+    #[serde(default, skip_serializing_if = "crate::post::PostProcess::is_neutral")]
+    pub post: crate::post::PostProcess,
 }
 
 fn yes() -> bool {
@@ -44,6 +65,9 @@ impl Default for Camera3D {
             priority: 0,
             active: true,
             clear: CameraClear::Background,
+            viewport: Viewport::FULL,
+            tonemap: Tonemap::default(),
+            post: crate::post::PostProcess::default(),
         }
     }
 }
@@ -80,10 +104,20 @@ impl Camera3D {
         self.projection = projection;
         self
     }
+
+    /// How its picture is made from its light: the curve and the grade.
+    pub fn look(&self) -> Look3D {
+        Look3D {
+            tonemap: self.tonemap,
+            post: self.post.settings(),
+        }
+    }
 }
 
-/// The 3D camera a game renders through: the highest-priority active one,
-/// ties to the lowest entity index, as [`camera::active`](crate::camera::active).
+/// The highest-priority active 3D camera, ties to the lowest entity index,
+/// as [`camera::active`](crate::camera::active): what the inspector and a
+/// tool call "the scene's 3D camera". A frame draws every active camera
+/// ([`camera::frame_shots`](crate::camera::frame_shots)).
 pub fn active(world: &World) -> Option<Entity> {
     world
         .query::<Camera3D>()
@@ -172,11 +206,15 @@ mod tests {
     #[test]
     fn a_camera_round_trips_and_writes_only_what_it_changes() {
         let plain = ron::to_string(&Camera3D::default()).expect("serialises");
-        assert!(!plain.contains("clear"), "{plain}");
+        for unwritten in ["clear", "viewport", "tonemap", "post"] {
+            assert!(!plain.contains(unwritten), "{plain}");
+        }
         let back: Camera3D = ron::from_str("(projection: Perspective())").expect("defaults");
         assert_eq!(back, Camera3D::default());
         let ortho = Camera3D {
             clear: CameraClear::Color([0.0, 0.0, 0.0, 1.0]),
+            viewport: Viewport::RIGHT,
+            tonemap: Tonemap::Aces,
             ..Camera3D::default().with_projection(Projection3D::orthographic(8.0))
         };
         let text = ron::to_string(&ortho).expect("serialises");
