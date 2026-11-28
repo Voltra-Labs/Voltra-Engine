@@ -25,26 +25,30 @@ struct Hint {
     degrees: Vec3,
 }
 
+/// How many of an entity's past hints are kept, newest first: enough for an
+/// undo and a redo across a few typed rotations to come back to the angles
+/// each was typed as, rather than only the last.
+const KEPT: usize = 8;
+
 /// Every inspected 3D entity's shown angles.
 #[derive(Debug, Default)]
 pub(crate) struct EulerHints {
-    by_entity: HashMap<Entity, Hint>,
+    by_entity: HashMap<Entity, Vec<Hint>>,
 }
 
 impl EulerHints {
     /// The angles to show for `entity`, whose rotation is now `rotation`:
-    /// the ones typed, while the rotation is still the one they made, and
-    /// the quaternion's own otherwise.
+    /// the ones typed or shown for that very rotation, if it is one of the
+    /// last few it had, and the quaternion's own otherwise.
     pub(crate) fn degrees(&mut self, entity: Entity, rotation: Quat) -> Vec3 {
-        if let Some(hint) = self.by_entity.get(&entity) {
-            if hint.rotation == rotation {
-                return hint.degrees;
-            }
+        let kept = self.by_entity.entry(entity).or_default();
+        if let Some(hint) = kept.iter().find(|hint| hint.rotation == rotation) {
+            return hint.degrees;
         }
         let degrees = Transform3D::default()
             .with_rotation(rotation)
             .euler_degrees();
-        self.by_entity.insert(entity, Hint { rotation, degrees });
+        remember(kept, Hint { rotation, degrees });
         degrees
     }
 
@@ -52,7 +56,10 @@ impl EulerHints {
     /// the angles that made it.
     pub(crate) fn typed(&mut self, entity: Entity, degrees: Vec3) -> Quat {
         let rotation = Transform3D::from_euler_degrees(degrees).rotation;
-        self.by_entity.insert(entity, Hint { rotation, degrees });
+        remember(
+            self.by_entity.entry(entity).or_default(),
+            Hint { rotation, degrees },
+        );
         rotation
     }
 
@@ -62,6 +69,14 @@ impl EulerHints {
     pub(crate) fn forget_dead(&mut self, world: &World) {
         self.by_entity.retain(|&entity, _| world.is_alive(entity));
     }
+}
+
+/// `hint` as the newest of `kept`, replacing one for the same rotation and
+/// dropping the oldest past [`KEPT`].
+fn remember(kept: &mut Vec<Hint>, hint: Hint) {
+    kept.retain(|old| old.rotation != hint.rotation);
+    kept.insert(0, hint);
+    kept.truncate(KEPT);
 }
 
 #[cfg(test)]
@@ -118,6 +133,29 @@ mod tests {
         let typed = Vec3::new(10.0, 450.0, -720.0);
         let rotation = hints.typed(e, typed);
         assert_eq!(hints.degrees(e, rotation), typed);
+    }
+
+    #[test]
+    fn undo_then_redo_comes_back_to_each_typed_angle() {
+        let (_, e) = entity();
+        let mut hints = EulerHints::default();
+        let first = hints.typed(e, Vec3::new(0.0, 180.0, 0.0));
+        let second = hints.typed(e, Vec3::new(180.0, 0.0, 0.0));
+
+        // Undo puts the first rotation back, redo the second.
+        assert_eq!(hints.degrees(e, first), Vec3::new(0.0, 180.0, 0.0));
+        assert_eq!(hints.degrees(e, second), Vec3::new(180.0, 0.0, 0.0));
+        assert_eq!(hints.degrees(e, first), Vec3::new(0.0, 180.0, 0.0));
+    }
+
+    #[test]
+    fn only_the_last_few_are_kept() {
+        let (_, e) = entity();
+        let mut hints = EulerHints::default();
+        for yaw in 0..20 {
+            hints.typed(e, Vec3::new(0.0, yaw as f32 * 5.0 + 360.0, 0.0));
+        }
+        assert_eq!(hints.by_entity[&e].len(), KEPT);
     }
 
     #[test]

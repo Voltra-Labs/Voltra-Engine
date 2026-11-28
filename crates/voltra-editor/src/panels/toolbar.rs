@@ -156,10 +156,18 @@ fn views(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
 /// Says so when the scene holds 3D entities: the 2D view neither draws nor
 /// picks them, and a scene that looks empty should not be taken for one.
 fn not_shown_3d(ui: &mut Ui, frame: &UiFrame<'_>) {
+    // One with both transforms (a file that broke the rule) is drawn by its
+    // 2D one, so it is not counted as hidden.
     let count = frame
         .world
-        .components::<voltra_scene::Transform3D>()
-        .map_or(0, |set| set.len());
+        .query::<voltra_scene::Transform3D>()
+        .filter(|(entity, _)| {
+            frame
+                .world
+                .get::<voltra_scene::Transform2D>(*entity)
+                .is_none()
+        })
+        .count();
     if count == 0 {
         return;
     }
