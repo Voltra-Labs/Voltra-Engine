@@ -9779,9 +9779,12 @@ what was built and where it differs.
   unsuffixed name to 3D, which would have made every 0.4 file's
   `RigidBody` silently mean a different component. Bevy's one `Transform`
   is the shape rejected in "When 3D arrives".
-- **Not yet**: the editor's `t:` search takes the new names only (`t:Sprite`
-  matches nothing now; no alias lookup for old names typed by habit); a
-  game's own component renamed has no migration hook (the table is the
+- **The editor's `t:` search** takes a registered name, or — when no
+  component is called exactly that — the name without its `2D`/`3D`
+  suffix: `t:sprite` finds every `Sprite2D` (and, once it exists, every
+  `Sprite3D`), so a habit from 0.4 still works and "every sprite" stays one
+  term; a part of a name (`t:Sprit`) is still no type.
+- **Not yet**: a game's own component renamed has no migration hook (the table is the
   engine's; a game renaming one edits its files); the bridge and MCP take
   only the new names in tool arguments (a v1 file is read in new names);
   `migrate` cannot normalise a game's components without linking the game.

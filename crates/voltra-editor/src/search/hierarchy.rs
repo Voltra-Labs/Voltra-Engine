@@ -36,21 +36,23 @@ pub(crate) fn label(world: &World, entity: Entity) -> String {
 /// Every scene entity `query` matches: its label holds every word, and it
 /// has a component of every `t:` type — all of them, so `t:Sprite2D
 /// t:Collider2D` narrows rather than widens. A type is the registered name,
-/// case aside; one no component is called matches nothing and is reported.
+/// case aside — or, when no component is called exactly that, the name
+/// without its dimension: `t:sprite` is any of `Sprite2D` and `Sprite3D`,
+/// so the name a 0.4 author types still finds them. One no component is
+/// called matches nothing and is reported.
 pub(crate) fn filter(
     world: &World,
     registry: &ComponentRegistry,
     query: &Query,
 ) -> HierarchyFilter {
     let mut found = HierarchyFilter::default();
-    let mut components = Vec::new();
+    let mut components: Vec<Vec<&str>> = Vec::new();
     for typed in query.types() {
-        match registry
-            .names()
-            .find(|name| name.eq_ignore_ascii_case(typed))
-        {
-            Some(name) => components.push(name),
-            None => found.unknown.push(typed.clone()),
+        let names = type_names(registry, typed);
+        if names.is_empty() {
+            found.unknown.push(typed.clone());
+        } else {
+            components.push(names);
         }
     }
     if !found.unknown.is_empty() {
@@ -58,9 +60,11 @@ pub(crate) fn filter(
     }
 
     for (entity, _) in world.query::<SceneId>() {
-        let has_all = components
-            .iter()
-            .all(|name| registry.has(world, entity, name) == Some(true));
+        let has_all = components.iter().all(|names| {
+            names
+                .iter()
+                .any(|name| registry.has(world, entity, name) == Some(true))
+        });
         if has_all && query.name_matches(&label(world, entity)) {
             found.matched.insert(entity);
         }
@@ -75,6 +79,25 @@ pub(crate) fn filter(
         }
     }
     found
+}
+
+/// The registered names a `t:` term means: the one it spells, case aside,
+/// or else each it spells but for a `2D`/`3D` suffix. Empty for neither.
+fn type_names<'r>(registry: &'r ComponentRegistry, typed: &str) -> Vec<&'r str> {
+    if let Some(name) = registry
+        .names()
+        .find(|name| name.eq_ignore_ascii_case(typed))
+    {
+        return vec![name];
+    }
+    registry
+        .names()
+        .filter(|name| {
+            name.len() == typed.len() + 2
+                && name[..typed.len()].eq_ignore_ascii_case(typed)
+                && ["2D", "3D"].contains(&&name[typed.len()..])
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -127,6 +150,15 @@ mod tests {
 
         let solid = filter(&world, &registry, &Query::parse("t:Sprite2D t:Collider2D"));
         assert_eq!(solid.matched, HashSet::from([boxed]));
+
+        // Without the dimension, as 0.4 spelled them: the same answers.
+        let sprites = filter(&world, &registry, &Query::parse("t:sprite"));
+        assert_eq!(sprites.matched, HashSet::from([gold, boxed]));
+        let solid = filter(&world, &registry, &Query::parse("t:Sprite t:Collider"));
+        assert_eq!(solid.matched, HashSet::from([boxed]));
+        // But not a part of a name: `t:Sprit` is no type.
+        let partial = filter(&world, &registry, &Query::parse("t:Sprit"));
+        assert_eq!(partial.unknown, ["sprit"]);
 
         let named_too = filter(&world, &registry, &Query::parse("t:Sprite2D coin"));
         assert_eq!(named_too.matched, HashSet::from([gold]));
