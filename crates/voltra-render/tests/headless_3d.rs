@@ -62,8 +62,12 @@ fn quad(mesh: &mut MeshData3D, center: Vec3, u: Vec3, v: Vec3, normal: Vec3) {
 }
 
 fn instance(at: Vec3, rotation: Quat, scale: f32, tint: [f32; 4]) -> Instance3D {
-    let model = Affine3A::from_scale_rotation_translation(Vec3::splat(scale), rotation, at);
-    Instance3D::new(model, tint).expect("an invertible placement")
+    scaled(at, rotation, Vec3::splat(scale), tint)
+}
+
+fn scaled(at: Vec3, rotation: Quat, scale: Vec3, tint: [f32; 4]) -> Instance3D {
+    let model = Affine3A::from_scale_rotation_translation(scale, rotation, at);
+    Instance3D::new(model, tint).expect("a drawable placement")
 }
 
 struct Gpu {
@@ -92,19 +96,30 @@ impl Gpu {
         instances: &[Instance3D],
         draws: &[(u32, u32)],
     ) -> Vec<[u8; 4]> {
-        let format = self.renderer.context().format();
-        let target = RenderTarget::new(&self.device, "3d", format, width, height, Filter::Linear);
         let draws: Vec<MeshDraw3D<'_>> = draws
             .iter()
             .map(|&(start, end)| MeshDraw3D {
                 mesh,
                 instances: start..end,
+                mirrored: false,
             })
             .collect();
+        self.draw_all((width, height), view, instances, &draws)
+    }
+
+    fn draw_all(
+        &mut self,
+        (width, height): (u32, u32),
+        view: View3D,
+        instances: &[Instance3D],
+        draws: &[MeshDraw3D<'_>],
+    ) -> Vec<[u8; 4]> {
+        let format = self.renderer.context().format();
+        let target = RenderTarget::new(&self.device, "3d", format, width, height, Filter::Linear);
         let scene = Scene3D {
             view,
             instances,
-            draws: &draws,
+            draws,
             clear: CLEAR,
         };
         self.renderer.render_3d_into(&target, &scene, Layer::EMPTY);
@@ -207,6 +222,7 @@ fn the_depth_target_follows_the_colour_target_size() {
     let draws = [MeshDraw3D {
         mesh: &mesh,
         instances: 0..1,
+        mirrored: false,
     }];
     for (width, height) in [(64, 64), (96, 48), (17, 130)] {
         let target = RenderTarget::new(&gpu.device, "t", format, width, height, Filter::Linear);
@@ -293,4 +309,95 @@ fn nothing_to_draw_clears_and_a_bad_range_is_skipped() {
     // not a GPU validation error.
     let pixels = gpu.draw((16, 16), view, &mesh, &one, &[(0, 1), (1, 5)]);
     assert!(is_red(pixels[8 * 16 + 8]));
+}
+
+const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
+const YELLOW: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
+
+fn is_blue(p: [u8; 4]) -> bool {
+    p[2] > 200 && p[0] < 40 && p[1] < 40
+}
+
+fn is_yellow(p: [u8; 4]) -> bool {
+    p[0] > 200 && p[1] > 200 && p[2] < 40
+}
+
+#[test]
+fn a_mirrored_square_and_cube_draw_their_fronts_and_test_depth() {
+    let Some(mut gpu) = gpu() else {
+        eprintln!("no adapter: skipping");
+        return;
+    };
+    let square = Mesh3D::new(&gpu.device, "square", &square(0.5)).expect("a square");
+    let cube = Mesh3D::new(&gpu.device, "cube", &cube()).expect("a cube");
+    let view = looking_down_minus_z(45.0, None);
+    let turned = Quat::from_rotation_y(0.6) * Quat::from_rotation_x(0.3);
+    let left = Vec3::new(-0.9, 0.0, -4.0);
+    let right = Vec3::new(0.9, 0.0, -4.0);
+    let mut counts = Vec::new();
+    for flip in [1.0, -1.0] {
+        let mirror = Vec3::new(flip, 1.0, 1.0);
+        let instances = [
+            // A red wall behind both, a green square left, a blue cube right
+            // with a yellow square in front of its middle.
+            scaled(
+                Vec3::new(0.0, 0.0, -8.0),
+                Quat::IDENTITY,
+                Vec3::splat(20.0),
+                RED,
+            ),
+            scaled(left, Quat::IDENTITY, mirror, GREEN),
+            scaled(right, turned, mirror * 0.8, BLUE),
+            scaled(
+                right + Vec3::new(0.0, 0.0, 0.9),
+                Quat::IDENTITY,
+                Vec3::splat(0.3),
+                YELLOW,
+            ),
+        ];
+        let mirrored = flip < 0.0;
+        let draws = [
+            MeshDraw3D {
+                mesh: &square,
+                instances: 0..1,
+                mirrored: false,
+            },
+            MeshDraw3D {
+                mesh: &square,
+                instances: 1..2,
+                mirrored,
+            },
+            MeshDraw3D {
+                mesh: &cube,
+                instances: 2..3,
+                mirrored,
+            },
+            MeshDraw3D {
+                mesh: &square,
+                instances: 3..4,
+                mirrored: false,
+            },
+        ];
+        let pixels = gpu.draw_all((64, 64), view, &instances, &draws);
+        let green = pixels.iter().filter(|&&p| is_green(p)).count();
+        let blue = pixels.iter().filter(|&&p| is_blue(p)).count();
+        let yellow = pixels.iter().filter(|&&p| is_yellow(p)).count();
+        let red = pixels.iter().filter(|&&p| is_red(p)).count();
+        assert!(
+            green > 100 && blue > 100 && yellow > 4,
+            "{flip}: {green} {blue} {yellow}"
+        );
+        // The wall behind is hidden where they stand: depth holds.
+        assert_eq!(green + blue + yellow + red, 64 * 64, "{flip}");
+        counts.push((green, blue, yellow));
+    }
+    // A mirrored square and a mirrored symmetric cube cover what the
+    // unmirrored ones do, within a pixel row of the cube's turned edges.
+    let (plain, flipped) = (counts[0], counts[1]);
+    assert_eq!(plain.0, flipped.0, "the square");
+    assert!(
+        (plain.1 as i32 - flipped.1 as i32).abs() <= 16,
+        "{plain:?} {flipped:?}"
+    );
+    assert_eq!(plain.2, flipped.2, "the yellow square over the cube");
 }

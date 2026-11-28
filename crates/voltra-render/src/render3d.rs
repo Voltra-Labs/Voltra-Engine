@@ -23,7 +23,7 @@ mod view;
 pub use bounds::Aabb3;
 pub use depth::{DepthTarget, DEPTH_CLEAR, DEPTH_COMPARE, DEPTH_FORMAT};
 pub use frustum::Frustum;
-pub use instance::Instance3D;
+pub use instance::{Instance3D, InstanceRefused};
 pub use mesh::Mesh3D;
 pub use mesh_data::{MeshData3D, MeshDataError};
 pub use pass::Pass3D;

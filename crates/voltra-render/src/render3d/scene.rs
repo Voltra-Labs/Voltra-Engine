@@ -7,13 +7,17 @@ use super::mesh::Mesh3D;
 use super::view::View3D;
 
 /// One instanced draw: `mesh`, once per instance in `instances` — a range
-/// of [`Scene3D::instances`].
+/// of [`Scene3D::instances`], all mirrored or none.
 #[derive(Debug, Clone)]
 pub struct MeshDraw3D<'a> {
     /// The mesh drawn.
     pub mesh: &'a Mesh3D,
     /// Which of the frame's instances draw it.
     pub instances: Range<u32>,
+    /// Whether those instances mirror space
+    /// ([`Instance3D::mirrored`](super::Instance3D::mirrored)): drawn with
+    /// clockwise fronts.
+    pub mirrored: bool,
 }
 
 /// A 3D frame's whole input: what the scene side's draw list resolves to.

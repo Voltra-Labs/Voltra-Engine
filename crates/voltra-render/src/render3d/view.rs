@@ -17,10 +17,11 @@ use super::frustum::Frustum;
 ///
 /// The constructors take what a camera component holds, already in
 /// radians and metres, and never produce a non-finite matrix: a near plane
-/// that is not positive becomes [`DEFAULT_NEAR`](Self::DEFAULT_NEAR), a far
-/// plane not past it is dropped (perspective: infinite) or moved past it
-/// (orthographic), the field of view is kept inside `(0°, 180°)` and the
-/// aspect positive. The scene side warns about such a camera; this side
+/// that is not positive becomes [`DEFAULT_NEAR`](Self::DEFAULT_NEAR), both
+/// planes are kept within 10¹⁸ m, a far plane not past the near one is
+/// dropped (perspective: infinite) or moved past it (orthographic: a metre
+/// or a thousandth, whichever is more), the field of view is kept inside
+/// `(0°, 180°)` and the aspect positive. The scene side warns about such a camera; this side
 /// only refuses to draw garbage.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct View3D {
@@ -56,7 +57,11 @@ impl View3D {
             std::f32::consts::FRAC_PI_3
         };
         let aspect = sane_aspect(aspect);
-        let projection = match far.filter(|far| far.is_finite() && *far > near) {
+        let far = far
+            .filter(|far| far.is_finite())
+            .map(|far| far.min(MAX_PLANE))
+            .filter(|far| *far > near);
+        let projection = match far {
             // Reversed by handing the planes over swapped: near maps to 1.
             Some(far) => directx::perspective(fov_y, aspect, far, near),
             None => directx::perspective_infinite_reverse(fov_y, aspect, near),
@@ -73,11 +78,17 @@ impl View3D {
         near: f32,
         far: f32,
     ) -> Self {
-        let near = if near.is_finite() { near.max(0.0) } else { 0.0 };
+        let near = if near.is_finite() {
+            near.clamp(0.0, MAX_PLANE)
+        } else {
+            0.0
+        };
+        // Past `near` by a metre or a thousandth of it, whichever is more:
+        // `near + 1` is `near` again from 1e8 up.
         let far = if far.is_finite() && far > near {
             far
         } else {
-            near + 1.0
+            (near + 1.0).max(near * 1.001)
         };
         let half_height = if half_height.is_finite() && half_height > 0.0 {
             half_height
@@ -131,9 +142,14 @@ impl View3D {
     }
 }
 
+/// The furthest a near plane may be: far enough for any scene, near enough
+/// that a far plane a thousandth past it, and the matrices made from both
+/// (a perspective one multiplies the two), stay finite.
+const MAX_PLANE: f32 = 1.0e18;
+
 fn sane_near(near: f32) -> f32 {
     if near.is_finite() && near > 0.0 {
-        near
+        near.min(MAX_PLANE)
     } else {
         View3D::DEFAULT_NEAR
     }
@@ -203,6 +219,10 @@ mod tests {
             View3D::perspective(broken, f32::NAN, 0.0, -1.0, Some(f32::NAN)),
             View3D::perspective(Affine3A::IDENTITY, 0.0, f32::INFINITY, 0.0, Some(0.0)),
             View3D::orthographic(broken, 0.0, -2.0, f32::NAN, -5.0),
+            View3D::orthographic(Affine3A::IDENTITY, 1.0, 1.0, 1.0e8, 0.0),
+            View3D::orthographic(Affine3A::IDENTITY, 1.0, 1.0, 1.0e38, f32::MAX),
+            View3D::perspective(Affine3A::IDENTITY, 1.0, 1.0, 1.0e38, None),
+            View3D::perspective(Affine3A::IDENTITY, 1.0, 1.0, f32::MAX, Some(f32::MAX)),
         ] {
             assert!(view.view_projection().is_finite(), "{view:?}");
         }

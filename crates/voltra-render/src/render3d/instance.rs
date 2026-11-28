@@ -49,17 +49,38 @@ impl Instance3D {
         }
     }
 
-    /// The instance of a mesh placed by `model` and tinted `tint`, or `None`
-    /// when `model` is not finite or collapses space (a zero scale on some
-    /// axis): such a mesh covers no pixel, and its normal matrix does not
-    /// exist.
-    pub fn new(model: Affine3A, tint: [f32; 4]) -> Option<Self> {
-        let linear = Mat3::from(model.matrix3);
-        let determinant = linear.determinant();
-        if !model.is_finite() || !determinant.is_finite() || determinant.abs() < 1.0e-12 {
-            return None;
+    /// The instance of a mesh placed by `model` and tinted `tint`.
+    ///
+    /// Refused only when nothing can be drawn from it: a model that is not
+    /// finite, or whose normal matrix overflows ([`InstanceRefused::NotFinite`]),
+    /// or one that collapses space to a line or a point
+    /// ([`InstanceRefused::Degenerate`], rank below 2) — it covers no pixel.
+    /// A model flattened to a plane (`builtin:plane` at scale `(10, 0, 10)`,
+    /// a cube with no height) still covers pixels and is drawn, as is a
+    /// tiny one.
+    ///
+    /// The normal matrix is the cofactor matrix — the inverse transpose
+    /// times the determinant, defined for a singular model too — signed so
+    /// that a mirrored model's normals still point out. It is not unit
+    /// length: a shader that reads normals normalises after multiplying.
+    pub fn new(model: Affine3A, tint: [f32; 4]) -> Result<Self, InstanceRefused> {
+        if !model.is_finite() {
+            return Err(InstanceRefused::NotFinite);
         }
-        let normal = linear.inverse().transpose();
+        let linear = Mat3::from(model.matrix3);
+        let (a, b, c) = (linear.x_axis, linear.y_axis, linear.z_axis);
+        let cofactor = Mat3::from_cols(b.cross(c), c.cross(a), a.cross(b));
+        if !cofactor.is_finite() {
+            return Err(InstanceRefused::NotFinite);
+        }
+        if cofactor == Mat3::ZERO {
+            return Err(InstanceRefused::Degenerate);
+        }
+        let normal = if Self::mirrored(&model) {
+            -cofactor
+        } else {
+            cofactor
+        };
         let t = model.translation;
         let rows = |m: Mat3, w: [f32; 3]| {
             [0, 1, 2].map(|i| {
@@ -67,12 +88,31 @@ impl Instance3D {
                 [row.x, row.y, row.z, w[i]]
             })
         };
-        Some(Self {
+        Ok(Self {
             model: rows(linear, [t.x, t.y, t.z]),
             normal: rows(normal, [0.0; 3]),
             tint,
         })
     }
+
+    /// Whether `model` mirrors space (a negative determinant: an odd number
+    /// of negative scales). A mirrored mesh's triangles wind the other way
+    /// on screen, so it is drawn with the clockwise pipeline
+    /// ([`UnlitPipeline3D::pipeline`](super::UnlitPipeline3D::pipeline)), as
+    /// Unity and Godot flip the front face for a negatively scaled renderer.
+    pub fn mirrored(model: &Affine3A) -> bool {
+        Mat3::from(model.matrix3).determinant() < 0.0
+    }
+}
+
+/// Why [`Instance3D::new`] drew nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstanceRefused {
+    /// The model, or its normal matrix, is not finite: a broken transform,
+    /// worth saying so once.
+    NotFinite,
+    /// The model collapses space to a line or a point: it covers no pixel.
+    Degenerate,
 }
 
 #[cfg(test)]
@@ -147,10 +187,52 @@ mod tests {
     }
 
     #[test]
-    fn a_collapsed_or_broken_model_has_no_instance() {
-        let flat = Affine3A::from_scale(Vec3::new(1.0, 0.0, 1.0));
-        assert!(Instance3D::new(flat, [1.0; 4]).is_none());
+    fn a_flat_or_tiny_model_is_drawn_and_a_line_or_a_broken_one_is_not() {
+        for drawn in [
+            Vec3::new(10.0, 0.0, 10.0),
+            Vec3::new(1.0, 0.0, 1.0),
+            Vec3::splat(1.0e-4),
+            Vec3::new(-1.0, 1.0, 1.0),
+        ] {
+            let model = Affine3A::from_scale(drawn);
+            assert!(Instance3D::new(model, [1.0; 4]).is_ok(), "{drawn}");
+        }
+        // A plane flattened along Y keeps its normal along Y.
+        let flat = Instance3D::new(Affine3A::from_scale(Vec3::new(10.0, 0.0, 10.0)), [1.0; 4])
+            .expect("a plane");
+        let n = flat.normal.map(|r| glam::Vec4::from(r).truncate());
+        let up = Vec3::new(n[0].dot(Vec3::Y), n[1].dot(Vec3::Y), n[2].dot(Vec3::Y));
+        assert!(up.normalize().abs_diff_eq(Vec3::Y, 1e-6), "{up}");
+        for line in [Vec3::new(1.0, 0.0, 0.0), Vec3::ZERO] {
+            let model = Affine3A::from_scale(line);
+            assert_eq!(
+                Instance3D::new(model, [1.0; 4]),
+                Err(InstanceRefused::Degenerate)
+            );
+        }
         let broken = Affine3A::from_translation(Vec3::splat(f32::NAN));
-        assert!(Instance3D::new(broken, [1.0; 4]).is_none());
+        assert_eq!(
+            Instance3D::new(broken, [1.0; 4]),
+            Err(InstanceRefused::NotFinite)
+        );
+        let overflowing = Affine3A::from_scale(Vec3::splat(1.0e20));
+        assert_eq!(
+            Instance3D::new(overflowing, [1.0; 4]),
+            Err(InstanceRefused::NotFinite)
+        );
+    }
+
+    #[test]
+    fn a_mirrored_model_keeps_its_normals_pointing_out() {
+        let model = Affine3A::from_scale(Vec3::new(-2.0, 1.0, 1.0));
+        assert!(Instance3D::mirrored(&model));
+        assert!(!Instance3D::mirrored(&Affine3A::from_scale(Vec3::splat(
+            2.0
+        ))));
+        let instance = Instance3D::new(model, [1.0; 4]).expect("invertible");
+        // The +X face is now at −X; its normal must point to −X.
+        let n = instance.normal.map(|r| glam::Vec4::from(r).truncate());
+        let out = Vec3::new(n[0].dot(Vec3::X), n[1].dot(Vec3::X), n[2].dot(Vec3::X));
+        assert!(out.x < 0.0, "{out}");
     }
 }

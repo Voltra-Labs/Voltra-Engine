@@ -115,8 +115,8 @@ impl Pass3D {
         let Some(instances) = instances else {
             return;
         };
-        pass.set_pipeline(self.pipeline.pipeline());
         pass.set_bind_group(0, &self.view_group, &[]);
+        let mut bound = None;
         let stride = size_of::<Instance3D>() as wgpu::BufferAddress;
         let count = scene.instances.len() as u32;
         for draw in scene.draws {
@@ -129,6 +129,10 @@ impl Pass3D {
                     "a 3D draw names instances {range:?} of {count}; skipped (a draw list bug)"
                 );
                 continue;
+            }
+            if bound != Some(draw.mirrored) {
+                pass.set_pipeline(self.pipeline.pipeline(draw.mirrored));
+                bound = Some(draw.mirrored);
             }
             pass.set_vertex_buffer(0, draw.mesh.vertices().slice(..));
             // Bound at the run's first instance rather than drawn with a
