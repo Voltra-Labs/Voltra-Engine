@@ -10343,16 +10343,18 @@ asked).
 
   | Benchmark | Median |
   | --- | --- |
-  | `draw3d/cull-group/10k` | 1.12 ms |
-  | `draw3d/cull-group-jobs/10k` | 1.05 ms |
+  | `draw3d/cull-group/10k` | 1.32 ms |
+  | `draw3d/cull-group-jobs/10k` | 1.21 ms |
 
   10 000 instances over the five built-in meshes (the spec asked for 20;
   only five meshes exist until mesh files, and the group count barely
   moves the cost, which is per instance), about half outside the view.
   First measured at 2.17 ms: the sort moved whole candidates (some 256
   bytes each) and each built-in was found through a hashed map. Sorting
-  20-byte keys and an array of built-in handles halved it (the winding
-  since added makes the key 24 bytes). Split by phase
+  20-byte keys and an array of built-in handles halved it, to 1.12 ms;
+  the review's fixes — the winding in the key (24 bytes), a determinant
+  per instance, the refusal reason kept — brought it to the 1.32 ms
+  above. Split by phase
   (best of 40, optimised test build): composing the world's matrices
   0.30 ms, gathering 0.24, culling 0.35, sorting and grouping 0.36 — so
   culling across the pool saves little at 10 000, and the pool is there
