@@ -94,7 +94,7 @@ impl GpuContext {
         device.set_device_lost_callback(|reason, message| {
             log::error!("the GPU device was lost ({reason:?}): {message}");
         });
-        let errors = errors::UncapturedErrors::install(&device);
+        let errors = errors::UncapturedErrors::install(&device, false);
 
         let mut config = surface
             .get_default_config(&adapter, width.max(1), height.max(1))
@@ -140,7 +140,7 @@ impl GpuContext {
             ..Default::default()
         }))
         .ok()?;
-        let errors = errors::UncapturedErrors::install(&device);
+        let errors = errors::UncapturedErrors::install(&device, cfg!(debug_assertions));
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
