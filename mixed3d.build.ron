@@ -1,0 +1,10 @@
+// One frame of both worlds: a 3D scene, a 2D overlay and a HUD in
+// scenes/mixed3d.ron. What crates/voltra-player/web/test/mixed3d.mjs
+// builds for the web.
+(
+    version: 1,
+    name: "Voltra Mixed 3D",
+    scene: "scenes/mixed3d.ron",
+    window: (width: 960, height: 540),
+    assets: "assets",
+)
