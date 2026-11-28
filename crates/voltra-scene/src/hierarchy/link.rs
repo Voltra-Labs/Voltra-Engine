@@ -47,6 +47,19 @@ pub enum HierarchyError {
     ///
     /// [`Transform2D`]: crate::Transform2D
     PhysicsBody,
+    /// The link would put one dimension's transform under the other's.
+    ///
+    /// A 2D child under a 3D parent has no frame to compose — a `Mat3`
+    /// under an `Affine3A` — so the nearest transform at or above the parent
+    /// and the nearest at or below the child, on every branch, must be of
+    /// one dimension. An entity with no transform passes the rule through.
+    /// See [`super::dimension`].
+    MixedDimensions,
+    /// The entity already carries the other dimension's transform.
+    ///
+    /// Not a link refusal: what [`super::can_take_transform`] answers for a
+    /// second transform, kept beside the link rules it shares a reason with.
+    SecondTransform,
 }
 
 impl fmt::Display for HierarchyError {
@@ -58,6 +71,13 @@ impl fmt::Display for HierarchyError {
                 write!(f, "a parent must carry a scene identity to be saved")
             }
             Self::PhysicsBody => write!(f, "an entity with physics cannot be parented"),
+            Self::MixedDimensions => {
+                write!(f, "2D and 3D entities cannot be parented to each other")
+            }
+            Self::SecondTransform => write!(
+                f,
+                "an entity is 2D or 3D: it cannot carry both Transform2D and Transform3D"
+            ),
         }
     }
 }
@@ -104,6 +124,9 @@ pub fn can_parent(world: &World, child: Entity, parent: Entity) -> Result<(), Hi
     // because after it the walk itself would be the cycle.
     if is_ancestor(world, child, parent) {
         return Err(HierarchyError::Cycle);
+    }
+    if super::dimension::link_mixes(world, child, parent) {
+        return Err(HierarchyError::MixedDimensions);
     }
 
     Ok(())

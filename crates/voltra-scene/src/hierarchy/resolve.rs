@@ -59,6 +59,20 @@ pub fn resolve_parents(world: &mut World) {
             link.entity = resolved;
         }
     }
+
+    // Warned rather than repaired, for the reason the physics case is.
+    for problem in super::dimension::problems(world) {
+        match problem {
+            super::dimension::Problem::BothTransforms(entity) => log::warn!(
+                "{entity:?} carries both Transform2D and Transform3D; each dimension draws it \
+                 by its own, and the editor will not add either again"
+            ),
+            super::dimension::Problem::MixedLink { child, above } => log::warn!(
+                "{child:?} is parented under {above:?} of the other dimension; it is composed \
+                 as if that link were not there"
+            ),
+        }
+    }
 }
 
 #[cfg(test)]

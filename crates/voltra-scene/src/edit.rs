@@ -12,7 +12,10 @@ use ron::value::RawValue;
 use voltra_ecs::{Entity, World};
 
 use crate::format::{entity_with_id, record_entity, ComponentRegistry};
-use crate::hierarchy::{clear_parent, despawn_recursive, resolve_parents, roots, set_parent};
+use crate::hierarchy::{
+    can_take_transform, clear_parent, despawn_recursive, resolve_parents, roots, set_parent,
+    Dimension,
+};
 use crate::keyframes::target::resolve;
 use crate::{Name, SceneId};
 
@@ -92,6 +95,9 @@ pub fn components_of(
 }
 
 /// Sets the component `name` on `entity` from `ron`, through the registry.
+///
+/// A transform the entity does not have yet is refused when it would carry
+/// both, or be linked to the other dimension ([`can_take_transform`]).
 pub fn set_component(
     world: &mut World,
     registry: &ComponentRegistry,
@@ -103,6 +109,13 @@ pub fn set_component(
         return Err(EditError(format!(
             "{name} is structure: reparent for a parent; prefab links are made by prefabs"
         )));
+    }
+    // An entity is 2D or 3D, and a chain one or the other: a transform that
+    // would make it both, or mix it with its parent or children, is refused
+    // here, for the bridge and the MCP server alike.
+    if let Some(dimension) = Dimension::of_transform_name(name) {
+        can_take_transform(world, entity, dimension)
+            .map_err(|e| EditError(format!("{name}: {e}")))?;
     }
     let raw = RawValue::from_ron(ron).map_err(|e| EditError(format!("{name}: {e}")))?;
     registry
@@ -229,8 +242,33 @@ mod tests {
         assert!(find(&world, "Player").is_err_and(|e| e.0.contains("give one of their ids")));
         assert!(set_component(&mut world, &registry, arm, "Parent", "()").is_err());
         assert!(remove_component(&mut world, &registry, arm, "Nope").is_err());
+        assert!(set_component(&mut world, &registry, arm, "Transform3D", "()").is_ok());
+        let refused = set_component(
+            &mut world,
+            &registry,
+            arm,
+            "Transform2D",
+            "(translation: (0.0, 0.0), rotation: 0.0, scale: (1.0, 1.0))",
+        );
+        assert!(
+            refused.is_err_and(|e| e.0.contains("both")),
+            "a second transform"
+        );
+        let flat = spawn(&mut world, &registry, Some("Flat"), None, []).expect("spawns");
+        reparent(&mut world, flat, Some(arm)).expect("bare under 3D");
+        assert!(
+            set_component(
+                &mut world,
+                &registry,
+                flat,
+                "Transform2D",
+                "(translation: (0.0, 0.0), rotation: 0.0, scale: (1.0, 1.0))"
+            )
+            .is_err(),
+            "2D under 3D"
+        );
         let (_, components) = components_of(&world, &registry, arm).expect("an id");
         assert!(components.contains_key("Name"));
-        assert_eq!(delete(&mut world, player), 2);
+        assert_eq!(delete(&mut world, player), 3);
     }
 }

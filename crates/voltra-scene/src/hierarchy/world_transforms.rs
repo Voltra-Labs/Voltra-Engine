@@ -1,13 +1,14 @@
-//! Every entity's world matrix, composed in one pass.
+//! Every entity's 2D world matrix, composed in one pass.
 //!
 //! The memoised twin of [`super::world_transform`]'s single lookups: a frame
 //! of sprites, or a pick, walks the whole world, and composing each chain
-//! from the root would cost one multiply per entity per level.
+//! from the root would cost one multiply per entity per level. The pass
+//! itself is `compose.rs`, shared with 3D's.
 
 use voltra_ecs::{Entity, World};
-use voltra_render::glam::Mat3;
+use voltra_render::glam::{Mat3, Vec2};
 
-use super::parent::Parent;
+use super::compose::Composed;
 use crate::transform::Transform2D;
 
 /// Every entity's world matrix, composed in one pass.
@@ -22,12 +23,7 @@ use crate::transform::Transform2D;
 /// does not hold, which is the same answer a root with no transform gets.
 #[derive(Debug, Default, Clone)]
 pub struct WorldTransforms2D {
-    /// Indexed by [`Entity::index`]: the entity it was composed for (so a
-    /// recycled index with a new generation misses) and its matrix. Dense,
-    /// because the ECS hands out indices densely; a lookup is an index and
-    /// a compare, not a hash.
-    matrices: Vec<Option<(Entity, Mat3)>>,
-    len: usize,
+    composed: Composed<Mat3>,
 }
 
 impl WorldTransforms2D {
@@ -35,97 +31,28 @@ impl WorldTransforms2D {
     ///
     /// Each chain is walked up only until it meets an ancestor already
     /// composed, so every matrix is multiplied once however deep the tree.
-    /// Locals and parents are read straight from the world's sparse sets —
-    /// an index each — rather than copied into maps first, which was most
-    /// of what this cost with thousands of entities.
-    ///
-    /// A [`Parent`] naming a despawned entity, or one in a cycle, makes its
-    /// child a root: drawn where its own transform says, and warned about.
+    /// A [`Parent`](super::Parent) naming a despawned entity, or one in a
+    /// cycle, makes its child a root: drawn where its own transform says,
+    /// and warned about.
     pub fn from_world(world: &World) -> Self {
         let mut this = Self::default();
-        this.compose(world);
+        this.composed.compose::<Transform2D>(world);
         this
     }
 
     /// [`seen_from`](Self::seen_from) into this one, keeping its storage: a
     /// draw composing every frame reuses last frame's rather than
     /// allocating (and faulting in) megabytes for a large world afresh.
-    pub fn recompose_seen_from(&mut self, world: &World, camera: voltra_render::glam::Vec2) {
-        self.compose(world);
+    pub fn recompose_seen_from(&mut self, world: &World, camera: Vec2) {
+        self.composed.compose::<Transform2D>(world);
         crate::parallax::apply(self, world, camera);
-    }
-
-    /// Empties this and composes `world` into it.
-    fn compose(&mut self, world: &World) {
-        self.matrices.clear();
-        self.len = 0;
-        let this = self;
-        let mut chain: Vec<Entity> = Vec::new();
-        // Each set found once, not once per entity asked.
-        let parents = world.components::<Parent>();
-        let Some(transforms) = world.components::<Transform2D>() else {
-            return;
-        };
-        for (entity, transform) in transforms.iter() {
-            if this.get(entity).is_some() {
-                continue;
-            }
-
-            chain.clear();
-            let mut cursor = entity;
-            let mut above = Mat3::IDENTITY;
-            loop {
-                chain.push(cursor);
-                let Some(parent) = parents
-                    .and_then(|parents| parents.get(cursor))
-                    .and_then(|link| link.entity)
-                    .filter(|parent| world.is_alive(*parent))
-                else {
-                    break;
-                };
-                if let Some(known) = this.get(parent) {
-                    above = known;
-                    break;
-                }
-                if chain.contains(&parent) {
-                    log::warn!("{parent:?} is in a parent cycle; composing it as a root");
-                    break;
-                }
-                cursor = parent;
-            }
-
-            for link in chain.iter().rev().copied() {
-                // The query's own transform for the entity itself, rather
-                // than asking the world for it again.
-                above *= if link == entity {
-                    transform.matrix()
-                } else {
-                    // A grouping node without a transform adds no frame.
-                    transforms
-                        .get(link)
-                        .map_or(Mat3::IDENTITY, Transform2D::matrix)
-                };
-                this.insert(link, above);
-            }
-        }
-    }
-
-    fn insert(&mut self, entity: Entity, matrix: Mat3) {
-        let index = entity.index() as usize;
-        if index >= self.matrices.len() {
-            self.matrices.resize(index + 1, None);
-        }
-        if self.matrices[index].is_none() {
-            self.len += 1;
-        }
-        self.matrices[index] = Some((entity, matrix));
     }
 
     /// [`from_world`](Self::from_world), with every [`Parallax`] layer
     /// displaced for a camera at `camera` — what the draw and the pick see.
     ///
     /// [`Parallax`]: crate::Parallax
-    pub fn seen_from(world: &World, camera: voltra_render::glam::Vec2) -> Self {
+    pub fn seen_from(world: &World, camera: Vec2) -> Self {
         let mut transforms = Self::from_world(world);
         crate::parallax::apply(&mut transforms, world, camera);
         transforms
@@ -133,15 +60,13 @@ impl WorldTransforms2D {
 
     /// Every entity composed.
     pub(crate) fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
-        self.matrices.iter().flatten().map(|(entity, _)| *entity)
+        self.composed.entities()
     }
 
     /// Moves `entity`'s composed matrix by `offset` in world space.
-    pub(crate) fn translate(&mut self, entity: Entity, offset: voltra_render::glam::Vec2) {
-        if let Some(Some((owner, matrix))) = self.matrices.get_mut(entity.index() as usize) {
-            if *owner == entity {
-                *matrix = Mat3::from_translation(offset) * *matrix;
-            }
+    pub(crate) fn translate(&mut self, entity: Entity, offset: Vec2) {
+        if let Some(matrix) = self.composed.get_mut(entity) {
+            *matrix = Mat3::from_translation(offset) * *matrix;
         }
     }
 
@@ -152,20 +77,17 @@ impl WorldTransforms2D {
 
     /// `entity`'s world matrix, or `None` if it was not composed.
     pub fn get(&self, entity: Entity) -> Option<Mat3> {
-        match self.matrices.get(entity.index() as usize) {
-            Some(Some((owner, matrix))) if *owner == entity => Some(*matrix),
-            _ => None,
-        }
+        self.composed.get(entity)
     }
 
     /// How many entities have a composed matrix.
     pub fn len(&self) -> usize {
-        self.len
+        self.composed.len()
     }
 
     /// Whether no entity has a composed matrix.
     pub fn is_empty(&self) -> bool {
-        self.len == 0
+        self.len() == 0
     }
 }
 
@@ -174,6 +96,7 @@ mod tests {
     use super::*;
     use crate::hierarchy::link::set_parent;
     use crate::hierarchy::world_transform::world_matrix_2d;
+    use crate::hierarchy::Parent;
     use crate::scene_id::SceneId;
     use voltra_render::glam::Vec2;
 

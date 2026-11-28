@@ -1,4 +1,4 @@
-//! Where a parented entity actually is.
+//! Where a parented 2D entity actually is.
 //!
 //! A [`Transform2D`] is local to its parent. Everything that draws, picks or
 //! points at an entity needs the composed matrix instead, and there are two
@@ -6,12 +6,14 @@
 //! entity at once (a frame of sprites). [`world_matrix_2d`] serves the first by
 //! walking up the chain; [`WorldTransforms2D`] serves the second by composing the
 //! whole world once, so a deep tree costs one multiply per entity rather than
-//! one per entity per level.
+//! one per entity per level. Both are `compose.rs`'s arithmetic, which
+//! 3D's twins ([`super::world_transform_3d`]) share.
 
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::Mat3;
 
-use super::walk::{ancestors, parent_of};
+use super::compose;
+use super::walk::parent_of;
 use crate::transform::Transform2D;
 
 /// The memoised pass, on the path 0.4 had it.
@@ -23,29 +25,19 @@ pub use crate::renamed::{
     parent_matrix, set_world_transform, world_matrix, world_transform, WorldTransforms,
 };
 
-/// Below this a parent's frame has collapsed and cannot be inverted.
-///
-/// Same threshold and same reasoning as picking: `Mat3::inverse` on a singular
-/// matrix does not panic, it returns infinities and NaN, and a NaN transform
-/// removes an entity from the screen with no error anywhere.
-const MIN_DETERMINANT: f32 = 1e-12;
-
 /// The frame `entity` sits in: every ancestor's matrix, composed.
 ///
 /// [`Mat3::IDENTITY`] for a root, which is what makes a root's local transform
-/// its world transform with no special case anywhere else.
+/// its world transform with no special case anywhere else. An ancestor with
+/// no `Transform2D` — a grouping node, or a 3D one in a file that mixes the
+/// two — adds no frame.
 pub fn parent_matrix_2d(world: &World, entity: Entity) -> Mat3 {
-    ancestors(world, entity)
-        .iter()
-        .rev()
-        .fold(Mat3::IDENTITY, |above, ancestor| {
-            above * local_matrix(world, *ancestor)
-        })
+    compose::parent_matrix::<Transform2D>(world, entity)
 }
 
 /// Where `entity` is in world space, as a matrix.
 pub fn world_matrix_2d(world: &World, entity: Entity) -> Mat3 {
-    parent_matrix_2d(world, entity) * local_matrix(world, entity)
+    compose::world_matrix::<Transform2D>(world, entity)
 }
 
 /// Where `entity` is in world space, as a transform.
@@ -66,31 +58,7 @@ pub fn world_transform_2d(world: &World, entity: Entity) -> Transform2D {
 /// space at all. Both leave the entity exactly as it was rather than writing a
 /// NaN that would make it disappear.
 pub fn set_world_transform_2d(world: &mut World, entity: Entity, target: &Transform2D) -> bool {
-    let parent = parent_matrix_2d(world, entity);
-    if parent.determinant().abs() < MIN_DETERMINANT {
-        log::warn!("{entity:?} sits under a collapsed parent; leaving its transform alone");
-        return false;
-    }
-
-    let local = Transform2D::from_matrix(parent.inverse() * target.matrix());
-    match world.get_mut::<Transform2D>(entity) {
-        Some(transform) => {
-            *transform = local;
-            true
-        }
-        None => false,
-    }
-}
-
-/// `entity`'s own transform as a matrix, or the identity if it has none.
-///
-/// An entity with children but no transform of its own is a grouping node, and
-/// the identity is exactly what "adds no frame of its own" means.
-pub(super) fn local_matrix(world: &World, entity: Entity) -> Mat3 {
-    world
-        .get::<Transform2D>(entity)
-        .map(Transform2D::matrix)
-        .unwrap_or(Mat3::IDENTITY)
+    compose::set_world(world, entity, target)
 }
 
 /// Whether `entity` is drawn where its own transform says it is.

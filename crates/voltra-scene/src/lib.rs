@@ -56,6 +56,7 @@ pub mod tilemap;
 pub mod timer;
 pub mod trail2d;
 pub mod transform;
+pub mod transform3d;
 pub mod triangulate;
 pub mod tween;
 pub mod ui;
@@ -76,7 +77,7 @@ pub use filter::{CollisionLayers, Sensor};
 pub use format::{ComponentRegistry, ReplicateError, ReplicatedComponent, SceneError};
 pub use global_light::GlobalLight2D;
 pub use gradient::{Gradient, GradientKey};
-pub use hierarchy::{Parent, WorldTransforms2D};
+pub use hierarchy::{Parent, WorldTransforms2D, WorldTransforms3D};
 pub use interpolate::Interpolate;
 pub use joint::{
     AngleLimit, Joint2D, JointImpulses, JointKind, LinearMotor, Motor, RestSpring, Spring,
@@ -112,6 +113,7 @@ pub use tilemap::{Tile, TileMeshCache, Tilemap};
 pub use timer::{TimerId, Timers};
 pub use trail2d::Trail2D;
 pub use transform::Transform2D;
+pub use transform3d::Transform3D;
 pub use tween::{TweenId, Tweens};
 pub use ui::{
     UiButton, UiControls, UiDropdown, UiHidden, UiLayout, UiOwnStyle, UiRect, UiScroll, UiSlice,
