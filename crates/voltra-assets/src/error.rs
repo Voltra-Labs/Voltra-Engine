@@ -63,6 +63,10 @@ pub enum AssetError {
         /// Why it does not describe a slicing.
         source: crate::atlas::AtlasError,
     },
+    /// A render texture asked for as an image: a camera draws its pixels on
+    /// the GPU, so there is no file of pixels to read — a CPU reader (a
+    /// sprite's traced silhouette) has nothing to read.
+    MadeNotRead(PathBuf),
     /// A `*.clip.ron` that reads as RON but does not describe a clip: another
     /// version, a file that is not a sound, a backwards loop.
     ClipSettings {
@@ -122,6 +126,11 @@ impl fmt::Display for AssetError {
             Self::ClipSettings { path, reason } => {
                 write!(f, "{} is not a usable clip: {reason}", path.display())
             }
+            Self::MadeNotRead(path) => write!(
+                f,
+                "{} is a render texture: a camera draws it, there are no pixels to read",
+                path.display()
+            ),
             Self::Font { path, message } => {
                 write!(f, "{} is not a usable font: {message}", path.display())
             }
@@ -147,6 +156,7 @@ impl std::error::Error for AssetError {
             | Self::EscapesRoot(_)
             | Self::Empty
             | Self::ClipSettings { .. }
+            | Self::MadeNotRead(_)
             | Self::Font { .. } => None,
         }
     }
