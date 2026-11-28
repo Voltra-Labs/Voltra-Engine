@@ -104,9 +104,9 @@ pub struct UiFrame<'a> {
     pub(super) viewport: TextureId,
     pub(super) viewport_size: (u32, u32),
     pub(super) requested_size: &'a mut (u32, u32),
-    /// Set by [`show_game_camera_3d`](Self::show_game_camera_3d): the next
-    /// frame draws the viewport through the scene's 3D camera.
-    pub(super) game_view_3d: &'a mut bool,
+    /// Set by [`show_game_frame`](Self::show_game_frame): the next frame
+    /// draws the viewport as the game draws its window.
+    pub(super) game_frame: &'a mut bool,
     /// Loaded textures as egui knows them, for a panel that draws one.
     pub(super) thumbnails: &'a HashMap<Handle<Texture>, TextureId>,
     /// The scene as this frame drew it, graded: what `capture_viewport`
@@ -216,16 +216,18 @@ impl<'a> UiFrame<'a> {
         self.gpu_particles
     }
 
-    /// Asks the next frame to draw the viewport through the scene's 3D
-    /// camera — the editor's game view of a 3D scene — and answers whether
-    /// it can: an active [`Camera3D`](voltra_scene::Camera3D) and no active
-    /// 2D camera. Honoured the next frame, as
-    /// [`request_viewport_size`](Self::request_viewport_size) is; asked
+    /// Asks the next frame to draw the viewport as the game draws its
+    /// window — every camera of both dimensions composited, the HUD over
+    /// them — and answers whether it will: an active
+    /// [`Camera3D`](voltra_scene::Camera3D) draws to the screen. A 2D scene's game view is the
+    /// game camera framing the 2D view, as before. Honoured the next frame,
+    /// as [`request_viewport_size`](Self::request_viewport_size) is; asked
     /// every frame the game view is shown, and forgotten when it is not.
-    pub fn show_game_camera_3d(&mut self) -> bool {
-        *self.game_view_3d = true;
-        voltra_scene::camera3d::active(self.world).is_some()
-            && voltra_scene::camera::shots(self.world).is_empty()
+    pub fn show_game_frame(&mut self) -> bool {
+        *self.game_frame = true;
+        voltra_scene::camera::shots_3d(self.world)
+            .iter()
+            .any(|s| s.target.is_none())
     }
 
     /// Asks for a different scene resolution, honoured on the *next* frame.

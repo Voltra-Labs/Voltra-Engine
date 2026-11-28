@@ -8,8 +8,8 @@ use voltra_assets::Textures;
 use voltra_render::{Filter, RenderTarget, Renderer};
 
 use super::Headless;
-use crate::app::draw::shots;
 use crate::app::draw::world::WorldDraw;
+use crate::app::draw::{frame, shots};
 use crate::app::ui_frame::resolve_world_textures;
 
 /// A drawn frame: tightly packed RGBA bytes, top row first, as a screen
@@ -128,23 +128,41 @@ impl Headless {
         // A texture a tick named since the last shot.
         resolve_world_textures(&mut app.world, textures, &device, &queue);
         voltra_scene::camera::target::resolve_world(&mut app.world, textures, &device, &queue);
-        let frame_shots = voltra_scene::camera::shots(&app.world);
-        let lone_3d = app.world3d.lone_camera(&app.world, &frame_shots);
-        if lone_3d.is_some() || shots::needs_shots(&frame_shots) {
+        let frame = voltra_scene::camera::frame_shots(&app.world);
+        let plan = frame::plan(&frame);
+        let frame_shots = frame::flat_shots(&frame);
+        if plan != frame::Plan::Flat || shots::needs_shots(&frame_shots) {
             voltra_scene::text::prepare(&app.world, fonts, 1.0);
             fonts.upload(textures, &device, &queue);
         }
-        if let Some(camera) = lone_3d {
-            let hud = shots::hud(&app.world, atlases, textures, fonts, (width, height), 1.0);
-            let hud_mesh = hud.upload(&device);
-            let white = renderer.white_bind_group().clone();
-            let hud_draws = hud_draws(&hud, textures, &white);
-            let hud = voltra_render::Layer {
-                mesh: hud_mesh.as_ref(),
-                draws: &hud_draws,
-            };
-            app.world3d
-                .draw(&app.world, renderer, camera, Some(graded), hud);
+        if plan != frame::Plan::Flat {
+            let root = app
+                .asset_root
+                .clone()
+                .unwrap_or_else(voltra_assets::default_root);
+            frame::FrameDraw {
+                shots: shots::ShotDraw {
+                    world: &app.world,
+                    renderer,
+                    textures,
+                    atlases,
+                    fonts,
+                    silhouettes: app.silhouettes.as_mut(),
+                    sorting_layers: &app.sorting_layers,
+                    batch: &mut app.frame_batch,
+                    tile_meshes: &mut app.tile_meshes,
+                    gpu_rings: &app.gpu_rings,
+                    skins: &app.skinned_meshes,
+                    materials: app.materials.as_ref(),
+                    material_bank: &mut app.material_bank,
+                    pool: &mut app.camera_pool,
+                    elapsed: app.elapsed,
+                },
+                world3d: &mut app.world3d,
+                root: &root,
+                scale: 1.0,
+            }
+            .draw(&frame, plan, Some(&*graded), (width, height));
             let rgba = voltra_render::read_rgba8(&device, &queue, graded.texture(), width, height);
             return Ok(Screenshot {
                 width,
@@ -152,6 +170,7 @@ impl Headless {
                 rgba,
             });
         }
+        app.world3d.warn_cycles(&frame);
         if shots::needs_shots(&frame_shots) {
             let rects = shots::ShotDraw {
                 world: &app.world,

@@ -19,6 +19,9 @@ pub mod time;
 pub mod ui;
 pub mod window;
 
+pub use app::draw::render_settings::{
+    parse_render_settings, RenderSettings, DEFAULT_RENDER_SETTINGS,
+};
 pub use app::headless::{Headless, HeadlessError, Screenshot, ScreenshotError};
 pub use app::{
     parse_bus_layout, parse_sorting_layers, App, LoadStats, Net, SceneChangeStatus, SceneLoad,

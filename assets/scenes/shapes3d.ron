@@ -8,7 +8,7 @@
         (
             id: "019fe300-0135-7000-8000-000000000001",
             components: {
-                "Camera3D": (projection:Perspective(fov_y_degrees:60.0,near:0.1),priority:0,active:true),
+                "Camera3D": (projection:Perspective(fov_y_degrees:60.0,near:0.1),priority:0,active:true,tonemap:r#None),
                 "Name": "Camera",
                 "Transform3D": (translation:(0.0,2.2,5.5),rotation:(-0.141076,0.0,0.0,0.989999),scale:(1.0,1.0,1.0)),
             },

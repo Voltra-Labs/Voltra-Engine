@@ -1,7 +1,8 @@
-//! A 3D scene screenshotted headless, as the player draws it: the shipped
+//! 3D scenes screenshotted headless, as the player draws them: the shipped
 //! `scenes/shapes3d.ron` — a camera, a floor, the built-in meshes
-//! overlapping in depth, two walls a centimetre apart at 50 m — and a HUD
-//! over it. Each skips without a GPU adapter.
+//! overlapping in depth, two walls a centimetre apart at 50 m — with a HUD
+//! and a 2D camera over it, and `scenes/mixed3d.ron`, one frame of both
+//! worlds through AgX. Each skips without a GPU adapter.
 //!
 //! Set `VOLTRA_SHOT_DIR` to a folder to keep the pictures.
 
@@ -184,7 +185,7 @@ fn the_hud_draws_over_the_3d_world() {
 }
 
 #[test]
-fn with_a_2d_camera_too_the_2d_camera_draws() {
+fn with_a_2d_camera_too_2d_draws_over_the_3d_world() {
     let mut session = open();
     let world = session.world_mut();
     let camera = world.spawn();
@@ -193,11 +194,66 @@ fn with_a_2d_camera_too_the_2d_camera_draws() {
     world.insert(camera, Camera2D::new(1.0));
     let block = world.spawn();
     world.insert(block, SceneId::new());
-    world.insert(block, Transform2D::default().with_scale(Vec2::splat(4.0)));
+    world.insert(block, Transform2D::default().with_scale(Vec2::splat(0.5)));
     world.insert(block, Sprite2D::new([1.0, 0.0, 1.0, 1.0]));
     let Some(shot) = shoot(&mut session, "shapes3d-with-2d") else {
         return;
     };
-    // The 2D block fills the view; no 3D mesh is drawn under it.
-    assert_eq!(count(&shot, [1.0, 0.0, 1.0]), (WIDTH * HEIGHT) as usize);
+    // The 2D block, half a unit of a camera two units tall on 270 pixels
+    // (67 square), over the 3D world, which shows everywhere else.
+    let block = count(&shot, [1.0, 0.0, 1.0]);
+    assert!(
+        (block as i32 - 67 * 67).abs() <= 300,
+        "{block} block pixels"
+    );
+    assert!(count(&shot, FLOOR) >= 20_000, "the floor around it");
+    assert!(count(&shot, CUBE) >= 800, "and the cube");
+}
+
+/// `scenes/mixed3d.ron`: the 3D world through AgX, a 2D overlay of the
+/// same priority over it, the HUD over both.
+fn open_mixed() -> Headless {
+    let app = App::default().with_asset_root(assets());
+    Headless::open(app, &AssetPath::new("scenes/mixed3d.ron").expect("valid"))
+        .expect("the mixed sample loads")
+}
+
+fn agx(linear: [f32; 3]) -> [f32; 3] {
+    voltra_render::render3d::Tonemap::AgX.apply(linear)
+}
+
+#[test]
+fn the_mixed_sample_draws_3d_through_agx_2d_over_it_and_the_hud_over_both() {
+    let mut session = open_mixed();
+    let Some(shot) = shoot(&mut session, "mixed3d") else {
+        return;
+    };
+    // The bytes `web/test/mixed3d.mjs` looks for, pinned here.
+    assert_eq!(encode(agx(CUBE)), [206, 125, 110], "the cube through AgX");
+    assert_eq!(
+        encode(agx(SPHERE)),
+        [114, 198, 138],
+        "the sphere through AgX"
+    );
+    // 3D, through the curve: the meshes, in their AgX colours, where they
+    // stand.
+    for (name, colour) in [("cube", agx(CUBE)), ("sphere", agx(SPHERE))] {
+        let n = count(&shot, colour);
+        assert!(n >= 800, "{name}: {n} pixels");
+    }
+    assert_eq!(count(&shot, CUBE), 0, "no 3D colour skips the curve");
+    // 2D over it, graded neutral and never tone mapped: the banner, 6 × 1
+    // units through a size-5 camera on 270 pixels (162 × 27), exact.
+    let banner = count(&shot, [1.0, 0.6, 0.1]);
+    assert!(
+        (banner as i32 - 162 * 27).abs() <= 200,
+        "{banner} banner pixels"
+    );
+    // The half-transparent badge: its blue half over what is under it.
+    let (bx, by) = (240 + 162, 135 - 81);
+    let badge = shot.pixel(bx, by).expect("on screen");
+    assert!(badge[2] > badge[0] && badge[2] > 120, "{badge:?}");
+    // The HUD panel, 180 × 44 at the top left, over everything.
+    let hud = count(&shot, [1.0, 0.0, 1.0]);
+    assert!((hud as i32 - 180 * 44).abs() <= 100, "{hud} HUD pixels");
 }

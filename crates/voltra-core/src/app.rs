@@ -5,7 +5,7 @@ mod audio;
 mod builder;
 mod bus_layout;
 mod camera_rig;
-mod draw;
+pub(crate) mod draw;
 mod framing;
 mod gamepads;
 mod gpu_particles;

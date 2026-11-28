@@ -37,24 +37,46 @@ impl App {
             renderer.context().device(),
             renderer.context().queue(),
         );
-        let frame_shots = voltra_scene::camera::shots(&self.world);
-        if let Some(camera) = self.world3d.lone_camera(&self.world, &frame_shots) {
+        let frame = voltra_scene::camera::frame_shots(&self.world);
+        let plan = frame::plan(&frame);
+        if plan != frame::Plan::Flat {
             let config = renderer.context().config();
             let screen = (config.width, config.height);
-            let hud = shots::hud(&self.world, atlases, textures, fonts, screen, scale);
-            let hud_mesh = hud.upload(renderer.context().device());
-            let white = renderer.white_bind_group().clone();
-            let hud_draws = mesh_draws(&hud, textures, &white);
-            let _render = voltra_profile::scope("render");
+            let root = self
+                .asset_root
+                .clone()
+                .unwrap_or_else(voltra_assets::default_root);
             renderer.set_gpu_timing(voltra_profile::is_enabled());
-            let hud = Layer {
-                mesh: hud_mesh.as_ref(),
-                draws: &hud_draws,
-            };
-            self.world3d.draw(&self.world, renderer, camera, None, hud);
-            record_gpu_timings(renderer);
+            frame::FrameDraw {
+                shots: shots::ShotDraw {
+                    world: &self.world,
+                    renderer,
+                    textures,
+                    atlases,
+                    fonts,
+                    silhouettes: self.silhouettes.as_mut(),
+                    sorting_layers: &self.sorting_layers,
+                    batch: &mut self.frame_batch,
+                    tile_meshes: &mut self.tile_meshes,
+                    gpu_rings: &self.gpu_rings,
+                    skins: &self.skinned_meshes,
+                    materials: self.materials.as_ref(),
+                    material_bank: &mut self.material_bank,
+                    pool: &mut self.camera_pool,
+                    elapsed: self.elapsed,
+                },
+                world3d: &mut self.world3d,
+                root: &root,
+                scale,
+            }
+            .draw(&frame, plan, None, screen);
+            if let Some(renderer) = self.renderer.as_mut() {
+                record_gpu_timings(renderer);
+            }
             return;
         }
+        self.world3d.warn_cycles(&frame);
+        let frame_shots = frame::flat_shots(&frame);
         if shots::needs_shots(&frame_shots) {
             let config = renderer.context().config();
             let screen = (config.width, config.height);

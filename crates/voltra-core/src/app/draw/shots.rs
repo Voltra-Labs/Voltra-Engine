@@ -5,8 +5,8 @@
 use voltra_assets::{Atlases, Fonts, Materials, Silhouettes, Textures};
 use voltra_ecs::World;
 use voltra_render::material::MaterialBank;
-use voltra_render::{Layer, RenderTarget, Renderer};
-use voltra_scene::camera::Shot;
+use voltra_render::{Grade, Layer, RenderTarget, Renderer};
+use voltra_scene::camera::{AnyShot, FrameShot, Shot};
 use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{SortingLayers, SpriteBatch, TileMeshCache};
 
@@ -42,48 +42,116 @@ impl ShotDraw<'_> {
     /// Answers, for the screen's shots in order, which of `pool`'s pictures
     /// holds it and where on the screen it goes.
     pub fn draw(&mut self, shots: &[Shot], screen: (u32, u32)) -> Vec<(usize, [f32; 4])> {
-        let device = self.renderer.context().device().clone();
-        let format = self.renderer.context().format();
         let mut placed = Vec::new();
         for shot in shots {
-            let (width, height, at) = match shot.target {
-                Some(handle) => {
-                    let Some(texture) = self.textures.render_texture(handle) else {
-                        continue;
-                    };
-                    (texture.picture.width(), texture.picture.height(), None)
-                }
-                None => {
-                    let [x, y, w, h] = shot.camera.viewport.pixels(screen.0, screen.1);
-                    let slot = placed.len();
-                    if self.pool.len() <= slot {
-                        let make = |label| {
-                            RenderTarget::new(
-                                &device,
-                                label,
-                                format,
-                                w,
-                                h,
-                                voltra_render::texture::Filter::Nearest,
-                            )
-                        };
-                        self.pool
-                            .push((make("camera-scene"), make("camera-picture")));
-                    }
-                    let (scene, picture) = &mut self.pool[slot];
-                    scene.resize(&device, w, h);
-                    picture.resize(&device, w, h);
-                    placed.push((slot, [x as f32, y as f32, w as f32, h as f32]));
-                    (w, h, Some(slot))
-                }
+            let Some((width, height, at)) =
+                self.place(shot.target, shot.camera.viewport, screen, &mut placed)
+            else {
+                continue;
             };
-            self.draw_one(shot, width, height, at);
+            self.draw_one(shot, width, height, at, Grade::Picture);
         }
         placed
     }
 
-    /// One shot through its view, into its render texture or `pool[at]`.
-    fn draw_one(&mut self, shot: &Shot, width: u32, height: u32, at: Option<usize>) {
+    /// [`draw`](Self::draw) over a frame's shots of both dimensions, its
+    /// 3D ones through `world3d`; overlays start transparent, a 2D one
+    /// graded unpremultiplied.
+    pub fn draw_frame(
+        &mut self,
+        world3d: &mut super::world3d::World3D,
+        shots: &[FrameShot],
+        screen: (u32, u32),
+    ) -> Vec<(usize, [f32; 4])> {
+        let mut placed = Vec::new();
+        for frame_shot in shots {
+            let shot = frame_shot.shot;
+            let Some((width, height, at)) =
+                self.place(shot.target(), shot.viewport(), screen, &mut placed)
+            else {
+                continue;
+            };
+            match shot {
+                AnyShot::D2(shot) => {
+                    let grade = if frame_shot.overlay {
+                        Grade::Overlay
+                    } else {
+                        Grade::Picture
+                    };
+                    self.draw_one(&shot, width, height, at, grade);
+                }
+                AnyShot::D3(shot) => {
+                    let picture = match (shot.target, at) {
+                        (Some(handle), _) => self
+                            .textures
+                            .render_texture(handle)
+                            .map(|texture| &texture.picture),
+                        (None, Some(slot)) => Some(&self.pool[slot].1),
+                        (None, None) => None,
+                    };
+                    if let Some(picture) = picture {
+                        world3d.draw(
+                            self.world,
+                            self.renderer,
+                            &shot,
+                            Some(picture),
+                            frame_shot.overlay,
+                            Layer::EMPTY,
+                        );
+                    }
+                }
+            }
+        }
+        placed
+    }
+
+    /// Where a shot into `target`, or the `viewport` of a `screen` of that
+    /// many pixels, draws: its size, and for the screen's the slot of
+    /// `pool` it draws into, sized to it and added to `placed`. `None` for
+    /// a render texture that is not there.
+    fn place(
+        &mut self,
+        target: Option<voltra_assets::Handle<voltra_render::Texture>>,
+        viewport: voltra_scene::Viewport,
+        screen: (u32, u32),
+        placed: &mut Vec<(usize, [f32; 4])>,
+    ) -> Option<(u32, u32, Option<usize>)> {
+        let device = self.renderer.context().device().clone();
+        let format = self.renderer.context().format();
+        match target {
+            Some(handle) => {
+                let texture = self.textures.render_texture(handle)?;
+                Some((texture.picture.width(), texture.picture.height(), None))
+            }
+            None => {
+                let [x, y, w, h] = viewport.pixels(screen.0, screen.1);
+                let slot = placed.len();
+                if self.pool.len() <= slot {
+                    let make = |label| {
+                        RenderTarget::new(
+                            &device,
+                            label,
+                            format,
+                            w,
+                            h,
+                            voltra_render::texture::Filter::Nearest,
+                        )
+                    };
+                    self.pool
+                        .push((make("camera-scene"), make("camera-picture")));
+                }
+                let (scene, picture) = &mut self.pool[slot];
+                scene.resize(&device, w, h);
+                picture.resize(&device, w, h);
+                placed.push((slot, [x as f32, y as f32, w as f32, h as f32]));
+                Some((w, h, Some(slot)))
+            }
+        }
+    }
+
+    /// One shot through its view, into its render texture or `pool[at]`,
+    /// graded as `grade` says.
+    fn draw_one(&mut self, shot: &Shot, width: u32, height: u32, at: Option<usize>, grade: Grade) {
         let view = shot.view(width, height);
         self.renderer.camera = view;
         let sheets = Sheets::new(self.atlases, self.textures)
@@ -150,7 +218,7 @@ impl ShotDraw<'_> {
             (None, None) => return,
         };
         self.renderer
-            .render_scene(scene, picture, mesh.as_ref(), &draws, none, &post);
+            .render_scene_as(scene, picture, mesh.as_ref(), &draws, none, &post, grade);
     }
 }
 

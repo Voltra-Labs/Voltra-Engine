@@ -66,6 +66,14 @@ impl App {
             if self.reload_bus_layout(&path) {
                 continue;
             }
+            // Read again by the next 3D frame; a 2D game never read it.
+            let root = self
+                .asset_root
+                .clone()
+                .unwrap_or_else(voltra_assets::default_root);
+            if self.world3d.reload_settings(&path, &root) {
+                continue;
+            }
             // A face needs no device either: its atlas starts over and is
             // re-rasterized and uploaded by the next draw.
             if self.fonts.as_mut().is_some_and(|fonts| fonts.reload(&path)) {

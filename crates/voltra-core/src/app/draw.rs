@@ -9,7 +9,9 @@ use voltra_scene::sprite::sheets::Sheets;
 use super::{App, UiFrame};
 
 mod direct;
+pub(super) mod frame;
 mod parts;
+pub mod render_settings;
 mod resolve;
 pub(super) mod shots;
 pub(super) mod world;
@@ -76,21 +78,29 @@ impl App {
         self.thumbnails.sync(egui, &device, textures);
 
         let scale = window.scale_factor() as f32;
-        // The scene's render textures, so a minimap shows in the editor too.
-        // The editor's own view draws below, through the editor's camera.
+        // The game's whole frame, both dimensions, when the game view asked
+        // for it in last frame's layout and a 3D camera draws to the screen;
+        // otherwise the game view frames the 2D camera through the 2D path,
+        // as it always has. The scene view stays 2D: it draws 2D only.
         voltra_scene::camera::target::resolve_world(&mut self.world, textures, &device, &queue);
-        let texture_shots: Vec<_> = voltra_scene::camera::shots(&self.world)
-            .into_iter()
-            .filter(|shot| shot.target.is_some())
-            .collect();
-        if !texture_shots.is_empty() {
-            let editor_camera = renderer.camera;
-            shots::ShotDraw {
+        let frame = voltra_scene::camera::frame_shots(&self.world);
+        let game_frame =
+            std::mem::take(&mut self.world3d.game_view) && frame.screen().any(|s| s.shot.is_3d());
+        if game_frame {
+            prepare_text(&self.world, fonts, textures, &device, &queue, scale);
+        }
+        let root = self
+            .asset_root
+            .clone()
+            .unwrap_or_else(voltra_assets::default_root);
+        let editor_camera = renderer.camera;
+        let frame_draw = frame::FrameDraw {
+            shots: shots::ShotDraw {
                 world: &self.world,
-                renderer,
-                textures,
-                atlases,
-                fonts,
+                renderer: &mut *renderer,
+                textures: &*textures,
+                atlases: &*atlases,
+                fonts: &*fonts,
                 silhouettes: self.silhouettes.as_mut(),
                 sorting_layers: &self.sorting_layers,
                 batch: &mut self.frame_batch,
@@ -101,32 +111,21 @@ impl App {
                 material_bank: &mut self.material_bank,
                 pool: &mut self.camera_pool,
                 elapsed: self.elapsed,
-            }
-            .draw(&texture_shots, (width.max(1), height.max(1)));
-            renderer.camera = editor_camera;
-        }
-        // The game view of a 3D scene, asked for by last frame's layout; the
-        // scene view stays 2D, as the 2D view draws 2D only.
-        let game_3d = std::mem::take(&mut self.world3d.game_view)
-            .then(|| {
-                let shots = voltra_scene::camera::shots(&self.world);
-                self.world3d.lone_camera(&self.world, &shots)
-            })
-            .flatten();
-        if let Some(camera) = game_3d {
-            prepare_text(&self.world, fonts, textures, &device, &queue, scale);
+            },
+            world3d: &mut self.world3d,
+            root: &root,
+            scale,
+        };
+        if game_frame {
             let size = (graded.width(), graded.height());
-            let hud = shots::hud(&self.world, atlases, textures, fonts, size, scale);
-            let hud_mesh = hud.upload(&device);
-            let white = renderer.white_bind_group().clone();
-            let hud_draws = mesh_draws(&hud, textures, &white);
-            let hud = Layer {
-                mesh: hud_mesh.as_ref(),
-                draws: &hud_draws,
-            };
-            self.world3d
-                .draw(&self.world, renderer, camera, Some(graded), hud);
+            frame_draw.draw(&frame, frame::plan(&frame), Some(&*graded), size);
         } else {
+            // The scene's render textures, so a minimap shows in the editor
+            // too; the editor's own view draws below, through its camera.
+            frame_draw.textures(&frame);
+        }
+        renderer.camera = editor_camera;
+        if !game_frame {
             world::WorldDraw {
                 world: &self.world,
                 renderer,
@@ -202,7 +201,7 @@ impl App {
             game: &mut self.game,
             net: &mut self.net,
             gpu_particles,
-            game_view_3d: &mut self.world3d.game_view,
+            game_frame: &mut self.world3d.game_view,
         };
         {
             let _ui = voltra_profile::scope("ui");
