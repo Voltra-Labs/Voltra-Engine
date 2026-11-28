@@ -2,16 +2,16 @@
 //! them: texture shots producer before consumer, then the screen's by
 //! priority with 3D first at a tie; each screen shot an overlay or not.
 
-use std::collections::HashSet;
-
 use voltra_assets::Handle;
 use voltra_ecs::{Entity, World};
 use voltra_render::Texture;
 
 use super::{shots, CameraTarget, Shot, Viewport};
 use crate::camera3d::{Camera3D, CameraClear};
-use crate::sprite::Sprite2D;
-use crate::ui::UiRect;
+
+mod order;
+
+use order::*;
 
 /// One 3D camera's part of a frame: the twin of [`Shot`].
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -211,59 +211,4 @@ pub fn frame_shots(world: &World) -> FrameShots {
         });
     }
     FrameShots { shots: out, cycle }
-}
-
-/// The render textures the 2D world shows: those its sprites name, the
-/// HUD's left out — it is drawn after every shot.
-fn shown_by_2d(world: &World) -> HashSet<Handle<Texture>> {
-    let targets: HashSet<Handle<Texture>> = world
-        .query::<CameraTarget>()
-        .filter_map(|(_, t)| t.handle)
-        .collect();
-    if targets.is_empty() {
-        return targets;
-    }
-    world
-        .query::<Sprite2D>()
-        .filter(|(e, _)| world.get::<UiRect>(*e).is_none())
-        .filter_map(|(_, sprite)| sprite.texture_handle)
-        .filter(|h| targets.contains(h))
-        .collect()
-}
-
-/// `shots` reordered so each comes after the shots filling the textures
-/// it `shows`, keeping their order otherwise (Kahn's, always taking the
-/// first ready). Where none is ready — a cycle — the first left goes, and
-/// is returned too.
-fn producers_first(
-    shots: Vec<AnyShot>,
-    shows: impl Fn(&AnyShot) -> Vec<Handle<Texture>>,
-) -> (Vec<AnyShot>, Vec<Entity>) {
-    let needs: Vec<Vec<Handle<Texture>>> = shots.iter().map(&shows).collect();
-    let mut left: Vec<usize> = (0..shots.len()).collect();
-    let mut order = Vec::with_capacity(shots.len());
-    let mut cycle = Vec::new();
-    while !left.is_empty() {
-        let ready = left.iter().position(|&i| {
-            needs[i].iter().all(|t| {
-                // Every shot still to draw that fills `t` is a producer not
-                // yet drawn.
-                !left
-                    .iter()
-                    .any(|&j| j != i && shots[j].target() == Some(*t))
-            })
-        });
-        let at = ready.unwrap_or_else(|| {
-            cycle.push(shots[left[0]].entity());
-            0
-        });
-        order.push(shots[left.remove(at)]);
-    }
-    (order, cycle)
-}
-
-/// Whether two viewports share any area.
-fn overlaps(a: Viewport, b: Viewport) -> bool {
-    let (a, b) = (a.clamped(), b.clamped());
-    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
 }
