@@ -1,6 +1,7 @@
 //! A standard surface's inputs around its lighting, in pixels: a UV
 //! offset moving a texture by a known texel, an alpha mask cutting with
-//! and without MSAA, a blend over what is behind.
+//! and without MSAA, alpha to coverage weighing an edge once, a blend over
+//! what is behind.
 
 mod common;
 
@@ -124,6 +125,56 @@ fn a_mask_cuts_where_alpha_is_under_its_cutoff_with_and_without_msaa() {
             } else if x > 4 {
                 assert!(within(*p, green, 1), "{samples}×: kept at {x}: {p:?}");
             }
+        }
+    }
+}
+
+#[test]
+fn alpha_to_coverage_weighs_an_opaque_edge_by_its_coverage_once() {
+    let Some(mut gpu) = gpu() else {
+        eprintln!("no adapter: skipping");
+        return;
+    };
+    // A white masked wall over black whose alpha sits a known way from the
+    // cutoff and does not vary, so its ramp is the floor's (10⁻⁴) and every
+    // pixel has one coverage: of 4 samples, 1, 2 and 3. The resolve weighs
+    // the white by the samples covered; a colour premultiplied by the
+    // coverage as well read coverage² (half coverage: 137, not 188).
+    gpu.renderer.set_msaa(4);
+    let square = Mesh3D::new(&gpu.device, "square", &square(0.5)).expect("a square");
+    let cutoff = 0.5;
+    for coverage in [0.25f32, 0.5, 0.75] {
+        let surface = StandardSurface {
+            base_color: [1.0, 1.0, 1.0, cutoff + (coverage - 0.5) * 1.0e-4],
+            alpha: AlphaMode::Mask(cutoff),
+            ..StandardSurface::UNLIT
+        };
+        let material = gpu
+            .renderer
+            .surface_material(&surface, &SurfaceTextures::NONE);
+        let pixels = picture(
+            &mut gpu,
+            (8, 8),
+            columns_view(8),
+            Lighting3D::DARK,
+            &[Draw {
+                mesh: &square,
+                material: &material,
+                instances: vec![scaled(
+                    Vec3::new(0.0, 0.0, -5.0),
+                    Quat::IDENTITY,
+                    Vec3::splat(16.0),
+                    WHITE,
+                )],
+            }],
+        );
+        let want = encode(coverage);
+        for p in &pixels {
+            assert!(
+                within(*p, [want; 3], 2),
+                "coverage {coverage}: {p:?}, want {want}"
+            );
+            assert_eq!(p[3], 255, "over an opaque clear, opaque");
         }
     }
 }

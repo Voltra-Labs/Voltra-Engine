@@ -10753,8 +10753,19 @@ loads, a handle that never fails, a bank of pipelines by what varies.
   it is **alpha to coverage** (`fs_mask_coverage`), alpha sharpened to a
   pixel-wide ramp about the cutoff (`(α − cutoff) / fwidth(α) + ½`, Ben
   Golus's) so the samples step across the edge instead of half the pixel
-  turning to mush; the coverage is written as alpha too, so the colour is
-  premultiplied by it — an overlay's masked edge has no bright fringe. Blend writes premultiplied colour through
+  turning to mush. **The colour is written whole**: the covered samples
+  already weigh it by the coverage when they resolve, and premultiplying
+  it as well (as the first review fix did) darkened every cut-out's edge
+  to coverage² — a white edge over black read 137 at half coverage, not
+  188. The alpha output is the coverage (alpha to coverage reads it), and
+  the mask pipeline blends alpha by `Max` (factors One, colour replaced),
+  so over an opaque clear a covered sample stays opaque. Over a
+  transparent overlay a covered sample keeps the coverage as its alpha,
+  so the resolved edge lets up to `coverage − coverage²` of what is behind
+  through (a quarter at half coverage): WebGL2 has no sample-mask output,
+  so there is no exact answer for both. Pinned by
+  `headless_surface_inputs.rs`: a white edge over black at 1, 2 and 3 of 4
+  samples reads 137, 188 and 225 ±2, opaque. Blend writes premultiplied colour through
   `PREMULTIPLIED_ALPHA_BLENDING`, the 3D target's and the composite's
   convention, depth-tested and not written.
 - **Draw order** (`draw3d/group.rs`): a 24-byte key — the order, one

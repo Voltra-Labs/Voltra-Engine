@@ -248,14 +248,17 @@ fn fs_mask(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) ve
 
 // Cut out by alpha to coverage under MSAA: alpha sharpened to a pixel-wide
 // ramp about the cutoff (Ben Golus's), which the samples cover in steps.
-// The alpha is written too, so the colour is premultiplied by it, as the
-// 3D target is: an overlay's masked edge has no bright fringe.
+// The colour is written whole: the samples covered already weigh it by the
+// coverage when they resolve, so premultiplying it too would darken every
+// edge to coverage². The alpha output is the coverage (alpha to coverage
+// reads it); the pipeline keeps the larger of it and what is there (`Max`),
+// so over an opaque clear a covered sample stays opaque.
 @fragment
 fn fs_mask_coverage(in: VertexOut, @builtin(front_facing) front: bool) -> @location(0) vec4<f32> {
     let shaded = shade(in, front);
     let ramp = max(fwidth(shaded.alpha), 1.0e-4);
     let coverage = clamp((shaded.alpha - surface.flags.x) / ramp + 0.5, 0.0, 1.0);
-    return vec4<f32>(shaded.color * coverage, coverage);
+    return vec4<f32>(shaded.color, coverage);
 }
 
 // Blended: premultiplied, as the 3D target and the composite are.

@@ -56,6 +56,22 @@ pub struct SurfaceKey {
     pub pass: SurfacePass,
 }
 
+/// Alpha to coverage's blend: the colour replaces, the alpha keeps the
+/// larger of the coverage written and what the sample held — so a covered
+/// sample over an opaque clear stays opaque. Over a transparent overlay a
+/// covered sample holds the coverage, and the resolved edge lets a little
+/// of what is behind through (`coverage − coverage²` of it at most, a
+/// quarter at half coverage): WebGL2 has no sample-mask output, so there is
+/// no exact answer for both.
+const MASK_COVERAGE_BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent::REPLACE,
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    },
+};
+
 /// The standard surface's pipelines into one colour format at one sample
 /// count, by [`SurfaceKey`]: made the first time a draw needs one, kept
 /// for the bank's life (the variants are few: 3 alpha classes × 2 sides ×
@@ -133,7 +149,7 @@ impl SurfaceBank {
         let coverage = self.samples > 1;
         let (entry, blend, write) = match key.alpha {
             AlphaClass::Opaque => ("fs_opaque", None, true),
-            AlphaClass::Mask if coverage => ("fs_mask_coverage", None, true),
+            AlphaClass::Mask if coverage => ("fs_mask_coverage", Some(MASK_COVERAGE_BLEND), true),
             AlphaClass::Mask => ("fs_mask", None, true),
             AlphaClass::Blend => (
                 "fs_blend",
