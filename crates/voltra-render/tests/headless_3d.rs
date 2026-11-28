@@ -6,8 +6,10 @@ mod common;
 
 use common::*;
 use voltra_render::glam::{Affine3A, Quat, Vec3};
-use voltra_render::render3d::{Mesh3D, MeshDraw3D, Pass3D, Scene3D, View3D, Winding};
-use voltra_render::{read_rgba8, wgpu, Filter, RenderTarget};
+use voltra_render::render3d::{
+    Look3D, Mesh3D, MeshDraw3D, Pass3D, Scene3D, Targets3D, View3D, Winding,
+};
+use voltra_render::{read_rgba8, wgpu, Filter, Layer, RenderTarget};
 
 #[test]
 fn depth_decides_what_is_in_front_whatever_the_submission_order() {
@@ -66,14 +68,11 @@ fn reversed_z_resolves_two_planes_a_centimetre_apart_at_500_m() {
 
 #[test]
 fn the_depth_target_follows_the_colour_target_size() {
-    let Some(gpu) = gpu() else {
+    let Some(mut gpu) = gpu() else {
         eprintln!("no adapter: skipping");
         return;
     };
-    let format = gpu.renderer.context().format();
     let mesh = Mesh3D::new(&gpu.device, "cube", &cube()).expect("a cube");
-    let mut pass = Pass3D::new(&gpu.device, format);
-    assert_eq!(pass.depth_size(), None);
     let instances = [instance(
         Vec3::new(0.0, 0.0, -3.0),
         Quat::IDENTITY,
@@ -85,43 +84,48 @@ fn the_depth_target_follows_the_colour_target_size() {
         instances: 0..1,
         winding: Winding::CounterClockwise,
     }];
-    for (width, height) in [(64, 64), (96, 48), (17, 130)] {
-        let target = RenderTarget::new(&gpu.device, "t", format, width, height, Filter::Linear);
-        let scene = Scene3D {
-            view: View3D::perspective(
-                Affine3A::IDENTITY,
-                1.0,
-                width as f32 / height as f32,
-                0.1,
-                None,
-            ),
-            instances: &instances,
-            draws: &draws,
-            clear: CLEAR,
-        };
-        let mut encoder = gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-        pass.record(
-            &gpu.device,
-            &gpu.queue,
-            &mut encoder,
-            target.view(),
-            (width, height),
-            &scene,
-        );
-        gpu.queue.submit([encoder.finish()]);
-        assert_eq!(pass.depth_size(), Some((width, height)));
-        let pixels = read_rgba8(&gpu.device, &gpu.queue, target.texture(), width, height);
-        let at = |x: u32, y: u32| {
-            let i = ((y * width + x) * 4) as usize;
-            [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
-        };
-        assert!(
-            is_red(at(width / 2, height / 2)),
-            "the cube is in the middle"
-        );
-        assert!(!is_red(at(0, 0)), "and not in the corner");
+    for samples in [1, 4] {
+        gpu.renderer.set_msaa(samples);
+        let hdr = gpu.renderer.hdr_3d();
+        let mut pass = Pass3D::new(&gpu.device, hdr);
+        let mut targets = Targets3D::new(&gpu.device, hdr, 64, 64);
+        let format = gpu.renderer.context().format();
+        for (width, height) in [(64, 64), (96, 48), (17, 130)] {
+            targets.resize(&gpu.device, width, height);
+            assert_eq!(targets.size(), (width, height));
+            assert_eq!(targets.depth_size(), (width, height), "{samples}");
+            let scene = Scene3D {
+                view: View3D::perspective(
+                    Affine3A::IDENTITY,
+                    1.0,
+                    width as f32 / height as f32,
+                    0.1,
+                    None,
+                ),
+                instances: &instances,
+                draws: &draws,
+                clear: CLEAR,
+            };
+            let mut encoder = gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            pass.record(&gpu.device, &gpu.queue, &mut encoder, &targets, &scene);
+            gpu.queue.submit([encoder.finish()]);
+            // Through the renderer, as a shot draws it, at the same size.
+            let target = RenderTarget::new(&gpu.device, "t", format, width, height, Filter::Linear);
+            gpu.renderer
+                .render_3d_into(&target, &scene, &Look3D::NEUTRAL, Layer::EMPTY);
+            let pixels = read_rgba8(&gpu.device, &gpu.queue, target.texture(), width, height);
+            let at = |x: u32, y: u32| {
+                let i = ((y * width + x) * 4) as usize;
+                [pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3]]
+            };
+            assert!(
+                is_red(at(width / 2, height / 2)),
+                "the cube is in the middle"
+            );
+            assert!(!is_red(at(0, 0)), "and not in the corner");
+        }
     }
 }
 

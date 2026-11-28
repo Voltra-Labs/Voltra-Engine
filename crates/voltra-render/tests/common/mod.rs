@@ -5,7 +5,7 @@
 
 use voltra_render::glam::{Affine3A, Quat, Vec3};
 use voltra_render::render3d::{
-    Instance3D, Mesh3D, MeshData3D, MeshDraw3D, Scene3D, Vertex3D, View3D, Winding,
+    Instance3D, Look3D, Mesh3D, MeshData3D, MeshDraw3D, Scene3D, Vertex3D, View3D, Winding,
 };
 use voltra_render::{read_rgba8, wgpu, Filter, Layer, RenderTarget, Renderer};
 
@@ -77,8 +77,12 @@ pub struct Gpu {
     pub queue: wgpu::Queue,
 }
 
+/// A headless renderer drawing 3D with one sample a pixel and no tone
+/// curve ([`Look3D::NEUTRAL`]): edges are hard and colours exact, as the
+/// depth tests count them.
 pub fn gpu() -> Option<Gpu> {
-    let renderer = Renderer::headless(64, 64)?;
+    let mut renderer = Renderer::headless(64, 64)?;
+    renderer.set_msaa(1);
     let device = renderer.context().device().clone();
     let queue = renderer.context().queue().clone();
     Some(Gpu {
@@ -123,7 +127,8 @@ impl Gpu {
             draws,
             clear: CLEAR,
         };
-        self.renderer.render_3d_into(&target, &scene, Layer::EMPTY);
+        self.renderer
+            .render_3d_into(&target, &scene, &Look3D::NEUTRAL, Layer::EMPTY);
         read_rgba8(&self.device, &self.queue, target.texture(), width, height)
             .as_chunks::<4>()
             .0

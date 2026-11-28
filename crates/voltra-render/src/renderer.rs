@@ -74,9 +74,12 @@ pub struct Renderer {
     /// Where the world is drawn before the post pass on the window path,
     /// sized to the surface; made on the first frame.
     frame_target: Option<RenderTarget>,
-    /// The 3D pass, made with the first 3D frame: a 2D game never builds
-    /// it.
-    pass3d: Option<crate::render3d::Pass3D>,
+    /// The 3D pass and its targets, made with the first 3D frame: a 2D
+    /// game never builds them.
+    state3d: world3d::State3D,
+    /// The composite's pipeline, blending pictures premultiplied; made
+    /// with the first frame of several cameras.
+    composite: std::sync::OnceLock<crate::pipeline::SpritePipeline>,
     /// The size the line shader widens against, rewritten every frame.
     viewport_binding: ViewportBinding,
     /// The world camera, rewritten into its uniform every frame.
@@ -198,7 +201,8 @@ impl Renderer {
             particles,
             skin,
             frame_target: None,
-            pass3d: None,
+            state3d: world3d::State3D::default(),
+            composite: std::sync::OnceLock::new(),
             viewport_binding,
             camera,
             lighting: Lighting::default(),

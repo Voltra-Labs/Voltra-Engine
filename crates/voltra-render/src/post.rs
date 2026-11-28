@@ -10,8 +10,10 @@ use wgpu::util::DeviceExt;
 use crate::bloom::BloomSettings;
 use crate::shader;
 
+mod grade;
 mod uniform;
 
+pub use grade::Grade;
 use uniform::PostUniform;
 
 /// How the frame is graded. [`PostSettings::NEUTRAL`] changes nothing.
@@ -52,6 +54,9 @@ impl Default for PostSettings {
 /// The pipeline, its uniform and its sampler. One per renderer.
 pub struct PostPass {
     pipeline: wgpu::RenderPipeline,
+    /// The overlay and tonemap pipelines, made the first time each is
+    /// asked for: a 2D game with no overlay never builds them.
+    variants: grade::Variants,
     layout: wgpu::BindGroupLayout,
     uniform: wgpu::Buffer,
     sampler: wgpu::Sampler,
@@ -109,36 +114,7 @@ impl PostPass {
             bind_group_layouts: &[Some(&layout)],
             immediate_size: 0,
         });
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("post-pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &module,
-                entry_point: Some("vs_main"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: None,
-                ..Default::default()
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &module,
-                entry_point: Some("fs_main"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    // Replaces, not blends: the pass writes every pixel.
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let pipeline = grade::pipeline(device, &pipeline_layout, &module, "fs_main", format);
         let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("post-uniform"),
             contents: bytemuck::bytes_of(&PostUniform::new(&PostSettings::NEUTRAL, 1.0)),
@@ -171,6 +147,7 @@ impl PostPass {
             .create_view(&wgpu::TextureViewDescriptor::default());
         Self {
             pipeline,
+            variants: grade::Variants::new(pipeline_layout, format),
             layout,
             uniform,
             sampler,
@@ -192,10 +169,43 @@ impl PostPass {
         settings: &PostSettings,
         aspect: f32,
     ) {
+        self.record_as(
+            device,
+            queue,
+            encoder,
+            source,
+            bloom,
+            target,
+            settings,
+            aspect,
+            Grade::Picture,
+        );
+    }
+
+    /// [`record`](Self::record), graded as `grade` says: a 2D picture, a
+    /// 2D overlay (unpremultiplied, graded, premultiplied again) or a 3D
+    /// picture through its tone curve.
+    #[allow(clippy::too_many_arguments)]
+    pub fn record_as(
+        &self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        encoder: &mut wgpu::CommandEncoder,
+        source: &wgpu::TextureView,
+        bloom: Option<&wgpu::TextureView>,
+        target: &wgpu::TextureView,
+        settings: &PostSettings,
+        aspect: f32,
+        grade: Grade,
+    ) {
+        let pipeline = match grade {
+            Grade::Picture => &self.pipeline,
+            other => self.variants.get(device, other),
+        };
         queue.write_buffer(
             &self.uniform,
             0,
-            bytemuck::bytes_of(&PostUniform::new(settings, aspect)),
+            bytemuck::bytes_of(&PostUniform::new(settings, aspect).with_grade(grade)),
         );
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("post-bind-group"),
@@ -235,7 +245,7 @@ impl PostPass {
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        pass.set_pipeline(&self.pipeline);
+        pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);
     }

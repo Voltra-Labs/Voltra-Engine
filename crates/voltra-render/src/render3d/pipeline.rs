@@ -18,11 +18,12 @@ pub struct UnlitPipeline3D {
     pipelines: [wgpu::RenderPipeline; 3],
     view_layout: wgpu::BindGroupLayout,
     format: wgpu::TextureFormat,
+    samples: u32,
 }
 
 impl UnlitPipeline3D {
-    /// The pipeline drawing into `format`.
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+    /// The pipeline drawing into `format`, `samples` a pixel.
+    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, samples: u32) -> Self {
         let view_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("view-3d-layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -89,7 +90,10 @@ impl UnlitPipeline3D {
                     stencil: wgpu::StencilState::default(),
                     bias: wgpu::DepthBiasState::default(),
                 }),
-                multisample: wgpu::MultisampleState::default(),
+                multisample: wgpu::MultisampleState {
+                    count: samples.max(1),
+                    ..Default::default()
+                },
                 multiview_mask: None,
                 cache: None,
             })
@@ -98,6 +102,7 @@ impl UnlitPipeline3D {
             pipelines: Winding::ALL.map(build),
             view_layout,
             format,
+            samples: samples.max(1),
         }
     }
 
@@ -114,5 +119,10 @@ impl UnlitPipeline3D {
     /// The colour format it draws into.
     pub fn format(&self) -> wgpu::TextureFormat {
         self.format
+    }
+
+    /// The samples a pixel it draws.
+    pub fn samples(&self) -> u32 {
+        self.samples
     }
 }

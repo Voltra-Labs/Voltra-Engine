@@ -4,8 +4,10 @@ use std::ops::Range;
 
 use super::instance::Instance3D;
 use super::mesh::Mesh3D;
+use super::tonemap::Tonemap;
 use super::view::View3D;
 use super::winding::Winding;
+use crate::post::PostSettings;
 
 /// One instanced draw: `mesh`, once per instance in `instances` — a range
 /// of [`Scene3D::instances`], all of one [`Winding`].
@@ -31,4 +33,33 @@ pub struct Scene3D<'a> {
     pub draws: &'a [MeshDraw3D<'a>],
     /// What the colour target is cleared to first, linear.
     pub clear: wgpu::Color,
+}
+
+/// How a 3D shot's light becomes its picture: the grade, bloom and
+/// exposure included, then the curve. [`Look3D::NEUTRAL`] changes nothing
+/// — a flat colour reads back as given.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Look3D {
+    /// The tone curve, after exposure and before the grade.
+    pub tonemap: Tonemap,
+    /// Exposure, bloom and the grade, as a 2D camera's.
+    pub post: PostSettings,
+}
+
+impl Look3D {
+    /// No curve and a neutral grade.
+    pub const NEUTRAL: Self = Self {
+        tonemap: Tonemap::None,
+        post: PostSettings::NEUTRAL,
+    };
+}
+
+impl Default for Look3D {
+    /// The default curve, [`Tonemap::AgX`], and a neutral grade.
+    fn default() -> Self {
+        Self {
+            tonemap: Tonemap::default(),
+            post: PostSettings::NEUTRAL,
+        }
+    }
 }

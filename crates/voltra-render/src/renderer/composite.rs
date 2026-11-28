@@ -18,7 +18,9 @@ pub struct Placed<'a> {
 
 impl Renderer {
     /// Clears `output`, draws `pictures` over it in order — a later one
-    /// over an earlier where they overlap — then `ui` over all of them.
+    /// over an earlier where they overlap, blended premultiplied, so an
+    /// overlay's transparent parts show what is under it — then `ui` over
+    /// all of them.
     pub fn composite(&mut self, output: &RenderTarget, pictures: &[Placed<'_>], ui: Layer<'_>) {
         let device = self.ctx.device().clone();
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -106,10 +108,18 @@ impl Renderer {
             self.ctx.queue(),
             screen_projection(width as f32, height as f32),
         );
+        let premultiplied = self.composite.get_or_init(|| {
+            crate::pipeline::create_premultiplied(
+                device,
+                self.ctx.format(),
+                self.camera_binding.layout(),
+                &self.texture_layout,
+            )
+        });
         pass::draw_mesh_batches(
             encoder,
             view,
-            &self.flat_color,
+            premultiplied,
             self.ui_camera_binding.bind_group(),
             mesh.as_ref(),
             &draws,

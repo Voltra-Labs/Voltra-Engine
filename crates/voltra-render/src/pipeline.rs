@@ -18,6 +18,43 @@ pub fn create_flat_color(
     camera_layout: &wgpu::BindGroupLayout,
     texture_layout: &wgpu::BindGroupLayout,
 ) -> SpritePipeline {
+    flat_color_blending(
+        device,
+        format,
+        camera_layout,
+        texture_layout,
+        wgpu::BlendState::ALPHA_BLENDING,
+    )
+}
+
+/// The flat-colour pipeline blending premultiplied colour: what the
+/// composite lays cameras' pictures with. A picture's colour is already
+/// multiplied by its alpha — a 2D overlay's sprites blended over nothing,
+/// a 3D overlay's edges resolved over nothing — so it is added over what
+/// is under it rather than multiplied by its alpha again. An opaque
+/// picture (alpha 1) composites exactly as through [`create_flat_color`].
+pub fn create_premultiplied(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    camera_layout: &wgpu::BindGroupLayout,
+    texture_layout: &wgpu::BindGroupLayout,
+) -> SpritePipeline {
+    flat_color_blending(
+        device,
+        format,
+        camera_layout,
+        texture_layout,
+        wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING,
+    )
+}
+
+fn flat_color_blending(
+    device: &wgpu::Device,
+    format: wgpu::TextureFormat,
+    camera_layout: &wgpu::BindGroupLayout,
+    texture_layout: &wgpu::BindGroupLayout,
+    blend: wgpu::BlendState,
+) -> SpritePipeline {
     let module = shader::create_module(device, "flat-color", shader::FLAT_COLOR);
 
     // Declared rather than inferred from the shader: an explicit layout keeps
@@ -40,7 +77,7 @@ pub fn create_flat_color(
             fragment_entry: "fs_main",
             target: wgpu::ColorTargetState {
                 format,
-                blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                blend: Some(blend),
                 write_mask: wgpu::ColorWrites::ALL,
             },
         },

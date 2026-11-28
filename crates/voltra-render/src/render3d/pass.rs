@@ -1,19 +1,21 @@
 //! The 3D pass: one depth-tested, instanced draw of a [`Scene3D`] into a
-//! colour target.
+//! shot's [`Targets3D`].
 
-use super::depth::{DepthTarget, DEPTH_CLEAR};
+use super::depth::DEPTH_CLEAR;
+use super::hdr::Hdr3D;
 use super::instance::Instance3D;
 use super::pipeline::UnlitPipeline3D;
 use super::scene::Scene3D;
+use super::targets::Targets3D;
 
 /// Records a [`Scene3D`]: clears colour and depth, uploads the view and
 /// the instances, then one instanced draw per [`MeshDraw3D`].
 ///
-/// Owns what persists between frames — the pipeline, the view's uniform,
-/// the instance buffer (grown, never shrunk) and the depth target, which
-/// follows the colour target's size on every call. Every call writes its
-/// buffers before its own submit, so one pass serves one shot per submit
-/// (`Queue::write_buffer` lands at the next submit, for every draw of it).
+/// Owns what persists between frames — the pipeline, the view's uniform
+/// and the instance buffer (grown, never shrunk); the targets are the
+/// shot's. Every call writes its buffers before its own submit, so one
+/// pass serves one shot per submit (`Queue::write_buffer` lands at the next
+/// submit, for every draw of it).
 ///
 /// [`MeshDraw3D`]: super::MeshDraw3D
 #[derive(Debug)]
@@ -22,13 +24,12 @@ pub struct Pass3D {
     view_buffer: wgpu::Buffer,
     view_group: wgpu::BindGroup,
     instances: Option<wgpu::Buffer>,
-    depth: Option<DepthTarget>,
 }
 
 impl Pass3D {
-    /// A pass drawing into colour targets of `format`.
-    pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
-        let pipeline = UnlitPipeline3D::new(device, format);
+    /// A pass drawing into targets of `hdr`'s format and samples.
+    pub fn new(device: &wgpu::Device, hdr: Hdr3D) -> Self {
+        let pipeline = UnlitPipeline3D::new(device, hdr.format, hdr.samples);
         let view_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("view-3d"),
             size: size_of::<[[f32; 4]; 4]>() as wgpu::BufferAddress,
@@ -48,39 +49,36 @@ impl Pass3D {
             view_buffer,
             view_group,
             instances: None,
-            depth: None,
         }
     }
 
-    /// The colour format it draws into.
-    pub fn format(&self) -> wgpu::TextureFormat {
-        self.pipeline.format()
+    /// The format and samples it draws.
+    pub fn hdr(&self) -> Hdr3D {
+        Hdr3D {
+            format: self.pipeline.format(),
+            samples: self.pipeline.samples(),
+        }
     }
 
-    /// The depth target's size, once a frame has been drawn.
-    pub fn depth_size(&self) -> Option<(u32, u32)> {
-        self.depth.as_ref().map(DepthTarget::size)
-    }
-
-    /// Records `scene` into `color`, `width` × `height` pixels: cleared to
-    /// `scene.clear`, depth cleared to the far plane.
-    #[allow(clippy::too_many_arguments)]
+    /// Records `scene` into `targets`, made for [`hdr`](Self::hdr): colour
+    /// cleared to `scene.clear` and resolved when multisampled, depth
+    /// cleared to the far plane.
     pub fn record(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         encoder: &mut wgpu::CommandEncoder,
-        color: &wgpu::TextureView,
-        (width, height): (u32, u32),
+        targets: &Targets3D,
         scene: &Scene3D<'_>,
     ) {
-        let depth = match &mut self.depth {
-            Some(depth) => {
-                depth.resize(device, width, height);
-                depth
-            }
-            None => self.depth.insert(DepthTarget::new(device, width, height)),
-        };
+        if targets.hdr() != self.hdr() {
+            log::error!(
+                "3D targets of {:?} drawn by a pass for {:?}; skipped (a renderer bug)",
+                targets.hdr(),
+                self.hdr()
+            );
+            return;
+        }
         queue.write_buffer(
             &self.view_buffer,
             0,
@@ -91,16 +89,21 @@ impl Pass3D {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("pass-3d"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: color,
+                view: targets.color(),
                 depth_slice: None,
-                resolve_target: None,
+                resolve_target: targets.resolve(),
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(scene.clear),
-                    store: wgpu::StoreOp::Store,
+                    // Resolved, the samples are read by nothing.
+                    store: if targets.resolve().is_some() {
+                        wgpu::StoreOp::Discard
+                    } else {
+                        wgpu::StoreOp::Store
+                    },
                 },
             })],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                view: depth.view(),
+                view: targets.depth(),
                 depth_ops: Some(wgpu::Operations {
                     load: wgpu::LoadOp::Clear(DEPTH_CLEAR),
                     // Nothing after the pass reads it yet.

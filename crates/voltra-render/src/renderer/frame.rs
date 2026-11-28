@@ -6,7 +6,7 @@ use super::{Layer, Renderer};
 use crate::camera::screen_projection;
 use crate::mesh::Mesh2D;
 use crate::pass;
-use crate::post::PostSettings;
+use crate::post::{Grade, PostSettings};
 use crate::scene_draw::{self, SceneDraw};
 use crate::target::RenderTarget;
 
@@ -50,7 +50,7 @@ impl Renderer {
         let scope = self.gpu_timer.begin(&mut encoder, "scene");
         {
             let target = self.frame_target.as_ref().expect("made just above");
-            self.record_scene(&mut encoder, target.view(), mesh, draws);
+            self.record_scene(&mut encoder, target.view(), mesh, draws, self.clear_color);
         }
         self.gpu_timer.end(&mut encoder, scope);
         let scope = self.gpu_timer.begin(&mut encoder, "normals");
@@ -79,6 +79,7 @@ impl Renderer {
                     .as_ref()
                     .filter(|_| layers)
                     .map(RenderTarget::view),
+                mode: Grade::Picture,
             },
             &mut self.transients,
             &mut self.gpu_timer,
@@ -113,6 +114,25 @@ impl Renderer {
         ui: Layer<'_>,
         post: &PostSettings,
     ) {
+        self.render_scene_as(target, output, mesh, draws, ui, post, Grade::Picture);
+    }
+
+    /// [`render_scene`](Self::render_scene), graded as `grade` says. A
+    /// [`Grade::Overlay`] clears `target` transparent rather than to
+    /// [`clear_color`](Self::clear_color) — a 2D shot over another
+    /// dimension's picture — so its light map lights only what it draws,
+    /// and grades it unpremultiplied.
+    #[allow(clippy::too_many_arguments)]
+    pub fn render_scene_as(
+        &mut self,
+        target: &RenderTarget,
+        output: &RenderTarget,
+        mesh: Option<&Mesh2D>,
+        draws: &[SceneDraw<'_>],
+        ui: Layer<'_>,
+        post: &PostSettings,
+        grade: Grade,
+    ) {
         let mut encoder =
             self.ctx
                 .device()
@@ -120,8 +140,12 @@ impl Renderer {
                     label: Some("scene-encoder"),
                 });
 
+        let clear = match grade {
+            Grade::Overlay => wgpu::Color::TRANSPARENT,
+            _ => self.clear_color,
+        };
         let scope = self.gpu_timer.begin(&mut encoder, "scene");
-        self.record_scene(&mut encoder, target.view(), mesh, draws);
+        self.record_scene(&mut encoder, target.view(), mesh, draws, clear);
         self.gpu_timer.end(&mut encoder, scope);
         let size = (target.width(), target.height());
         let scope = self.gpu_timer.begin(&mut encoder, "normals");
@@ -149,6 +173,7 @@ impl Renderer {
                     .as_ref()
                     .filter(|_| layers)
                     .map(RenderTarget::view),
+                mode: grade,
             },
             &mut self.transients,
             &mut self.gpu_timer,
@@ -204,6 +229,7 @@ impl Renderer {
         view: &wgpu::TextureView,
         mesh: Option<&Mesh2D>,
         draws: &[SceneDraw<'_>],
+        clear: wgpu::Color,
     ) {
         // Uploaded every frame rather than on change: one 64-byte write is
         // cheaper than tracking whether the camera moved.
@@ -217,7 +243,7 @@ impl Renderer {
             self.camera_binding.bind_group(),
             mesh,
             draws,
-            self.clear_color,
+            clear,
         );
     }
 }

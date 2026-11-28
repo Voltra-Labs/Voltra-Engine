@@ -38,7 +38,9 @@ fn vs_main(vertex: VertexIn, instance: InstanceIn) -> VertexOut {
     return out;
 }
 
+// Opaque: alpha 1 whatever the tint's, so a 3D overlay is see-through
+// only where nothing was drawn (alpha modes are the materials').
 @fragment
 fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
-    return in.tint;
+    return vec4<f32>(in.tint.rgb, 1.0);
 }

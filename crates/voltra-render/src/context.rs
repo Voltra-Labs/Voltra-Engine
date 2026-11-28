@@ -5,8 +5,10 @@ use wgpu::SurfaceTarget;
 use crate::frame_buffers::FrameBuffers;
 
 mod adapter;
+mod formats;
 
 use adapter::{optional_features, present_mode, required_limits, srgb_format};
+pub use formats::TargetSupport;
 
 /// Owns the GPU device and, for a window, the swapchain surface.
 ///
@@ -26,6 +28,8 @@ pub struct GpuContext {
     downlevel: wgpu::DownlevelFlags,
     /// Buffers made for the frame being recorded; see [`FrameBuffers`].
     frame_buffers: FrameBuffers,
+    /// What the 3D shot's targets may be: see [`TargetSupport`].
+    targets: TargetSupport,
 }
 
 impl GpuContext {
@@ -98,6 +102,7 @@ impl GpuContext {
         config.present_mode = present_mode(true);
         surface.configure(&device, &config);
         let downlevel = adapter.get_downlevel_capabilities().flags;
+        let targets = TargetSupport::of(&adapter, device.features(), format);
 
         Self {
             surface: Some(surface),
@@ -107,6 +112,7 @@ impl GpuContext {
             format,
             downlevel,
             frame_buffers: FrameBuffers::default(),
+            targets,
         }
     }
 
@@ -141,6 +147,7 @@ impl GpuContext {
             view_formats: Vec::new(),
         };
         let downlevel = adapter.get_downlevel_capabilities().flags;
+        let targets = TargetSupport::of(&adapter, device.features(), config.format);
         Some(Self {
             surface: None,
             device,
@@ -149,6 +156,7 @@ impl GpuContext {
             config,
             downlevel,
             frame_buffers: FrameBuffers::default(),
+            targets,
         })
     }
 
@@ -165,6 +173,11 @@ impl GpuContext {
     /// The adapter's downlevel capability flags.
     pub fn downlevel(&self) -> wgpu::DownlevelFlags {
         self.downlevel
+    }
+
+    /// What the device can draw a 3D shot into: see [`TargetSupport`].
+    pub fn target_support(&self) -> &TargetSupport {
+        &self.targets
     }
 
     /// The queue commands are submitted to.

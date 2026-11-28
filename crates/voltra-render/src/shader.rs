@@ -30,8 +30,21 @@ pub const EGUI: &str = include_str!("shaders/egui.wgsl");
 /// Source of the shader that widens line segments in screen space.
 pub const LINES: &str = include_str!("shaders/lines.wgsl");
 
-/// The full-screen post-processing pass: grading and vignette.
-pub const POST: &str = include_str!("shaders/post.wgsl");
+/// The full-screen post-processing pass of a 2D picture: grading and
+/// vignette, and the overlay's unpremultiplied grade.
+pub const POST: &str = concat!(
+    include_str!("shaders/grade.wgsl"),
+    "\n",
+    include_str!("shaders/post.wgsl")
+);
+
+/// The full-screen post-processing pass of a 3D picture: exposure, the
+/// tone curve, then the same grade. See [`Grade::Tonemap`](crate::post::Grade).
+pub const TONEMAP: &str = concat!(
+    include_str!("shaders/grade.wgsl"),
+    "\n",
+    include_str!("shaders/tonemap.wgsl")
+);
 
 /// Bloom's prefilter, downsample and upsample. See [`BloomPass`](crate::bloom::BloomPass).
 pub const BLOOM: &str = include_str!("shaders/bloom.wgsl");

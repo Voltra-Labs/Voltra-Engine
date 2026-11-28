@@ -35,7 +35,7 @@ pub mod texture;
 
 pub use bloom::{BloomPass, BloomSettings};
 pub use camera::{screen_projection, CameraBinding, View2D};
-pub use context::GpuContext;
+pub use context::{GpuContext, TargetSupport};
 pub use egui_backend::{EguiBackend, ScreenDescriptor};
 pub use frame_buffers::FrameBuffers;
 pub use gpu_timer::{GpuScope, GpuTimer};
@@ -53,7 +53,7 @@ pub use particles::{
 };
 pub use pass::{MaterialDraw, MeshDraw};
 pub use pipeline::SpritePipeline;
-pub use post::{PostPass, PostSettings};
+pub use post::{Grade, PostPass, PostSettings};
 pub use quad::QuadInstance;
 pub use readback::read_rgba8;
 pub use renderer::{Layer, Placed, Renderer};

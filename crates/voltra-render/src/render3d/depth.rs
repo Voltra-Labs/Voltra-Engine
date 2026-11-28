@@ -10,7 +10,8 @@ pub const DEPTH_CLEAR: f32 = 0.0;
 /// The depth test: nearer is greater, under reversed Z.
 pub const DEPTH_COMPARE: wgpu::CompareFunction = wgpu::CompareFunction::GreaterEqual;
 
-/// A depth texture kept the size of the colour target it is drawn with.
+/// A depth texture kept the size, and the samples a pixel, of the colour
+/// target it is drawn with.
 #[derive(Debug)]
 pub struct DepthTarget {
     texture: wgpu::Texture,
@@ -18,8 +19,15 @@ pub struct DepthTarget {
 }
 
 impl DepthTarget {
-    /// A `width` × `height` depth target, each at least 1.
+    /// A `width` × `height` depth target, each at least 1, one sample a
+    /// pixel.
     pub fn new(device: &wgpu::Device, width: u32, height: u32) -> Self {
+        Self::with_samples(device, width, height, 1)
+    }
+
+    /// A `width` × `height` depth target of `samples` a pixel, for a
+    /// colour target of as many.
+    pub fn with_samples(device: &wgpu::Device, width: u32, height: u32, samples: u32) -> Self {
         let texture = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("depth-3d"),
             size: wgpu::Extent3d {
@@ -28,7 +36,7 @@ impl DepthTarget {
                 depth_or_array_layers: 1,
             },
             mip_level_count: 1,
-            sample_count: 1,
+            sample_count: samples.max(1),
             dimension: wgpu::TextureDimension::D2,
             format: DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
@@ -44,13 +52,18 @@ impl DepthTarget {
         if self.size() == (width.max(1), height.max(1)) {
             return false;
         }
-        *self = Self::new(device, width, height);
+        *self = Self::with_samples(device, width, height, self.samples());
         true
     }
 
     /// Its size in pixels.
     pub fn size(&self) -> (u32, u32) {
         (self.texture.width(), self.texture.height())
+    }
+
+    /// Its samples a pixel.
+    pub fn samples(&self) -> u32 {
+        self.texture.sample_count()
     }
 
     /// The view the pass attaches.

@@ -9,11 +9,19 @@ use super::PostSettings;
 pub(super) struct PostUniform {
     tint_exposure: [f32; 4],
     grade: [f32; 4],
-    /// x: bloom intensity; the rest unused.
+    /// x: bloom intensity, y: the tone curve's number; the rest unused.
     bloom: [f32; 4],
 }
 
 impl PostUniform {
+    /// With the tone curve `grade` names, if it names one.
+    pub(super) fn with_grade(mut self, grade: super::Grade) -> Self {
+        if let super::Grade::Tonemap(curve) = grade {
+            self.bloom[1] = curve.index();
+        }
+        self
+    }
+
     pub(super) fn new(settings: &PostSettings, aspect: f32) -> Self {
         let finite = |v: f32, fallback: f32| if v.is_finite() { v } else { fallback };
         Self {
