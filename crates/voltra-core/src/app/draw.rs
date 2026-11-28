@@ -57,6 +57,7 @@ impl App {
         };
         // Every pass this frame records is timed while the profiler records.
         renderer.set_gpu_timing(voltra_profile::is_enabled());
+        renderer.begin_frame();
 
         // Cloned handles rather than borrows: `renderer.camera` goes into the
         // UI callback mutably, which rules out holding a borrow of the renderer

@@ -11,11 +11,10 @@ use crate::post::Grade;
 use crate::render3d::{Hdr3D, HdrDegraded, Look3D, Pass3D, Scene3D, Targets3D};
 use crate::target::RenderTarget;
 
-/// How many shots' targets are kept between frames, by size: a split
-/// screen and a picture in a picture are three. Past this the least
-/// recently drawn is let go — so a window dragged through many sizes
-/// holds at most this many full-size HDR targets, and a frame of more 3D
-/// sizes than this remakes some each frame.
+/// How many shots' targets are kept at most, by size: a split screen and a
+/// picture in a picture are three. The backstop to the age rule
+/// ([`Renderer::begin_frame`]): past it the least recently drawn is let
+/// go, and a frame of more 3D sizes than this remakes some each frame.
 const KEPT_TARGETS: usize = 4;
 
 /// What the renderer keeps for 3D, made with the first 3D frame: a 2D game
@@ -23,8 +22,11 @@ const KEPT_TARGETS: usize = 4;
 #[derive(Debug)]
 pub(super) struct State3D {
     pass: Option<Pass3D>,
-    /// Targets by use, the most recent last.
-    targets: Vec<Targets3D>,
+    /// Targets by use, the most recent last, each with the frame it was
+    /// last drawn in.
+    targets: Vec<(Targets3D, u64)>,
+    /// The frame being drawn: counted by [`Renderer::begin_frame`].
+    frame: u64,
     /// The samples a pixel asked for: 1 or 4.
     samples: u32,
     /// What has been said about the device falling short, once each.
@@ -36,6 +38,7 @@ impl Default for State3D {
         Self {
             pass: None,
             targets: Vec::new(),
+            frame: 0,
             samples: Hdr3D::DEFAULT_SAMPLES,
             warned: HashSet::new(),
         }
@@ -55,9 +58,9 @@ impl State3D {
         let found = self
             .targets
             .iter()
-            .position(|t| t.hdr() == hdr && t.size() == size);
+            .position(|(t, _)| t.hdr() == hdr && t.size() == size);
         let targets = match found {
-            Some(at) => self.targets.remove(at),
+            Some(at) => self.targets.remove(at).0,
             None => {
                 if self.targets.len() >= KEPT_TARGETS {
                     self.targets.remove(0);
@@ -65,12 +68,35 @@ impl State3D {
                 Targets3D::new(device, hdr, width, height)
             }
         };
-        self.targets.push(targets);
-        self.targets.last().expect("pushed just above")
+        self.targets.push((targets, self.frame));
+        &self.targets.last().expect("pushed just above").0
+    }
+
+    /// Starts frame `frame + 1`: lets go of every target drawn in neither
+    /// the frame just ended nor the one before — a size a window was
+    /// dragged through, a sample count since changed.
+    fn begin_frame(&mut self) {
+        self.frame += 1;
+        let frame = self.frame;
+        self.targets.retain(|(_, used)| used + 2 >= frame);
     }
 }
 
 impl Renderer {
+    /// Marks the start of a frame. What it keeps between frames for shots
+    /// it no longer draws — 3D targets of a size not drawn this frame or
+    /// the last — is let go. Call once before each frame's draws; a
+    /// renderer never told keeps its [`KEPT_TARGETS`] most recent.
+    pub fn begin_frame(&mut self) {
+        self.state3d.begin_frame();
+    }
+
+    /// How many 3D shots' target sets are kept: for a test, or a memory
+    /// readout.
+    pub fn kept_3d_targets(&self) -> usize {
+        self.state3d.targets.len()
+    }
+
     /// Sets the samples a pixel 3D shots are drawn with: 1 (off) or 4, the
     /// default (`default.render.ron`'s `msaa`). Anything above 1 is 4; the
     /// device may still allow only 1 ([`hdr_3d`](Self::hdr_3d)).

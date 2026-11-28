@@ -118,6 +118,7 @@ impl Headless {
         else {
             return Err(ScreenshotError::NoDevice);
         };
+        renderer.begin_frame();
         let device = renderer.context().device().clone();
         let queue = renderer.context().queue().clone();
         target.resize(&device, width, height);

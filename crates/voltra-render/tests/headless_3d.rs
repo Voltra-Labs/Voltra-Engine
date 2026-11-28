@@ -175,3 +175,47 @@ fn nothing_to_draw_clears_and_a_bad_range_is_skipped() {
     let pixels = gpu.draw((16, 16), view, &mesh, &one, &[(0, 1), (1, 5)]);
     assert!(is_red(pixels[8 * 16 + 8]));
 }
+
+#[test]
+fn targets_not_drawn_this_frame_or_the_last_are_let_go() {
+    let Some(mut gpu) = gpu() else {
+        eprintln!("no adapter: skipping");
+        return;
+    };
+    let mesh = Mesh3D::new(&gpu.device, "cube", &cube()).expect("a cube");
+    let view = looking_down_minus_z(60.0, None);
+    gpu.renderer.set_msaa(4);
+    let draw = |gpu: &mut Gpu, size: u32| {
+        gpu.draw((size, size), view, &mesh, &[], &[]);
+    };
+    // A frame of two sizes, then frames of one: a window dragged.
+    draw(&mut gpu, 32);
+    draw(&mut gpu, 48);
+    assert_eq!(gpu.renderer.kept_3d_targets(), 2);
+    gpu.renderer.begin_frame();
+    draw(&mut gpu, 32);
+    gpu.renderer.begin_frame();
+    assert_eq!(
+        gpu.renderer.kept_3d_targets(),
+        2,
+        "48 was drawn the frame before last"
+    );
+    draw(&mut gpu, 32);
+    gpu.renderer.begin_frame();
+    assert_eq!(gpu.renderer.kept_3d_targets(), 1, "48 let go");
+    // MSAA turned off: the 4× set ages out the same way.
+    gpu.renderer.set_msaa(1);
+    draw(&mut gpu, 32);
+    assert_eq!(gpu.renderer.kept_3d_targets(), 2);
+    gpu.renderer.begin_frame();
+    draw(&mut gpu, 32);
+    gpu.renderer.begin_frame();
+    draw(&mut gpu, 32);
+    gpu.renderer.begin_frame();
+    assert_eq!(gpu.renderer.kept_3d_targets(), 1, "the 4× set let go");
+    // Many sizes in one frame: the count cap holds.
+    for size in [8, 9, 10, 11, 12, 13] {
+        draw(&mut gpu, size);
+    }
+    assert_eq!(gpu.renderer.kept_3d_targets(), 4);
+}

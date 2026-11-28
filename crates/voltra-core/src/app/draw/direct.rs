@@ -18,6 +18,7 @@ impl App {
         ) else {
             return;
         };
+        renderer.begin_frame();
         // Before the batch, not after: the frame about to be recorded has to be
         // the one the scene's camera describes. `aspect` is the window's and
         // stays the window's — `Renderer::resize` owns it.
