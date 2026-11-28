@@ -69,6 +69,18 @@ pub fn is_font(name: &str) -> bool {
     has_extension(name, FONT_EXTENSIONS)
 }
 
+/// File extensions a material's shader is written in, lowercase, without
+/// the dot: a sprite material's fragment function and a surface material's
+/// `surface()` alike.
+pub const SHADER_EXTENSIONS: &[&str] = &["wgsl"];
+
+/// Whether a file name is a material's shader, which
+/// [`Materials::reload`](crate::Materials::reload) reloads every material
+/// naming.
+pub fn is_shader(name: &str) -> bool {
+    has_extension(name, SHADER_EXTENSIONS)
+}
+
 /// Whether a file name is an input map: `*.input.ron`, the suffix that
 /// keeps it out of the scene list the way `*.atlas.ron` keeps a slicing out.
 pub fn is_input_map(name: &str) -> bool {

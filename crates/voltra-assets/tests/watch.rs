@@ -196,3 +196,20 @@ fn reading_an_asset_is_not_a_change_to_it() {
     let seen = drain_for(&mut watcher, Duration::from_millis(900));
     assert!(seen.is_empty(), "reads reported as changes: {seen:?}");
 }
+
+#[test]
+fn a_rewritten_shader_arrives_for_the_materials_naming_it() {
+    // A material's `.wgsl` is no texture, scene or project file; before
+    // stage 138 the watch dropped it, and editing a shader reloaded nothing.
+    let root = scratch_root();
+    let file = root.join("materials/dissolve.wgsl");
+    std::fs::create_dir_all(file.parent().expect("a folder")).expect("folders");
+    std::fs::write(&file, "fn surface( {").expect("written");
+    let mut watcher = AssetWatcher::new(&root).expect("watching a scratch dir");
+    std::fs::write(&file, "fn surface() {}").expect("rewritten");
+    let expected = AssetPath::new("materials/dissolve.wgsl").expect("valid");
+    assert!(
+        wait_for(&mut watcher, &expected),
+        "no event for the rewritten shader within {DEADLINE:?}"
+    );
+}
