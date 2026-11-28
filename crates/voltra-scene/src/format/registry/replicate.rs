@@ -21,6 +21,8 @@ use crate::interpolate::Interpolate;
 type EncodeFn = fn(&World, Entity) -> Option<Result<Vec<u8>, postcard::Error>>;
 /// An encoded value inserted on `entity`, replacing any there.
 type ApplyFn = fn(&mut World, Entity, &[u8]) -> Result<(), postcard::Error>;
+/// Whether any entity of the world has one.
+type PresentFn = fn(&World) -> bool;
 /// The value a fraction `t` of the way from one encoded value to another.
 type LerpFn = fn(&[u8], &[u8], f32) -> Result<Vec<u8>, postcard::Error>;
 
@@ -29,6 +31,7 @@ type LerpFn = fn(&[u8], &[u8], f32) -> Result<Vec<u8>, postcard::Error>;
 pub(super) struct ReplicateFns {
     encode: EncodeFn,
     apply: ApplyFn,
+    present: PresentFn,
     lerp: Option<LerpFn>,
 }
 
@@ -36,6 +39,7 @@ impl ReplicateFns {
     fn of<T: Serialize + DeserializeOwned + 'static>() -> Self {
         Self {
             encode: |world, entity| world.get::<T>(entity).map(postcard::to_allocvec),
+            present: |world| world.component_count::<T>() > 0,
             apply: |world, entity, bytes| {
                 let value: T = decode(bytes)?;
                 world.insert(entity, value);
@@ -214,6 +218,14 @@ impl ComponentRegistry {
             Ok(fns) => (fns.encode)(world, entity).map(|r| r.map_err(ReplicateError::from)),
             Err(error) => Some(Err(error)),
         }
+    }
+
+    /// Whether any entity of `world` has `component` — one storage's length,
+    /// so a server reading the world once a snapshot can pass over a type
+    /// no entity has (a 2D game's `Transform3D`) instead of asking every
+    /// entity for it. `false` for a handle this registry did not issue.
+    pub fn any_replicated(&self, component: ReplicatedComponent, world: &World) -> bool {
+        self.fns(component).is_ok_and(|fns| (fns.present)(world))
     }
 
     /// Decodes `bytes` as `component` and puts it on `entity`, replacing

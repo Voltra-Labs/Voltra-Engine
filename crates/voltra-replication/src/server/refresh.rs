@@ -24,6 +24,13 @@ impl ReplicationServer {
             .map(|(entity, replicated)| (entity, *replicated))
             .collect();
         let placed = self.interest.is_some();
+        // A type no entity has is passed over for the whole snapshot rather
+        // than asked of every entity: a 2D game's `Transform3D`.
+        let present: Vec<bool> = self
+            .components
+            .iter()
+            .map(|&component| registry.any_replicated(component, world))
+            .collect();
 
         let mut seen = HashMap::with_capacity(live.len());
         for &(entity, replicated) in &live {
@@ -63,6 +70,9 @@ impl ReplicationServer {
                 .iter()
                 .enumerate()
                 .map(|(index, &component)| {
+                    if !present[index] {
+                        return None;
+                    }
                     let bytes = match registry.encode_replicated(component, world, entity)? {
                         Ok(bytes) => bytes,
                         Err(error) => {

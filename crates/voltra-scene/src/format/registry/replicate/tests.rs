@@ -53,11 +53,7 @@ fn a_3d_transform_round_trips_and_slerps_on_the_wire() {
         .expect("lerps");
     let half: crate::Transform3D = decode(&half).expect("decodes");
     assert_eq!(half.translation, Vec3::new(1.0, 2.0, -3.0));
-    let off = 2.0
-        * (half.rotation * Quat::from_rotation_y(0.5).conjugate())
-            .xyz()
-            .length()
-            .asin();
+    let off = voltra_testkit::rotation_apart(half.rotation, Quat::from_rotation_y(0.5));
     assert!(off < 1e-5, "half of 1 rad about Y: {off} rad off");
 }
 
@@ -121,4 +117,22 @@ fn junk_and_trailing_bytes_change_nothing() {
             .is_err());
     }
     assert!(world.get::<Health>(e).is_none());
+}
+
+#[test]
+fn a_type_no_entity_has_is_not_present() {
+    let registry = ComponentRegistry::with_defaults();
+    let transform3d = *registry
+        .replicated()
+        .iter()
+        .find(|c| c.name == crate::Transform3D::NAME)
+        .expect("replicated");
+    let mut world = World::new();
+    let flat = world.spawn();
+    world.insert(flat, Transform2D::default());
+    assert!(!registry.any_replicated(transform3d, &world));
+    assert!(registry.any_replicated(registry.replicated()[0], &world));
+    let deep = world.spawn();
+    world.insert(deep, crate::Transform3D::default());
+    assert!(registry.any_replicated(transform3d, &world));
 }
