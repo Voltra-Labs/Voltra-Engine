@@ -27,6 +27,8 @@ impl ReplicationServer {
     ///
     /// `false`, and nothing kept, for a peer that is not a client of this
     /// server (not yet joined, or gone): points for it would outlive it.
+    /// An empty list clears them; `vec![]` names no point type to infer, so
+    /// [`clear_interest_points`](Self::clear_interest_points) says it.
     pub fn set_interest_points<P: Into<InterestPoint>>(
         &mut self,
         peer: PeerId,
@@ -36,12 +38,17 @@ impl ReplicationServer {
             self.points.remove(&peer);
             return false;
         }
-        let mut points: Vec<InterestPoint> = points.into_iter().map(Into::into).collect();
+        // One past the cap, to know it was passed without collecting
+        // whatever an iterator would give.
+        let mut points: Vec<InterestPoint> = points
+            .into_iter()
+            .take(MAX_INTEREST_POINTS + 1)
+            .map(Into::into)
+            .collect();
         if points.len() > MAX_INTEREST_POINTS {
             log::warn!(
-                "{peer}: {} interest points, over the {MAX_INTEREST_POINTS} a client may have; \
-                 the first are kept",
-                points.len()
+                "{peer}: more than the {MAX_INTEREST_POINTS} interest points a client may have; \
+                 the first {MAX_INTEREST_POINTS} are kept"
             );
             points.truncate(MAX_INTEREST_POINTS);
         }
@@ -51,6 +58,13 @@ impl ReplicationServer {
             self.points.insert(peer, points);
         }
         true
+    }
+
+    /// Drops the points the game set for `peer`: it is sent the world
+    /// around the entities it owns only. `false` for a peer that is not a
+    /// client of this server, as [`set_interest_points`](Self::set_interest_points).
+    pub fn clear_interest_points(&mut self, peer: PeerId) -> bool {
+        self.set_interest_points(peer, std::iter::empty::<InterestPoint>())
     }
 
     /// Every point `peer` was sent the world around at the last snapshot:

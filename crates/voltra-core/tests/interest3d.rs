@@ -174,4 +174,10 @@ fn a_point_sees_only_entities_of_its_own_dimension() {
     assert!(rig.has(near_id), "a 3D point sees the 3D entity 2.2 m off");
     assert!(!rig.has(flat_id), "and not the 2D one 1 m off");
     assert!(!rig.has(deep_id), "nor the 3D one 40 m off");
+
+    // Cleared: no point again, so nothing placed is sent.
+    assert!(rig.server.net_mut().clear_interest_points(peer));
+    rig.step(30);
+    assert!(!rig.has(near_id), "the 3D point is gone");
+    assert!(!rig.server.net_mut().clear_interest_points(PeerId(999)));
 }

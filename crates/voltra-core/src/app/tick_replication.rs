@@ -99,6 +99,17 @@ impl Net {
         }
     }
 
+    /// Drops the points set for `peer` with
+    /// [`set_interest_points`](Self::set_interest_points): it is sent the
+    /// world around the entities it owns only. `false` off a replicating
+    /// server or for a peer not joined to it.
+    pub fn clear_interest_points(&mut self, peer: PeerId) -> bool {
+        match self.replication.as_mut().and_then(Replication::server_mut) {
+            Some(server) => server.clear_interest_points(peer),
+            None => false,
+        }
+    }
+
     /// The entity `peer` owns on a server: the first [`Replicated`] one
     /// carrying its [`NetOwner`](voltra_replication::NetOwner).
     ///
