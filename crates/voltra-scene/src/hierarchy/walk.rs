@@ -14,9 +14,10 @@ use crate::scene_id::SceneId;
 /// How deep a chain [`ancestors`] will walk before it gives up.
 ///
 /// A guard against a cycle, not a design limit: cycles cannot be made through
-/// [`set_parent`](super::link::set_parent), but a hand-edited scene file can name one, and every walk up
-/// the tree has to terminate on one anyway. Deeper than any hierarchy a person
-/// builds, shallow enough that a cycle is caught in the same frame it appears.
+/// [`set_parent`](super::link::set_parent), but a hand-edited scene file can
+/// name one, and every walk up the tree has to terminate on one anyway.
+/// Deeper than any hierarchy a person builds, shallow enough that a cycle is
+/// caught in the same frame it appears.
 pub const MAX_DEPTH: usize = 256;
 
 /// The live parent of `entity`, if it has one that resolves.

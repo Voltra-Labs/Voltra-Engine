@@ -8,13 +8,13 @@
 //!
 //! Split by how the parts fail. [`parent`] is the component and its file form,
 //! [`link`] is the rules about which links may exist, [`walk`] is following
-//! them up and down the tree, [`resolve`] is turning a
-//! stored identity back into a live entity, [`world_transform`] is the
-//! arithmetic of composing one, and [`world_transforms`] composes them all in
-//! one pass; [`world_transform_3d`] and [`world_transforms_3d`] are their 3D
-//! twins over the same arithmetic. [`dimension`] is the rule that a chain
-//! keeps to one dimension: `Parent` is shared, the transforms are not. Nothing here touches the GPU or egui, so all of
-//! it is unit-tested.
+//! them up and down the tree, [`resolve`] is turning a stored identity back
+//! into a live entity, [`world_transform`] is the arithmetic of composing
+//! one, and [`world_transforms`] composes them all in one pass;
+//! [`world_transform_3d`] and [`world_transforms_3d`] are their 3D twins over
+//! the same arithmetic. [`dimension`] is the rule that a chain keeps to one
+//! dimension: `Parent` is shared, the transforms are not. Nothing here
+//! touches the GPU or egui, so all of it is unit-tested.
 //!
 //! **The hierarchy is a transform relationship, not a container.** Despawning a
 //! parent does not despawn its children, and a scene file is a flat list of

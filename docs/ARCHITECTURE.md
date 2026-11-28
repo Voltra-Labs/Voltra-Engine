@@ -9839,13 +9839,21 @@ file". This is what was built.
   (`voltra_scene::transform3d`): default identity with scale one;
   `matrix() -> Affine3A` (scale, rotate, translate, as 2D); `from_matrix`,
   lossy for shear as 2D's is — the rotation comes back normalised, and a
-  matrix collapsed flat (a zero scale) comes back unrotated with its axes'
-  lengths as the scale instead of NaN (glam's `to_scale_rotation_translation`
-  divides by the scale); `looking_at(target, up)` (forward −Z at the target;
+  matrix collapsed flat comes back unrotated with its axes' lengths as the
+  scale instead of NaN (glam's `to_scale_rotation_translation` divides by the
+  scale). **Collapsed is relative in 3D** (`Transform3D::is_collapsed`):
+  |det| over the product of the axis lengths below `FLATNESS` (10⁻⁶), or an
+  axis product `f32` cannot hold. An absolute determinant threshold is one on
+  scale³ — a centimetre glTF at 0.01 under a parent at 0.01 would have
+  counted as flat, and `set_world_transform_3d` refused under a parent at
+  10⁻⁴. 2D keeps picking's absolute 10⁻¹² on the area: it bites below 10⁻⁶ a
+  unit per axis, under a pixel at any zoom; `looking_at(target, up)` (forward −Z at the target;
   left as it is when the target is where it stands, any perpendicular taken
   as up when `up` is along the view); `forward()`/`right()`/`up()`;
   `from_euler_degrees`/`euler_degrees`, `(x, y, z)` in Godot's YXZ order
-  (`Ry · Rx · Rz`, glam's intrinsic `EulerRot::YXZ`). **Read from a file
+  (`Ry · Rx · Rz`, glam's intrinsic `EulerRot::YXZ`), read in `f64` — near
+  gimbal lock the `f32` quaternion bounds it (within 0.01° to ±89.9° of
+  pitch, a few hundredths at ±89.99°). **Read from a file
   through a repair** (`transform3d/file.rs`, `#[serde(from)]` a mirror
   whose fields default): a quaternion outside glam's `is_normalized`
   tolerance (2 × 10⁻⁴ on the length squared) is normalised, a zero or
@@ -9883,7 +9891,9 @@ file". This is what was built.
   the MCP server) and the inspector's "add to the rest" ask it. A file that
   breaks either rule is **warned about on load and left alone**
   (`dimension::problems`, from `resolve_parents`, free for a world with no
-  `Transform3D`): each dimension composes the entity by its own transform,
+  `Transform3D`; each entity named once, a both-transforms entity's children
+  not flagged again; said once per problem per run, keyed by `SceneId`,
+  since `resolve_parents` runs per record of an undo): each dimension composes the entity by its own transform,
   as if the other's link were not there. Physics parenting is unchanged
   until stage 148 (`takes_part_in_physics` still names the 2D components).
 - **`Placement`** (`prefab/placement.rs`): `AsAuthored | D2(Transform2D) |
@@ -9905,12 +9915,22 @@ file". This is what was built.
   translation in either dimension; `variant` and the replication client
   spawn `AsAuthored`, as does `Tick::duplicate`. Unity's prefab root
   placement and Godot's instanced-scene root, for both dimensions at once.
+  **An instance whose root's dimension differs from its file's root** (an
+  Apply from an instance whose root changed dimension leaves the others so)
+  is not synced at all — its parts taking the file's other-dimension
+  transforms under a root that keeps its own would mix the two — and is
+  named in `SyncReport::other_dimension` and warned about, which the
+  editor's Console shows.
 - **Editor**: the inspector's `Transform3D` section — position and scale
   as three numbers each (mixed `—` per axis), rotation as Euler degrees
-  through `EulerHints` (`euler_hint.rs`): per entity the angles last shown
-  and the quaternion they were for, so a typed 180° stays 180° while the
-  rotation is the one it made, and a rotation changed elsewhere (undo, a
-  script) is read from the quaternion again — Unity's
+  through `EulerHints` (`euler_hint.rs`): per entity the last eight (angles,
+  quaternion) pairs, so a typed 180° stays 180° while the rotation is one it
+  made — through undo and redo — and a rotation changed elsewhere (a
+  script) is read from the quaternion. An edit writes the **whole**
+  quaternion across a multi-selection (a touch on `rotation`): field by
+  field it would mix two rotations into neither. The other values written
+  per component (a translation or scale axis, a colour channel) are
+  independent, so per component is right for them — Unity's
   `m_LocalEulerAnglesHint`, in the editor and not the file. The hierarchy's
   **Create ▸ 3D ▸ Empty** makes a named `Transform3D` at the origin, one
   undo entry. No 3D view yet: the 2D view draws and picks 2D entities only,
@@ -9942,7 +9962,9 @@ file". This is what was built.
   `Transform2D`); `Transform3D` is not replicated, interpolated, animated
   or interest-managed (134, 156); physics parenting for 3D (148); dropping a
   3D prefab on the 2D view spawns it as authored, warned, rather than at
-  the cursor; the Euler hint is per editor session, not saved.
+  the cursor; the Euler hint is per editor session, not saved; Apply does
+  not offer to bring other instances across when a root changes dimension
+  (they are reported, not converted).
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
