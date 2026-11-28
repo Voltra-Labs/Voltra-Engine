@@ -10,7 +10,7 @@ use voltra_scene::camera::{AnyShot, FrameShot, FrameShots, Shot, Shot3D};
 
 use super::parts::mesh_draws;
 use super::shots::{self, ShotDraw};
-use super::world3d::World3D;
+use super::world3d::{Picture3D, World3D};
 
 /// How a frame is drawn, by [`plan`].
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -140,9 +140,14 @@ impl FrameDraw<'_> {
         };
         let _render = voltra_profile::scope("render");
         match plan {
-            Plan::Lone3D(shot) => {
-                world3d.draw(draw.world, draw.renderer, &shot, output, false, hud)
-            }
+            Plan::Lone3D(shot) => world3d.draw(
+                draw.world,
+                draw.renderer,
+                &shot,
+                output,
+                Picture3D::Opaque,
+                hud,
+            ),
             _ => {
                 let placed = shots::placed(draw.pool, &rects);
                 match output {

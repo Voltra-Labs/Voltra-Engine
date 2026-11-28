@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use super::post_chain::{record_post, Chain};
 use super::{Layer, Renderer};
 use crate::lights::Lighting;
-use crate::post::Grade;
+use crate::post::{Grade, PictureAlpha};
 use crate::render3d::{Hdr3D, HdrDegraded, Look3D, Pass3D, Scene3D, Targets3D};
 use crate::target::RenderTarget;
 
@@ -134,20 +134,39 @@ impl Renderer {
         };
         let view = self.ctx.frame_view(&frame);
         let size = (self.ctx.config().width, self.ctx.config().height);
-        self.record_3d(&view, size, scene, look, ui);
+        self.record_3d(&view, size, scene, look, PictureAlpha::Premultiplied, ui);
         self.ctx.present(frame);
     }
 
     /// Draws `scene` into `output` as `look` says, then `ui` over it in its
     /// pixels: a 3D shot's picture — the editor's view, a headless
-    /// screenshot, a part of a frame of several cameras, a render texture.
-    /// `output` is in the renderer's [`format`](crate::GpuContext::format),
-    /// as every picture is.
+    /// screenshot, a part of a frame of several cameras — premultiplied, as
+    /// the composite lays it. `output` is in the renderer's
+    /// [`format`](crate::GpuContext::format), as every picture is.
     pub fn render_3d_into(
         &mut self,
         output: &RenderTarget,
         scene: &Scene3D<'_>,
         look: &Look3D,
+        ui: Layer<'_>,
+    ) {
+        self.render_3d_picture(output, scene, look, PictureAlpha::Premultiplied, ui);
+    }
+
+    /// [`render_3d_into`](Self::render_3d_into) a render texture's picture:
+    /// in straight alpha, as a sprite or a HUD image showing it blends it.
+    /// A camera clearing to a half-transparent colour leaves its texture
+    /// half-transparent, and not darkened twice.
+    pub fn render_3d_texture(&mut self, output: &RenderTarget, scene: &Scene3D<'_>, look: &Look3D) {
+        self.render_3d_picture(output, scene, look, PictureAlpha::Straight, Layer::EMPTY);
+    }
+
+    fn render_3d_picture(
+        &mut self,
+        output: &RenderTarget,
+        scene: &Scene3D<'_>,
+        look: &Look3D,
+        alpha: PictureAlpha,
         ui: Layer<'_>,
     ) {
         if output.format() != self.ctx.format() {
@@ -159,7 +178,7 @@ impl Renderer {
             return;
         }
         let size = (output.width(), output.height());
-        self.record_3d(output.view(), size, scene, look, ui);
+        self.record_3d(output.view(), size, scene, look, alpha, ui);
     }
 
     fn record_3d(
@@ -168,6 +187,7 @@ impl Renderer {
         size: (u32, u32),
         scene: &Scene3D<'_>,
         look: &Look3D,
+        alpha: PictureAlpha,
         ui: Layer<'_>,
     ) {
         let hdr = self.hdr_3d();
@@ -195,7 +215,7 @@ impl Renderer {
                 lighting: &unlit,
                 normals: None,
                 layers: None,
-                mode: Grade::Tonemap(look.tonemap),
+                mode: Grade::Tonemap(look.tonemap, alpha),
             },
             &mut self.transients,
             &mut self.gpu_timer,

@@ -53,7 +53,7 @@ pub use particles::{
 };
 pub use pass::{MaterialDraw, MeshDraw};
 pub use pipeline::SpritePipeline;
-pub use post::{Grade, PostPass, PostSettings};
+pub use post::{Grade, PictureAlpha, PostPass, PostSettings};
 pub use quad::QuadInstance;
 pub use readback::read_rgba8;
 pub use renderer::{Layer, Placed, Renderer};

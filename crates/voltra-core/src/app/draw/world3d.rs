@@ -78,15 +78,16 @@ impl World3D {
     }
 
     /// Draws `world` through `shot` into `output` — the window for `None`
-    /// — and `ui` over it. An `overlay` starts transparent where the
-    /// camera's clear would have filled it.
+    /// — and `ui` over it, as `picture` says: an overlay starts transparent
+    /// where the camera's clear would have filled it, a render texture is
+    /// written in straight alpha.
     pub fn draw(
         &mut self,
         world: &World,
         renderer: &mut Renderer,
         shot: &Shot3D,
         output: Option<&RenderTarget>,
-        overlay: bool,
+        picture: Picture3D,
         ui: Layer<'_>,
     ) {
         let (width, height) = match output {
@@ -142,14 +143,32 @@ impl World3D {
             view,
             instances: &self.list.instances,
             draws: &draws,
-            clear: clear(shot.camera.clear, overlay, renderer.clear_color),
+            clear: clear(
+                shot.camera.clear,
+                picture == Picture3D::Overlay,
+                renderer.clear_color,
+            ),
         };
         let look = shot.camera.look();
-        match output {
-            Some(target) => renderer.render_3d_into(target, &scene, &look, ui),
-            None => renderer.render_3d(&scene, &look, ui),
+        match (output, picture) {
+            (Some(target), Picture3D::Texture) => renderer.render_3d_texture(target, &scene, &look),
+            (Some(target), _) => renderer.render_3d_into(target, &scene, &look, ui),
+            (None, _) => renderer.render_3d(&scene, &look, ui),
         }
     }
+}
+
+/// What a 3D shot's picture is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::app) enum Picture3D {
+    /// A screen shot drawn over nothing of the other dimension.
+    Opaque,
+    /// A screen shot over another dimension's picture: transparent where
+    /// it draws nothing.
+    Overlay,
+    /// A render texture, written in straight alpha for the sprites that
+    /// show it.
+    Texture,
 }
 
 /// What a 3D shot's target is cleared to, premultiplied as the picture

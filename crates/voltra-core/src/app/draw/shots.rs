@@ -11,6 +11,7 @@ use voltra_scene::sprite::sheets::Sheets;
 use voltra_scene::{SortingLayers, SpriteBatch, TileMeshCache};
 
 use super::parts::clock_seconds;
+use super::world3d::Picture3D;
 use crate::app::gpu_particles::GpuParticleRings;
 use crate::app::scene_draws::{prepare_materials, scene_draws};
 
@@ -95,7 +96,13 @@ impl ShotDraw<'_> {
                             self.renderer,
                             &shot,
                             Some(picture),
-                            frame_shot.overlay,
+                            if shot.target.is_some() {
+                                Picture3D::Texture
+                            } else if frame_shot.overlay {
+                                Picture3D::Overlay
+                            } else {
+                                Picture3D::Opaque
+                            },
                             Layer::EMPTY,
                         );
                     }

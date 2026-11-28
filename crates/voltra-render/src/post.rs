@@ -13,7 +13,7 @@ use crate::shader;
 mod grade;
 mod uniform;
 
-pub use grade::Grade;
+pub use grade::{Grade, PictureAlpha};
 use uniform::PostUniform;
 
 /// How the frame is graded. [`PostSettings::NEUTRAL`] changes nothing.

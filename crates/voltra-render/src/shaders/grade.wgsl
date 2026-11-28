@@ -14,7 +14,8 @@ struct Params {
     tint_exposure: vec4<f32>,
     // x: contrast, y: saturation, z: vignette, w: aspect (width / height)
     grade: vec4<f32>,
-    // x: bloom intensity, y: the tone curve (`tonemap.wgsl`'s; 0 elsewhere)
+    // x: bloom intensity, y: the tone curve and z: 1 for straight alpha
+    // (`tonemap.wgsl`'s; 0 elsewhere)
     bloom: vec4<f32>,
 }
 

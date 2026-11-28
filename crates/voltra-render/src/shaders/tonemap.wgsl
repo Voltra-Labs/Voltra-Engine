@@ -88,5 +88,8 @@ fn fs_tonemap(in: VertexOutput) -> @location(0) vec4<f32> {
     let bloomed = sampled.rgb + glowing * params.bloom.x;
     let exposed = bloomed / max(alpha, 1e-6) * params.tint_exposure.a;
     let c = grade(tone(exposed, params.bloom.y) * params.tint_exposure.rgb, in.uv);
-    return select(vec4<f32>(0.0), vec4<f32>(c * alpha, alpha), alpha > 0.0);
+    // Premultiplied for the composite; straight for a render texture,
+    // which sprites blend by its alpha (`bloom.z`).
+    let colour = select(c * alpha, c, params.bloom.z > 0.5);
+    return select(vec4<f32>(0.0), vec4<f32>(colour, alpha), alpha > 0.0);
 }

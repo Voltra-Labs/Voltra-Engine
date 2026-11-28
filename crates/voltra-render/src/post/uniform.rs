@@ -9,15 +9,17 @@ use super::PostSettings;
 pub(super) struct PostUniform {
     tint_exposure: [f32; 4],
     grade: [f32; 4],
-    /// x: bloom intensity, y: the tone curve's number; the rest unused.
+    /// x: bloom intensity, y: the tone curve's number, z: 1 for a 3D
+    /// picture in straight alpha; w unused.
     bloom: [f32; 4],
 }
 
 impl PostUniform {
     /// With the tone curve `grade` names, if it names one.
     pub(super) fn with_grade(mut self, grade: super::Grade) -> Self {
-        if let super::Grade::Tonemap(curve) = grade {
+        if let super::Grade::Tonemap(curve, alpha) = grade {
             self.bloom[1] = curve.index();
+            self.bloom[2] = f32::from(u8::from(alpha == super::PictureAlpha::Straight));
         }
         self
     }

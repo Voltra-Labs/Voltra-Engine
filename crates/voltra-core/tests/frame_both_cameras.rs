@@ -198,3 +198,47 @@ fn a_split_screen_draws_3d_on_the_left_and_2d_on_the_right() {
     // The right half is not an overlay: the 2D camera's own background.
     assert!(!near(at(&shot, WIDTH - 5, 5), SKY, 3));
 }
+
+#[test]
+fn a_half_transparent_3d_render_texture_blends_once_on_its_sprite() {
+    let root = scratch_root();
+    std::fs::write(
+        root.join("glass.rendertexture.ron"),
+        "(version: 1, width: 32, height: 32)",
+    )
+    .expect("the render texture");
+    let texture = || AssetPath::new("glass.rendertexture.ron").expect("path");
+    let tint = [0.9, 0.5, 0.1];
+    let mut app = App::default().with_asset_root(&root);
+    let world = &mut app.world;
+    // A 3D camera seeing nothing, cleared to an orange at alpha 0.5.
+    let eye = camera_3d(world, Camera3D::default());
+    world.get_mut::<Camera3D>(eye).expect("spawned").clear =
+        CameraClear::Color([tint[0], tint[1], tint[2], 0.5]);
+    world.insert(eye, CameraTarget::new(texture()));
+    // A 2D world: a green field, and a sprite showing the texture over it.
+    camera_2d(world, Vec2::ZERO, Camera2D::new(5.0));
+    sprite(world, Vec2::ZERO, 40.0, rgba(GREEN));
+    let glass = sprite(world, Vec2::ZERO, 4.0, [1.0; 4]);
+    {
+        let glass = world.get_mut::<Sprite2D>(glass).expect("spawned");
+        glass.texture = Some(texture());
+        glass.sort_order = 1;
+    }
+    let Some((shot, _)) = shoot(app, "both-glass") else {
+        return;
+    };
+    // Straight alpha, 128/255 in the texture's 8 bits, blended once.
+    let alpha = 128.0 / 255.0;
+    let once: [f32; 3] = std::array::from_fn(|i| tint[i] * alpha + GREEN[i] * (1.0 - alpha));
+    let pixel = at(&shot, WIDTH / 2, HEIGHT / 2);
+    assert!(
+        near(pixel, once, 1),
+        "{pixel:?}, the CPU says {:?}",
+        encode(once)
+    );
+    // Premultiplied and blended by its alpha again, it would be darker.
+    let twice: [f32; 3] =
+        std::array::from_fn(|i| tint[i] * alpha * alpha + GREEN[i] * (1.0 - alpha));
+    assert!(!near(pixel, twice, 6), "{pixel:?} is darkened twice");
+}

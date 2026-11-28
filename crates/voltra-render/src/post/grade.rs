@@ -18,10 +18,22 @@ pub enum Grade {
     /// a soft edge would halo.
     Overlay,
     /// A 3D picture: linear HDR light, exposed, brought into range by the
-    /// curve, then tinted and graded. Premultiplied the same way, alpha
-    /// passed through, so a 3D overlay stays transparent where nothing was
-    /// drawn.
-    Tonemap(Tonemap),
+    /// curve, then tinted and graded. Unpremultiplied around the curve and
+    /// written as `alpha` says, so a 3D overlay stays transparent where
+    /// nothing was drawn.
+    Tonemap(Tonemap, PictureAlpha),
+}
+
+/// How a picture's colour stands to its alpha.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum PictureAlpha {
+    /// Colour times alpha: what the composite lays over the pictures
+    /// under it.
+    #[default]
+    Premultiplied,
+    /// Colour as it is: a render texture, which sprites and the HUD
+    /// sample and blend by its alpha.
+    Straight,
 }
 
 /// The pipelines for [`Grade::Overlay`] and [`Grade::Tonemap`] (one for
@@ -47,7 +59,7 @@ impl Variants {
     /// holds that one itself).
     pub(super) fn get(&self, device: &wgpu::Device, grade: Grade) -> &wgpu::RenderPipeline {
         match grade {
-            Grade::Tonemap(_) => self.tonemap.get_or_init(|| {
+            Grade::Tonemap(..) => self.tonemap.get_or_init(|| {
                 let module = shader::create_module(device, "tonemap", shader::TONEMAP);
                 pipeline(device, &self.layout, &module, "fs_tonemap", self.format)
             }),
