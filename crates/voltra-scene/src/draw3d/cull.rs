@@ -27,6 +27,11 @@ pub(super) struct Candidate {
     pub alpha: AlphaClass,
     /// Whether the material shows both faces.
     pub double_sided: bool,
+    /// Which shader it draws through, folded to 16 bits: 0 for the
+    /// standard, the revision's low bits (never 0) for a custom one — what
+    /// groups the materials of one shader so the pass switches pipelines
+    /// less. A clash of two custom shaders only interleaves them.
+    pub shader: u16,
     pub model: Affine3A,
     pub tint: [f32; 4],
     pub bounds: Aabb3,
@@ -58,7 +63,7 @@ pub(super) fn gather(
     out.clear();
     let transforms = WorldTransforms3D::from_world(world);
     for (entity, instance) in world.query::<MeshInstance3D>() {
-        let (material, alpha, double_sided) =
+        let (material, alpha, double_sided, shader) =
             surface_of(entity, instance, materials, warned_materials);
         let resolved = meshes.resolve(&instance.mesh);
         let Some(bounds) = meshes.bounds(resolved.handle) else {
@@ -79,6 +84,7 @@ pub(super) fn gather(
             material,
             alpha,
             double_sided,
+            shader,
             model,
             tint: if resolved.missing {
                 MISSING_TINT
@@ -95,7 +101,7 @@ pub(super) fn gather(
 }
 
 /// `instance`'s material, if it draws through one, and what picks its
-/// pipeline: its alpha class and sidedness. The default white standard
+/// pipeline: its alpha class, sidedness and shader group. The default white standard
 /// (opaque, one side) for none, for one not loaded, and — warned about once
 /// for `entity` — for one that will not draw or is a sprite's.
 fn surface_of(
@@ -103,8 +109,8 @@ fn surface_of(
     instance: &MeshInstance3D,
     materials: Option<&Materials>,
     warned: &mut HashSet<Entity>,
-) -> (Option<Handle<Material>>, AlphaClass, bool) {
-    let default = (None, AlphaClass::Opaque, false);
+) -> (Option<Handle<Material>>, AlphaClass, bool, u16) {
+    let default = (None, AlphaClass::Opaque, false, 0);
     let (Some(path), Some(materials)) = (&instance.material, materials) else {
         return default;
     };
@@ -119,6 +125,10 @@ fn surface_of(
             Some(handle),
             AlphaClass::of(surface.standard.alpha),
             surface.standard.double_sided,
+            surface
+                .custom
+                .as_ref()
+                .map_or(0, |custom| (custom.shader.revision() as u16).max(1)),
         ),
         None => {
             if warned.insert(entity) {

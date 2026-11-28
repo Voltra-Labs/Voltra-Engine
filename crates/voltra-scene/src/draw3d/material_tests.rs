@@ -186,3 +186,48 @@ fn a_sprite_material_or_one_not_loaded_draws_as_the_default() {
         "one not loaded yet is not wrong"
     );
 }
+
+#[test]
+fn opaque_draws_of_one_custom_shader_sit_together() {
+    let root = voltra_testkit::scratch_root();
+    let write = |name: &str, text: &str| {
+        let at = root.join(name);
+        std::fs::create_dir_all(at.parent().expect("a folder")).expect("folders");
+        std::fs::write(at, text).expect("written");
+    };
+    write(
+        "m/tint.wgsl",
+        "fn surface(in: SurfaceInput) -> Surface {\n    var s = standard_surface(in);\n    s.base_color = material.tint.rgb;\n    return s;\n}\n",
+    );
+    for (name, tint) in [("a", "1.0, 0.0, 0.0"), ("b", "0.0, 0.0, 1.0")] {
+        write(
+            &format!("m/tint_{name}.material.ron"),
+            &format!(
+                r#"(version: 1, domain: Surface, shader: "m/tint.wgsl", uniforms: {{"tint": Color(({tint}, 1.0))}})"#
+            ),
+        );
+    }
+    write("m/red.material.ron", "(version: 1, domain: Surface)");
+    // Loaded so the standard red's slot falls between the two tints'.
+    let mut materials = Materials::new(root.path());
+    for name in ["tint_a", "red", "tint_b"] {
+        materials.load(&path(&format!("m/{name}.material.ron")));
+    }
+    let mut world = World::new();
+    for (x, name) in [(-1.0, "tint_a"), (0.0, "red"), (1.0, "tint_b")] {
+        let material = format!("m/{name}.material.ron");
+        spawn(
+            &mut world,
+            BuiltinMesh::Cube,
+            Vec3::new(x, 0.0, -4.0),
+            Some(material.as_str()),
+        );
+    }
+    let mut meshes = Meshes::new();
+    let list = DrawList3D::from_world(&world, &view(), &mut meshes, Some(&materials), None);
+    let handle = |name: &str| materials.by_path_handle(&path(&format!("m/{name}.material.ron")));
+    let order: Vec<_> = list.draws.iter().map(|d| d.material).collect();
+    // The standard's first, then both of the one custom shader: one
+    // pipeline switch, not two.
+    assert_eq!(order, [handle("red"), handle("tint_a"), handle("tint_b")]);
+}

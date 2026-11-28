@@ -8,7 +8,8 @@ use super::cull::Candidate;
 use super::Draw3D;
 
 /// What the seen are sorted by: the order (for the opaque and masked the
-/// pipeline above the material, for the blended the class alone), the mesh
+/// pipeline above the shader group above the material, for the blended the
+/// class alone), the mesh
 /// (0 for the blended), the view depth, the entity index — and where the
 /// candidate is. 24 bytes, so the sort moves that rather than a whole
 /// candidate. A handle's slot alone tells two live materials or meshes
@@ -41,11 +42,18 @@ fn draw_of(candidate: &Candidate) -> (u32, u32, u32) {
     )
 }
 
+/// Where the pipeline's bits start in the order: above the shader group
+/// (16 bits) above the material's slot (32 bits).
+const PIPELINE_SHIFT: u32 = 48;
+
+/// Where the alpha class's bits start: above the sides and the winding.
+const CLASS_SHIFT: u32 = PIPELINE_SHIFT + 3;
+
 fn is_blend(key: &Key) -> bool {
-    (key.0 >> 35) as u32 == AlphaClass::Blend as u32
+    (key.0 >> CLASS_SHIFT) as u32 == AlphaClass::Blend as u32
 }
 
-/// Opaque and masked: by pipeline → material → mesh, front to back within
+/// Opaque and masked: by pipeline → shader → material → mesh, front to back within
 /// a mesh. Blended, after them: back to front, whatever their material.
 fn order(a: &Key, b: &Key) -> Ordering {
     a.0.cmp(&b.0).then_with(|| {
@@ -82,10 +90,12 @@ pub(super) fn group(
                 // The blended are ordered by depth alone: their pipeline,
                 // material and mesh only split the runs, below.
                 let (order, mesh) = if blend {
-                    (u64::from(AlphaClass::Blend as u32) << 35, 0)
+                    (u64::from(AlphaClass::Blend as u32) << CLASS_SHIFT, 0)
                 } else {
                     (
-                        u64::from(pipeline(c)) << 32 | u64::from(material(c)),
+                        u64::from(pipeline(c)) << PIPELINE_SHIFT
+                            | u64::from(c.shader) << 32
+                            | u64::from(material(c)),
                         c.mesh.index(),
                     )
                 };
