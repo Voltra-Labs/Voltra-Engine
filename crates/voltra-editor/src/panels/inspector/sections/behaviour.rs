@@ -9,8 +9,8 @@ use voltra_scene::{AudioSource, Camera2D, LagCompensated, Parallax, Replicated, 
 
 use super::super::mixed;
 use super::super::{
-    animation_player, animator, audio_source, camera, camera_rig, camera_view, global_light, joint,
-    lag_compensated, light, parallax, replicated, skeleton, skinned,
+    animation_player, animator, audio_source, camera, camera3d, camera_rig, camera_view,
+    global_light, joint, lag_compensated, light, parallax, replicated, skeleton, skinned,
 };
 use super::gate;
 use crate::editor::Editor;
@@ -168,6 +168,15 @@ pub(in crate::panels::inspector) fn show(
         ui.separator();
         mixed::marker(ui, multi, &[Camera2D::NAME]);
         claim = claim.or(camera::show(ui, camera));
+    }
+    if let Some(camera) = gate(
+        frame.world.get_mut::<voltra_scene::Camera3D>(entity),
+        multi,
+        voltra_scene::Camera3D::NAME,
+    ) {
+        ui.separator();
+        mixed::marker(ui, multi, &[voltra_scene::Camera3D::NAME]);
+        claim = claim.or(camera3d::show(ui, camera));
     }
     if frame.world.get::<Camera2D>(entity).is_some()
         && multi.editable(&[Camera2D::NAME, voltra_scene::CameraTarget::NAME])

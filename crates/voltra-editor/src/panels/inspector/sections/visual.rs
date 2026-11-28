@@ -13,8 +13,8 @@ use voltra_scene::{
 
 use super::super::mixed::{self, Fields};
 use super::super::{
-    animation, particles, shapes2d, sprite, sprite_material, text, tilemap, transform, transform3d,
-    ui_button, ui_controls, ui_rect, ui_slice, ui_stack,
+    animation, mesh_instance3d, particles, shapes2d, sprite, sprite_material, text, tilemap,
+    transform, transform3d, ui_button, ui_controls, ui_rect, ui_slice, ui_stack,
 };
 use super::gate;
 use crate::editor::Editor;
@@ -54,6 +54,15 @@ pub(in crate::panels::inspector) fn show(
             &mut editor.euler_hints,
             fields,
         ));
+    }
+    if let Some(instance) = gate(
+        frame.world.get_mut::<voltra_scene::MeshInstance3D>(entity),
+        multi,
+        voltra_scene::MeshInstance3D::NAME,
+    ) {
+        ui.separator();
+        mixed::marker(ui, multi, &[voltra_scene::MeshInstance3D::NAME]);
+        claim = claim.or(mesh_instance3d::show(ui, instance));
     }
     let parent_rect = ui_parent_rect(ui, frame, entity);
     let stacked = hierarchy::parent_of(frame.world, entity)
