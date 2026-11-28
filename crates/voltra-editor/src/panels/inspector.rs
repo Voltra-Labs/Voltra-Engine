@@ -69,6 +69,16 @@ use crate::multi_edit::MultiEdit;
 use crate::play::PlayState;
 
 pub fn show(editor: &mut Editor, ui: &mut Ui, frame: &mut UiFrame<'_>) {
+    // The open surface material's draft settles even while no mesh naming
+    // it is selected: deselecting mid-edit must not lose it.
+    if let Some(doc) = editor.surface_doc.as_mut() {
+        let ctx = ui.ctx().clone();
+        let busy = ctx.dragged_id().is_some()
+            || egui::Popup::is_any_open(&ctx)
+            || ctx.egui_wants_keyboard_input();
+        let root = frame.textures.root().to_path_buf();
+        doc.settle(&root, frame.materials.as_deref_mut(), busy);
+    }
     egui::Panel::right("inspector")
         .default_size(240.0)
         .show(ui, |ui| {

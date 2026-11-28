@@ -26,28 +26,33 @@ pub(super) fn show(
 ) {
     let root = frame.textures.root().to_path_buf();
     let revision = revision(frame, path);
-    // Another file, or this one changed on disk (a text editor, a hot
-    // reload) with nothing unsaved here: read it again rather than write
-    // a stale draft over it.
-    let stale = slot.as_ref().is_none_or(|doc| {
-        doc.path() != path || (!doc.is_unsaved() && doc.seen.is_some() && doc.seen != revision)
-    });
-    if stale {
-        match SurfaceDoc::open(&root, path) {
-            Ok(mut doc) => {
-                doc.seen = revision;
-                *slot = Some(doc);
+    // Another file: the open one's draft is written first, then this one
+    // read. This one changed on disk (a text editor, a hot reload) with
+    // nothing unsaved here: read again rather than write a stale draft
+    // over it.
+    let opened =
+        SurfaceDoc::switch_to(slot, &root, path, frame.materials.as_deref_mut()).and_then(|()| {
+            match slot.as_mut() {
+                Some(doc) if doc.seen.is_none() => {
+                    doc.seen = revision;
+                    Ok(())
+                }
+                Some(doc) if !doc.is_unsaved() && doc.seen != revision => {
+                    doc.reread(&root)?;
+                    doc.seen = revision;
+                    Ok(())
+                }
+                _ => Ok(()),
             }
-            Err(error) => {
-                *slot = None;
-                ui.label(
-                    RichText::new(format!("cannot open it: {error}"))
-                        .color(ui.visuals().error_fg_color)
-                        .small(),
-                );
-                return;
-            }
-        }
+        });
+    if let Err(error) = opened {
+        *slot = None;
+        ui.label(
+            RichText::new(format!("cannot open it: {error}"))
+                .color(ui.visuals().error_fg_color)
+                .small(),
+        );
+        return;
     }
     let Some(doc) = slot.as_mut() else {
         return;
@@ -113,10 +118,14 @@ pub(super) fn show(
     if doc.settle(&root, frame.materials.as_deref_mut(), busy) {
         log::info!("saved {}", path.as_str());
         doc.seen = self::revision(frame, path);
-    } else if doc.seen.is_none() {
-        doc.seen = self::revision(frame, path);
     }
-    if doc.is_unsaved() {
+    if let Some(error) = doc.error() {
+        ui.label(
+            RichText::new(format!("not saved: {error}"))
+                .color(ui.visuals().error_fg_color)
+                .small(),
+        );
+    } else if doc.is_unsaved() {
         ui.label(RichText::new("unsaved…").weak().small());
     }
 }

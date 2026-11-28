@@ -7,11 +7,19 @@
 //! not in the scene's history, and it does not mark the scene unsaved —
 //! but written to the file when the pointer is let go and no popup is
 //! open, then the material reloaded so every mesh draws it that frame. The
-//! live preview draws the draft every frame, a drag included.
+//! live preview draws the draft every frame, a drag included. Switching to
+//! another file writes this one's draft first: the switch ends the edit.
+//!
+//! The file's leading comments are kept over a write, as `cargo xtask
+//! migrate` keeps them (`voltra_assets::leading_comments`), and a number
+//! that is not finite reads as its default, so a NaN cannot make the draft
+//! differ from the file on every frame.
 
 use std::path::Path;
 
-use voltra_assets::{AssetPath, MaterialDomain, MaterialFile, Materials, StandardFile};
+use voltra_assets::{
+    leading_comments, AssetPath, MaterialDomain, MaterialFile, Materials, StandardFile,
+};
 
 /// An open surface material.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,6 +29,11 @@ pub struct SurfaceDoc {
     file: MaterialFile,
     /// As last read or written.
     saved: MaterialFile,
+    /// The comments the file opened with, written back in front of it.
+    header: String,
+    /// Why the last write failed, and the draft it failed for: not tried
+    /// again until the draft changes.
+    failed: Option<(MaterialFile, String)>,
     /// The store's revision of the material when the file was last read
     /// or written: a different one, with nothing unsaved, means the file
     /// changed on disk and is read again.
@@ -33,12 +46,15 @@ impl SurfaceDoc {
         let full = root.join(path.as_str());
         let text =
             std::fs::read_to_string(&full).map_err(|e| format!("{}: {e}", full.display()))?;
-        let file: MaterialFile =
+        let mut file: MaterialFile =
             ron::from_str(&text).map_err(|e| format!("{}: {e}", full.display()))?;
+        file.standard = file.standard.finite().0;
         Ok(Self {
             path: path.clone(),
             saved: file.clone(),
             file,
+            header: leading_comments(&text).to_owned(),
+            failed: None,
             seen: None,
         })
     }
@@ -54,7 +70,7 @@ impl SurfaceDoc {
             std::fs::create_dir_all(folder).map_err(|e| format!("{}: {e}", folder.display()))?;
         }
         let file = MaterialFile::surface(StandardFile::default());
-        write(&full, &file)?;
+        write(&full, "", &file)?;
         Self::open(root, path)
     }
 
@@ -83,31 +99,68 @@ impl SurfaceDoc {
         self.file != self.saved
     }
 
+    /// Why the last write failed, while the draft is the one it failed for.
+    pub fn error(&self) -> Option<&str> {
+        self.failed
+            .as_ref()
+            .filter(|(draft, _)| *draft == self.file)
+            .map(|(_, why)| why.as_str())
+    }
+
     /// Writes the edit to the file unless `busy` (a drag, an open popup) or
     /// nothing changed, then reloads it in `materials`. Answers whether it
-    /// wrote; an error is logged and kept for the next try.
+    /// wrote. A failed write is kept as [`error`](Self::error) and not tried
+    /// again until the draft changes.
     pub fn settle(&mut self, root: &Path, materials: Option<&mut Materials>, busy: bool) -> bool {
-        if busy || !self.is_unsaved() {
+        if busy || !self.is_unsaved() || self.error().is_some() {
             return false;
         }
         let full = root.join(self.path.as_str());
-        if let Err(e) = write(&full, &self.file) {
+        if let Err(e) = write(&full, &self.header, &self.file) {
             log::error!("saving {}: {e}", self.path.as_str());
-            // Not retried every frame: the next edit tries again.
-            self.saved = self.file.clone();
+            self.failed = Some((self.file.clone(), e));
             return false;
         }
+        self.failed = None;
         self.saved = self.file.clone();
         if let Some(materials) = materials {
             materials.reload(&self.path);
         }
         true
     }
+
+    /// Makes `slot` hold the file at `path`: the open draft, if it is that
+    /// file; otherwise the draft of the file open before is written — the
+    /// switch ends its edit, a drag or not — and `path` read.
+    pub fn switch_to(
+        slot: &mut Option<Self>,
+        root: &Path,
+        path: &AssetPath,
+        materials: Option<&mut Materials>,
+    ) -> Result<(), String> {
+        if slot.as_ref().is_some_and(|doc| doc.path() == path) {
+            return Ok(());
+        }
+        if let Some(old) = slot.as_mut() {
+            old.settle(root, materials, false);
+        }
+        *slot = None;
+        *slot = Some(Self::open(root, path)?);
+        Ok(())
+    }
+
+    /// Reads the file again over the draft: it changed on disk.
+    pub fn reread(&mut self, root: &Path) -> Result<(), String> {
+        let seen = self.seen;
+        *self = Self::open(root, &self.path)?;
+        self.seen = seen;
+        Ok(())
+    }
 }
 
-fn write(full: &Path, file: &MaterialFile) -> Result<(), String> {
+fn write(full: &Path, header: &str, file: &MaterialFile) -> Result<(), String> {
     let text = file.to_ron().map_err(|e| e.to_string())?;
-    std::fs::write(full, text).map_err(|e| format!("{}: {e}", full.display()))
+    std::fs::write(full, format!("{header}{text}")).map_err(|e| format!("{}: {e}", full.display()))
 }
 
 #[cfg(test)]
