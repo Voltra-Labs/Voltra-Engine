@@ -4144,10 +4144,14 @@ dependencies = [
  "epaint",
  "glam",
  "image",
+ "js-sys",
  "log",
+ "naga",
  "pollster",
  "serde",
  "voltra-testkit",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wgpu",
 ]
 

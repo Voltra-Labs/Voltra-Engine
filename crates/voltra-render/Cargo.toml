@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 wgpu.workspace = true
+naga.workspace = true
 pollster.workspace = true
 log.workspace = true
 bytemuck.workspace = true
@@ -24,3 +25,10 @@ voltra-testkit.workspace = true
 # it and falls back to WebGL2 where it does not (`GpuContext::new_async`).
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wgpu = { workspace = true, features = ["webgl"] }
+# WebGPU's error scopes and uncaptured errors read through the browser's own
+# objects: wgpu 30's WebGPU backend panics converting a validation error
+# (`backend/webgpu.rs`, `Error::from_js`), so `webgpu_errors.rs` asks the
+# `GPUDevice` directly.
+js-sys.workspace = true
+wasm-bindgen.workspace = true
+wasm-bindgen-futures.workspace = true

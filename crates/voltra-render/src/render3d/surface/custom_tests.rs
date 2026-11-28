@@ -172,3 +172,58 @@ fn the_uniform_block_is_a_multiple_of_16_bytes_for_webgl2() {
         assert_eq!(span % 16, 0);
     }
 }
+
+#[test]
+fn an_override_is_refused_rather_than_failing_the_pipeline() {
+    let source = "override k: f32;\nfn surface(in: SurfaceInput) -> Surface {\n    var s = standard_surface(in);\n    s.roughness = k;\n    return s;\n}\n";
+    let error = checked(source, &[], SurfaceLighting::Lit).expect_err("an override");
+    assert!(error.contains("override"), "{error}");
+}
+
+#[test]
+fn what_webgl2_cannot_run_is_refused_on_every_platform() {
+    // Both validate as WGSL; neither has a GLSL ES 300 form.
+    for (source, says) in [
+        (
+            "fn surface(in: SurfaceInput) -> Surface {\n    var s = standard_surface(in);\n    s.roughness = f32(textureNumLevels(base_color_texture));\n    return s;\n}\n",
+            "TEXTURE_LEVELS",
+        ),
+        (
+            "fn surface(in: SurfaceInput) -> Surface {\n    var s = standard_surface(in);\n    s.roughness = f32(pack4x8unorm(vec4<f32>(s.base_color, 1.0)));\n    return s;\n}\n",
+            "WebGL2",
+        ),
+    ] {
+        let error = checked(source, &[], SurfaceLighting::Lit).expect_err("not on WebGL2");
+        assert!(error.contains("WebGL2") && error.contains(says), "{error}");
+    }
+    // The standard surface writes as GLSL ES 300, every entry point.
+    assert!(SurfaceShader::new(standard_source(), 0).is_ok());
+}
+
+#[test]
+fn a_texture_named_as_the_prelude_names_a_thing_is_refused_by_name() {
+    for name in [
+        "standard",
+        "frame",
+        "surface_uv",
+        "Surface",
+        "fs_mask",
+        "material",
+    ] {
+        let error = compose_surface(TINTED, &layout(), &[name], SurfaceLighting::Lit)
+            .expect_err("the engine's name");
+        assert!(error.contains(name) && error.contains("prelude"), "{error}");
+    }
+    // One the material's own source declares: naga says so at its line.
+    let own = "fn mask() {}\n".to_owned() + TINTED;
+    let error = checked(&own, &["mask"], SurfaceLighting::Lit).expect_err("a clash");
+    assert!(error.contains("wgsl:1:"), "the source's own line: {error}");
+}
+
+#[test]
+fn the_uniformity_opt_out_is_taken_at_the_top_of_the_source() {
+    // The guide's escape hatch for a deliberate branch: a directive must
+    // open the module, and the material's source does.
+    let source = "diagnostic(off, derivative_uniformity);\nfn surface(in: SurfaceInput) -> Surface {\n    var s = standard_surface(in);\n    if in.uv.x > 0.5 {\n        s.base_color = textureSample(base_color_texture, surface_sampler, in.uv).rgb;\n    }\n    return s;\n}\n";
+    checked(source, &[], SurfaceLighting::Lit).unwrap_or_else(|e| panic!("{e}"));
+}

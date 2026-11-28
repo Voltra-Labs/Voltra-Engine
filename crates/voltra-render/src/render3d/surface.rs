@@ -11,6 +11,7 @@
 
 mod bank;
 pub mod brdf;
+mod check;
 mod compose;
 mod custom;
 mod key;
@@ -21,7 +22,7 @@ mod shader;
 mod standard;
 mod uniform;
 
-pub use bank::{SurfaceBank, KEEP_USES};
+pub use bank::SurfaceBank;
 pub use compose::{
     compose_surface, standard_source, SurfaceLighting, CUSTOM_TEXTURES, SURFACE_ENTRIES,
     SURFACE_ENTRY,
@@ -122,5 +123,7 @@ mod tests {
     }
 }
 
+#[cfg(test)]
+mod bank_tests;
 #[cfg(test)]
 mod custom_tests;

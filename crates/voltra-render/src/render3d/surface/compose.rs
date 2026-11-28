@@ -9,6 +9,9 @@
 //! lighting and every pass. The standard surface is the same composition
 //! of a `surface()` that returns `standard_surface(in)`.
 
+use std::collections::HashSet;
+use std::sync::LazyLock;
+
 use serde::{Deserialize, Serialize};
 
 use super::layouts::{CUSTOM_BLOCK_BINDING, CUSTOM_TEXTURE_BINDING};
@@ -144,6 +147,12 @@ pub fn compose_surface(
         if !crate::material::is_identifier(name) {
             return Err(format!("texture {name:?} is not a name WGSL takes"));
         }
+        if engine_names().contains(*name) {
+            return Err(format!(
+                "texture {name:?} is a name the engine's prelude declares; call it something \
+                 else"
+            ));
+        }
         declared.push_str(&format!(
             "@group(1) @binding({}) var {name}: texture_2d<f32>;\n",
             CUSTOM_TEXTURE_BINDING + i as u32
@@ -160,6 +169,37 @@ pub fn compose_surface(
         prelude = crate::shader::SURFACE_3D,
         block = layout.wgsl_struct_aligned(),
     ))
+}
+
+/// Every module-scope name the composer declares around a material's
+/// source — the prelude's functions, types, constants and bindings, the
+/// uniform block and the entry points — but `surface`, which the source
+/// defines. A texture named one of them would be redefined in a line the
+/// author never wrote; a clash with the source's own names is naga's to
+/// report, at the source's line.
+fn engine_names() -> &'static HashSet<String> {
+    static NAMES: LazyLock<HashSet<String>> = LazyLock::new(|| {
+        let module = wgpu::naga::front::wgsl::parse_str(crate::shader::SURFACE_3D)
+            .unwrap_or_else(|e| panic!("the engine's prelude parses: {e}"));
+        let mut names: HashSet<String> = module
+            .functions
+            .iter()
+            .filter_map(|(_, f)| f.name.clone())
+            .chain(
+                module
+                    .global_variables
+                    .iter()
+                    .filter_map(|(_, g)| g.name.clone()),
+            )
+            .chain(module.constants.iter().filter_map(|(_, c)| c.name.clone()))
+            .chain(module.types.iter().filter_map(|(_, t)| t.name.clone()))
+            .chain(module.entry_points.iter().map(|e| e.name.clone()))
+            .collect();
+        names.extend(SURFACE_ENTRIES.iter().map(|e| (*e).to_owned()));
+        names.extend(["material", "Material", "surface_color"].map(str::to_owned));
+        names
+    });
+    &NAMES
 }
 
 /// The standard surface's whole shader: [`compose_surface`] of a

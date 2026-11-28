@@ -32,6 +32,8 @@ pub mod shader;
 pub mod skinning;
 pub mod target;
 pub mod texture;
+#[cfg(target_arch = "wasm32")]
+mod webgpu_errors;
 
 pub use bloom::{BloomPass, BloomSettings};
 pub use camera::{screen_projection, CameraBinding, View2D};

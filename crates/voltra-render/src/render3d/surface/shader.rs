@@ -36,23 +36,52 @@ impl SurfaceShader {
     /// `source`, composed with `textures` named textures, checked: it
     /// parses, validates, and binds nothing but what the composer declared
     /// — a material's own `@group` / `@binding` is refused, since the
-    /// pipeline's layout is the engine's. `Err` says what and where.
+    /// pipeline's layout is the engine's; it declares no `override` (the
+    /// engine sets no pipeline constants, and one left unset fails the
+    /// pipeline); and every entry point writes as WebGL2's GLSL ES 300,
+    /// so what WebGL2 cannot run (`textureNumLevels`, `pack4x8unorm`) is
+    /// refused on every platform rather than on a browser's. `Err` says
+    /// what and where.
+    ///
+    /// What passes here can still be refused by a GPU's own compiler —
+    /// Tint holds WGSL's fragment uniformity rule, which naga 30 lifts:
+    /// [`SurfaceBank`](super::SurfaceBank) catches that in an error scope.
     pub fn new(source: String, textures: usize) -> Result<Self, String> {
         let module =
             naga::front::wgsl::parse_str(&source).map_err(|e| e.emit_to_string(&source))?;
         check_bindings(&module, textures)?;
-        naga::valid::Validator::new(
+        if !module.overrides.is_empty() {
+            return Err(
+                "a surface material declares an `override`: the engine sets no pipeline \
+                 constants — make it a uniform"
+                    .to_owned(),
+            );
+        }
+        let info = naga::valid::Validator::new(
             naga::valid::ValidationFlags::all(),
             naga::valid::Capabilities::empty(),
         )
         .validate(&module)
         .map_err(|e| e.emit_to_string(&source))?;
+        check_webgl2(&module, &info)?;
         let mut hasher = DefaultHasher::new();
         source.hash(&mut hasher);
         Ok(Self {
             revision: hasher.finish(),
             source,
         })
+    }
+
+    /// `source` as it is, unchecked: for a test of what the GPU does with
+    /// what the checks would have refused.
+    #[cfg(test)]
+    pub(crate) fn unchecked(source: String) -> Self {
+        let mut hasher = DefaultHasher::new();
+        source.hash(&mut hasher);
+        Self {
+            revision: hasher.finish(),
+            source,
+        }
     }
 
     /// The standard surface's shader: a `surface()` returning the
@@ -103,6 +132,50 @@ fn check_bindings(module: &naga::Module, textures: usize) -> Result<(), String> 
             ));
         }
         seen.push(at);
+    }
+    Ok(())
+}
+
+/// Every entry point of `module` written as WebGL2's GLSL (ES 300), as
+/// wgpu's GL backend writes it: what naga cannot write there, WebGL2
+/// cannot run.
+fn check_webgl2(module: &naga::Module, info: &naga::valid::ModuleInfo) -> Result<(), String> {
+    use ::naga::back::glsl;
+    let mut binding_map = glsl::BindingMap::default();
+    let mut slot = 0u8;
+    for (_, global) in module.global_variables.iter() {
+        if let Some(binding) = &global.binding {
+            binding_map.insert(*binding, slot);
+            slot = slot.saturating_add(1);
+        }
+    }
+    let options = glsl::Options {
+        version: glsl::Version::Embedded {
+            version: 300,
+            is_webgl: true,
+        },
+        writer_flags: glsl::WriterFlags::ADJUST_COORDINATE_SPACE
+            | glsl::WriterFlags::FORCE_POINT_SIZE,
+        binding_map,
+        zero_initialize_workgroup_memory: false,
+    };
+    for entry in &module.entry_points {
+        let pipeline = glsl::PipelineOptions {
+            shader_stage: entry.stage,
+            entry_point: entry.name.clone(),
+            multiview: None,
+        };
+        let mut out = String::new();
+        glsl::Writer::new(
+            &mut out,
+            module,
+            info,
+            &options,
+            &pipeline,
+            ::naga::proc::BoundsCheckPolicies::default(),
+        )
+        .and_then(|mut writer| writer.write().map(|_| ()))
+        .map_err(|e| format!("`{}` cannot run on WebGL2 (GLSL ES 300): {e}", entry.name))?;
     }
     Ok(())
 }

@@ -5,6 +5,7 @@ use wgpu::SurfaceTarget;
 use crate::frame_buffers::FrameBuffers;
 
 mod adapter;
+mod errors;
 mod formats;
 
 use adapter::{optional_features, present_mode, required_limits, srgb_format};
@@ -30,6 +31,8 @@ pub struct GpuContext {
     frame_buffers: FrameBuffers,
     /// What the 3D shot's targets may be: see [`TargetSupport`].
     targets: TargetSupport,
+    /// The GPU errors no scope caught: see [`errors`].
+    errors: std::sync::Arc<errors::UncapturedErrors>,
 }
 
 impl GpuContext {
@@ -91,6 +94,7 @@ impl GpuContext {
         device.set_device_lost_callback(|reason, message| {
             log::error!("the GPU device was lost ({reason:?}): {message}");
         });
+        let errors = errors::UncapturedErrors::install(&device);
 
         let mut config = surface
             .get_default_config(&adapter, width.max(1), height.max(1))
@@ -113,6 +117,7 @@ impl GpuContext {
             downlevel,
             frame_buffers: FrameBuffers::default(),
             targets,
+            errors,
         }
     }
 
@@ -135,6 +140,7 @@ impl GpuContext {
             ..Default::default()
         }))
         .ok()?;
+        let errors = errors::UncapturedErrors::install(&device);
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
@@ -157,6 +163,7 @@ impl GpuContext {
             downlevel,
             frame_buffers: FrameBuffers::default(),
             targets,
+            errors,
         })
     }
 

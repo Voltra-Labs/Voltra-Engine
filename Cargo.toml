@@ -29,6 +29,10 @@ voltra-server = { path = "crates/voltra-server" }
 voltra-testkit = { path = "crates/voltra-testkit" }
 
 wgpu = "30.0.0"
+# wgpu's own shader translator, named for its GLSL writer: a custom
+# surface shader is written as WebGL2's GLSL ES 300 when it loads, so what
+# WebGL2 cannot run is refused natively (voltra-render only, as wgpu is).
+naga = { version = "30.0.0", features = ["glsl-out"] }
 # `serde` for `KeyCode` and `MouseButton` in an input map file.
 winit = { version = "0.30.13", features = ["serde"] }
 bytemuck = { version = "1.25.2", features = ["derive"] }

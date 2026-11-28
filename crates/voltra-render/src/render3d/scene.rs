@@ -43,7 +43,7 @@ pub struct Scene3D<'a> {
     pub lighting: Lighting3D,
     /// Seconds since the game started, what a surface's `in.time` reads:
     /// wrapped at an hour ([`FrameUniform3D::TIME_WRAP`](super::FrameUniform3D::TIME_WRAP)),
-    /// so an `f32` keeps a tenth of a millisecond.
+    /// so an `f32` keeps a quarter of a millisecond.
     pub time: f32,
 }
 

@@ -75,7 +75,7 @@ fn a_custom_surface_returning_the_standard_one_draws_as_the_standard_does() {
 }
 
 #[test]
-fn an_edited_shader_s_pipelines_are_let_go_once_unused() {
+fn a_shader_is_kept_while_a_material_holds_it_and_let_go_after() {
     let Some(gpu) = gpu() else {
         eprintln!("no adapter: skipping");
         return;
@@ -117,15 +117,30 @@ fn an_edited_shader_s_pipelines_are_let_go_once_unused() {
     bank.prepare(&gpu.device, key(&standard), &standard);
     bank.prepare(&gpu.device, key(&first), &first);
     assert_eq!((bank.shaders(), bank.len()), (2, 2));
-    // The material is edited: every later shot draws the new shader.
-    for _ in 0..=voltra_render::render3d::surface::KEEP_USES {
+    assert!(
+        bank.pipeline(key(&first)) != bank.pipeline(key(&standard)),
+        "its own"
+    );
+    // A thousand shots without it — culled, off screen — while a material
+    // still holds it: kept, so it does not hitch when it shows again.
+    for _ in 0..1000 {
         bank.begin();
         bank.prepare(&gpu.device, key(&edited), &edited);
     }
-    assert!(bank.pipeline(key(&first)).is_none(), "the old one let go");
+    assert_eq!(bank.shaders(), 3, "the standard, the held, the drawn");
+    assert!(bank.pipeline(key(&first)) != bank.pipeline(key(&standard)));
+    // The material is edited and its old shader let go by everything that
+    // held it: the next shot drops its module and pipelines.
+    let first_revision = key(&first);
+    drop(first);
+    bank.begin();
+    assert_eq!(bank.shaders(), 2);
+    assert!(
+        bank.pipeline(first_revision) == bank.pipeline(key(&standard)),
+        "gone: what asks for it draws the standard"
+    );
     assert!(bank.pipeline(key(&edited)).is_some());
     assert!(bank.pipeline(key(&standard)).is_some(), "the standard kept");
-    assert_eq!(bank.shaders(), 2);
 }
 
 #[test]
