@@ -10425,25 +10425,39 @@ cameras draw a frame* (stage 84's shots, pruning and composite), *The
 frame's post chain is a render graph* and *Post-processing is one graded
 pass*, and replaces stage 135's lone-3D-camera rule.
 
-- **The order** (`voltra-scene` `camera/frame.rs`): `frame_shots(world)`
-  gives `FrameShots { shots: Vec<FrameShot>, cycle }`, each `FrameShot` a
+- **The order** (`voltra-scene` `camera/frame.rs`, `frame/order.rs`):
+  `frame_shots(world, screen)` gives `FrameShots { shots: Vec<FrameShot>, cycle }`, each `FrameShot` a
   `shot: AnyShot::D2(Shot) | D3(Shot3D)` and whether it is an `overlay`.
   `camera::shots` is untouched — 2D cameras pruned among themselves, the
   0.4 tests unchanged — and `shots_3d` is its twin over `Camera3D`. Texture
   shots come first, then the screen's, each by `(priority, 3D before 2D,
   entity)`. **Texture shots are then ordered producer before consumer**
-  (Kahn's, always taking the first ready): a 2D shot shows every render
-  texture a world sprite names (a `UiRect` sprite is the HUD, drawn after
-  every shot) but its own; a 3D shot none until surface materials (137).
-  Where shots show each other's textures the first by priority draws with
-  the other's last frame, is named in `cycle`, and warned once per camera
-  (`World3D::warn_cycles`).
+  (Kahn's, always taking the first ready): a 2D shot *may* show every
+  render texture a world sprite names (a `UiRect` sprite is the HUD, drawn
+  after every shot) but its own; a 3D shot none until surface materials
+  (137). Where shots may show each other's textures, a **producer inside
+  the cycle** — the first left whose own texture another waits for, never
+  a mere consumer — draws first, with the other's last frame, is named in
+  `cycle`, and warned once per camera (`World3D::warn_cycles`) as "may
+  show": what a sprite names is all the order reads, not whether the
+  camera's view takes the sprite in, so two monitors on one wall warn
+  though neither sees the other. A view test needs each sprite's bounds
+  in the world for each texture camera — worth it once someone hits it.
+  (The review's probe: A, B, C into TA, TB, TC with sprites on TB and TC
+  first drew A, B, C, cycle A and B; now B, C, A, cycle B.)
 - **Overlay or framing**: a screen shot that an earlier screen shot of the
-  other dimension overlaps (rectangles sharing any area) is an overlay and
-  starts transparent, unless it is a `Camera3D` with `clear: Color`.
-  Pruning stays per dimension: two full-screen 2D cameras still draw only
-  the higher, and a 2D camera never hides a 3D one. A texture shot is
-  never an overlay.
+  other dimension overlaps — by a pixel of the screen, the whole-pixel
+  rectangles `Viewport::pixels` draws them in, so viewports that adjoin
+  never overlap by a rounding (fractions compared as floats did, 560
+  adjoining pairs on a 0.01 grid) — is an overlay and starts transparent,
+  unless it is a `Camera3D` with `clear: Color`. **Pruning** runs over
+  both dimensions' screen shots in order: a shot is left out under a later
+  full-screen shot of its own dimension **only with no shot of the other
+  dimension between them**. Two full-screen 2D cameras still draw only
+  the higher, and a 2D camera never hides a 3D one; but 3D p0, 2D p1,
+  3D p2 keeps all three — the p0 world is a layer under the 2D one, not a
+  framing p2 replaces, which pruning each dimension alone first lost.
+  A texture shot is never an overlay.
 - **Three paths** (`voltra-core` `draw/frame.rs`, `plan`): `Flat` — no
   active 3D camera — is the 2D path as it was, direct or stage 84's shots;
   `Lone3D` — one full-screen 3D camera is the screen's only shot, texture
@@ -10458,14 +10472,21 @@ pass*, and replaces stage 135's lone-3D-camera rule.
 - **A 3D shot** (`voltra-render` `renderer/world3d.rs`): `Targets3D` —
   colour in `Rgba16Float` at `Hdr3D::samples` (4 by default), resolved
   into a single-sampled texture at the end of the pass (the samples
-  discarded), `Depth32Float` at the same count — kept by size, the four
-  most recently used, in the renderer's `State3D`; `Pass3D` is made per
+  discarded), `Depth32Float` at the same count — kept in the renderer's
+  `State3D`, each stamped with the frame it was drawn in;
+  `Renderer::begin_frame`, which every draw path calls, lets go of the
+  sets drawn in neither the frame just ended nor the one before (a window
+  dragged through sizes, an MSAA since changed: some 350 MB of stale sets
+  at 1080p before), with four kept at most as a backstop; `Pass3D` is made per
   `Hdr3D` (format and samples). Then the 2D frame's render graph with no
   light pass: bloom (already `Rgba16Float`) over the resolved picture, and
   the grade pass as `Grade::Tonemap(curve)` into a picture in the
   renderer's sRGB format — the same kind a 2D shot writes, which is what
   lets the composite, render textures and the editor's viewport take it
-  as they are. Order: (scene + glow) × `post.exposure` → curve → tint →
+  as they are — premultiplied for the composite, **straight for a render
+  texture** (`render_3d_texture`, `PictureAlpha::Straight`), which sprites
+  and HUD images blend by its alpha: a 3D camera cleared to a colour at
+  alpha 0.5 is blended once, not darkened twice. Order: (scene + glow) × `post.exposure` → curve → tint →
   contrast, saturation, vignette. **The colour is unpremultiplied around
   the curve** and the alpha passes through: an overlay's background is
   transparent black and an MSAA edge resolves to colour × coverage, and a
@@ -10546,12 +10567,17 @@ pass*, and replaces stage 135's lone-3D-camera rule.
   own clear colour.
 - **Found on the way**: `Textures::preload` decoded a `.rendertexture.ron`
   as a PNG when a world held it and another textured sprite, and drew the
-  checker (fixed, `tests/preload.rs`).
+  checker (fixed, `tests/preload.rs`); and `decode_file` itself, which a
+  silhouette and `DecodedTexture` call directly, now answers
+  `AssetError::MadeNotRead` for a render texture rather than a bogus PNG
+  error.
 - **Tests**: `camera/frame_tests.rs` (3D first at a tie and the 2D over it
   an overlay; a 3D picture in a picture over 2D by priority, opaque with
   its own colour; pruning per dimension; a split screen of both, no
   overlay; a texture shot after the one it shows, a HUD image ordering
-  nothing; a cycle named; unresolved and inactive left out),
+  nothing; a cycle named; one broken at a producer inside it; 3D, 2D, 3D
+  all kept; adjoining viewports on a 0.01 grid never overlays; unresolved
+  and inactive left out),
   `draw/frame.rs` (a 2D frame keeps the 2D path, a lone full-screen 3D
   camera the direct one, a part of the screen composites),
   `render3d/hdr.rs` (WebGPU's rules give float at 4×; WebGL2 without float
@@ -10562,7 +10588,10 @@ pass*, and replaces stage 135's lone-3D-camera rule.
   as `headless_post.rs`; each curve on the GPU within 1/255 of its CPU
   twin over 28 inputs; MSAA 4 gives some 100 edge pixels between the two
   colours, MSAA 1 none), `headless_3d.rs` (the targets follow the colour's
-  size at 1 and 4 samples), `voltra-core/tests/frame_both.rs` (a 2D
+  size at 1 and 4 samples; sets unused two frames let go, a changed MSAA
+  too, four at most), `voltra-core/tests/frame_both.rs` and
+  `frame_both_cameras.rs` (a half-transparent 3D render texture blended
+  once on its sprite, within 1/255 of the CPU; a 2D
   sprite over the 3D cube, the cube around it and the sky past it; a 2D
   ambient of 0.25 lighting its sprite and not the cube; a graded overlay's
   alpha-0.5 pixel within 1/255 of the CPU — graded premultiplied it is
@@ -10589,6 +10618,11 @@ pass*, and replaces stage 135's lone-3D-camera rule.
   overlay graded unpremultiplied, the composite and the HUD — most of it a
   software rasterizer filling four samples a pixel.
 
+- **For stage 137**: a `Winding::Flat` instance gets the cofactor
+  unnegated, so a flat model's normal points along whichever side the
+  flattening left — the opposite way for a mirrored one. Both faces are
+  drawn, so the lit shader must flip the normal by `front_facing`, as a
+  double-sided material does.
 - **Not yet**: a `Camera2D` clear colour (a 2D camera over a 3D one is
   always an overlay); MSAA per camera and on the options screen; two
   cameras of different dimensions into one render texture (the later
