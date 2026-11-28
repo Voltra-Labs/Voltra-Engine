@@ -1,12 +1,11 @@
 //! The game's say in what each client is sent: the points it watches
 //! besides the entities it owns, and what was relevant to it.
 
-use glam::Vec2;
 use voltra_ecs::Entity;
 use voltra_net::PeerId;
 
 use super::{ReplicationServer, MAX_INTEREST_POINTS};
-use crate::Interest;
+use crate::{Interest, InterestPoint};
 
 impl ReplicationServer {
     /// The interest it culls by: the config's, once checked; `None` when
@@ -22,13 +21,22 @@ impl ReplicationServer {
     /// dropped, with a warning. Without interest management it changes
     /// nothing.
     ///
+    /// Each is an [`InterestPoint`] — a `Vec2` or a `Vec3` converts — and
+    /// sees only entities of its own dimension: a 3D spectator camera
+    /// passes `Vec3`s, a 2D one `Vec2`s, a game with both worlds both.
+    ///
     /// `false`, and nothing kept, for a peer that is not a client of this
     /// server (not yet joined, or gone): points for it would outlive it.
-    pub fn set_interest_points(&mut self, peer: PeerId, mut points: Vec<Vec2>) -> bool {
+    pub fn set_interest_points<P: Into<InterestPoint>>(
+        &mut self,
+        peer: PeerId,
+        points: impl IntoIterator<Item = P>,
+    ) -> bool {
         if !self.clients.contains_key(&peer) {
             self.points.remove(&peer);
             return false;
         }
+        let mut points: Vec<InterestPoint> = points.into_iter().map(Into::into).collect();
         if points.len() > MAX_INTEREST_POINTS {
             log::warn!(
                 "{peer}: {} interest points, over the {MAX_INTEREST_POINTS} a client may have; \
@@ -48,7 +56,7 @@ impl ReplicationServer {
     /// Every point `peer` was sent the world around at the last snapshot:
     /// where its entities were, then the game's. Empty without interest
     /// management.
-    pub fn interest_points(&self, peer: PeerId) -> &[Vec2] {
+    pub fn interest_points(&self, peer: PeerId) -> &[InterestPoint] {
         self.clients
             .get(&peer)
             .map_or(&[], |view| view.interest.points.as_slice())

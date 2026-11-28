@@ -345,7 +345,7 @@ fn with_its_owner_gone_a_client_sees_what_the_game_watches_for_it() {
         .expect("a server")
         .interest_points(peer)
         .to_vec();
-    assert_eq!(points, [Vec2::new(98.0, 0.0)]);
+    assert_eq!(points, [Vec2::new(98.0, 0.0).into()]);
 
     // Capped, and refused for a peer that is not there.
     let many = vec![Vec2::new(98.0, 0.0); 100];

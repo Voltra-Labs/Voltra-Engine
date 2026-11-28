@@ -8,14 +8,13 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use glam::Vec2;
 use voltra_ecs::{Entity, World};
 use voltra_net::{Endpoint, NetEvent, PeerId};
 use voltra_scene::{ComponentRegistry, ReplicatedComponent};
 
 use crate::acks::ReceivedTicks;
 use crate::wire::{self, ClientMessage, Control, NetId, ServerTick, MAX_LISTED};
-use crate::{Interest, InterestGrid, ReplicationConfig};
+use crate::{Interest, InterestGrid, InterestPoint, ReplicationConfig};
 
 mod ask;
 mod audience;
@@ -74,7 +73,7 @@ pub struct ReplicationServer {
     /// rebuilds each snapshot.
     interest: Option<(Interest, InterestGrid)>,
     /// The points the game watches for each client, beside its entities.
-    points: HashMap<PeerId, Vec<Vec2>>,
+    points: HashMap<PeerId, Vec<InterestPoint>>,
 }
 
 impl ReplicationServer {

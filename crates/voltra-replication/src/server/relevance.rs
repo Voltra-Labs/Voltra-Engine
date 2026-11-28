@@ -8,12 +8,11 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use glam::Vec2;
 use voltra_net::PeerId;
 
 use super::snapshot::Tracked;
 use super::view::ClientView;
-use crate::{InterestGrid, NetId};
+use crate::{InterestGrid, InterestPoint, NetId};
 
 /// Fills every client's [`ClientInterest`](super::view::ClientInterest)
 /// for this snapshot from `tracked`, and culls what left.
@@ -21,13 +20,14 @@ pub(super) fn update(
     grid: &mut InterestGrid,
     tracked: &BTreeMap<NetId, Tracked>,
     clients: &mut BTreeMap<PeerId, ClientView>,
-    extra: &HashMap<PeerId, Vec<Vec2>>,
+    extra: &HashMap<PeerId, Vec<InterestPoint>>,
 ) {
     grid.clear();
-    // Roots relevant to everyone: marked so, or with nowhere to be.
+    // Roots relevant to everyone: marked so, or with nowhere to be — no
+    // transform of either dimension.
     let mut always: Vec<NetId> = Vec::new();
     let mut children: HashMap<NetId, Vec<NetId>> = HashMap::new();
-    let mut owned: HashMap<PeerId, Vec<(NetId, Option<Vec2>)>> = HashMap::new();
+    let mut owned: HashMap<PeerId, Vec<(NetId, Option<InterestPoint>)>> = HashMap::new();
     for (&id, entity) in tracked {
         let place = entity.place;
         if place.root != id {
@@ -49,6 +49,7 @@ pub(super) fn update(
         let interest = &mut view.interest;
         let mine = owned.get(peer).map(Vec::as_slice).unwrap_or_default();
         interest.points.clear();
+        // An owned entity watches from where it is, in its own dimension.
         interest
             .points
             .extend(mine.iter().filter_map(|(_, at)| *at));

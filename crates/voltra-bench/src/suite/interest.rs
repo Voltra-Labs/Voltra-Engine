@@ -1,15 +1,18 @@
 //! Interest management at a thousand replicated entities and eight
-//! clients: the grid's rebuild and queries, the per-pair distance check
-//! the grid replaces, and a whole server frame with interest on and off.
+//! clients: the grid's rebuild and queries (2D, and 3D on the ground plane
+//! with a height), the per-pair distance check the grid replaces, and a
+//! whole server frame with interest on and off.
 
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 use voltra_core::net::{MemoryNetwork, NetConfig, PeerId};
-use voltra_core::replication::{Interest, InterestGrid, NetOwner, ReplicationConfig};
+use voltra_core::replication::{
+    Interest, InterestGrid, InterestPoint, NetOwner, ReplicationConfig,
+};
 use voltra_core::{App, Headless};
 use voltra_ecs::Entity;
-use voltra_render::glam::Vec2;
+use voltra_render::glam::{Vec2, Vec3};
 use voltra_scene::{Replicated, SceneId, Transform2D};
 
 use super::Bench;
@@ -26,7 +29,12 @@ const FRAME: f32 = 1.0 / 60.0;
 pub(super) fn benches() -> Vec<Bench> {
     vec![
         Bench::new("interest/grid/1k-entities-8-clients", 15.0, |config| {
-            grid(config, CLIENTS)
+            grid(config, CLIENTS, false)
+        }),
+        // The same layout stood up in 3D: the grid over (x, z), each entity
+        // at a height, the last test the 3D distance (stage 134).
+        Bench::new("interest/grid-3d/1k-entities-8-clients", 15.0, |config| {
+            grid(config, CLIENTS, true)
         }),
         Bench::new("interest/per-pair/1k-entities-8-clients", 15.0, |config| {
             per_pair(config, CLIENTS)
@@ -34,7 +42,7 @@ pub(super) fn benches() -> Vec<Bench> {
         // Where the two cross: the grid's rebuild is flat in clients, the
         // pairs grow with them.
         Bench::new("interest/grid/1k-entities-64-clients", 15.0, |config| {
-            grid(config, 64)
+            grid(config, 64, false)
         }),
         Bench::new("interest/per-pair/1k-entities-64-clients", 15.0, |config| {
             per_pair(config, 64)
@@ -54,10 +62,29 @@ pub(super) fn benches() -> Vec<Bench> {
 }
 
 /// The grid rebuilt and read by `clients` clients, each with one point and
-/// the hysteresis set it had.
+/// the hysteresis set it had — in 3D, the plane's layout laid on (x, z) at
+/// heights up to a radius, and points at a radius's height.
 /// Tens of microseconds: steadied (`Config::steady`).
-fn grid(config: &Config, clients: usize) -> super::Outcome {
-    let (entities, points) = layout(clients);
+fn grid(config: &Config, clients: usize, three_d: bool) -> super::Outcome {
+    let (flat, flat_points) = layout(clients);
+    let stand = |at: &Vec2, n: usize| -> InterestPoint {
+        if three_d {
+            let height = (n * 7 % 31) as f32 / 31.0 * RADIUS;
+            Vec3::new(at.x, height, at.y).into()
+        } else {
+            (*at).into()
+        }
+    };
+    let entities: Vec<InterestPoint> = flat
+        .iter()
+        .enumerate()
+        .map(|(n, at)| stand(at, n))
+        .collect();
+    let points: Vec<InterestPoint> = flat_points
+        .iter()
+        .enumerate()
+        .map(|(n, at)| stand(at, n))
+        .collect();
     let mut grid = InterestGrid::new(Interest::new(RADIUS));
     let mut previous = vec![HashSet::new(); clients];
     measure(

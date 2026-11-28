@@ -53,7 +53,7 @@ mod wire;
 
 pub use client::{Correction, ReplicaStats, ReplicationClient};
 pub use config::{ReplicationChannels, ReplicationConfig};
-pub use interest::{Interest, InterestGrid, MAX_CELLS_PER_AXIS};
+pub use interest::{Interest, InterestGrid, InterestPoint, MAX_CELLS_PER_AXIS};
 pub use lag::{LagCompensation, MeasuredLag, ViewTime};
 pub use owner::NetOwner;
 pub use prediction::{Prediction, PredictionStats};

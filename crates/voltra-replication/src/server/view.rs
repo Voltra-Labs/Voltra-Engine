@@ -16,8 +16,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque};
 use std::sync::Arc;
 
-use glam::Vec2;
-
 use super::inputs::InputQueue;
 use crate::acks::ReceivedTicks;
 use crate::wire::{NetId, ServerTick};
@@ -190,7 +188,7 @@ pub(crate) struct ClientInterest {
     pub(crate) out: HashSet<NetId>,
     /// The points it was given this snapshot: its own entities' and the
     /// game's.
-    pub(crate) points: Vec<Vec2>,
+    pub(crate) points: Vec<crate::InterestPoint>,
 }
 
 #[cfg(test)]

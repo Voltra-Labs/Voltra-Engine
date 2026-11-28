@@ -85,10 +85,13 @@ impl Net {
     /// `false` off a replicating server or for a peer not joined to it.
     /// Changes nothing without
     /// [`ReplicationConfig::interest`](voltra_replication::ReplicationConfig::interest).
-    pub fn set_interest_points(
+    /// Each point is a `Vec2` or a `Vec3`
+    /// ([`InterestPoint`](voltra_replication::InterestPoint)) and sees only
+    /// entities of its own dimension.
+    pub fn set_interest_points<P: Into<voltra_replication::InterestPoint>>(
         &mut self,
         peer: PeerId,
-        points: Vec<voltra_render::glam::Vec2>,
+        points: impl IntoIterator<Item = P>,
     ) -> bool {
         match self.replication.as_mut().and_then(Replication::server_mut) {
             Some(server) => server.set_interest_points(peer, points),

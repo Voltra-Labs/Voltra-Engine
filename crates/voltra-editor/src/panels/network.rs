@@ -211,7 +211,16 @@ fn map(ui: &mut Ui, client: &Headless, frame: &UiFrame<'_>) {
                 interest.radius / span.y * (MAP - 12.0),
             );
             let stroke = egui::Stroke::new(1.0, ui.visuals().weak_text_color());
-            for &point in replication.interest_points(peer) {
+            // The map is of 2D entities, so of 2D points; a 3D point has
+            // no place on it (stage 156 gives the window 3D).
+            let points = replication
+                .interest_points(peer)
+                .iter()
+                .filter_map(|p| match p {
+                    voltra_core::replication::InterestPoint::D2(at) => Some(*at),
+                    voltra_core::replication::InterestPoint::D3(_) => None,
+                });
+            for point in points {
                 painter.add(egui::Shape::ellipse_stroke(
                     to_screen(point),
                     radius,

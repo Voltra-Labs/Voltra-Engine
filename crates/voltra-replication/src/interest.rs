@@ -18,8 +18,10 @@
 //! [`Replicated::always_relevant`]: voltra_scene::Replicated::always_relevant
 
 mod grid;
+mod point;
 
 pub use grid::InterestGrid;
+pub use point::InterestPoint;
 
 /// The most cells a client's query may span along one axis: a cell size
 /// set far below the radius is raised until the leave radius's diameter is

@@ -9,6 +9,11 @@ fn grid(entities: &[(NetId, Vec2)]) -> InterestGrid {
 }
 
 fn query(grid: &InterestGrid, points: &[Vec2], previous: &[NetId]) -> Vec<NetId> {
+    let points: Vec<InterestPoint> = points.iter().map(|&p| p.into()).collect();
+    seen_from(grid, &points, previous)
+}
+
+fn seen_from(grid: &InterestGrid, points: &[InterestPoint], previous: &[NetId]) -> Vec<NetId> {
     let previous: HashSet<NetId> = previous.iter().copied().collect();
     let mut out = HashSet::new();
     grid.relevant(points, &previous, &mut out);
@@ -83,7 +88,7 @@ fn a_rebuild_forgets_where_entities_were() {
     assert_eq!(grid.len(), 1);
     assert!(query(&grid, &[Vec2::ZERO], &[]).is_empty());
     assert_eq!(query(&grid, &[Vec2::new(2985.0, 0.0)], &[]), [1]);
-    assert!(grid.cells.len() < 200, "left cells let go of");
+    assert!(grid.layers[0].cells.len() < 200, "left cells let go of");
 }
 
 #[test]
@@ -121,4 +126,42 @@ fn extreme_values_unchecked_answer_without_overflow_or_a_long_walk() {
         grid.insert(1, Vec2::new(9.0e6, 0.0), None);
         assert_eq!(query(&grid, &[Vec2::ZERO], &[]), [1]);
     }
+}
+
+#[test]
+fn a_3d_entity_is_near_by_its_ground_plane_and_then_by_its_height() {
+    use glam::Vec3;
+    let mut grid = grid(&[]);
+    // Radius 10, leave radius 11.
+    grid.insert(1, Vec3::new(8.0, 0.0, 0.0), None);
+    grid.insert(2, Vec3::new(0.0, 0.0, 12.0), None);
+    grid.insert(3, Vec3::new(6.0, 9.0, 0.0), None);
+    grid.insert(4, Vec3::new(0.0, 30.0, 0.0), None);
+    grid.insert(5, Vec3::new(0.0, 0.0, 10.5), None);
+    let origin = [InterestPoint::D3(Vec3::ZERO)];
+    // 1 at 8 m across; 2 at 12 m along Z — (x, z), not (x, y); 3 at
+    // 6 m across and 9 m up is 10.8 m away; 4 straight overhead at 30 m.
+    assert_eq!(seen_from(&grid, &origin, &[]), [1]);
+    assert_eq!(seen_from(&grid, &origin, &[3, 5]), [1, 3, 5], "inside 11 m");
+    // A point up at 30 m sees the one overhead and nothing on the ground.
+    assert_eq!(
+        seen_from(&grid, &[Vec3::new(0.0, 30.0, 0.0).into()], &[]),
+        [4]
+    );
+}
+
+#[test]
+fn a_point_sees_only_its_own_dimension() {
+    use glam::Vec3;
+    let mut grid = grid(&[(1, Vec2::new(1.0, 0.0))]);
+    grid.insert(2, Vec3::new(1.0, 0.0, 0.0), None);
+    grid.insert(3, Vec3::new(1.0, 0.0, 0.0), Some(100.0));
+    grid.insert(4, Vec2::new(50.0, 0.0), Some(100.0));
+    assert_eq!(query(&grid, &[Vec2::ZERO], &[2, 3]), [1, 4], "2D: no 3D");
+    assert_eq!(
+        seen_from(&grid, &[InterestPoint::D3(Vec3::ZERO)], &[1, 4]),
+        [2, 3],
+        "3D: no 2D, wide ones included"
+    );
+    assert_eq!(grid.len(), 4);
 }

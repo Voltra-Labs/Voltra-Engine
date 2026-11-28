@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use voltra_ecs::{Entity, World};
 use voltra_scene::{
-    hierarchy, ComponentRegistry, PrefabInstance, Replicated, SceneId, Transform2D,
+    hierarchy, ComponentRegistry, PrefabInstance, Replicated, SceneId, Transform2D, Transform3D,
 };
 
 use super::snapshot::{Place, Tracked};
@@ -130,7 +130,10 @@ impl ReplicationServer {
         }
     }
 
-    /// Where `entity` stands: its replicated root and its world position.
+    /// Where `entity` stands: its replicated root and its world position —
+    /// a 2D entity's (x, y), a 3D entity's (x, y, z), which the grid lays
+    /// on the ground plane. One carrying both transforms (a file the loader
+    /// warned about) is placed by its 2D one.
     fn place(&mut self, world: &World, entity: Entity) {
         let Some(&id) = self.ids.get(&entity) else {
             return;
@@ -141,10 +144,21 @@ impl ReplicationServer {
             .find(|&above| world.get::<Replicated>(above).is_some())
             .and_then(|above| self.ids.get(&above).copied())
             .unwrap_or(id);
-        let at = world
-            .get::<Transform2D>(entity)
-            .is_some()
-            .then(|| hierarchy::world_transform_2d(world, entity).translation);
+        let at = if world.get::<Transform2D>(entity).is_some() {
+            Some(
+                hierarchy::world_transform_2d(world, entity)
+                    .translation
+                    .into(),
+            )
+        } else if world.get::<Transform3D>(entity).is_some() {
+            Some(
+                hierarchy::world_transform_3d(world, entity)
+                    .translation
+                    .into(),
+            )
+        } else {
+            None
+        };
         if let Some(tracked) = self.tracked.get_mut(&id) {
             tracked.place.root = root;
             tracked.place.at = at;
