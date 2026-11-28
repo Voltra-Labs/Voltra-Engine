@@ -62,7 +62,7 @@ fn empty_3d(world: &mut voltra_ecs::World) -> Entity {
 fn camera_3d(world: &mut voltra_ecs::World) -> Entity {
     let at =
         Transform3D::from_translation(Vec3::new(0.0, 2.0, 5.0)).looking_at(Vec3::ZERO, Vec3::Y);
-    let entity = named_3d(world, "Camera3D", at);
+    let entity = named_3d(world, Camera3D::NAME, at);
     world.insert(entity, Camera3D::default());
     entity
 }
