@@ -19,6 +19,10 @@ mod world_shape;
 pub use polygon::{ConvexPolygon, PolygonError};
 pub use world_shape::WorldShape;
 
+/// The 0.4 name, where 0.4 had it; see [`crate::renamed`].
+#[allow(deprecated)]
+pub use crate::renamed::Collider;
+
 /// The shape used for collision.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum Collider2D {

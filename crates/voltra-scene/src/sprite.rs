@@ -7,6 +7,10 @@ use voltra_assets::{AssetPath, Atlas, Atlases, Frame, Handle, Textures};
 use voltra_ecs::Entity;
 use voltra_render::Texture;
 
+/// The 0.4 name, where 0.4 had it; see [`crate::renamed`].
+#[allow(deprecated)]
+pub use crate::renamed::Sprite;
+
 /// A coloured quad. Its size comes from the entity's [`Transform2D`].
 ///
 /// [`Transform2D`]: crate::transform::Transform2D

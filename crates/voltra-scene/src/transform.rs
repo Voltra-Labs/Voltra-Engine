@@ -2,6 +2,10 @@
 
 use voltra_render::glam::{Affine2, Mat3, Vec2, Vec3};
 
+/// The 0.4 name, where 0.4 had it; see [`crate::renamed`].
+#[allow(deprecated)]
+pub use crate::renamed::Transform;
+
 /// A 2D position, rotation and scale.
 ///
 /// `Mat3` rather than `Mat4`: a 2D affine transform needs nine floats, not

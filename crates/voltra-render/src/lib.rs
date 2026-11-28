@@ -61,18 +61,11 @@ pub use skinning::{SkinPipeline, SkinVertex, SkinnedMesh};
 pub use target::RenderTarget;
 pub use texture::{Filter, Texture, TextureError};
 
-// The names 0.4 used, for out-of-tree code moving to 0.5: each compiles with
-// a warning naming its replacement, and goes in 0.6. Nothing in the tree uses
-// them. `Camera2D` has none: it is `voltra_scene::Camera2D` now, and an alias
+// The names 0.4 used, for out-of-tree code moving to 0.5 (`mesh.rs`).
+// `Camera2D` has none: it is `voltra_scene::Camera2D` now, and an alias
 // here would make a glob import of both crates ambiguous.
-
-/// Renamed [`Vertex2D`] in 0.5.
-#[deprecated(since = "0.5.0", note = "renamed `Vertex2D`")]
-pub type Vertex = Vertex2D;
-
-/// Renamed [`Mesh2D`] in 0.5.
-#[deprecated(since = "0.5.0", note = "renamed `Mesh2D`")]
-pub type Mesh = Mesh2D;
+#[allow(deprecated)]
+pub use mesh::{Mesh, Vertex};
 
 // Re-exported so downstream crates never declare their own `wgpu` dependency
 // and can't drift onto a different version.

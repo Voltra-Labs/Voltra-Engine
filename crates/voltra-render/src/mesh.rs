@@ -5,6 +5,18 @@ use std::ops::Range;
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
+// The names 0.4 used, for out-of-tree code moving to 0.5: each compiles with
+// a warning naming its replacement, and goes in 0.6. Nothing in the tree uses
+// them.
+
+/// Renamed [`Vertex2D`] in 0.5; goes in 0.6.
+#[deprecated(since = "0.5.0", note = "renamed `Vertex2D`; removed in 0.6")]
+pub type Vertex = Vertex2D;
+
+/// Renamed [`Mesh2D`] in 0.5; goes in 0.6.
+#[deprecated(since = "0.5.0", note = "renamed `Mesh2D`; removed in 0.6")]
+pub type Mesh = Mesh2D;
+
 pub use crate::quad::QuadInstance;
 pub use buffers::MeshBuffers;
 

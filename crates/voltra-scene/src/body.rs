@@ -3,6 +3,10 @@
 use serde::{Deserialize, Serialize};
 use voltra_render::glam::Vec2;
 
+/// The 0.4 name, where 0.4 had it; see [`crate::renamed`].
+#[allow(deprecated)]
+pub use crate::renamed::RigidBody;
+
 /// How a body responds to time and, later, to contacts.
 ///
 /// The three every engine converged on. Kinematic is not a special case of the

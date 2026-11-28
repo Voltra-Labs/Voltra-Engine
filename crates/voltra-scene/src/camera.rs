@@ -20,6 +20,10 @@ pub use shots::{shots, Shot};
 pub use target::CameraTarget;
 pub use viewport::Viewport;
 
+/// The 0.4 name, where 0.4 had it; see [`crate::renamed`].
+#[allow(deprecated)]
+pub use crate::renamed::Camera;
+
 /// A camera authored into the scene.
 ///
 /// Its position comes from the entity's [`Transform2D`], composed through any

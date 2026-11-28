@@ -15,6 +15,12 @@ use super::link::{ancestors, parent_of};
 use super::parent::Parent;
 use crate::transform::Transform2D;
 
+/// The 0.4 names, where 0.4 had them; see [`crate::renamed`].
+#[allow(deprecated)]
+pub use crate::renamed::{
+    parent_matrix, set_world_transform, world_matrix, world_transform, WorldTransforms,
+};
+
 /// Below this a parent's frame has collapsed and cannot be inverted.
 ///
 /// Same threshold and same reasoning as picking: `Mat3::inverse` on a singular

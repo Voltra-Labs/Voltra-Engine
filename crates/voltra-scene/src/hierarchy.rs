@@ -30,6 +30,10 @@ pub use link::{
     ancestors, can_parent, children_of, clear_parent, depth, descendants, despawn_recursive,
     is_ancestor, parent_of, roots, set_parent, HierarchyError, MAX_DEPTH,
 };
+
+/// The 0.4 name, where 0.4 had it; see [`crate::renamed`].
+#[allow(deprecated)]
+pub use crate::renamed::WorldTransforms;
 pub use parent::Parent;
 // The 0.4 names, where 0.4 had them.
 #[allow(deprecated)]
