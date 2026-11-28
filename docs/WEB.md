@@ -142,6 +142,8 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   answered; refused, the material draws its standard block and the
   console says why, once. Uncaptured GPU errors are logged, not a panic,
   through `onuncapturederror` on WebGPU.
+  Sprite materials take the same scope: refused, their sprites draw
+  plainly; `materials.mjs` pins it with a deliberately branchy bar.
 - `custom3d.mjs` requires the native frame's colours for a data texture
   read unlit and a dissolve's rim on both, and a deliberately branchy
   material's standard block on WebGPU (its own colour on WebGL2).

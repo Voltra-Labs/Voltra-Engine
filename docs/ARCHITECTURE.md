@@ -7416,7 +7416,11 @@ second sprite pass.
   material. Uniform types are `f32`, `vec2` and `vec4`, laid out by
   WGSL's uniform rules in name order, at most 256 bytes.
 - **Checked before compiled**: the composed source is parsed and
-  validated with `wgpu::naga` when the material loads, because `wgpu`
+  validated with `wgpu::naga` when the material loads (since stage 138's
+  review, also written as WebGL2's GLSL ES 300, and an `override`
+  refused; and its pipeline drawn with only once the GPU, in an error
+  scope, has taken it — see *A surface material may write its own
+  `surface()`*), because `wgpu`
   reports a broken shader to an error scope, asynchronously, not to its
   caller. A material that will not read or validate is still a handle,
   its error logged once and shown in the inspector; its sprites draw
@@ -11064,6 +11068,21 @@ broken one is a material with an error, never a crash.
   GLSL ES 300 — `textureNumLevels`, `pack4x8unorm` — checked per entry
   point by `naga::back::glsl` (a direct `naga` dependency of
   voltra-render, for its `glsl-out`), only when the composed text changes.
+  **Sprite materials take the same protection** (the review's last
+  item): `material::validate` refuses an `override` and runs the same
+  GLSL ES 300 check (`shader_check.rs`, shared), and `MaterialBank` makes
+  each pipeline in the same scope (`gpu_check.rs`, shared) and draws a
+  material only once the GPU has taken it — meanwhile and when refused,
+  its sprites draw plainly, stage 83's fallback for a broken material,
+  the refusal said once. Before, a sprite shader Tint refused made every
+  sprite pass drawing it invalid on WebGPU. Pinned by `material/bank/
+  tests.rs` (a shader binding what the layout lacks: refused, drawn
+  plainly, the other material drawn through its own, 0 uncaptured
+  errors, not made again), `compose.rs` (an `override` and
+  `textureNumLevels` refused), `voltra-core/tests/materials.rs` (the
+  shipped branchy bar its own blue natively) and `materials.mjs` — on
+  WebGPU the bar is its plain orange tint (11 340 pixels, none blue) and
+  both coins draw as ever; on WebGL2 it is blue.
 - **Colour buttons write only on change**, everywhere in the editor
   (`panels/colour_edit.rs`): egui's `color_edit_button_*` round-trips the
   colour through HSV each frame it is drawn and writes the result back —
@@ -11188,10 +11207,7 @@ broken one is a material with an error, never a crash.
   mipmaps; a preview that animates (a preview of a time-driven surface is
   drawn once, at time 0, and again when the material changes); line
   numbers of a 2D sprite material's errors (its source still follows the
-  prelude); a 2D sprite material Tint refuses — its pipelines are not
-  made in a scope yet, so on WebGPU it invalidates the frame's sprite
-  pass, as before (stage 83's `MaterialBank` would take the same
-  `GpuCheck`); the editor's loop waking on a file change by itself — the
+  prelude); the editor's loop waking on a file change by itself — the
   watch is drained when the loop next runs, so a change on disk shows
   with the next event (pre-existing, 2D alike). **Fixed in review**: stage
   83's sprite materials composed their uniform struct at its raw size, so

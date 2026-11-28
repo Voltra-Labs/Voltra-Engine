@@ -65,6 +65,11 @@ stages land, for the 0.5 entry.
   an `Option` (a texture named with no image yet). A sprite material's
   uniform struct is declared 16-byte aligned, so one of a single `f32` or
   `vec2` runs on WebGL2.
+- **A sprite material the GPU refuses draws plainly** (stage 138
+  review): its pipelines are made in a validation scope, so a shader
+  WebGPU's compiler refuses no longer invalidates the sprite pass.
+  `material::validate` also refuses an `override` and what WebGL2 cannot
+  run. `MaterialBank::is_refused` says which.
 
 ## [0.4.0] — 2026-11-27
 
