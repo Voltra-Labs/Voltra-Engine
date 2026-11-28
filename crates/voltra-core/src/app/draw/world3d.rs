@@ -9,13 +9,18 @@ use voltra_assets::Meshes;
 use voltra_ecs::{Entity, World};
 use voltra_jobs::JobPool;
 use voltra_render::render3d::{MeshDraw3D, Scene3D};
-use voltra_render::{wgpu, Layer, RenderTarget, Renderer};
+use voltra_render::{Layer, RenderTarget, Renderer};
 use voltra_scene::camera::{FrameShots, Shot3D};
 use voltra_scene::camera3d;
 use voltra_scene::draw3d::PARALLEL_FROM;
-use voltra_scene::{CameraClear, DrawList3D, MeshInstance3D};
+use voltra_scene::{DrawList3D, MeshInstance3D};
 
 use super::render_settings::{self, RenderSettings, DEFAULT_RENDER_SETTINGS};
+
+mod clear;
+
+use clear::clear;
+pub(in crate::app) use clear::Picture3D;
 
 /// What drawing the 3D world keeps from frame to frame.
 #[derive(Debug, Default)]
@@ -155,62 +160,5 @@ impl World3D {
             (Some(target), _) => renderer.render_3d_into(target, &scene, &look, ui),
             (None, _) => renderer.render_3d(&scene, &look, ui),
         }
-    }
-}
-
-/// What a 3D shot's picture is for.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::app) enum Picture3D {
-    /// A screen shot drawn over nothing of the other dimension.
-    Opaque,
-    /// A screen shot over another dimension's picture: transparent where
-    /// it draws nothing.
-    Overlay,
-    /// A render texture, written in straight alpha for the sprites that
-    /// show it.
-    Texture,
-}
-
-/// What a 3D shot's target is cleared to, premultiplied as the picture
-/// is: the camera's own colour; else transparent for an overlay, so what
-/// drew before shows around its world; else the renderer's background.
-fn clear(clear: CameraClear, overlay: bool, background: wgpu::Color) -> wgpu::Color {
-    match clear {
-        CameraClear::Color([r, g, b, a]) => {
-            let a = a.clamp(0.0, 1.0);
-            wgpu::Color {
-                r: f64::from(r * a),
-                g: f64::from(g * a),
-                b: f64::from(b * a),
-                a: f64::from(a),
-            }
-        }
-        CameraClear::Background if overlay => wgpu::Color::TRANSPARENT,
-        CameraClear::Background => background,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn an_overlay_clears_transparent_and_a_colour_of_its_own_stays() {
-        let background = wgpu::Color {
-            r: 0.1,
-            g: 0.1,
-            b: 0.12,
-            a: 1.0,
-        };
-        assert_eq!(
-            clear(CameraClear::Background, true, background),
-            wgpu::Color::TRANSPARENT
-        );
-        assert_eq!(
-            clear(CameraClear::Background, false, background),
-            background
-        );
-        let half = clear(CameraClear::Color([1.0, 0.5, 0.0, 0.5]), true, background);
-        assert_eq!((half.r, half.g, half.b, half.a), (0.5, 0.25, 0.0, 0.5));
     }
 }
