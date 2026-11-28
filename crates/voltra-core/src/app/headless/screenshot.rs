@@ -129,7 +129,7 @@ impl Headless {
         // A texture a tick named since the last shot.
         resolve_world_textures(&mut app.world, textures, &device, &queue);
         voltra_scene::camera::target::resolve_world(&mut app.world, textures, &device, &queue);
-        let frame = voltra_scene::camera::frame_shots(&app.world);
+        let frame = voltra_scene::camera::frame_shots(&app.world, (width, height));
         let plan = frame::plan(&frame);
         let frame_shots = frame::flat_shots(&frame);
         if plan != frame::Plan::Flat || shots::needs_shots(&frame_shots) {

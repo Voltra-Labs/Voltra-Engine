@@ -31,8 +31,9 @@ pub(super) fn shown_by_2d(world: &World) -> HashSet<Handle<Texture>> {
 
 /// `shots` reordered so each comes after the shots filling the textures
 /// it `shows`, keeping their order otherwise (Kahn's, always taking the
-/// first ready). Where none is ready — a cycle — the first left goes, and
-/// is returned too.
+/// first ready). Where none is ready — a cycle — the first shot left whose
+/// own texture another shot left waits for goes: a producer inside the
+/// cycle, not a mere consumer of it. It is returned too.
 pub(super) fn producers_first(
     shots: Vec<AnyShot>,
     shows: impl Fn(&AnyShot) -> Vec<Handle<Texture>>,
@@ -52,16 +53,46 @@ pub(super) fn producers_first(
             })
         });
         let at = ready.unwrap_or_else(|| {
-            cycle.push(shots[left[0]].entity());
-            0
+            let waited_for = |&i: &usize| {
+                let mine = shots[i].target();
+                left.iter()
+                    .any(|&j| j != i && needs[j].iter().any(|t| Some(*t) == mine))
+            };
+            // Stuck means every shot left waits on one, so one is waited for.
+            let at = left.iter().position(waited_for).unwrap_or(0);
+            cycle.push(shots[left[at]].entity());
+            at
         });
         order.push(shots[left.remove(at)]);
     }
     (order, cycle)
 }
 
-/// Whether two viewports share any area.
-pub(super) fn overlaps(a: Viewport, b: Viewport) -> bool {
-    let (a, b) = (a.clamped(), b.clamped());
-    a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+/// Whether two viewports share a pixel of a `screen` of that many: in the
+/// whole-pixel rectangles they are drawn in, so viewports that adjoin
+/// never overlap by a rounding.
+pub(super) fn overlaps(a: Viewport, b: Viewport, (width, height): (u32, u32)) -> bool {
+    let [ax, ay, aw, ah] = a.pixels(width.max(1), height.max(1));
+    let [bx, by, bw, bh] = b.pixels(width.max(1), height.max(1));
+    ax < bx + bw && bx < ax + aw && ay < by + bh && by < ay + ah
+}
+
+/// `shots`, the screen's in draw order, less each wholly under a later
+/// full-screen shot of its own dimension with none of the other between.
+pub(super) fn prune(shots: Vec<AnyShot>) -> Vec<AnyShot> {
+    let hidden: Vec<bool> = (0..shots.len())
+        .map(|i| {
+            let kind = shots[i].is_3d();
+            shots[i + 1..]
+                .iter()
+                .take_while(|later| later.is_3d() == kind)
+                .any(|later| later.viewport().clamped().is_full())
+        })
+        .collect();
+    shots
+        .into_iter()
+        .zip(hidden)
+        .filter(|(_, hidden)| !hidden)
+        .map(|(shot, _)| shot)
+        .collect()
 }

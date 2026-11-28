@@ -38,7 +38,8 @@ impl App {
             renderer.context().device(),
             renderer.context().queue(),
         );
-        let frame = voltra_scene::camera::frame_shots(&self.world);
+        let config = renderer.context().config();
+        let frame = voltra_scene::camera::frame_shots(&self.world, (config.width, config.height));
         let plan = frame::plan(&frame);
         if plan != frame::Plan::Flat {
             let config = renderer.context().config();

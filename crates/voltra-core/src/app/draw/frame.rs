@@ -178,10 +178,13 @@ mod tests {
     fn a_2d_frame_keeps_the_2d_path_and_a_lone_3d_camera_the_direct_one() {
         let mut world = World::new();
         spawn(&mut world, Camera2D::default(), false);
-        assert_eq!(plan(&frame_shots(&world)), Plan::Flat);
+        assert_eq!(plan(&frame_shots(&world, (640, 360))), Plan::Flat);
         let mut world = World::new();
         spawn(&mut world, Camera3D::default(), true);
-        assert!(matches!(plan(&frame_shots(&world)), Plan::Lone3D(_)));
+        assert!(matches!(
+            plan(&frame_shots(&world, (640, 360))),
+            Plan::Lone3D(_)
+        ));
         // A part of the screen is a picture placed by the composite.
         let mut world = World::new();
         spawn(
@@ -192,7 +195,7 @@ mod tests {
             },
             true,
         );
-        assert_eq!(plan(&frame_shots(&world)), Plan::Composite);
+        assert_eq!(plan(&frame_shots(&world, (640, 360))), Plan::Composite);
     }
 
     #[test]
@@ -200,7 +203,7 @@ mod tests {
         let mut world = World::new();
         spawn(&mut world, Camera3D::default(), true);
         spawn(&mut world, Camera2D::default(), false);
-        let frame = frame_shots(&world);
+        let frame = frame_shots(&world, (640, 360));
         assert_eq!(plan(&frame), Plan::Composite);
         assert_eq!(flat_shots(&frame).len(), 1);
         assert!(texture_shots(&frame).is_empty());

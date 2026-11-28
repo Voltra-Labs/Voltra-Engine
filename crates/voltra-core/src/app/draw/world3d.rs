@@ -61,14 +61,17 @@ impl World3D {
         true
     }
 
-    /// Says, once per camera this session, which texture shots draw with a
-    /// texture's last frame: `frame`'s cycle.
+    /// Says, once per camera this session, which texture shots draw before
+    /// a camera filling a texture their world may show: `frame`'s cycle.
+    /// "May": the order is decided by what the world's sprites name, not by
+    /// what each camera's view takes in.
     pub fn warn_cycles(&mut self, frame: &FrameShots) {
         for &camera in &frame.cycle {
             if self.cycle_warned.insert(camera) {
                 log::warn!(
-                    "the camera on {camera:?} shows a render texture whose camera shows its \
-                     own: a cycle, so it draws with that texture's last frame"
+                    "the camera on {camera:?} draws into a render texture a sprite of its \
+                     world may show, and so does another camera: it draws first, and if \
+                     it sees that sprite, it sees the other texture's last frame"
                 );
             }
         }

@@ -84,7 +84,8 @@ impl App {
         // otherwise the game view frames the 2D camera through the 2D path,
         // as it always has. The scene view stays 2D: it draws 2D only.
         voltra_scene::camera::target::resolve_world(&mut self.world, textures, &device, &queue);
-        let frame = voltra_scene::camera::frame_shots(&self.world);
+        let frame =
+            voltra_scene::camera::frame_shots(&self.world, (graded.width(), graded.height()));
         let game_frame =
             std::mem::take(&mut self.world3d.game_view) && frame.screen().any(|s| s.shot.is_3d());
         if game_frame {

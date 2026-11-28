@@ -6,7 +6,7 @@ use voltra_assets::Handle;
 use voltra_ecs::{Entity, World};
 use voltra_render::Texture;
 
-use super::{shots, CameraTarget, Shot, Viewport};
+use super::{CameraTarget, Shot, Viewport};
 use crate::camera3d::{Camera3D, CameraClear};
 
 mod order;
@@ -85,12 +85,14 @@ pub struct FrameShot {
 }
 
 /// The frame's shots, in order, and the texture shots drawn before a shot
-/// that fills a texture they show — a cycle, so they show its last frame.
+/// that fills a texture they may show — a cycle, so they would show its
+/// last frame.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FrameShots {
     /// Every shot, in the order the frame draws them.
     pub shots: Vec<FrameShot>,
-    /// The cameras drawn with last frame's picture of a texture they show.
+    /// The cameras drawn before a producer of a texture they may show: if
+    /// they show it, it is last frame's picture.
     pub cycle: Vec<Entity>,
 }
 
@@ -109,8 +111,21 @@ impl FrameShots {
 /// Every active 3D camera's shot: those with a render texture, then the
 /// screen's — each set by priority, then entity — less a screen camera
 /// wholly under a later full-screen one, and one whose render texture is
-/// not resolved. [`shots`]'s rule, among 3D cameras only.
+/// not resolved. [`shots`](super::shots)'s rule, among 3D cameras only.
 pub fn shots_3d(world: &World) -> Vec<Shot3D> {
+    let all = candidates_3d(world);
+    let last_full = all
+        .iter()
+        .rposition(|s| s.target.is_none() && s.camera.viewport.clamped().is_full());
+    all.into_iter()
+        .enumerate()
+        .filter(|(i, s)| s.target.is_some() || last_full.is_none_or(|full| *i >= full))
+        .map(|(_, s)| s)
+        .collect()
+}
+
+/// Every active 3D camera's shot, none pruned, in [`shots_3d`]'s order.
+fn candidates_3d(world: &World) -> Vec<Shot3D> {
     let mut all: Vec<Shot3D> = world
         .query::<Camera3D>()
         .filter(|(_, camera)| camera.active)
@@ -127,54 +142,45 @@ pub fn shots_3d(world: &World) -> Vec<Shot3D> {
         })
         .collect();
     all.sort_by_key(|s| (s.target.is_none(), s.camera.priority, s.entity.index()));
-    let last_full = all
-        .iter()
-        .rposition(|s| s.target.is_none() && s.camera.viewport.clamped().is_full());
-    all.into_iter()
-        .enumerate()
-        .filter(|(i, s)| s.target.is_some() || last_full.is_none_or(|full| *i >= full))
-        .map(|(_, s)| s)
-        .collect()
+    all
 }
 
-/// The frame of `world`: every camera of both dimensions in draw order.
+/// The frame of `world` on a `screen` of that many pixels: every camera
+/// of both dimensions in draw order.
 ///
-/// - **Texture shots first**, a producer before every shot that shows its
-///   texture: a 2D camera shows every render texture a world sprite names
-///   (but its own); a 3D camera none yet (surface materials, stage 137).
-///   Otherwise by priority, 3D first at a tie. Where producers show each
-///   other's textures the order cannot hold for all: the one drawn first
-///   shows the other's last frame and is named in
-///   [`cycle`](FrameShots::cycle).
-/// - **Then the screen's**, by priority, 3D first at a tie, then entity.
-///   [`shots`]'s pruning of a camera wholly under a later full-screen one
-///   holds within a dimension only: several framings of one world, the
-///   highest wins, but a 2D camera never hides a 3D one or the reverse.
-/// - **Overlay or framing**: a screen shot overlapped in any part by an
-///   earlier one of the other dimension is an overlay, its picture
+/// - **Texture shots first**, a producer before every shot that may show
+///   its texture: a 2D camera may show every render texture a world sprite
+///   names (but its own); a 3D camera none yet (surface materials, stage
+///   137). Otherwise by priority, 3D first at a tie. Where producers may
+///   show each other's textures the order cannot hold for all: a producer
+///   inside the cycle draws first, with the other's last frame, and is
+///   named in [`cycle`](FrameShots::cycle).
+/// - **Then the screen's**, by priority, 3D first at a tie, then entity. A
+///   camera wholly under a later full-screen camera of its own dimension
+///   with no camera of the other between them is left out — several
+///   framings of one world, the highest wins, as [`shots`](super::shots) prunes — but a
+///   camera of the other dimension between them keeps it: its world is a
+///   layer of the picture, not a framing replaced.
+/// - **Overlay or framing**: a screen shot overlapped, by a pixel or more,
+///   by an earlier one of the other dimension is an overlay, its picture
 ///   cleared transparent — Unity's overlay camera, Godot's canvas over its
 ///   world — unless it is a 3D camera with a colour of its own to clear to.
-pub fn frame_shots(world: &World) -> FrameShots {
+pub fn frame_shots(world: &World, screen: (u32, u32)) -> FrameShots {
     let mut textures = Vec::new();
-    let mut screen = Vec::new();
-    for shot in shots(world) {
-        let any = AnyShot::D2(shot);
-        if shot.target.is_some() {
-            textures.push(any);
+    let mut on_screen = Vec::new();
+    let all = super::shots::candidates(world)
+        .into_iter()
+        .map(AnyShot::D2)
+        .chain(candidates_3d(world).into_iter().map(AnyShot::D3));
+    for shot in all {
+        if shot.target().is_some() {
+            textures.push(shot);
         } else {
-            screen.push(any);
-        }
-    }
-    for shot in shots_3d(world) {
-        let any = AnyShot::D3(shot);
-        if shot.target.is_some() {
-            textures.push(any);
-        } else {
-            screen.push(any);
+            on_screen.push(shot);
         }
     }
     textures.sort_by_key(AnyShot::key);
-    screen.sort_by_key(AnyShot::key);
+    on_screen.sort_by_key(AnyShot::key);
     let shown = shown_by_2d(world);
     let (textures, cycle) = producers_first(textures, |shot| match shot {
         AnyShot::D2(shot) => shown
@@ -191,7 +197,8 @@ pub fn frame_shots(world: &World) -> FrameShots {
             overlay: false,
         })
         .collect();
-    for (i, &shot) in screen.iter().enumerate() {
+    let on_screen = prune(on_screen);
+    for (i, &shot) in on_screen.iter().enumerate() {
         let opaque = matches!(
             shot,
             AnyShot::D3(Shot3D {
@@ -202,8 +209,8 @@ pub fn frame_shots(world: &World) -> FrameShots {
                 ..
             })
         );
-        let under = screen[..i].iter().any(|earlier| {
-            earlier.is_3d() != shot.is_3d() && overlaps(earlier.viewport(), shot.viewport())
+        let under = on_screen[..i].iter().any(|earlier| {
+            earlier.is_3d() != shot.is_3d() && overlaps(earlier.viewport(), shot.viewport(), screen)
         });
         out.push(FrameShot {
             shot,

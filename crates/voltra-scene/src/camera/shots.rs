@@ -63,36 +63,41 @@ impl Shot {
 /// cameras draws only the highest, as it did when one camera took the
 /// frame. A camera whose render texture is not resolved is left out too.
 pub fn shots(world: &World) -> Vec<Shot> {
-    let mut all: Vec<(Shot, bool, i32, u32)> = world
+    let all = candidates(world);
+    let last_full = all
+        .iter()
+        .rposition(|shot| shot.target.is_none() && shot.camera.viewport.clamped().is_full());
+    all.into_iter()
+        .enumerate()
+        .filter(|(i, shot)| shot.target.is_some() || last_full.is_none_or(|full| *i >= full))
+        .map(|(_, shot)| shot)
+        .collect()
+}
+
+/// Every active 2D camera's shot, none pruned: those with a resolved
+/// render texture first, then the screen's, each set by priority, then
+/// entity. A camera whose render texture is not resolved is left out.
+pub(super) fn candidates(world: &World) -> Vec<Shot> {
+    let mut all: Vec<Shot> = world
         .query::<Camera2D>()
         .filter(|(_, camera)| camera.active)
         .filter_map(|(entity, camera)| {
-            let wants_texture = world.get::<CameraTarget>(entity);
-            let target = match wants_texture {
+            let target = match world.get::<CameraTarget>(entity) {
                 Some(t) => Some(t.handle?),
                 None => None,
             };
             let (position, rotation) = eye(world, entity);
-            let shot = Shot {
+            Some(Shot {
                 entity,
                 camera: *camera,
                 position,
                 rotation,
                 target,
-            };
-            Some((shot, target.is_none(), camera.priority, entity.index()))
+            })
         })
         .collect();
-    // Textures first, then by priority and index.
-    all.sort_by_key(|(_, screen, priority, index)| (*screen, *priority, *index));
-    let last_full = all
-        .iter()
-        .rposition(|(shot, screen, _, _)| *screen && shot.camera.viewport.clamped().is_full());
-    all.into_iter()
-        .enumerate()
-        .filter(|(i, (_, screen, _, _))| !*screen || last_full.is_none_or(|full| *i >= full))
-        .map(|(_, (shot, _, _, _))| shot)
-        .collect()
+    all.sort_by_key(|s| (s.target.is_none(), s.camera.priority, s.entity.index()));
+    all
 }
 
 #[cfg(test)]
