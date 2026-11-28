@@ -9,6 +9,7 @@ mod draw;
 mod framing;
 mod gamepads;
 mod gpu_particles;
+mod handler;
 pub mod headless;
 mod input_map;
 mod loading;
@@ -18,6 +19,7 @@ mod net_counters;
 mod particles;
 mod pending_physics;
 mod prefab_sync;
+mod reload;
 mod restyle;
 mod scene_draws;
 mod scenes;
@@ -57,10 +59,8 @@ use voltra_physics::{CollisionEvent, Contact, PhysicsWorld};
 use voltra_render::glam::Vec2;
 use voltra_render::{LineBatch, RenderTarget, Renderer};
 use voltra_scene::{ComponentRegistry, Prefabs};
-use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::window::{Window, WindowId};
+use winit::event_loop::EventLoop;
+use winit::window::Window;
 
 use crate::app::audio::SceneAudio;
 use crate::app::framing::SceneFraming;
@@ -459,211 +459,5 @@ impl App {
         self.send_replication(delta);
         // What every tick of the frame queued goes out together.
         self.flush_net();
-    }
-
-    /// Applies whatever the watcher saw since the last frame.
-    ///
-    /// Between the clock and the render, so a texture that changed this frame
-    /// is on screen this frame rather than next. Costs one non-blocking
-    /// `try_recv` when nothing changed, which is almost every frame.
-    fn reload_changed_assets(&mut self) {
-        let _reload = voltra_profile::scope("asset reload");
-        let Some(watcher) = self.watcher.as_mut() else {
-            return;
-        };
-        let changed = watcher.drain();
-        if changed.is_empty() {
-            return;
-        }
-
-        // Sounds first, and on their own: a clip needs no device, so a run
-        // whose renderer is not up yet still hears the edit.
-        let mut images = Vec::with_capacity(changed.len());
-        for path in changed {
-            // A sound reaches its own clip and every clip a settings file
-            // makes of it.
-            let reloaded = match self.clips.as_mut() {
-                Some(clips) => clips.reload(&path),
-                None => Vec::new(),
-            };
-            if !reloaded.is_empty() {
-                for clip in reloaded {
-                    self.scene_audio.restart(&self.world, clip, &mut self.audio);
-                }
-                continue;
-            }
-            // A clip is read by its players next frame, a machine by its
-            // animators.
-            if self.reload_animation_clip(&path) || self.reload_state_machine(&path) {
-                continue;
-            }
-            // A prefab's instances take the edit, but for what they override.
-            if self.reload_prefab(&path) {
-                continue;
-            }
-            // A material, or a shader one names: compiled again next draw.
-            if self
-                .materials
-                .as_mut()
-                .is_some_and(|materials| materials.reload(&path))
-            {
-                continue;
-            }
-            // Strings land in their texts next frame.
-            if self.locale.reload(&path) {
-                continue;
-            }
-            // Nor do the bindings.
-            if self.reload_input_map(&path) {
-                continue;
-            }
-            if self.reload_sorting_layers(&path) {
-                continue;
-            }
-            if self.reload_bus_layout(&path) {
-                continue;
-            }
-            // A face needs no device either: its atlas starts over and is
-            // re-rasterized and uploaded by the next draw.
-            if self.fonts.as_mut().is_some_and(|fonts| fonts.reload(&path)) {
-                continue;
-            }
-            images.push(path);
-        }
-
-        let (Some(textures), Some(atlases), Some(renderer)) = (
-            self.textures.as_mut(),
-            self.atlases.as_mut(),
-            self.renderer.as_ref(),
-        ) else {
-            return;
-        };
-
-        let device = renderer.context().device();
-        for path in images {
-            // Traced outlines go stale with their pixels, whichever store
-            // answers below; they are traced again when next asked for.
-            if let Some(silhouettes) = self.silhouettes.as_mut() {
-                silhouettes.reload(&path);
-            }
-            // A re-cut sheet changes no pixels, and a repainted one changes no
-            // slicing, so whichever store owns the path answers and the other
-            // ignores it.
-            if atlases.reload(&path) {
-                continue;
-            }
-            if !textures.reload(device, renderer.context().queue(), &path) {
-                continue;
-            }
-            // The handle survived the swap; the view behind it did not. A
-            // thumbnail still pointing at the old view draws a texture that has
-            // been destroyed, which is a validation error rather than a stale
-            // picture.
-            let (Some(egui), Some(handle)) = (self.egui.as_mut(), textures.by_path_handle(&path))
-            else {
-                continue;
-            };
-            self.thumbnails.refresh(egui, device, textures, handle);
-        }
-    }
-}
-
-impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // Android and iOS resume more than once; only the first pass builds.
-        if self.window.is_some() {
-            return;
-        }
-
-        let window = Arc::new(
-            event_loop
-                .create_window(self.config.to_attributes())
-                .expect("failed to create window"),
-        );
-
-        // Held from here, so a second `resumed` while the renderer is still
-        // on its way (the web) does not build a second one.
-        self.window = Some(window.clone());
-        platform::start_renderer(self, window);
-    }
-
-    fn user_event(&mut self, _event_loop: &ActiveEventLoop, (): ()) {
-        // The one event sent to the loop: the web's renderer, built.
-        #[cfg(target_arch = "wasm32")]
-        if let Some(renderer) = self.take_renderer() {
-            self.finish_resume(renderer);
-        }
-    }
-
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
-        // egui gets first refusal. A keystroke aimed at a text field must not
-        // also fly the camera, and a click on a panel must not select in the
-        // scene behind it.
-        let consumed = match (self.egui.as_mut(), self.window.as_ref()) {
-            (Some(egui), Some(window)) => egui.on_window_event(window, &event),
-            _ => false,
-        };
-        if !consumed {
-            self.input.process_window_event(&event);
-        }
-        // Before the renderer check: a key pressed while the device is still
-        // on its way is the page's gesture all the same.
-        #[cfg(target_arch = "wasm32")]
-        self.on_web_event(&event);
-
-        if self.renderer.is_none() {
-            return;
-        }
-
-        match event {
-            WindowEvent::CloseRequested => {
-                if self.window_requests.on_close_requested(self.ui.is_some()) {
-                    log::info!("close requested, shutting down");
-                    event_loop.exit();
-                }
-            }
-            WindowEvent::Resized(size) => {
-                if let Some(renderer) = self.renderer.as_mut() {
-                    renderer.resize(size.width, size.height);
-                }
-                // A resize is also how fullscreen arriving, or leaving by
-                // the platform's own key, shows.
-                self.refresh_game_window();
-            }
-            WindowEvent::Moved(_) | WindowEvent::ScaleFactorChanged { .. } => {
-                // Another monitor, other modes.
-                self.refresh_game_window();
-            }
-            WindowEvent::RedrawRequested => {
-                self.refresh_game_window_shown();
-                self.update();
-
-                if self.ui.is_some() {
-                    self.redraw_with_ui();
-                } else {
-                    self.redraw_without_ui();
-                }
-
-                // Must come after everything that reads input this frame.
-                self.input.end_frame();
-
-                // Between this frame and the next, as the scene changes
-                // were: fullscreen, size and vsync change on a window that
-                // is not being drawn into.
-                self.apply_game_window();
-
-                // A close the UI agreed to, or asked for itself.
-                if self.window_requests.should_exit() {
-                    log::info!("closing, as the UI asked");
-                    event_loop.exit();
-                    return;
-                }
-
-                if let Some(window) = self.window.as_ref() {
-                    window.request_redraw();
-                }
-            }
-            _ => {}
-        }
     }
 }

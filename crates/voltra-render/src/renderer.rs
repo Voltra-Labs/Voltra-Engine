@@ -9,10 +9,8 @@ use crate::graph::TexturePool;
 use crate::light_layers::LayerPass;
 use crate::lights::{LightPass, Lighting};
 use crate::lines::ViewportBinding;
-use crate::mesh::Mesh2D;
 use crate::normals::NormalPass;
 use crate::particles::{GpuParticles, ParticleLook, ParticlePipelines, SimStep};
-use crate::pass::MeshDraw;
 use crate::post::PostPass;
 use crate::target::RenderTarget;
 use crate::texture::Texture;
@@ -22,10 +20,12 @@ mod composite;
 mod direct;
 mod frame;
 mod gpu_timing;
+mod layer;
 mod light_layers;
 mod normals;
 
 pub use composite::Placed;
+pub use layer::Layer;
 
 /// Drives one frame at a time on top of a [`GpuContext`].
 pub struct Renderer {
@@ -286,24 +286,6 @@ impl Renderer {
         // Without this the image stretches when the window is not square.
         self.camera.aspect = aspect_of(width, height);
     }
-}
-
-/// Geometry drawn in a target's own pixels over the scene - y down, origin
-/// top-left - with the sprite pipeline. [`Layer::EMPTY`] draws nothing.
-#[derive(Clone, Copy)]
-pub struct Layer<'a> {
-    /// The mesh the draws index into, or `None` for nothing.
-    pub mesh: Option<&'a Mesh2D>,
-    /// The index ranges to draw, in order.
-    pub draws: &'a [MeshDraw<'a>],
-}
-
-impl Layer<'_> {
-    /// A layer that draws nothing.
-    pub const EMPTY: Layer<'static> = Layer {
-        mesh: None,
-        draws: &[],
-    };
 }
 
 /// Guards against the divide-by-zero a minimised window would otherwise cause.
