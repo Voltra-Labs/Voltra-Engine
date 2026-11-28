@@ -93,9 +93,10 @@ fn type_names<'r>(registry: &'r ComponentRegistry, typed: &str) -> Vec<&'r str> 
     registry
         .names()
         .filter(|name| {
-            name.len() == typed.len() + 2
-                && name[..typed.len()].eq_ignore_ascii_case(typed)
-                && ["2D", "3D"].contains(&&name[typed.len()..])
+            ["2D", "3D"].iter().any(|suffix| {
+                name.strip_suffix(suffix)
+                    .is_some_and(|stem| stem.eq_ignore_ascii_case(typed))
+            })
         })
         .collect()
 }
@@ -159,6 +160,9 @@ mod tests {
         // But not a part of a name: `t:Sprit` is no type.
         let partial = filter(&world, &registry, &Query::parse("t:Sprit"));
         assert_eq!(partial.unknown, ["sprit"]);
+        // A term that is not ASCII is no type either, and no panic.
+        let accented = filter(&world, &registry, &Query::parse("t:Spritë"));
+        assert_eq!(accented.unknown.len(), 1);
 
         let named_too = filter(&world, &registry, &Query::parse("t:Sprite2D coin"));
         assert_eq!(named_too.matched, HashSet::from([gold]));
