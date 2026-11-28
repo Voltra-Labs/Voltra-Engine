@@ -9851,9 +9851,18 @@ file". This is what was built.
   left as it is when the target is where it stands, any perpendicular taken
   as up when `up` is along the view); `forward()`/`right()`/`up()`;
   `from_euler_degrees`/`euler_degrees`, `(x, y, z)` in Godot's YXZ order
-  (`Ry · Rx · Rz`, glam's intrinsic `EulerRot::YXZ`), read in `f64` — near
-  gimbal lock the `f32` quaternion bounds it (within 0.01° to ±89.9° of
-  pitch, a few hundredths at ±89.99°). **Read from a file
+  (`Ry · Rx · Rz`, glam's intrinsic `EulerRot::YXZ`). **Gimbal lock is
+  handled explicitly**: read from an `f32` quaternion, cos pitch at ±90° is
+  noise of about 10⁻³, so glam's own lock test (`16 · EPSILON` of the type)
+  misses it — in `f64` it never fires and yaw and roll come out of `atan2`
+  of noise (up to 180° wrong composed back); in `f32` it fires at the lock
+  but not just off it (5.6° wrong at a pitch of 89.9999°). `euler_degrees`
+  reads in `f64` with a band of its own, `1 − |sin pitch| < EULER_LOCK`
+  (10⁻⁶, within about 0.08° of ±90°), where the pitch reads ±90°, the roll
+  0 and the turn is folded into the yaw. Measured worst cases, composed
+  back, over yaw and roll in 10° steps: 1.3 × 10⁻⁵° at the lock, 0.085° at
+  the band's edge, under 0.02° outside it — against `f32`'s 5.6° and
+  1.4° at 89.9999° and 89.999°. **Read from a file
   through a repair** (`transform3d/file.rs`, `#[serde(from)]` a mirror
   whose fields default): a quaternion outside glam's `is_normalized`
   tolerance (2 × 10⁻⁴ on the length squared) is normalised, a zero or
@@ -9928,7 +9937,9 @@ file". This is what was built.
   made — through undo and redo — and a rotation changed elsewhere (a
   script) is read from the quaternion. An edit writes the **whole**
   quaternion across a multi-selection (a touch on `rotation`): field by
-  field it would mix two rotations into neither. The other values written
+  field it would mix two rotations into neither. The three angles are the
+  shared mixed number on that path: `—` while the rotations differ, and a
+  number typed and left is written to all even when it is the primary's. The other values written
   per component (a translation or scale axis, a colour channel) are
   independent, so per component is right for them — Unity's
   `m_LocalEulerAnglesHint`, in the editor and not the file. The hierarchy's
