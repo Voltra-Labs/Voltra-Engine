@@ -16,8 +16,11 @@
 //! differs only in its spaces is the same value.
 //!
 //! **The root's transform is always the instance's own**, in either
-//! dimension ([`super::Placement`]): it is where the instance was put. So are the structure components — `Parent`, the link
-//! and the part — which a sync rebuilds rather than copies.
+//! dimension ([`super::Placement`]): it is where the instance was put. So
+//! are the structure components — `Parent`, the link and the part — which a
+//! sync rebuilds rather than copies. An instance whose root is of the other
+//! dimension than its file's is left alone and reported
+//! ([`SyncReport::other_dimension`]).
 //!
 //! **An instance saved before parts existed is adopted** on its first sync:
 //! its root is matched to the file's root of the same name (or the first),
@@ -43,7 +46,7 @@ use voltra_ecs::{Entity, World};
 use super::adopt::adopt;
 use super::compare::{canonical, differences, ids_to_records, parent_record, subtree};
 use super::membership::{members, Children};
-use super::{Prefab, PrefabInstance, PrefabPart};
+use super::{placement, Prefab, PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy;
 use crate::scene_id::SceneId;
@@ -64,6 +67,12 @@ pub struct SyncReport {
     /// its assets looked up again, since a component read from a file has
     /// no handles.
     pub touched: Vec<Entity>,
+    /// Instance roots of one dimension whose file's root is of the other —
+    /// an Apply from an instance whose root changed dimension, say. A root's
+    /// transform is its placement, which a sync never touches, and its parts
+    /// taking the other dimension's would mix the two: such an instance is
+    /// left as it is, named here, and warned about.
+    pub other_dimension: Vec<Entity>,
 }
 
 impl SyncReport {
@@ -78,6 +87,7 @@ impl SyncReport {
         self.despawned += other.despawned;
         self.adopted += other.adopted;
         self.touched.extend(other.touched);
+        self.other_dimension.extend(other.other_dimension);
     }
 }
 
@@ -123,6 +133,24 @@ pub(super) fn sync_with(
     if records.is_empty() {
         log::warn!("an instance's root names a record its prefab no longer has; left as it is");
         return Ok((report, Vec::new()));
+    }
+    if let Some(file_root) = records.iter().find(|record| record.id == top) {
+        let theirs = placement::record_dimensions(file_root);
+        let ours = hierarchy::Dimension::of(world, root);
+        if !theirs.is_empty() && !ours.is_empty() && theirs != ours {
+            // Not synced at all: its parts would take the file's transforms
+            // of the other dimension under a root that keeps its own, and
+            // the instance would mix the two.
+            log::warn!(
+                "{root:?} is an instance of {}, whose root is now of the other dimension; \
+                 the instance is left as it is: replace it, or Apply it",
+                prefab
+                    .source()
+                    .map_or("an unsaved prefab", |path| path.as_str())
+            );
+            report.other_dimension.push(root);
+            return Ok((report, Vec::new()));
+        }
     }
     let removed: HashSet<SceneId> = world
         .get::<PrefabInstance>(root)

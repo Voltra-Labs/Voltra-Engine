@@ -251,3 +251,86 @@ fn a_variant_of_a_3d_prefab_spawns_as_its_base_and_follows_it() {
         Some(9.0)
     );
 }
+
+#[test]
+fn apply_keeps_a_root_with_no_transform_in_its_file() {
+    // 0.4's Apply skipped such a root's record entirely: the file lost it.
+    let root = scratch_root();
+    let mut prefabs = Prefabs::new(&root);
+    let mut world = World::new();
+    let rig = world.spawn();
+    world.insert(rig, SceneId::new());
+    world.insert(rig, Name::new("rig"));
+    let lamp = named_3d(&mut world, "lamp", Transform3D::from_translation(Vec3::Y));
+    set_parent(&mut world, lamp, rig).expect("3D under a bare group");
+    let file = fragment(&world, &registry(), rig).expect("cut");
+    let target = path("rig.prefab.ron");
+    crate::format::write(&file, &prefabs.root().join(target.as_str())).expect("written");
+
+    let mut scene = World::new();
+    let top = spawned(&mut scene, &mut prefabs, &target, Placement::AsAuthored);
+    scene.insert(top, Name::new("rig, renamed"));
+    apply(&mut scene, &registry(), &mut prefabs, top).expect("applied");
+
+    let handle = prefabs.load(&target);
+    let written = prefabs.get(handle).file.as_ref().expect("reads");
+    assert_eq!(written.entities.len(), 2, "the root is still in its file");
+    let top_record = written
+        .entities
+        .iter()
+        .find(|r| !r.components.contains_key(Parent::NAME))
+        .expect("a root record");
+    assert!(top_record.components.keys().all(|k| !Placement::names(k)));
+    let name: Name = top_record.components[Name::NAME]
+        .into_rust()
+        .expect("reads");
+    assert_eq!(name.as_str(), "rig, renamed");
+}
+
+#[test]
+fn applying_a_root_that_changed_dimension_reports_the_other_instances() {
+    let root = scratch_root();
+    let mut prefabs = Prefabs::new(&root);
+    let file = write_crate(&prefabs, 1.0);
+    let mut world = World::new();
+    let changed = spawned(&mut world, &mut prefabs, &file, Placement::AsAuthored);
+    let other = spawned(&mut world, &mut prefabs, &file, Placement::AsAuthored);
+    // The first instance's root made 2D (its child, too, to keep the chain
+    // in one dimension).
+    world.remove::<Transform3D>(changed);
+    world.insert(changed, Transform2D::from_translation(Vec2::new(1.0, 1.0)));
+    let lamp = children_of(&world, changed)[0];
+    world.remove::<Transform3D>(lamp);
+    world.insert(lamp, Transform2D::default());
+
+    let report = apply(&mut world, &registry(), &mut prefabs, changed).expect("applied");
+
+    let handle = prefabs.load(&file);
+    let written = prefabs.get(handle).file.as_ref().expect("reads");
+    let top = &written.entities[0];
+    assert!(top.components.contains_key(Transform2D::NAME));
+    assert!(
+        !top.components.contains_key(Transform3D::NAME),
+        "the old dimension is not kept beside the new one"
+    );
+    assert_eq!(report.other_dimension, vec![other]);
+    assert_eq!(
+        transform(&world, other),
+        authored_root_at_origin(),
+        "its placement is its own: left as it is"
+    );
+    let theirs = children_of(&world, other)[0];
+    assert!(
+        world.get::<Transform3D>(theirs).is_some() && world.get::<Transform2D>(theirs).is_none(),
+        "its parts are not given the file's 2D transforms under a 3D root"
+    );
+    assert!(crate::hierarchy::dimension::problems(&world).is_empty());
+}
+
+/// The crate's root as its file stores it: the fragment zeroed it.
+fn authored_root_at_origin() -> Transform3D {
+    Transform3D {
+        translation: Vec3::ZERO,
+        ..authored_root()
+    }
+}

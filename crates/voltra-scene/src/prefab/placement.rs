@@ -13,7 +13,8 @@ use ron::value::RawValue;
 use voltra_ecs::{Entity, World};
 use voltra_render::glam::{Quat, Vec2, Vec3};
 
-use crate::format::SceneError;
+use crate::format::{EntityRecord, SceneError};
+use crate::hierarchy::Dimension;
 use crate::transform::Transform2D;
 use crate::transform3d::Transform3D;
 
@@ -115,6 +116,14 @@ impl Placement {
             );
         }
     }
+}
+
+/// The dimensions a stored record has a transform of.
+pub(super) fn record_dimensions(record: &EntityRecord) -> Vec<Dimension> {
+    [Dimension::D2, Dimension::D3]
+        .into_iter()
+        .filter(|d| record.components.contains_key(d.transform_name()))
+        .collect()
 }
 
 /// Each transform `entity` carries, its translation zeroed and its rotation

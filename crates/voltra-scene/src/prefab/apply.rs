@@ -42,7 +42,8 @@ pub fn link(world: &mut World, root: Entity, source: AssetPath) {
 /// its own — with parents named by record. Not the links and parts, which
 /// belong to instances, not to the prefab; and not the root's placement:
 /// the file's root keeps the transform it had, in either dimension
-/// ([`Placement`]), as Unity's apply leaves the root's position out. Records the instance deleted leave the file.
+/// ([`Placement`]), as Unity's apply leaves the root's position out.
+/// Records the instance deleted leave the file.
 /// Afterwards the instance overrides nothing — it *is* the prefab.
 ///
 /// **Instances the file holds stay instances.** A variant's root stays an
