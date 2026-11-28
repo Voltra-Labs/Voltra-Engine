@@ -4,7 +4,7 @@ use super::cull::Candidate;
 use super::Draw3D;
 use voltra_render::render3d::Instance3D;
 
-/// What the seen are sorted by: mirrored or not, mesh slot and generation,
+/// What the seen are sorted by: winding, mesh slot and generation,
 /// view depth, entity index — and where the candidate is. 24 bytes, so the
 /// sort moves that rather than a whole candidate.
 pub(super) type Key = (u32, u32, u32, f32, u32, u32);
@@ -32,7 +32,7 @@ pub(super) fn group(
             .filter(|(_, c)| c.instance.is_some())
             .map(|(at, c)| {
                 (
-                    u32::from(c.mirrored),
+                    c.winding as u32,
                     c.mesh.index(),
                     c.mesh.generation(),
                     c.depth,
@@ -71,7 +71,7 @@ pub(super) fn group(
         draws.push(Draw3D {
             mesh: head.mesh,
             instances: first..instances.len() as u32,
-            mirrored: head.mirrored,
+            winding: head.winding,
         });
     }
 }

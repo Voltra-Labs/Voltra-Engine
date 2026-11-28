@@ -6,7 +6,7 @@ mod common;
 
 use common::*;
 use voltra_render::glam::{Affine3A, Quat, Vec3};
-use voltra_render::render3d::{Mesh3D, MeshDraw3D, Pass3D, Scene3D, View3D};
+use voltra_render::render3d::{Mesh3D, MeshDraw3D, Pass3D, Scene3D, View3D, Winding};
 use voltra_render::{read_rgba8, wgpu, Filter, RenderTarget};
 
 #[test]
@@ -83,7 +83,7 @@ fn the_depth_target_follows_the_colour_target_size() {
     let draws = [MeshDraw3D {
         mesh: &mesh,
         instances: 0..1,
-        mirrored: false,
+        winding: Winding::CounterClockwise,
     }];
     for (width, height) in [(64, 64), (96, 48), (17, 130)] {
         let target = RenderTarget::new(&gpu.device, "t", format, width, height, Filter::Linear);

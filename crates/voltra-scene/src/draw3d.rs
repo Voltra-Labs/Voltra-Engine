@@ -19,7 +19,7 @@ use std::ops::Range;
 use voltra_assets::{Handle, Meshes};
 use voltra_ecs::{Entity, World};
 use voltra_jobs::JobPool;
-use voltra_render::render3d::{Instance3D, Mesh3D, View3D};
+use voltra_render::render3d::{Instance3D, Mesh3D, View3D, Winding};
 
 use crate::mesh_instance3d::MeshInstance3D;
 
@@ -27,17 +27,17 @@ use crate::mesh_instance3d::MeshInstance3D;
 pub const PARALLEL_FROM: usize = 4096;
 
 /// One instanced draw: `mesh`, once for each of the list's `instances` —
-/// all mirrored or none.
+/// all of one winding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Draw3D {
     /// The mesh drawn.
     pub mesh: Handle<Mesh3D>,
     /// Which of [`DrawList3D::instances`] draw it.
     pub instances: Range<u32>,
-    /// Whether they mirror space
-    /// ([`Instance3D::mirrored`](voltra_render::render3d::Instance3D::mirrored)):
-    /// drawn with clockwise fronts.
-    pub mirrored: bool,
+    /// Which way their fronts wind
+    /// ([`Winding::of`](voltra_render::render3d::Winding::of)): mirrored
+    /// ones clockwise, flattened ones with no face culled.
+    pub winding: Winding,
 }
 
 /// What a 3D view draws this frame. Kept from frame to frame and rebuilt

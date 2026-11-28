@@ -3,6 +3,8 @@
 use bytemuck::{Pod, Zeroable};
 use glam::{Affine3A, Mat3};
 
+use super::winding::Winding;
+
 /// Per-instance data of an instanced 3D draw: 112 bytes, seven attributes.
 ///
 /// The model matrix as an affine `3×vec4` (rows: the 3×3 part and the
@@ -77,7 +79,7 @@ impl Instance3D {
         if cofactor == Mat3::ZERO {
             return Err(InstanceRefused::Degenerate);
         }
-        let normal = if Self::mirrored(&model) {
+        let normal = if Self::winding(&model) == Winding::Clockwise {
             -cofactor
         } else {
             cofactor
@@ -96,13 +98,10 @@ impl Instance3D {
         })
     }
 
-    /// Whether `model` mirrors space (a negative determinant: an odd number
-    /// of negative scales). A mirrored mesh's triangles wind the other way
-    /// on screen, so it is drawn with the clockwise pipeline
-    /// ([`UnlitPipeline3D::pipeline`](super::UnlitPipeline3D::pipeline)), as
-    /// Unity and Godot flip the front face for a negatively scaled renderer.
-    pub fn mirrored(model: &Affine3A) -> bool {
-        Mat3::from(model.matrix3).determinant() < 0.0
+    /// Which way `model` turns a mesh's triangles on screen, and so which
+    /// pipeline variant draws it: see [`Winding::of`].
+    pub fn winding(model: &Affine3A) -> Winding {
+        Winding::of(model)
     }
 }
 
@@ -226,10 +225,11 @@ mod tests {
     #[test]
     fn a_mirrored_model_keeps_its_normals_pointing_out() {
         let model = Affine3A::from_scale(Vec3::new(-2.0, 1.0, 1.0));
-        assert!(Instance3D::mirrored(&model));
-        assert!(!Instance3D::mirrored(&Affine3A::from_scale(Vec3::splat(
-            2.0
-        ))));
+        assert_eq!(Instance3D::winding(&model), Winding::Clockwise);
+        assert_eq!(
+            Instance3D::winding(&Affine3A::from_scale(Vec3::splat(2.0))),
+            Winding::CounterClockwise
+        );
         let instance = Instance3D::new(model, [1.0; 4]).expect("invertible");
         // The +X face is now at −X; its normal must point to −X.
         let n = instance.normal.map(|r| glam::Vec4::from(r).truncate());

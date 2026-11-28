@@ -5,19 +5,19 @@ use std::ops::Range;
 use super::instance::Instance3D;
 use super::mesh::Mesh3D;
 use super::view::View3D;
+use super::winding::Winding;
 
 /// One instanced draw: `mesh`, once per instance in `instances` — a range
-/// of [`Scene3D::instances`], all mirrored or none.
+/// of [`Scene3D::instances`], all of one [`Winding`].
 #[derive(Debug, Clone)]
 pub struct MeshDraw3D<'a> {
     /// The mesh drawn.
     pub mesh: &'a Mesh3D,
     /// Which of the frame's instances draw it.
     pub instances: Range<u32>,
-    /// Whether those instances mirror space
-    /// ([`Instance3D::mirrored`](super::Instance3D::mirrored)): drawn with
-    /// clockwise fronts.
-    pub mirrored: bool,
+    /// Which way those instances' fronts wind ([`Winding::of`]): the
+    /// pipeline variant they are drawn with.
+    pub winding: Winding,
 }
 
 /// A 3D frame's whole input: what the scene side's draw list resolves to.

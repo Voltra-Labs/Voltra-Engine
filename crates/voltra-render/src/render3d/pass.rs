@@ -130,9 +130,9 @@ impl Pass3D {
                 );
                 continue;
             }
-            if bound != Some(draw.mirrored) {
-                pass.set_pipeline(self.pipeline.pipeline(draw.mirrored));
-                bound = Some(draw.mirrored);
+            if bound != Some(draw.winding) {
+                pass.set_pipeline(self.pipeline.pipeline(draw.winding));
+                bound = Some(draw.winding);
             }
             pass.set_vertex_buffer(0, draw.mesh.vertices().slice(..));
             // Bound at the run's first instance rather than drawn with a

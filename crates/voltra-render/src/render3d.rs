@@ -19,6 +19,7 @@ mod pipeline;
 mod scene;
 mod vertex;
 mod view;
+mod winding;
 
 pub use bounds::Aabb3;
 pub use depth::{DepthTarget, DEPTH_CLEAR, DEPTH_COMPARE, DEPTH_FORMAT};
@@ -31,3 +32,4 @@ pub use pipeline::UnlitPipeline3D;
 pub use scene::{MeshDraw3D, Scene3D};
 pub use vertex::Vertex3D;
 pub use view::View3D;
+pub use winding::Winding;

@@ -111,7 +111,7 @@ impl World3D {
                 Some(MeshDraw3D {
                     mesh,
                     instances: draw.instances.clone(),
-                    mirrored: draw.mirrored,
+                    winding: draw.winding,
                 })
             })
             .collect();

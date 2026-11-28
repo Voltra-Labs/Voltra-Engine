@@ -5,7 +5,7 @@
 
 use voltra_render::glam::{Affine3A, Quat, Vec3};
 use voltra_render::render3d::{
-    Instance3D, Mesh3D, MeshData3D, MeshDraw3D, Scene3D, Vertex3D, View3D,
+    Instance3D, Mesh3D, MeshData3D, MeshDraw3D, Scene3D, Vertex3D, View3D, Winding,
 };
 use voltra_render::{read_rgba8, wgpu, Filter, Layer, RenderTarget, Renderer};
 
@@ -102,7 +102,7 @@ impl Gpu {
             .map(|&(start, end)| MeshDraw3D {
                 mesh,
                 instances: start..end,
-                mirrored: false,
+                winding: Winding::CounterClockwise,
             })
             .collect();
         self.draw_all((width, height), view, instances, &draws)

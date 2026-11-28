@@ -3,17 +3,19 @@
 use super::depth::{DEPTH_COMPARE, DEPTH_FORMAT};
 use super::instance::Instance3D;
 use super::vertex::Vertex3D;
+use super::winding::Winding;
 
 /// The pipeline the 3D pass draws every mesh with until surface materials
 /// (stage 137): a flat tint, depth written and tested reversed, back faces
-/// culled. Built for one colour format, in two variants: counter-clockwise
-/// fronts, and clockwise for a mirrored instance (a negative determinant
-/// turns its triangles over on screen). Every later 3D pipeline — material,
-/// shadow, picking — keys on the same flag.
+/// culled. Built for one colour format, in a variant per [`Winding`]:
+/// counter-clockwise fronts, clockwise for a mirrored instance (a negative
+/// determinant turns its triangles over on screen), and no culling for a
+/// model flattened to a plane. Every later 3D pipeline — material, shadow,
+/// picking — keys on the same three.
 #[derive(Debug)]
 pub struct UnlitPipeline3D {
-    pipeline: wgpu::RenderPipeline,
-    mirrored: wgpu::RenderPipeline,
+    /// One per [`Winding`], in [`Winding::ALL`]'s order.
+    pipelines: [wgpu::RenderPipeline; 3],
     view_layout: wgpu::BindGroupLayout,
     format: wgpu::TextureFormat,
 }
@@ -43,7 +45,18 @@ impl UnlitPipeline3D {
             bind_group_layouts: &[Some(&view_layout)],
             immediate_size: 0,
         });
-        let build = |front_face, label| {
+        let build = |winding: Winding| {
+            let (front_face, cull_mode, label) = match winding {
+                Winding::CounterClockwise => {
+                    (wgpu::FrontFace::Ccw, Some(wgpu::Face::Back), "unlit-3d")
+                }
+                Winding::Clockwise => (
+                    wgpu::FrontFace::Cw,
+                    Some(wgpu::Face::Back),
+                    "unlit-3d-mirrored",
+                ),
+                Winding::Flat => (wgpu::FrontFace::Ccw, None, "unlit-3d-flat"),
+            };
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some(label),
                 layout: Some(&layout),
@@ -66,7 +79,7 @@ impl UnlitPipeline3D {
                 primitive: wgpu::PrimitiveState {
                     topology: wgpu::PrimitiveTopology::TriangleList,
                     front_face,
-                    cull_mode: Some(wgpu::Face::Back),
+                    cull_mode,
                     ..Default::default()
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
@@ -81,24 +94,16 @@ impl UnlitPipeline3D {
                 cache: None,
             })
         };
-        let pipeline = build(wgpu::FrontFace::Ccw, "unlit-3d");
-        let mirrored = build(wgpu::FrontFace::Cw, "unlit-3d-mirrored");
         Self {
-            pipeline,
-            mirrored,
+            pipelines: Winding::ALL.map(build),
             view_layout,
             format,
         }
     }
 
-    /// The pipeline for instances that are `mirrored`
-    /// ([`Instance3D::mirrored`]) or not.
-    pub fn pipeline(&self, mirrored: bool) -> &wgpu::RenderPipeline {
-        if mirrored {
-            &self.mirrored
-        } else {
-            &self.pipeline
-        }
+    /// The pipeline for instances of `winding` ([`Winding::of`]).
+    pub fn pipeline(&self, winding: Winding) -> &wgpu::RenderPipeline {
+        &self.pipelines[winding as usize]
     }
 
     /// The layout of group 0: the view's uniform.

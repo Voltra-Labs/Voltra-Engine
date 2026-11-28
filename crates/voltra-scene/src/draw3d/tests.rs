@@ -4,7 +4,7 @@ use voltra_assets::{AssetPath, BuiltinMesh, MeshPath, Meshes};
 use voltra_ecs::{Entity, World};
 use voltra_jobs::JobPool;
 use voltra_render::glam::{Affine3A, Vec3};
-use voltra_render::render3d::View3D;
+use voltra_render::render3d::{View3D, Winding};
 
 use super::{DrawList3D, PARALLEL_FROM};
 use crate::{MeshInstance3D, SceneId, Transform3D};
@@ -211,9 +211,33 @@ fn mirrored_instances_of_a_mesh_are_a_draw_of_their_own() {
     }
     let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
     assert_eq!(list.draws.len(), 2);
-    let mirrored: Vec<_> = list.draws.iter().filter(|d| d.mirrored).collect();
+    let mirrored: Vec<_> = list
+        .draws
+        .iter()
+        .filter(|d| d.winding == Winding::Clockwise)
+        .collect();
     assert_eq!(mirrored.len(), 1);
     assert_eq!(mirrored[0].instances.len(), 1);
     let x = list.instances[mirrored[0].instances.start as usize].model[0][3];
     assert_eq!(x, 0.0, "the flipped one");
+}
+
+#[test]
+fn a_flattened_instance_is_a_flat_draw_of_its_own() {
+    let mut world = World::new();
+    let mut meshes = Meshes::new();
+    let at = Vec3::new(0.0, 0.0, -5.0);
+    let flat = mesh(&mut world, BuiltinMesh::Cube, at);
+    world.insert(
+        flat,
+        Transform3D::from_translation(at)
+            .with_rotation(voltra_render::glam::Quat::from_rotation_y(0.7))
+            .with_scale(Vec3::new(1.0, 1.0, 0.0)),
+    );
+    mesh(&mut world, BuiltinMesh::Cube, Vec3::new(2.0, 0.0, -5.0));
+    let list = DrawList3D::from_world(&world, &view(None), &mut meshes, None);
+    let windings: Vec<Winding> = list.draws.iter().map(|d| d.winding).collect();
+    assert_eq!(windings.len(), 2);
+    assert!(windings.contains(&Winding::Flat), "{windings:?}");
+    assert!(windings.contains(&Winding::CounterClockwise), "{windings:?}");
 }

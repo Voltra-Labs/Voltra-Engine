@@ -7,7 +7,7 @@ use voltra_assets::{meshes::MISSING_TINT, Handle, Meshes};
 use voltra_ecs::{Entity, World};
 use voltra_jobs::JobPool;
 use voltra_render::glam::Affine3A;
-use voltra_render::render3d::{Aabb3, Instance3D, InstanceRefused, Mesh3D, View3D};
+use voltra_render::render3d::{Aabb3, Instance3D, InstanceRefused, Mesh3D, View3D, Winding};
 
 use super::PARALLEL_FROM;
 use crate::hierarchy::WorldTransforms3D;
@@ -25,8 +25,8 @@ pub(super) struct Candidate {
     pub instance: Option<Instance3D>,
     /// Filled by [`cull`]: why a seen candidate has no instance.
     pub refused: Option<InstanceRefused>,
-    /// Whether its model mirrors space: drawn with clockwise fronts.
-    pub mirrored: bool,
+    /// Which way its model winds the mesh's fronts on screen.
+    pub winding: Winding,
     /// How far in front of the eye its world bounds' centre is.
     pub depth: f32,
 }
@@ -68,7 +68,7 @@ pub(super) fn gather(
             bounds,
             instance: None,
             refused: None,
-            mirrored: Instance3D::mirrored(&model),
+            winding: Winding::of(&model),
             depth: 0.0,
         });
     }
