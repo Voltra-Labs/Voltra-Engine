@@ -232,4 +232,26 @@ mod tests {
 
         assert!(create(&root, &names).is_err(), "never over a game");
     }
+
+    #[test]
+    fn a_new_game_s_scenes_are_as_an_editor_saves_them() {
+        // `cargo xtask migrate --check` passes over a game just made — its
+        // scene and the prefabs it copies — with a title that needs
+        // escaping too.
+        let root = scratch();
+        for path in COPIED {
+            let to = root.join("assets").join(path);
+            std::fs::create_dir_all(to.parent().expect("a folder")).expect("dir");
+            std::fs::copy(workspace().join("assets").join(path), to).expect("the engine's asset");
+        }
+        let registry = voltra_scene::ComponentRegistry::with_defaults();
+        for (package, title) in [("my-game", None), ("quoted", Some("A \"Quoted\" Game"))] {
+            let names = Names::new(package, title).expect("a name");
+            let dir = create(&root, &names).expect("made");
+            let (seen, outdated) =
+                crate::migrate::survey(&dir.join("assets"), &registry).expect("reads");
+            assert_eq!(seen, 3, "the scene and the two prefabs");
+            assert!(outdated.is_empty(), "{outdated:#?}");
+        }
+    }
 }
