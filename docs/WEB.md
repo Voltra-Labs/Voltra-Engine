@@ -99,6 +99,17 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   each other. A scene with far, close-together surfaces raises its
   `Camera3D`'s `near` (precision scales with it). WebGPU keeps the native
   precision. Pinned in the browser at 1 cm and 50 m by `shapes3d.mjs`.
+- **3D's HDR target and MSAA degrade, never fail.** A 3D camera draws
+  into `Rgba16Float`, 4× multisampled (`default.render.ron`'s `msaa`). On
+  WebGL2 `Rgba16Float` is a render target only with the
+  `EXT_color_buffer_float` (or `_half_float`) extension; without it the 3D
+  shot draws into the frame's 8-bit sRGB format instead — light past 1
+  clips before the tone curve, which still shapes what is under it — and
+  where a format cannot be multisampled and resolved it draws one sample.
+  Each is said once in the console. wgpu checks WebGL2 textures against
+  what the backend reports rather than WebGPU's guarantees, and the
+  engine asks the same (`TargetSupport`). Headless Chromium's SwiftShader
+  has both: `mixed3d.mjs` draws the same picture on WebGPU and WebGL2.
 
 ## Checking a web build
 
@@ -109,6 +120,7 @@ Playwright with a Chromium):
 node crates/voltra-player/web/test/first-frame.mjs   # the sandbox draws, on WebGPU and WebGL2
 node crates/voltra-player/web/test/play.mjs          # the platformer walks, takes a coin, sounds
 node crates/voltra-player/web/test/shapes3d.mjs      # a 3D scene, and WebGL2's depth at 50 m
+node crates/voltra-player/web/test/mixed3d.mjs       # 3D through AgX, a 2D overlay and the HUD over it
 ```
 
 Each builds through `cargo xtask dist --web` into `target/`, serves it and

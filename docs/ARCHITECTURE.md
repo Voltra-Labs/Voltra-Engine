@@ -156,7 +156,10 @@ is keyed, drawn between snapshots and placed for interest* under
 Decisions; stage 135 — the depth pass, `Camera3D`, meshes, culling and
 unlit instanced drawing (the first part of "The 3D pass" and the camera
 lines of "Conventions of the 3D world"), see *A 3D camera draws meshes
-through a reversed-Z depth pass* under Decisions.
+through a reversed-Z depth pass* under Decisions; stage 136 — one frame of
+both worlds, HDR, MSAA and the tone curves, 3D into render textures ("One
+frame, both worlds" and the MSAA line of "The 3D pass"), see *2D and 3D
+cameras draw one frame by priority* under Decisions.
 Everything else below is still a plan. Each stage that lands writes
 its detail as a Decisions entry of its own and edits this section to say what
 is built; until then, every sentence here about 3D is a plan. It replaces
@@ -381,6 +384,13 @@ voltra-physics2d  voltra-physics3d (parry3d)  voltra-replication
 
 ### One frame, both worlds
 
+**Built (stage 136)**, as below, with three differences recorded in *2D
+and 3D cameras draw one frame by priority*: a `Camera2D` has no `clear`
+yet, so a 2D camera over a 3D one is always an overlay; a glow over an
+overlay's transparent pixels is left out; and two cameras of different
+dimensions into one render texture replace rather than overlay each
+other. Exposure is `post.exposure` until stage 142.
+
 ```
 texture shots (CameraTarget), a producer before every shot that samples it
 screen shots, by priority; at equal priority 3D before 2D:
@@ -437,8 +447,9 @@ HUD (UiRect …) once, over everything
 **Built (stage 135)**: the depth target, the precision split, instancing
 with the layout pinned, CPU culling and the built-in meshes, drawn unlit
 by a lone 3D camera — see *A 3D camera draws meshes through a reversed-Z
-depth pass*. Materials, alpha, the light list, MSAA and the frame shared
-with 2D are still the plan below.
+depth pass*; **stage 136** the HDR target, MSAA and the frame shared with
+2D — see *2D and 3D cameras draw one frame by priority*. Materials,
+alpha and the light list are still the plan below.
 
 - **Depth**: `Depth32Float`, **reversed-Z** (`CompareFunction::GreaterEqual`,
   cleared to 0), an infinite far plane by default (`far: None`), Bevy's
@@ -10242,6 +10253,19 @@ asked).
   the material bank's variants (137), the shadow pass (140) and the ID
   pass (146) each need both windings, or a mirrored model draws, casts or
   picks inside out.
+  **Since the stage-135 review, three windings** (`render3d::Winding`):
+  counter-clockwise, clockwise, and **flat** — a model flattened along a
+  turned axis (outer rotation · scale (1, 1, 0) · inner rotation) has a
+  determinant of rounding noise, some ±10⁻⁹, whose sign flipped the
+  winding between neighbouring angles: the reviewer measured a square at
+  577 pixels, then 0, then 654. `Winding::of` counts a determinant under
+  10⁻⁵ · ‖cofactor‖ · ‖M‖ (Frobenius norms: blind to scale, a uniform
+  10⁻⁴ cube still solid) as flat, drawn by a third pipeline variant with
+  no face culled — which also draws the flattened-and-mirrored open plane
+  at (−1, 1, 0). Pinned by a sweep over 720 angles (`winding.rs`) and
+  one of 36 on the GPU (`headless_3d_mirrored.rs`, 0 pixels at some
+  angles under the sign rule). The draw list keys on the winding, so
+  `Draw3D::winding` replaced `mirrored`.
 - **A run is bound at its offset, not drawn with a first instance.** The
   pass sets the instance buffer at `start × 112` and draws instances from
   0, which is the same on every backend: WebGL2 has no base instance
@@ -10315,15 +10339,13 @@ asked).
   beside a path is stale the moment an edit changes the path without
   re-resolving, and the bench below says the lookup is affordable. A non-finite transform is left out
   and warned once per entity.
-- **A lone 3D camera draws through the direct path**: an active
-  `Camera3D` and no active `Camera2D` (`World3D::lone_camera`,
-  `voltra-core/src/app/draw/world3d.rs`) — the player's window, a headless
-  screenshot, and the editor's Game view, which asks for it through
-  `UiFrame::show_game_camera_3d` (honoured the next frame, as
-  `request_viewport_size` is). With both cameras active the 2D one draws,
-  warned once: composing the two is 136, and keeping 2D's path exactly as
-  it was is what keeps every 2D test and game unchanged. The Scene view
-  stays 2D.
+- **A lone 3D camera drew through the direct path**: an active
+  `Camera3D` and no active `Camera2D`; with both active the 2D one drew,
+  warned once. **Stage 136 replaced the rule** with one frame of both
+  worlds (*2D and 3D cameras draw one frame by priority*): a lone
+  full-screen 3D camera still draws straight into the output, now through
+  its HDR target and tone curve, and the editor's Game view asks for the
+  whole frame through `UiFrame::show_game_frame`.
 - **Editor**: inspector sections for both components (the projection's
   kind and fields, priority, active, clear; a built-in mesh from a
   dropdown or a file by path, the colour), and Create ▸ 3D ▸ Camera (5 m
@@ -10388,13 +10410,192 @@ asked).
   the entities respawned in reverse; a 60 × 30 HUD panel over the 3D
   world to ±60 pixels; a `Camera2D` beside the `Camera3D` drawing the 2D
   world). Web: `shapes3d.mjs` on WebGPU and WebGL2.
-- **Not yet**: one frame of 3D and 2D cameras, several 3D cameras, a
-  `Camera3D` viewport or render texture, HDR, MSAA and the tonemap (136);
-  materials, double-sided faces and lighting (137–139) — a mesh's back
+- **Not yet**: ~~one frame of 3D and 2D cameras, several 3D cameras, a
+  `Camera3D` viewport or render texture, HDR, MSAA and the tonemap~~
+  (built in 136); materials, double-sided faces and lighting (137–139) — a mesh's back
   faces are culled, so a camera inside a mesh sees nothing of it and the
   plane has no underside; mesh files (143); a 3D view in the editor, its
   picking and gizmos (145–147); the Network window's map of 3D entities;
   a twenty-mesh bench once there are twenty meshes.
+
+### 2D and 3D cameras draw one frame by priority; a 3D shot is HDR, multisampled and tone mapped (stage 136)
+
+"One frame, both worlds", built. It mirrors the 2D entries *Several
+cameras draw a frame* (stage 84's shots, pruning and composite), *The
+frame's post chain is a render graph* and *Post-processing is one graded
+pass*, and replaces stage 135's lone-3D-camera rule.
+
+- **The order** (`voltra-scene` `camera/frame.rs`): `frame_shots(world)`
+  gives `FrameShots { shots: Vec<FrameShot>, cycle }`, each `FrameShot` a
+  `shot: AnyShot::D2(Shot) | D3(Shot3D)` and whether it is an `overlay`.
+  `camera::shots` is untouched — 2D cameras pruned among themselves, the
+  0.4 tests unchanged — and `shots_3d` is its twin over `Camera3D`. Texture
+  shots come first, then the screen's, each by `(priority, 3D before 2D,
+  entity)`. **Texture shots are then ordered producer before consumer**
+  (Kahn's, always taking the first ready): a 2D shot shows every render
+  texture a world sprite names (a `UiRect` sprite is the HUD, drawn after
+  every shot) but its own; a 3D shot none until surface materials (137).
+  Where shots show each other's textures the first by priority draws with
+  the other's last frame, is named in `cycle`, and warned once per camera
+  (`World3D::warn_cycles`).
+- **Overlay or framing**: a screen shot that an earlier screen shot of the
+  other dimension overlaps (rectangles sharing any area) is an overlay and
+  starts transparent, unless it is a `Camera3D` with `clear: Color`.
+  Pruning stays per dimension: two full-screen 2D cameras still draw only
+  the higher, and a 2D camera never hides a 3D one. A texture shot is
+  never an overlay.
+- **Three paths** (`voltra-core` `draw/frame.rs`, `plan`): `Flat` — no
+  active 3D camera — is the 2D path as it was, direct or stage 84's shots;
+  `Lone3D` — one full-screen 3D camera is the screen's only shot, texture
+  shots aside — draws straight into the output, the HUD over it;
+  `Composite` — anything else with a 3D camera — draws each screen shot
+  into a picture of its viewport's size (the 2D shots' `camera_pool`) and
+  lays them in order, the HUD over them once. The window, a headless
+  screenshot and the editor's Game view take the same `FrameDraw`, so
+  they cannot drift. **What a 2D-only frame pays**: one `Camera3D` query
+  and the producer ordering of its texture shots; no pass, target or
+  settings file is made or read. Measured below.
+- **A 3D shot** (`voltra-render` `renderer/world3d.rs`): `Targets3D` —
+  colour in `Rgba16Float` at `Hdr3D::samples` (4 by default), resolved
+  into a single-sampled texture at the end of the pass (the samples
+  discarded), `Depth32Float` at the same count — kept by size, the four
+  most recently used, in the renderer's `State3D`; `Pass3D` is made per
+  `Hdr3D` (format and samples). Then the 2D frame's render graph with no
+  light pass: bloom (already `Rgba16Float`) over the resolved picture, and
+  the grade pass as `Grade::Tonemap(curve)` into a picture in the
+  renderer's sRGB format — the same kind a 2D shot writes, which is what
+  lets the composite, render textures and the editor's viewport take it
+  as they are. Order: (scene + glow) × `post.exposure` → curve → tint →
+  contrast, saturation, vignette. **The colour is unpremultiplied around
+  the curve** and the alpha passes through: an overlay's background is
+  transparent black and an MSAA edge resolves to colour × coverage, and a
+  curve is not linear. The unlit shader now writes alpha 1: an opaque
+  surface is opaque in an overlay whatever its tint's alpha.
+- **The curves** (`render3d::Tonemap`, `Camera3D::tonemap`, default
+  **AgX**): `AgX` (Benjamin Wrensch's fit of Troy Sobotka's AgX, in linear
+  sRGB primaries — the inset, the log2 encoding over 16.5 stops, the
+  sixth-order sigmoid, the outset, 2.2 back to linear), `Aces` (Stephen
+  Hill's fit of the RRT and ODT), `Reinhard` (`c / (1 + c)` per channel),
+  `None` (clips; `scenes/shapes3d.ron` uses it so its flat colours read
+  back as written; a save writes it `r#None`, `None` being RON's own word,
+  and either reads). `Tonemap::apply` is the CPU twin, number for number.
+  AgX by default as Blender 4 and Godot 4.4 chose: bright saturated light
+  rolls off towards white as film does, where ACES skews hues and
+  Reinhard never reaches white. Bevy defaults to TonyMcMapface (a 3D LUT
+  texture, a sampler WebGL2 budgets count) and Unity URP to Neutral/ACES;
+  an analytic curve needs no texture on any backend.
+- **A 2D overlay** (`Renderer::render_scene_as(.., Grade::Overlay)`):
+  cleared transparent rather than to `clear_color`, so sprites blended
+  with `ALPHA_BLENDING` over nothing come out premultiplied (wgpu's alpha
+  component is `One, OneMinusSrcAlpha`). Its light map multiplies colour
+  only (`lights_composite.wgsl` keeps alpha), so a transparent pixel stays
+  transparent: a 2D camera's ambient does not darken the 3D layer under
+  it. `post.wgsl`'s `fs_overlay` unpremultiplies (over `max(α, 10⁻⁶)`),
+  grades, and premultiplies again; a glow over a pixel with nothing drawn
+  has no alpha to show by and is left out.
+- **The composite blends premultiplied**
+  (`pipeline::create_premultiplied`, `PREMULTIPLIED_ALPHA_BLENDING`, made
+  with the first composite): an opaque picture (alpha 1, every 2D
+  framing) lands exactly as through the old `ALPHA_BLENDING` pipeline.
+- **One grade, three entry points**: `grade.wgsl` (the uniform, the
+  bindings, the full-screen triangle, contrast to vignette) is put before
+  `post.wgsl` (`fs_main` — the 2D picture, the same arithmetic in the
+  same order as before — and `fs_overlay`) and `tonemap.wgsl`
+  (`fs_tonemap`). The curve's number rides in the uniform's unused
+  `bloom.y`, so the 2D layout is unchanged. The overlay and tonemap
+  pipelines are made on first use (`post/grade.rs`): a 2D game with no
+  overlay builds neither. **Every sample comes before any choice**: Tint
+  (Chromium's WebGPU) refuses `textureSample` outside uniform control
+  flow, which naga accepts — the first version returned early for a
+  transparent pixel, and the web test found the whole `post` module
+  invalid on WebGPU, the 2D picture's `fs_main` with it. `select` instead.
+- **`default.render.ron`** (`(version: 1, msaa: 4)`, `1` off, anything
+  else refused with why): read with the first 3D frame — a 2D game never
+  opens it — hot reloaded, edited in Project Settings ▸ Render, the
+  bridge's `Settings { file: "render" }`, listed by the asset browser as
+  its own kind (`*.render.ron` is no longer taken for a scene).
+  `Renderer::set_msaa`.
+- **Degrades, never fails**: `TargetSupport` (`context/formats.rs`),
+  asked of the adapter once, as `wgpu-core`'s `describe_format_features`
+  decides — WebGPU's guaranteed features where the adapter has
+  `WEBGPU_TEXTURE_FORMAT_SUPPORT`, the backend's own where not (WebGL2).
+  `Hdr3D::choose` falls back to the frame's sRGB format when
+  `Rgba16Float` cannot be drawn and sampled (WebGL2 without
+  `EXT_color_buffer_float`/`_half_float`) and to one sample when the
+  colour format cannot be multisampled 4× and resolved or the depth
+  format multisampled; each said once.
+- **`Camera3D` gains** `viewport` (stage 84's rectangle), `tonemap` and
+  `post` (exposure, bloom, the grade — a 2D camera's), each unwritten at
+  its default; **`CameraTarget` on a `Camera3D`** draws it into a render
+  texture whose picture the tone pass writes (the texture's 8-bit scene
+  target is the 2D path's and goes unused).
+- **Editor**: the Game view shows the whole frame when a 3D camera draws
+  to the screen (`UiFrame::show_game_frame`); otherwise the 2D camera
+  frames the 2D view as before. The Scene view stays 2D. The inspector
+  edits a `Camera3D`'s viewport and render texture (`camera_view.rs`, both
+  kinds), its tone curve and its grade (`post_fields.rs`, shared with
+  `Camera2D`).
+- **What the engines do**: Unity URP stacks a base camera and overlay
+  cameras flagged as such; Godot draws its canvas layers over the 3D
+  world, a `SubViewport` for anything else; Bevy orders cameras by
+  `order`, each `Camera2d` or `Camera3d` running its own graph, an overlay
+  being `ClearColorConfig::None`, `Tonemapping` and MSAA per camera. We
+  take Bevy's order and per-camera curve, and Unity's overlay — decided by
+  overlap rather than flagged, so a 2D HUD layer over a 3D game needs no
+  setting, and an opaque 3D picture in a picture is just a camera with its
+  own clear colour.
+- **Found on the way**: `Textures::preload` decoded a `.rendertexture.ron`
+  as a PNG when a world held it and another textured sprite, and drew the
+  checker (fixed, `tests/preload.rs`).
+- **Tests**: `camera/frame_tests.rs` (3D first at a tie and the 2D over it
+  an overlay; a 3D picture in a picture over 2D by priority, opaque with
+  its own colour; pruning per dimension; a split screen of both, no
+  overlay; a texture shot after the one it shows, a HUD image ordering
+  nothing; a cycle named; unresolved and inactive left out),
+  `draw/frame.rs` (a 2D frame keeps the 2D path, a lone full-screen 3D
+  camera the direct one, a part of the screen composites),
+  `render3d/hdr.rs` (WebGPU's rules give float at 4×; WebGL2 without float
+  targets falls to sRGB, without resolve to one sample),
+  `render3d/tonemap.rs` (each curve from black, rising, in range; middle
+  grey and highlights where their authors put them; AgX desaturates
+  bright red), `headless_tonemap.rs` (no curve of linear 0.5 reads 188,
+  as `headless_post.rs`; each curve on the GPU within 1/255 of its CPU
+  twin over 28 inputs; MSAA 4 gives some 100 edge pixels between the two
+  colours, MSAA 1 none), `headless_3d.rs` (the targets follow the colour's
+  size at 1 and 4 samples), `voltra-core/tests/frame_both.rs` (a 2D
+  sprite over the 3D cube, the cube around it and the sky past it; a 2D
+  ambient of 0.25 lighting its sprite and not the cube; a graded overlay's
+  alpha-0.5 pixel within 1/255 of the CPU — graded premultiplied it is
+  off by more than 6 — and the sky exact where nothing is drawn; a 3D
+  picture in a picture at priority 1 over a full-screen 2D game, opaque
+  and overlay; two full-screen 2D cameras drawing only the higher beside a
+  3D one; a 3D camera into a render texture on a sprite and in the HUD;
+  split screen 3D left, 2D right), `scene3d.rs` (`scenes/mixed3d.ron`: the
+  meshes in their AgX colours, none in their raw ones, the 2D banner
+  exact, the HUD over both), `draw/render_settings.rs`,
+  `project_settings.rs`. Web: `mixed3d.mjs` on WebGPU and WebGL2, the same
+  picture on both; `shapes3d.mjs` and `first-frame.mjs` still pass.
+- **Bench** (release, this container, best of 3 runs):
+
+  | Benchmark | Before | After |
+  | --- | --- | --- |
+  | `frame/headless/sandbox-640x360` | 2.42 ms | 2.33 ms |
+  | `frame/headless/mixed3d-640x360` | — | 7.77 ms |
+
+  The 2D frame is unchanged within noise (`voltra-bench compare`: −3.7 %,
+  no regression), the two builds measured back to back in target dirs of
+  their own. The mixed frame, new, is the cost of both worlds on lavapipe:
+  a 640 × 360 `Rgba16Float` target at 4× MSAA, resolved, tone mapped, a 2D
+  overlay graded unpremultiplied, the composite and the HUD — most of it a
+  software rasterizer filling four samples a pixel.
+
+- **Not yet**: a `Camera2D` clear colour (a 2D camera over a 3D one is
+  always an overlay); MSAA per camera and on the options screen; two
+  cameras of different dimensions into one render texture (the later
+  replaces the earlier); a glow over an overlay's transparent pixels; a 3D
+  surface showing a render texture (materials, 137); exposure modes (142);
+  alpha to coverage (137); the sRGB fallback is pinned by `Hdr3D::choose`'s
+  unit test only — headless Chromium's SwiftShader has float targets.
 
 ### Particles look things up over their life, and the GPU reads the same answers from a table
 
@@ -11155,6 +11356,10 @@ Verified against the crate source, not from memory:
 | Shadow sampling | `SamplerDescriptor::compare: Option<CompareFunction>` makes a comparison sampler; `DepthBiasState { constant: i32, slope_scale: f32, clamp: f32 }` |
 | MSAA | `MultisampleState { count, mask: u64, alpha_to_coverage_enabled }`; the resolve is the colour attachment's `resolve_target` |
 | WebGL2 limits | `Limits::downlevel_webgl2_defaults()`: no storage buffers or textures, no compute, `max_inter_stage_shader_variables: 15`, `max_vertex_buffer_array_stride: 255`, 16 KiB uniform blocks (`downlevel_defaults`) |
+| Format features on WebGL2 | Without `Features::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES`, `wgpu-core` validates a texture against `TextureFormat::guaranteed_format_features` — unless the adapter lacks `DownlevelFlags::WEBGPU_TEXTURE_FORMAT_SUPPORT` (WebGL2), when it asks the backend (`describe_format_features`, `device/resource.rs`). Ask the same: `adapter.get_texture_format_features(format)` there. On GLES `Rgba16Float` is a colour attachment only with `EXT_color_buffer_float` or `_half_float` (`gles/adapter.rs`, `half_float_renderable`); MSAA 4× is always listed |
+| MSAA resolve | Draw into a texture of `sample_count: 4` (usage `RENDER_ATTACHMENT` alone will do), name a single-sampled one as the attachment's `resolve_target`, and `StoreOp::Discard` the samples; the depth attachment and the pipeline's `MultisampleState::count` must match the 4. `TextureFormatFeatureFlags::sample_count_supported(n)` and `MULTISAMPLE_RESOLVE` say whether a format can |
+| Premultiplied blending | `BlendState::PREMULTIPLIED_ALPHA_BLENDING` is `One, OneMinusSrcAlpha` for colour and alpha; `ALPHA_BLENDING`'s alpha component is the same `One, OneMinusSrcAlpha`, so sprites blended over a transparent target come out premultiplied |
+| WGSL uniformity on WebGPU | Chromium's Tint refuses `textureSample` (an implicit derivative) after a branch on a non-uniform value, an early `return` included, and the **whole module** is invalid — every entry point in it. naga accepts it, so native tests pass: sample first, then `select`. Found by `mixed3d.mjs` |
 | `Queue::write_buffer` ordering | Writes land before the next `submit`'s commands and after every earlier submit's: two writes to one buffer before one submit leave only the second for every draw of that submit |
 
 When touching wgpu, read the vendored source under
