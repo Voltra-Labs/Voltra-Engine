@@ -150,6 +150,26 @@ mod tests {
     }
 
     #[test]
+    fn a_tiny_parent_still_takes_a_world_placement() {
+        // A model at 1e-4 per axis — 1e-12 by volume — is small, not flat.
+        let mut world = World::new();
+        let parent = spawn(
+            &mut world,
+            Transform3D::default().with_scale(Vec3::splat(1e-4)),
+        );
+        let child = spawn(&mut world, Transform3D::default());
+        set_parent(&mut world, child, parent).expect("a plain reparent");
+
+        assert!(set_world_transform_3d(
+            &mut world,
+            child,
+            &at(0.5, 0.0, 0.0)
+        ));
+        let p = position(&world, child);
+        assert!((p - Vec3::new(0.5, 0.0, 0.0)).length() < 1e-4, "{p:?}");
+    }
+
+    #[test]
     fn an_entity_without_a_transform_cannot_be_placed() {
         let mut world = World::new();
         let bare = world.spawn();

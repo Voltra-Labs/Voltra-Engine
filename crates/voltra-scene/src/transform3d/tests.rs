@@ -116,3 +116,53 @@ fn a_scene_value_writes_and_reads_back_byte_for_byte() {
         ron::ser::to_string_pretty(&back, ron::ser::PrettyConfig::default()).expect("writes again");
     assert_eq!(again, text);
 }
+
+#[test]
+fn a_small_but_whole_frame_keeps_its_rotation() {
+    // A centimetre-unit model imported at 0.01, under a parent at 0.009:
+    // the determinant is about 7e-13, and the frame is not flat at all.
+    let parent = Transform3D::default().with_scale(Vec3::splat(0.01));
+    let child = Transform3D::default()
+        .with_rotation(Quat::from_rotation_y(0.6))
+        .with_scale(Vec3::splat(0.009));
+    let composed = parent.matrix() * child.matrix();
+    assert!(composed.matrix3.determinant().abs() < 1e-12);
+    assert!(!Transform3D::is_collapsed(&composed));
+
+    let back = Transform3D::from_matrix(composed);
+    assert!(back.rotation.abs_diff_eq(Quat::from_rotation_y(0.6), 1e-5));
+    assert!(close(back.scale, Vec3::splat(9e-5)));
+}
+
+#[test]
+fn a_flat_frame_is_collapsed_at_any_scale() {
+    for size in [1e-4, 1.0, 1e4] {
+        let flat = Transform3D::default().with_scale(Vec3::new(size, size, 0.0));
+        assert!(Transform3D::is_collapsed(&flat.matrix()), "{size}");
+        let whole = Transform3D::default().with_scale(Vec3::splat(size));
+        assert!(!Transform3D::is_collapsed(&whole.matrix()), "{size}");
+    }
+    // Axes of length one that lie in a plane: flat though none is zero.
+    let coplanar = Affine3A::from_cols(
+        Vec3::X.into(),
+        Vec3::Y.into(),
+        Vec3::new(1.0, 1.0, 0.0).normalize().into(),
+        Vec3::ZERO.into(),
+    );
+    assert!(Transform3D::is_collapsed(&coplanar));
+}
+
+#[test]
+fn euler_angles_near_gimbal_lock_read_back_to_a_hundredth_of_a_degree() {
+    // The bound is the f32 quaternion's: a few hundredths of a degree at
+    // ±89.99° of pitch, 0.06° at 89.995°; within a hundredth to ±89.9°.
+    for pitch in [89.5, 89.9, -89.7, -89.9] {
+        let typed = Vec3::new(pitch, 25.0, 30.0);
+        let back = Transform3D::from_euler_degrees(typed).euler_degrees();
+        // Same rotation however it is spelled, and here spelled the same.
+        assert!(
+            (back - typed).abs().max_element() < 0.01,
+            "{typed:?} -> {back:?}"
+        );
+    }
+}

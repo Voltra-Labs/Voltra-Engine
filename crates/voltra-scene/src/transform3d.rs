@@ -78,9 +78,20 @@ impl Transform3D {
     /// the equivalent angles one rotation has (180° of yaw reads back as
     /// 180° of pitch and of roll, near enough). The editor keeps what was
     /// typed beside it for that reason.
+    ///
+    /// Near gimbal lock (a pitch near ±90°) yaw and roll are the difference
+    /// of nearly equal terms, and what the `f32` quaternion holds bounds
+    /// them: within 0.01° to ±89.9° of pitch, a few hundredths at ±89.99°.
+    /// Read in `f64`, which costs nothing here and comes about a fifth
+    /// closer than `f32`; the inspector shows the typed angles anyway.
     pub fn euler_degrees(&self) -> Vec3 {
-        let (y, x, z) = self.rotation.to_euler(EulerRot::YXZ);
-        Vec3::new(x.to_degrees(), y.to_degrees(), z.to_degrees())
+        let q = self.rotation.as_dquat();
+        let (y, x, z) = q.to_euler(EulerRot::YXZ);
+        Vec3::new(
+            x.to_degrees() as f32,
+            y.to_degrees() as f32,
+            z.to_degrees() as f32,
+        )
     }
 
     /// Sets the rotation.
@@ -146,13 +157,12 @@ impl Transform3D {
     /// [`from_matrix`](crate::Transform2D::from_matrix) is: a rotated child
     /// under a non-uniformly scaled parent shears, and three fields cannot
     /// say so — the rotation comes back as the nearest one, normalised.
-    /// A matrix collapsed flat (a zero scale on some axis) has no rotation
-    /// to recover: it comes back unrotated, with the lengths of its axes as
-    /// the scale, rather than as NaN.
+    /// A matrix collapsed flat ([`is_collapsed`](Self::is_collapsed)) has
+    /// no rotation to recover: it comes back unrotated, with the lengths of
+    /// its axes as the scale, rather than as NaN.
     pub fn from_matrix(matrix: Affine3A) -> Self {
-        const COLLAPSED: f32 = 1e-12;
         let translation = Vec3::from(matrix.translation);
-        if matrix.matrix3.determinant().abs() < COLLAPSED {
+        if Self::is_collapsed(&matrix) {
             let scale = Vec3::new(
                 matrix.matrix3.x_axis.length(),
                 matrix.matrix3.y_axis.length(),
@@ -170,6 +180,31 @@ impl Transform3D {
             rotation: rotation.normalize(),
             scale,
         }
+    }
+}
+
+impl Transform3D {
+    /// How flat a frame may be, as the sine of the smallest angle between
+    /// its axes and their plane, before it counts as collapsed.
+    pub const FLATNESS: f32 = 1e-6;
+
+    /// Whether `matrix` has collapsed flat: no axis left to invert or take
+    /// a rotation from.
+    ///
+    /// **Relative, not absolute.** The determinant is the product of the
+    /// three axis lengths and the sine-like flatness of the frame, so an
+    /// absolute threshold on it is a threshold on scale³: a centimetre-unit
+    /// model imported at 0.01 under a parent at 0.01 would count as flat.
+    /// Dividing by the axes' lengths leaves only the flatness, which is what
+    /// "collapsed" means — a zero scale on an axis, or axes that lie in one
+    /// plane — at any scale. A frame whose axes are all zero, or too small
+    /// for `f32` to multiply, is collapsed too.
+    pub fn is_collapsed(matrix: &Affine3A) -> bool {
+        let m = &matrix.matrix3;
+        let lengths = m.x_axis.length() * m.y_axis.length() * m.z_axis.length();
+        let determinant = m.determinant();
+        !(lengths.is_normal() && determinant.is_finite())
+            || determinant.abs() / lengths < Self::FLATNESS
     }
 }
 

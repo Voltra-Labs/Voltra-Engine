@@ -35,8 +35,10 @@ pub(crate) trait Local: Copy + 'static {
     fn local(&self) -> Self::Matrix;
     /// The transform `matrix` describes; lossy for shear.
     fn from_matrix(matrix: Self::Matrix) -> Self;
-    /// The matrix's volume (or area) scale: near zero for a collapsed frame.
-    fn determinant(matrix: &Self::Matrix) -> f32;
+    /// Whether `matrix` has collapsed and cannot be inverted: inverting a
+    /// singular matrix does not panic, it returns infinities and NaN, and a
+    /// NaN transform removes an entity from the screen with no error.
+    fn collapsed(matrix: &Self::Matrix) -> bool;
     /// The inverse of an invertible `matrix`.
     fn inverse(matrix: &Self::Matrix) -> Self::Matrix;
 }
@@ -50,8 +52,10 @@ impl Local for Transform2D {
     fn from_matrix(matrix: Mat3) -> Self {
         Transform2D::from_matrix(matrix)
     }
-    fn determinant(matrix: &Mat3) -> f32 {
-        matrix.determinant()
+    /// Picking's absolute area threshold, kept: in 2D it bites only below
+    /// a millionth of a unit per axis, under a pixel at any zoom.
+    fn collapsed(matrix: &Mat3) -> bool {
+        matrix.determinant().abs() < MIN_DETERMINANT_2D
     }
     fn inverse(matrix: &Mat3) -> Mat3 {
         matrix.inverse()
@@ -67,20 +71,19 @@ impl Local for Transform3D {
     fn from_matrix(matrix: Affine3A) -> Self {
         Transform3D::from_matrix(matrix)
     }
-    fn determinant(matrix: &Affine3A) -> f32 {
-        matrix.matrix3.determinant()
+    /// Relative to the axes' lengths, so a small but whole frame is not
+    /// collapsed; see [`Transform3D::is_collapsed`].
+    fn collapsed(matrix: &Affine3A) -> bool {
+        Transform3D::is_collapsed(matrix)
     }
     fn inverse(matrix: &Affine3A) -> Affine3A {
         matrix.inverse()
     }
 }
 
-/// Below this a parent's frame has collapsed and cannot be inverted.
-///
-/// Same threshold and same reasoning as picking: inverting a singular
-/// matrix does not panic, it returns infinities and NaN, and a NaN transform
-/// removes an entity from the screen with no error anywhere.
-const MIN_DETERMINANT: f32 = 1e-12;
+/// Below this a 2D parent's frame has collapsed and cannot be inverted:
+/// picking's threshold, and 0.4's.
+const MIN_DETERMINANT_2D: f32 = 1e-12;
 
 /// `entity`'s own `T` as a matrix, or the identity if it has none.
 ///
@@ -110,7 +113,7 @@ pub(crate) fn world_matrix<T: Local>(world: &World, entity: Entity) -> T::Matrix
 /// leave it alone.
 pub(crate) fn set_world<T: Local>(world: &mut World, entity: Entity, target: &T) -> bool {
     let parent = parent_matrix::<T>(world, entity);
-    if T::determinant(&parent).abs() < MIN_DETERMINANT {
+    if T::collapsed(&parent) {
         log::warn!("{entity:?} sits under a collapsed parent; leaving its transform alone");
         return false;
     }
