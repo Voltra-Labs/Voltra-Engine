@@ -449,7 +449,7 @@ with 2D are still the plan below.
   (WebGL2 included) wgpu-hal always sets naga's `ADJUST_COORDINATE_SPACE`,
   which writes `gl_Position.z = z * 2 - w` and has no clip control, so the
   depth is remapped to GL's `[-1, 1]` and reversed-Z's even spread is lost:
-  the error grows as about ULP(1)·d²/near (some 3 mm at 50 m, centimetres
+  the error grows as about ULP(1)·d²/near (some 3 mm at 50 m, some 30 cm
   at 500 m with the 0.1 m near plane). Reversed-Z is still *correct*
   there — the comparison is unchanged — only less precise. Recorded in the
   API notes and `docs/WEB.md`; far scenes on WebGL2 raise `near`.
@@ -10189,8 +10189,11 @@ asked).
   `perspective_infinite_reverse`, finite by handing glam's `perspective`
   the planes swapped — and `orthographic`, reversed the same way; never a
   non-finite matrix: a near plane that is not positive becomes the 0.1 m
-  default, a far plane not past it is dropped or moved, the field of view
-  kept inside (0°, 180°), the placement's scale ignored); `Frustum`
+  default, both planes are kept within 10¹⁸ m (a perspective matrix
+  multiplies the two), a far plane not past the near one is dropped or
+  moved past it by a metre or a thousandth, whichever is more (`near + 1`
+  is `near` again from 10⁸ m), the field of view kept inside (0°, 180°),
+  the placement's scale ignored); `Frustum`
   (Gribb–Hartmann from the view-projection, written for `0 ≤ z ≤ w`
   reversed: `w − z` is the near plane, `z` the far one, which an infinite
   projection leaves degenerate and so out — five planes); `Aabb3` (a mesh's
@@ -10199,22 +10202,46 @@ asked).
   (checked — whole triangles, indices in range, finite positions — before
   `Mesh3D` uploads it); a `Depth32Float` `DepthTarget` cleared to 0 and
   compared `GreaterEqual`, remade at the colour target's size on every
-  record; `UnlitPipeline3D` (flat tint, back faces culled, depth written);
+  record; `UnlitPipeline3D` (flat tint, back faces culled, depth written;
+  two variants, counter-clockwise and clockwise fronts — below);
   `Pass3D`, which owns the pipeline, the view uniform, the instance buffer
   (grown to the next power of two, never shrunk) and the depth target.
   `Renderer::render_3d` draws a `Scene3D` to the window and
   `render_3d_into` into a target, the HUD over both; the pass is made with
   the first 3D frame, so a 2D game never builds it.
 - **The instance layout is pinned against WebGL2 now**: the model matrix
-  as three rows of an affine `3×vec4`, its normal matrix (inverse
-  transpose) as another `3×vec4`, a linear tint — 7 attributes, 112
+  as three rows of an affine `3×vec4`, its normal matrix as another
+  `3×vec4`, a linear tint — 7 attributes, 112
   bytes. With `Vertex3D`'s 4 that is 11; the light list's one `Uint32x2`
   (139) and the skin's two (155) make 14 of WebGL2's 16, every stride
   under 255 bytes. `instance.rs`'s test asserts the counts, the strides
-  and unique locations against `Limits::downlevel_webgl2_defaults()`. A
-  collapsed model (zero scale on an axis) or a non-finite one has no
-  `Instance3D` (`Instance3D::new` answers `None`): it covers no pixel and
-  its normal matrix does not exist.
+  and unique locations against `Limits::downlevel_webgl2_defaults()`.
+- **The normal matrix is the cofactor matrix**, `[b × c, c × a, a × b]` of
+  the model's columns — the inverse transpose times the determinant —
+  signed by the determinant so a mirrored model's normals point out. It is
+  defined for a singular model, so a model flattened to a plane
+  (`builtin:plane` at scale `(10, 0, 10)`, a cube with no height) is drawn,
+  its normals along the one axis left; so is a tiny one (a uniform 10⁻⁴).
+  It is not unit length, and a shader that reads normals (137) normalises
+  after multiplying. `Instance3D::new` refuses only what draws nothing:
+  `Degenerate` — rank below 2, a line or a point, no pixel, left out
+  quietly — and `NotFinite` — a broken model, or one whose cofactors
+  overflow (a scale near 10²⁰), warned once per entity by the draw list.
+  The first version inverted the matrix and refused a determinant under
+  10⁻¹², which dropped flat planes and a 10⁻⁴ scale (10⁻¹² exactly)
+  without a word.
+- **A mirrored instance draws with clockwise fronts.** A negative
+  determinant (an odd number of negative scales) turns a mesh's triangles
+  over on screen, and one counter-clockwise, back-culling pipeline then
+  draws its inside: a square vanished at scale x = −1. The draw list keys
+  `Instance3D::mirrored` first, so mirrored instances of a mesh are a run
+  and a `Draw3D` of their own (`mirrored: true`), and `UnlitPipeline3D`
+  holds a second pipeline with `FrontFace::Cw` that the pass binds for
+  them — Unity and Godot flip the front face for a negatively scaled
+  renderer the same way. **Every later 3D pipeline keys on the flag too**:
+  the material bank's variants (137), the shadow pass (140) and the ID
+  pass (146) each need both windings, or a mirrored model draws, casts or
+  picks inside out.
 - **A run is bound at its offset, not drawn with a first instance.** The
   pass sets the instance buffer at `start × 112` and draws instances from
   0, which is the same on every backend: WebGL2 has no base instance
@@ -10240,7 +10267,8 @@ asked).
   75°, Bevy 45°), 0.1 m, no far plane (Bevy's) — or `Orthographic { size,
   near, far }`, `size` half the height as `Camera2D::size` and Unity's
   `orthographicSize` are. `Projection3D::problem` names what cannot be
-  drawn as written; `camera3d::view` warns once per entity and problem,
+  drawn as written; the frame warns once per camera and problem in its
+  session (`World3D`, so a second session in one process is told too),
   the inspector shows the sentence, and `View3D` draws it corrected.
   `clear: Background | Color(rgba)` — `Background` is the renderer's
   colour; 136 makes it transparent for an overlay and `Color` opaque.
@@ -10275,15 +10303,17 @@ asked).
   `MeshInstance3D` gathered with its composed matrix
   (`WorldTransforms3D`), its world box tested against the frustum —
   across a `JobPool` from 4096 instances (`PARALLEL_FROM`), on the frame
-  thread below — sorted by mesh, then front to back by the box centre's
-  view depth, then entity index (so the list does not depend on spawn
-  order), one `Draw3D` per mesh, the draws ordered by their nearest
+  thread below — sorted by winding and mesh, then front to back by the box
+  centre's view depth, then entity index (so the list does not depend on
+  spawn order), one `Draw3D` per mesh and winding, the draws ordered by
+  their nearest
   instance: opaque front to back so the depth test rejects early.
-  Rebuilt in place each frame. The mesh is resolved from its `MeshPath`
-  per instance per frame, a hash of a short string, rather than cached as
-  a handle on the component: a handle cached beside a path is stale the
-  moment an edit changes the path without re-resolving, and the bench
-  below says the hash is affordable. A non-finite transform is left out
+  Rebuilt in place each frame, its candidates, sort keys and runs kept for
+  their storage. The mesh is resolved from its `MeshPath` per instance per
+  frame — an array index for a built-in mesh, a hash of the path for a
+  file — rather than cached as a handle on the component: a handle cached
+  beside a path is stale the moment an edit changes the path without
+  re-resolving, and the bench below says the lookup is affordable. A non-finite transform is left out
   and warned once per entity.
 - **A lone 3D camera draws through the direct path**: an active
   `Camera3D` and no active `Camera2D` (`World3D::lone_camera`,
@@ -10321,7 +10351,8 @@ asked).
   moves the cost, which is per instance), about half outside the view.
   First measured at 2.17 ms: the sort moved whole candidates (some 256
   bytes each) and each built-in was found through a hashed map. Sorting
-  24-byte keys and an array of built-in handles halved it. Split by phase
+  20-byte keys and an array of built-in handles halved it (the winding
+  since added makes the key 24 bytes). Split by phase
   (best of 40, optimised test build): composing the world's matrices
   0.30 ms, gathering 0.24, culling 0.35, sorting and grouping 0.36 — so
   culling across the pool saves little at 10 000, and the pool is there
@@ -10330,17 +10361,24 @@ asked).
 - **Tests**: `render3d` unit tests (near at depth 1 and far at 0 for the
   three projections to 10⁻⁶; a box past each of the six planes culled and
   one straddling each kept; an orthographic frustum's walls to 0.1 m;
-  broken numbers make a finite matrix; the WebGL2 budget 11 + 3 = 14 ≤ 16,
-  strides 48 and 112 ≤ 255; a stretched normal stays perpendicular to
-  10⁻⁵; a mesh's four ways of being undrawable); `headless_3d.rs` (two
+  broken numbers make a finite matrix, near planes of 10⁸ and 10³⁸ m
+  included; the WebGL2 budget 11 + 3 = 14 ≤ 16, strides 48 and 112 ≤ 255;
+  a stretched normal stays perpendicular to 10⁻⁵; flat and 10⁻⁴ models
+  drawn, a flat plane's normal along Y to 10⁻⁶, lines, points, NaN and
+  10²⁰ refused; a mirrored model's normal points out; a mesh's four ways
+  of being undrawable); `headless_3d.rs` (two
   cubes in either order, as two draws or one instanced, the same picture,
   the nearer at the overlap; 1 cm at 500 m, 0 pixels of the far plane;
   the depth target at 64², 96 × 48 and 17 × 130 with the colour; a 1 m cube
   256 ± 16 pixels at 3 m and 60 m orthographic, none past the far plane;
-  an empty scene clears, a bad range is skipped); `draw3d/tests.rs`
+  an empty scene clears, a bad range is skipped; a mirrored square and
+  cube draw their fronts — the square as many pixels as unmirrored, 0
+  before the fix — and hide the wall behind them); `draw3d/tests.rs`
   (behind the camera and past a 100 m far plane culled; grouping front to
   back and the same list from another spawn order; zero-scale, despawned
-  and NaN instances; a missing mesh magenta; a child placed through its
+  and NaN instances; a plane flattened to (10, 0, 10) and a 10⁻⁴ cube
+  drawn, a line not, a 10²⁰ scale warned; a mirrored cube a draw of its
+  own; a missing mesh magenta; a child placed through its
   parent; the 5 184-instance list identical across three workers); the
   built-in mesh tests above; `voltra-core/tests/scene3d.rs` (the shapes
   scene: each mesh at least 800 pixels and its colour where its projected

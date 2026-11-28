@@ -94,7 +94,7 @@ need the cross-origin isolation (`COOP`/`COEP`) threaded wasm would.
   depth to GL's `[-1, 1]` range with no way to turn that off, which costs
   reversed Z its even spread of precision: the error grows with the square
   of the distance over the near plane, about 3 mm at 50 m with the default
-  0.1 m `near`, centimetres at 500 m. Drawing is still correct — the
+  0.1 m `near`, about 30 cm at 500 m. Drawing is still correct — the
   nearer surface wins — only surfaces closer than that flicker against
   each other. A scene with far, close-together surfaces raises its
   `Camera3D`'s `near` (precision scales with it). WebGPU keeps the native
