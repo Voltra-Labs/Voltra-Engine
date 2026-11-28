@@ -23,7 +23,7 @@ fn coin_instance(world: &mut World, prefabs: &mut Prefabs, coin: &AssetPath) -> 
         world,
         &registry(),
         prefabs.get(handle),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("spawns")
     .root()
@@ -85,7 +85,7 @@ fn a_coin_deleted_from_a_row_cut_around_it_leaves_the_row_s_instances() {
         &mut scene,
         &registry(),
         prefabs.get(handle),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("spawns")
     .root()

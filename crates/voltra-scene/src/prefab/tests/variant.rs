@@ -93,7 +93,7 @@ pub(super) fn spawned(world: &mut World, prefabs: &mut Prefabs, file: &AssetPath
         world,
         &registry(),
         prefabs.get(handle),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("spawns")
     .root()

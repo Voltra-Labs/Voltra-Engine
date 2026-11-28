@@ -58,7 +58,7 @@ fn level() -> Option<(Scratch, World, Prefabs)> {
     let handle = prefabs.load(&path);
     for i in 0..INSTANCES {
         let at = Transform2D::from_translation(Vec2::new(i as f32, 0.0));
-        prefab::spawn(&mut world, &registry, prefabs.get(handle), &at).ok()?;
+        prefab::spawn(&mut world, &registry, prefabs.get(handle), at).ok()?;
     }
     for _ in 0..FILLER {
         named(&mut world, "filler");

@@ -15,9 +15,10 @@ use crate::scene_id::SceneId;
 pub(super) const STRUCTURE: [&str; 3] = [Parent::NAME, PrefabInstance::NAME, PrefabPart::NAME];
 
 /// Whether a sync keeps `name` in step on an entity: not structure, and not
-/// the instance root's placement.
+/// the instance root's placement — its transform of either dimension, which
+/// is therefore never an override.
 pub(super) fn tracked(name: &str, is_root: bool) -> bool {
-    !STRUCTURE.contains(&name) && !(is_root && name == crate::Transform2D::NAME)
+    !STRUCTURE.contains(&name) && !(is_root && super::Placement::names(name))
 }
 
 /// A record's components as their types write them, structure left out and

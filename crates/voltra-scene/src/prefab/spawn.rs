@@ -5,11 +5,10 @@ use std::collections::{HashMap, HashSet};
 
 use voltra_ecs::{Entity, World};
 
-use super::{Prefab, PrefabInstance, PrefabPart};
+use super::{Placement, Prefab, PrefabInstance, PrefabPart};
 use crate::format::{ComponentRegistry, EntityRecord, SceneError};
 use crate::hierarchy::Parent;
 use crate::scene_id::SceneId;
-use crate::transform::Transform2D;
 
 /// The name a parent link is stored under in a scene file.
 const PARENT: &str = Parent::NAME;
@@ -45,11 +44,13 @@ impl Instance {
 /// - **A link to a parent outside the prefab is cut**, and its entity is a
 ///   root. The id it names belongs to whatever scene the fragment was cut
 ///   from, and following it would hang every instance off one entity there.
-/// - **Roots are placed by `at`**, composed in front of their own transform,
-///   so a prefab authored around the origin lands around `at` and keeps the
-///   offsets it was authored with. Children are left alone: they are local to
-///   their parent, and moving the root moved them. A root with no `Transform2D`
-///   is not positional and is not given one.
+/// - **Roots are placed by `at`**, composed in front of their own transform
+///   of the same dimension ([`Placement`]: a `&Transform2D`, a
+///   `&Transform3D`, or [`Placement::AsAuthored`]), so a prefab authored
+///   around the origin lands around `at` and keeps the offsets it was
+///   authored with. Children are left alone: they are local to their
+///   parent, and moving the root moved them. A root with no transform is not
+///   positional and is not given one.
 /// - **Every root is linked to the prefab's source** with a
 ///   [`PrefabInstance`], replacing whatever link the record itself carried:
 ///   a root is an instance of the file it was just spawned from, in its own
@@ -64,13 +65,13 @@ pub fn spawn(
     world: &mut World,
     registry: &ComponentRegistry,
     prefab: &Prefab,
-    at: &Transform2D,
+    at: impl Into<Placement>,
 ) -> Result<Instance, SceneError> {
     spawn_copy(
         world,
         registry,
         prefab,
-        Some(at),
+        Some(at.into()),
         Ids::Fresh,
         &HashSet::new(),
     )
@@ -176,7 +177,7 @@ fn spawn_copy(
     world: &mut World,
     registry: &ComponentRegistry,
     prefab: &Prefab,
-    at: Option<&Transform2D>,
+    at: Option<Placement>,
     ids: Ids,
     skipped: &HashSet<SceneId>,
 ) -> Result<Instance, SceneError> {
@@ -271,9 +272,7 @@ fn spawn_copy(
 
     if let Some(at) = at {
         for &root in &roots {
-            if let Some(transform) = world.get_mut::<Transform2D>(root) {
-                *transform = place(at, transform);
-            }
+            at.place(world, root);
             if let Some(source) = &prefab.source {
                 world.insert(root, PrefabInstance::new(source.clone()));
             }
@@ -281,20 +280,4 @@ fn spawn_copy(
     }
 
     Ok(Instance { entities, roots })
-}
-
-/// `local` as seen through `at`.
-///
-/// A placement that only moves is applied as an addition rather than through
-/// a matrix: it is the common case — a bullet at the muzzle, a coin on a tile
-/// — and the decomposition [`Transform2D::from_matrix`] does would put float
-/// noise into an authored rotation and scale that nothing asked to change.
-fn place(at: &Transform2D, local: &Transform2D) -> Transform2D {
-    if at.rotation == 0.0 && at.scale == voltra_render::glam::Vec2::ONE {
-        return Transform2D {
-            translation: local.translation + at.translation,
-            ..*local
-        };
-    }
-    Transform2D::from_matrix(at.matrix() * local.matrix())
 }

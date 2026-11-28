@@ -15,8 +15,8 @@
 //! a file is pretty-printed and a world's record is not, and text that
 //! differs only in its spaces is the same value.
 //!
-//! **The root's `Transform2D` is always the instance's own**: it is where the
-//! instance was put. So are the structure components — `Parent`, the link
+//! **The root's transform is always the instance's own**, in either
+//! dimension ([`super::Placement`]): it is where the instance was put. So are the structure components — `Parent`, the link
 //! and the part — which a sync rebuilds rather than copies.
 //!
 //! **An instance saved before parts existed is adopted** on its first sync:

@@ -173,7 +173,7 @@ fn a_loop_through_a_nested_instance_on_disk_reads_with_an_error() {
         &mut world,
         &registry(),
         prefabs.get(a),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("spawns");
     assert_eq!(world.entity_count(), 2);

@@ -40,7 +40,7 @@ fn a_base_changed_on_disk_reaches_an_instance_of_its_variant() {
     let variant = path("coin Variant.prefab.ron");
     prefab::variant(&registry, app.prefabs(), &base, &variant).expect("written");
     let coin = app
-        .spawn(&variant, &Transform2D::default())
+        .spawn(&variant, Transform2D::default())
         .expect("spawns")
         .root()
         .expect("a root");

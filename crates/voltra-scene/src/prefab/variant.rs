@@ -14,9 +14,8 @@ use voltra_ecs::World;
 use super::cycle::reaches;
 use super::resolve::written;
 use super::write::WriteError;
-use super::{spawn, Prefabs};
+use super::{spawn, Placement, Prefabs};
 use crate::format::{ComponentRegistry, SceneError};
-use crate::transform::Transform2D;
 
 /// What a variant of `base` is called before a number makes it free: the
 /// base's file name without its suffix, then ` Variant` — Unity's name.
@@ -57,9 +56,10 @@ pub fn variant(
         ))));
     }
 
-    // An instance of the base at its own origin, written out whole.
+    // An instance of the base as authored, in whichever dimension, written
+    // out whole.
     let mut world = World::new();
-    let instance = spawn(&mut world, registry, prefab, &Transform2D::default())?;
+    let instance = spawn(&mut world, registry, prefab, Placement::AsAuthored)?;
     let file = written(&world, registry, &instance.entities)?;
 
     let path = prefabs.root().join(target.as_str());

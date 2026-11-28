@@ -20,3 +20,5 @@ postcard.workspace = true
 
 [dev-dependencies]
 voltra-render.workspace = true
+# A scratch asset root for the prefab a client spawns by path.
+voltra-testkit.workspace = true

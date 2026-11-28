@@ -22,7 +22,7 @@ fn write_row(prefabs: &mut Prefabs) -> AssetPath {
     let row = named(&mut world, "row", Vec2::ZERO);
     for (n, x) in [-1.0, 1.0].into_iter().enumerate() {
         let at = Transform2D::from_translation(Vec2::new(x, 0.0));
-        let one = spawn(&mut world, &registry(), prefabs.get(handle), &at)
+        let one = spawn(&mut world, &registry(), prefabs.get(handle), at)
             .expect("spawns")
             .root()
             .expect("a root");
@@ -61,7 +61,7 @@ fn row_instance(world: &mut World, prefabs: &mut Prefabs, row: &AssetPath) -> En
         world,
         &registry(),
         prefabs.get(handle),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("spawns")
     .root()
@@ -234,7 +234,7 @@ fn write_holder(prefabs: &mut Prefabs, name: &str, inner: &[&AssetPath]) -> Asse
     for (n, file) in inner.iter().enumerate() {
         let handle = prefabs.load(file);
         let at = Transform2D::from_translation(Vec2::new(n as f32, 0.0));
-        let one = spawn(&mut world, &registry(), prefabs.get(handle), &at)
+        let one = spawn(&mut world, &registry(), prefabs.get(handle), at)
             .expect("spawns")
             .root()
             .expect("a root");
@@ -263,7 +263,7 @@ fn a_diamond_reads_the_shared_file_once_and_reaches_both_branches() {
         &mut world,
         &registry(),
         prefabs.get(handle),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("spawns")
     .root()

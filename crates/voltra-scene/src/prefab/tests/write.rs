@@ -39,7 +39,7 @@ fn the_root_loses_its_parent_and_its_position_but_keeps_its_shape() {
     let prefab = Prefab::new(fragment(&world, &registry(), chest).expect("records")).expect("v1");
     let mut out = World::new();
     let at = Transform2D::from_translation(Vec2::new(-3.0, 0.0));
-    let instance = spawn(&mut out, &registry(), &prefab, &at).expect("reads");
+    let instance = spawn(&mut out, &registry(), &prefab, at).expect("reads");
 
     let root = instance.root().expect("one root");
     let transform = out.get::<Transform2D>(root).expect("positional");
@@ -87,7 +87,7 @@ fn a_written_prefab_spawns_linked_to_where_it_was_written() {
         &mut out,
         &registry(),
         prefabs.get(handle),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("reads");
     assert_eq!(instance.entities.len(), 2);

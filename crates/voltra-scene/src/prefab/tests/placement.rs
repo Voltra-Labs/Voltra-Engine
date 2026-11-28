@@ -9,7 +9,7 @@ fn the_roots_are_placed_and_the_children_keep_their_offsets() {
     let mut world = World::new();
     let at = Transform2D::from_translation(Vec2::new(10.0, 5.0));
 
-    let instance = spawn(&mut world, &registry(), &ship(), &at).expect("reads");
+    let instance = spawn(&mut world, &registry(), &ship(), at).expect("reads");
 
     let hull = instance.root().expect("one root");
     let gun = children_of(&world, hull)[0];
@@ -30,7 +30,7 @@ fn a_rotated_placement_turns_the_root_about_its_own_origin() {
     let at = Transform2D::from_translation(Vec2::new(3.0, 0.0))
         .with_rotation(std::f32::consts::FRAC_PI_2);
 
-    let instance = spawn(&mut world, &registry(), &ship(), &at).expect("reads");
+    let instance = spawn(&mut world, &registry(), &ship(), at).expect("reads");
 
     let hull = world
         .get::<Transform2D>(instance.root().expect("one root"))
@@ -50,7 +50,7 @@ fn a_root_authored_off_the_origin_keeps_its_offset_from_the_placement() {
         &mut world,
         &registry(),
         &prefab_of(&source),
-        &Transform2D::from_translation(Vec2::new(0.0, 7.0)),
+        Transform2D::from_translation(Vec2::new(0.0, 7.0)),
     )
     .expect("reads");
 
@@ -74,7 +74,7 @@ fn a_root_with_no_transform_is_not_given_one() {
         &mut world,
         &registry(),
         &prefab_of(&source),
-        &Transform2D::from_translation(Vec2::ONE),
+        Transform2D::from_translation(Vec2::ONE),
     )
     .expect("reads");
 

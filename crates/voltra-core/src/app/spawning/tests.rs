@@ -4,7 +4,7 @@ use super::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 use voltra_render::glam::Vec2;
-use voltra_scene::{ComponentRegistry, Name, SceneId};
+use voltra_scene::{ComponentRegistry, Name, SceneId, Transform2D};
 use voltra_testkit::scratch_root;
 
 /// An asset root holding `coin.ron`: one named, positioned entity.
@@ -29,6 +29,45 @@ fn coin() -> AssetPath {
 }
 
 #[test]
+fn a_tick_spawns_a_3d_prefab_where_it_is_told() {
+    let root = scratch_root();
+    let mut world = voltra_ecs::World::new();
+    let lamp = world.spawn();
+    world.insert(lamp, SceneId::new());
+    world.insert(lamp, voltra_scene::Transform3D::default());
+    voltra_scene::format::save(
+        &world,
+        &ComponentRegistry::with_defaults(),
+        &root.join("lamp.ron"),
+    )
+    .expect("the fixture writes");
+    let spawned = Rc::new(RefCell::new(Vec::new()));
+    let seen = spawned.clone();
+    let mut app = App::default()
+        .with_asset_root(&root)
+        .with_simulation()
+        .with_update(move |tick| {
+            let lamp = tick.prefab(&AssetPath::new("lamp.ron").expect("valid"));
+            let at = voltra_scene::Transform3D::from_translation(voltra_render::glam::Vec3::new(
+                1.0, 2.0, 3.0,
+            ));
+            let instance = tick.spawn(lamp, at).expect("the prefab reads");
+            seen.borrow_mut().extend(instance.roots);
+        });
+
+    app.advance(1.0 / 60.0);
+
+    let roots = spawned.borrow();
+    assert_eq!(roots.len(), 1);
+    assert_eq!(
+        app.world
+            .get::<voltra_scene::Transform3D>(roots[0])
+            .map(|t| t.translation),
+        Some(voltra_render::glam::Vec3::new(1.0, 2.0, 3.0))
+    );
+}
+
+#[test]
 fn a_tick_spawns_a_prefab_where_it_is_told() {
     let spawned = Rc::new(RefCell::new(Vec::new()));
     let seen = spawned.clone();
@@ -39,7 +78,7 @@ fn a_tick_spawns_a_prefab_where_it_is_told() {
         .with_update(move |tick| {
             let coin = tick.prefab(&coin());
             let instance = tick
-                .spawn(coin, &Transform2D::from_translation(Vec2::new(3.0, 4.0)))
+                .spawn(coin, Transform2D::from_translation(Vec2::new(3.0, 4.0)))
                 .expect("the prefab reads");
             seen.borrow_mut().extend(instance.roots);
         });
@@ -65,7 +104,7 @@ fn a_tick_that_spawns_every_frame_makes_one_per_frame() {
         .with_simulation()
         .with_update(|tick| {
             let coin = tick.prefab(&coin());
-            tick.spawn(coin, &Transform2D::default()).expect("reads");
+            tick.spawn(coin, Transform2D::default()).expect("reads");
         });
 
     for _ in 0..3 {
@@ -83,7 +122,7 @@ fn a_forged_handle_spawns_nothing_rather_than_panicking() {
         .with_simulation()
         .with_update(|tick| {
             let instance = tick
-                .spawn(Handle::forge(40, 0), &Transform2D::default())
+                .spawn(Handle::forge(40, 0), Transform2D::default())
                 .expect("not an error");
             assert!(instance.entities.is_empty());
         });
@@ -101,7 +140,7 @@ fn an_entity_despawned_by_the_tick_that_made_it_is_skipped() {
         .with_simulation()
         .with_update(|tick| {
             let coin = tick.prefab(&coin());
-            let instance = tick.spawn(coin, &Transform2D::default()).expect("reads");
+            let instance = tick.spawn(coin, Transform2D::default()).expect("reads");
             for entity in instance.entities {
                 tick.world.despawn(entity);
             }

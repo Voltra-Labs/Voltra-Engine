@@ -63,7 +63,7 @@ impl LobbyScreen {
             .map_err(|_| LobbyScreenError::BadPath(config.prefab.clone()))?;
         let prefab = tick.prefab(&path);
         let instance = tick
-            .spawn(prefab, &Transform2D::default())
+            .spawn(prefab, Transform2D::default())
             .map_err(LobbyScreenError::Spawn)?;
         let root = instance
             .root()

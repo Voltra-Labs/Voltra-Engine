@@ -96,7 +96,7 @@ pub use particles::ParticleEmitter;
 pub use persistent::Persistent;
 pub use polygon2d::Polygon2D;
 pub use post::PostProcess;
-pub use prefab::{Instance, Prefab, PrefabInstance, PrefabPart, Prefabs};
+pub use prefab::{Instance, Placement, Prefab, PrefabInstance, PrefabPart, Prefabs};
 #[allow(deprecated)] // The 0.4 names, re-exported where 0.4 had them.
 pub use renamed::{Camera, Collider, RigidBody, Sprite, Transform, WorldTransforms};
 pub use replicated::Replicated;

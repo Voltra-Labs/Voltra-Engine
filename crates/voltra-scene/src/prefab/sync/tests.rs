@@ -64,7 +64,7 @@ fn instance(world: &mut World, prefab: &Prefab, at: Vec2) -> Entity {
         world,
         &registry(),
         prefab,
-        &Transform2D::from_translation(at),
+        Transform2D::from_translation(at),
     )
     .expect("spawns")
     .root()

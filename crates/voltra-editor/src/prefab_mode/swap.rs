@@ -129,7 +129,7 @@ mod tests {
 
         let handle = prefabs.load(&path);
         let at = Transform2D::from_translation(voltra_render::glam::Vec2::new(3.0, 0.0));
-        let other = prefab::spawn(&mut world, registry, prefabs.get(handle), &at)
+        let other = prefab::spawn(&mut world, registry, prefabs.get(handle), at)
             .expect("spawned")
             .roots[0];
         world.insert(other, Name::new("Blue coin"));
@@ -193,7 +193,7 @@ mod tests {
             &mut world,
             &registry,
             prefabs.get(handle),
-            &Transform2D::default(),
+            Transform2D::default(),
         )
         .expect("spawned");
 

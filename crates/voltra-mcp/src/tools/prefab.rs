@@ -56,7 +56,7 @@ pub fn prefab_instantiate(
         &mut world,
         &registry,
         source,
-        &Transform2D::from_translation(at),
+        Transform2D::from_translation(at),
     )
     .map_err(ToolError::from_cause)?;
     let root = instance

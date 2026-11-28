@@ -16,9 +16,7 @@ use std::collections::HashMap;
 use voltra_assets::AssetPath;
 use voltra_ecs::{Entity, World};
 use voltra_net::PeerId;
-use voltra_scene::{
-    hierarchy, prefab, ComponentRegistry, Prefabs, Replicated, SceneId, Transform2D,
-};
+use voltra_scene::{hierarchy, prefab, ComponentRegistry, Placement, Prefabs, Replicated, SceneId};
 
 use super::stash::Stash;
 use crate::wire::Spawn;
@@ -123,7 +121,7 @@ fn from_prefab(
     };
     let handle = prefabs.load(&path);
     let prefab = prefabs.try_get(handle)?;
-    let instance = match prefab::spawn(world, registry, prefab, &Transform2D::default()) {
+    let instance = match prefab::spawn(world, registry, prefab, Placement::AsAuthored) {
         Ok(instance) => instance,
         Err(error) => {
             log::warn!("prefab {path:?} would not spawn for a replicated entity: {error}");
@@ -146,4 +144,43 @@ fn from_prefab(
             .filter(|&e| world.is_alive(e)),
     );
     Some(root)
+}
+
+#[cfg(test)]
+mod tests {
+    use voltra_render::glam::{Quat, Vec3};
+    use voltra_scene::Transform3D;
+
+    use super::*;
+
+    #[test]
+    fn a_3d_prefab_spawns_as_authored_for_a_replicated_entity() {
+        // The server's placement arrives as the replicated transform; the
+        // client's copy must not move the root on its own first.
+        let root = voltra_testkit::scratch_root();
+        let authored = Transform3D::from_translation(Vec3::new(4.0, 1.0, -2.0))
+            .with_rotation(Quat::from_rotation_y(0.5));
+        let mut source = World::new();
+        let ship = source.spawn();
+        source.insert(ship, SceneId::new());
+        source.insert(ship, authored);
+        let registry = ComponentRegistry::with_defaults();
+        voltra_scene::format::save(&source, &registry, &root.join("ship.prefab.ron"))
+            .expect("the fixture writes");
+        let mut prefabs = Prefabs::new(&root);
+        let mut world = World::new();
+        let mut made = Vec::new();
+
+        let entity = from_prefab(
+            &mut world,
+            &registry,
+            Some(&mut prefabs),
+            "ship.prefab.ron",
+            &mut made,
+        )
+        .expect("spawned");
+
+        assert_eq!(world.get::<Transform3D>(entity), Some(&authored));
+        assert_eq!(made, vec![entity]);
+    }
 }

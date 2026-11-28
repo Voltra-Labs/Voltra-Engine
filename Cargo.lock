@@ -4163,6 +4163,7 @@ dependencies = [
  "voltra-net",
  "voltra-render",
  "voltra-scene",
+ "voltra-testkit",
 ]
 
 [[package]]

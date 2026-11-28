@@ -258,7 +258,7 @@ impl App {
             &mut self.world,
             &self.registry,
             prefabs.get(handle),
-            &Transform2D::default(),
+            Transform2D::default(),
         ) {
             Ok(instance) => {
                 self.spawned.extend_from_slice(&instance.entities);

@@ -51,7 +51,7 @@ fn a_spawn_makes_every_entity_with_its_components() {
     let mut world = World::new();
 
     let instance =
-        spawn(&mut world, &registry(), &ship(), &Transform2D::default()).expect("the prefab reads");
+        spawn(&mut world, &registry(), &ship(), Transform2D::default()).expect("the prefab reads");
 
     assert_eq!(instance.entities.len(), 2);
     assert_eq!(world.entity_count(), 2);
@@ -67,8 +67,8 @@ fn two_spawns_never_share_an_id() {
     let mut world = World::new();
     let prefab = ship();
 
-    spawn(&mut world, &registry(), &prefab, &Transform2D::default()).expect("reads");
-    spawn(&mut world, &registry(), &prefab, &Transform2D::default()).expect("reads");
+    spawn(&mut world, &registry(), &prefab, Transform2D::default()).expect("reads");
+    spawn(&mut world, &registry(), &prefab, Transform2D::default()).expect("reads");
 
     let mut ids: Vec<SceneId> = world.query::<SceneId>().map(|(_, id)| *id).collect();
     let before = ids.len();
@@ -86,8 +86,7 @@ fn the_ids_are_not_the_prefab_s_own() {
     let original = *source.get::<SceneId>(only).expect("spawned with one");
     let prefab = prefab_of(&source);
 
-    let instance =
-        spawn(&mut source, &registry(), &prefab, &Transform2D::default()).expect("reads");
+    let instance = spawn(&mut source, &registry(), &prefab, Transform2D::default()).expect("reads");
 
     let copy = instance.root().expect("one root");
     assert_ne!(source.get::<SceneId>(copy), Some(&original));
@@ -100,8 +99,8 @@ fn a_child_hangs_off_its_own_instance_s_parent() {
     let mut world = World::new();
     let prefab = ship();
 
-    let first = spawn(&mut world, &registry(), &prefab, &Transform2D::default()).expect("reads");
-    let second = spawn(&mut world, &registry(), &prefab, &Transform2D::default()).expect("reads");
+    let first = spawn(&mut world, &registry(), &prefab, Transform2D::default()).expect("reads");
+    let second = spawn(&mut world, &registry(), &prefab, Transform2D::default()).expect("reads");
 
     for instance in [first, second] {
         let hull = instance.root().expect("one root");
@@ -132,7 +131,7 @@ fn a_parent_outside_the_prefab_is_cut_and_its_child_is_a_root() {
         &mut world,
         &registry(),
         &prefab_of(&source),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("reads");
 
@@ -167,7 +166,7 @@ fn a_component_that_will_not_read_spawns_nothing_at_all() {
     };
     let prefab = Prefab::new(file).expect("the version is fine");
 
-    let result = spawn(&mut world, &registry(), &prefab, &Transform2D::default());
+    let result = spawn(&mut world, &registry(), &prefab, Transform2D::default());
 
     assert!(result.is_err());
     assert_eq!(
@@ -199,7 +198,7 @@ fn an_unknown_component_travels_with_the_copy() {
         &mut world,
         &registry(),
         &Prefab::new(file).expect("fine"),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("reads");
 
@@ -228,7 +227,7 @@ fn the_empty_prefab_spawns_nothing() {
         &mut world,
         &registry(),
         &Prefab::empty(),
-        &Transform2D::default(),
+        Transform2D::default(),
     )
     .expect("empty");
     assert_eq!(instance, Instance::default());
@@ -252,6 +251,7 @@ mod nested;
 mod own;
 mod placement;
 mod store;
+mod three_d;
 mod variant;
 mod whole_scenes;
 mod write;

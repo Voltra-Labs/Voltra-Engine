@@ -1,12 +1,10 @@
 //! An entity and everything under it, cut out of a world as a prefab file.
 
 use voltra_ecs::{Entity, World};
-use voltra_render::glam::Vec2;
 
-use super::PrefabInstance;
+use super::{placement, PrefabInstance};
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile, VERSION};
 use crate::hierarchy::{descendants, is_ancestor};
-use crate::transform::Transform2D;
 
 /// `root` and its descendants as a file [`super::spawn`] can stamp out again.
 ///
@@ -23,7 +21,8 @@ use crate::transform::Transform2D;
 ///   stored whole — link and parts — so it stays an instance of its own
 ///   file and follows it. Any other part names a record of whatever prefab
 ///   the selection came from, not of this one, and is dropped.
-/// - **Its translation is zeroed; its rotation and scale are kept.** A spawn
+/// - **Its translation is zeroed; its rotation and scale are kept**, in
+///   whichever dimension its transform is ([`super::Placement`]). A spawn
 ///   places roots *around* `at`, so a prefab authored where it happened to
 ///   stand in the scene would land that far from every cursor it is dropped
 ///   on. Unity keeps the position and every author then resets it by hand;
@@ -56,16 +55,8 @@ pub fn fragment(
         if entity == root {
             record.components.remove(crate::Parent::NAME);
             record.components.remove(PrefabInstance::NAME);
-            if let Some(transform) = world.get::<Transform2D>(entity) {
-                let at_origin = Transform2D {
-                    translation: Vec2::ZERO,
-                    ..*transform
-                };
-                let value =
-                    ron::value::RawValue::from_rust(&at_origin).map_err(SceneError::Serialize)?;
-                record
-                    .components
-                    .insert(Transform2D::NAME.to_owned(), value);
+            for (name, value) in placement::at_origin(world, entity)? {
+                record.components.insert(name.to_owned(), value);
             }
         }
         entities.push(record);

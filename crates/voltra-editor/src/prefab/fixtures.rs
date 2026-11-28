@@ -98,15 +98,10 @@ pub(crate) fn spawned(
     file: &AssetPath,
 ) -> Entity {
     let handle = prefabs.load(file);
-    prefab::spawn(
-        world,
-        registry,
-        prefabs.get(handle),
-        &Transform2D::default(),
-    )
-    .expect("spawns")
-    .root()
-    .expect("a root")
+    prefab::spawn(world, registry, prefabs.get(handle), Transform2D::default())
+        .expect("spawns")
+        .root()
+        .expect("a root")
 }
 
 pub(crate) fn overridden(world: &World, entity: Entity) -> Vec<String> {

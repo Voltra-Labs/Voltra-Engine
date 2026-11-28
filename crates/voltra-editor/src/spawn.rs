@@ -111,7 +111,7 @@ pub(crate) fn prefab(
         frame.world,
         registry,
         frame.prefabs.get(handle),
-        &Transform2D::from_translation(at),
+        Transform2D::from_translation(at),
     );
     match spawned {
         Ok(instance) => {

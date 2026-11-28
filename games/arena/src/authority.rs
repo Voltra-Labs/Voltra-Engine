@@ -62,7 +62,7 @@ pub(crate) fn spawn_player(tick: &mut Tick<'_>, peer: PeerId) {
     let path = AssetPath::new(PLAYER_PREFAB).expect("the prefab path is valid");
     let prefab = tick.prefab(&path);
     let at = Transform2D::from_translation(spawn_point(peer));
-    match tick.spawn(prefab, &at) {
+    match tick.spawn(prefab, at) {
         Ok(instance) => match instance.root() {
             Some(root) => {
                 tick.world.insert(root, NetOwner(peer));

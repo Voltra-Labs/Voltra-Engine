@@ -15,11 +15,10 @@ use super::cycle::{nested_in, reaches};
 use super::instances::sync_sources;
 use super::membership::{instance_root, members, Children};
 use super::write::WriteError;
-use super::{PrefabInstance, PrefabPart, Prefabs, SyncReport};
+use super::{placement, Placement, PrefabInstance, PrefabPart, Prefabs, SyncReport};
 use crate::format::{record_entity, ComponentRegistry, SceneError, SceneFile, VERSION};
 use crate::hierarchy::{self, Parent};
 use crate::scene_id::SceneId;
-use crate::transform::Transform2D;
 
 /// Makes `root` and everything under it an instance of `source`, a file
 /// [`super::write`] has just cut from them: the root linked, and each entity
@@ -42,8 +41,8 @@ pub fn link(world: &mut World, root: Entity, source: AssetPath) {
 /// under its record's id — an entity the instance added becomes a record of
 /// its own — with parents named by record. Not the links and parts, which
 /// belong to instances, not to the prefab; and not the root's placement:
-/// the file's root keeps the transform it had, as Unity's apply leaves the
-/// root's position out. Records the instance deleted leave the file.
+/// the file's root keeps the transform it had, in either dimension
+/// ([`Placement`]), as Unity's apply leaves the root's position out. Records the instance deleted leave the file.
 /// Afterwards the instance overrides nothing — it *is* the prefab.
 ///
 /// **Instances the file holds stay instances.** A variant's root stays an
@@ -106,9 +105,13 @@ pub fn apply(
         ids.insert(entity, id);
     }
     let record_of = |_: &World, entity: Entity| ids.get(&entity).copied();
-    let file_root_transform = record_of(world, root)
-        .and_then(|top| resolved.entities.iter().find(|r| r.id == top))
-        .and_then(|r| r.components.get(Transform2D::NAME).cloned());
+    // The file's own root placement, in whichever dimensions it has one.
+    let file_root =
+        record_of(world, root).and_then(|top| resolved.entities.iter().find(|r| r.id == top));
+    let file_placement: Vec<(&'static str, Box<RawValue>)> = Placement::NAMES
+        .iter()
+        .filter_map(|&name| Some((name, file_root?.components.get(name)?.clone())))
+        .collect();
 
     // A reference between the instance's entities — a joint, a camera's
     // target — names their records in the file.
@@ -138,22 +141,26 @@ pub fn apply(
         if entity == root {
             record.components.remove(PrefabInstance::NAME);
             record.components.remove(Parent::NAME);
-            let placement = match &file_root_transform {
-                Some(kept) => kept.clone(),
-                None => {
-                    let at_origin = world.get::<Transform2D>(entity).map(|t| Transform2D {
-                        translation: voltra_render::glam::Vec2::ZERO,
-                        ..*t
-                    });
-                    match at_origin {
-                        Some(t) => RawValue::from_rust(&t).map_err(SceneError::Serialize)?,
-                        None => continue,
-                    }
-                }
+            // Per transform the root carries, the file's where it has one and
+            // the root's own at the origin where it has none. A root with no
+            // transform keeps the file's; one whose dimension changed does
+            // not get the old one beside its new one.
+            let own = placement::at_origin(world, entity)?;
+            let kept = |name: &str| {
+                file_placement
+                    .iter()
+                    .find(|(kept, _)| *kept == name)
+                    .map(|(_, value)| value.clone())
             };
-            record
-                .components
-                .insert(Transform2D::NAME.to_owned(), placement);
+            if own.is_empty() {
+                for (name, value) in &file_placement {
+                    record.components.insert((*name).to_owned(), value.clone());
+                }
+            }
+            for (name, zeroed) in own {
+                let value = kept(name).unwrap_or(zeroed);
+                record.components.insert(name.to_owned(), value);
+            }
         } else if let Some(parent) = hierarchy::parent_of(world, entity) {
             if let Some(parent_record) = record_of(world, parent) {
                 let link = Parent {

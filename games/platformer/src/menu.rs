@@ -107,7 +107,7 @@ fn open_pause(tick: &mut Tick<'_>) -> Menu {
         }
     };
     let prefab = tick.prefab(&path);
-    let instance = match tick.spawn(prefab, &Transform2D::default()) {
+    let instance = match tick.spawn(prefab, Transform2D::default()) {
         Ok(instance) => instance,
         Err(e) => {
             log::error!("the pause menu would not spawn: {e}");
