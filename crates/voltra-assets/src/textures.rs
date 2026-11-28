@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use voltra_render::texture::{decode_png, DecodedImage};
+use voltra_render::texture::DecodedImage;
 use voltra_render::wgpu::{BindGroup, BindGroupLayout, Device, Queue};
 use voltra_render::{Filter, Texture};
 
@@ -13,10 +13,12 @@ use crate::path::AssetPath;
 use crate::placeholder;
 use crate::store::Assets;
 
+mod decode;
 mod generated;
 mod preload;
 mod render_texture;
 
+pub(crate) use decode::decode_file;
 pub use preload::DecodedTexture;
 pub use render_texture::{
     is_render_texture, RenderTexture, RenderTextureFile, RENDER_TEXTURE_SUFFIX,
@@ -357,20 +359,6 @@ impl Textures {
     pub(crate) fn root_path(&self) -> &Path {
         &self.root
     }
-}
-
-/// Reads and decodes `path` under `root`: the only place textures touch the
-/// disk, and needing no device, safe on any thread.
-pub(crate) fn decode_file(root: &Path, path: &AssetPath) -> Result<DecodedImage, AssetError> {
-    // Safe to join because `AssetPath` has already refused anything that
-    // could climb out of the root. That check lives in the constructor
-    // precisely so it cannot be forgotten here.
-    let full = root.join(path.as_str());
-    let bytes = crate::fs::read(&full).map_err(|source| AssetError::Read {
-        path: full.clone(),
-        source,
-    })?;
-    decode_png(&bytes).map_err(|source| AssetError::Decode { path: full, source })
 }
 
 /// The magenta-and-black checker, uploaded.
