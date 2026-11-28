@@ -1,0 +1,73 @@
+// A first 3D scene: a camera, a floor and four built-in meshes that
+// overlap in depth, and two walls 1 cm apart 50 m away — what the 3D
+// depth pass is checked with headless (crates/voltra-core/tests/scene3d.rs)
+// and in the browser (crates/voltra-player/web/test/shapes3d.mjs).
+(
+    version: 2,
+    entities: [
+        (
+            id: "019fe300-0135-7000-8000-000000000001",
+            components: {
+                "Camera3D": (projection:Perspective(fov_y_degrees:60.0,near:0.1),priority:0,active:true),
+                "Name": "Camera",
+                "Transform3D": (translation:(0.0,2.2,5.5),rotation:(-0.141076,0.0,0.0,0.989999),scale:(1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0135-7000-8000-000000000002",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane",color:(0.35,0.37,0.4,1.0)),
+                "Name": "Floor",
+                "Transform3D": (translation:(0.0,0.0,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(12.0,1.0,12.0)),
+            },
+        ),
+        (
+            id: "019fe300-0135-7000-8000-000000000003",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cube",color:(0.9,0.15,0.1,1.0)),
+                "Name": "Cube",
+                "Transform3D": (translation:(-2.2,0.5,0.0),rotation:(0.0,0.258819,0.0,0.965926),scale:(1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0135-7000-8000-000000000004",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:sphere",color:(0.1,0.8,0.2,1.0)),
+                "Name": "Sphere",
+                "Transform3D": (translation:(-1.5,0.6,0.5),rotation:(0.0,0.0,0.0,1.0),scale:(1.2,1.2,1.2)),
+            },
+        ),
+        (
+            id: "019fe300-0135-7000-8000-000000000005",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:capsule",color:(0.15,0.3,0.95,1.0)),
+                "Name": "Capsule",
+                "Transform3D": (translation:(0.8,1.0,-0.5),rotation:(0.0,0.0,0.0,1.0),scale:(1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0135-7000-8000-000000000006",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:cylinder",color:(0.95,0.8,0.1,1.0)),
+                "Name": "Cylinder",
+                "Transform3D": (translation:(1.4,0.5,0.0),rotation:(0.0,0.0,0.0,1.0),scale:(1.0,1.0,1.0)),
+            },
+        ),
+        (
+            id: "019fe300-0135-7000-8000-000000000007",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane",color:(0.0,0.9,0.9,1.0)),
+                "Name": "Far wall, behind",
+                "Transform3D": (translation:(0.0,9.0,-50.0),rotation:(0.5,0.0,0.0,0.866025),scale:(24.0,1.0,10.0)),
+            },
+        ),
+        (
+            id: "019fe300-0135-7000-8000-000000000008",
+            components: {
+                "MeshInstance3D": (mesh:"builtin:plane",color:(0.9,0.9,0.9,1.0)),
+                "Name": "Far wall, 1 cm in front",
+                "Transform3D": (translation:(0.0,9.005,-49.99134),rotation:(0.5,0.0,0.0,0.866025),scale:(24.0,1.0,10.0)),
+            },
+        ),
+    ],
+)

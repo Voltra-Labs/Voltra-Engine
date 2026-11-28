@@ -239,6 +239,8 @@ pub struct App {
     gpu_rings: gpu_particles::GpuParticleRings,
     /// The renderer's half of every skinned sprite.
     skinned_meshes: skinned_meshes::SkinnedMeshes,
+    /// The 3D world's meshes and draw list, kept between frames.
+    world3d: draw::world3d::World3D,
     /// The scene. Populate it before calling [`App::run`].
     pub world: World,
     /// Which components a prefab can carry: the defaults, plus whatever a

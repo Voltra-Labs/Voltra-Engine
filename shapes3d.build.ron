@@ -1,0 +1,10 @@
+// The first 3D sample: a camera, a floor and the built-in meshes in
+// scenes/shapes3d.ron. What crates/voltra-player/web/test/shapes3d.mjs
+// builds for the web.
+(
+    version: 1,
+    name: "Voltra Shapes 3D",
+    scene: "scenes/shapes3d.ron",
+    window: (width: 960, height: 540),
+    assets: "assets",
+)

@@ -129,9 +129,30 @@ impl Headless {
         resolve_world_textures(&mut app.world, textures, &device, &queue);
         voltra_scene::camera::target::resolve_world(&mut app.world, textures, &device, &queue);
         let frame_shots = voltra_scene::camera::shots(&app.world);
-        if shots::needs_shots(&frame_shots) {
+        let lone_3d = app.world3d.lone_camera(&app.world, &frame_shots);
+        if lone_3d.is_some() || shots::needs_shots(&frame_shots) {
             voltra_scene::text::prepare(&app.world, fonts, 1.0);
             fonts.upload(textures, &device, &queue);
+        }
+        if let Some(camera) = lone_3d {
+            let hud = shots::hud(&app.world, atlases, textures, fonts, (width, height), 1.0);
+            let hud_mesh = hud.upload(&device);
+            let white = renderer.white_bind_group().clone();
+            let hud_draws = hud_draws(&hud, textures, &white);
+            let hud = voltra_render::Layer {
+                mesh: hud_mesh.as_ref(),
+                draws: &hud_draws,
+            };
+            app.world3d
+                .draw(&app.world, renderer, camera, Some(graded), hud);
+            let rgba = voltra_render::read_rgba8(&device, &queue, graded.texture(), width, height);
+            return Ok(Screenshot {
+                width,
+                height,
+                rgba,
+            });
+        }
+        if shots::needs_shots(&frame_shots) {
             let rects = shots::ShotDraw {
                 world: &app.world,
                 renderer,
@@ -153,20 +174,7 @@ impl Headless {
             let hud = shots::hud(&app.world, atlases, textures, fonts, (width, height), 1.0);
             let hud_mesh = hud.upload(&device);
             let white = renderer.white_bind_group().clone();
-            let hud_draws: Vec<voltra_render::MeshDraw<'_>> = hud
-                .ranges
-                .iter()
-                .map(|range| voltra_render::MeshDraw {
-                    texture: match range.texture {
-                        Some(handle) => textures.bind_group(handle),
-                        None => &white,
-                    },
-                    normal: None,
-                    light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
-                    primitives: range.primitives.clone(),
-                    material: None,
-                })
-                .collect();
+            let hud_draws = hud_draws(&hud, textures, &white);
             let placed = shots::placed(&app.camera_pool, &rects);
             renderer.composite(
                 graded,
@@ -248,4 +256,25 @@ impl Headless {
         app.renderer = Some(renderer);
         Ok(())
     }
+}
+
+/// The HUD batch's draws: each range against its texture, or `white`.
+fn hud_draws<'a>(
+    hud: &voltra_scene::SpriteBatch,
+    textures: &'a Textures,
+    white: &'a voltra_render::wgpu::BindGroup,
+) -> Vec<voltra_render::MeshDraw<'a>> {
+    hud.ranges
+        .iter()
+        .map(|range| voltra_render::MeshDraw {
+            texture: match range.texture {
+                Some(handle) => textures.bind_group(handle),
+                None => white,
+            },
+            normal: None,
+            light_layers: voltra_render::DEFAULT_LIGHT_LAYERS,
+            primitives: range.primitives.clone(),
+            material: None,
+        })
+        .collect()
 }

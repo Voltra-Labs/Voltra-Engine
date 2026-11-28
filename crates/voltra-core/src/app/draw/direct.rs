@@ -38,6 +38,23 @@ impl App {
             renderer.context().queue(),
         );
         let frame_shots = voltra_scene::camera::shots(&self.world);
+        if let Some(camera) = self.world3d.lone_camera(&self.world, &frame_shots) {
+            let config = renderer.context().config();
+            let screen = (config.width, config.height);
+            let hud = shots::hud(&self.world, atlases, textures, fonts, screen, scale);
+            let hud_mesh = hud.upload(renderer.context().device());
+            let white = renderer.white_bind_group().clone();
+            let hud_draws = mesh_draws(&hud, textures, &white);
+            let _render = voltra_profile::scope("render");
+            renderer.set_gpu_timing(voltra_profile::is_enabled());
+            let hud = Layer {
+                mesh: hud_mesh.as_ref(),
+                draws: &hud_draws,
+            };
+            self.world3d.draw(&self.world, renderer, camera, None, hud);
+            record_gpu_timings(renderer);
+            return;
+        }
         if shots::needs_shots(&frame_shots) {
             let config = renderer.context().config();
             let screen = (config.width, config.height);

@@ -13,6 +13,7 @@ mod parts;
 mod resolve;
 pub(super) mod shots;
 pub(super) mod world;
+pub(super) mod world3d;
 
 use parts::{clock_seconds, lighting, mesh_draws, prepare_text, ui_batch, ui_scale};
 
@@ -104,25 +105,48 @@ impl App {
             .draw(&texture_shots, (width.max(1), height.max(1)));
             renderer.camera = editor_camera;
         }
-        world::WorldDraw {
-            world: &self.world,
-            renderer,
-            textures,
-            atlases,
-            fonts,
-            silhouettes: self.silhouettes.as_mut(),
-            sorting_layers: &self.sorting_layers,
-            batch: &mut self.frame_batch,
-            buffers: &mut self.batch_buffers,
-            tile_meshes: &mut self.tile_meshes,
-            gpu_rings: &self.gpu_rings,
-            skins: &self.skinned_meshes,
-            materials: self.materials.as_ref(),
-            material_bank: &mut self.material_bank,
-            elapsed: self.elapsed,
-            scale,
+        // The game view of a 3D scene, asked for by last frame's layout; the
+        // scene view stays 2D, as the 2D view draws 2D only.
+        let game_3d = std::mem::take(&mut self.world3d.game_view)
+            .then(|| {
+                let shots = voltra_scene::camera::shots(&self.world);
+                self.world3d.lone_camera(&self.world, &shots)
+            })
+            .flatten();
+        if let Some(camera) = game_3d {
+            prepare_text(&self.world, fonts, textures, &device, &queue, scale);
+            let size = (graded.width(), graded.height());
+            let hud = shots::hud(&self.world, atlases, textures, fonts, size, scale);
+            let hud_mesh = hud.upload(&device);
+            let white = renderer.white_bind_group().clone();
+            let hud_draws = mesh_draws(&hud, textures, &white);
+            let hud = Layer {
+                mesh: hud_mesh.as_ref(),
+                draws: &hud_draws,
+            };
+            self.world3d
+                .draw(&self.world, renderer, camera, Some(graded), hud);
+        } else {
+            world::WorldDraw {
+                world: &self.world,
+                renderer,
+                textures,
+                atlases,
+                fonts,
+                silhouettes: self.silhouettes.as_mut(),
+                sorting_layers: &self.sorting_layers,
+                batch: &mut self.frame_batch,
+                buffers: &mut self.batch_buffers,
+                tile_meshes: &mut self.tile_meshes,
+                gpu_rings: &self.gpu_rings,
+                skins: &self.skinned_meshes,
+                materials: self.materials.as_ref(),
+                material_bank: &mut self.material_bank,
+                elapsed: self.elapsed,
+                scale,
+            }
+            .into_targets(target, graded);
         }
-        .into_targets(target, graded);
 
         let size = window.inner_size();
         let screen = ScreenDescriptor {
@@ -178,6 +202,7 @@ impl App {
             game: &mut self.game,
             net: &mut self.net,
             gpu_particles,
+            game_view_3d: &mut self.world3d.game_view,
         };
         {
             let _ui = voltra_profile::scope("ui");
