@@ -82,6 +82,11 @@ fn a_render_texture_is_made_by_its_load_not_decoded_by_a_preload() {
     let loaded = textures.preload(&device, &queue, names.iter().map(|name| path(name)), &pool);
     assert_eq!(loaded, 1);
     let map = textures.load(&device, &queue, &path("map.rendertexture.ron"));
-    let targets = textures.render_texture(map).expect("made as a render texture");
-    assert_eq!((targets.picture.width(), targets.picture.height()), (32, 16));
+    let targets = textures
+        .render_texture(map)
+        .expect("made as a render texture");
+    assert_eq!(
+        (targets.picture.width(), targets.picture.height()),
+        (32, 16)
+    );
 }
