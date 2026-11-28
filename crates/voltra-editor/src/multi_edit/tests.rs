@@ -2,6 +2,7 @@
 //! and the undo entry it makes.
 
 mod mixed;
+mod rotation;
 mod sparse;
 mod undo;
 mod variants;

@@ -54,6 +54,10 @@ pub(super) fn show(
             .on_hover_text("degrees about X, Y and Z, applied Y, then X, then Z");
             if changed {
                 transform.rotation = hints.typed(entity, degrees);
+                // One value: the selection is written the whole quaternion,
+                // not the components that moved, which would mix the
+                // primary's rotation into each other entity's.
+                mixed.touch(ui, vec![Step::Field("rotation")]);
             }
             ui.end_row();
 
