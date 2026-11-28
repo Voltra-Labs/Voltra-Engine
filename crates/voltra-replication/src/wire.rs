@@ -23,8 +23,14 @@ use crate::ViewTime;
 ///
 /// `1`: stage 114's (0.3). `2`: stage 127's interest — the schema's
 /// `interest` flag and the snapshot's `culled` list. `3`: stage 128's lag
-/// compensation — each input's [`ViewTime`].
-pub const REPLICATION_WIRE_VERSION: u32 = 3;
+/// compensation — each input's [`ViewTime`]. `4`: stage 132's (0.5)
+/// renames — the schema's component names are the registered ones, and
+/// `Transform` became `Transform2D`: a 0.4 peer would connect and then
+/// match none of a 0.5 server's transforms, so it is refused instead.
+///
+/// A change of the registry's names reaches the wire through
+/// [`Control::Schema`] and is a bump too.
+pub const REPLICATION_WIRE_VERSION: u32 = 4;
 
 /// A replicated entity's number in a session: given by the server, never
 /// reused while it runs, and far smaller on the wire than a [`SceneId`].
