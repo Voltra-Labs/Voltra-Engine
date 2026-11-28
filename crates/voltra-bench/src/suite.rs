@@ -12,6 +12,7 @@ use crate::report::{BenchResult, Report};
 use crate::stats::Stats;
 
 mod batch;
+mod draw3d;
 mod frame;
 mod interest;
 mod keyframes;
@@ -85,6 +86,7 @@ pub fn all() -> Vec<Bench> {
     let mut benches = Vec::new();
     benches.extend(batch::benches());
     benches.extend(tilemap::benches());
+    benches.extend(draw3d::benches());
     benches.extend(physics::benches());
     benches.extend(ui::benches());
     benches.extend(text::benches());

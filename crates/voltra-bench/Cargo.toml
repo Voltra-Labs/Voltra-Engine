@@ -17,6 +17,8 @@ path = "src/main.rs"
 voltra-assets.workspace = true
 voltra-core.workspace = true
 voltra-ecs.workspace = true
+# The 3D draw list culls across a pool, as the frame does.
+voltra-jobs.workspace = true
 voltra-physics.workspace = true
 voltra-render.workspace = true
 voltra-scene.workspace = true
